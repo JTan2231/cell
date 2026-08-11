@@ -33,6 +33,8 @@ The foundational decisions are:
 - [CLI](cli.md) defines the proposed command surface and output contracts.
 - [Implementation plan](implementation-plan.md) proposes a small Rust stack,
   milestones, and acceptance criteria.
+- [Performance results](performance-results.md) records the reproducible
+  release-mode corpus, environment, and version-one latency gates.
 
 ## Terminology
 
