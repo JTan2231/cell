@@ -11,12 +11,10 @@ use crate::corpus::{
 };
 use crate::db;
 use crate::error::AppError;
-use crate::model_runner::Runner;
+use crate::model_runner::{ModelSettings, Runner};
 use crate::resolver;
 use crate::tool_server::{Backend, Tool, ToolFailure};
 
-const MODEL: &str = "gpt-5.6-terra";
-const REASONING_EFFORT: &str = "medium";
 const PROMPT_VERSION: &str = "liaison-v1";
 const MAX_READ_CHARACTERS: usize = 12_000;
 const MAX_OVERVIEW_CHARACTERS: usize = 16_000;
@@ -28,23 +26,25 @@ const MAX_SEARCH_EXCERPT_CHARACTERS: usize = 1_000;
 pub(crate) fn integrate(
     path: &Path,
     work: &Work,
+    settings: &ModelSettings,
     forward_progress: bool,
 ) -> Result<ProposalRecord, AppError> {
-    integrate_with_runner(path, work, forward_progress, &Runner::default())
+    integrate_with_runner(path, work, settings, forward_progress, &Runner::default())
 }
 
 pub(crate) fn integrate_with_runner(
     path: &Path,
     work: &Work,
+    settings: &ModelSettings,
     forward_progress: bool,
     runner: &Runner,
 ) -> Result<ProposalRecord, AppError> {
     let mut connection = db::open_write(path)?;
     let base_revision = revision(&connection)?;
-    let token = create_run(&mut connection, work.id, base_revision)?;
+    let token = create_run(&mut connection, work.id, base_revision, settings)?;
     let prompt = pointer_prompt(&work.label, base_revision);
     let mut backend = LiaisonBackend::open(path, &token)?;
-    let result = runner.run_liaison(&prompt, &mut backend, forward_progress);
+    let result = runner.run_liaison(settings, &prompt, &mut backend, forward_progress);
     match result {
         Ok(final_response) => {
             finish_run(
@@ -98,6 +98,7 @@ fn create_run(
     connection: &mut Connection,
     work_id: i64,
     base_revision: i64,
+    settings: &ModelSettings,
 ) -> Result<String, AppError> {
     let token = connection.query_row("SELECT lower(hex(randomblob(32)))", [], |row| {
         row.get::<_, String>(0)
@@ -111,8 +112,8 @@ fn create_run(
             token,
             work_id,
             base_revision,
-            MODEL,
-            REASONING_EFFORT,
+            settings.model(),
+            settings.reasoning_effort(),
             PROMPT_VERSION,
             now()?
         ],
@@ -988,7 +989,11 @@ mod tests {
         index::rebuild_all(&transaction)?;
         transaction.commit()?;
         let work = store_work(&connection, "Paper", "Exact source language.")?;
-        let token = create_run(&mut connection, work.id, 0)?;
+        let settings = ModelSettings::new(
+            crate::model_runner::ModelQuality::Medium,
+            Some("custom-model"),
+        );
+        let token = create_run(&mut connection, work.id, 0, &settings)?;
         drop(connection);
 
         let mut backend = LiaisonBackend::open(&path, &token)?;
@@ -1017,6 +1022,18 @@ mod tests {
         drop(backend);
 
         let connection = db::open_read(&path)?;
+        let recorded_settings = connection.query_row(
+            "SELECT model, reasoning_effort FROM model_runs WHERE token = ?1",
+            [&token],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )?;
+        assert_eq!(
+            recorded_settings,
+            (
+                settings.model().to_owned(),
+                settings.reasoning_effort().to_owned()
+            )
+        );
         assert_eq!(
             connection.query_row(
                 "SELECT status FROM model_runs WHERE token = ?1",

@@ -13,8 +13,6 @@ use serde_json::{Value, json};
 use crate::error::{AppError, AppResult};
 use crate::tool_server::{self, Backend, Tool, ToolFailure};
 
-const MODEL: &str = "gpt-5.6-terra";
-const REASONING_EFFORT: &str = "medium";
 const DEFAULT_TIMEOUT: Duration = Duration::from_mins(30);
 const DEFAULT_MAX_STDOUT_BYTES: usize = 64 * 1024 * 1024;
 const DEFAULT_STDERR_TAIL_BYTES: usize = 64 * 1024;
@@ -64,6 +62,51 @@ const CONFIG_OVERRIDES: &[&str] = &[
     "web_search=\"disabled\"",
 ];
 
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, clap::ValueEnum)]
+pub(crate) enum ModelQuality {
+    Low,
+    Medium,
+    #[default]
+    High,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) struct ModelSettings {
+    model: String,
+    reasoning_effort: &'static str,
+}
+
+impl ModelSettings {
+    #[must_use]
+    pub(crate) fn new(quality: ModelQuality, model: Option<&str>) -> Self {
+        let (preset_model, reasoning_effort) = match quality {
+            ModelQuality::Low => ("gpt-5.6-luna", "medium"),
+            ModelQuality::Medium => ("gpt-5.6-terra", "medium"),
+            ModelQuality::High => ("gpt-5.6-sol", "max"),
+        };
+        Self {
+            model: model.unwrap_or(preset_model).to_owned(),
+            reasoning_effort,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn model(&self) -> &str {
+        &self.model
+    }
+
+    #[must_use]
+    pub(crate) fn reasoning_effort(&self) -> &str {
+        self.reasoning_effort
+    }
+}
+
+impl Default for ModelSettings {
+    fn default() -> Self {
+        Self::new(ModelQuality::default(), None)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Runner {
     program: PathBuf,
@@ -100,6 +143,7 @@ impl Runner {
     /// proposal side effect recorded through `submit_change`.
     pub(crate) fn run_liaison(
         &self,
+        settings: &ModelSettings,
         prompt: &str,
         backend: &mut impl Backend,
         forward_stderr: bool,
@@ -108,7 +152,8 @@ impl Runner {
         let work_dir = temporary.create_subdirectory("work")?;
         let codex_home = temporary.create_subdirectory("codex-home")?;
         copy_codex_auth(&codex_home)?;
-        let catalog_path = self.write_restricted_catalog(temporary.path(), &codex_home)?;
+        let catalog_path =
+            self.write_restricted_catalog(temporary.path(), &codex_home, settings.model())?;
         let dynamic_tools = dynamic_tool_specs()?;
 
         let mut command = Command::new(&self.program);
@@ -135,6 +180,7 @@ impl Runner {
         self.run_app_server(
             command,
             &work_dir,
+            settings,
             prompt,
             &dynamic_tools,
             backend,
@@ -142,7 +188,12 @@ impl Runner {
         )
     }
 
-    fn write_restricted_catalog(&self, directory: &Path, codex_home: &Path) -> AppResult<PathBuf> {
+    fn write_restricted_catalog(
+        &self,
+        directory: &Path,
+        codex_home: &Path,
+        model: &str,
+    ) -> AppResult<PathBuf> {
         let output = Command::new(&self.program)
             .args(["debug", "models", "--bundled"])
             .env("CODEX_HOME", codex_home)
@@ -174,7 +225,7 @@ impl Runner {
                 "the bundled model catalog was unexpectedly large",
             ));
         }
-        let catalog = restricted_model_catalog(&output.stdout)?;
+        let catalog = restricted_model_catalog(&output.stdout, model)?;
         let path = directory.join("models.json");
         fs::write(&path, serde_json::to_vec(&catalog)?)?;
         Ok(path)
@@ -185,6 +236,7 @@ impl Runner {
         &self,
         mut command: Command,
         work_dir: &Path,
+        settings: &ModelSettings,
         prompt: &str,
         dynamic_tools: &[Value],
         backend: &mut impl Backend,
@@ -224,7 +276,7 @@ impl Runner {
             submitted: false,
             final_response: String::new(),
         }
-        .run(work_dir, prompt, dynamic_tools);
+        .run(work_dir, settings, prompt, dynamic_tools);
 
         terminate(&mut child, group);
         let _ = child.wait();
@@ -261,6 +313,7 @@ impl<B: Backend> ProtocolClient<'_, B> {
     fn run(
         mut self,
         work_dir: &Path,
+        settings: &ModelSettings,
         prompt: &str,
         dynamic_tools: &[Value],
     ) -> Result<String, RuntimeFailure> {
@@ -282,7 +335,7 @@ impl<B: Backend> ProtocolClient<'_, B> {
             2,
             "thread/start",
             &json!({
-                "model": MODEL,
+                "model": settings.model(),
                 "cwd": work_dir.display().to_string(),
                 "approvalPolicy": "never",
                 "sandbox": "read-only",
@@ -300,7 +353,7 @@ impl<B: Backend> ProtocolClient<'_, B> {
             &json!({
                 "threadId": thread_id,
                 "input": [{ "type": "text", "text": prompt, "textElements": [] }],
-                "effort": REASONING_EFFORT,
+                "effort": settings.reasoning_effort(),
                 "environments": []
             }),
         )?;
@@ -655,7 +708,7 @@ fn dynamic_tool_specs() -> AppResult<Vec<Value>> {
         .collect()
 }
 
-fn restricted_model_catalog(bytes: &[u8]) -> AppResult<Value> {
+fn restricted_model_catalog(bytes: &[u8], selected_model: &str) -> AppResult<Value> {
     let mut catalog: Value = serde_json::from_slice(bytes).map_err(|error| {
         AppError::unexpected(
             "model_runner_catalog",
@@ -673,18 +726,18 @@ fn restricted_model_catalog(bytes: &[u8]) -> AppResult<Value> {
         })?;
     let Some(index) = models
         .iter()
-        .position(|model| model.get("slug").and_then(Value::as_str) == Some(MODEL))
+        .position(|model| model.get("slug").and_then(Value::as_str) == Some(selected_model))
     else {
         return Err(AppError::unexpected(
             "model_runner_catalog",
-            format!("Codex's bundled model catalog does not contain {MODEL}"),
+            format!("Codex's bundled model catalog does not contain {selected_model}"),
         ));
     };
     let mut model = models.remove(index);
     let object = model.as_object_mut().ok_or_else(|| {
         AppError::unexpected(
             "model_runner_catalog",
-            format!("the {MODEL} catalog entry is not an object"),
+            format!("the {selected_model} catalog entry is not an object"),
         )
     })?;
     object.insert("tool_mode".to_owned(), json!("direct"));
@@ -873,7 +926,34 @@ mod tests {
 
     use crate::tool_server::{Backend, Tool, ToolFailure};
 
-    use super::{CONFIG_OVERRIDES, MODEL, Runner, dynamic_tool_specs, restricted_model_catalog};
+    use super::{
+        CONFIG_OVERRIDES, ModelQuality, ModelSettings, Runner, dynamic_tool_specs,
+        restricted_model_catalog,
+    };
+
+    #[test]
+    fn quality_presets_select_the_expected_model_and_effort() {
+        for (quality, model, effort) in [
+            (ModelQuality::Low, "gpt-5.6-luna", "medium"),
+            (ModelQuality::Medium, "gpt-5.6-terra", "medium"),
+            (ModelQuality::High, "gpt-5.6-sol", "max"),
+        ] {
+            let settings = ModelSettings::new(quality, None);
+            assert_eq!(settings.model(), model);
+            assert_eq!(settings.reasoning_effort(), effort);
+        }
+        assert_eq!(
+            ModelSettings::default(),
+            ModelSettings::new(ModelQuality::High, None)
+        );
+    }
+
+    #[test]
+    fn explicit_model_overrides_only_the_preset_model() {
+        let settings = ModelSettings::new(ModelQuality::Medium, Some("custom-model"));
+        assert_eq!(settings.model(), "custom-model");
+        assert_eq!(settings.reasoning_effort(), "medium");
+    }
 
     #[test]
     fn runner_accepts_an_explicit_program_for_isolated_tests() {
@@ -897,15 +977,17 @@ mod tests {
 
     #[test]
     fn model_catalog_disables_every_codex_tool_source() -> Result<(), Box<dyn std::error::Error>> {
+        let selected_model = "selected-model";
         let catalog = restricted_model_catalog(
             serde_json::to_string(&json!({
                 "models": [{
-                    "slug": MODEL,
+                    "slug": selected_model,
                     "base_instructions": "coding",
                     "model_messages": { "instructions_template": "coding" }
                 }, { "slug": "another-model" }]
             }))?
             .as_bytes(),
+            selected_model,
         )?;
         assert_eq!(catalog["models"].as_array().map(Vec::len), Some(1));
         let model = &catalog["models"][0];
@@ -964,6 +1046,7 @@ mod tests {
     #[test]
     fn app_server_dynamic_call_is_dispatched_to_the_backend()
     -> Result<(), Box<dyn std::error::Error>> {
+        let settings = ModelSettings::new(ModelQuality::Low, Some("custom-model"));
         let directory = tempfile::tempdir()?;
         let program = directory.path().join("fake-codex");
         fs::write(
@@ -971,7 +1054,7 @@ mod tests {
             format!(
                 r#"#!/bin/sh
 if [ "$1" = "debug" ]; then
-  printf '%s\n' '{{"models":[{{"slug":"{MODEL}"}}]}}'
+  printf '%s\n' '{{"models":[{{"slug":"{model}"}}]}}'
   exit 0
 fi
 IFS= read -r ignored
@@ -979,15 +1062,25 @@ printf '%s\n' '{{"jsonrpc":"2.0","id":0,"result":{{}}}}'
 IFS= read -r ignored
 IFS= read -r ignored
 printf '%s\n' '{{"jsonrpc":"2.0","id":1,"result":{{"data":[],"nextCursor":null}}}}'
-IFS= read -r ignored
+IFS= read -r thread_request
+case "$thread_request" in
+  *'"model":"{model}"'*) ;;
+  *) exit 11 ;;
+esac
 printf '%s\n' '{{"jsonrpc":"2.0","id":2,"result":{{"thread":{{"id":"thread"}}}}}}'
-IFS= read -r ignored
+IFS= read -r turn_request
+case "$turn_request" in
+  *'"effort":"{effort}"'*) ;;
+  *) exit 12 ;;
+esac
 printf '%s\n' '{{"jsonrpc":"2.0","id":3,"result":{{"turn":{{"id":"turn"}}}}}}'
 printf '%s\n' '{{"jsonrpc":"2.0","id":20,"method":"item/tool/call","params":{{"threadId":"thread","turnId":"turn","callId":"call","namespace":null,"tool":"work_overview","arguments":{{}}}}}}'
 IFS= read -r ignored
 printf '%s\n' '{{"jsonrpc":"2.0","method":"item/completed","params":{{"item":{{"type":"agentMessage","text":"diagnostic"}}}}}}'
 printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread","turn":{{"id":"turn","status":"completed"}}}}}}'
-"#
+"#,
+                model = settings.model(),
+                effort = settings.reasoning_effort()
             ),
         )?;
         let mut permissions = fs::metadata(&program)?.permissions();
@@ -996,7 +1089,7 @@ printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId"
 
         let runner = Runner::new(&program, Duration::from_secs(2));
         let mut backend = StubBackend::default();
-        let diagnostic = runner.run_liaison("pointer", &mut backend, false)?;
+        let diagnostic = runner.run_liaison(&settings, "pointer", &mut backend, false)?;
         assert_eq!(diagnostic, "diagnostic");
         assert_eq!(backend.calls, [Tool::WorkOverview]);
         Ok(())
@@ -1005,8 +1098,9 @@ printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId"
     #[test]
     fn catalog_failure_has_a_stable_error_code() {
         let runner = Runner::new("/usr/bin/false", Duration::from_secs(1));
+        let settings = ModelSettings::default();
         let mut backend = StubBackend::default();
-        let Err(error) = runner.run_liaison("pointer", &mut backend, false) else {
+        let Err(error) = runner.run_liaison(&settings, "pointer", &mut backend, false) else {
             panic!("the false runner unexpectedly succeeded");
         };
         assert_eq!(error.code(), "model_runner_catalog");

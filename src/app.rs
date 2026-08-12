@@ -21,6 +21,7 @@ use crate::db;
 use crate::error::{AppError, AppResult};
 use crate::index;
 use crate::model::{CorpusView, DiffEntry, DiffKind, LibraryStats, ValidationSeverity};
+use crate::model_runner::ModelSettings;
 use crate::render::{CommandOutput, render_terminal_text};
 use crate::resolver::ResolvedOperation;
 use crate::{liaison, resolver, validate};
@@ -245,7 +246,8 @@ fn integrate(
         let connection = db::open_write(path)?;
         store_work(&connection, &label, &text)?
     };
-    let record = liaison::integrate(path, &work, forward_progress)?;
+    let settings = ModelSettings::new(args.quality, args.model.as_deref());
+    let record = liaison::integrate(path, &work, &settings, forward_progress)?;
     if args.apply && record.outcome == "change" && record.uncertainties.is_empty() {
         let mut connection = db::open_write(path)?;
         let applied = resolver::apply_record(&mut connection, &record)?;

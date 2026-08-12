@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use clap::{ArgAction, Args, Parser, Subcommand};
 
+use crate::model_runner::ModelQuality;
+
 /// Annals command-line arguments.
 #[derive(Debug, Clone, Parser)]
 #[command(
@@ -111,6 +113,12 @@ pub struct IntegrateArgs {
     /// Label for a newly retained work. Defaults to its filename.
     #[arg(long, value_name = "LABEL", requires = "input")]
     pub name: Option<String>,
+    /// Liaison quality preset.
+    #[arg(long, value_enum, default_value_t)]
+    pub quality: ModelQuality,
+    /// Exact Codex model, overriding the model selected by --quality.
+    #[arg(long, value_name = "MODEL")]
+    pub model: Option<String>,
     /// Apply a certain change immediately after the liaison submits it.
     #[arg(long)]
     pub apply: bool,
@@ -213,6 +221,7 @@ mod tests {
     use clap::Parser;
 
     use super::{ChangeCommand, Cli, Command, WorkCommand};
+    use crate::model_runner::ModelQuality;
 
     #[test]
     fn language_first_commands_parse() {
@@ -243,5 +252,41 @@ mod tests {
         assert!(Cli::try_parse_from(["annals", "integrate"]).is_err());
         assert!(Cli::try_parse_from(["annals", "integrate", "paper.txt"]).is_ok());
         assert!(Cli::try_parse_from(["annals", "integrate", "--work", "Existing paper"]).is_ok());
+    }
+
+    #[test]
+    fn integrate_model_settings_parse() {
+        let default = Cli::try_parse_from(["annals", "integrate", "paper.txt"]);
+        let Ok(Command::Integrate(default)) = default.map(|cli| cli.command) else {
+            panic!("default integrate arguments did not parse");
+        };
+        assert_eq!(default.quality, ModelQuality::High);
+        assert_eq!(default.model, None);
+
+        for (quality, expected) in [
+            ("low", ModelQuality::Low),
+            ("medium", ModelQuality::Medium),
+            ("high", ModelQuality::High),
+        ] {
+            let parsed = Cli::try_parse_from([
+                "annals",
+                "integrate",
+                "paper.txt",
+                "--quality",
+                quality,
+                "--model",
+                "custom-model",
+            ]);
+            let Ok(Command::Integrate(args)) = parsed.map(|cli| cli.command) else {
+                panic!("integrate arguments for {quality} did not parse");
+            };
+            assert_eq!(args.quality, expected);
+            assert_eq!(args.model.as_deref(), Some("custom-model"));
+        }
+
+        assert!(
+            Cli::try_parse_from(["annals", "integrate", "paper.txt", "--quality", "invalid"])
+                .is_err()
+        );
     }
 }

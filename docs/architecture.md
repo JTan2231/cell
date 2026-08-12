@@ -15,11 +15,15 @@ backing up, and rebuilding search data do not advance the corpus revision.
 
 `annals integrate` retains or selects one work, reads HEAD, creates a model-run
 record bound to both, and starts an isolated Codex app-server process. The
-process uses `gpt-5.6-terra` with medium reasoning, an empty temporary
-directory, a private temporary Codex home, and no execution environment. Annals
-loads the installed Codex model catalog, narrows the selected model to direct
-tool mode, and disables the shell, web, planning, user-input, multi-agent,
-plugin, skill, and other built-in tool sources.
+high-quality default uses `gpt-5.6-sol` with max reasoning. The low and medium
+presets use `gpt-5.6-luna` and `gpt-5.6-terra`, respectively, both with medium
+reasoning. An exact model override changes the model while the selected preset
+continues to control reasoning effort. Annals records the resolved model and
+effort, loads the installed Codex model catalog, and narrows that model to
+direct tool mode. The process uses an empty temporary directory, a private
+temporary Codex home, and no execution environment, and disables the shell,
+web, planning, user-input, multi-agent, plugin, skill, and other built-in tool
+sources.
 
 The prompt is deliberately a pointer. It contains the work label, base
 revision, and operating instructions, but not the complete work. The work is

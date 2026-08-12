@@ -69,14 +69,27 @@ Example JSON from `work add`:
 ## Model-assisted integration
 
 ```text
-annals integrate INPUT [--name LABEL] [--apply]
-annals integrate --work LABEL [--apply]
+annals integrate INPUT [--name LABEL] [--quality QUALITY] [--model MODEL] [--apply]
+annals integrate --work LABEL [--quality QUALITY] [--model MODEL] [--apply]
 ```
 
 The first form retains a new work and then examines it. The second examines an
 already retained work. Annals freezes the current corpus revision, invokes the
 liaison, and expects one recorded `change` or `no_change` result through its
 tool interface. The model's final response is not parsed as the proposal.
+
+`--quality` accepts three presets and defaults to `high`:
+
+| Quality | Model | Reasoning effort |
+| --- | --- | --- |
+| `low` | `gpt-5.6-luna` | `medium` |
+| `medium` | `gpt-5.6-terra` | `medium` |
+| `high` | `gpt-5.6-sol` | `max` |
+
+`--model` overrides only the preset model. The selected quality still controls
+reasoning effort, so `--model MODEL` uses max reasoning by default, while
+`--quality medium --model MODEL` uses medium reasoning. The exact resolved
+model and effort are recorded with the model run.
 
 Without `--apply`, a valid change remains pending. `--apply` immediately
 commits a change only when its `uncertainties` array is empty. An uncertain

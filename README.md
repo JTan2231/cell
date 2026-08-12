@@ -15,11 +15,14 @@ details.
 - an installed and authenticated `codex` executable for `annals integrate`;
 - no daemon or separate database server.
 
-The liaison uses `gpt-5.6-terra` with medium reasoning. Annals gives it a short
-pointer prompt and exactly six session-scoped tools through an isolated Codex
-app-server; no shell, web, planning, user-input, or multi-agent tools are
-available. The complete work is not placed in the prompt. Its recorded
-`submit_change` tool call, rather than its final response, is the deliverable.
+The liaison defaults to high quality: `gpt-5.6-sol` with max reasoning.
+`--quality low` selects `gpt-5.6-luna` with medium reasoning, and `--quality
+medium` selects `gpt-5.6-terra` with medium reasoning. `--model` provides an
+exact model override. Annals gives the liaison a short pointer prompt and
+exactly six session-scoped tools through an isolated Codex app-server; no
+shell, web, planning, user-input, or multi-agent tools are available. The
+complete work is not placed in the prompt. Its recorded `submit_change` tool
+call, rather than its final response, is the deliverable.
 
 ## Build and use
 
@@ -47,6 +50,18 @@ again by label:
 ```sh
 annals --library ./annals.db integrate --work "Serializable execution"
 ```
+
+Choose a lower-cost preset or an exact model when needed:
+
+```sh
+annals --library ./annals.db integrate --work "Serializable execution" \
+  --quality low
+annals --library ./annals.db integrate --work "Serializable execution" \
+  --quality medium --model gpt-5.6-sol
+```
+
+An explicit model changes only the model; `--quality` continues to select its
+reasoning effort and defaults to `high`.
 
 A human or another program can submit the same strict change contract without
 invoking a model:
