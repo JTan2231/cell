@@ -1,57 +1,45 @@
 # Performance results
 
-These measurements exercise the deterministic release-mode corpus in
-`tests/operational.rs`. The fixture uses ten broad branches, a 20-level deep
-branch, a 1,600-word source that produces two overlapping passages, a common
-term in every source, and stable rare markers. It contains exactly the stated
-number of search units; no random seed is used.
+The current homogeneous-node schema and one-row-per-node index do not use the
+older passage-based benchmark corpus. No p50, p95, throughput, or database-size
+numbers are claimed for this implementation.
 
-## Reproduce
+## Enforced repository limit
 
-```sh
-cargo build --release --locked
-cargo test --release --locked --test operational \
-  deterministic_1k_and_10k_scale_samples -- --ignored --nocapture
-cargo test --release --locked --test operational \
-  deterministic_100k_unit_reindex_and_search_smoke -- --ignored --nocapture
+`./ci.sh` is the complete checked-in quality gate and has a hard 60-second
+wall-clock limit. It runs, under Rust 1.97.1:
+
+```text
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features --locked ...
+cargo test --all-features --locked --no-fail-fast
+cargo doc --all-features --no-deps --locked
+cargo build --all-features --release --locked
 ```
 
-Search and mutation measurements include release-binary startup, SQLite open,
-JSON serialization, and process shutdown. Each p50/p95 value comes from 20
-samples after a warm-up query with a warm filesystem cache. The bulk seed is a
-single test-helper transaction.
+Exceeding 60 seconds fails the gate.
 
-## Recorded environment
+## Bounded operations
 
-- Date: 2026-08-11
-- Host: Apple M4 Mac mini, 10 cores, 16 GB memory, arm64 macOS
-- Bundled SQLite: 3.50.2 with FTS5
-- Fixture: deterministic corpus, no randomness
+The implementation has these explicit runtime bounds:
 
-## Scale and rebuild
+- model process-group execution timeout: 30 minutes;
+- captured model stdout: at most 16 MiB;
+- retained model-error tail: at most 64 KiB;
+- search query: at most 4,096 UTF-8 bytes and 32 terms;
+- returned search results: 1 through 100;
+- lexical candidate pool: 50 through 500 rows.
 
-| Search units | Bulk seed | Seed throughput | Full reindex | Database size |
-| ---: | ---: | ---: | ---: | ---: |
-| 1,000 | 4.646 ms | 215,221 units/s | 38.289 ms | not recorded |
-| 10,000 | 13.978 ms | 715,412 units/s | 331.214 ms | not recorded |
-| 100,000 | 160.226 ms | 624,118 units/s | 3.711 s | 76,713,984 bytes |
+Model invocation is exercised in tests with local fake executables over the
+same standard-I/O boundary. The CI runtime therefore does not measure external
+model latency.
 
-## Warm 100k-unit latency
+## Cost shape
 
-| Operation | p50 | p95 | Gate |
-| --- | ---: | ---: | ---: |
-| Global rare-term search, 10 results | 22.39 ms | 22.67 ms | <150 ms |
-| Global common-term search, 10 results | 75.07 ms | 76.82 ms | <150 ms |
-| Scoped rare-term search, 10 results | 22.37 ms | 24.00 ms | <150 ms |
-| Scoped common-term search, 10 results | 105.80 ms | 108.32 ms | <150 ms |
-| Shallow breadcrumb lookup | 76.15 ms | 77.70 ms | recorded |
-| Deep breadcrumb lookup | 77.66 ms | 79.46 ms | recorded |
-| Indexed node append | 22.99 ms | 23.51 ms | <50 ms |
-| Indexed body edit | 22.85 ms | 23.51 ms | <50 ms |
-| Indexed no-position move | 23.09 ms | 29.90 ms | <50 ms |
-| Indexed leaf delete | 22.82 ms | 23.24 ms | <50 ms |
+Ingestion holds the raw UTF-8 input, its 8,192-byte transport windows, the
+complete prompt, and the accepted proposal in memory. Inference completes
+before an immediate SQLite write transaction begins.
 
-All provisional 100k-unit gates pass. The non-ignored operational tests also
-exercise a stable reader snapshot while a CLI writer commits under WAL,
-transaction rollback after forced indexing failures, and backup-copy integrity
-recovery through `validate` plus `reindex`.
+Every canonical mutation currently rebuilds one search row per node plus the
+FTS5 table. Mutation cost therefore grows with total node count. Search reads a
+bounded candidate set and returns one result per matching node.

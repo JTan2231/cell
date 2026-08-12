@@ -1,367 +1,182 @@
-# CLI design
+# CLI contract
 
-## Goals
+## Global options
 
-The Annals CLI should make tree edits explicit, make destructive operations
-hard to perform accidentally, and keep search useful in both a terminal and a
-script. The command surface below is the CLI contract and maps directly to
-SQLite and FTS5 operations.
-
-Examples use `annals.db` in the current directory:
-
-```sh
-annals init --library ./annals.db
-annals --library ./annals.db tree list
+```text
+annals [--library PATH] [--json] [--quiet] [--no-color] [-v...] COMMAND
 ```
 
-`--library PATH` is a global option. Resolution order is:
+The library path resolves in this order:
 
 1. `--library PATH`;
 2. `ANNALS_LIBRARY`;
 3. `./annals.db`.
 
-Commands should print the resolved path in error messages. They should not
-silently search parent directories for another database.
+`--json` emits one success object on standard output or one error object on
+standard error. `--quiet` suppresses successful human-readable mutation
+messages. `--no-color` disables highlighting. `-v` prints the resolved library
+path on standard error in human mode.
 
-Other global options are:
-
-- `--json` for one JSON document on standard output;
-- `--quiet` to suppress successful human-oriented mutation output;
-- `--no-color` to disable color even when standard output is a terminal;
-- `-v` to add diagnostics to standard error. Repeating it may add detail, but
-  must never change a result.
-
-## Stable identifiers
-
-Nodes use SQLite integer primary keys. An ID is stable within its library: it
-does not change when the node's title, body, sibling position, or parent
-changes. A tree has no separate row or ID; its root node ID identifies it.
-
-Editing commands accept exact decimal node IDs. Titles and display paths may
-repeat or change, so they are conveniences for browsing and search rather than
-identity. Search-unit IDs belong to derived index data and are not accepted by
-editing commands.
-
-## Initialization and inspection
+## Library commands
 
 ```text
-annals init [--library PATH]
+annals init
 annals stats
 annals validate
 annals backup OUTPUT
 annals reindex
-annals ingest INPUT
 ```
 
-`init` creates a new library with the current data model and verifies that its
-SQLite build includes FTS5. It refuses to replace an existing file.
+`init` creates a new SQLite library and refuses to replace an existing path. It
+checks that the bundled SQLite build provides FTS5 and creates an empty current
+search index.
 
-`stats` reports the canonical library revision, root, node, source, and
-indexed-unit counts, database size, and whether the full-text index is current.
+`stats` reports the revision; root, node, raw-input, generation-run,
+support-link, and search-unit counts; file size; and index freshness.
 
-`validate` runs SQLite integrity and foreign-key checks, then checks Annals
-invariants: every non-root node has one existing parent, roots have none, no
-cycles exist, source nodes are leaves with source metadata, sibling positions
-are valid, and the derived search index agrees with canonical rows. A topic
-leaf is reported as an incomplete-tree warning, not structural corruption.
-Validation does not repair data.
+`validate` checks SQLite, forest topology, generation grounding, retained input
+digests, exact adapter-produced ranges, and the derived index. It does not
+repair data.
 
-`backup OUTPUT` uses SQLite's backup API to create a consistent copy. It
-refuses to replace `OUTPUT`; there is no implicit or forced overwrite mode.
+`backup` creates a consistent SQLite copy and refuses to replace its output.
 
-`reindex` recreates search units and FTS rows from canonical node data. It is
-safe to run repeatedly. The command reports indexed node and unit counts.
+`reindex` replaces all derived search rows with one row per canonical node. It
+does not change canonical rows or increment the library revision.
+
+## Generated ingestion
+
+```text
+annals ingest INPUT
+    [--node-budget N]
+    [--max-depth N]
+    [--max-children N]
+```
+
+`INPUT` is a UTF-8 file or `-` for standard input. Empty or non-UTF-8 input is
+rejected before model invocation. Defaults are:
+
+```text
+--node-budget 32
+--max-depth 6
+--max-children 6
+```
+
+All three values are hard maxima, not targets. The root is depth zero. The
+model may return a smaller tree and branches of unequal depth.
+
+Ingestion uses the embedded Codex launcher fixed to `gpt-5.6-terra` with medium
+reasoning. An installed and authenticated `codex` executable is required. The
+launcher receives one complete prompt on stdin and returns one schema-constrained
+JSON proposal on stdout. Model progress is forwarded on stderr.
+
+The accepted input is cut by the `raw-window` version `1` adapter into stable,
+non-overlapping windows of at most 8,192 bytes. Those windows are transport
+units and do not determine the tree.
+
+After schema and deterministic topology checks pass, raw input, SHA-256 digest,
+adapter metadata, model settings, prompt/schema versions, policy, accepted
+proposal JSON, windows, nodes, support links, revision, and search rows are
+committed together. A model or validation failure writes nothing.
+
+Human output reports the generated root, node count, and unit count. JSON data
+has this shape:
+
+```json
+{
+  "root_node_id": 1,
+  "node_ids": [1, 2, 3],
+  "input_id": 1,
+  "generation_run_id": 1,
+  "revision": 1
+}
+```
+
+Generated trees are immutable through `node` commands. Use `tree delete` to
+remove one in full.
 
 ## Tree commands
 
 ```text
-annals tree create --title TITLE [--body TEXT | --body-file PATH]
+annals tree create --text TEXT
 annals tree list
 annals tree show ROOT_NODE_ID [--depth N]
 annals tree delete ROOT_NODE_ID [--yes]
 ```
 
-`tree create` appends a root topic node to the forest in one transaction. The
-title must not be empty after trimming. Its body defaults to empty;
-`--body-file -` reads a UTF-8 body from standard input. `--body` and
-`--body-file` are mutually exclusive.
+`tree create` adds a manual root. `TEXT` must be nonempty and have no leading or
+trailing whitespace.
 
-`tree list` returns each root node ID, root title, and subtree node count.
-`tree show` renders an indented tree. `--depth` limits display depth; it does
-not alter the tree.
+`tree list` returns each root integer ID, text, and subtree count. `tree show`
+uses depth-first order; `--depth` limits display only.
 
-Deleting a tree deletes all of its nodes and derived index rows. In a terminal,
-the command first shows the affected node count and asks for confirmation. In
-non-interactive use it fails unless `--yes` is present.
+`tree delete` removes the complete tree. In interactive human use it asks for
+confirmation. JSON and other non-interactive use require `--yes`. Deleting a
+generated tree also removes its generation run, windows, support links, and
+unshared retained input.
 
 ## Node commands
 
 ```text
-annals node add --parent NODE_ID --kind topic|source \
-    --title TITLE [--body TEXT | --body-file PATH]
-    [--locator VALUE] [--media-type TYPE] [--checksum VALUE]
-    [--captured-at RFC3339]
-    [--position N]
-
+annals node add --parent NODE_ID --text TEXT [--position N]
 annals node show NODE_ID
 annals node children NODE_ID
-annals node edit NODE_ID [--kind topic|source] \
-    [--title TITLE] [--body TEXT | --body-file PATH | --clear-body]
-    [--locator VALUE] [--media-type TYPE] [--checksum VALUE]
-    [--captured-at RFC3339]
+annals node edit NODE_ID --text TEXT
 annals node move NODE_ID --parent NEW_PARENT_ID [--position N]
 annals node delete NODE_ID [--recursive] [--yes]
 ```
 
-New children append to the parent's children unless `--position N` is given.
-The flag is a zero-based ordinal among the destination's children. Physical
-SQLite positions may be spaced integers so insertion normally updates only one
-row; that storage detail is not exposed in JSON.
+These mutation commands apply only to manual trees. Each node contains the same
+one-string representation; there is no kind flag.
 
-`--locator`, `--media-type`, `--checksum`, and `--captured-at` are provenance
-metadata for source nodes. A locator may be a URL, path, citation, or another
-opaque value; Annals does not fetch it. Supplying source metadata for a topic
-is an input error. The following structural rules are enforced before
-committing:
+`--position` is a zero-based sibling ordinal. Omitting it appends. A position
+past the current sibling list is rejected.
 
-- a source node cannot have children;
-- changing a topic to a source is allowed only when it has no children;
-- a child cannot be added or moved beneath a source;
-- a node cannot be moved beneath itself or one of its descendants;
-- root nodes cannot be moved or deleted through `node`; and
-- moving a node between trees is not supported.
+`node move` accepts only non-root nodes, rejects cycles, and keeps a subtree
+within its existing root. `node delete` accepts a leaf directly. A node with
+descendants requires `--recursive` and confirmation; non-interactive use also
+requires `--yes`. Roots must be removed with `tree delete`.
 
-`node edit` changes only supplied fields. Supplying no change is a usage error.
-An empty body is set explicitly with `--clear-body`. `--body-file -` may be
-used for piped UTF-8 input; it cannot be combined with an interactive
-confirmation that also needs standard input. Changing a topic to a source
-creates its provenance row; changing a source to a topic removes that row.
-
-Deleting a leaf needs no extra flag. Deleting a non-leaf requires
-`--recursive`; Annals displays the subtree size and asks for confirmation when
-attached to a terminal. Non-interactive recursive deletion additionally
-requires `--yes`.
-
-## Ingestion
-
-```text
-annals ingest INPUT
-```
-
-`INPUT` is one UTF-8 JSON document; `-` reads it from standard input. Ingestion
-is scoped to one existing tree and applies one exact, atomic change. It never
-chooses a parent, appends an omitted child, merges nodes, promotes children, or
-generates intermediate topics.
-
-```json
-{
-  "tree_root_id": 1,
-  "base_revision": 8,
-  "create_nodes": [
-    {
-      "ref": "paper",
-      "node": {
-        "kind": "source",
-        "title": "Reference",
-        "body": "Source text",
-        "source": {
-          "locator": "paper.pdf",
-          "media_type": "application/pdf",
-          "checksum": null,
-          "captured_at": null
-        }
-      }
-    }
-  ],
-  "replace_nodes": [],
-  "delete_subtrees": [],
-  "child_orders": [
-    {"parent": 1, "children": [2, "paper", 3]}
-  ]
-}
-```
-
-Existing nodes are integer IDs. Strings are document-local references declared
-by `create_nodes`. A node replacement supplies its complete final kind, title,
-body, and source value. For each parent whose immediate children change,
-`child_orders` must contain the complete final child list. Both the old and new
-parents must therefore be listed when moving a subtree. Parents absent from
-`child_orders` retain their exact current children, order, and stored positions.
-
-`delete_subtrees` supplies a root ID and the exact expected depth-first node-ID
-list. Ingestion fails if the live subtree differs. `base_revision` must equal
-the revision reported by `stats`, which prevents applying a document prepared
-against stale content. The complete proposed graph is validated before any row
-is changed; canonical rows, source metadata, search data, and the revision then
-commit together or all roll back.
-
-All four top-level arrays are required, even when empty, and at least one of
-them must declare a change. Every created node must appear exactly once in the
-final child lists. Every node object supplies `kind`, `title`, `body`, and
-`source`: topics use `"source": null`; sources supply all four provenance fields,
-using `null` for an unknown value.
-
-Every object is strict: unknown fields are errors. Titles must be non-empty and
-already free of leading or trailing whitespace. The document has no topology
-defaults.
-
-A successful ingestion returns the previous and new revisions, the mapping of
-local references to created node IDs, replaced node IDs, parent-changing moves,
-deleted node IDs, and every resolved child order supplied by the document. This
-receipt is an exact account of the submitted canonical change.
+Every successful canonical mutation rebuilds search rows and increments the
+library revision in the same transaction.
 
 ## Search
 
 ```text
-annals search QUERY [--within NODE_ID]
-    [--kind all|topic|source]
-    [--detail overview|balanced|source]
-    [--limit N] [--explain]
+annals search QUERY [--within NODE_ID] [--limit N] [--explain]
 ```
 
-Defaults are `--kind all`, `--detail balanced`, and `--limit 10`. `--within`
-restricts results to a node and its descendants. Supplying a root node ID is
-therefore the way to search exactly one tree.
+Whitespace separates terms and double quotes preserve a phrase. `--within`
+restricts retrieval to one node and its descendants. `--limit` defaults to 10
+and accepts 1 through 100. `--explain` includes unstable ranking diagnostics.
 
-The ordinary query is plain user text, not raw FTS5 syntax. Annals normalizes
-it and builds escaped FTS expressions itself. Whitespace separates terms and
-double quotes preserve a phrase. Punctuation cannot change the SQL or FTS
-expression unexpectedly. An advanced raw-query mode is deliberately absent.
+Search recognizes exact node IDs, normalized complete breadcrumbs, and
+normalized complete node text before lexical FTS5 retrieval. It returns node
+text, integer ID, breadcrumb, optional highlighted snippet, and match reasons.
 
-Detail preference affects grouping, not eligibility:
+## JSON and exit behavior
 
-- `overview` favors a directly matching topic when nearby descendants also
-  match;
-- `balanced` selects the strongest direct result from an ancestor/descendant
-  run and nests supporting matches beneath it; and
-- `source` favors directly matching source leaves while still including their
-  topic breadcrumb.
-
-Search resolves exact IDs, normalized titles, and normalized paths, then uses
-an FTS5/BM25 AND pass with a controlled OR fallback when results are sparse. A
-final-token title-prefix fallback may also be used. Typo matching is deferred
-until relevance tests establish a need. Tree-aware grouping and branch
-diversification follow retrieval; search does not descend through a single
-chosen root branch. `--explain` adds match signals and grouping reasons for
-debugging, but its diagnostic details are not a stable machine API.
-
-A human result contains, in order:
-
-1. rank, node kind, and full node identifier;
-2. a breadcrumb made from ancestor titles;
-3. the matching snippet with terms highlighted when color is enabled; and
-4. nested related hits, if nearby nodes on the same branch also matched.
-
-No matches is a successful search: human output says `No matches`, JSON has an
-empty result array, and the process exits zero.
-
-## Output contracts
-
-Human output is intended to be read, not parsed. Color is enabled only for a
-terminal and honors `NO_COLOR`. Data goes to standard output; progress,
-warnings, and diagnostics go to standard error.
-
-`--json` emits exactly one UTF-8 JSON object and no decoration:
+Success:
 
 ```json
-{
-  "ok": true,
-  "data": {
-    "query": "transaction isolation",
-    "results": [
-      {
-        "rank": 1,
-        "node_id": 42,
-        "kind": "topic",
-        "title": "Isolation",
-        "breadcrumb": [
-          {"node_id": 1, "title": "Databases"},
-          {"node_id": 42, "title": "Isolation"}
-        ],
-        "snippet": "...transaction isolation...",
-        "match_reasons": ["phrase", "lexical"],
-        "related_hits": []
-      }
-    ]
-  }
-}
+{"ok":true,"data":{}}
 ```
 
-`rank` is stable only within that response. Raw BM25 values are not part of the
-public JSON contract because their scale changes with corpus and query shape.
-Ordinary single-mutation commands return the affected node IDs; ingestion
-returns the exact receipt described above. List commands return arrays, even for
-zero rows.
-
-With `--json`, an expected error is a single object on standard error:
+Failure:
 
 ```json
-{
-  "ok": false,
-  "error": {
-    "code": "would_create_cycle",
-    "message": "the requested parent is inside the node's subtree"
-  }
-}
+{"ok":false,"error":{"code":"stable_code","message":"description"}}
 ```
 
-Human error wording may improve over time; the short JSON error `code` is the
-machine-facing value.
-
-## Exit codes
+Exit categories are:
 
 | Code | Meaning |
 | ---: | --- |
-| 0 | Success, including a search with no matches. |
-| 1 | Unexpected runtime failure. |
-| 2 | Invalid command syntax, invalid title/body input, or an unsupported option combination. |
-| 3 | Requested library, tree, or node was not found. |
-| 4 | The operation conflicts with a tree invariant or needs confirmation. |
-| 5 | SQLite, schema initialization, integrity, or index failure. |
+| 0 | Success |
+| 1 | Unexpected process, I/O, or JSON failure |
+| 2 | Invalid command or input |
+| 3 | Missing library, tree, or node |
+| 4 | Invariant or confirmation conflict |
+| 5 | SQLite, integrity, or index failure |
 
-The JSON error code provides finer detail. The numeric set stays intentionally
-small.
-
-## Safety and concurrency
-
-- Every mutation and its ordinary FTS maintenance occur in one SQLite
-  transaction.
-- Ingestion validates a complete projected tree before changing canonical rows.
-- A failed invariant check rolls the whole command back.
-- `init` and `backup` do not overwrite files.
-- Recursive deletion is explicit and confirmable as described above.
-- The CLI uses a finite SQLite busy timeout and reports lock contention rather
-  than waiting forever.
-- Search indexes are derived data. `reindex` may replace them, but it never
-  rewrites canonical node titles, bodies, provenance, or hierarchy.
-- `init` creates the current schema; normal library opens never rewrite it.
-
-## Examples
-
-```sh
-# Start a library and make a root topic.
-annals init --library ./annals.db
-annals --library ./annals.db tree create \
-  --title "Databases" --body "Notes about database systems."
-
-# Add successively more detailed views. IDs shown here are placeholders.
-annals --library ./annals.db node add \
-  --parent ROOT_ID --kind topic --title "Transactions" \
-  --body "Atomicity, consistency, isolation, and durability."
-annals --library ./annals.db node add \
-  --parent TRANSACTIONS_ID --kind source --title "Isolation paper" \
-  --body-file ./paper.txt --locator "https://example.test/paper"
-
-# Search globally, then inside one branch.
-annals --library ./annals.db search "transaction isolation"
-annals --library ./annals.db search "serializable" \
-  --within TRANSACTIONS_ID --kind source --explain
-
-# Consume results from a script.
-annals --library ./annals.db --json search "write skew" --limit 5
-
-# Move safely, verify invariants, and rebuild derived search data.
-annals --library ./annals.db node move NODE_ID --parent NEW_PARENT_ID
-annals --library ./annals.db validate
-annals --library ./annals.db reindex
-```
+Terminal rendering escapes control characters from stored text. Color, when
+enabled, is used only for search highlights.

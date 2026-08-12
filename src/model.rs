@@ -1,152 +1,35 @@
-use std::{fmt, str::FromStr};
-
-use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 /// Stable identifier for a node within one library.
 pub type NodeId = i64;
 
-/// The structural role of a node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
-#[serde(rename_all = "lowercase")]
-pub enum NodeKind {
-    Topic,
-    Source,
-}
-
-impl NodeKind {
-    /// Return the value stored in `SQLite` and exposed through JSON.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Topic => "topic",
-            Self::Source => "source",
-        }
-    }
-}
-
-impl fmt::Display for NodeKind {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
-    }
-}
-
-impl FromStr for NodeKind {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "topic" => Ok(Self::Topic),
-            "source" => Ok(Self::Source),
-            _ => Err(format!("invalid node kind: {value}")),
-        }
-    }
-}
-
-/// Hard node-kind filter accepted by search.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum SearchKind {
-    #[default]
-    All,
-    Topic,
-    Source,
-}
-
-impl SearchKind {
-    /// Return the value exposed through JSON and the command line.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::All => "all",
-            Self::Topic => "topic",
-            Self::Source => "source",
-        }
-    }
-
-    /// Convert a concrete filter into its corresponding node kind.
-    #[must_use]
-    pub const fn node_kind(self) -> Option<NodeKind> {
-        match self {
-            Self::All => None,
-            Self::Topic => Some(NodeKind::Topic),
-            Self::Source => Some(NodeKind::Source),
-        }
-    }
-}
-
-impl fmt::Display for SearchKind {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
-    }
-}
-
-/// Tree-aware search presentation preference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum Detail {
-    Overview,
-    #[default]
-    Balanced,
-    Source,
-}
-
-impl Detail {
-    /// Return the value exposed through JSON and the command line.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Overview => "overview",
-            Self::Balanced => "balanced",
-            Self::Source => "source",
-        }
-    }
-}
-
-impl fmt::Display for Detail {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
-    }
-}
-
-/// Optional provenance attached to a source node.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Source {
-    pub node_id: NodeId,
-    pub locator: Option<String>,
-    pub media_type: Option<String>,
-    pub checksum: Option<String>,
-    pub captured_at: Option<String>,
-}
-
-/// One canonical topic or source node.
+/// One canonical conceptual node.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Node {
     pub id: NodeId,
     pub parent_id: Option<NodeId>,
-    pub kind: NodeKind,
-    pub title: String,
-    pub body: String,
+    pub text: String,
     #[serde(skip_serializing)]
     pub position: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generation_run_id: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
-    pub source: Option<Source>,
 }
 
-/// A node title in a root-to-result breadcrumb.
+/// A node string in a root-to-result breadcrumb.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BreadcrumbItem {
     #[serde(rename = "node_id")]
     pub id: NodeId,
-    pub title: String,
+    pub text: String,
 }
 
 /// One root returned by `tree list`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TreeSummary {
     pub root_id: NodeId,
-    pub title: String,
+    pub text: String,
     pub node_count: u64,
 }
 
@@ -163,10 +46,62 @@ pub struct LibraryStats {
     pub revision: i64,
     pub root_count: u64,
     pub node_count: u64,
-    pub source_count: u64,
+    pub raw_input_count: u64,
+    pub generation_run_count: u64,
+    pub support_link_count: u64,
     pub indexed_unit_count: u64,
     pub database_size_bytes: u64,
     pub index_current: bool,
+}
+
+/// The raw UTF-8 input retained for one ingestion.
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RawInput {
+    pub id: i64,
+    pub text: String,
+    pub sha256: String,
+    pub created_at: String,
+}
+
+/// The complete reproducibility record for an accepted generation.
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GenerationRun {
+    pub id: i64,
+    pub input_id: i64,
+    pub root_node_id: Option<NodeId>,
+    pub adapter_name: String,
+    pub adapter_version: String,
+    pub model: String,
+    pub reasoning_effort: String,
+    pub prompt_version: String,
+    pub output_schema_version: u32,
+    pub node_budget: usize,
+    pub max_depth: usize,
+    pub max_children: usize,
+    pub accepted_proposal_json: String,
+    pub created_at: String,
+}
+
+/// A deterministic byte window supplied to the model.
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputUnit {
+    pub run_id: i64,
+    pub unit_id: String,
+    pub start_byte: usize,
+    pub end_byte: usize,
+}
+
+/// One explicit grounding edge between a generated node and an input unit.
+#[cfg(test)]
+#[allow(clippy::struct_field_names)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeSupport {
+    pub node_id: NodeId,
+    pub run_id: i64,
+    pub unit_id: String,
 }
 
 /// Severity of a validation finding.
@@ -193,20 +128,13 @@ pub struct ValidationReport {
     pub issues: Vec<ValidationIssue>,
 }
 
-/// Byte range of a passage in the canonical node body.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BodyRange {
-    pub start_byte: usize,
-    pub end_byte: usize,
-}
-
 /// Stable, user-facing explanation for why a search result matched.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MatchReason {
     ExactId,
     ExactPath,
-    ExactTitle,
+    ExactText,
     Phrase,
     Lexical,
     Prefix,
@@ -224,7 +152,7 @@ pub struct ResultExplanation {
     pub exact_class: String,
     pub direct_score: f64,
     pub support_score: f64,
-    pub support_source_node_id: Option<NodeId>,
+    pub support_node_id: Option<NodeId>,
     pub chain_group_node_id: NodeId,
     pub grouping_reason: String,
     pub branch_key: NodeId,
@@ -249,10 +177,8 @@ pub struct SearchExplanation {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RelatedHit {
     pub node_id: NodeId,
-    pub kind: NodeKind,
-    pub title: String,
+    pub text: String,
     pub breadcrumb: Vec<BreadcrumbItem>,
-    pub body_range: Option<BodyRange>,
     pub snippet: Option<String>,
     pub match_reasons: Vec<MatchReason>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -264,10 +190,8 @@ pub struct RelatedHit {
 pub struct SearchResult {
     pub rank: usize,
     pub node_id: NodeId,
-    pub kind: NodeKind,
-    pub title: String,
+    pub text: String,
     pub breadcrumb: Vec<BreadcrumbItem>,
-    pub body_range: Option<BodyRange>,
     pub snippet: Option<String>,
     pub match_reasons: Vec<MatchReason>,
     pub related_hits: Vec<RelatedHit>,
@@ -292,19 +216,23 @@ pub struct MutationOutput {
 
 #[cfg(test)]
 mod tests {
-    use super::{NodeKind, SearchKind};
-    use std::str::FromStr;
+    use super::Node;
 
     #[test]
-    fn node_kind_uses_database_spelling() {
-        assert_eq!(NodeKind::from_str("topic"), Ok(NodeKind::Topic));
-        assert_eq!(NodeKind::Source.as_str(), "source");
-        assert!(NodeKind::from_str("other").is_err());
-    }
+    fn generated_run_is_omitted_for_manual_nodes_in_json() -> Result<(), serde_json::Error> {
+        let node = Node {
+            id: 1,
+            parent_id: None,
+            text: "Concept".to_owned(),
+            position: 0,
+            generation_run_id: None,
+            created_at: "2026-08-11T00:00:00Z".to_owned(),
+            updated_at: "2026-08-11T00:00:00Z".to_owned(),
+        };
 
-    #[test]
-    fn all_search_kind_has_no_database_filter() {
-        assert_eq!(SearchKind::All.node_kind(), None);
-        assert_eq!(SearchKind::Source.node_kind(), Some(NodeKind::Source));
+        let json = serde_json::to_value(node)?;
+        assert!(json.get("generation_run_id").is_none());
+        assert_eq!(json["text"], "Concept");
+        Ok(())
     }
 }

@@ -1,74 +1,94 @@
-use std::str::FromStr;
-
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::error::AppError;
-use crate::model::{Node, NodeKind, Source};
+use crate::model::Node;
+#[cfg(test)]
+use crate::model::{GenerationRun, InputUnit, NodeSupport, RawInput};
 
 const POSITION_STEP: i64 = 1024;
 
-#[derive(Clone, Debug, Default)]
-pub struct SourceFields {
-    pub locator: Option<String>,
-    pub media_type: Option<String>,
-    pub checksum: Option<String>,
-    pub captured_at: Option<String>,
-}
-
-impl SourceFields {
-    #[must_use]
-    pub fn supplied(&self) -> bool {
-        self.locator.is_some()
-            || self.media_type.is_some()
-            || self.checksum.is_some()
-            || self.captured_at.is_some()
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct NewNode {
-    pub kind: NodeKind,
-    pub title: String,
-    pub body: String,
+    pub text: String,
     pub position: Option<usize>,
-    pub source: SourceFields,
+    pub generation_run_id: Option<i64>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct NodeChanges {
-    pub kind: Option<NodeKind>,
-    pub title: Option<String>,
-    pub body: Option<String>,
-    pub source: SourceFields,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct EditOutcome {
-    pub title_changed: bool,
+    pub text: Option<String>,
 }
 
 #[derive(Clone, Debug)]
-struct RawNode {
-    id: i64,
-    parent_id: Option<i64>,
-    kind: String,
-    title: String,
-    body: String,
-    position: i64,
-    created_at: String,
-    updated_at: String,
-    source_node_id: Option<i64>,
-    locator: Option<String>,
-    media_type: Option<String>,
-    checksum: Option<String>,
-    captured_at: Option<String>,
+pub struct NewGenerationRun {
+    pub input_id: i64,
+    pub adapter_name: String,
+    pub adapter_version: String,
+    pub model: String,
+    pub reasoning_effort: String,
+    pub prompt_version: String,
+    pub output_schema_version: u32,
+    pub node_budget: usize,
+    pub max_depth: usize,
+    pub max_children: usize,
+    pub accepted_proposal_json: String,
 }
 
 fn now() -> Result<String, AppError> {
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .map_err(|error| AppError::unexpected("timestamp_error", error.to_string()))
+}
+
+fn validated_text(text: &str) -> Result<String, AppError> {
+    if text.is_empty() || text.trim() != text {
+        return Err(AppError::invalid(
+            "invalid_node_text",
+            "node text must be nonempty and may not have leading or trailing whitespace",
+        ));
+    }
+    Ok(text.to_owned())
+}
+
+fn required_text(value: &str, field: &'static str) -> Result<String, AppError> {
+    if value.is_empty() || value.trim() != value {
+        return Err(AppError::invalid(
+            "invalid_generation_metadata",
+            format!("{field} must be nonempty and trimmed"),
+        ));
+    }
+    Ok(value.to_owned())
+}
+
+fn to_i64(value: usize, field: &'static str) -> Result<i64, AppError> {
+    i64::try_from(value).map_err(|_| {
+        AppError::invalid(
+            "numeric_value_too_large",
+            format!("{field} is too large for the library format"),
+        )
+    })
+}
+
+fn to_usize(value: i64, field: &'static str) -> Result<usize, AppError> {
+    usize::try_from(value).map_err(|_| {
+        AppError::database(
+            "invalid_stored_number",
+            format!("stored {field} is negative or too large"),
+        )
+    })
+}
+
+fn raw_node(row: &rusqlite::Row<'_>) -> rusqlite::Result<Node> {
+    Ok(Node {
+        id: row.get(0)?,
+        parent_id: row.get(1)?,
+        generation_run_id: row.get(2)?,
+        text: row.get(3)?,
+        position: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+    })
 }
 
 /// Return the revision of the canonical library content.
@@ -100,140 +120,40 @@ pub fn bump_library_revision(transaction: &Transaction<'_>) -> Result<i64, AppEr
     Ok(revision)
 }
 
-fn validated_title(title: &str) -> Result<String, AppError> {
-    let title = title.trim();
-    if title.is_empty() {
-        return Err(AppError::invalid(
-            "invalid_title",
-            "a node title cannot be empty",
-        ));
-    }
-    Ok(title.to_owned())
-}
-
-fn validate_captured_at(value: Option<&str>) -> Result<(), AppError> {
-    if let Some(value) = value {
-        OffsetDateTime::parse(value, &Rfc3339).map_err(|_| {
-            AppError::invalid(
-                "invalid_captured_at",
-                "--captured-at must be an RFC 3339 timestamp",
-            )
-        })?;
-    }
-    Ok(())
-}
-
-fn validate_checksum(value: Option<&str>) -> Result<(), AppError> {
-    let Some(value) = value else {
-        return Ok(());
-    };
-    let Some((algorithm, digest)) = value.split_once(':') else {
-        return Err(AppError::invalid(
-            "invalid_checksum",
-            "--checksum must use an algorithm-prefixed value such as sha256:...",
-        ));
-    };
-    let valid_algorithm = !algorithm.is_empty()
-        && algorithm
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'));
-    if !valid_algorithm || digest.trim().is_empty() {
-        return Err(AppError::invalid(
-            "invalid_checksum",
-            "--checksum must use an algorithm-prefixed value such as sha256:...",
-        ));
-    }
-    Ok(())
-}
-
-fn raw_node(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawNode> {
-    Ok(RawNode {
-        id: row.get(0)?,
-        parent_id: row.get(1)?,
-        kind: row.get(2)?,
-        title: row.get(3)?,
-        body: row.get(4)?,
-        position: row.get(5)?,
-        created_at: row.get(6)?,
-        updated_at: row.get(7)?,
-        source_node_id: row.get(8)?,
-        locator: row.get(9)?,
-        media_type: row.get(10)?,
-        checksum: row.get(11)?,
-        captured_at: row.get(12)?,
-    })
-}
-
-fn materialize(raw: RawNode) -> Result<Node, AppError> {
-    let kind = NodeKind::from_str(&raw.kind).map_err(|_| {
-        AppError::database(
-            "invalid_node_kind",
-            format!("node {} has invalid kind {:?}", raw.id, raw.kind),
-        )
-    })?;
-    let source = raw.source_node_id.map(|node_id| Source {
-        node_id,
-        locator: raw.locator,
-        media_type: raw.media_type,
-        checksum: raw.checksum,
-        captured_at: raw.captured_at,
-    });
-    Ok(Node {
-        id: raw.id,
-        parent_id: raw.parent_id,
-        kind,
-        title: raw.title,
-        body: raw.body,
-        position: raw.position,
-        created_at: raw.created_at,
-        updated_at: raw.updated_at,
-        source,
-    })
-}
-
 pub fn get_node(connection: &Connection, node_id: i64) -> Result<Node, AppError> {
-    let raw = connection
+    connection
         .query_row(
-            "SELECT n.id, n.parent_id, n.kind, n.title, n.body, n.position, \
-                    n.created_at, n.updated_at, s.node_id, s.locator, s.media_type, \
-                    s.checksum, s.captured_at \
-             FROM nodes AS n LEFT JOIN sources AS s ON s.node_id = n.id \
-             WHERE n.id = ?1",
+            "SELECT id, parent_id, generation_run_id, text, position, created_at, updated_at \
+             FROM nodes WHERE id = ?1",
             [node_id],
             raw_node,
         )
-        .optional()?;
-    raw.map_or_else(
-        || {
-            Err(AppError::not_found(
-                "node_not_found",
-                format!("node {node_id} was not found"),
-            ))
-        },
-        materialize,
-    )
+        .optional()?
+        .ok_or_else(|| {
+            AppError::not_found("node_not_found", format!("node {node_id} was not found"))
+        })
 }
 
 /// Return the display path from the tree root through `node_id`.
 pub fn node_path(connection: &Connection, node_id: i64) -> Result<String, AppError> {
     let mut statement = connection.prepare(
-        "WITH RECURSIVE ancestors(id, parent_id, title, distance) AS ( \
-             SELECT id, parent_id, title, 0 FROM nodes WHERE id = ?1 \
+        "WITH RECURSIVE ancestors(id, parent_id, text, distance) AS ( \
+             SELECT id, parent_id, text, 0 FROM nodes WHERE id = ?1 \
              UNION ALL \
-             SELECT n.id, n.parent_id, n.title, ancestors.distance + 1 \
+             SELECT n.id, n.parent_id, n.text, ancestors.distance + 1 \
              FROM nodes AS n JOIN ancestors ON ancestors.parent_id = n.id \
          ) \
-         SELECT title FROM ancestors ORDER BY distance DESC",
+         SELECT text FROM ancestors ORDER BY distance DESC",
     )?;
     let rows = statement.query_map([node_id], |row| row.get::<_, String>(0))?;
-    let titles = rows.collect::<Result<Vec<_>, _>>()?;
-    if titles.is_empty() {
+    let parts = rows.collect::<Result<Vec<_>, _>>()?;
+    if parts.is_empty() {
         return Err(AppError::not_found(
             "node_not_found",
             format!("node {node_id} was not found"),
         ));
     }
-    Ok(titles.join(" / "))
+    Ok(parts.join(" / "))
 }
 
 fn sibling_ids(
@@ -339,20 +259,40 @@ fn insert_at(
     reorder(transaction, parent_id, &ids)
 }
 
-pub fn create_root(
+fn insert_root(
     transaction: &Transaction<'_>,
-    title: &str,
-    body: &str,
+    text: &str,
+    generation_run_id: Option<i64>,
 ) -> Result<i64, AppError> {
-    let title = validated_title(title)?;
+    let text = validated_text(text)?;
     let timestamp = now()?;
     let position = next_position(transaction, None)?;
     transaction.execute(
-        "INSERT INTO nodes(parent_id, kind, title, body, position, created_at, updated_at) \
-         VALUES(NULL, 'topic', ?1, ?2, ?3, ?4, ?4)",
-        params![title, body, position, timestamp],
+        "INSERT INTO nodes(parent_id, generation_run_id, text, position, created_at, updated_at) \
+         VALUES(NULL, ?1, ?2, ?3, ?4, ?4)",
+        params![generation_run_id, text, position, timestamp],
     )?;
     Ok(transaction.last_insert_rowid())
+}
+
+pub fn create_root(transaction: &Transaction<'_>, text: &str) -> Result<i64, AppError> {
+    insert_root(transaction, text, None)
+}
+
+pub fn create_generation_root(
+    transaction: &Transaction<'_>,
+    generation_run_id: i64,
+    text: &str,
+) -> Result<i64, AppError> {
+    insert_root(transaction, text, Some(generation_run_id))
+}
+
+pub fn create_root_for_run(
+    transaction: &Transaction<'_>,
+    text: &str,
+    generation_run_id: i64,
+) -> Result<i64, AppError> {
+    create_generation_root(transaction, generation_run_id, text)
 }
 
 pub fn add_node(
@@ -361,21 +301,20 @@ pub fn add_node(
     new_node: &NewNode,
 ) -> Result<i64, AppError> {
     let parent = get_node(transaction, parent_id)?;
-    if parent.kind == NodeKind::Source {
+    if parent.generation_run_id.is_some() && new_node.generation_run_id.is_none() {
         return Err(AppError::conflict(
-            "source_cannot_have_children",
-            format!("source node {parent_id} cannot have children"),
+            "generated_tree_immutable",
+            "generated trees cannot be changed with manual node commands",
         ));
     }
-    if new_node.kind == NodeKind::Topic && new_node.source.supplied() {
-        return Err(AppError::invalid(
-            "source_metadata_for_topic",
-            "source metadata can only be supplied for a source node",
+    let generation_run_id = new_node.generation_run_id.or(parent.generation_run_id);
+    if generation_run_id != parent.generation_run_id {
+        return Err(AppError::conflict(
+            "generation_run_mismatch",
+            "a child must belong to the same generation run as its parent",
         ));
     }
-    validate_captured_at(new_node.source.captured_at.as_deref())?;
-    validate_checksum(new_node.source.checksum.as_deref())?;
-    let title = validated_title(&new_node.title)?;
+    let text = validated_text(&new_node.text)?;
     if let Some(position) = new_node.position {
         let sibling_count = sibling_ids(transaction, Some(parent_id), None)?.len();
         if position > sibling_count {
@@ -390,128 +329,41 @@ pub fn add_node(
     let timestamp = now()?;
     let position = next_position(transaction, Some(parent_id))?;
     transaction.execute(
-        "INSERT INTO nodes(parent_id, kind, title, body, position, created_at, updated_at) \
-         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-        params![
-            parent_id,
-            new_node.kind.as_str(),
-            title,
-            new_node.body,
-            position,
-            timestamp
-        ],
+        "INSERT INTO nodes(parent_id, generation_run_id, text, position, created_at, updated_at) \
+         VALUES(?1, ?2, ?3, ?4, ?5, ?5)",
+        params![parent_id, generation_run_id, text, position, timestamp],
     )?;
     let node_id = transaction.last_insert_rowid();
-    if new_node.kind == NodeKind::Source {
-        transaction.execute(
-            "INSERT INTO sources(node_id, locator, media_type, checksum, captured_at) \
-             VALUES(?1, ?2, ?3, ?4, ?5)",
-            params![
-                node_id,
-                new_node.source.locator,
-                new_node.source.media_type,
-                new_node.source.checksum,
-                new_node.source.captured_at
-            ],
-        )?;
-    }
     if new_node.position.is_some() {
         insert_at(transaction, Some(parent_id), node_id, new_node.position)?;
     }
     Ok(node_id)
 }
 
-pub fn child_count(connection: &Connection, node_id: i64) -> Result<usize, AppError> {
-    let count = connection.query_row(
-        "SELECT COUNT(*) FROM nodes WHERE parent_id = ?1",
-        [node_id],
-        |row| row.get::<_, i64>(0),
-    )?;
-    usize::try_from(count)
-        .map_err(|_| AppError::database("invalid_count", "database returned a negative count"))
-}
-
 pub fn edit_node(
     transaction: &Transaction<'_>,
     node_id: i64,
     changes: &NodeChanges,
-) -> Result<EditOutcome, AppError> {
+) -> Result<(), AppError> {
     let old = get_node(transaction, node_id)?;
-    if changes.kind.is_none()
-        && changes.title.is_none()
-        && changes.body.is_none()
-        && !changes.source.supplied()
-    {
+    if old.generation_run_id.is_some() {
+        return Err(AppError::conflict(
+            "generated_tree_immutable",
+            "generated trees cannot be changed with manual node commands",
+        ));
+    }
+    let Some(text) = changes.text.as_deref() else {
         return Err(AppError::invalid(
             "no_changes",
-            "node edit requires at least one change",
+            "node edit requires a new text value",
         ));
-    }
-    let kind = changes.kind.unwrap_or(old.kind);
-    let title = match changes.title.as_deref() {
-        Some(value) => validated_title(value)?,
-        None => old.title.clone(),
     };
-    if kind == NodeKind::Source && child_count(transaction, node_id)? > 0 {
-        return Err(AppError::conflict(
-            "source_cannot_have_children",
-            format!("node {node_id} has children and cannot become a source"),
-        ));
-    }
-    if kind == NodeKind::Topic && changes.source.supplied() {
-        return Err(AppError::invalid(
-            "source_metadata_for_topic",
-            "source metadata can only be supplied for a source node",
-        ));
-    }
-    validate_captured_at(changes.source.captured_at.as_deref())?;
-    validate_checksum(changes.source.checksum.as_deref())?;
-    let body = changes.body.as_deref().unwrap_or(&old.body);
-    let timestamp = now()?;
+    let text = validated_text(text)?;
     transaction.execute(
-        "UPDATE nodes SET kind = ?1, title = ?2, body = ?3, updated_at = ?4 WHERE id = ?5",
-        params![kind.as_str(), title, body, timestamp, node_id],
+        "UPDATE nodes SET text = ?1, updated_at = ?2 WHERE id = ?3",
+        params![text, now()?, node_id],
     )?;
-
-    match (old.kind, kind) {
-        (NodeKind::Topic, NodeKind::Source) => {
-            transaction.execute(
-                "INSERT INTO sources(node_id, locator, media_type, checksum, captured_at) \
-                 VALUES(?1, ?2, ?3, ?4, ?5)",
-                params![
-                    node_id,
-                    changes.source.locator,
-                    changes.source.media_type,
-                    changes.source.checksum,
-                    changes.source.captured_at
-                ],
-            )?;
-        }
-        (NodeKind::Source, NodeKind::Topic) => {
-            transaction.execute("DELETE FROM sources WHERE node_id = ?1", [node_id])?;
-        }
-        (NodeKind::Source, NodeKind::Source) if changes.source.supplied() => {
-            transaction.execute(
-                "UPDATE sources SET \
-                    locator = COALESCE(?1, locator), \
-                    media_type = COALESCE(?2, media_type), \
-                    checksum = COALESCE(?3, checksum), \
-                    captured_at = COALESCE(?4, captured_at) \
-                 WHERE node_id = ?5",
-                params![
-                    changes.source.locator,
-                    changes.source.media_type,
-                    changes.source.checksum,
-                    changes.source.captured_at,
-                    node_id
-                ],
-            )?;
-        }
-        _ => {}
-    }
-    Ok(EditOutcome {
-        title_changed: title != old.title,
-    })
+    Ok(())
 }
 
 pub fn subtree_ids(connection: &Connection, node_id: i64) -> Result<Vec<i64>, AppError> {
@@ -576,19 +428,25 @@ pub fn move_node(
     position: Option<usize>,
 ) -> Result<(), AppError> {
     let node = get_node(transaction, node_id)?;
+    if node.generation_run_id.is_some() {
+        return Err(AppError::conflict(
+            "generated_tree_immutable",
+            "generated trees cannot be changed with manual node commands",
+        ));
+    }
     let new_parent = get_node(transaction, new_parent_id)?;
+    if new_parent.generation_run_id.is_some() {
+        return Err(AppError::conflict(
+            "generated_tree_immutable",
+            "generated trees cannot be changed with manual node commands",
+        ));
+    }
     let old_parent_id = node.parent_id.ok_or_else(|| {
         AppError::conflict(
             "root_move_not_allowed",
             "root nodes cannot be moved with `node move`",
         )
     })?;
-    if new_parent.kind == NodeKind::Source {
-        return Err(AppError::conflict(
-            "source_cannot_have_children",
-            format!("source node {new_parent_id} cannot have children"),
-        ));
-    }
     if contains_in_subtree(transaction, node_id, new_parent_id)? {
         return Err(AppError::conflict(
             "would_create_cycle",
@@ -655,6 +513,12 @@ pub fn move_node(
 
 pub fn delete_node(transaction: &Transaction<'_>, node_id: i64) -> Result<(), AppError> {
     let node = get_node(transaction, node_id)?;
+    if node.generation_run_id.is_some() {
+        return Err(AppError::conflict(
+            "generated_tree_immutable",
+            "generated trees cannot be changed with manual node commands",
+        ));
+    }
     node.parent_id.ok_or_else(|| {
         AppError::conflict(
             "root_delete_not_allowed",
@@ -673,18 +537,29 @@ pub fn delete_tree(transaction: &Transaction<'_>, root_node_id: i64) -> Result<(
             format!("node {root_node_id} is not a tree root"),
         ));
     }
-    transaction.execute("DELETE FROM nodes WHERE id = ?1", [root_node_id])?;
+    if let Some(run_id) = root.generation_run_id {
+        let input_id = transaction.query_row(
+            "SELECT input_id FROM generation_runs WHERE id = ?1",
+            [run_id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        transaction.execute("DELETE FROM generation_runs WHERE id = ?1", [run_id])?;
+        transaction.execute(
+            "DELETE FROM raw_inputs WHERE id = ?1 \
+             AND NOT EXISTS(SELECT 1 FROM generation_runs WHERE input_id = ?1)",
+            [input_id],
+        )?;
+    } else {
+        transaction.execute("DELETE FROM nodes WHERE id = ?1", [root_node_id])?;
+    }
     Ok(())
 }
 
 pub fn roots(connection: &Connection) -> Result<Vec<Node>, AppError> {
     nodes_for_query(
         connection,
-        "SELECT n.id, n.parent_id, n.kind, n.title, n.body, n.position, \
-                n.created_at, n.updated_at, s.node_id, s.locator, s.media_type, \
-                s.checksum, s.captured_at \
-         FROM nodes AS n LEFT JOIN sources AS s ON s.node_id = n.id \
-         WHERE n.parent_id IS NULL ORDER BY n.position, n.id",
+        "SELECT id, parent_id, generation_run_id, text, position, created_at, updated_at \
+         FROM nodes WHERE parent_id IS NULL ORDER BY position, id",
         [],
     )
 }
@@ -693,11 +568,8 @@ pub fn children(connection: &Connection, node_id: i64) -> Result<Vec<Node>, AppE
     get_node(connection, node_id)?;
     nodes_for_query(
         connection,
-        "SELECT n.id, n.parent_id, n.kind, n.title, n.body, n.position, \
-                n.created_at, n.updated_at, s.node_id, s.locator, s.media_type, \
-                s.checksum, s.captured_at \
-         FROM nodes AS n LEFT JOIN sources AS s ON s.node_id = n.id \
-         WHERE n.parent_id = ?1 ORDER BY n.position, n.id",
+        "SELECT id, parent_id, generation_run_id, text, position, created_at, updated_at \
+         FROM nodes WHERE parent_id = ?1 ORDER BY position, id",
         [node_id],
     )
 }
@@ -709,8 +581,7 @@ fn nodes_for_query<P: rusqlite::Params>(
 ) -> Result<Vec<Node>, AppError> {
     let mut statement = connection.prepare(sql)?;
     let rows = statement.query_map(parameters, raw_node)?;
-    rows.map(|row| row.map_err(AppError::from).and_then(materialize))
-        .collect()
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
 pub fn subtree_with_depth(
@@ -735,24 +606,271 @@ pub fn subtree_with_depth(
              FROM nodes AS n JOIN subtree ON n.parent_id = subtree.id \
              WHERE subtree.depth < ?2 \
          ) \
-         SELECT n.id, n.parent_id, n.kind, n.title, n.body, n.position, \
-                n.created_at, n.updated_at, s.node_id, s.locator, s.media_type, \
-                s.checksum, s.captured_at, subtree.depth \
+         SELECT n.id, n.parent_id, n.generation_run_id, n.text, n.position, \
+                n.created_at, n.updated_at, subtree.depth \
          FROM subtree JOIN nodes AS n ON n.id = subtree.id \
-         LEFT JOIN sources AS s ON s.node_id = n.id \
          ORDER BY subtree.sort_path",
     )?;
     let rows = statement.query_map(params![root_node_id, depth_limit], |row| {
-        Ok((raw_node(row)?, row.get::<_, i64>(13)?))
+        Ok((raw_node(row)?, row.get::<_, i64>(7)?))
     })?;
     rows.map(|row| {
-        let (raw, depth) = row?;
-        let depth = usize::try_from(depth).map_err(|_| {
-            AppError::database("invalid_depth", "database returned a negative tree depth")
-        })?;
-        Ok((materialize(raw)?, depth))
+        let (node, depth) = row?;
+        Ok((node, to_usize(depth, "tree depth")?))
     })
     .collect()
+}
+
+/// Persist one raw input. The caller supplies its lowercase hexadecimal SHA-256.
+pub fn insert_raw_input(
+    transaction: &Transaction<'_>,
+    text: &str,
+    sha256: &str,
+) -> Result<i64, AppError> {
+    if sha256.len() != 64
+        || !sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        return Err(AppError::invalid(
+            "invalid_sha256",
+            "raw input checksum must be 64 lowercase hexadecimal characters",
+        ));
+    }
+    transaction.execute(
+        "INSERT INTO raw_inputs(text, sha256, created_at) VALUES(?1, ?2, ?3)",
+        params![text, sha256, now()?],
+    )?;
+    Ok(transaction.last_insert_rowid())
+}
+
+/// Start a generation record. Set its root after inserting the accepted nodes.
+pub fn insert_generation_run(
+    transaction: &Transaction<'_>,
+    run: &NewGenerationRun,
+) -> Result<i64, AppError> {
+    let adapter_name = required_text(&run.adapter_name, "adapter name")?;
+    let adapter_version = required_text(&run.adapter_version, "adapter version")?;
+    let model = required_text(&run.model, "model")?;
+    let reasoning_effort = required_text(&run.reasoning_effort, "reasoning effort")?;
+    let prompt_version = required_text(&run.prompt_version, "prompt version")?;
+    if run.output_schema_version == 0
+        || run.node_budget == 0
+        || run.max_children == 0
+        || serde_json::from_str::<serde_json::Value>(&run.accepted_proposal_json).is_err()
+    {
+        return Err(AppError::invalid(
+            "invalid_generation_metadata",
+            "generation limits and accepted proposal must be valid",
+        ));
+    }
+    transaction.execute(
+        "INSERT INTO generation_runs( \
+             input_id, root_node_id, adapter_name, adapter_version, model, reasoning_effort, \
+             prompt_version, output_schema_version, node_budget, max_depth, max_children, \
+             accepted_proposal_json, created_at \
+         ) VALUES(?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![
+            run.input_id,
+            adapter_name,
+            adapter_version,
+            model,
+            reasoning_effort,
+            prompt_version,
+            i64::from(run.output_schema_version),
+            to_i64(run.node_budget, "node budget")?,
+            to_i64(run.max_depth, "maximum depth")?,
+            to_i64(run.max_children, "maximum children")?,
+            run.accepted_proposal_json,
+            now()?,
+        ],
+    )?;
+    Ok(transaction.last_insert_rowid())
+}
+
+pub fn set_generation_root(
+    transaction: &Transaction<'_>,
+    run_id: i64,
+    root_node_id: i64,
+) -> Result<(), AppError> {
+    let changed = transaction.execute(
+        "UPDATE generation_runs SET root_node_id = ?1 \
+         WHERE id = ?2 \
+           AND root_node_id IS NULL \
+           AND EXISTS( \
+               SELECT 1 FROM nodes \
+               WHERE id = ?1 AND parent_id IS NULL AND generation_run_id = ?2 \
+           )",
+        params![root_node_id, run_id],
+    )?;
+    if changed != 1 {
+        return Err(AppError::conflict(
+            "invalid_generation_root",
+            "generation root must be an unset root node from the same run",
+        ));
+    }
+    Ok(())
+}
+
+pub fn insert_input_unit(
+    transaction: &Transaction<'_>,
+    run_id: i64,
+    unit_id: &str,
+    start_byte: usize,
+    end_byte: usize,
+) -> Result<(), AppError> {
+    if unit_id.is_empty() || unit_id.trim() != unit_id || end_byte <= start_byte {
+        return Err(AppError::invalid(
+            "invalid_input_unit",
+            "input units require a trimmed ID and a nonempty byte range",
+        ));
+    }
+    transaction.execute(
+        "INSERT INTO input_units(run_id, unit_id, start_byte, end_byte) \
+         VALUES(?1, ?2, ?3, ?4)",
+        params![
+            run_id,
+            unit_id,
+            to_i64(start_byte, "unit start byte")?,
+            to_i64(end_byte, "unit end byte")?
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn insert_node_support(
+    transaction: &Transaction<'_>,
+    node_id: i64,
+    run_id: i64,
+    unit_id: &str,
+) -> Result<(), AppError> {
+    transaction.execute(
+        "INSERT INTO node_support(node_id, run_id, unit_id) VALUES(?1, ?2, ?3)",
+        params![node_id, run_id, unit_id],
+    )?;
+    Ok(())
+}
+
+#[cfg(test)]
+fn get_raw_input(connection: &Connection, input_id: i64) -> Result<RawInput, AppError> {
+    connection
+        .query_row(
+            "SELECT id, text, sha256, created_at FROM raw_inputs WHERE id = ?1",
+            [input_id],
+            |row| {
+                Ok(RawInput {
+                    id: row.get(0)?,
+                    text: row.get(1)?,
+                    sha256: row.get(2)?,
+                    created_at: row.get(3)?,
+                })
+            },
+        )
+        .optional()?
+        .ok_or_else(|| {
+            AppError::not_found(
+                "raw_input_not_found",
+                format!("raw input {input_id} was not found"),
+            )
+        })
+}
+
+#[cfg(test)]
+fn get_generation_run(connection: &Connection, run_id: i64) -> Result<GenerationRun, AppError> {
+    let raw = connection
+        .query_row(
+            "SELECT id, input_id, root_node_id, adapter_name, adapter_version, model, \
+                    reasoning_effort, prompt_version, output_schema_version, node_budget, \
+                    max_depth, max_children, accepted_proposal_json, created_at \
+             FROM generation_runs WHERE id = ?1",
+            [run_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, i64>(8)?,
+                    row.get::<_, i64>(9)?,
+                    row.get::<_, i64>(10)?,
+                    row.get::<_, i64>(11)?,
+                    row.get::<_, String>(12)?,
+                    row.get::<_, String>(13)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some(raw) = raw else {
+        return Err(AppError::not_found(
+            "generation_run_not_found",
+            format!("generation run {run_id} was not found"),
+        ));
+    };
+    Ok(GenerationRun {
+        id: raw.0,
+        input_id: raw.1,
+        root_node_id: raw.2,
+        adapter_name: raw.3,
+        adapter_version: raw.4,
+        model: raw.5,
+        reasoning_effort: raw.6,
+        prompt_version: raw.7,
+        output_schema_version: u32::try_from(raw.8).map_err(|_| {
+            AppError::database("invalid_stored_number", "invalid output schema version")
+        })?,
+        node_budget: to_usize(raw.9, "node budget")?,
+        max_depth: to_usize(raw.10, "maximum depth")?,
+        max_children: to_usize(raw.11, "maximum children")?,
+        accepted_proposal_json: raw.12,
+        created_at: raw.13,
+    })
+}
+
+#[cfg(test)]
+fn input_units(connection: &Connection, run_id: i64) -> Result<Vec<InputUnit>, AppError> {
+    let mut statement = connection.prepare(
+        "SELECT run_id, unit_id, start_byte, end_byte \
+         FROM input_units WHERE run_id = ?1 ORDER BY start_byte, unit_id",
+    )?;
+    let rows = statement.query_map([run_id], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, i64>(2)?,
+            row.get::<_, i64>(3)?,
+        ))
+    })?;
+    rows.map(|row| {
+        let (run_id, unit_id, start_byte, end_byte) = row?;
+        Ok(InputUnit {
+            run_id,
+            unit_id,
+            start_byte: to_usize(start_byte, "unit start byte")?,
+            end_byte: to_usize(end_byte, "unit end byte")?,
+        })
+    })
+    .collect()
+}
+
+#[cfg(test)]
+fn node_support(connection: &Connection, node_id: i64) -> Result<Vec<NodeSupport>, AppError> {
+    get_node(connection, node_id)?;
+    let mut statement = connection.prepare(
+        "SELECT node_id, run_id, unit_id FROM node_support \
+         WHERE node_id = ?1 ORDER BY unit_id",
+    )?;
+    let rows = statement.query_map([node_id], |row| {
+        Ok(NodeSupport {
+            node_id: row.get(0)?,
+            run_id: row.get(1)?,
+            unit_id: row.get(2)?,
+        })
+    })?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
 #[cfg(test)]
@@ -772,23 +890,11 @@ mod tests {
         Ok((directory, connection))
     }
 
-    fn topic(title: &str, position: Option<usize>) -> NewNode {
+    fn child(text: &str, position: Option<usize>) -> NewNode {
         NewNode {
-            kind: NodeKind::Topic,
-            title: title.to_owned(),
-            body: String::new(),
+            text: text.to_owned(),
             position,
-            source: SourceFields::default(),
-        }
-    }
-
-    fn source(title: &str) -> NewNode {
-        NewNode {
-            kind: NodeKind::Source,
-            title: title.to_owned(),
-            body: format!("source body for {title}"),
-            position: None,
-            source: SourceFields::default(),
+            generation_run_id: None,
         }
     }
 
@@ -796,297 +902,90 @@ mod tests {
         nodes.iter().map(|node| node.id).collect()
     }
 
-    fn positions(nodes: &[Node]) -> Vec<i64> {
-        nodes.iter().map(|node| node.position).collect()
-    }
-
     #[test]
-    fn inserts_at_requested_ordinals_and_rejects_out_of_range_positions() -> TestResult {
+    fn homogeneous_tree_crud_preserves_order_and_paths() -> TestResult {
         let (_directory, mut connection) = library()?;
         let transaction = connection.transaction()?;
-        let root = create_root(&transaction, "Root", "")?;
-        let alpha = add_node(&transaction, root, &topic("Alpha", None))?;
-        let gamma = add_node(&transaction, root, &topic("Gamma", None))?;
-        let beta = add_node(&transaction, root, &topic("Beta", Some(1)))?;
-
-        let Err(error) = add_node(&transaction, root, &topic("Too far", Some(4))) else {
-            return Err("an out-of-range insertion unexpectedly succeeded".into());
-        };
-        assert_eq!(error.code(), "invalid_position");
-        transaction.commit()?;
-
-        let children = children(&connection, root)?;
-        assert_eq!(node_ids(&children), [alpha, beta, gamma]);
-        assert_eq!(positions(&children), [0, POSITION_STEP, 2 * POSITION_STEP]);
-        Ok(())
-    }
-
-    #[test]
-    fn node_path_is_root_to_node_and_reports_missing_nodes() -> TestResult {
-        let (_directory, mut connection) = library()?;
-        let transaction = connection.transaction()?;
-        let root = create_root(&transaction, "Root", "")?;
-        let branch = add_node(&transaction, root, &topic("Branch", None))?;
-        let leaf = add_node(&transaction, branch, &topic("Leaf", None))?;
-
-        assert_eq!(node_path(&transaction, leaf)?, "Root / Branch / Leaf");
-        let Err(error) = node_path(&transaction, i64::MAX) else {
-            return Err("a missing node unexpectedly produced a path".into());
-        };
-        assert_eq!(error.code(), "node_not_found");
-        transaction.commit()?;
-        Ok(())
-    }
-
-    #[test]
-    fn sources_reject_children_and_topics_reject_source_metadata() -> TestResult {
-        let (_directory, mut connection) = library()?;
-        let transaction = connection.transaction()?;
-        let root = create_root(&transaction, "Root", "")?;
-        let source_id = add_node(&transaction, root, &source("Source"))?;
-
-        let Err(error) = add_node(&transaction, source_id, &topic("Child", None)) else {
-            return Err("a child was unexpectedly added beneath a source".into());
-        };
-        assert_eq!(error.code(), "source_cannot_have_children");
-
-        let topic_with_source_metadata = NewNode {
-            source: SourceFields {
-                locator: Some("https://example.test".to_owned()),
-                ..SourceFields::default()
-            },
-            ..topic("Topic", None)
-        };
-        let Err(error) = add_node(&transaction, root, &topic_with_source_metadata) else {
-            return Err("source metadata was unexpectedly accepted for a topic".into());
-        };
-        assert_eq!(error.code(), "source_metadata_for_topic");
-
-        let invalid_checksum = NewNode {
-            source: SourceFields {
-                checksum: Some("unversioned-digest".to_owned()),
-                ..SourceFields::default()
-            },
-            ..source("Invalid checksum")
-        };
-        let Err(error) = add_node(&transaction, root, &invalid_checksum) else {
-            return Err("an unversioned checksum was unexpectedly accepted".into());
-        };
-        assert_eq!(error.code(), "invalid_checksum");
-        transaction.commit()?;
-
-        assert_eq!(child_count(&connection, source_id)?, 0);
-        assert_eq!(node_ids(&children(&connection, root)?), [source_id]);
-        Ok(())
-    }
-
-    #[test]
-    fn kind_changes_maintain_source_rows_and_preserve_parent_rules() -> TestResult {
-        let (_directory, mut connection) = library()?;
-        let transaction = connection.transaction()?;
-        let root = create_root(&transaction, "Root", "")?;
-        let leaf = add_node(&transaction, root, &topic("Leaf", None))?;
-        let parent = add_node(&transaction, root, &topic("Parent", None))?;
-        let _child = add_node(&transaction, parent, &topic("Child", None))?;
-
-        let Err(error) = edit_node(&transaction, leaf, &NodeChanges::default()) else {
-            return Err("an empty edit unexpectedly succeeded".into());
-        };
-        assert_eq!(error.code(), "no_changes");
-
-        let to_source = NodeChanges {
-            kind: Some(NodeKind::Source),
-            source: SourceFields {
-                locator: Some("paper:42".to_owned()),
-                captured_at: Some("2026-08-11T12:00:00Z".to_owned()),
-                ..SourceFields::default()
-            },
-            ..NodeChanges::default()
-        };
-        edit_node(&transaction, leaf, &to_source)?;
-        let converted = get_node(&transaction, leaf)?;
-        assert_eq!(converted.kind, NodeKind::Source);
-        assert_eq!(
-            converted
-                .source
-                .as_ref()
-                .and_then(|item| item.locator.as_deref()),
-            Some("paper:42")
-        );
-
+        let root = create_root(&transaction, "Root")?;
+        let alpha = add_node(&transaction, root, &child("Alpha", None))?;
+        let gamma = add_node(&transaction, root, &child("Gamma", None))?;
+        let beta = add_node(&transaction, root, &child("Beta", Some(1)))?;
+        assert_eq!(node_path(&transaction, beta)?, "Root / Beta");
         edit_node(
             &transaction,
-            leaf,
+            beta,
             &NodeChanges {
-                kind: Some(NodeKind::Topic),
-                ..NodeChanges::default()
+                text: Some("Beta revised".to_owned()),
             },
         )?;
-        let converted_back = get_node(&transaction, leaf)?;
-        assert_eq!(converted_back.kind, NodeKind::Topic);
-        assert!(converted_back.source.is_none());
-
-        let Err(error) = edit_node(&transaction, parent, &to_source) else {
-            return Err("a topic with children unexpectedly became a source".into());
-        };
-        assert_eq!(error.code(), "source_cannot_have_children");
         transaction.commit()?;
 
-        assert_eq!(get_node(&connection, parent)?.kind, NodeKind::Topic);
-        Ok(())
-    }
-
-    #[test]
-    fn move_rejects_cycles_cross_tree_moves_roots_and_source_parents() -> TestResult {
-        let (_directory, mut connection) = library()?;
-        let transaction = connection.transaction()?;
-        let first_root = create_root(&transaction, "First", "")?;
-        let branch = add_node(&transaction, first_root, &topic("Branch", None))?;
-        let descendant = add_node(&transaction, branch, &topic("Descendant", None))?;
-        let source_id = add_node(&transaction, first_root, &source("Source"))?;
-        let second_root = create_root(&transaction, "Second", "")?;
-        let other_tree_node = add_node(&transaction, second_root, &topic("Other", None))?;
-
-        let Err(error) = move_node(&transaction, branch, descendant, None) else {
-            return Err("a cycle-producing move unexpectedly succeeded".into());
-        };
-        assert_eq!(error.code(), "would_create_cycle");
-
-        let Err(error) = move_node(&transaction, branch, other_tree_node, None) else {
-            return Err("a cross-tree move unexpectedly succeeded".into());
-        };
-        assert_eq!(error.code(), "cross_tree_move_not_supported");
-
-        let Err(error) = move_node(&transaction, first_root, branch, None) else {
-            return Err("a root move unexpectedly succeeded".into());
-        };
-        assert_eq!(error.code(), "root_move_not_allowed");
-
-        let Err(error) = move_node(&transaction, branch, source_id, None) else {
-            return Err("a move beneath a source unexpectedly succeeded".into());
-        };
-        assert_eq!(error.code(), "source_cannot_have_children");
-        transaction.commit()?;
-
-        assert_eq!(get_node(&connection, branch)?.parent_id, Some(first_root));
-        assert_eq!(get_node(&connection, descendant)?.parent_id, Some(branch));
-        Ok(())
-    }
-
-    #[test]
-    fn ordinary_moves_and_deletes_preserve_spaced_positions() -> TestResult {
-        let (_directory, mut connection) = library()?;
-        let transaction = connection.transaction()?;
-        let root = create_root(&transaction, "Root", "")?;
-        let left = add_node(&transaction, root, &topic("Left", None))?;
-        let right = add_node(&transaction, root, &topic("Right", None))?;
-        let left_first = add_node(&transaction, left, &topic("Left first", None))?;
-        let left_second = add_node(&transaction, left, &topic("Left second", None))?;
-        let left_third = add_node(&transaction, left, &topic("Left third", None))?;
-        let right_first = add_node(&transaction, right, &topic("Right first", None))?;
-
-        let changes_before = transaction.total_changes();
-        move_node(&transaction, left_first, left, None)?;
-        assert_eq!(transaction.total_changes() - changes_before, 1);
-        let left_children = children(&transaction, left)?;
         assert_eq!(
-            node_ids(&left_children),
-            [left_second, left_third, left_first]
+            node_ids(&children(&connection, root)?),
+            [alpha, beta, gamma]
         );
-        assert_eq!(
-            positions(&left_children),
-            [POSITION_STEP, 2 * POSITION_STEP, 3 * POSITION_STEP]
-        );
-
-        let changes_before = transaction.total_changes();
-        move_node(&transaction, left_second, right, None)?;
-        assert_eq!(transaction.total_changes() - changes_before, 1);
-        let right_children = children(&transaction, right)?;
-        assert_eq!(node_ids(&right_children), [right_first, left_second]);
-        assert_eq!(positions(&right_children), [0, POSITION_STEP]);
-        let left_children = children(&transaction, left)?;
-        assert_eq!(node_ids(&left_children), [left_third, left_first]);
-        assert_eq!(
-            positions(&left_children),
-            [2 * POSITION_STEP, 3 * POSITION_STEP]
-        );
-
-        let changes_before = transaction.total_changes();
-        delete_node(&transaction, left_third)?;
-        assert_eq!(transaction.total_changes() - changes_before, 1);
-        let left_children = children(&transaction, left)?;
-        assert_eq!(node_ids(&left_children), [left_first]);
-        assert_eq!(positions(&left_children), [3 * POSITION_STEP]);
-        transaction.commit()?;
+        assert_eq!(get_node(&connection, beta)?.text, "Beta revised");
         Ok(())
     }
 
     #[test]
-    fn moves_reorder_both_parent_lists() -> TestResult {
+    fn generated_record_round_trips_with_units_and_support() -> TestResult {
         let (_directory, mut connection) = library()?;
         let transaction = connection.transaction()?;
-        let root = create_root(&transaction, "Root", "")?;
-        let left = add_node(&transaction, root, &topic("Left", None))?;
-        let right = add_node(&transaction, root, &topic("Right", None))?;
-        let left_first = add_node(&transaction, left, &topic("Left first", None))?;
-        let left_second = add_node(&transaction, left, &topic("Left second", None))?;
-        let right_first = add_node(&transaction, right, &topic("Right first", None))?;
-
-        move_node(&transaction, left_first, right, Some(0))?;
-        move_node(&transaction, right_first, right, Some(0))?;
-
-        let Err(error) = move_node(&transaction, left_second, right, Some(4)) else {
-            return Err("an out-of-range move unexpectedly succeeded".into());
-        };
-        assert_eq!(error.code(), "invalid_position");
+        let input_id = insert_raw_input(&transaction, "alpha beta", &"a".repeat(64))?;
+        let run_id = insert_generation_run(
+            &transaction,
+            &NewGenerationRun {
+                input_id,
+                adapter_name: "raw-window".to_owned(),
+                adapter_version: "1".to_owned(),
+                model: "gpt-5.6-terra".to_owned(),
+                reasoning_effort: "medium".to_owned(),
+                prompt_version: "1".to_owned(),
+                output_schema_version: 1,
+                node_budget: 32,
+                max_depth: 6,
+                max_children: 6,
+                accepted_proposal_json: r#"{"schema_version":1,"nodes":[]}"#.to_owned(),
+            },
+        )?;
+        insert_input_unit(&transaction, run_id, "u000000", 0, 10)?;
+        let root = create_generation_root(&transaction, run_id, "Family")?;
+        let leaf = add_node(
+            &transaction,
+            root,
+            &NewNode {
+                text: "Alpha".to_owned(),
+                position: None,
+                generation_run_id: Some(run_id),
+            },
+        )?;
+        insert_node_support(&transaction, leaf, run_id, "u000000")?;
+        set_generation_root(&transaction, run_id, root)?;
         transaction.commit()?;
 
-        let left_children = children(&connection, left)?;
-        assert_eq!(node_ids(&left_children), [left_second]);
-        assert_eq!(positions(&left_children), [0]);
-        let right_children = children(&connection, right)?;
-        assert_eq!(node_ids(&right_children), [right_first, left_first]);
-        assert_eq!(positions(&right_children), [0, POSITION_STEP]);
-        assert_eq!(root_id(&connection, left_first)?, root);
+        let run = get_generation_run(&connection, run_id)?;
+        assert_eq!(run.root_node_id, Some(root));
+        assert_eq!(get_raw_input(&connection, input_id)?.text, "alpha beta");
+        assert_eq!(input_units(&connection, run_id)?[0].start_byte, 0);
+        assert_eq!(node_support(&connection, leaf)?[0].unit_id, "u000000");
         Ok(())
     }
 
     #[test]
-    fn deletion_cascades_subtrees_and_protects_roots() -> TestResult {
+    fn moves_reject_cycles_and_cross_tree_changes() -> TestResult {
         let (_directory, mut connection) = library()?;
         let transaction = connection.transaction()?;
-        let first_root = create_root(&transaction, "First", "")?;
-        let second_root = create_root(&transaction, "Second", "")?;
-        let branch = add_node(&transaction, first_root, &topic("Branch", None))?;
-        let source_id = add_node(&transaction, branch, &source("Source"))?;
-        let leaf = add_node(&transaction, first_root, &topic("Leaf", None))?;
+        let first_root = create_root(&transaction, "First")?;
+        let branch = add_node(&transaction, first_root, &child("Branch", None))?;
+        let descendant = add_node(&transaction, branch, &child("Descendant", None))?;
+        let second_root = create_root(&transaction, "Second")?;
 
-        let Err(error) = delete_node(&transaction, first_root) else {
-            return Err("a root was unexpectedly deleted through node delete".into());
-        };
-        assert_eq!(error.code(), "root_delete_not_allowed");
-
-        let Err(error) = delete_tree(&transaction, leaf) else {
-            return Err("a non-root node was unexpectedly deleted as a tree".into());
-        };
-        assert_eq!(error.code(), "tree_not_found");
-
-        delete_node(&transaction, branch)?;
-        let Err(error) = get_node(&transaction, source_id) else {
-            return Err("a descendant unexpectedly survived subtree deletion".into());
-        };
-        assert_eq!(error.code(), "node_not_found");
-        let remaining_children = children(&transaction, first_root)?;
-        assert_eq!(node_ids(&remaining_children), [leaf]);
-        assert_eq!(positions(&remaining_children), [POSITION_STEP]);
-
-        delete_tree(&transaction, first_root)?;
+        let cycle = move_node(&transaction, branch, descendant, None);
+        assert!(cycle.is_err_and(|error| error.code() == "would_create_cycle"));
+        let cross_tree = move_node(&transaction, branch, second_root, None);
+        assert!(cross_tree.is_err_and(|error| error.code() == "cross_tree_move_not_supported"));
         transaction.commit()?;
-
-        let roots = roots(&connection)?;
-        assert_eq!(node_ids(&roots), [second_root]);
-        assert_eq!(positions(&roots), [POSITION_STEP]);
-        assert_eq!(subtree_count(&connection, second_root)?, 1);
         Ok(())
     }
 }

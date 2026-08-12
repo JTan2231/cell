@@ -28,12 +28,6 @@ impl CommandOutput {
     }
 
     #[must_use]
-    pub fn with_diagnostics(mut self, diagnostics: impl Into<String>) -> Self {
-        self.diagnostics = diagnostics.into();
-        self
-    }
-
-    #[must_use]
     pub fn mutation(mut self) -> Self {
         self.quietable = true;
         self

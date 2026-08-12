@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::fs;
 use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
@@ -5,24 +7,32 @@ use std::path::{Path, PathBuf};
 use rusqlite::{Connection, TransactionBehavior};
 use serde::Serialize;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use crate::cli::{
     Cli, Command, IngestArgs, NodeAddArgs, NodeCommand, NodeDeleteArgs, NodeEditArgs, TreeCommand,
 };
 use crate::db;
 use crate::error::{AppError, AppResult};
+use crate::generation::{
+    self, ADAPTER_NAME, ADAPTER_VERSION, GENERATED_TREE_SCHEMA_VERSION, GeneratedTree,
+    PROMPT_VERSION, ResolutionPolicy,
+};
 use crate::index;
-use crate::ingest;
 use crate::model::{
     LibraryStats, MatchReason, MutationOutput, Node, ResultExplanation, SearchOutput, TreeEntry,
     TreeSummary, ValidationSeverity,
 };
+use crate::model_runner::Runner;
 use crate::render::{CommandOutput, color_enabled, render_snippet, render_terminal_text};
 use crate::search::{self, Options as SearchOptions};
-use crate::tree::{self, NewNode, NodeChanges, SourceFields};
+use crate::tree::{self, NewGenerationRun, NewNode, NodeChanges};
 use crate::validate;
 
-/// Resolve the library path using the documented option/environment/default order.
+const MODEL: &str = "gpt-5.6-terra";
+const REASONING_EFFORT: &str = "medium";
+
+/// Resolve the library path using option, environment, then local default.
 #[must_use]
 pub fn library_path(explicit: Option<&PathBuf>) -> PathBuf {
     explicit.cloned().unwrap_or_else(|| {
@@ -32,7 +42,6 @@ pub fn library_path(explicit: Option<&PathBuf>) -> PathBuf {
 }
 
 /// Execute one parsed CLI command.
-#[allow(clippy::too_many_lines)]
 pub fn run(cli: &Cli, path: &Path) -> AppResult<CommandOutput> {
     match &cli.command {
         Command::Init => initialize(path),
@@ -40,13 +49,9 @@ pub fn run(cli: &Cli, path: &Path) -> AppResult<CommandOutput> {
         Command::Validate => validate_library(path),
         Command::Backup(arguments) => backup(path, &arguments.output),
         Command::Reindex => reindex(path),
-        Command::Ingest(arguments) => ingest_tree(path, arguments),
+        Command::Ingest(arguments) => ingest_tree(path, arguments, !cli.json),
         Command::Tree(command) => match command {
-            TreeCommand::Create(arguments) => {
-                let body = read_body(arguments.body.as_ref(), arguments.body_file.as_deref())?
-                    .unwrap_or_default();
-                create_tree(path, &arguments.title, &body)
-            }
+            TreeCommand::Create(arguments) => create_tree(path, &arguments.text),
             TreeCommand::List => list_trees(path),
             TreeCommand::Show(arguments) => {
                 show_tree(path, arguments.root_node_id, arguments.depth)
@@ -82,7 +87,7 @@ fn initialize(path: &Path) -> Result<CommandOutput, AppError> {
     })();
     if let Err(error) = initialization {
         drop(connection);
-        let _cleanup_result = fs::remove_file(path);
+        let _ = fs::remove_file(path);
         return Err(error);
     }
     Ok(CommandOutput::new(
@@ -94,51 +99,46 @@ fn initialize(path: &Path) -> Result<CommandOutput, AppError> {
 
 fn stats(path: &Path) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let revision = tree::library_revision(&connection)?;
-    let root_count = count(
-        &connection,
-        "SELECT COUNT(*) FROM nodes WHERE parent_id IS NULL",
-    )?;
-    let node_count = count(&connection, "SELECT COUNT(*) FROM nodes")?;
-    let source_count = count(&connection, "SELECT COUNT(*) FROM sources")?;
-    let indexed_unit_count = count(&connection, "SELECT COUNT(*) FROM search_units")?;
-    let database_size_bytes =
-        fs::metadata(path)
-            .map(|metadata| metadata.len())
-            .map_err(|error| {
+    let stats = LibraryStats {
+        revision: tree::library_revision(&connection)?,
+        root_count: count(
+            &connection,
+            "SELECT COUNT(*) FROM nodes WHERE parent_id IS NULL",
+        )?,
+        node_count: count(&connection, "SELECT COUNT(*) FROM nodes")?,
+        raw_input_count: count(&connection, "SELECT COUNT(*) FROM raw_inputs")?,
+        generation_run_count: count(&connection, "SELECT COUNT(*) FROM generation_runs")?,
+        support_link_count: count(&connection, "SELECT COUNT(*) FROM node_support")?,
+        indexed_unit_count: count(&connection, "SELECT COUNT(*) FROM search_units")?,
+        database_size_bytes: fs::metadata(path).map(|metadata| metadata.len()).map_err(
+            |error| {
                 AppError::unexpected(
                     "database_metadata_failed",
                     format!("unable to read metadata for {}: {error}", path.display()),
                 )
-            })?;
-    let index_current = index::status(&connection)?.is_current();
-    let stats = LibraryStats {
-        revision,
-        root_count,
-        node_count,
-        source_count,
-        indexed_unit_count,
-        database_size_bytes,
-        index_current,
+            },
+        )?,
+        index_current: index::status(&connection)?.is_current(),
     };
     let human = format!(
-        "Revision: {}\nRoots: {}\nNodes: {}\nSources: {}\nSearch units: {}\nDatabase size: {} bytes\nIndex current: {}",
+        "Revision: {}\nRoots: {}\nNodes: {}\nRaw inputs: {}\nGeneration runs: {}\nSupport links: {}\nSearch units: {}\nDatabase size: {} bytes\nIndex current: {}",
         stats.revision,
         stats.root_count,
         stats.node_count,
-        stats.source_count,
+        stats.raw_input_count,
+        stats.generation_run_count,
+        stats.support_link_count,
         stats.indexed_unit_count,
         stats.database_size_bytes,
-        stats.index_current
+        stats.index_current,
     );
     Ok(CommandOutput::new(to_value(&stats)?, human))
 }
 
-#[allow(clippy::format_push_string)]
 fn validate_library(path: &Path) -> Result<CommandOutput, AppError> {
     let connection = db::open_validation(path)?;
     let report = validate::validate(&connection)?;
-    let mut report_text = if report.valid {
+    let mut text = if report.valid {
         "Library is valid".to_owned()
     } else {
         "Library is invalid".to_owned()
@@ -148,19 +148,12 @@ fn validate_library(path: &Path) -> Result<CommandOutput, AppError> {
             ValidationSeverity::Warning => "warning",
             ValidationSeverity::Error => "error",
         };
-        report_text.push_str(&format!("\n{severity} [{}]: {}", issue.code, issue.message));
+        let _ = write!(text, "\n{severity} [{}]: {}", issue.code, issue.message);
     }
     if !report.valid {
-        return Err(AppError::database("validation_failed", report_text));
+        return Err(AppError::database("validation_failed", text));
     }
-    let warnings = report
-        .issues
-        .iter()
-        .filter(|issue| issue.severity == ValidationSeverity::Warning)
-        .map(|issue| format!("warning [{}]: {}", issue.code, issue.message))
-        .collect::<Vec<_>>()
-        .join("\n");
-    Ok(CommandOutput::new(to_value(&report)?, "Library is valid").with_diagnostics(warnings))
+    Ok(CommandOutput::new(to_value(&report)?, text))
 }
 
 fn backup(path: &Path, output: &Path) -> Result<CommandOutput, AppError> {
@@ -178,38 +171,153 @@ fn reindex(path: &Path) -> Result<CommandOutput, AppError> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let stats = index::rebuild_all(&transaction)?;
     transaction.commit()?;
-    let data = json!({ "indexed_nodes": stats.nodes, "indexed_units": stats.units });
     Ok(CommandOutput::new(
-        data,
+        json!({ "indexed_nodes": stats.nodes, "indexed_units": stats.units }),
         format!("Indexed {} nodes into {} units", stats.nodes, stats.units),
     )
     .mutation())
 }
 
-fn ingest_tree(path: &Path, arguments: &IngestArgs) -> Result<CommandOutput, AppError> {
-    let document = read_ingestion(&arguments.input)?;
-    let plan = ingest::parse_plan(&document)?;
-    let mut connection = current_write_connection(path)?;
-    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let output = ingest::apply(&transaction, plan)?;
-    transaction.commit()?;
-    let human = format!(
-        "Applied ingestion revision {} -> {} ({} created, {} replaced, {} moved, {} deleted)",
-        output.previous_revision,
-        output.new_revision,
-        output.created.len(),
-        output.replaced_node_ids.len(),
-        output.moved.len(),
-        output.deleted_node_ids.len(),
-    );
-    Ok(CommandOutput::new(to_value(&output)?, human).mutation())
+fn ingest_tree(
+    path: &Path,
+    arguments: &IngestArgs,
+    forward_model_progress: bool,
+) -> Result<CommandOutput, AppError> {
+    ingest_tree_with_runner(path, arguments, &Runner::default(), forward_model_progress)
 }
 
-fn create_tree(path: &Path, title: &str, body: &str) -> Result<CommandOutput, AppError> {
+fn ingest_tree_with_runner(
+    path: &Path,
+    arguments: &IngestArgs,
+    runner: &Runner,
+    forward_model_progress: bool,
+) -> Result<CommandOutput, AppError> {
+    let connection = db::open_read(path)?;
+    index::require_current(&connection)?;
+    drop(connection);
+    let input = read_utf8(&arguments.input)?;
+    let policy = ResolutionPolicy {
+        node_budget: arguments.node_budget,
+        max_depth: arguments.max_depth,
+        max_children: arguments.max_children,
+    };
+    let units =
+        generation::segment_raw_input(&input).map_err(|error| generation_input_error(&error))?;
+    let prompt = generation::build_generation_prompt(&units, &policy)
+        .map_err(|error| generation_input_error(&error))?;
+
+    // Inference deliberately happens before the SQLite writer transaction.
+    let proposal_text = runner.run(&prompt, forward_model_progress)?;
+    let proposal = generation::parse_and_validate_generated_tree(&proposal_text, &units, &policy)
+        .map_err(|error| generation_output_error(&error))?;
+    persist_generated_tree(path, &input, &units, &policy, &proposal)
+}
+
+fn persist_generated_tree(
+    path: &Path,
+    input: &str,
+    units: &[generation::RawUnit],
+    policy: &ResolutionPolicy,
+    proposal: &GeneratedTree,
+) -> Result<CommandOutput, AppError> {
+    let accepted_proposal_json = serde_json::to_string(proposal)?;
+    let checksum = sha256_hex(input.as_bytes());
     let mut connection = current_write_connection(path)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let node_id = tree::create_root(&transaction, title, body)?;
-    index::rebuild_node(&transaction, node_id)?;
+    let input_id = tree::insert_raw_input(&transaction, input, &checksum)?;
+    let run_id = tree::insert_generation_run(
+        &transaction,
+        &NewGenerationRun {
+            input_id,
+            adapter_name: ADAPTER_NAME.to_owned(),
+            adapter_version: ADAPTER_VERSION.to_owned(),
+            model: MODEL.to_owned(),
+            reasoning_effort: REASONING_EFFORT.to_owned(),
+            prompt_version: PROMPT_VERSION.to_owned(),
+            output_schema_version: GENERATED_TREE_SCHEMA_VERSION,
+            node_budget: policy.node_budget,
+            max_depth: policy.max_depth,
+            max_children: policy.max_children,
+            accepted_proposal_json,
+        },
+    )?;
+    for unit in units {
+        tree::insert_input_unit(
+            &transaction,
+            run_id,
+            &unit.id,
+            unit.start_byte,
+            unit.end_byte,
+        )?;
+    }
+
+    let mut resolved = HashMap::<&str, i64>::new();
+    let mut node_ids = Vec::with_capacity(proposal.nodes.len());
+    for generated in &proposal.nodes {
+        let node_id = if let Some(parent_ref) = generated.parent_id.as_deref() {
+            let parent_id = resolved.get(parent_ref).copied().ok_or_else(|| {
+                AppError::invalid(
+                    "invalid_generated_tree",
+                    format!("generated parent {parent_ref} was not resolved"),
+                )
+            })?;
+            tree::add_node(
+                &transaction,
+                parent_id,
+                &NewNode {
+                    text: generated.text.clone(),
+                    position: None,
+                    generation_run_id: Some(run_id),
+                },
+            )?
+        } else {
+            tree::create_root_for_run(&transaction, &generated.text, run_id)?
+        };
+        resolved.insert(&generated.id, node_id);
+        node_ids.push(node_id);
+        for unit_id in &generated.support_unit_ids {
+            tree::insert_node_support(&transaction, node_id, run_id, unit_id)?;
+        }
+    }
+    let root_id = *node_ids
+        .first()
+        .ok_or_else(|| AppError::invalid("invalid_generated_tree", "generated tree has no root"))?;
+    tree::set_generation_root(&transaction, run_id, root_id)?;
+    index::rebuild_all(&transaction)?;
+    let revision = tree::bump_library_revision(&transaction)?;
+    transaction.commit()?;
+
+    let data = json!({
+        "root_node_id": root_id,
+        "node_ids": node_ids,
+        "input_id": input_id,
+        "generation_run_id": run_id,
+        "revision": revision,
+    });
+    Ok(CommandOutput::new(
+        data,
+        format!(
+            "Generated tree {root_id} with {} nodes from {} input units",
+            proposal.nodes.len(),
+            units.len()
+        ),
+    )
+    .mutation())
+}
+
+fn generation_input_error(error: &generation::GenerationError) -> AppError {
+    AppError::invalid("invalid_ingestion", error.to_string())
+}
+
+fn generation_output_error(error: &generation::GenerationError) -> AppError {
+    AppError::invalid("invalid_model_output", error.to_string())
+}
+
+fn create_tree(path: &Path, text: &str) -> Result<CommandOutput, AppError> {
+    let mut connection = current_write_connection(path)?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let node_id = tree::create_root(&transaction, text)?;
+    index::rebuild_all(&transaction)?;
     tree::bump_library_revision(&transaction)?;
     transaction.commit()?;
     mutation_output(&[node_id], format!("Created tree {node_id}"))
@@ -217,16 +325,18 @@ fn create_tree(path: &Path, title: &str, body: &str) -> Result<CommandOutput, Ap
 
 fn list_trees(path: &Path) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let mut summaries = Vec::new();
-    for root in tree::roots(&connection)? {
-        let node_count = u64::try_from(tree::subtree_count(&connection, root.id)?)
-            .map_err(|_| AppError::database("invalid_count", "tree node count is too large"))?;
-        summaries.push(TreeSummary {
-            root_id: root.id,
-            title: root.title,
-            node_count,
-        });
-    }
+    let summaries = tree::roots(&connection)?
+        .into_iter()
+        .map(|root| {
+            Ok(TreeSummary {
+                root_id: root.id,
+                text: root.text,
+                node_count: u64::try_from(tree::subtree_count(&connection, root.id)?).map_err(
+                    |_| AppError::database("invalid_count", "tree node count is too large"),
+                )?,
+            })
+        })
+        .collect::<Result<Vec<_>, AppError>>()?;
     let human = if summaries.is_empty() {
         "No trees".to_owned()
     } else {
@@ -236,7 +346,7 @@ fn list_trees(path: &Path) -> Result<CommandOutput, AppError> {
                 format!(
                     "{}\t{}\t{} node{}",
                     tree.root_id,
-                    render_terminal_text(&tree.title, false),
+                    render_terminal_text(&tree.text, false),
                     tree.node_count,
                     if tree.node_count == 1 { "" } else { "s" }
                 )
@@ -268,10 +378,9 @@ fn show_tree(
         .iter()
         .map(|(node, depth)| {
             format!(
-                "{}{} {} [{}]",
+                "{}{} [{}]",
                 "  ".repeat(*depth),
-                node.kind,
-                render_terminal_text(&node.title, false),
+                render_terminal_text(&node.text, false),
                 node.id
             )
         })
@@ -295,64 +404,51 @@ fn delete_tree(
         ));
     }
     let preview_ids = tree::subtree_ids(&connection, root_node_id)?;
-    let preview_count = preview_ids.len();
-    let preview_path = tree::node_path(&connection, root_node_id)?;
     confirm(
-        &format!("tree {root_node_id} at {preview_path:?} ({preview_count} nodes)"),
+        &format!("tree {root_node_id} ({} nodes)", preview_ids.len()),
         yes,
         json_mode,
     )?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let affected_ids = tree::subtree_ids(&transaction, root_node_id)?;
-    let count = affected_ids.len();
     if affected_ids != preview_ids && !yes {
         return Err(AppError::conflict(
             "subtree_changed",
-            "the tree changed while deletion was being confirmed; inspect it and retry",
+            "the tree changed while deletion was being confirmed",
         ));
     }
     tree::delete_tree(&transaction, root_node_id)?;
+    index::rebuild_all(&transaction)?;
     tree::bump_library_revision(&transaction)?;
     transaction.commit()?;
     mutation_output(
         &affected_ids,
-        format!("Deleted tree {root_node_id} ({count} nodes)"),
+        format!("Deleted tree {root_node_id} ({} nodes)", affected_ids.len()),
     )
 }
 
 fn add_node(path: &Path, arguments: &NodeAddArgs) -> Result<CommandOutput, AppError> {
-    let body =
-        read_body(arguments.body.as_ref(), arguments.body_file.as_deref())?.unwrap_or_default();
-    let source = SourceFields {
-        locator: arguments.locator.clone(),
-        media_type: arguments.media_type.clone(),
-        checksum: arguments.checksum.clone(),
-        captured_at: arguments.captured_at.clone(),
-    };
-    let new_node = NewNode {
-        kind: arguments.kind,
-        title: arguments.title.clone(),
-        body,
-        position: arguments.position,
-        source,
-    };
     let mut connection = current_write_connection(path)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let node_id = tree::add_node(&transaction, arguments.parent, &new_node)?;
-    index::rebuild_node(&transaction, node_id)?;
+    let node_id = tree::add_node(
+        &transaction,
+        arguments.parent,
+        &NewNode {
+            text: arguments.text.clone(),
+            position: arguments.position,
+            generation_run_id: None,
+        },
+    )?;
+    index::rebuild_all(&transaction)?;
     tree::bump_library_revision(&transaction)?;
     transaction.commit()?;
-    mutation_output(
-        &[node_id],
-        format!("Created {} node {node_id}", arguments.kind),
-    )
+    mutation_output(&[node_id], format!("Created node {node_id}"))
 }
 
 fn show_node(path: &Path, node_id: i64) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
     let node = tree::get_node(&connection, node_id)?;
-    let human = render_node(&node);
-    Ok(CommandOutput::new(to_value(&node)?, human))
+    Ok(CommandOutput::new(to_value(&node)?, render_node(&node)))
 }
 
 fn children(path: &Path, node_id: i64) -> Result<CommandOutput, AppError> {
@@ -363,14 +459,7 @@ fn children(path: &Path, node_id: i64) -> Result<CommandOutput, AppError> {
     } else {
         nodes
             .iter()
-            .map(|node| {
-                format!(
-                    "{}\t{}\t{}",
-                    node.id,
-                    node.kind,
-                    render_terminal_text(&node.title, false)
-                )
-            })
+            .map(|node| format!("{}\t{}", node.id, render_terminal_text(&node.text, false)))
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -378,41 +467,22 @@ fn children(path: &Path, node_id: i64) -> Result<CommandOutput, AppError> {
 }
 
 fn edit_node(path: &Path, arguments: &NodeEditArgs) -> Result<CommandOutput, AppError> {
-    if !arguments.has_changes() {
-        return Err(AppError::invalid(
-            "no_changes",
-            "node edit requires at least one changed field",
-        ));
-    }
-    let body = if arguments.clear_body {
-        Some(String::new())
-    } else {
-        read_body(arguments.body.as_ref(), arguments.body_file.as_deref())?
-    };
-    let changes = NodeChanges {
-        kind: arguments.kind,
-        title: arguments.title.clone(),
-        body,
-        source: SourceFields {
-            locator: arguments.locator.clone(),
-            media_type: arguments.media_type.clone(),
-            checksum: arguments.checksum.clone(),
-            captured_at: arguments.captured_at.clone(),
-        },
-    };
     let mut connection = current_write_connection(path)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let outcome = tree::edit_node(&transaction, arguments.node_id, &changes)?;
-    let affected_ids = if outcome.title_changed {
-        index::rebuild_subtree(&transaction, arguments.node_id)?;
-        tree::subtree_ids(&transaction, arguments.node_id)?
-    } else {
-        index::rebuild_node(&transaction, arguments.node_id)?;
-        vec![arguments.node_id]
-    };
+    tree::edit_node(
+        &transaction,
+        arguments.node_id,
+        &NodeChanges {
+            text: Some(arguments.text.clone()),
+        },
+    )?;
+    index::rebuild_all(&transaction)?;
     tree::bump_library_revision(&transaction)?;
     transaction.commit()?;
-    mutation_output(&affected_ids, format!("Updated node {}", arguments.node_id))
+    mutation_output(
+        &[arguments.node_id],
+        format!("Updated node {}", arguments.node_id),
+    )
 }
 
 fn move_node(
@@ -425,7 +495,7 @@ fn move_node(
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let affected_ids = tree::subtree_ids(&transaction, node_id)?;
     tree::move_node(&transaction, node_id, parent_id, position)?;
-    index::rebuild_subtree(&transaction, node_id)?;
+    index::rebuild_all(&transaction)?;
     tree::bump_library_revision(&transaction)?;
     transaction.commit()?;
     mutation_output(
@@ -448,9 +518,7 @@ fn delete_node(
         ));
     }
     let preview_ids = tree::subtree_ids(&connection, arguments.node_id)?;
-    let count = preview_ids.len();
-    let preview_path = tree::node_path(&connection, arguments.node_id)?;
-    if count > 1 {
+    if preview_ids.len() > 1 {
         if !arguments.recursive {
             return Err(AppError::conflict(
                 "recursive_delete_required",
@@ -462,8 +530,9 @@ fn delete_node(
         }
         confirm(
             &format!(
-                "subtree {} at {preview_path:?} ({count} nodes)",
-                arguments.node_id
+                "subtree {} ({} nodes)",
+                arguments.node_id,
+                preview_ids.len()
             ),
             arguments.yes,
             json_mode,
@@ -471,28 +540,23 @@ fn delete_node(
     }
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let affected_ids = tree::subtree_ids(&transaction, arguments.node_id)?;
-    let count = affected_ids.len();
     if affected_ids != preview_ids && !arguments.yes {
         return Err(AppError::conflict(
             "subtree_changed",
-            "the subtree changed while deletion was being confirmed; inspect it and retry",
-        ));
-    }
-    if count > 1 && !arguments.recursive {
-        return Err(AppError::conflict(
-            "recursive_delete_required",
-            format!(
-                "node {} has descendants; use --recursive",
-                arguments.node_id
-            ),
+            "the subtree changed while deletion was being confirmed",
         ));
     }
     tree::delete_node(&transaction, arguments.node_id)?;
+    index::rebuild_all(&transaction)?;
     tree::bump_library_revision(&transaction)?;
     transaction.commit()?;
     mutation_output(
         &affected_ids,
-        format!("Deleted node {} ({count} nodes)", arguments.node_id),
+        format!(
+            "Deleted node {} ({} nodes)",
+            arguments.node_id,
+            affected_ids.len()
+        ),
     )
 }
 
@@ -507,8 +571,6 @@ fn search_library(
         &arguments.query,
         SearchOptions {
             within: arguments.within,
-            kind: arguments.kind,
-            detail: arguments.detail,
             limit: arguments.limit,
             explain: arguments.explain,
         },
@@ -531,36 +593,7 @@ fn count(connection: &Connection, sql: &str) -> Result<u64, AppError> {
         .map_err(|_| AppError::database("invalid_count", "database returned a negative count"))
 }
 
-fn read_body(inline: Option<&String>, file: Option<&Path>) -> Result<Option<String>, AppError> {
-    if let Some(body) = inline {
-        return Ok(Some(body.clone()));
-    }
-    let Some(path) = file else {
-        return Ok(None);
-    };
-    let bytes = if path == Path::new("-") {
-        let mut bytes = Vec::new();
-        io::stdin().read_to_end(&mut bytes).map_err(|error| {
-            AppError::unexpected(
-                "body_read_failed",
-                format!("unable to read the body from standard input: {error}"),
-            )
-        })?;
-        bytes
-    } else {
-        fs::read(path).map_err(|error| {
-            AppError::unexpected(
-                "body_read_failed",
-                format!("unable to read body file {}: {error}", path.display()),
-            )
-        })?
-    };
-    String::from_utf8(bytes)
-        .map(Some)
-        .map_err(|_| AppError::invalid("body_not_utf8", "body input must be valid UTF-8 text"))
-}
-
-fn read_ingestion(path: &Path) -> Result<String, AppError> {
+fn read_utf8(path: &Path) -> Result<String, AppError> {
     let bytes = if path == Path::new("-") {
         let mut bytes = Vec::new();
         io::stdin().read_to_end(&mut bytes).map_err(|error| {
@@ -580,10 +613,21 @@ fn read_ingestion(path: &Path) -> Result<String, AppError> {
     };
     String::from_utf8(bytes).map_err(|_| {
         AppError::invalid(
-            "invalid_ingestion",
-            "ingestion input must be valid UTF-8 JSON",
+            "ingestion_not_utf8",
+            "ingestion input must be valid UTF-8 text",
         )
     })
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let digest = Sha256::digest(bytes);
+    let mut encoded = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        encoded.push(char::from(HEX[usize::from(byte >> 4)]));
+        encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    encoded
 }
 
 fn confirm(description: &str, yes: bool, json_mode: bool) -> Result<(), AppError> {
@@ -597,13 +641,11 @@ fn confirm(description: &str, yes: bool, json_mode: bool) -> Result<(), AppError
         ));
     }
     let mut stderr = io::stderr().lock();
-    write!(stderr, "Delete {description}? [y/N] ").map_err(AppError::from)?;
-    stderr.flush().map_err(AppError::from)?;
+    write!(stderr, "Delete {description}? [y/N] ")?;
+    stderr.flush()?;
     drop(stderr);
     let mut response = String::new();
-    io::stdin()
-        .read_line(&mut response)
-        .map_err(AppError::from)?;
+    io::stdin().read_line(&mut response)?;
     if matches!(response.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
         Ok(())
     } else {
@@ -615,10 +657,13 @@ fn confirm(description: &str, yes: bool, json_mode: bool) -> Result<(), AppError
 }
 
 fn mutation_output(node_ids: &[i64], human: String) -> Result<CommandOutput, AppError> {
-    let data = MutationOutput {
-        node_ids: node_ids.to_vec(),
-    };
-    Ok(CommandOutput::new(to_value(&data)?, human).mutation())
+    Ok(CommandOutput::new(
+        to_value(&MutationOutput {
+            node_ids: node_ids.to_vec(),
+        })?,
+        human,
+    )
+    .mutation())
 }
 
 fn to_value<T: Serialize>(value: &T) -> Result<Value, AppError> {
@@ -626,148 +671,77 @@ fn to_value<T: Serialize>(value: &T) -> Result<Value, AppError> {
 }
 
 fn render_node(node: &Node) -> String {
-    let mut lines = vec![
-        format!("{} {}", node.kind, node.id),
-        format!("Title: {}", render_terminal_text(&node.title, false)),
-        format!(
-            "Parent: {}",
-            node.parent_id
-                .map_or_else(|| "root".to_owned(), |id| id.to_string())
-        ),
-        format!("Position: {}", node.position),
-        format!("Created: {}", node.created_at),
-        format!("Updated: {}", node.updated_at),
-        "Body:".to_owned(),
-        render_terminal_text(&node.body, true),
-    ];
-    if let Some(source) = &node.source {
-        lines.push("Source metadata:".to_owned());
+    format!(
+        "Node {}\nText: {}\nParent: {}\nPosition: {}\nGeneration run: {}\nCreated: {}\nUpdated: {}",
+        node.id,
+        render_terminal_text(&node.text, false),
+        node.parent_id
+            .map_or_else(|| "root".to_owned(), |id| id.to_string()),
+        node.position,
+        node.generation_run_id
+            .map_or_else(|| "manual".to_owned(), |id| id.to_string()),
+        node.created_at,
+        node.updated_at,
+    )
+}
+
+fn render_search(output: &SearchOutput, color: bool, explain: bool) -> String {
+    if output.results.is_empty() {
+        return "No matches".to_owned();
+    }
+    let mut lines = Vec::new();
+    for result in &output.results {
         lines.push(format!(
-            "  Locator: {}",
-            render_terminal_text(source.locator.as_deref().unwrap_or("-"), false)
+            "{}. {} [{}]",
+            result.rank,
+            render_terminal_text(&result.text, false),
+            result.node_id
         ));
         lines.push(format!(
-            "  Media type: {}",
-            render_terminal_text(source.media_type.as_deref().unwrap_or("-"), false)
+            "   Path: {}",
+            result
+                .breadcrumb
+                .iter()
+                .map(|item| render_terminal_text(&item.text, false))
+                .collect::<Vec<_>>()
+                .join(" / ")
         ));
+        if let Some(snippet) = &result.snippet {
+            lines.push(format!("   {}", render_snippet(snippet, color)));
+        }
         lines.push(format!(
-            "  Checksum: {}",
-            render_terminal_text(source.checksum.as_deref().unwrap_or("-"), false)
+            "   Match: {}",
+            render_match_reasons(&result.match_reasons)
         ));
+        if explain && let Some(explanation) = &result.explanation {
+            lines.push(format!(
+                "   Explain: {}",
+                render_result_explanation(explanation)
+            ));
+        }
+    }
+    if explain && let Some(explanation) = &output.explanation {
         lines.push(format!(
-            "  Captured at: {}",
-            render_terminal_text(source.captured_at.as_deref().unwrap_or("-"), false)
+            "Query explain: exact={} and={} or={} prefix={} returned={}",
+            explanation.exact_candidates,
+            explanation.after_and_candidates,
+            explanation.or_fallback_used,
+            explanation.prefix_fallback_used,
+            explanation.returned_results,
         ));
     }
     lines.join("\n")
 }
 
-fn render_search(output: &SearchOutput, color: bool, explain: bool) -> String {
-    if output.results.is_empty() {
-        let mut rendered = "No matches".to_owned();
-        if explain && let Some(explanation) = &output.explanation {
-            rendered.push('\n');
-            rendered.push_str(&render_search_explanation(explanation));
-        }
-        return rendered;
-    }
-    let mut groups = Vec::new();
-    for result in &output.results {
-        let mut lines = vec![format!(
-            "{}. {} {} — {}",
-            result.rank,
-            result.kind,
-            result.node_id,
-            render_terminal_text(&result.title, false)
-        )];
-        lines.push(
-            result
-                .breadcrumb
-                .iter()
-                .map(|item| render_terminal_text(&item.title, false))
-                .collect::<Vec<_>>()
-                .join(" > "),
-        );
-        if let Some(snippet) = &result.snippet {
-            lines.push(render_snippet(snippet, color));
-        }
-        if explain {
-            lines.push(format!(
-                "matches: {}",
-                render_match_reasons(&result.match_reasons)
-            ));
-            if let Some(explanation) = &result.explanation {
-                lines.push(format!(
-                    "explain: {}",
-                    render_result_explanation(explanation)
-                ));
-            }
-        }
-        for related in &result.related_hits {
-            lines.push(format!(
-                "  related: {} {} — {}",
-                related.kind,
-                related.node_id,
-                render_terminal_text(&related.title, false)
-            ));
-            if let Some(snippet) = &related.snippet {
-                lines.push(format!("    {}", render_snippet(snippet, color)));
-            }
-            if explain {
-                lines.push(format!(
-                    "    matches: {}",
-                    render_match_reasons(&related.match_reasons)
-                ));
-                if let Some(explanation) = &related.explanation {
-                    lines.push(format!(
-                        "    explain: {}",
-                        render_result_explanation(explanation)
-                    ));
-                }
-            }
-        }
-        groups.push(lines.join("\n"));
-    }
-    if explain && let Some(explanation) = &output.explanation {
-        groups.push(render_search_explanation(explanation));
-    }
-    groups.join("\n\n")
-}
-
-fn render_search_explanation(explanation: &crate::model::SearchExplanation) -> String {
-    format!(
-        "search explain: exact_candidates={} after_and={} or_fallback={} after_or={} \
-         prefix_fallback={} after_prefix={} groups={} returned={}",
-        explanation.exact_candidates,
-        explanation.after_and_candidates,
-        explanation.or_fallback_used,
-        explanation.after_or_candidates,
-        explanation.prefix_fallback_used,
-        explanation.after_prefix_candidates,
-        explanation.groups_after_collapse,
-        explanation.returned_results
-    )
-}
-
 fn render_result_explanation(explanation: &ResultExplanation) -> String {
     format!(
-        "unit={} bm25={} lexical_rank={} pass={} exact={} direct={:.6} support={:.6} \
-         support_source={} chain_group={} grouping={} branch={} diversity={} final_position={}",
-        display_optional(explanation.primary_unit_id),
-        explanation
-            .raw_bm25
-            .map_or_else(|| "-".to_owned(), |value| format!("{value:.6}")),
-        display_optional(explanation.lexical_rank),
-        explanation.retrieval_pass.as_deref().unwrap_or("-"),
+        "class={} direct={:.3} pass={} lexical_rank={} branch={} position={}",
         explanation.exact_class,
         explanation.direct_score,
-        explanation.support_score,
-        display_optional(explanation.support_source_node_id),
-        explanation.chain_group_node_id,
-        explanation.grouping_reason,
+        explanation.retrieval_pass.as_deref().unwrap_or("-"),
+        display_optional(explanation.lexical_rank),
         explanation.branch_key,
-        explanation.diversity_reason,
-        display_optional(explanation.final_position)
+        display_optional(explanation.final_position),
     )
 }
 
@@ -781,7 +755,7 @@ fn render_match_reasons(reasons: &[MatchReason]) -> String {
         .map(|reason| match reason {
             MatchReason::ExactId => "exact_id",
             MatchReason::ExactPath => "exact_path",
-            MatchReason::ExactTitle => "exact_title",
+            MatchReason::ExactText => "exact_text",
             MatchReason::Phrase => "phrase",
             MatchReason::Lexical => "lexical",
             MatchReason::Prefix => "prefix",
@@ -797,10 +771,182 @@ fn clean_search_snippets(output: &mut SearchOutput) {
         if let Some(snippet) = &mut result.snippet {
             *snippet = render_snippet(snippet, false);
         }
-        for related in &mut result.related_hits {
-            if let Some(snippet) = &mut related.snippet {
-                *snippet = render_snippet(snippet, false);
-            }
-        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+    use std::time::Duration;
+
+    use rusqlite::Connection;
+    use tempfile::tempdir;
+
+    use super::{IngestArgs, ingest_tree_with_runner, sha256_hex};
+    use crate::{db, generation, index, model_runner::Runner, validate};
+
+    #[test]
+    fn hashes_raw_input_as_lowercase_sha256() {
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn fake_model_ingestion_persists_grounding_and_provenance_atomically()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempdir()?;
+        let library = directory.path().join("annals.db");
+        initialize_library(&library)?;
+        let input = directory.path().join("input.txt");
+        fs::write(&input, "alpha evidence")?;
+        let runner = fake_runner(
+            directory.path(),
+            r#"{"schema_version":1,"nodes":[{"id":"n0","parent_id":null,"text":"Alpha","support_unit_ids":["u000000"]}]}"#,
+        )?;
+
+        let output = ingest_tree_with_runner(
+            &library,
+            &IngestArgs {
+                input,
+                node_budget: 32,
+                max_depth: 6,
+                max_children: 6,
+            },
+            &runner,
+            false,
+        )?;
+
+        assert_eq!(output.data["root_node_id"], 1);
+        let connection = db::open_read(&library)?;
+        assert_eq!(
+            connection.query_row("SELECT text FROM raw_inputs", [], |row| row
+                .get::<_, String>(0))?,
+            "alpha evidence"
+        );
+        assert_eq!(
+            connection.query_row("SELECT model FROM generation_runs", [], |row| row
+                .get::<_, String>(0))?,
+            "gpt-5.6-terra"
+        );
+        assert_eq!(
+            connection.query_row("SELECT COUNT(*) FROM node_support", [], |row| row
+                .get::<_, i64>(0))?,
+            1
+        );
+        assert!(index::status(&connection)?.is_current());
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_model_tree_leaves_no_canonical_rows() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempdir()?;
+        let library = directory.path().join("annals.db");
+        initialize_library(&library)?;
+        let input = directory.path().join("input.txt");
+        fs::write(&input, "alpha evidence")?;
+        let runner = fake_runner(
+            directory.path(),
+            r#"{"schema_version":1,"nodes":[{"id":"n0","parent_id":null,"text":"Unsupported","support_unit_ids":[]}]}"#,
+        )?;
+
+        let result = ingest_tree_with_runner(
+            &library,
+            &IngestArgs {
+                input,
+                node_budget: 32,
+                max_depth: 6,
+                max_children: 6,
+            },
+            &runner,
+            false,
+        );
+        let Err(error) = result else {
+            return Err("an unsupported leaf was accepted".into());
+        };
+
+        assert_eq!(error.code(), "invalid_model_output");
+        let connection = db::open_read(&library)?;
+        assert_eq!(row_count(&connection, "nodes")?, 0);
+        assert_eq!(row_count(&connection, "raw_inputs")?, 0);
+        assert_eq!(row_count(&connection, "generation_runs")?, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn validation_recomputes_the_recorded_raw_window_adapter()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempdir()?;
+        let library = directory.path().join("annals.db");
+        initialize_library(&library)?;
+        let input = directory.path().join("input.txt");
+        fs::write(&input, "a".repeat(generation::RAW_WINDOW_BYTES + 20))?;
+        let runner = fake_runner(
+            directory.path(),
+            r#"{"schema_version":1,"nodes":[{"id":"n0","parent_id":null,"text":"Alpha","support_unit_ids":["u000000"]}]}"#,
+        )?;
+        ingest_tree_with_runner(
+            &library,
+            &IngestArgs {
+                input,
+                node_budget: 32,
+                max_depth: 6,
+                max_children: 6,
+            },
+            &runner,
+            false,
+        )?;
+
+        let connection = Connection::open(&library)?;
+        connection.execute(
+            "UPDATE input_units SET end_byte = ?1 WHERE unit_id = 'u000000'",
+            [i64::try_from(generation::RAW_WINDOW_BYTES - 1)?],
+        )?;
+        connection.execute(
+            "UPDATE input_units SET start_byte = ?1 WHERE unit_id = 'u000001'",
+            [i64::try_from(generation::RAW_WINDOW_BYTES - 1)?],
+        )?;
+
+        let report = validate::validate(&connection)?;
+        assert!(!report.valid);
+        assert!(
+            report
+                .issues
+                .iter()
+                .any(|issue| issue.code == "adapter_output_mismatch")
+        );
+        Ok(())
+    }
+
+    fn initialize_library(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        let mut connection = db::init(path)?;
+        let transaction = connection.transaction()?;
+        index::rebuild_all(&transaction)?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    fn fake_runner(directory: &Path, output: &str) -> Result<Runner, Box<dyn std::error::Error>> {
+        let script = directory.join(format!("fake-{}.sh", directory.read_dir()?.count()));
+        fs::write(
+            &script,
+            format!("#!/bin/sh\nset -eu\ncat >/dev/null\nprintf '%s' '{output}'\n"),
+        )?;
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755))?;
+        Ok(Runner::new(
+            script,
+            Duration::from_secs(1),
+            1024 * 1024,
+            1024,
+        ))
+    }
+
+    fn row_count(connection: &Connection, table: &str) -> rusqlite::Result<i64> {
+        connection.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
     }
 }

@@ -1,78 +1,61 @@
 # Annals documentation
 
-## Status
+These documents describe the implemented Annals contracts.
 
-This directory documents the Annals implementation and its design boundaries.
+## Decided model
 
-The foundational decisions are:
+1. A library is one SQLite database containing a forest of rooted trees.
+2. Every node has one canonical string, an optional parent, and ordered
+   children. There are no node kinds.
+3. Ingestion accepts one raw UTF-8 stream with no required record structure.
+4. The raw-window adapter cuts the stream into deterministic, non-overlapping
+   windows of at most 8,192 bytes. Window boundaries are transport boundaries,
+   not conceptual boundaries.
+5. The embedded Codex launcher is fixed to `gpt-5.6-terra` with medium
+   reasoning and communicates only through standard I/O.
+6. The model chooses the conceptual hierarchy. `node_budget`, `max_depth`, and
+   `max_children` are hard maxima, not fill targets.
+7. Annals accepts only schema-conforming, structurally valid proposals. It does
+   not repair or semantically rescore a proposal.
+8. Accepted trees, raw input, byte windows, grounding links, model settings,
+   prompt/schema versions, limits, and accepted JSON are committed atomically.
+9. Generated trees are immutable through node commands and may be removed only
+   as complete trees.
+10. Search uses one derived SQLite FTS5 row per node and can be rebuilt from
+    canonical rows.
 
-1. A library contains one or more rooted trees.
-2. Every node has a short navigation title and an arbitrary body string. The
-   title is user-supplied operational metadata, not generated topic content.
-3. Internal nodes are topic views. A complete tree ends in source nodes;
-   temporary topic leaves are allowed while editing and reported by validation.
-4. SQLite is the canonical store and FTS5 is the search engine.
-5. Retrieval searches indexed units directly. It does not route from the root
-   downward.
-6. Tree structure is used for search scope, breadcrumbs, result grouping, and
-   modest reranking.
-7. Search indexes are derived data and can always be rebuilt from canonical
-   rows.
-8. Embeddings, generated content, synchronization, and a server mode are not
-   part of the design.
+Conceptual correctness remains the model's judgment. Deterministic validation
+establishes contract and topology correctness, not semantic truth.
 
 ## Documents
 
-- [Architecture](architecture.md) defines the system boundaries and major
-  components.
-- [Data model](data-model.md) defines the SQLite schema and tree invariants.
-- [Search](search.md) defines the embedding-free retrieval and ranking
-  pipeline.
-- [CLI](cli.md) defines the command surface and output contracts.
-- [Performance results](performance-results.md) records the reproducible
-  release-mode corpus, environment, and latency gates.
+- [Architecture](architecture.md) describes ingestion and process boundaries.
+- [Data model](data-model.md) describes canonical and derived SQLite state.
+- [CLI](cli.md) describes commands and output behavior.
+- [Search](search.md) describes the implemented lexical retrieval path.
+- [Performance results](performance-results.md) records the performance claims
+  that apply to this implementation.
 
 ## Terminology
 
 **Library**
 : One SQLite database managed by Annals.
 
-**Tree**
-: A rooted hierarchy within a library.
+**Raw input**
+: The unchanged UTF-8 string supplied to one ingestion.
 
-**Node**
-: A stable object in a tree with a navigation title and an arbitrary body
-  string. The body is the topic view or source text.
+**Input unit**
+: A stable ID and contiguous byte range produced by the raw-window adapter.
 
-**Topic node**
-: A node whose children present the same subject in greater detail.
+**Proposal**
+: The schema-constrained JSON tree emitted by the model.
 
-**Source node**
-: A leaf containing source text or metadata referring to source material.
+**Generation run**
+: The retained record tying raw input, adapter, model, prompt, policy, accepted
+  proposal, tree, and grounding together.
+
+**Support link**
+: An explicit relation from a generated node to an input-unit ID.
 
 **Search unit**
-: The text indexed as one retrieval record. A short body normally produces one
-  unit; a long body may produce several passage-sized units. Search units do
-  not alter the visible tree.
-
-**Direct match**
-: A match against a node's own indexed text.
-
-**Supporting match**
-: Relevance inherited from a matching descendant and used only to make an
-  ancestor a useful navigation result.
-
-## Explicit non-goals
-
-Annals does not include:
-
-- embeddings or a vector index;
-- automatic topic assignment or text generation;
-- a graph database or a general DAG;
-- a client/server database;
-- collaborative editing or synchronization;
-- plugins, an ORM, or an async runtime;
-- a second full-text index such as Tantivy.
-
-Those choices can be revisited only after the SQLite/FTS5 implementation has a
-measured limitation.
+: The derived FTS5 record for one canonical node string and breadcrumb.
