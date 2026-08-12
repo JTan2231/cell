@@ -6,9 +6,9 @@ use rusqlite::backup::Backup;
 use rusqlite::{Connection, OpenFlags};
 
 use crate::error::AppError;
-use crate::migrations;
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+const SCHEMA: &str = include_str!("../schema.sql");
 
 /// Create and initialize a new Annals library without replacing an existing path.
 pub fn init(path: &Path) -> Result<Connection, AppError> {
@@ -25,15 +25,14 @@ pub fn init(path: &Path) -> Result<Connection, AppError> {
     }
 }
 
-/// Open a library for reads without running migrations or changing journal mode.
+/// Open a library for reads without changing journal mode.
 pub fn open_read(path: &Path) -> Result<Connection, AppError> {
     let connection = open_existing(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     configure_connection(&connection)?;
-    migrations::require_current_schema(&connection)?;
     Ok(connection)
 }
 
-/// Open an existing library for validation without applying migrations.
+/// Open an existing library for validation.
 ///
 /// Validation normally reads data, but FTS5's external-content integrity
 /// command is issued as an insert into the virtual table. The command does not
@@ -41,19 +40,13 @@ pub fn open_read(path: &Path) -> Result<Connection, AppError> {
 pub fn open_validation(path: &Path) -> Result<Connection, AppError> {
     let connection = open_existing(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
     configure_connection(&connection)?;
-    migrations::require_current_schema(&connection)?;
     Ok(connection)
 }
 
-/// Open a library for writes, applying supported migrations before returning it.
+/// Open an existing library for writes.
 pub fn open_write(path: &Path) -> Result<Connection, AppError> {
-    let mut connection = open_existing(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+    let connection = open_existing(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
     configure_connection(&connection)?;
-
-    // Compatibility is checked before any persistent pragma or migration, so a
-    // newer database is rejected without writes.
-    migrations::reject_newer_schema(&connection)?;
-    migrations::apply_pending_migrations(&mut connection)?;
     enable_wal(&connection)?;
     Ok(connection)
 }
@@ -70,11 +63,16 @@ pub fn backup(source: &Connection, output: &Path) -> Result<(), AppError> {
 }
 
 fn initialize_reserved_file(path: &Path) -> Result<Connection, AppError> {
-    let mut connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
+    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
         .map_err(|error| open_error(path, &error))?;
     configure_connection(&connection)?;
     probe_fts5(&connection)?;
-    migrations::apply_pending_migrations(&mut connection)?;
+    connection.execute_batch(SCHEMA).map_err(|error| {
+        AppError::database(
+            "schema_creation_failed",
+            format!("unable to create the library schema: {error}"),
+        )
+    })?;
     enable_wal(&connection)?;
     Ok(connection)
 }
@@ -192,7 +190,7 @@ mod tests {
         let path = directory.path().join("annals.db");
 
         let connection = init(&path)?;
-        assert_eq!(migrations::schema_version(&connection)?, 1);
+        assert_eq!(library_revision(&connection)?, 0);
         assert_eq!(
             connection.query_row("PRAGMA foreign_keys", [], |row| row.get::<_, i64>(0))?,
             1
@@ -204,11 +202,11 @@ mod tests {
         drop(connection);
 
         let read_connection = open_read(&path)?;
-        assert_eq!(migrations::schema_version(&read_connection)?, 1);
+        assert_eq!(library_revision(&read_connection)?, 0);
         drop(read_connection);
 
         let write_connection = open_write(&path)?;
-        assert_eq!(migrations::schema_version(&write_connection)?, 1);
+        assert_eq!(library_revision(&write_connection)?, 0);
         Ok(())
     }
 
@@ -231,25 +229,15 @@ mod tests {
         assert_eq!(backup_error.code(), "backup_exists");
 
         let backup_connection = open_read(&backup_path)?;
-        assert_eq!(migrations::schema_version(&backup_connection)?, 1);
+        assert_eq!(library_revision(&backup_connection)?, 0);
         Ok(())
     }
 
-    #[test]
-    fn newer_schema_is_rejected_without_changes() -> TestResult {
-        let directory = tempfile::tempdir()?;
-        let path = directory.path().join("annals.db");
-        let connection = init(&path)?;
-        connection.execute("UPDATE schema_migrations SET version = 2", [])?;
-        drop(connection);
-
-        let Err(error) = open_write(&path) else {
-            return Err("a newer schema was unexpectedly opened for writing".into());
-        };
-        assert_eq!(error.code(), "unsupported_schema_version");
-
-        let connection = Connection::open(&path)?;
-        assert_eq!(migrations::schema_version(&connection)?, 2);
-        Ok(())
+    fn library_revision(connection: &Connection) -> rusqlite::Result<i64> {
+        connection.query_row(
+            "SELECT revision FROM library_state WHERE singleton = 1",
+            [],
+            |row| row.get(0),
+        )
     }
 }

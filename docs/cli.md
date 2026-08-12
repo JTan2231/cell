@@ -4,8 +4,8 @@
 
 The Annals CLI should make tree edits explicit, make destructive operations
 hard to perform accidentally, and keep search useful in both a terminal and a
-script. The command surface below is a proposed version-one contract. It is
-small enough to implement directly over SQLite and FTS5.
+script. The command surface below is the CLI contract and maps directly to
+SQLite and FTS5 operations.
 
 Examples use `annals.db` in the current directory:
 
@@ -50,13 +50,14 @@ annals stats
 annals validate
 annals backup OUTPUT
 annals reindex
+annals ingest INPUT
 ```
 
-`init` creates a new library, applies all migrations, and verifies that its
+`init` creates a new library with the current data model and verifies that its
 SQLite build includes FTS5. It refuses to replace an existing file.
 
-`stats` reports root, node, source, and indexed-unit counts, the schema version,
-database size, and whether the full-text index is current.
+`stats` reports the canonical library revision, root, node, source, and
+indexed-unit counts, database size, and whether the full-text index is current.
 
 `validate` runs SQLite integrity and foreign-key checks, then checks Annals
 invariants: every non-root node has one existing parent, roots have none, no
@@ -66,8 +67,7 @@ leaf is reported as an incomplete-tree warning, not structural corruption.
 Validation does not repair data.
 
 `backup OUTPUT` uses SQLite's backup API to create a consistent copy. It
-refuses to replace `OUTPUT`; a later implementation may add an explicit
-`--force` if that proves necessary.
+refuses to replace `OUTPUT`; there is no implicit or forced overwrite mode.
 
 `reindex` recreates search units and FTS rows from canonical node data. It is
 safe to run repeatedly. The command reports indexed node and unit counts.
@@ -129,7 +129,7 @@ committing:
 - a child cannot be added or moved beneath a source;
 - a node cannot be moved beneath itself or one of its descendants;
 - root nodes cannot be moved or deleted through `node`; and
-- moving a node between trees is not supported in version one.
+- moving a node between trees is not supported.
 
 `node edit` changes only supplied fields. Supplying no change is a usage error.
 An empty body is set explicitly with `--clear-body`. `--body-file -` may be
@@ -141,6 +141,74 @@ Deleting a leaf needs no extra flag. Deleting a non-leaf requires
 `--recursive`; Annals displays the subtree size and asks for confirmation when
 attached to a terminal. Non-interactive recursive deletion additionally
 requires `--yes`.
+
+## Ingestion
+
+```text
+annals ingest INPUT
+```
+
+`INPUT` is one UTF-8 JSON document; `-` reads it from standard input. Ingestion
+is scoped to one existing tree and applies one exact, atomic change. It never
+chooses a parent, appends an omitted child, merges nodes, promotes children, or
+generates intermediate topics.
+
+```json
+{
+  "tree_root_id": 1,
+  "base_revision": 8,
+  "create_nodes": [
+    {
+      "ref": "paper",
+      "node": {
+        "kind": "source",
+        "title": "Reference",
+        "body": "Source text",
+        "source": {
+          "locator": "paper.pdf",
+          "media_type": "application/pdf",
+          "checksum": null,
+          "captured_at": null
+        }
+      }
+    }
+  ],
+  "replace_nodes": [],
+  "delete_subtrees": [],
+  "child_orders": [
+    {"parent": 1, "children": [2, "paper", 3]}
+  ]
+}
+```
+
+Existing nodes are integer IDs. Strings are document-local references declared
+by `create_nodes`. A node replacement supplies its complete final kind, title,
+body, and source value. For each parent whose immediate children change,
+`child_orders` must contain the complete final child list. Both the old and new
+parents must therefore be listed when moving a subtree. Parents absent from
+`child_orders` retain their exact current children, order, and stored positions.
+
+`delete_subtrees` supplies a root ID and the exact expected depth-first node-ID
+list. Ingestion fails if the live subtree differs. `base_revision` must equal
+the revision reported by `stats`, which prevents applying a document prepared
+against stale content. The complete proposed graph is validated before any row
+is changed; canonical rows, source metadata, search data, and the revision then
+commit together or all roll back.
+
+All four top-level arrays are required, even when empty, and at least one of
+them must declare a change. Every created node must appear exactly once in the
+final child lists. Every node object supplies `kind`, `title`, `body`, and
+`source`: topics use `"source": null`; sources supply all four provenance fields,
+using `null` for an unknown value.
+
+Every object is strict: unknown fields are errors. Titles must be non-empty and
+already free of leading or trailing whitespace. The document has no topology
+defaults.
+
+A successful ingestion returns the previous and new revisions, the mapping of
+local references to created node IDs, replaced node IDs, parent-changing moves,
+deleted node IDs, and every resolved child order supplied by the document. This
+receipt is an exact account of the submitted canonical change.
 
 ## Search
 
@@ -158,8 +226,7 @@ therefore the way to search exactly one tree.
 The ordinary query is plain user text, not raw FTS5 syntax. Annals normalizes
 it and builds escaped FTS expressions itself. Whitespace separates terms and
 double quotes preserve a phrase. Punctuation cannot change the SQL or FTS
-expression unexpectedly. An advanced raw-query mode is deliberately absent
-from version one.
+expression unexpectedly. An advanced raw-query mode is deliberately absent.
 
 Detail preference affects grouping, not eligibility:
 
@@ -194,12 +261,10 @@ Human output is intended to be read, not parsed. Color is enabled only for a
 terminal and honors `NO_COLOR`. Data goes to standard output; progress,
 warnings, and diagnostics go to standard error.
 
-`--json` emits exactly one UTF-8 JSON object and no decoration. All JSON output
-has a top-level format version so fields can evolve deliberately:
+`--json` emits exactly one UTF-8 JSON object and no decoration:
 
 ```json
 {
-  "format_version": 1,
   "ok": true,
   "data": {
     "query": "transaction isolation",
@@ -224,14 +289,14 @@ has a top-level format version so fields can evolve deliberately:
 
 `rank` is stable only within that response. Raw BM25 values are not part of the
 public JSON contract because their scale changes with corpus and query shape.
-Mutation results return the affected node IDs. List commands return arrays,
-even for zero rows.
+Ordinary single-mutation commands return the affected node IDs; ingestion
+returns the exact receipt described above. List commands return arrays, even for
+zero rows.
 
 With `--json`, an expected error is a single object on standard error:
 
 ```json
 {
-  "format_version": 1,
   "ok": false,
   "error": {
     "code": "would_create_cycle",
@@ -252,7 +317,7 @@ machine-facing value.
 | 2 | Invalid command syntax, invalid title/body input, or an unsupported option combination. |
 | 3 | Requested library, tree, or node was not found. |
 | 4 | The operation conflicts with a tree invariant or needs confirmation. |
-| 5 | SQLite, migration, integrity, or index failure. |
+| 5 | SQLite, schema initialization, integrity, or index failure. |
 
 The JSON error code provides finer detail. The numeric set stays intentionally
 small.
@@ -261,18 +326,15 @@ small.
 
 - Every mutation and its ordinary FTS maintenance occur in one SQLite
   transaction.
+- Ingestion validates a complete projected tree before changing canonical rows.
 - A failed invariant check rolls the whole command back.
 - `init` and `backup` do not overwrite files.
 - Recursive deletion is explicit and confirmable as described above.
 - The CLI uses a finite SQLite busy timeout and reports lock contention rather
   than waiting forever.
-- Opening a database with a newer unsupported schema version fails without
-  writing to it.
 - Search indexes are derived data. `reindex` may replace them, but it never
   rewrites canonical node titles, bodies, provenance, or hierarchy.
-- Search and read commands never trigger an implicit migration. Migrations run
-  only when a write-capable command opens an older supported database, and the
-  eventual implementation should provide a visible migration notice.
+- `init` creates the current schema; normal library opens never rewrite it.
 
 ## Examples
 

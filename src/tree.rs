@@ -71,6 +71,35 @@ fn now() -> Result<String, AppError> {
         .map_err(|error| AppError::unexpected("timestamp_error", error.to_string()))
 }
 
+/// Return the revision of the canonical library content.
+pub fn library_revision(connection: &Connection) -> Result<i64, AppError> {
+    connection
+        .query_row(
+            "SELECT revision FROM library_state WHERE singleton = 1",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(AppError::from)
+}
+
+/// Increment the canonical library revision once for a committed mutation.
+pub fn bump_library_revision(transaction: &Transaction<'_>) -> Result<i64, AppError> {
+    let revision = library_revision(transaction)?
+        .checked_add(1)
+        .ok_or_else(|| AppError::database("revision_overflow", "library revision is too large"))?;
+    let changed = transaction.execute(
+        "UPDATE library_state SET revision = ?1 WHERE singleton = 1",
+        [revision],
+    )?;
+    if changed != 1 {
+        return Err(AppError::database(
+            "library_state_missing",
+            "library revision row is missing",
+        ));
+    }
+    Ok(revision)
+}
+
 fn validated_title(title: &str) -> Result<String, AppError> {
     let title = title.trim();
     if title.is_empty() {

@@ -54,7 +54,7 @@ impl AppError {
         }
     }
 
-    /// Construct a database, migration, integrity, or index error (exit code 5).
+    /// Construct a database, integrity, or index error (exit code 5).
     #[must_use]
     pub fn database(code: &'static str, message: impl Into<String>) -> Self {
         Self::Database {

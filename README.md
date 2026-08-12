@@ -2,10 +2,10 @@
 
 Annals is a local-first CLI for maintaining and searching trees of textual
 topics. Each child is a more detailed view of its parent; completed trees end
-in source material. The implementation follows the version-one design in the
+in source material. Its architecture and behavior are described in the
 [documentation index](docs/README.md).
 
-The initial design deliberately uses:
+Annals deliberately uses:
 
 - Rust for the CLI;
 - SQLite as the authoritative store;
@@ -32,6 +32,11 @@ annals --library ./annals.db node add \
   --body "Serializable transactions prevent several anomalies."
 annals --library ./annals.db search "serializable transactions"
 ```
+
+`annals ingest PLAN.json` atomically applies an explicit tree change containing
+complete node content, exact subtree deletions, and complete child order for
+every changed parent. Annals validates the whole proposed tree but does not
+choose or rebalance its structure.
 
 Run `annals --help`, `annals tree --help`, or `annals node --help` for the full
 command surface. Every command also supports `--json`; the library path may be

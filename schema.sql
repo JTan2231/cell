@@ -1,7 +1,11 @@
-CREATE TABLE schema_migrations (
-    version     INTEGER PRIMARY KEY,
-    applied_at  TEXT NOT NULL
+CREATE TABLE library_state (
+    singleton   INTEGER PRIMARY KEY
+                        CHECK (singleton = 1),
+    revision    INTEGER NOT NULL
+                        CHECK (revision >= 0)
 );
+
+INSERT INTO library_state(singleton, revision) VALUES (1, 0);
 
 CREATE TABLE nodes (
     id          INTEGER PRIMARY KEY,

@@ -42,7 +42,6 @@ impl CommandOutput {
 
 #[derive(Serialize)]
 struct SuccessEnvelope<'a> {
-    format_version: u8,
     ok: bool,
     data: &'a Value,
 }
@@ -55,23 +54,17 @@ struct ErrorBody<'a> {
 
 #[derive(Serialize)]
 struct ErrorEnvelope<'a> {
-    format_version: u8,
     ok: bool,
     error: ErrorBody<'a>,
 }
 
 pub fn success_json(data: &Value) -> Result<String, AppError> {
-    serde_json::to_string(&SuccessEnvelope {
-        format_version: 1,
-        ok: true,
-        data,
-    })
-    .map_err(|error| AppError::unexpected("json_serialization_failed", error.to_string()))
+    serde_json::to_string(&SuccessEnvelope { ok: true, data })
+        .map_err(|error| AppError::unexpected("json_serialization_failed", error.to_string()))
 }
 
 pub fn error_json(error: &AppError) -> String {
     let envelope = ErrorEnvelope {
-        format_version: 1,
         ok: false,
         error: ErrorBody {
             code: error.code(),
@@ -80,7 +73,6 @@ pub fn error_json(error: &AppError) -> String {
     };
     serde_json::to_string(&envelope).unwrap_or_else(|_| {
         json!({
-            "format_version": 1,
             "ok": false,
             "error": {
                 "code": "json_serialization_failed",

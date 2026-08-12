@@ -6,7 +6,7 @@ Annals is a local-first CLI for maintaining and searching a forest of topic tree
 Each internal node is a view of a topic; its children provide progressively more
 detailed views. Leaf nodes contain source material.
 
-This first design is deliberately small:
+The design is deliberately small:
 
 - one Rust executable;
 - one SQLite database per library;
@@ -14,8 +14,8 @@ This first design is deliberately small:
 - no embeddings, vector index, server, or background daemon;
 - no topic assignment or text generation.
 
-The database is the portable library artifact. Import and export formats can be
-added later, but they are not part of the search core.
+The database is the portable library artifact. Import and export formats are
+outside the search core.
 
 ## Design boundaries
 
@@ -26,9 +26,9 @@ Annals owns:
 - optional provenance for source leaves;
 - deterministic conversion of node text into searchable units;
 - lexical retrieval, tree-aware result grouping, and result display;
-- schema migration, validation, and index rebuilding.
+- schema initialization, validation, and index rebuilding.
 
-Annals does not initially own:
+Annals does not own:
 
 - automatically choosing where material belongs;
 - producing summaries or intermediate topic views;
@@ -36,8 +36,8 @@ Annals does not initially own:
 - watching external source files for changes;
 - semantic retrieval.
 
-These boundaries keep the canonical model independent of any future search
-engine. A later index can be added without changing what a topic tree means.
+These boundaries keep the canonical model independent of the search engine.
+Changing the index does not change what a topic tree means.
 
 ## High-level shape
 
@@ -56,13 +56,18 @@ SQLite repository
     `-- FTS5-derived tables
 ```
 
-Suggested Rust modules are `cli`, `db`, `tree`, `index`, `search`, and
-`render`. They are code-organization boundaries, not separate crates unless the
-codebase later gives a concrete reason to split them.
+The Rust modules are `cli`, `db`, `tree`, `ingest`, `index`, `search`, and `render`.
+They are code-organization boundaries rather than separate crates.
 
 All mutations go through application commands. The repository exposes
 transaction-scoped operations; it should not let callers make a tree mutation
 and forget the corresponding index update.
+
+Ingestion is a strict executor boundary. Its caller supplies complete final
+child lists for every changed parent, complete replacement content, and exact
+subtree membership for deletions. Annals validates that proposed graph and
+performs it without choosing placement, balancing branches, merging nodes, or
+promoting children.
 
 ## Why SQLite and FTS5
 
@@ -96,7 +101,7 @@ and its FTS5 index is derived and may be deleted and rebuilt.
 This distinction is important:
 
 - restoring canonical tables restores the user's library;
-- an index format can change without a content migration;
+- an index format can change without changing canonical content;
 - an interrupted or suspect index can be repaired with `annals reindex`;
 - search code never needs to write back into canonical content.
 
@@ -107,7 +112,7 @@ search data, not identifiers, because titles may be edited and may repeat.
 ## Tree representation
 
 Use an adjacency list: each node has an optional `parent_id`; a null parent is a
-root. This is enough for the base design. Recursive CTEs handle ancestors,
+root. This is enough for the design. Recursive CTEs handle ancestors,
 descendants, breadcrumbs, and subtree-scoped search.
 
 "More detailed than the parent" is a semantic authoring rule, not something the
@@ -132,9 +137,8 @@ The application and database together preserve these invariants:
 
 The intended complete-tree condition is that every leaf is a source. It can be
 useful to create an empty topic while editing, so the database may temporarily
-contain topic leaves. `annals validate` should report them, and an export or
-future "publish" operation may treat them as errors. Sources having children,
-cycles, and dangling references are always errors.
+contain topic leaves. `annals validate` reports them as warnings. Sources having
+children, cycles, and dangling references are always errors.
 
 ## Searchable units
 
@@ -198,7 +202,7 @@ Tree-aware ranking should stay conservative:
 - prefer the requested level of detail instead of globally preferring shallow
   or deep nodes.
 
-Initial detail modes can be simple presentation/reranking policies:
+Detail modes are simple presentation/reranking policies:
 
 - `overview`: lean toward topic nodes;
 - `balanced`: default to the best direct match and collapse nearby relatives;
@@ -240,7 +244,8 @@ IMMEDIATE` so write contention is discovered before work begins:
 3. Determine which nodes' search units are affected.
 4. Regenerate those units; FTS triggers mirror the changes.
 5. Run cheap postcondition checks.
-6. Commit.
+6. Increment the canonical library revision once.
+7. Commit.
 
 If indexing fails, roll back the content change too. This keeps ordinary edits
 immediately searchable and avoids introducing an index job queue. Full
@@ -256,16 +261,14 @@ Specific mutations have the following impact:
 - Reordering siblings only changes positions and needs no text reindex.
 - Deleting a node deletes its entire subtree with foreign-key cascades. This is
   an explicit, confirmed operation; children are never silently promoted.
-- A future `remove --promote-children` command, if desired, should be a distinct
-  transaction with clear ordering behavior.
 
-Do not add soft deletion initially. Backups and explicit confirmation provide a
-clearer model for a local CLI. Before a destructive subtree deletion, show the
+Annals does not use soft deletion. Backups and explicit confirmation provide a
+clear model for a local CLI. Before a destructive subtree deletion, show the
 resolved node, path, and descendant count.
 
-Sibling ordering can use spaced integer positions (for example, increments of
-1024) so most insertions require one row change. When gaps run out, normalize
-the affected sibling list inside the same transaction.
+Sibling ordering uses spaced integer positions. Ingestion treats those values
+as a mechanical encoding of supplied child arrays and never rewrites a parent
+that the document did not name.
 
 ## Reindexing and recovery
 
@@ -279,9 +282,8 @@ the affected sibling list inside the same transaction.
 6. commit.
 
 The command should build all regenerated data in the transaction. A failure
-leaves the prior working index in place through rollback. For a very large
-future corpus, a shadow-table swap may reduce lock duration, but it is needless
-complexity for the initial design.
+leaves the prior working index in place through rollback. Reindexing directly
+regenerates the derived tables without a shadow-table swap.
 
 At startup, compare the stored indexer version to the executable's version. If
 they differ, return a useful instruction to run `annals reindex`; do not silently
@@ -292,24 +294,14 @@ Useful validation checks include foreign-key integrity, absence of cycles,
 source nodes without children, source metadata presence, sibling-position
 uniqueness, stored unit hashes, and FTS5 integrity.
 
-## Migrations
+## Schema initialization
 
-Ship ordered SQL migrations with the executable. Record each applied version
-and timestamp in `schema_migrations`. On database open:
+`schema.sql` is the current data model. `annals init` executes it once while
+creating a new library. Existing libraries are opened directly. Change the
+schema definition itself when the data model changes.
 
-1. reject a database newer than the executable understands;
-2. take a write transaction;
-3. apply each missing migration in order;
-4. record each successful version;
-5. commit, or roll back the entire migration attempt on error.
-
-Back up the database before any migration that rewrites canonical content.
-Changes limited to `search_units` or FTS configuration should prefer dropping
-and rebuilding derived state rather than transforming it row by row.
-
-Keep migrations forward-only at first. A migration framework, ORM, and generic
-repository abstraction are not required; numbered SQL files plus a small Rust
-runner are sufficient.
+Changes limited to `search_units` or FTS configuration should prefer rebuilding
+derived state rather than rewriting canonical rows.
 
 ## Practical quality bar
 

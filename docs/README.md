@@ -1,10 +1,8 @@
-# Annals base design
+# Annals documentation
 
 ## Status
 
-This directory describes the intended first implementation of Annals. It is a
-design baseline, not a promise that every possible search feature belongs in
-version one.
+This directory documents the Annals implementation and its design boundaries.
 
 The foundational decisions are:
 
@@ -21,7 +19,7 @@ The foundational decisions are:
 7. Search indexes are derived data and can always be rebuilt from canonical
    rows.
 8. Embeddings, generated content, synchronization, and a server mode are not
-   part of the base design.
+   part of the design.
 
 ## Documents
 
@@ -30,11 +28,9 @@ The foundational decisions are:
 - [Data model](data-model.md) defines the SQLite schema and tree invariants.
 - [Search](search.md) defines the embedding-free retrieval and ranking
   pipeline.
-- [CLI](cli.md) defines the proposed command surface and output contracts.
-- [Implementation plan](implementation-plan.md) proposes a small Rust stack,
-  milestones, and acceptance criteria.
+- [CLI](cli.md) defines the command surface and output contracts.
 - [Performance results](performance-results.md) records the reproducible
-  release-mode corpus, environment, and version-one latency gates.
+  release-mode corpus, environment, and latency gates.
 
 ## Terminology
 
@@ -68,7 +64,7 @@ The foundational decisions are:
 
 ## Explicit non-goals
 
-The first implementation does not need:
+Annals does not include:
 
 - embeddings or a vector index;
 - automatic topic assignment or text generation;

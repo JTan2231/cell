@@ -26,7 +26,7 @@ single test-helper transaction.
 - Date: 2026-08-11
 - Host: Apple M4 Mac mini, 10 cores, 16 GB memory, arm64 macOS
 - Bundled SQLite: 3.50.2 with FTS5
-- Fixture: `deterministic-v1`, no randomness
+- Fixture: deterministic corpus, no randomness
 
 ## Scale and rebuild
 

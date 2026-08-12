@@ -3,7 +3,7 @@ mod cli;
 mod db;
 mod error;
 mod index;
-mod migrations;
+mod ingest;
 mod model;
 mod render;
 mod search;

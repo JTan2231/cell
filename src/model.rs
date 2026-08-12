@@ -160,11 +160,11 @@ pub struct TreeEntry {
 /// Counts and index state returned by `stats`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LibraryStats {
+    pub revision: i64,
     pub root_count: u64,
     pub node_count: u64,
     pub source_count: u64,
     pub indexed_unit_count: u64,
-    pub schema_version: i64,
     pub database_size_bytes: u64,
     pub index_current: bool,
 }

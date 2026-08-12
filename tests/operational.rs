@@ -136,7 +136,6 @@ where
     );
     assert!(output.stdout.is_empty());
     let envelope = serde_json::from_slice::<Value>(&output.stderr)?;
-    assert_eq!(envelope["format_version"], 1);
     assert_eq!(envelope["ok"], false);
     assert_eq!(envelope["error"]["code"], code);
     Ok(envelope)
@@ -188,7 +187,6 @@ fn successful_json(output: &Output) -> TestResult<Value> {
     );
     assert!(output.stderr.is_empty());
     let envelope = serde_json::from_slice::<Value>(&output.stdout)?;
-    assert_eq!(envelope["format_version"], 1);
     assert_eq!(envelope["ok"], true);
     Ok(envelope["data"].clone())
 }
@@ -415,7 +413,7 @@ fn report_100k_timings(
          shallow lookup p50/p95={:?}/{:?}, deep lookup p50/p95={:?}/{:?}, \
          append p50/p95={:?}/{:?}, edit p50/p95={:?}/{:?}, \
          move p50/p95={:?}/{:?}, delete p50/p95={:?}/{:?}, \
-         database={database_bytes} bytes, fixture=deterministic-v1, cache=warm, \
+         database={database_bytes} bytes, fixture=deterministic, cache=warm, \
          sqlite={sqlite_version}, host={}-{} ({logical_cpus} logical CPUs)",
         units_per_second(100_000, bulk_seed_elapsed),
         global_rare.p50,

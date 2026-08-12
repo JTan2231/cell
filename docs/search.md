@@ -159,7 +159,7 @@ Search has a small, fixed set of retrieval passes:
 4. Optionally, if it is still sparse, run a prefix or typo fallback over titles.
 
 Fetch more candidates than the requested result count so grouping and branch
-diversity have room to work. A practical initial value is 50 to 100 FTS units for a
+diversity have room to work. A practical value is 50 to 100 FTS units for a
 default result limit of 10. Put these values in one search configuration structure,
 not throughout the code.
 
@@ -200,7 +200,7 @@ such in diagnostics and ranked below exact and ordinary lexical matches.
 
 ## Filters and scope
 
-The initial CLI surface can remain small:
+The CLI search surface is:
 
 ```text
 annals search QUERY
@@ -293,9 +293,7 @@ Choose one primary result per chain using:
 
 Attach other direct matches in that chain as related hits, including their own
 snippets. Do not collapse cousins: two descendants in different child branches
-are independent results even though they share an ancestor. If later usage shows a
-need to expose every level, an `--all-levels` diagnostic option can bypass this
-step, but it is not required for the first release.
+are independent results even though they share an ancestor.
 
 ## Branch diversity
 
@@ -307,7 +305,7 @@ using the first child below the search scope as the branch key:
 3. If the result limit is not filled, backfill from the skipped list.
 
 The scope node itself has its own branch key. Exact path, identifier, and title
-matches are exempt from the initial quota, though their related descendants still
+matches are exempt from the branch quota, though their related descendants still
 collapse normally. This policy is deliberately simpler than a general diversity
 optimizer and is easy to explain and test.
 
@@ -345,10 +343,10 @@ SearchResult {
 }
 ```
 
-Scores are diagnostic, local to the current index and ranking version, and are not
-promised to be comparable across releases. Human-readable output should emphasize
-breadcrumb, kind, and match reason. A `--json` representation, if added, should
-carry a result schema version.
+Scores are diagnostic and local to the current index; they are not promised to
+be comparable after its ranking inputs change. Human-readable output emphasizes
+breadcrumb, kind, and match reason. JSON exposes the stable result fields shown
+above but not raw ranking internals.
 
 ## Deterministic ordering
 
@@ -362,8 +360,8 @@ Once candidates have their rank fields, sort with an explicit, stable sequence:
 6. Stable node ID ascending.
 
 Unit-level ties additionally use passage ordinal and unit ID. Do not use update
-time as an implicit tie-breaker; recency is not relevance unless a future flag
-asks for it. Offset pagination is deterministic while the database is unchanged,
+time as an implicit tie-breaker; recency is not a relevance signal. Offset
+pagination is deterministic while the database is unchanged,
 but mutations may shift results, which is acceptable for a local CLI.
 
 ## End-to-end algorithm
@@ -446,13 +444,13 @@ only for a handful of memorable examples.
 - A failed optional prefix or typo pass never removes results from the ordinary
   lexical pass.
 
-## Initial implementation boundary
+## Search boundary
 
-The first complete version needs only normalized exact lookup, FTS5 BM25, subtree
-and kind filters, node roll-up, strongest-descendant support, chain collapsing,
-branch quotas, snippets, and deterministic ordering. Prefix search can follow
-quickly. Trigram typo handling should be added only when evaluation demonstrates
-that misspellings are a meaningful failure mode.
+Search uses normalized exact lookup, FTS5 BM25, subtree and kind filters, node
+roll-up, strongest-descendant support, chain collapsing, branch quotas, prefix
+search, snippets, and deterministic ordering. Trigram typo handling remains
+outside the boundary unless evaluation demonstrates that misspellings are a
+meaningful failure mode.
 
-This boundary preserves a straightforward execution path while establishing the
-interfaces and tests needed to tune search behavior later.
+This boundary preserves a straightforward execution path and keeps search
+behavior measurable through the relevance tests.

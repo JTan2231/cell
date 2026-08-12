@@ -88,6 +88,12 @@ impl Library {
         self.json_ok(["search", query])
     }
 
+    fn revision(&self) -> TestResult<i64> {
+        self.json_ok(["stats"])?["revision"]
+            .as_i64()
+            .ok_or_else(|| io::Error::other("stats omitted the library revision").into())
+    }
+
     fn json_with_stdin<I, S>(&self, arguments: I, input: &[u8]) -> TestResult<Output>
     where
         I: IntoIterator<Item = S>,
@@ -125,7 +131,6 @@ fn successful_json(output: &Output) -> TestResult<Value> {
     );
     assert!(output.stderr.is_empty(), "successful JSON wrote to stderr");
     let envelope = serde_json::from_slice::<Value>(&output.stdout)?;
-    assert_eq!(envelope["format_version"], 1);
     assert_eq!(envelope["ok"], true);
     Ok(envelope["data"].clone())
 }
@@ -139,7 +144,6 @@ fn error_json(output: &Output, exit_code: i32, code: &str) -> TestResult<Value> 
     );
     assert!(output.stdout.is_empty(), "JSON error wrote to stdout");
     let envelope = serde_json::from_slice::<Value>(&output.stderr)?;
-    assert_eq!(envelope["format_version"], 1);
     assert_eq!(envelope["ok"], false);
     assert_eq!(envelope["error"]["code"], code);
     Ok(envelope)
@@ -174,7 +178,7 @@ fn lifecycle_json_streams_and_exit_codes() -> TestResult {
     assert_eq!(initialized["library"], library.path.display().to_string());
 
     let stats = library.json_ok(["stats"])?;
-    assert_eq!(stats["schema_version"], 1);
+    assert_eq!(stats["revision"], 0);
     assert_eq!(stats["node_count"], 0);
     assert_eq!(stats["index_current"], true);
 
@@ -204,6 +208,35 @@ fn lifecycle_json_streams_and_exit_codes() -> TestResult {
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
+    Ok(())
+}
+
+#[test]
+fn canonical_mutations_increment_the_revision_once() -> TestResult {
+    let library = Library::initialized()?;
+    assert_eq!(library.revision()?, 0);
+
+    let root = library.create_tree("Root", "root")?;
+    assert_eq!(library.revision()?, 1);
+    let branch = library.add_node(root, "topic", "Branch", "branch")?;
+    assert_eq!(library.revision()?, 2);
+    let container = library.add_node(root, "topic", "Container", "container")?;
+    assert_eq!(library.revision()?, 3);
+
+    let branch_text = branch.to_string();
+    library.json_ok(["node", "edit", &branch_text, "--body", "updated"])?;
+    assert_eq!(library.revision()?, 4);
+    let container_text = container.to_string();
+    library.json_ok(["node", "move", &branch_text, "--parent", &container_text])?;
+    assert_eq!(library.revision()?, 5);
+    library.json_ok(["node", "delete", &branch_text])?;
+    assert_eq!(library.revision()?, 6);
+
+    let root_text = root.to_string();
+    library.json_ok(["tree", "delete", &root_text, "--yes"])?;
+    assert_eq!(library.revision()?, 7);
+    library.json_ok(["reindex"])?;
+    assert_eq!(library.revision()?, 7);
     Ok(())
 }
 

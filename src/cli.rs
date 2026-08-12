@@ -17,7 +17,7 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "PATH")]
     pub library: Option<PathBuf>,
 
-    /// Emit one versioned JSON document.
+    /// Emit one JSON document.
     #[arg(long, global = true)]
     pub json: bool,
 
@@ -50,6 +50,8 @@ pub enum Command {
     Backup(BackupArgs),
     /// Rebuild all derived search data from canonical nodes.
     Reindex,
+    /// Apply one explicit tree-ingestion document.
+    Ingest(IngestArgs),
     /// Create, inspect, and delete rooted trees.
     #[command(subcommand)]
     Tree(TreeCommand),
@@ -58,6 +60,14 @@ pub enum Command {
     Node(NodeCommand),
     /// Search indexed topic and source text.
     Search(SearchArgs),
+}
+
+/// Arguments for `ingest`.
+#[derive(Debug, Clone, Args)]
+pub struct IngestArgs {
+    /// JSON ingestion document, or `-` for standard input.
+    #[arg(value_name = "INPUT")]
+    pub input: PathBuf,
 }
 
 /// Arguments for `backup`.

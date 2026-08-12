@@ -7,12 +7,12 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::cli::{
-    Cli, Command, NodeAddArgs, NodeCommand, NodeDeleteArgs, NodeEditArgs, TreeCommand,
+    Cli, Command, IngestArgs, NodeAddArgs, NodeCommand, NodeDeleteArgs, NodeEditArgs, TreeCommand,
 };
 use crate::db;
 use crate::error::{AppError, AppResult};
 use crate::index;
-use crate::migrations;
+use crate::ingest;
 use crate::model::{
     LibraryStats, MatchReason, MutationOutput, Node, ResultExplanation, SearchOutput, TreeEntry,
     TreeSummary, ValidationSeverity,
@@ -40,6 +40,7 @@ pub fn run(cli: &Cli, path: &Path) -> AppResult<CommandOutput> {
         Command::Validate => validate_library(path),
         Command::Backup(arguments) => backup(path, &arguments.output),
         Command::Reindex => reindex(path),
+        Command::Ingest(arguments) => ingest_tree(path, arguments),
         Command::Tree(command) => match command {
             TreeCommand::Create(arguments) => {
                 let body = read_body(arguments.body.as_ref(), arguments.body_file.as_deref())?
@@ -93,6 +94,7 @@ fn initialize(path: &Path) -> Result<CommandOutput, AppError> {
 
 fn stats(path: &Path) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
+    let revision = tree::library_revision(&connection)?;
     let root_count = count(
         &connection,
         "SELECT COUNT(*) FROM nodes WHERE parent_id IS NULL",
@@ -100,7 +102,6 @@ fn stats(path: &Path) -> Result<CommandOutput, AppError> {
     let node_count = count(&connection, "SELECT COUNT(*) FROM nodes")?;
     let source_count = count(&connection, "SELECT COUNT(*) FROM sources")?;
     let indexed_unit_count = count(&connection, "SELECT COUNT(*) FROM search_units")?;
-    let schema_version = migrations::schema_version(&connection)?;
     let database_size_bytes =
         fs::metadata(path)
             .map(|metadata| metadata.len())
@@ -112,21 +113,21 @@ fn stats(path: &Path) -> Result<CommandOutput, AppError> {
             })?;
     let index_current = index::status(&connection)?.is_current();
     let stats = LibraryStats {
+        revision,
         root_count,
         node_count,
         source_count,
         indexed_unit_count,
-        schema_version,
         database_size_bytes,
         index_current,
     };
     let human = format!(
-        "Roots: {}\nNodes: {}\nSources: {}\nSearch units: {}\nSchema version: {}\nDatabase size: {} bytes\nIndex current: {}",
+        "Revision: {}\nRoots: {}\nNodes: {}\nSources: {}\nSearch units: {}\nDatabase size: {} bytes\nIndex current: {}",
+        stats.revision,
         stats.root_count,
         stats.node_count,
         stats.source_count,
         stats.indexed_unit_count,
-        stats.schema_version,
         stats.database_size_bytes,
         stats.index_current
     );
@@ -185,11 +186,31 @@ fn reindex(path: &Path) -> Result<CommandOutput, AppError> {
     .mutation())
 }
 
+fn ingest_tree(path: &Path, arguments: &IngestArgs) -> Result<CommandOutput, AppError> {
+    let document = read_ingestion(&arguments.input)?;
+    let plan = ingest::parse_plan(&document)?;
+    let mut connection = current_write_connection(path)?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let output = ingest::apply(&transaction, plan)?;
+    transaction.commit()?;
+    let human = format!(
+        "Applied ingestion revision {} -> {} ({} created, {} replaced, {} moved, {} deleted)",
+        output.previous_revision,
+        output.new_revision,
+        output.created.len(),
+        output.replaced_node_ids.len(),
+        output.moved.len(),
+        output.deleted_node_ids.len(),
+    );
+    Ok(CommandOutput::new(to_value(&output)?, human).mutation())
+}
+
 fn create_tree(path: &Path, title: &str, body: &str) -> Result<CommandOutput, AppError> {
     let mut connection = current_write_connection(path)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let node_id = tree::create_root(&transaction, title, body)?;
     index::rebuild_node(&transaction, node_id)?;
+    tree::bump_library_revision(&transaction)?;
     transaction.commit()?;
     mutation_output(&[node_id], format!("Created tree {node_id}"))
 }
@@ -291,6 +312,7 @@ fn delete_tree(
         ));
     }
     tree::delete_tree(&transaction, root_node_id)?;
+    tree::bump_library_revision(&transaction)?;
     transaction.commit()?;
     mutation_output(
         &affected_ids,
@@ -318,6 +340,7 @@ fn add_node(path: &Path, arguments: &NodeAddArgs) -> Result<CommandOutput, AppEr
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let node_id = tree::add_node(&transaction, arguments.parent, &new_node)?;
     index::rebuild_node(&transaction, node_id)?;
+    tree::bump_library_revision(&transaction)?;
     transaction.commit()?;
     mutation_output(
         &[node_id],
@@ -387,6 +410,7 @@ fn edit_node(path: &Path, arguments: &NodeEditArgs) -> Result<CommandOutput, App
         index::rebuild_node(&transaction, arguments.node_id)?;
         vec![arguments.node_id]
     };
+    tree::bump_library_revision(&transaction)?;
     transaction.commit()?;
     mutation_output(&affected_ids, format!("Updated node {}", arguments.node_id))
 }
@@ -402,6 +426,7 @@ fn move_node(
     let affected_ids = tree::subtree_ids(&transaction, node_id)?;
     tree::move_node(&transaction, node_id, parent_id, position)?;
     index::rebuild_subtree(&transaction, node_id)?;
+    tree::bump_library_revision(&transaction)?;
     transaction.commit()?;
     mutation_output(
         &affected_ids,
@@ -463,6 +488,7 @@ fn delete_node(
         ));
     }
     tree::delete_node(&transaction, arguments.node_id)?;
+    tree::bump_library_revision(&transaction)?;
     transaction.commit()?;
     mutation_output(
         &affected_ids,
@@ -532,6 +558,32 @@ fn read_body(inline: Option<&String>, file: Option<&Path>) -> Result<Option<Stri
     String::from_utf8(bytes)
         .map(Some)
         .map_err(|_| AppError::invalid("body_not_utf8", "body input must be valid UTF-8 text"))
+}
+
+fn read_ingestion(path: &Path) -> Result<String, AppError> {
+    let bytes = if path == Path::new("-") {
+        let mut bytes = Vec::new();
+        io::stdin().read_to_end(&mut bytes).map_err(|error| {
+            AppError::unexpected(
+                "ingestion_read_failed",
+                format!("unable to read ingestion input from standard input: {error}"),
+            )
+        })?;
+        bytes
+    } else {
+        fs::read(path).map_err(|error| {
+            AppError::unexpected(
+                "ingestion_read_failed",
+                format!("unable to read ingestion input {}: {error}", path.display()),
+            )
+        })?
+    };
+    String::from_utf8(bytes).map_err(|_| {
+        AppError::invalid(
+            "invalid_ingestion",
+            "ingestion input must be valid UTF-8 JSON",
+        )
+    })
 }
 
 fn confirm(description: &str, yes: bool, json_mode: bool) -> Result<(), AppError> {
