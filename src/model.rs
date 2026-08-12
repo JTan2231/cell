@@ -1,110 +1,146 @@
 use serde::{Deserialize, Serialize};
 
-/// Stable identifier for a node within one library.
-pub type NodeId = i64;
-
-/// One canonical conceptual node.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Node {
-    pub id: NodeId,
-    pub parent_id: Option<NodeId>,
-    pub text: String,
-    #[serde(skip_serializing)]
-    pub position: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub generation_run_id: Option<i64>,
+pub struct HeadingView {
+    pub path: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkSummary {
+    pub work: String,
+    pub sha256: String,
+    pub size_bytes: usize,
     pub created_at: String,
-    pub updated_at: String,
 }
 
-/// A node string in a root-to-result breadcrumb.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BreadcrumbItem {
-    #[serde(rename = "node_id")]
-    pub id: NodeId,
-    pub text: String,
+pub struct WorkView {
+    #[serde(flatten)]
+    pub summary: WorkSummary,
+    pub headings: Vec<HeadingView>,
 }
 
-/// One root returned by `tree list`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TreeSummary {
-    pub root_id: NodeId,
-    pub text: String,
-    pub node_count: u64,
+pub struct EvidenceView {
+    pub work: String,
+    pub quote: String,
 }
 
-/// One row in a depth-first tree rendering.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TreeEntry {
-    pub node: Node,
-    pub depth: u64,
+pub struct ConceptView {
+    pub path: Vec<String>,
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent: Option<Vec<String>>,
+    pub children: Vec<String>,
+    pub evidence: Vec<EvidenceView>,
 }
 
-/// Counts and index state returned by `stats`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CorpusView {
+    pub revision: i64,
+    pub concepts: Vec<ConceptView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProposalView {
+    pub work: String,
+    pub base_revision: i64,
+    pub status: String,
+    pub outcome: String,
+    pub summary: String,
+    pub request: serde_json::Value,
+    pub uncertainties: Vec<String>,
+    pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub applied_revision: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommitView {
+    pub revision: i64,
+    pub parent_revision: i64,
+    pub kind: String,
+    pub summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub work: Option<String>,
+    pub actor: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordedChangeView {
+    pub revision: i64,
+    pub parent_revision: i64,
+    pub base_revision: i64,
+    pub status: String,
+    pub kind: String,
+    pub summary: String,
+    pub work: Option<String>,
+    pub submitted_request: serde_json::Value,
+    pub resolved_operations: serde_json::Value,
+    pub metadata: serde_json::Value,
+    pub actor: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiffKind {
+    Created,
+    Retired,
+    Moved,
+    Reworded,
+    EvidenceAdded,
+    EvidenceRemoved,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiffEntry {
+    pub kind: DiffKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub work: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quote: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiffView {
+    pub from_revision: i64,
+    pub to_revision: i64,
+    pub entries: Vec<DiffEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchResult {
+    pub path: Vec<String>,
+    pub label: String,
+    pub evidence: Vec<EvidenceView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchOutput {
+    pub query: String,
+    pub results: Vec<SearchResult>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LibraryStats {
     pub revision: i64,
-    pub root_count: u64,
-    pub node_count: u64,
-    pub raw_input_count: u64,
-    pub generation_run_count: u64,
-    pub support_link_count: u64,
-    pub indexed_unit_count: u64,
+    pub concept_count: u64,
+    pub work_count: u64,
+    pub evidence_count: u64,
+    pub pending_change_count: u64,
+    pub commit_count: u64,
+    pub model_run_count: u64,
     pub database_size_bytes: u64,
     pub index_current: bool,
 }
 
-/// The raw UTF-8 input retained for one ingestion.
-#[cfg(test)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RawInput {
-    pub id: i64,
-    pub text: String,
-    pub sha256: String,
-    pub created_at: String,
-}
-
-/// The complete reproducibility record for an accepted generation.
-#[cfg(test)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GenerationRun {
-    pub id: i64,
-    pub input_id: i64,
-    pub root_node_id: Option<NodeId>,
-    pub adapter_name: String,
-    pub adapter_version: String,
-    pub model: String,
-    pub reasoning_effort: String,
-    pub prompt_version: String,
-    pub output_schema_version: u32,
-    pub node_budget: usize,
-    pub max_depth: usize,
-    pub max_children: usize,
-    pub accepted_proposal_json: String,
-    pub created_at: String,
-}
-
-/// A deterministic byte window supplied to the model.
-#[cfg(test)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct InputUnit {
-    pub run_id: i64,
-    pub unit_id: String,
-    pub start_byte: usize,
-    pub end_byte: usize,
-}
-
-/// One explicit grounding edge between a generated node and an input unit.
-#[cfg(test)]
-#[allow(clippy::struct_field_names)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NodeSupport {
-    pub node_id: NodeId,
-    pub run_id: i64,
-    pub unit_id: String,
-}
-
-/// Severity of a validation finding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ValidationSeverity {
@@ -112,127 +148,15 @@ pub enum ValidationSeverity {
     Error,
 }
 
-/// One structural, integrity, or derived-index validation finding.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidationIssue {
     pub severity: ValidationSeverity,
     pub code: String,
     pub message: String,
-    pub node_id: Option<NodeId>,
 }
 
-/// Result of validating a library without modifying it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidationReport {
     pub valid: bool,
     pub issues: Vec<ValidationIssue>,
-}
-
-/// Stable, user-facing explanation for why a search result matched.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MatchReason {
-    ExactId,
-    ExactPath,
-    ExactText,
-    Phrase,
-    Lexical,
-    Prefix,
-    Typo,
-    DescendantSupport,
-}
-
-/// Unstable per-result ranking and grouping diagnostics for `search --explain`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ResultExplanation {
-    pub primary_unit_id: Option<i64>,
-    pub raw_bm25: Option<f64>,
-    pub lexical_rank: Option<usize>,
-    pub retrieval_pass: Option<String>,
-    pub exact_class: String,
-    pub direct_score: f64,
-    pub support_score: f64,
-    pub support_node_id: Option<NodeId>,
-    pub chain_group_node_id: NodeId,
-    pub grouping_reason: String,
-    pub branch_key: NodeId,
-    pub diversity_reason: String,
-    pub final_position: Option<usize>,
-}
-
-/// Unstable query-level diagnostics emitted only for `search --explain`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SearchExplanation {
-    pub exact_candidates: usize,
-    pub after_and_candidates: usize,
-    pub or_fallback_used: bool,
-    pub after_or_candidates: usize,
-    pub prefix_fallback_used: bool,
-    pub after_prefix_candidates: usize,
-    pub groups_after_collapse: usize,
-    pub returned_results: usize,
-}
-
-/// A secondary direct hit attached to a primary result on the same chain.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RelatedHit {
-    pub node_id: NodeId,
-    pub text: String,
-    pub breadcrumb: Vec<BreadcrumbItem>,
-    pub snippet: Option<String>,
-    pub match_reasons: Vec<MatchReason>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub explanation: Option<ResultExplanation>,
-}
-
-/// One ranked, node-level search result.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SearchResult {
-    pub rank: usize,
-    pub node_id: NodeId,
-    pub text: String,
-    pub breadcrumb: Vec<BreadcrumbItem>,
-    pub snippet: Option<String>,
-    pub match_reasons: Vec<MatchReason>,
-    pub related_hits: Vec<RelatedHit>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub explanation: Option<ResultExplanation>,
-}
-
-/// Search response payload shared by human and JSON renderers.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SearchOutput {
-    pub query: String,
-    pub results: Vec<SearchResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub explanation: Option<SearchExplanation>,
-}
-
-/// IDs changed by a successful mutation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MutationOutput {
-    pub node_ids: Vec<NodeId>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Node;
-
-    #[test]
-    fn generated_run_is_omitted_for_manual_nodes_in_json() -> Result<(), serde_json::Error> {
-        let node = Node {
-            id: 1,
-            parent_id: None,
-            text: "Concept".to_owned(),
-            position: 0,
-            generation_run_id: None,
-            created_at: "2026-08-11T00:00:00Z".to_owned(),
-            updated_at: "2026-08-11T00:00:00Z".to_owned(),
-        };
-
-        let json = serde_json::to_value(node)?;
-        assert!(json.get("generation_run_id").is_none());
-        assert_eq!(json["text"], "Concept");
-        Ok(())
-    }
 }

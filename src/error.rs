@@ -36,7 +36,7 @@ impl AppError {
         }
     }
 
-    /// Construct a missing library, tree, or node error (exit code 3).
+    /// Construct a missing library, work, concept, proposal, or revision error (exit code 3).
     #[must_use]
     pub fn not_found(code: &'static str, message: impl Into<String>) -> Self {
         Self::NotFound {
@@ -106,14 +106,14 @@ mod tests {
 
     #[test]
     fn constructors_keep_stable_codes_and_exit_categories() {
-        let invalid = AppError::invalid("empty_title", "a title is required");
-        let missing = AppError::not_found("node_not_found", "node 7 was not found");
+        let invalid = AppError::invalid("empty_label", "a label is required");
+        let missing = AppError::not_found("work_not_found", "the work was not found");
         let conflict = AppError::conflict("would_create_cycle", "move rejected");
         let database = AppError::database("index_stale", "run annals reindex");
         let unexpected = AppError::unexpected("internal_error", "unexpected failure");
 
-        assert_eq!((invalid.code(), invalid.exit_code()), ("empty_title", 2));
-        assert_eq!((missing.code(), missing.exit_code()), ("node_not_found", 3));
+        assert_eq!((invalid.code(), invalid.exit_code()), ("empty_label", 2));
+        assert_eq!((missing.code(), missing.exit_code()), ("work_not_found", 3));
         assert_eq!(
             (conflict.code(), conflict.exit_code()),
             ("would_create_cycle", 4)

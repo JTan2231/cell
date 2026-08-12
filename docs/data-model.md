@@ -1,161 +1,163 @@
 # Data model
 
-`schema.sql` is the authoritative SQLite schema. Canonical rows describe trees
-and accepted generations. Search rows are derived and rebuildable.
+`schema.sql` is the authoritative SQLite schema. The database contains four
+different kinds of state:
 
-## Canonical tables
+1. immutable source works;
+2. the current materialized corpus and its evidence;
+3. model examinations, proposals, and append-only commits; and
+4. a rebuildable concept-search projection.
 
-### `library_state`
+Storage identifiers and source ranges support mechanics and history. Public
+commands and liaison tools address works by label, concepts by path, evidence
+by quotation, and history by revision.
 
-The singleton row stores `revision`. It starts at zero and increments once for
-each committed canonical mutation. Reads, validation, backup, and reindexing do
-not increment it.
+## Revision state
 
-### `raw_inputs`
+`library_state` contains one nonnegative `revision`. Revision zero represents
+the empty corpus. Only applying a pending change or a revert increments it.
+Work retention, proposal submission, validation, backup, and reindexing leave
+it unchanged.
 
-| Column | Meaning |
-| --- | --- |
-| `id` | SQLite integer identifier |
-| `text` | Unchanged accepted UTF-8 input |
-| `sha256` | Lowercase 64-character SHA-256 hex digest |
-| `created_at` | UTC RFC 3339 creation time |
+## Immutable works
 
-The digest is validated by `annals validate` against the retained bytes.
+`works` stores:
 
-### `generation_runs`
+- a unique normalized human label;
+- the complete nonempty UTF-8 text;
+- a unique SHA-256 digest; and
+- its UTC creation time.
 
-One row records the reproducibility boundary for one accepted model proposal:
+Labels use Unicode NFKC, lowercase expansion, and collapsed whitespace for
+equality. The original label and text are retained unchanged. Both duplicate
+labels and duplicate content are rejected.
 
-- retained-input ID and generated root ID;
-- adapter name and version;
-- model and reasoning effort;
-- prompt version and output-schema version;
-- `node_budget`, `max_depth`, and `max_children`;
-- the complete accepted proposal encoded as valid JSON;
-- UTC RFC 3339 creation time.
+Works are independent of corpus topology. Foreign keys use `ON DELETE
+RESTRICT`, and there is no public work-deletion command. Retiring or reverting
+a concept therefore cannot delete its source work.
 
-The current recorded constants are `raw-window` version `1`,
-`gpt-5.6-terra`, medium reasoning, `prompt-v1`, and proposal schema version `1`.
+## Current corpus
 
-### `nodes`
+### `concepts`
 
-| Column | Meaning |
-| --- | --- |
-| `id` | Stable SQLite integer identifier |
-| `parent_id` | Parent node, or null for a root |
-| `generation_run_id` | Owning generation, or null for a manual node |
-| `text` | The one canonical, nonempty, trimmed node string |
-| `position` | Nonnegative sibling-order value |
-| `created_at`, `updated_at` | UTC RFC 3339 timestamps |
+Each concept stores a durable internal identity, optional parent, canonical
+label, normalized label, sibling ordering value, and created/updated revision.
+The adjacency list is an ordered forest.
 
-There is no node-kind column. Root, internal node, and leaf are derived from
-parent/child relationships.
+Unique indexes enforce normalized-unique labels and unique positions among
+roots and among each parent's children. Application validation additionally
+checks parent existence, acyclicity, revision metadata, complete traversal, and
+grounding.
 
-The adjacency list is a forest. Foreign keys require existing parents and
-cascade deletion down a subtree. Partial unique indexes require one sibling
-position within each parent and one position among roots. Application checks
-reject cycles, root moves through node commands, and moves across roots.
+A move or reword preserves internal identity. Retirement removes the current
+row, while historical commit snapshots retain its former state. A conceptual
+replacement is represented by retirement plus creation, with an optional
+replacement path recorded in the resolved operation.
 
-All nodes in an accepted generated tree carry the same nonnull
-`generation_run_id`. The run owns exactly one root. The application rejects
-individual mutations to those nodes.
+### `evidence`
 
-### `input_units`
+Each evidence row joins one concept to one immutable work and stores an exact
+UTF-8 byte range plus creation time. The database prevents duplicate
+concept/work/range links. Application validation checks range bounds and UTF-8
+boundaries and requires every leaf concept to have at least one evidence link.
 
-Each row belongs to a generation run and stores:
+The public contract does not expose ranges. It accepts an exact quotation and
+optional natural-language context, resolves that text uniquely, and stores the
+range internally. Rewording must explicitly retain or remove all evidence on
+the concept. Retirement removes the concept's links but not its works.
 
-- a stable ID such as `u000000`;
-- a start byte and exclusive end byte into `raw_inputs.text`.
+## Examinations and proposals
 
-Ranges are nonempty. For an accepted run they are ordered, contiguous,
-non-overlapping, valid UTF-8 boundaries, and cover the complete retained input.
-Unit text is recovered by slicing the retained input; it is not duplicated in
-this table.
+### `model_runs`
 
-### `node_support`
+One row binds a liaison invocation to a work and frozen base revision. It also
+records the model, reasoning effort, prompt version, status, final diagnostic
+response or failure, and start/completion times. Its random opaque token scopes
+the liaison backend (and its private MCP transport when used) and is never a
+public selector.
 
-Each row links one generated node to one input-unit ID in the same run. Composite
-foreign keys prevent a link from naming a node or unit outside that run. The
-primary key prevents duplicate links.
+A run is `running`, `submitted`, `no_submission`, or `failed`. Model runs are
+examination records, not corpus revisions.
 
-Proposal acceptance additionally requires every leaf to have support, rejects
-an unknown unit, and forbids attaching one unit to both an ancestor and its
-descendant. A unit may support several incomparable nodes. Coverage of every
-input unit is not required.
+### `tool_calls`
 
-## Derived search tables
+Every recognized liaison tool call that reaches the scoped backend records its
+sequence, tool name, strict JSON arguments, strict JSON result, success flag,
+and timestamp. These transcripts preserve inspection and retry history without
+entering the corpus commit log.
 
-### `search_units`
+### `proposals`
 
-There is exactly one row per canonical node:
+A proposal belongs to a work and base revision and optionally to a model run.
+It stores:
 
-- node ID;
-- exact node text and its normalized form;
-- complete root-to-node breadcrumb and its normalized form;
-- a deterministic content hash;
-- indexer version.
+- status: `pending`, `applied`, `superseded`, or `no_change`;
+- outcome and human summary;
+- the exact submitted language-level request;
+- the fully resolved change and resulting snapshot;
+- uncertainties and actor;
+- creation time and, when applied, revision.
 
-Normalization trims outer Unicode whitespace, applies NFKC and lowercase, and
-collapses internal whitespace to one ASCII space. It does not remove
-punctuation.
+At most one proposal per work is pending. Recording a result against the same
+or a later base revision supersedes the previous pending proposal for that
+work; an older-base result does not displace it. A no-change proposal has no
+resolved operations and never creates a commit.
 
-The content hash covers the node ID, text, normalized text, breadcrumb,
-normalized path, and indexer version. A parent edit or subtree move changes
-descendant breadcrumbs, so the current implementation rebuilds every search
-row for each canonical mutation.
+Proposal storage is separate from acceptance: submission validates and records
+a projected transition, while application later checks HEAD and commits it.
 
-### `search_fts` and `index_metadata`
+## Append-only history
 
-`search_fts` is an external-content FTS5 table over node text and breadcrumb.
-Insert, update, and delete triggers mirror `search_units`. The tokenizer is
-`unicode61 remove_diacritics 2` with two-, three-, and four-character prefix
-indexes.
+`commits` is a linear log keyed by public revision number. Every row records:
 
-`index_metadata` records the current deterministic indexer version. Search
-refuses to run when the version or one-row-per-node count is not current.
-`annals reindex` deletes and recreates `search_units`, asks FTS5 to rebuild, and
-records the current version.
+- parent and base revision;
+- optional source work and proposal association;
+- `change` or `revert` kind;
+- summary, actor, timestamp, and metadata;
+- original submitted request and resolved semantic operations; and
+- complete before-and-after corpus snapshots.
 
-## Generation commit
+The schema requires `parent_revision = revision - 1` and `base_revision =
+parent_revision`. Full snapshots make historical reads, cross-revision diffs,
+validation, and inversion direct. They also preserve retired concepts and old
+evidence states.
 
-Model invocation and proposal validation occur before the database write. Once
-accepted, one `BEGIN IMMEDIATE` transaction performs this sequence:
+A revert appends another commit. It never updates or deletes the target commit.
+Every accepted change remains inspectable by its public corpus revision with
+`annals change show --at REVISION`, including an accepted proposal or revert's
+submitted request, resolved semantic operations, and commit metadata.
 
-1. insert the retained raw input and digest;
-2. insert the generation-run record and accepted JSON;
-3. insert every input-unit range;
-4. insert generated nodes in proposal preorder, resolving local IDs to SQLite
-   IDs;
-5. insert support links and assign the run root;
-6. rebuild search rows and FTS state;
-7. increment the library revision once;
+## Derived search state
+
+`concept_search` contains one row per current concept with exact and normalized
+label and complete path, a deterministic content hash, and indexer version.
+`concept_fts` is an external-content FTS5 table mirrored by triggers.
+`index_metadata` records the active deterministic indexer version.
+
+This projection is not authoritative. Applying a corpus change or revert
+rebuilds it inside the same transaction as canonical state. `annals reindex`
+performs the same rebuild without changing the revision.
+
+## Atomic change commit
+
+Applying a pending proposal uses one immediate transaction:
+
+1. require HEAD to equal the proposal's base revision;
+2. re-resolve the original request and compare it with the stored result;
+3. validate the complete projected snapshot;
+4. replace the current concepts and evidence with that snapshot;
+5. rebuild derived search state;
+6. append the commit and mark the proposal applied;
+7. advance `library_state.revision`; and
 8. commit.
 
-An error rolls back all eight operations.
+Any failure rolls back every step.
 
-## Other mutations
+## Validation
 
-Manual root creation, node addition, text replacement, subtree movement, and
-deletion also run in one immediate transaction with search rebuild and one
-revision increment.
-
-Deleting a manual tree cascades through its nodes. Deleting a generated tree
-removes its generation run; node, input-unit, and support rows cascade, and the
-retained input is removed when no run references it.
-
-`annals backup` uses SQLite's backup API for a consistent copy and never
-replaces an existing output path.
-
-## Validation boundary
-
-The database directly enforces nonnull values, foreign keys, valid numeric
-ranges, sibling-position uniqueness, valid accepted JSON, and search ownership.
-The application enforces forest acyclicity, generated-tree ownership,
-immutability, proposal preorder, resolution maxima, unary-node rejection,
-support placement, and UTF-8 range coverage.
-
-`annals validate` independently checks SQLite and FTS integrity, foreign keys,
-node strings and parent chains, sibling positions, generation ownership,
-retained-input digests, exact reproduction of recorded adapter units,
-agreement with the accepted proposal, and derived-row equality. Validation is
-read-only with respect to canonical and indexed content.
+`annals validate` is read-only. It checks SQLite integrity and foreign keys,
+FTS integrity, retained-work digests, the singleton HEAD record, contiguous
+linear commit history, parseable and connected commit snapshots, equality of
+materialized HEAD with the latest historical after-state, current corpus
+invariants, and exact agreement of the derived search projection with current
+concepts and paths.

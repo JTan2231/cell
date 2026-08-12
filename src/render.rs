@@ -1,13 +1,9 @@
 use std::fmt::Write as _;
-use std::io::IsTerminal;
 
 use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::error::AppError;
-
-pub const HIGHLIGHT_START: char = '\u{e000}';
-pub const HIGHLIGHT_END: char = '\u{e001}';
 
 #[derive(Debug)]
 pub struct CommandOutput {
@@ -77,26 +73,6 @@ pub fn error_json(error: &AppError) -> String {
     })
 }
 
-#[must_use]
-pub fn color_enabled(no_color: bool) -> bool {
-    !no_color && std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal()
-}
-
-#[must_use]
-#[allow(clippy::format_push_string)]
-pub fn render_snippet(snippet: &str, color: bool) -> String {
-    let mut rendered = String::with_capacity(snippet.len());
-    for character in snippet.chars() {
-        match character {
-            HIGHLIGHT_START if color => rendered.push_str("\u{1b}[1;33m"),
-            HIGHLIGHT_END if color => rendered.push_str("\u{1b}[0m"),
-            HIGHLIGHT_START | HIGHLIGHT_END => {}
-            other => push_terminal_character(&mut rendered, other, false),
-        }
-    }
-    rendered
-}
-
 /// Render user-controlled text without allowing terminal control sequences.
 ///
 /// Single-line fields escape every control character. Full bodies may retain
@@ -122,19 +98,7 @@ fn push_terminal_character(rendered: &mut String, character: char, allow_newline
 
 #[cfg(test)]
 mod tests {
-    use super::{HIGHLIGHT_END, HIGHLIGHT_START, render_snippet, render_terminal_text};
-
-    #[test]
-    fn strips_markers_and_escapes_controls_without_color() {
-        let input = format!("a{HIGHLIGHT_START}hit{HIGHLIGHT_END}\u{7}");
-        assert_eq!(render_snippet(&input, false), "ahit\\u{7}");
-    }
-
-    #[test]
-    fn renders_ansi_highlights_when_enabled() {
-        let input = format!("{HIGHLIGHT_START}hit{HIGHLIGHT_END}");
-        assert_eq!(render_snippet(&input, true), "\u{1b}[1;33mhit\u{1b}[0m");
-    }
+    use super::render_terminal_text;
 
     #[test]
     fn user_text_cannot_emit_terminal_controls() {

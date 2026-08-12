@@ -1,14 +1,16 @@
 mod app;
+mod change;
 mod cli;
+mod corpus;
 mod db;
 mod error;
-mod generation;
 mod index;
+mod liaison;
 mod model;
 mod model_runner;
 mod render;
-mod search;
-mod tree;
+mod resolver;
+mod tool_server;
 mod validate;
 
 use std::ffi::OsStr;

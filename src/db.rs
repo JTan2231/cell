@@ -32,15 +32,9 @@ pub fn open_read(path: &Path) -> Result<Connection, AppError> {
     Ok(connection)
 }
 
-/// Open an existing library for validation.
-///
-/// Validation normally reads data, but FTS5's external-content integrity
-/// command is issued as an insert into the virtual table. The command does not
-/// modify indexed content, but `SQLite` requires a read-write connection for it.
+/// Open an existing library for read-only validation.
 pub fn open_validation(path: &Path) -> Result<Connection, AppError> {
-    let connection = open_existing(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
-    configure_connection(&connection)?;
-    Ok(connection)
+    open_read(path)
 }
 
 /// Open an existing library for writes.

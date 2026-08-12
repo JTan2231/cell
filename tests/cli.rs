@@ -1,16 +1,17 @@
 use std::error::Error;
 use std::ffi::OsStr;
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 use tempfile::TempDir;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 struct Library {
-    _directory: TempDir,
+    directory: TempDir,
     path: PathBuf,
 }
 
@@ -18,12 +19,15 @@ impl Library {
     fn initialized() -> TestResult<Self> {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("annals.db");
-        let library = Self {
-            _directory: directory,
-            path,
-        };
+        let library = Self { directory, path };
         library.json_ok(["init"])?;
         Ok(library)
+    }
+
+    fn file(&self, name: &str, contents: &str) -> TestResult<PathBuf> {
+        let path = self.directory.path().join(name);
+        fs::write(&path, contents)?;
+        Ok(path)
     }
 
     fn output<I, S>(&self, arguments: I) -> io::Result<Output>
@@ -42,33 +46,36 @@ impl Library {
         successful_json(&self.output(arguments)?)
     }
 
-    fn json_error<I, S>(&self, arguments: I, exit: i32, code: &str) -> TestResult
+    fn json_error<I, S>(&self, arguments: I, code: &str) -> TestResult<Value>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let output = self.output(arguments)?;
-        assert_eq!(output.status.code(), Some(exit));
-        assert!(output.stdout.is_empty());
-        let envelope = serde_json::from_slice::<Value>(&output.stderr)?;
-        assert_eq!(envelope["ok"], false);
-        assert_eq!(envelope["error"]["code"], code);
-        Ok(())
+        error_json(&self.output(arguments)?, code)
     }
 
-    fn create_tree(&self, text: &str) -> TestResult<i64> {
-        mutation_id(&self.json_ok(["tree", "create", "--text", text])?)
+    fn add_work(&self, name: &str, filename: &str, text: &str) -> TestResult<Value> {
+        let input = self.file(filename, text)?;
+        self.json_ok([
+            OsStr::new("work"),
+            OsStr::new("add"),
+            input.as_os_str(),
+            OsStr::new("--name"),
+            OsStr::new(name),
+        ])
     }
 
-    fn add_node(&self, parent: i64, text: &str) -> TestResult<i64> {
-        mutation_id(&self.json_ok([
-            "node",
-            "add",
-            "--parent",
-            &parent.to_string(),
-            "--text",
-            text,
-        ])?)
+    fn submit(&self, work: &str, base: i64, filename: &str, proposal: &Value) -> TestResult<Value> {
+        let request = self.file(filename, &serde_json::to_string_pretty(&proposal)?)?;
+        self.json_ok([
+            OsStr::new("change"),
+            OsStr::new("submit"),
+            request.as_os_str(),
+            OsStr::new("--work"),
+            OsStr::new(work),
+            OsStr::new("--base"),
+            OsStr::new(&base.to_string()),
+        ])
     }
 }
 
@@ -87,140 +94,413 @@ fn successful_json(output: &Output) -> TestResult<Value> {
     assert!(output.stderr.is_empty());
     let envelope = serde_json::from_slice::<Value>(&output.stdout)?;
     assert_eq!(envelope["ok"], true);
-    Ok(envelope["data"].clone())
+    let data = envelope["data"].clone();
+    assert_no_storage_selectors(&data);
+    Ok(data)
 }
 
-fn mutation_id(data: &Value) -> TestResult<i64> {
-    data["node_ids"]
-        .as_array()
-        .and_then(|ids| ids.first())
-        .and_then(Value::as_i64)
-        .ok_or_else(|| io::Error::other("mutation omitted its node ID").into())
+fn error_json(output: &Output, code: &str) -> TestResult<Value> {
+    assert!(!output.status.success(), "command unexpectedly succeeded");
+    assert!(output.stdout.is_empty());
+    let envelope = serde_json::from_slice::<Value>(&output.stderr)?;
+    assert_eq!(envelope["ok"], false);
+    assert_eq!(envelope["error"]["code"], code);
+    Ok(envelope)
+}
+
+fn assert_no_storage_selectors(value: &Value) {
+    match value {
+        Value::Object(object) => {
+            for (key, child) in object {
+                assert!(
+                    key != "id"
+                        && !key.ends_with("_id")
+                        && !key.ends_with("_ids")
+                        && !matches!(key.as_str(), "position" | "start_byte" | "end_byte"),
+                    "public JSON exposed storage field {key:?}: {value}"
+                );
+                assert_no_storage_selectors(child);
+            }
+        }
+        Value::Array(array) => {
+            for child in array {
+                assert_no_storage_selectors(child);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn initial_change() -> Value {
+    json!({
+        "outcome": "change",
+        "summary": "Integrate serializable execution and predicate locking",
+        "operations": [
+            {
+                "action": "create_concept",
+                "label": "Database systems",
+                "evidence": [{
+                    "quote": "Serializable transactions behave as some serial execution."
+                }]
+            },
+            {
+                "action": "create_concept",
+                "label": "Serializable execution",
+                "under": {"new": "Database systems"},
+                "evidence": [{
+                    "quote": "Serializable transactions behave as some serial execution."
+                }]
+            },
+            {
+                "action": "create_concept",
+                "label": "Predicate locking",
+                "under": {"new": "Serializable execution"},
+                "evidence": [{
+                    "quote": "Predicate locks prevent phantom inserts."
+                }]
+            }
+        ],
+        "uncertainties": []
+    })
 }
 
 #[test]
-fn lifecycle_and_homogeneous_crud() -> TestResult {
+fn work_add_and_show_retain_exact_source_without_changing_corpus() -> TestResult {
     let library = Library::initialized()?;
-    let root = library.create_tree("Database concurrency")?;
-    let branch = library.add_node(root, "Write skew")?;
-    let leaf = library.add_node(branch, "Serializable snapshot isolation")?;
+    let text = concat!(
+        "# Concurrency\n",
+        "Serializable transactions behave as some serial execution.\n\n",
+        "# Predicate locking\n",
+        "Predicate locks prevent phantom inserts.\n"
+    );
 
-    let shown = library.json_ok(["tree", "show", &root.to_string()])?;
-    assert_eq!(shown.as_array().map(Vec::len), Some(3));
-    assert_eq!(shown[2]["node"]["text"], "Serializable snapshot isolation");
+    let added = library.add_work("Serializable execution", "paper.md", text)?;
+    assert_eq!(added["work"], "Serializable execution");
+    assert_eq!(added["size_bytes"], u64::try_from(text.len())?);
+    assert_eq!(added["corpus_revision"], 0);
 
-    library.json_ok([
-        "node",
-        "edit",
-        &leaf.to_string(),
-        "--text",
-        "Snapshot isolation anomaly",
-    ])?;
-    let node = library.json_ok(["node", "show", &leaf.to_string()])?;
-    assert_eq!(node["text"], "Snapshot isolation anomaly");
+    let shown = library.json_ok(["work", "show", "Serializable execution"])?;
+    assert_eq!(shown["work"], "Serializable execution");
+    assert_eq!(shown["text"], text);
+    assert_eq!(shown["headings"][0]["path"], json!(["Concurrency"]));
 
     let stats = library.json_ok(["stats"])?;
-    assert_eq!(stats["revision"], 4);
-    assert_eq!(stats["node_count"], 3);
-    assert_eq!(stats["index_current"], true);
+    assert_eq!(stats["revision"], 0);
+    assert_eq!(stats["work_count"], 1);
+    assert_eq!(stats["concept_count"], 0);
+    assert_eq!(stats["commit_count"], 0);
+    Ok(())
+}
+
+#[test]
+fn one_change_moves_from_submission_through_history_and_revert() -> TestResult {
+    let library = Library::initialized()?;
+    let text = concat!(
+        "Serializable transactions behave as some serial execution.\n",
+        "Predicate locks prevent phantom inserts.\n"
+    );
+    library.add_work("Serializable execution", "serializable.txt", text)?;
+
+    let submitted = library.submit(
+        "Serializable execution",
+        0,
+        "change.json",
+        &initial_change(),
+    )?;
+    assert_eq!(submitted["work"], "Serializable execution");
+    assert_eq!(submitted["base_revision"], 0);
+    assert_eq!(submitted["status"], "pending");
+    assert_eq!(submitted["operation_count"], 3);
+    assert_eq!(library.json_ok(["stats"])?["revision"], 0);
+
+    let shown_change = library.json_ok(["change", "show"])?;
+    assert_eq!(
+        shown_change["proposal"]["operations"][1]["under"]["new"],
+        "Database systems"
+    );
+    let quiet_show = Command::new(env!("CARGO_BIN_EXE_annals"))
+        .arg("--library")
+        .arg(&library.path)
+        .arg("--quiet")
+        .args(["change", "show"])
+        .output()?;
+    assert!(quiet_show.status.success());
+    assert!(quiet_show.stderr.is_empty());
+    assert!(String::from_utf8(quiet_show.stdout)?.contains("Pending change"));
+    let validated = library.json_ok(["change", "validate"])?;
+    assert_eq!(validated["status"], "valid");
+    assert_eq!(validated["operations"].as_array().map(Vec::len), Some(3));
+
+    let applied = library.json_ok(["change", "apply"])?;
+    assert_eq!(applied["revision"], 1);
+    assert_eq!(applied["status"], "applied");
+
+    let genesis = library.json_ok(["show", "--at", "0"])?;
+    assert_eq!(genesis["revision"], 0);
+    assert_eq!(genesis["concepts"], json!([]));
+    let revision_one = library.json_ok(["show", "--at", "1"])?;
+    assert_eq!(revision_one["revision"], 1);
+    assert_eq!(revision_one["concepts"].as_array().map(Vec::len), Some(3));
+    assert_eq!(
+        revision_one["concepts"][2]["path"],
+        json!([
+            "Database systems",
+            "Serializable execution",
+            "Predicate locking"
+        ])
+    );
+    assert_eq!(
+        revision_one["concepts"][2]["evidence"][0]["quote"],
+        "Predicate locks prevent phantom inserts."
+    );
+
+    let log = library.json_ok(["log"])?;
+    assert_eq!(log["head_revision"], 1);
+    assert_eq!(log["commits"][0]["revision"], 1);
+    assert_eq!(log["commits"][0]["parent_revision"], 0);
+    assert_eq!(log["commits"][0]["summary"], initial_change()["summary"]);
+
+    let diff = library.json_ok(["diff", "0", "1"])?;
+    assert_eq!(diff["from_revision"], 0);
+    assert_eq!(diff["to_revision"], 1);
+    assert!(diff["entries"].as_array().is_some_and(|entries| {
+        entries.iter().any(|entry| {
+            entry["kind"] == "created"
+                && entry["after"]
+                    == json!([
+                        "Database systems",
+                        "Serializable execution",
+                        "Predicate locking"
+                    ])
+        })
+    }));
+    assert_eq!(library.json_ok(["validate"])?["valid"], true);
+    let reverted = library.json_ok(["revert", "1"])?;
+    assert_eq!(reverted["revision"], 2);
+    assert_eq!(reverted["reverted_revision"], 1);
+    assert_eq!(
+        library.json_ok(["show", "--at", "2"])?["concepts"],
+        json!([])
+    );
+    assert_eq!(
+        library.json_ok(["show", "--at", "1"])?["concepts"],
+        revision_one["concepts"]
+    );
+    let log = library.json_ok(["log"])?;
+    assert_eq!(log["head_revision"], 2);
+    assert_eq!(log["commits"].as_array().map(Vec::len), Some(2));
     assert_eq!(library.json_ok(["validate"])?["valid"], true);
     Ok(())
 }
 
 #[test]
-fn search_supports_exact_text_path_scope_and_prefix() -> TestResult {
+fn applied_change_remains_inspectable_by_revision() -> TestResult {
     let library = Library::initialized()?;
-    let root = library.create_tree("Databases")?;
-    let transactions = library.add_node(root, "Transactions")?;
-    let skew = library.add_node(transactions, "Write skew anomaly")?;
-    let other = library.create_tree("Languages")?;
-    library.add_node(other, "Write syntax")?;
+    library.add_work(
+        "Serializable execution",
+        "serializable.txt",
+        "Serializable transactions behave as some serial execution.\nPredicate locks prevent phantom inserts.\n",
+    )?;
+    library.submit(
+        "Serializable execution",
+        0,
+        "initial-change.json",
+        &initial_change(),
+    )?;
+    library.json_ok(["change", "apply"])?;
+    library.submit(
+        "Serializable execution",
+        1,
+        "later-examination.json",
+        &json!({
+            "outcome": "no_change",
+            "summary": "No additional change",
+            "reason": "The accepted revision already represents this work.",
+            "uncertainties": []
+        }),
+    )?;
 
-    let exact = library.json_ok(["search", "Write skew anomaly"])?;
-    assert_eq!(exact["results"][0]["node_id"], skew);
-    assert_eq!(exact["results"][0]["match_reasons"][0], "exact_text");
+    assert_eq!(
+        library.json_ok(["change", "show"])?["proposal"]["outcome"],
+        "no_change"
+    );
+    let archived = library.json_ok(["change", "show", "--at", "1"])?;
+    assert_eq!(archived["revision"], 1);
+    assert_eq!(archived["status"], "applied");
+    assert_eq!(archived["parent_revision"], 0);
+    assert_eq!(archived["base_revision"], 0);
+    assert_eq!(archived["kind"], "change");
+    assert_eq!(archived["submitted_request"], initial_change());
+    assert_eq!(
+        archived["resolved_operations"][2]["path"],
+        json!([
+            "Database systems",
+            "Serializable execution",
+            "Predicate locking"
+        ])
+    );
+    assert_eq!(archived["metadata"]["proposal_actor"], "human");
 
-    let scoped = library.json_ok(["search", "write", "--within", &root.to_string()])?;
-    assert!(scoped["results"].as_array().is_some_and(|results| {
-        results
-            .iter()
-            .all(|result| result["breadcrumb"][0]["node_id"] == root)
+    let historical_human = Command::new(env!("CARGO_BIN_EXE_annals"))
+        .arg("--library")
+        .arg(&library.path)
+        .args(["change", "show", "--at", "1"])
+        .output()?;
+    assert!(historical_human.status.success());
+    assert!(historical_human.stderr.is_empty());
+    let historical_human = String::from_utf8(historical_human.stdout)?;
+    assert!(historical_human.contains("Applied change at revision 1"));
+    assert!(historical_human.contains("Submitted operations (3)"));
+    assert!(historical_human.contains("Resolved operations (3)"));
+    assert!(historical_human.contains("Metadata:"));
+
+    let diff_human = Command::new(env!("CARGO_BIN_EXE_annals"))
+        .arg("--library")
+        .arg(&library.path)
+        .args(["diff", "0", "1"])
+        .output()?;
+    assert!(diff_human.status.success());
+    assert!(diff_human.stderr.is_empty());
+    let diff_human = String::from_utf8(diff_human.stdout)?;
+    assert!(diff_human.contains("Created: “Database systems”"));
+    assert!(diff_human.contains("Evidence added:"));
+    assert!(!diff_human.contains("Created: - ->"));
+
+    library.json_ok(["revert", "1"])?;
+    let archived_revert = library.json_ok(["change", "show", "--at", "2"])?;
+    assert_eq!(archived_revert["kind"], "revert");
+    assert_eq!(archived_revert["status"], "applied");
+    assert_eq!(archived_revert["submitted_request"]["revert_revision"], 1);
+    assert!(
+        archived_revert["resolved_operations"]
+            .as_array()
+            .is_some_and(|operations| !operations.is_empty())
+    );
+    let revert_human = Command::new(env!("CARGO_BIN_EXE_annals"))
+        .arg("--library")
+        .arg(&library.path)
+        .args(["change", "show", "--at", "2"])
+        .output()?;
+    assert!(revert_human.status.success());
+    let revert_human = String::from_utf8(revert_human.stdout)?;
+    assert!(revert_human.contains("Applied revert at revision 2"));
+    assert!(revert_human.contains("Submitted request: revert revision 1"));
+    assert!(revert_human.contains("Resolved transition"));
+    Ok(())
+}
+
+#[test]
+fn stale_change_is_rejected_without_partial_corpus_or_history_writes() -> TestResult {
+    let library = Library::initialized()?;
+    let source = "Serializable transactions behave as some serial execution.\nPredicate locks prevent phantom inserts.\n";
+    library.add_work("First work", "first.txt", source)?;
+    library.add_work("Second work", "second.txt", "A distinct source claim.\n")?;
+    library.submit("First work", 0, "first-change.json", &initial_change())?;
+    library.submit(
+        "Second work",
+        0,
+        "second-change.json",
+        &json!({
+            "outcome": "change",
+            "summary": "Add a stale concept",
+            "operations": [{
+                "action": "create_concept",
+                "label": "Stale concept",
+                "evidence": [{"quote": "A distinct source claim."}]
+            }],
+            "uncertainties": []
+        }),
+    )?;
+
+    let first = library.json_ok(["change", "apply", "--work", "First work"])?;
+    assert_eq!(first["revision"], 1);
+    let before = library.json_ok(["stats"])?;
+    let before_corpus = library.json_ok(["show"])?;
+    let before_log = library.json_ok(["log"])?;
+
+    let error = library.json_error(["change", "apply", "--work", "Second work"], "stale_change")?;
+    assert!(error["error"]["message"].as_str().is_some_and(|message| {
+        message.contains("revision 0") && message.contains("revision 1")
     }));
-    let prefix = library.json_ok(["search", "anom"])?;
-    assert_eq!(prefix["results"][0]["node_id"], skew);
+
+    let after = library.json_ok(["stats"])?;
+    assert_eq!(after["revision"], before["revision"]);
+    assert_eq!(after["concept_count"], before["concept_count"]);
+    assert_eq!(after["evidence_count"], before["evidence_count"]);
+    assert_eq!(after["commit_count"], before["commit_count"]);
+    assert_eq!(library.json_ok(["show"])?, before_corpus);
+    assert_eq!(library.json_ok(["log"])?, before_log);
+    assert_eq!(library.json_ok(["validate"])?["valid"], true);
     Ok(())
 }
 
 #[test]
-fn tree_invariants_and_confirmation_are_enforced() -> TestResult {
+fn public_help_and_request_contract_exclude_storage_selectors() -> TestResult {
+    let help = Command::new(env!("CARGO_BIN_EXE_annals"))
+        .arg("--help")
+        .output()?;
+    assert!(help.status.success());
+    let help = String::from_utf8(help.stdout)?;
+    for forbidden in [
+        "NODE_ID",
+        "ROOT_NODE_ID",
+        "--position",
+        "node add",
+        "node edit",
+        "node move",
+        "node delete",
+        "tree create",
+        "tree delete",
+        "ingest",
+    ] {
+        assert!(
+            !help.contains(forbidden),
+            "help exposed {forbidden:?}\n{help}"
+        );
+    }
+    for required in [
+        "work",
+        "integrate",
+        "change",
+        "show",
+        "log",
+        "diff",
+        "revert",
+    ] {
+        assert!(help.contains(required), "help omitted {required:?}\n{help}");
+    }
+
     let library = Library::initialized()?;
-    let root = library.create_tree("Root")?;
-    let branch = library.add_node(root, "Branch")?;
-    let leaf = library.add_node(branch, "Leaf")?;
-    let other = library.create_tree("Other")?;
-
-    library.json_error(
-        [
-            "node",
-            "move",
-            &branch.to_string(),
-            "--parent",
-            &leaf.to_string(),
-        ],
-        4,
-        "would_create_cycle",
+    library.add_work(
+        "Language source",
+        "language.txt",
+        "Exact source language.\n",
+    )?;
+    let invalid = library.file(
+        "opaque.json",
+        r#"{
+            "outcome": "change",
+            "summary": "Try an opaque selector",
+            "operations": [{
+                "action": "add_evidence",
+                "concept": {"node_id": 41},
+                "evidence": [{"quote": "Exact source language."}]
+            }],
+            "uncertainties": []
+        }"#,
     )?;
     library.json_error(
         [
-            "node",
-            "move",
-            &branch.to_string(),
-            "--parent",
-            &other.to_string(),
+            OsStr::new("change"),
+            OsStr::new("submit"),
+            invalid.as_os_str(),
+            OsStr::new("--work"),
+            OsStr::new("Language source"),
+            OsStr::new("--base"),
+            OsStr::new("0"),
         ],
-        4,
-        "cross_tree_move_not_supported",
+        "invalid_change",
     )?;
-    library.json_error(
-        ["node", "delete", &branch.to_string()],
-        4,
-        "recursive_delete_required",
-    )?;
-    library.json_error(
-        ["node", "delete", &branch.to_string(), "--recursive"],
-        4,
-        "confirmation_required",
-    )?;
-    library.json_ok([
-        "node",
-        "delete",
-        &branch.to_string(),
-        "--recursive",
-        "--yes",
-    ])?;
-    Ok(())
-}
-
-#[test]
-fn human_output_escapes_terminal_control_characters() -> TestResult {
-    let directory = tempfile::tempdir()?;
-    let path = directory.path().join("annals.db");
-    let mut plain = Command::new(env!("CARGO_BIN_EXE_annals"));
-    plain.arg("--library").arg(&path);
-    assert!(plain.arg("init").output()?.status.success());
-    let output = Command::new(env!("CARGO_BIN_EXE_annals"))
-        .arg("--library")
-        .arg(&path)
-        .args(["tree", "create", "--text", "safe\u{1b}[31m"])
-        .output()?;
-    assert!(output.status.success());
-    let list = Command::new(env!("CARGO_BIN_EXE_annals"))
-        .arg("--library")
-        .arg(&path)
-        .args(["tree", "list"])
-        .output()?;
-    let stdout = String::from_utf8(list.stdout)?;
-    assert!(!stdout.contains('\u{1b}'));
-    assert!(stdout.contains("\\u{1b}"));
+    assert_eq!(library.json_ok(["stats"])?["pending_change_count"], 0);
     Ok(())
 }

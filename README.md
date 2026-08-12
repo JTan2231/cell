@@ -1,23 +1,25 @@
 # Annals
 
-Annals is a local CLI that constructs and searches conceptual trees. Every
-node contains one string. A child is a materially narrower refinement of its
-parent; root, branch, and leaf are consequences of topology rather than node
-kinds.
+Annals is a local CLI for maintaining an evidence-grounded conceptual corpus.
+Source works are retained unchanged. Corpus concepts belong to the library, may
+be supported by many works, and change only through one validated proposal and
+one atomic revision commit.
 
-Ingestion accepts naive UTF-8 text, asks a pinned Codex subprocess to propose
-one grounded tree, validates the proposal deterministically, and commits the
-tree and its complete generation record to SQLite in one transaction. Semantic
-quality is model-judged; Annals does not claim an objective conceptual metric.
+The public interface uses work labels, concept paths, and exact quotations.
+SQLite identifiers, byte ranges, and sibling positions remain implementation
+details.
 
 ## Requirements
 
-- Rust 1.97.1 for building this repository;
-- an installed and authenticated `codex` executable for `annals ingest`;
-- no service process or separate database server.
+- macOS or Linux and Rust 1.97.1 to build the repository;
+- an installed and authenticated `codex` executable for `annals integrate`;
+- no daemon or separate database server.
 
-The embedded Codex bundle invokes `gpt-5.6-terra` with medium reasoning through
-standard I/O. The model and reasoning setting are not command-line options.
+The liaison uses `gpt-5.6-terra` with medium reasoning. Annals gives it a short
+pointer prompt and exactly six session-scoped tools through an isolated Codex
+app-server; no shell, web, planning, user-input, or multi-agent tools are
+available. The complete work is not placed in the prompt. Its recorded
+`submit_change` tool call, rather than its final response, is the deliverable.
 
 ## Build and use
 
@@ -26,35 +28,46 @@ standard I/O. The model and reasoning setting are not command-line options.
 cargo build --release
 ```
 
-Create a library and generate a tree from a file:
+Create a library, examine a work, review the proposal, and apply it:
 
 ```sh
-annals init --library ./annals.db
-annals --library ./annals.db ingest ./corpus.txt
-annals --library ./annals.db tree list
-annals --library ./annals.db search "serializable transactions"
+annals --library ./annals.db init
+annals --library ./annals.db integrate ./serializable-execution.md \
+  --name "Serializable execution"
+annals --library ./annals.db change show
+annals --library ./annals.db change apply
+annals --library ./annals.db show
 ```
 
-Standard input is also accepted. The three resolution values are hard maxima,
-not targets:
+`integrate` retains the immutable work before model examination. It records a
+proposal without changing the corpus unless `--apply` is supplied and the
+proposal contains no uncertainties. An already retained work can be examined
+again by label:
 
 ```sh
-cat corpus.txt | annals --library ./annals.db ingest - \
-  --node-budget 32 --max-depth 6 --max-children 6
+annals --library ./annals.db integrate --work "Serializable execution"
 ```
 
-Manual homogeneous trees remain available:
+A human or another program can submit the same strict change contract without
+invoking a model:
 
 ```sh
-annals --library ./annals.db tree create --text "Database systems"
-annals --library ./annals.db node add --parent 1 --text "Transactions"
+annals --library ./annals.db change submit request.json \
+  --work "Serializable execution" --base 0
 ```
 
-Generated trees cannot be changed with individual node commands. Delete one as
-a complete tree with `annals tree delete ROOT_ID`.
+Inspect current and historical state with language-level output:
 
-Run `annals --help` for the complete command surface. Every command supports
-`--json`; the library path resolves from `--library`, then `ANNALS_LIBRARY`,
-then `./annals.db`.
+```sh
+annals --library ./annals.db search "predicate locking"
+annals --library ./annals.db log
+annals --library ./annals.db diff 0 1
+annals --library ./annals.db show --at 1
+annals --library ./annals.db revert 1
+```
 
-See the [documentation index](docs/README.md) for the implemented contracts.
+Every command supports `--json`. The library path resolves from `--library`,
+then `ANNALS_LIBRARY`, then `./annals.db`.
+
+See the [documentation index](docs/README.md) for the command, protocol,
+architecture, storage, search, and runtime contracts.

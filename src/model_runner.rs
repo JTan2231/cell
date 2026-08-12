@@ -1,42 +1,81 @@
 use std::fs;
-use std::io::{self, Read, Write};
-use std::os::unix::fs::PermissionsExt;
+use std::io::{self, BufRead, BufReader, Read, Write};
+use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
+
+use serde_json::{Value, json};
 
 use crate::error::{AppError, AppResult};
+use crate::tool_server::{self, Backend, Tool, ToolFailure};
 
-const BUNDLED_AGENT: &[u8] = include_bytes!("../bundles/codex/agent.sh");
-const BUNDLED_SCHEMA: &[u8] = include_bytes!("../bundles/codex/generated-tree.schema.json");
+const MODEL: &str = "gpt-5.6-terra";
+const REASONING_EFFORT: &str = "medium";
 const DEFAULT_TIMEOUT: Duration = Duration::from_mins(30);
-const DEFAULT_MAX_STDOUT_BYTES: usize = 16 * 1024 * 1024;
+const DEFAULT_MAX_STDOUT_BYTES: usize = 64 * 1024 * 1024;
 const DEFAULT_STDERR_TAIL_BYTES: usize = 64 * 1024;
+const MAX_MODEL_CATALOG_BYTES: usize = 4 * 1024 * 1024;
 
-/// The deliberately small process boundary around the bundled Codex agent.
+const DISABLED_FEATURES: &[&str] = &[
+    "apps",
+    "auth_elicitation",
+    "browser_use",
+    "browser_use_external",
+    "browser_use_full_cdp_access",
+    "code_mode",
+    "code_mode_host",
+    "code_mode_only",
+    "computer_use",
+    "deferred_executor",
+    "enable_mcp_apps",
+    "goals",
+    "image_generation",
+    "in_app_browser",
+    "multi_agent",
+    "multi_agent_v2",
+    "plugins",
+    "remote_plugin",
+    "request_permissions_tool",
+    "skill_mcp_dependency_install",
+    "skill_search",
+    "standalone_web_search",
+    "token_budget",
+    "tool_call_mcp_elicitation",
+    "tool_suggest",
+];
+
+const CONFIG_OVERRIDES: &[&str] = &[
+    "agents.enabled=false",
+    "cli_auth_credentials_store=\"file\"",
+    "include_apps_instructions=false",
+    "include_collaboration_mode_instructions=false",
+    "include_environment_context=false",
+    "include_permissions_instructions=false",
+    "orchestrator.mcp.enabled=false",
+    "orchestrator.skills.enabled=false",
+    "skills.bundled.enabled=false",
+    "skills.include_instructions=false",
+    "tools.experimental_request_user_input.enabled=false",
+    "tools.update_plan.enabled=false",
+    "web_search=\"disabled\"",
+];
+
 #[derive(Debug, Clone)]
 pub(crate) struct Runner {
-    program: RunnerProgram,
+    program: PathBuf,
     timeout: Duration,
     max_stdout_bytes: usize,
     stderr_tail_bytes: usize,
 }
 
-#[derive(Debug, Clone)]
-#[cfg_attr(not(test), allow(dead_code))]
-enum RunnerProgram {
-    Embedded,
-    Injected(PathBuf),
-}
-
 impl Default for Runner {
     fn default() -> Self {
         Self {
-            program: RunnerProgram::Embedded,
+            program: PathBuf::from("codex"),
             timeout: DEFAULT_TIMEOUT,
             max_stdout_bytes: DEFAULT_MAX_STDOUT_BYTES,
             stderr_tail_bytes: DEFAULT_STDERR_TAIL_BYTES,
@@ -45,192 +84,720 @@ impl Default for Runner {
 }
 
 impl Runner {
-    /// Construct an injectable runner. Production ingestion uses [`Runner::default`].
     #[must_use]
     #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn new(
-        program: impl Into<PathBuf>,
-        timeout: Duration,
-        max_stdout_bytes: usize,
-        stderr_tail_bytes: usize,
-    ) -> Self {
+    pub(crate) fn new(program: impl Into<PathBuf>, timeout: Duration) -> Self {
         Self {
-            program: RunnerProgram::Injected(program.into()),
+            program: program.into(),
             timeout,
-            max_stdout_bytes,
-            stderr_tail_bytes,
+            ..Self::default()
         }
     }
 
-    /// Send one complete prompt to the agent and return its plain final response.
-    /// When requested, child diagnostics are forwarded with terminal controls escaped.
+    /// Run one isolated Codex liaison whose only model-visible tools are Annals' six tools.
     ///
-    /// # Errors
-    ///
-    /// Returns an error when the runner cannot be started or communicated with, exceeds a
-    /// configured limit, exits unsuccessfully, or returns empty or non-UTF-8 output.
-    #[allow(clippy::too_many_lines)]
-    pub(crate) fn run(&self, prompt: &str, forward_stderr: bool) -> AppResult<String> {
-        if self.max_stdout_bytes == 0 {
-            return Err(AppError::unexpected(
-                "model_runner_config",
-                "model runner stdout limit must be greater than zero",
-            ));
+    /// The returned final response is diagnostic only. Application success is determined by the
+    /// proposal side effect recorded through `submit_change`.
+    pub(crate) fn run_liaison(
+        &self,
+        prompt: &str,
+        backend: &mut impl Backend,
+        forward_stderr: bool,
+    ) -> AppResult<String> {
+        let temporary = TemporaryDirectory::create()?;
+        let work_dir = temporary.create_subdirectory("work")?;
+        let codex_home = temporary.create_subdirectory("codex-home")?;
+        copy_codex_auth(&codex_home)?;
+        let catalog_path = self.write_restricted_catalog(temporary.path(), &codex_home)?;
+        let dynamic_tools = dynamic_tool_specs()?;
+
+        let mut command = Command::new(&self.program);
+        for feature in DISABLED_FEATURES {
+            command.args(["--disable", feature]);
         }
-
-        let prepared_program = PreparedProgram::create(&self.program)?;
-        let program = prepared_program.path();
-        let work_dir = TemporaryDirectory::create("annals-model-work").map_err(|error| {
-            AppError::unexpected(
-                "model_runner_workdir",
-                format!("could not create model runner work directory: {error}"),
-            )
-        })?;
-
-        let mut command = Command::new(program);
+        for setting in CONFIG_OVERRIDES {
+            command.args(["-c", setting]);
+        }
+        let catalog_setting = format!(
+            "model_catalog_json={}",
+            serde_json::to_string(&catalog_path.display().to_string())?
+        );
         command
-            .current_dir(work_dir.path())
+            .args(["-c", &catalog_setting, "app-server", "--stdio"])
+            .current_dir(&work_dir)
+            .env("CODEX_HOME", &codex_home)
+            .env("CODEX_EXEC_SERVER_URL", "none")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .process_group(0);
+
+        self.run_app_server(
+            command,
+            &work_dir,
+            prompt,
+            &dynamic_tools,
+            backend,
+            forward_stderr,
+        )
+    }
+
+    fn write_restricted_catalog(&self, directory: &Path, codex_home: &Path) -> AppResult<PathBuf> {
+        let output = Command::new(&self.program)
+            .args(["debug", "models", "--bundled"])
+            .env("CODEX_HOME", codex_home)
+            .env("CODEX_EXEC_SERVER_URL", "none")
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|error| {
+                AppError::unexpected(
+                    "model_runner_catalog",
+                    format!(
+                        "could not read the bundled model catalog from {}: {error}",
+                        self.program.display()
+                    ),
+                )
+            })?;
+        if !output.status.success() {
+            return Err(runtime_error(
+                "model_runner_catalog",
+                &format!(
+                    "could not read the bundled model catalog: {}",
+                    output.status
+                ),
+                &output.stderr,
+            ));
+        }
+        if output.stdout.len() > MAX_MODEL_CATALOG_BYTES {
+            return Err(AppError::unexpected(
+                "model_runner_catalog",
+                "the bundled model catalog was unexpectedly large",
+            ));
+        }
+        let catalog = restricted_model_catalog(&output.stdout)?;
+        let path = directory.join("models.json");
+        fs::write(&path, serde_json::to_vec(&catalog)?)?;
+        Ok(path)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn run_app_server(
+        &self,
+        mut command: Command,
+        work_dir: &Path,
+        prompt: &str,
+        dynamic_tools: &[Value],
+        backend: &mut impl Backend,
+        forward_stderr: bool,
+    ) -> AppResult<String> {
+        let program = command.get_program().display().to_string();
         let mut child = command.spawn().map_err(|error| {
             AppError::unexpected(
                 "model_runner_spawn",
-                format!(
-                    "could not start model runner {}: {error}",
-                    program.display()
-                ),
+                format!("could not start model runner {program}: {error}"),
             )
         })?;
-        let process_group_id = child.id();
-
-        let pipes = (child.stdin.take(), child.stdout.take(), child.stderr.take());
-        let (Some(stdin), Some(stdout), Some(stderr)) = pipes else {
-            terminate_process_group(&mut child, process_group_id);
-            let _ = child.wait();
+        let group = child.id();
+        let (Some(stdin), Some(stdout), Some(stderr)) =
+            (child.stdin.take(), child.stdout.take(), child.stderr.take())
+        else {
+            terminate(&mut child, group);
             return Err(AppError::unexpected(
                 "model_runner_pipe",
-                "model runner did not provide all configured standard I/O pipes",
+                "model runner did not provide all configured pipes",
             ));
         };
-        let stdout_overflow = Arc::new(AtomicBool::new(false));
 
-        let prompt = prompt.as_bytes().to_vec();
-        let stdin_thread = thread::spawn(move || write_prompt(stdin, &prompt));
-
-        let overflow = Arc::clone(&stdout_overflow);
-        let stdout_limit = self.max_stdout_bytes;
-        let stdout_thread = thread::spawn(move || read_stdout(stdout, stdout_limit, overflow));
-
+        let (output_sender, output_receiver) = mpsc::channel();
+        let output_limit = self.max_stdout_bytes;
+        let output =
+            thread::spawn(move || read_protocol_lines(stdout, output_limit, &output_sender));
         let stderr_limit = self.stderr_tail_bytes;
-        let stderr_thread =
-            thread::spawn(move || read_stderr(stderr, stderr_limit, forward_stderr));
+        let diagnostics = thread::spawn(move || read_stderr(stderr, stderr_limit, forward_stderr));
 
         let deadline = Instant::now() + self.timeout;
-        let mut timed_out = false;
-        let mut killed_for_output = false;
-        let status = loop {
-            if stdout_overflow.load(Ordering::Relaxed) {
-                killed_for_output = true;
-                terminate_process_group(&mut child, process_group_id);
-                break child.wait();
-            }
-
-            match child.try_wait() {
-                Ok(Some(status)) => break Ok(status),
-                Ok(None) if Instant::now() >= deadline => {
-                    timed_out = true;
-                    terminate_process_group(&mut child, process_group_id);
-                    break child.wait();
-                }
-                Ok(None) => thread::sleep(Duration::from_millis(10)),
-                Err(error) => {
-                    terminate_process_group(&mut child, process_group_id);
-                    let _ = child.wait();
-                    break Err(error);
-                }
-            }
-        };
-        // A process that exits after starting a pipe-inheriting descendant must not make the
-        // reader threads outlive this runner call.
-        signal_process_group(process_group_id);
-
-        let stdin_result = join_stdin_thread(stdin_thread)?;
-        let stdout_result = join_io_thread(stdout_thread, "stdout")?;
-        let stderr_tail = join_io_thread(stderr_thread, "stderr")?;
-
-        if timed_out {
-            return Err(AppError::unexpected(
-                "model_runner_timeout",
-                format!(
-                    "model runner exceeded its {} second timeout{}",
-                    self.timeout.as_secs_f64(),
-                    diagnostic_suffix(&stderr_tail)
-                ),
-            ));
+        let result = ProtocolClient {
+            stdin,
+            output: output_receiver,
+            deadline,
+            backend,
+            submitted: false,
+            final_response: String::new(),
         }
-        if killed_for_output || stdout_result.overflowed {
-            return Err(AppError::unexpected(
-                "model_runner_output_too_large",
-                format!(
-                    "model runner stdout exceeded the {} byte limit{}",
-                    self.max_stdout_bytes,
-                    diagnostic_suffix(&stderr_tail)
-                ),
-            ));
-        }
+        .run(work_dir, prompt, dynamic_tools);
 
-        let status = status.map_err(|error| {
-            AppError::unexpected(
-                "model_runner_wait",
-                format!("could not wait for model runner: {error}"),
-            )
+        terminate(&mut child, group);
+        let _ = child.wait();
+        let output_result = output.join().map_err(|_| {
+            AppError::unexpected("model_runner_thread", "model runner output worker panicked")
         })?;
-        if !status.success() {
-            return Err(AppError::unexpected(
-                "model_runner_failed",
-                format!(
-                    "model runner exited with {status}{}",
-                    diagnostic_suffix(&stderr_tail)
-                ),
+        let diagnostics = diagnostics.join().map_err(|_| {
+            AppError::unexpected(
+                "model_runner_thread",
+                "model runner diagnostics worker panicked",
+            )
+        })??;
+        if let Err(error) = output_result {
+            return Err(runtime_error(
+                "model_runner_protocol",
+                &format!("could not read model runner protocol output: {error}"),
+                &diagnostics,
             ));
         }
-        stdin_result.map_err(|error| {
-            AppError::unexpected(
-                "model_runner_stdin",
-                format!("could not write the complete model prompt: {error}"),
-            )
-        })?;
-        let stdout = stdout_result.bytes;
-        if stdout.is_empty() || stdout.iter().all(u8::is_ascii_whitespace) {
-            return Err(AppError::unexpected(
-                "model_runner_empty_output",
-                format!(
-                    "model runner returned no output{}",
-                    diagnostic_suffix(&stderr_tail)
-                ),
-            ));
-        }
-
-        String::from_utf8(stdout).map_err(|error| {
-            AppError::unexpected(
-                "model_runner_invalid_utf8",
-                format!("model runner returned invalid UTF-8: {error}"),
-            )
-        })
+        result.map_err(|error| runtime_error(error.code, &error.message, &diagnostics))
     }
 }
 
-fn terminate_process_group(child: &mut Child, process_group_id: u32) {
-    if !signal_process_group(process_group_id) {
+struct ProtocolClient<'a, B> {
+    stdin: ChildStdin,
+    output: Receiver<io::Result<String>>,
+    deadline: Instant,
+    backend: &'a mut B,
+    submitted: bool,
+    final_response: String,
+}
+
+impl<B: Backend> ProtocolClient<'_, B> {
+    fn run(
+        mut self,
+        work_dir: &Path,
+        prompt: &str,
+        dynamic_tools: &[Value],
+    ) -> Result<String, RuntimeFailure> {
+        self.request(
+            0,
+            "initialize",
+            &json!({
+                "clientInfo": {
+                    "name": "annals",
+                    "title": "Annals",
+                    "version": env!("CARGO_PKG_VERSION")
+                },
+                "capabilities": { "experimentalApi": true }
+            }),
+        )?;
+        self.notify("initialized", None)?;
+        self.ensure_no_mcp_servers()?;
+        let thread = self.request(
+            2,
+            "thread/start",
+            &json!({
+                "model": MODEL,
+                "cwd": work_dir.display().to_string(),
+                "approvalPolicy": "never",
+                "sandbox": "read-only",
+                "baseInstructions": tool_server::instructions(),
+                "developerInstructions": "Use only the six supplied Annals tools. Complete the session with exactly one successful submit_change call.",
+                "ephemeral": true,
+                "environments": [],
+                "dynamicTools": dynamic_tools
+            }),
+        )?;
+        let thread_id = required_string(&thread, "/thread/id", "thread/start response")?;
+        let turn = self.request(
+            3,
+            "turn/start",
+            &json!({
+                "threadId": thread_id,
+                "input": [{ "type": "text", "text": prompt, "textElements": [] }],
+                "effort": REASONING_EFFORT,
+                "environments": []
+            }),
+        )?;
+        let turn_id = required_string(&turn, "/turn/id", "turn/start response")?;
+
+        loop {
+            let message = self.receive()?;
+            if self.handle_server_request(&message)? {
+                continue;
+            }
+            self.record_agent_message(&message);
+            if message.get("method").and_then(Value::as_str) != Some("turn/completed") {
+                continue;
+            }
+            let completed_thread = message.pointer("/params/threadId").and_then(Value::as_str);
+            let completed_turn = message.pointer("/params/turn/id").and_then(Value::as_str);
+            if completed_thread != Some(thread_id.as_str())
+                || completed_turn != Some(turn_id.as_str())
+            {
+                continue;
+            }
+            match message
+                .pointer("/params/turn/status")
+                .and_then(Value::as_str)
+            {
+                Some("completed") => return Ok(self.final_response),
+                Some(status) => {
+                    let detail = message
+                        .pointer("/params/turn/error/message")
+                        .and_then(Value::as_str)
+                        .unwrap_or("no error detail was provided");
+                    return Err(RuntimeFailure::new(
+                        "model_runner_failed",
+                        format!("model liaison ended with status {status}: {detail}"),
+                    ));
+                }
+                None => {
+                    return Err(RuntimeFailure::new(
+                        "model_runner_protocol",
+                        "turn/completed omitted the turn status",
+                    ));
+                }
+            }
+        }
+    }
+
+    fn ensure_no_mcp_servers(&mut self) -> Result<(), RuntimeFailure> {
+        let response = self.request(
+            1,
+            "mcpServerStatus/list",
+            &json!({
+                "cursor": null,
+                "limit": null,
+                "detail": "toolsAndAuthOnly",
+                "threadId": null
+            }),
+        )?;
+        let servers = response
+            .get("data")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                RuntimeFailure::new(
+                    "model_runner_protocol",
+                    "mcpServerStatus/list response omitted its data array",
+                )
+            })?;
+        if servers.is_empty() {
+            Ok(())
+        } else {
+            Err(RuntimeFailure::new(
+                "model_runner_tool_inventory",
+                "the isolated liaison unexpectedly loaded an MCP server",
+            ))
+        }
+    }
+
+    fn request(&mut self, id: i64, method: &str, params: &Value) -> Result<Value, RuntimeFailure> {
+        self.write(&json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params
+        }))?;
+        loop {
+            let message = self.receive()?;
+            if self.handle_server_request(&message)? {
+                continue;
+            }
+            self.record_agent_message(&message);
+            if message.get("id") != Some(&json!(id)) {
+                continue;
+            }
+            if let Some(error) = message.get("error") {
+                let detail = error
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown JSON-RPC error");
+                return Err(RuntimeFailure::new(
+                    "model_runner_failed",
+                    format!("{method} failed: {detail}"),
+                ));
+            }
+            return message.get("result").cloned().ok_or_else(|| {
+                RuntimeFailure::new(
+                    "model_runner_protocol",
+                    format!("{method} response omitted result"),
+                )
+            });
+        }
+    }
+
+    fn notify(&mut self, method: &str, params: Option<Value>) -> Result<(), RuntimeFailure> {
+        let mut message = json!({ "jsonrpc": "2.0", "method": method });
+        if let Some(params) = params {
+            message["params"] = params;
+        }
+        self.write(&message)
+    }
+
+    fn receive(&self) -> Result<Value, RuntimeFailure> {
+        let remaining = self
+            .deadline
+            .checked_duration_since(Instant::now())
+            .ok_or_else(|| {
+                RuntimeFailure::new(
+                    "model_runner_timeout",
+                    "model liaison exceeded its time limit",
+                )
+            })?;
+        let line = match self.output.recv_timeout(remaining) {
+            Ok(Ok(line)) => line,
+            Ok(Err(error)) => {
+                return Err(RuntimeFailure::new(
+                    "model_runner_protocol",
+                    format!("could not read model runner output: {error}"),
+                ));
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                return Err(RuntimeFailure::new(
+                    "model_runner_timeout",
+                    "model liaison exceeded its time limit",
+                ));
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                return Err(RuntimeFailure::new(
+                    "model_runner_failed",
+                    "model runner exited before completing the liaison turn",
+                ));
+            }
+        };
+        serde_json::from_str(&line).map_err(|error| {
+            RuntimeFailure::new(
+                "model_runner_protocol",
+                format!("model runner emitted invalid JSON-RPC: {error}"),
+            )
+        })
+    }
+
+    fn write(&mut self, message: &Value) -> Result<(), RuntimeFailure> {
+        serde_json::to_writer(&mut self.stdin, message).map_err(|error| {
+            RuntimeFailure::new(
+                "model_runner_stdin",
+                format!("could not encode a model runner request: {error}"),
+            )
+        })?;
+        self.stdin.write_all(b"\n").map_err(|error| {
+            RuntimeFailure::new(
+                "model_runner_stdin",
+                format!("could not write to the model runner: {error}"),
+            )
+        })?;
+        self.stdin.flush().map_err(|error| {
+            RuntimeFailure::new(
+                "model_runner_stdin",
+                format!("could not flush a model runner request: {error}"),
+            )
+        })
+    }
+
+    fn handle_server_request(&mut self, message: &Value) -> Result<bool, RuntimeFailure> {
+        let Some(method) = message.get("method").and_then(Value::as_str) else {
+            return Ok(false);
+        };
+        let Some(id) = message.get("id").cloned() else {
+            return Ok(false);
+        };
+        if method != "item/tool/call" {
+            self.write(&json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": { "code": -32601, "message": format!("unsupported server request {method:?}") }
+            }))?;
+            return Err(RuntimeFailure::new(
+                "model_runner_protocol",
+                format!("model runner requested unsupported operation {method:?}"),
+            ));
+        }
+
+        let params = message.get("params").cloned().unwrap_or_else(|| json!({}));
+        let namespace = params.get("namespace");
+        let name = params.get("tool").and_then(Value::as_str);
+        let arguments = params.get("arguments").cloned();
+        let result = match (namespace, name, arguments) {
+            (None | Some(Value::Null), Some(name), Some(arguments)) if arguments.is_object() => {
+                self.call_tool(name, arguments)
+            }
+            _ => Err(ToolFailure::new(
+                "invalid_tool_call",
+                "Annals tool calls require no namespace, a known tool name, and object arguments",
+            )),
+        };
+        let (text, success) = model_tool_result(result);
+        self.write(&json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "contentItems": [{ "type": "inputText", "text": text }],
+                "success": success
+            }
+        }))?;
+        Ok(true)
+    }
+
+    fn call_tool(&mut self, name: &str, arguments: Value) -> Result<Value, ToolFailure> {
+        let Some(tool) = Tool::from_name(name) else {
+            return Err(ToolFailure::new(
+                "unknown_tool",
+                format!("unknown Annals tool {name:?}"),
+            ));
+        };
+        if tool == Tool::SubmitChange && self.submitted {
+            return Err(ToolFailure::new(
+                "change_already_submitted",
+                "this liaison session has already recorded its change proposal",
+            ));
+        }
+        let result = self.backend.call(tool, arguments);
+        if tool == Tool::SubmitChange && result.is_ok() {
+            self.submitted = true;
+        }
+        result
+    }
+
+    fn record_agent_message(&mut self, message: &Value) {
+        if message.get("method").and_then(Value::as_str) != Some("item/completed") {
+            return;
+        }
+        let item = message.pointer("/params/item");
+        if item
+            .and_then(|item| item.get("type"))
+            .and_then(Value::as_str)
+            == Some("agentMessage")
+            && let Some(text) = item
+                .and_then(|item| item.get("text"))
+                .and_then(Value::as_str)
+        {
+            text.clone_into(&mut self.final_response);
+        }
+    }
+}
+
+#[derive(Debug)]
+struct RuntimeFailure {
+    code: &'static str,
+    message: String,
+}
+
+impl RuntimeFailure {
+    fn new(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+fn required_string(value: &Value, pointer: &str, context: &str) -> Result<String, RuntimeFailure> {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| {
+            RuntimeFailure::new(
+                "model_runner_protocol",
+                format!("{context} omitted {pointer}"),
+            )
+        })
+}
+
+fn model_tool_result(result: Result<Value, ToolFailure>) -> (String, bool) {
+    match result {
+        Ok(value) => (
+            serde_json::to_string(&value).unwrap_or_else(|_| "null".to_owned()),
+            true,
+        ),
+        Err(error) => {
+            let mut value = json!({
+                "error": {
+                    "code": error.code(),
+                    "message": error.message()
+                }
+            });
+            if let Some(details) = error.details() {
+                value["error"]["details"] = details.clone();
+            }
+            (
+                serde_json::to_string(&value).unwrap_or_else(|_| {
+                    r#"{"error":{"code":"tool_failed","message":"tool failed"}}"#.to_owned()
+                }),
+                false,
+            )
+        }
+    }
+}
+
+fn dynamic_tool_specs() -> AppResult<Vec<Value>> {
+    tool_server::tool_definitions()
+        .into_iter()
+        .map(|definition| {
+            let name = definition
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    AppError::unexpected(
+                        "model_runner_tool_schema",
+                        "an Annals tool definition omitted its name",
+                    )
+                })?;
+            let description = definition
+                .get("description")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    AppError::unexpected(
+                        "model_runner_tool_schema",
+                        format!("Annals tool {name:?} omitted its description"),
+                    )
+                })?;
+            let input_schema = definition.get("inputSchema").cloned().ok_or_else(|| {
+                AppError::unexpected(
+                    "model_runner_tool_schema",
+                    format!("Annals tool {name:?} omitted its input schema"),
+                )
+            })?;
+            Ok(json!({
+                "type": "function",
+                "name": name,
+                "description": description,
+                "inputSchema": input_schema,
+                "deferLoading": false
+            }))
+        })
+        .collect()
+}
+
+fn restricted_model_catalog(bytes: &[u8]) -> AppResult<Value> {
+    let mut catalog: Value = serde_json::from_slice(bytes).map_err(|error| {
+        AppError::unexpected(
+            "model_runner_catalog",
+            format!("Codex returned an invalid bundled model catalog: {error}"),
+        )
+    })?;
+    let models = catalog
+        .get_mut("models")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| {
+            AppError::unexpected(
+                "model_runner_catalog",
+                "Codex's bundled model catalog omitted its models array",
+            )
+        })?;
+    let Some(index) = models
+        .iter()
+        .position(|model| model.get("slug").and_then(Value::as_str) == Some(MODEL))
+    else {
+        return Err(AppError::unexpected(
+            "model_runner_catalog",
+            format!("Codex's bundled model catalog does not contain {MODEL}"),
+        ));
+    };
+    let mut model = models.remove(index);
+    let object = model.as_object_mut().ok_or_else(|| {
+        AppError::unexpected(
+            "model_runner_catalog",
+            format!("the {MODEL} catalog entry is not an object"),
+        )
+    })?;
+    object.insert("tool_mode".to_owned(), json!("direct"));
+    object.insert("multi_agent_version".to_owned(), json!("disabled"));
+    object.insert("shell_type".to_owned(), json!("disabled"));
+    object.insert("supports_parallel_tool_calls".to_owned(), json!(false));
+    object.insert("apply_patch_tool_type".to_owned(), Value::Null);
+    object.insert("supports_search_tool".to_owned(), json!(false));
+    object.insert("include_skills_usage_instructions".to_owned(), json!(false));
+    object.insert("experimental_supported_tools".to_owned(), json!([]));
+    object.insert("input_modalities".to_owned(), json!(["text"]));
+    object.insert(
+        "base_instructions".to_owned(),
+        json!(tool_server::instructions()),
+    );
+    object.insert("model_messages".to_owned(), Value::Null);
+    *models = vec![model];
+    Ok(catalog)
+}
+
+fn copy_codex_auth(isolated_home: &Path) -> AppResult<()> {
+    let source_home = std::env::var_os("CODEX_HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .filter(|value| !value.is_empty())
+                .map(|home| PathBuf::from(home).join(".codex"))
+        });
+    let Some(source) = source_home.map(|home| home.join("auth.json")) else {
+        return Ok(());
+    };
+    if source.is_file() {
+        let mut source = fs::File::open(source)?;
+        let mut destination = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(isolated_home.join("auth.json"))?;
+        io::copy(&mut source, &mut destination)?;
+        destination.flush()?;
+    }
+    Ok(())
+}
+
+fn read_protocol_lines(
+    reader: impl Read,
+    limit: usize,
+    sender: &mpsc::Sender<io::Result<String>>,
+) -> io::Result<()> {
+    let mut reader = BufReader::new(reader);
+    let mut total = 0_usize;
+    loop {
+        let mut line = String::new();
+        let count = reader.read_line(&mut line)?;
+        if count == 0 {
+            return Ok(());
+        }
+        total = total.saturating_add(count);
+        if total > limit {
+            let _ = sender.send(Err(io::Error::other(
+                "model liaison produced too much protocol output",
+            )));
+            return Ok(());
+        }
+        if sender.send(Ok(line)).is_err() {
+            return Ok(());
+        }
+    }
+}
+
+fn read_stderr(mut reader: impl Read, limit: usize, forward: bool) -> io::Result<Vec<u8>> {
+    let mut tail = Vec::new();
+    let mut buffer = [0_u8; 4096];
+    let mut terminal = forward.then(|| io::stderr().lock());
+    loop {
+        let count = reader.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        if let Some(output) = &mut terminal {
+            for byte in &buffer[..count] {
+                if matches!(byte, b'\n' | 0x20..=0x7e | 0x80..=0xff) {
+                    output.write_all(&[*byte])?;
+                } else {
+                    write!(output, "\\x{byte:02x}")?;
+                }
+            }
+        }
+        let chunk = &buffer[..count];
+        if chunk.len() >= limit {
+            tail.clear();
+            tail.extend_from_slice(&chunk[chunk.len() - limit..]);
+        } else {
+            let excess = tail.len().saturating_add(chunk.len()).saturating_sub(limit);
+            if excess > 0 {
+                tail.drain(..excess);
+            }
+            tail.extend_from_slice(chunk);
+        }
+    }
+    Ok(tail)
+}
+
+fn terminate(child: &mut Child, group: u32) {
+    if !signal_group(group) {
         let _ = child.kill();
     }
 }
 
-fn signal_process_group(process_group_id: u32) -> bool {
+fn signal_group(group: u32) -> bool {
     Command::new("/bin/kill")
-        .args(["-KILL", "--", &format!("-{process_group_id}")])
+        .args(["-KILL", "--", &format!("-{group}")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -238,223 +805,55 @@ fn signal_process_group(process_group_id: u32) -> bool {
         .is_ok_and(|status| status.success())
 }
 
-#[derive(Debug)]
-struct PreparedProgram {
-    path: PathBuf,
-    _bundle: Option<TemporaryDirectory>,
-}
-
-impl PreparedProgram {
-    fn create(program: &RunnerProgram) -> AppResult<Self> {
-        match program {
-            RunnerProgram::Embedded => Self::materialize_bundle(),
-            RunnerProgram::Injected(path) => {
-                let canonical = fs::canonicalize(path).map_err(|error| {
-                    AppError::unexpected(
-                        "model_runner_unavailable",
-                        format!("could not resolve model runner {}: {error}", path.display()),
-                    )
-                })?;
-                Ok(Self {
-                    path: canonical,
-                    _bundle: None,
-                })
-            }
-        }
-    }
-
-    fn materialize_bundle() -> AppResult<Self> {
-        let bundle = TemporaryDirectory::create("annals-codex-bundle").map_err(|error| {
-            AppError::unexpected(
-                "model_runner_bundle",
-                format!("could not create embedded Codex bundle: {error}"),
-            )
-        })?;
-        let path = bundle.path().join("agent.sh");
-        let schema_path = bundle.path().join("generated-tree.schema.json");
-        fs::write(&path, BUNDLED_AGENT)
-            .and_then(|()| fs::set_permissions(&path, fs::Permissions::from_mode(0o700)))
-            .and_then(|()| fs::write(schema_path, BUNDLED_SCHEMA))
-            .map_err(|error| {
-                AppError::unexpected(
-                    "model_runner_bundle",
-                    format!("could not materialize embedded Codex bundle: {error}"),
-                )
-            })?;
-        let path = fs::canonicalize(path).map_err(|error| {
-            AppError::unexpected(
-                "model_runner_bundle",
-                format!("could not resolve embedded Codex agent: {error}"),
-            )
-        })?;
-
-        Ok(Self {
-            path,
-            _bundle: Some(bundle),
-        })
-    }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-#[derive(Debug)]
-struct StdoutRead {
-    bytes: Vec<u8>,
-    overflowed: bool,
-}
-
-fn write_prompt(mut stdin: impl Write, prompt: &[u8]) -> io::Result<()> {
-    stdin.write_all(prompt)
-}
-
-fn read_stdout(
-    mut stdout: impl Read,
-    limit: usize,
-    overflow: Arc<AtomicBool>,
-) -> io::Result<StdoutRead> {
-    let mut bytes = Vec::with_capacity(limit.min(64 * 1024));
-    let mut buffer = [0_u8; 8192];
-    let mut overflowed = false;
-
-    loop {
-        let count = stdout.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        let remaining = limit.saturating_sub(bytes.len());
-        bytes.extend_from_slice(&buffer[..count.min(remaining)]);
-        if count > remaining {
-            overflowed = true;
-            overflow.store(true, Ordering::Relaxed);
-        }
-    }
-
-    drop(overflow);
-    Ok(StdoutRead { bytes, overflowed })
-}
-
-fn read_stderr(mut stderr: impl Read, tail_limit: usize, forward: bool) -> io::Result<Vec<u8>> {
-    let mut tail = Vec::with_capacity(tail_limit.min(64 * 1024));
-    let mut buffer = [0_u8; 4096];
-    let process_stderr = io::stderr();
-    let mut forwarded = forward.then(|| process_stderr.lock());
-
-    loop {
-        let count = stderr.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        let chunk = &buffer[..count];
-        if let Some(output) = &mut forwarded {
-            let _ = write_terminal_safe(output, chunk);
-        }
-        retain_tail(&mut tail, chunk, tail_limit);
-    }
-    if let Some(output) = &mut forwarded {
-        let _ = output.flush();
-    }
-    Ok(tail)
-}
-
-fn write_terminal_safe(mut output: impl Write, chunk: &[u8]) -> io::Result<()> {
-    for byte in chunk {
-        match byte {
-            b'\n' | 0x20..=0x7e | 0x80..=0xff => output.write_all(&[*byte])?,
-            _ => write!(output, "\\x{byte:02x}")?,
-        }
-    }
-    Ok(())
-}
-
-fn retain_tail(tail: &mut Vec<u8>, chunk: &[u8], limit: usize) {
-    if limit == 0 {
-        return;
-    }
-    if chunk.len() >= limit {
-        tail.clear();
-        tail.extend_from_slice(&chunk[chunk.len() - limit..]);
-        return;
-    }
-    let overflow = tail.len().saturating_add(chunk.len()).saturating_sub(limit);
-    if overflow > 0 {
-        tail.drain(..overflow);
-    }
-    tail.extend_from_slice(chunk);
-}
-
-fn diagnostic_suffix(stderr_tail: &[u8]) -> String {
-    let diagnostic = String::from_utf8_lossy(stderr_tail);
+fn runtime_error(code: &'static str, message: &str, diagnostics: &[u8]) -> AppError {
+    let diagnostic = String::from_utf8_lossy(diagnostics);
     let diagnostic = diagnostic.trim();
-    if diagnostic.is_empty() {
+    let suffix = if diagnostic.is_empty() {
         String::new()
     } else {
-        let diagnostic = diagnostic
-            .chars()
-            .flat_map(char::escape_default)
-            .collect::<String>();
-        format!("; stderr: {diagnostic}")
-    }
+        format!(
+            "; stderr: {}",
+            diagnostic
+                .chars()
+                .flat_map(char::escape_default)
+                .collect::<String>()
+        )
+    };
+    AppError::unexpected(code, format!("{message}{suffix}"))
 }
 
-fn join_io_thread<T>(
-    handle: thread::JoinHandle<io::Result<T>>,
-    stream: &'static str,
-) -> AppResult<T> {
-    handle
-        .join()
-        .map_err(|_| {
-            AppError::unexpected(
-                "model_runner_thread",
-                format!("model runner {stream} worker panicked"),
-            )
-        })?
-        .map_err(|error| {
-            AppError::unexpected(
-                "model_runner_io",
-                format!("model runner {stream} failed: {error}"),
-            )
-        })
-}
-
-fn join_stdin_thread(handle: thread::JoinHandle<io::Result<()>>) -> AppResult<io::Result<()>> {
-    handle.join().map_err(|_| {
-        AppError::unexpected("model_runner_thread", "model runner stdin worker panicked")
-    })
-}
-
-#[derive(Debug)]
 struct TemporaryDirectory {
     path: PathBuf,
 }
 
 impl TemporaryDirectory {
-    fn create(prefix: &str) -> io::Result<Self> {
-        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
+    fn create() -> AppResult<Self> {
         let base = std::env::temp_dir();
-
-        for _ in 0..100 {
-            let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-            let path = base.join(format!("{prefix}-{}-{stamp}-{id}", std::process::id()));
+        for counter in 0..1000_u16 {
+            let path = base.join(format!("annals-liaison-{}-{counter}", std::process::id()));
             match fs::create_dir(&path) {
-                Ok(()) => return Ok(Self { path }),
+                Ok(()) => {
+                    fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
+                    return Ok(Self { path });
+                }
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(error) => return Err(error),
+                Err(error) => return Err(error.into()),
             }
         }
-        Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            "could not allocate a unique temporary directory",
+        Err(AppError::unexpected(
+            "model_runner_workdir",
+            "could not allocate a liaison working directory",
         ))
     }
 
     fn path(&self) -> &Path {
         &self.path
+    }
+
+    fn create_subdirectory(&self, name: &str) -> AppResult<PathBuf> {
+        let path = self.path.join(name);
+        fs::create_dir(&path)?;
+        Ok(path)
     }
 }
 
@@ -466,228 +865,150 @@ impl Drop for TemporaryDirectory {
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
     use std::fs;
-    use std::io;
-    use std::os::unix::fs::PermissionsExt;
-    use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::os::unix::fs::PermissionsExt as _;
     use std::time::Duration;
 
-    use super::{
-        BUNDLED_AGENT, BUNDLED_SCHEMA, PreparedProgram, Runner, RunnerProgram, write_terminal_safe,
-    };
-    use crate::error::AppError;
+    use serde_json::{Value, json};
 
-    struct Script {
-        dir: PathBuf,
-        path: PathBuf,
-    }
+    use crate::tool_server::{Backend, Tool, ToolFailure};
 
-    impl Script {
-        fn new(body: &str) -> io::Result<Self> {
-            static NEXT_ID: AtomicU64 = AtomicU64::new(0);
-            let dir = loop {
-                let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-                let candidate = std::env::temp_dir().join(format!(
-                    "annals-model-runner-test-{}-{id}",
-                    std::process::id()
-                ));
-                match fs::create_dir(&candidate) {
-                    Ok(()) => break candidate,
-                    Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-                    Err(error) => return Err(error),
-                }
-            };
-            let path = dir.join("agent.sh");
-            fs::write(&path, format!("#!/bin/sh\nset -eu\n{body}\n"))?;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o755))?;
-            Ok(Self { dir, path })
-        }
+    use super::{CONFIG_OVERRIDES, MODEL, Runner, dynamic_tool_specs, restricted_model_catalog};
 
-        fn path(&self) -> &Path {
-            &self.path
-        }
-    }
-
-    impl Drop for Script {
-        fn drop(&mut self) {
-            let _ = fs::remove_file(&self.path);
-            let _ = fs::remove_dir(&self.dir);
-        }
-    }
-
-    fn runner(script: &Script) -> Runner {
-        Runner::new(script.path(), Duration::from_secs(5), 1024, 1024)
-    }
-
-    fn expected_error(runner: &Runner) -> Result<AppError, Box<dyn Error>> {
-        match runner.run("prompt", false) {
-            Ok(output) => Err(format!("expected runner failure, got {output:?}").into()),
-            Err(error) => Ok(error),
-        }
+    #[test]
+    fn runner_accepts_an_explicit_program_for_isolated_tests() {
+        let runner = Runner::new("/usr/bin/false", Duration::from_secs(1));
+        assert_eq!(runner.program.to_string_lossy(), "/usr/bin/false");
     }
 
     #[test]
-    fn embedded_bundle_is_executable_and_pins_codex() -> Result<(), Box<dyn Error>> {
-        let prepared = PreparedProgram::create(&RunnerProgram::Embedded)?;
-        let bundle_dir = prepared
-            .path()
-            .parent()
-            .ok_or_else(|| io::Error::other("materialized agent has no parent"))?;
-        let script_bytes = fs::read(prepared.path())?;
-        let schema_bytes = fs::read(bundle_dir.join("generated-tree.schema.json"))?;
-        let mode = fs::metadata(prepared.path())?.permissions().mode();
-        assert_eq!(script_bytes, BUNDLED_AGENT);
-        assert_eq!(schema_bytes, BUNDLED_SCHEMA);
-        let _: serde_json::Value = serde_json::from_slice(BUNDLED_SCHEMA)?;
-        assert_ne!(mode & 0o100, 0);
-
-        let script = std::str::from_utf8(BUNDLED_AGENT)?;
-        for required in [
-            "codex exec",
-            "--ephemeral",
-            "--ignore-user-config",
-            "--ignore-rules",
-            "--disable shell_tool",
-            "--disable unified_exec",
-            "--skip-git-repo-check",
-            "--sandbox read-only",
-            "--color never",
-            "--model gpt-5.6-terra",
-            "model_reasoning_effort=\"medium\"",
-            "--output-schema",
-            "generated-tree.schema.json",
+    fn runner_disables_unrelated_prompt_context() {
+        for setting in [
+            "include_apps_instructions=false",
+            "include_collaboration_mode_instructions=false",
+            "include_environment_context=false",
+            "include_permissions_instructions=false",
+            "skills.bundled.enabled=false",
+            "skills.include_instructions=false",
         ] {
-            assert!(
-                script.contains(required),
-                "missing invocation pin: {required}"
-            );
+            assert!(CONFIG_OVERRIDES.contains(&setting));
         }
-        assert!(!script.contains("--json"));
-        assert!(script.trim_end().ends_with('-'));
-        assert!(matches!(Runner::default().program, RunnerProgram::Embedded));
-        Ok(())
     }
 
     #[test]
-    fn sends_exact_prompt_from_an_empty_working_directory() -> Result<(), Box<dyn Error>> {
-        let script = Script::new(
-            r#"
-[ -z "$(ls -A)" ] || { printf 'working directory was not empty' >&2; exit 24; }
-cat >actual
-printf 'the exact prompt\nwith final newline\n' >expected
-cmp actual expected || { printf 'prompt bytes differed' >&2; exit 23; }
-printf '{"schema_version":1,"nodes":[]}'
-"#,
+    fn model_catalog_disables_every_codex_tool_source() -> Result<(), Box<dyn std::error::Error>> {
+        let catalog = restricted_model_catalog(
+            serde_json::to_string(&json!({
+                "models": [{
+                    "slug": MODEL,
+                    "base_instructions": "coding",
+                    "model_messages": { "instructions_template": "coding" }
+                }, { "slug": "another-model" }]
+            }))?
+            .as_bytes(),
         )?;
-
-        let output = runner(&script).run("the exact prompt\nwith final newline\n", false)?;
-
-        assert_eq!(output, r#"{"schema_version":1,"nodes":[]}"#);
+        assert_eq!(catalog["models"].as_array().map(Vec::len), Some(1));
+        let model = &catalog["models"][0];
+        assert_eq!(model["tool_mode"], "direct");
+        assert_eq!(model["multi_agent_version"], "disabled");
+        assert_eq!(model["shell_type"], "disabled");
+        assert_eq!(model["supports_parallel_tool_calls"], false);
+        assert!(model["apply_patch_tool_type"].is_null());
+        assert_eq!(model["supports_search_tool"], false);
+        assert_eq!(model["include_skills_usage_instructions"], false);
+        assert!(model["model_messages"].is_null());
+        assert!(
+            model["base_instructions"]
+                .as_str()
+                .is_some_and(|instructions| instructions.contains("Annals liaison"))
+        );
         Ok(())
     }
 
     #[test]
-    fn drains_and_forwards_stderr_without_polluting_stdout() -> Result<(), Box<dyn Error>> {
-        let script = Script::new(
-            r"
-printf 'visible progress\n' >&2
-printf '{}'
-",
-        )?;
-
-        assert_eq!(runner(&script).run("prompt", true)?, "{}");
-        Ok(())
-    }
-
-    #[test]
-    fn reports_nonzero_exit_with_stderr_tail() -> Result<(), Box<dyn Error>> {
-        let script = Script::new("printf 'useful failure' >&2\nexit 7")?;
-
-        let error = expected_error(&runner(&script))?;
-
-        assert_eq!(error.code(), "model_runner_failed");
-        assert!(error.to_string().contains("useful failure"));
-        Ok(())
-    }
-
-    #[test]
-    fn escapes_control_characters_in_retained_diagnostics() -> Result<(), Box<dyn Error>> {
-        let script = Script::new("printf '\\033[31mfailure' >&2\nexit 7")?;
-
-        let error = expected_error(&runner(&script))?;
-        let message = error.to_string();
-
-        assert!(!message.contains('\u{1b}'));
-        assert!(message.contains(r"\u{1b}[31mfailure"));
-        Ok(())
-    }
-
-    #[test]
-    fn escapes_terminal_controls_while_forwarding_progress() -> Result<(), Box<dyn Error>> {
-        let mut output = Vec::new();
-
-        write_terminal_safe(&mut output, b"progress\t\x1b[31mred\n")?;
-
-        assert_eq!(output, b"progress\\x09\\x1b[31mred\n");
-        Ok(())
-    }
-
-    #[test]
-    fn rejects_invalid_utf8_output() -> Result<(), Box<dyn Error>> {
-        let script = Script::new("printf '\\377'")?;
-
-        let error = expected_error(&runner(&script))?;
-
-        assert_eq!(error.code(), "model_runner_invalid_utf8");
-        Ok(())
-    }
-
-    #[test]
-    fn kills_a_timed_out_runner() -> Result<(), Box<dyn Error>> {
-        let script = Script::new("sleep 5 &\nwait")?;
-        let runner = Runner::new(script.path(), Duration::from_millis(30), 1024, 1024);
-        let started = std::time::Instant::now();
-
-        let error = expected_error(&runner)?;
-
-        assert_eq!(error.code(), "model_runner_timeout");
-        assert!(started.elapsed() < Duration::from_secs(1));
-        Ok(())
-    }
-
-    #[test]
-    fn closes_pipes_left_open_by_a_descendant_after_the_runner_exits() -> Result<(), Box<dyn Error>>
+    fn dynamic_inventory_is_exactly_the_six_annals_tools() -> Result<(), Box<dyn std::error::Error>>
     {
-        let script = Script::new("sleep 5 &\nprintf '{}'")?;
-        let started = std::time::Instant::now();
+        let tools = dynamic_tool_specs()?;
+        let names = tools
+            .iter()
+            .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            [
+                "work_overview",
+                "work_read",
+                "work_search",
+                "corpus_search",
+                "corpus_inspect",
+                "submit_change"
+            ]
+        );
+        assert!(tools.iter().all(|tool| tool["type"] == "function"));
+        assert!(tools.iter().all(|tool| tool["deferLoading"] == false));
+        Ok(())
+    }
 
-        let output = runner(&script).run("prompt", false)?;
+    #[derive(Default)]
+    struct StubBackend {
+        calls: Vec<Tool>,
+    }
 
-        assert_eq!(output, "{}");
-        assert!(started.elapsed() < Duration::from_secs(1));
+    impl Backend for StubBackend {
+        fn call(&mut self, tool: Tool, _arguments: Value) -> Result<Value, ToolFailure> {
+            self.calls.push(tool);
+            Ok(json!({ "ok": true }))
+        }
+    }
+
+    #[test]
+    fn app_server_dynamic_call_is_dispatched_to_the_backend()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let program = directory.path().join("fake-codex");
+        fs::write(
+            &program,
+            format!(
+                r#"#!/bin/sh
+if [ "$1" = "debug" ]; then
+  printf '%s\n' '{{"models":[{{"slug":"{MODEL}"}}]}}'
+  exit 0
+fi
+IFS= read -r ignored
+printf '%s\n' '{{"jsonrpc":"2.0","id":0,"result":{{}}}}'
+IFS= read -r ignored
+IFS= read -r ignored
+printf '%s\n' '{{"jsonrpc":"2.0","id":1,"result":{{"data":[],"nextCursor":null}}}}'
+IFS= read -r ignored
+printf '%s\n' '{{"jsonrpc":"2.0","id":2,"result":{{"thread":{{"id":"thread"}}}}}}'
+IFS= read -r ignored
+printf '%s\n' '{{"jsonrpc":"2.0","id":3,"result":{{"turn":{{"id":"turn"}}}}}}'
+printf '%s\n' '{{"jsonrpc":"2.0","id":20,"method":"item/tool/call","params":{{"threadId":"thread","turnId":"turn","callId":"call","namespace":null,"tool":"work_overview","arguments":{{}}}}}}'
+IFS= read -r ignored
+printf '%s\n' '{{"jsonrpc":"2.0","method":"item/completed","params":{{"item":{{"type":"agentMessage","text":"diagnostic"}}}}}}'
+printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread","turn":{{"id":"turn","status":"completed"}}}}}}'
+"#
+            ),
+        )?;
+        let mut permissions = fs::metadata(&program)?.permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(&program, permissions)?;
+
+        let runner = Runner::new(&program, Duration::from_secs(2));
+        let mut backend = StubBackend::default();
+        let diagnostic = runner.run_liaison("pointer", &mut backend, false)?;
+        assert_eq!(diagnostic, "diagnostic");
+        assert_eq!(backend.calls, [Tool::WorkOverview]);
         Ok(())
     }
 
     #[test]
-    fn kills_output_that_exceeds_the_limit() -> Result<(), Box<dyn Error>> {
-        let script = Script::new("printf '%02048d' 0")?;
-        let runner = Runner::new(script.path(), Duration::from_secs(1), 64, 1024);
-
-        let error = expected_error(&runner)?;
-
-        assert_eq!(error.code(), "model_runner_output_too_large");
-        Ok(())
-    }
-
-    #[test]
-    fn rejects_empty_output() -> Result<(), Box<dyn Error>> {
-        let script = Script::new("printf '   '")?;
-
-        let error = expected_error(&runner(&script))?;
-
-        assert_eq!(error.code(), "model_runner_empty_output");
-        Ok(())
+    fn catalog_failure_has_a_stable_error_code() {
+        let runner = Runner::new("/usr/bin/false", Duration::from_secs(1));
+        let mut backend = StubBackend::default();
+        let Err(error) = runner.run_liaison("pointer", &mut backend, false) else {
+            panic!("the false runner unexpectedly succeeded");
+        };
+        assert_eq!(error.code(), "model_runner_catalog");
     }
 }

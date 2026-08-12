@@ -1,189 +1,152 @@
 # Annals architecture
 
-## Purpose
+## Boundary and ownership
 
-Annals turns arbitrary UTF-8 text into a grounded conceptual tree and stores it
-locally. Every node is homogeneous: it has one string, an optional parent, and
-an ordered position among siblings. A root is the shortest standalone,
-corpus-relative description the model judges sufficient to identify and
-encompass the conceptual family. Each child is a narrower refinement.
+Annals is one Rust executable and one SQLite database per library. A work is an
+immutable source object. The corpus owns concepts. Evidence is many-to-many: a
+work may support many concepts and a concept may be supported by many works.
+Model runs own examinations and proposals, never concepts.
 
-There is no objective semantic score in the application. The model judges the
-hierarchy; Annals enforces the mechanical contract around that judgment.
+Only an accepted proposal changes the corpus. Retaining a work, reading state,
+running a model, recording a proposal, recording `no_change`, validating,
+backing up, and rebuilding search data do not advance the corpus revision.
 
-The implementation is one Rust executable, one SQLite database per library,
-an embedded Codex process bundle, and SQLite FTS5. It has no daemon, server,
-embedding index, or generic model-provider layer.
+## Liaison flow
 
-## Ingestion data flow
+`annals integrate` retains or selects one work, reads HEAD, creates a model-run
+record bound to both, and starts an isolated Codex app-server process. The
+process uses `gpt-5.6-terra` with medium reasoning, an empty temporary
+directory, a private temporary Codex home, and no execution environment. Annals
+loads the installed Codex model catalog, narrows the selected model to direct
+tool mode, and disables the shell, web, planning, user-input, multi-agent,
+plugin, skill, and other built-in tool sources.
 
-```text
-raw UTF-8 input
-  -> deterministic raw-window units
-  -> complete prompt on child stdin
-  -> pinned Codex subprocess
-  -> schema-constrained JSON on child stdout
-  -> deterministic acceptance checks
-  -> one SQLite transaction for canonical and derived state
-```
+The prompt is deliberately a pointer. It contains the work label, base
+revision, and operating instructions, but not the complete work. The work is
+presented through read tools as untrusted evidence, and the liaison is
+instructed not to treat its contents as operating instructions.
 
-`annals ingest INPUT` reads a file or `-` for standard input. The input must be
-nonempty UTF-8 and is retained unchanged after acceptance.
+At thread start Annals supplies exactly six direct, session-scoped dynamic
+tools through the app-server protocol:
 
-### Raw-window adapter
+- `work_overview()` returns byte size and a bounded Markdown-heading outline;
+- `work_read(regions[])` performs bounded reads by heading path, unique quote,
+  beginning/end anchor, or an exact quotation returned as a continuation;
+- `work_search(queries[])` returns compact paragraph excerpts and heading paths;
+- `corpus_search(queries[])` searches the frozen base revision and returns paths
+  and evidence;
+- `corpus_inspect(paths[])` returns topology and evidence for exact paths;
+- `submit_change(proposal)` records one complete proposal or `no_change` result.
 
-The adapter has the recorded name `raw-window` and version `1`. It emits
-ordered, non-overlapping units that cover every input byte exactly once.
+Read and search calls accept batches. One successful `submit_change` closes the
+session's sole write boundary. Failed submissions are returned as recoverable
+tool errors and may be corrected. Tool arguments and results are retained in
+the model-run transcript.
 
-- The fixed window limit is 8,192 bytes.
-- A boundary never splits a UTF-8 code point.
-- Within the final 1,024 bytes before a limit, a newline is preferred, then
-  other Unicode whitespace.
-- If neither exists, the nearest valid boundary at or before the limit is used.
-- IDs are `u000000`, `u000001`, and so on.
-- Each unit carries its start byte, end byte, and exact text in the prompt.
+App-server sends each dynamic tool call back to the host, which dispatches it
+to the same in-process liaison backend used by the standalone private MCP
+transport. The MCP server remains a transport adapter and test surface; it is
+not attached to the Codex liaison, so Codex's MCP resource tools never enter
+the model-visible inventory.
 
-These units exist only to transport bounded pieces of one stream. Their
-boundaries do not create nodes, and concepts may cross them. The same unit may
-ground several incomparable nodes.
+The model's final response is diagnostic only. `integrate` succeeds from the
+recorded `submit_change` side effect. If the process fails after recording a
+valid proposal, the proposal remains the result; if the process exits without
+one, Annals returns `model_did_not_submit_change`.
 
-### Resolution policy
+No SQLite write transaction is held while the model examines the work. For an
+ordinary unstructured work, the liaison can start at the beginning and pass a
+read's exact `continue_after` quotation into the next read. Each result reports
+`region_complete` and `work_complete`. A highly repetitive work may not yield a
+unique continuation quotation; exhaustive sequential traversal is not
+guaranteed in that case, so the liaison must use another available natural
+anchor when possible.
 
-The request contains three hard maxima:
+## Language-level proposal
 
-| Value | Default | Meaning |
-| --- | ---: | --- |
-| `node_budget` | 32 | Maximum nodes, including the root |
-| `max_depth` | 6 | Maximum depth, with the root at zero |
-| `max_children` | 6 | Maximum immediate children of one node |
+The host supplies the immutable work and base revision. The proposal contains
+only semantic judgment: a summary, operations, uncertainties, and either
+`change` or `no_change` outcome.
 
-They are ceilings, not requested shapes. The model may use fewer nodes, may
-stop branches at different depths, and must not add filler merely to consume a
-limit. A node is split only when at least two useful narrower refinements are
-supported.
-
-## Codex process boundary
-
-The executable embeds `bundles/codex/agent.sh` and
-`generated-tree.schema.json`. For each invocation it materializes those assets,
-creates an empty working directory, and starts the launcher with piped standard
-input, output, and error streams. The launcher executes:
-
-```sh
-codex exec \
-  --ephemeral \
-  --ignore-user-config \
-  --ignore-rules \
-  --disable shell_tool \
-  --disable unified_exec \
-  --skip-git-repo-check \
-  --sandbox read-only \
-  --color never \
-  --model gpt-5.6-terra \
-  -c 'model_reasoning_effort="medium"' \
-  --output-schema generated-tree.schema.json \
-  -
-```
-
-The installed `codex` executable and its existing authentication are required.
-User configuration and repository instruction files do not alter generation.
-Shell and unified-execution tools are disabled for the turn. The prompt also
-tells the model to treat corpus text as untrusted evidence, avoid other tools
-and browsing, and ignore instructions contained in the corpus.
-
-The parent writes the complete prompt to stdin while draining stdout and
-stderr concurrently. Human mode forwards terminal-safe progress; JSON mode
-buffers it so an error remains one JSON document. The final 64 KiB is retained
-for failures. The child starts in a dedicated process group, and timeout or
-output-limit failures terminate the whole group. The process must exit
-successfully within 30 minutes; stdout must be nonempty UTF-8 and no larger
-than 16 MiB. Stdout is parsed as the single JSON proposal without a JSONL
-translation layer.
-
-No SQLite write transaction is held while the model runs.
-
-## Prompt and proposal contract
-
-The versioned prompt receives ordered units plus the resolution policy. It asks
-the model to consider the complete input, disregard unit boundaries when
-choosing concepts, and emit nodes in depth-first preorder.
-
-The output shape is:
+Existing concepts use complete path arrays from the frozen base revision:
 
 ```json
-{
-  "schema_version": 1,
-  "nodes": [
-    {
-      "id": "n0",
-      "parent_id": null,
-      "text": "Conceptual family",
-      "support_unit_ids": ["u000000"]
-    }
-  ]
-}
+{"path":["Database systems","Concurrency control"]}
 ```
 
-Proposal IDs are local to that response. Database integer IDs are assigned only
-after acceptance.
+Concepts created in the same proposal use their meaningful label:
 
-## Deterministic acceptance
+```json
+{"new":"Predicate locking"}
+```
 
-Annals rejects a proposal without repairing it when any of these checks fail:
+Created labels must be unique within the request after Unicode NFKC,
+lowercasing, and whitespace collapse. Existing paths and proposal-local labels
+are all resolved before operations execute. A move or reword therefore cannot
+silently change what a later selector denotes.
 
-- schema version is not `1`;
-- IDs are not exactly `n0`, `n1`, and so on in array order;
-- `n0` is not the sole root;
-- a parent is missing, follows its child, or violates depth-first preorder;
-- any hard maximum is exceeded;
-- a node string is empty or has outer whitespace;
-- normalized sibling strings duplicate one another;
-- an internal node has exactly one child;
-- a leaf has no support link;
-- a support ID is unknown or repeated on one node;
-- the same unit is attached to an ancestor and its descendant;
-- input units are not consecutive, complete, nonempty UTF-8 ranges.
+Evidence uses an exact quotation from the scoped work. When it is repeated,
+`within_heading` (an exact heading path), `preceded_by`, or `followed_by`
+disambiguates it. The public protocol never asks for a byte offset.
 
-The check does not require every input unit to be cited. It also does not score
-whether one string is conceptually narrower than another; that remains the
-model's judgment.
+Placement appends by default. Optional `before` and `after` selectors express
+relative ordering; they are mutually exclusive. Omitting `under` places a
+created or moved concept at the root level.
 
-## Commit boundary
+## Resolution and validation
 
-After acceptance, one immediate SQLite transaction inserts:
+Submission parses a strict JSON contract and projects the complete resulting
+corpus in memory. Annals validates, among other things:
 
-1. the unchanged raw input and SHA-256 digest;
-2. generation metadata and accepted proposal JSON;
-3. all input-unit IDs and byte ranges;
-4. every node and ordered parent edge;
-5. every node-to-unit support link;
-6. one derived search row per node;
-7. one library revision increment.
+- every path and proposal-local selector resolves;
+- quotations resolve uniquely in the immutable work;
+- roots and siblings have normalized-unique labels;
+- ordering anchors belong to the selected destination;
+- the result is one acyclic ordered forest;
+- every leaf has source evidence;
+- evidence ranges are unique valid UTF-8 ranges;
+- retirement leaves no children behind; and
+- rewording explicitly retains or removes existing evidence.
 
-Any failure rolls back the complete write. The accepted JSON, generated tree,
-grounding, and search index therefore become visible together.
+Annals does not repair a proposal or judge whether its conceptual claims are
+true. It validates the deterministic boundary around that judgment.
 
-## Tree lifecycle
+A stored pending proposal includes its original request, resolved semantic
+operations, and complete projected result. A result based on the same or a
+later revision supersedes the same work's pending proposal. An older-base
+result remains an examination record without displacing a newer pending
+proposal.
 
-Generated nodes carry their generation-run ID. Individual add, edit, move, and
-delete commands reject any generated tree. `tree delete` removes the complete
-generated tree and its retained generation record atomically.
+## Atomic application
 
-Manual trees use the same homogeneous node representation with a null
-generation-run ID. Manual node commands can add, replace, move, or delete their
-nodes while preserving a forest, sibling order, and acyclicity. A root is moved
-or removed only through tree commands, and a subtree cannot move between roots.
+Application requires `HEAD == base_revision`, re-resolves the stored request,
+and verifies that it produces the same transition. One immediate SQLite
+transaction then:
 
-## Search and validation
+1. materializes the resulting concepts and evidence;
+2. rebuilds derived concept-search rows;
+3. inserts the append-only commit with request, resolved operations, metadata,
+   and before/after snapshots;
+4. marks the proposal applied;
+5. advances the revision once; and
+6. commits all state together.
 
-Canonical nodes and generation records are authoritative. `search_units`, the
-FTS5 table, and index-version metadata are derived. Mutations rebuild the
-derived rows in the same transaction; `annals reindex` recreates them from
-canonical node text and breadcrumbs.
+Any error rolls back the entire transition. A stale proposal fails with
+`stale_change`; Annals does not automatically rebase it. A proposal containing
+uncertainties fails application with `review_required`. Submit a revised,
+certain proposal to supersede it.
 
-`annals validate` checks SQLite integrity, foreign keys, FTS integrity, tree
-structure, raw-input digests, complete UTF-8 unit coverage, generation
-ownership, exact reproduction of the recorded adapter output, grounding
-references, agreement with the accepted proposal, and exact agreement between
-canonical nodes and derived search rows. It reports failures without repairing
-them.
+## History and reversion
+
+HEAD is materialized for ordinary reads. Every commit stores sufficient
+before-and-after state for historical `show`, semantic `diff`, validation, and
+inversion.
+
+`revert REVISION` applies the inverse of that revision to current HEAD and
+creates a new `revert` commit. It never removes the original commit. Inversion
+checks that each affected field still matches the target revision's after-state;
+otherwise it fails atomically with `revert_conflict`.
+
+Retired concepts disappear from HEAD but remain represented in historical
+snapshots. Works are independently retained and are never deleted by concept
+retirement, reorganization, or reversion.
