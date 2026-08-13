@@ -1,0 +1,82 @@
+[
+  {
+    "label": "Conversation ontology and archive design",
+    "source": "~/.codex/sessions/2026/08/07/rollout-2026-08-07T17-54-54-019fde6f-c437-7801-b081-b5eaedf9a469.jsonl"
+  },
+  {
+    "label": "Interpreting a year of conversations",
+    "source": "~/.codex/sessions/2026/08/08/rollout-2026-08-08T01-08-18-019fdffc-8e08-7c73-b6b9-4caa8bba216c.jsonl"
+  },
+  {
+    "label": "Frame construction in 2026 conversations",
+    "source": "~/.codex/sessions/2026/08/08/rollout-2026-08-08T01-56-58-019fe029-1af8-7400-9919-508b4f4ce8db.jsonl"
+  },
+  {
+    "label": "Web-browsing surfaces for agents",
+    "source": "~/.codex/sessions/2026/08/08/rollout-2026-08-08T17-46-50-019fe38e-bf5f-7483-88f8-ebec60abedee.jsonl"
+  },
+  {
+    "label": "Computer-use isolation and concurrency",
+    "source": "~/.codex/sessions/2026/08/09/rollout-2026-08-09T12-51-01-019fe7a6-45c0-79f0-befc-fafccf424d33.jsonl"
+  },
+  {
+    "label": "Embedding-free topic-tree retrieval",
+    "source": "~/.codex/sessions/2026/08/10/rollout-2026-08-10T23-27-04-019fef12-f38c-7772-84f3-15db31328b07.jsonl"
+  },
+  {
+    "label": "Strict local CI as a design constraint",
+    "source": "~/.codex/sessions/2026/08/10/rollout-2026-08-10T23-58-50-019fef30-08ad-7783-9e3d-f27f39c0c115.jsonl"
+  },
+  {
+    "label": "Building the initial Annals implementation",
+    "source": "~/.codex/sessions/2026/08/11/rollout-2026-08-11T17-04-45-019ff2db-49f7-7350-a308-4f2d5556e3c3.jsonl"
+  },
+  {
+    "label": "Explicit corpus-change contracts",
+    "source": "~/.codex/sessions/2026/08/11/rollout-2026-08-11T18-26-46-019ff326-61b3-7ba1-b5ed-4ae1acca39c3.jsonl"
+  },
+  {
+    "label": "The Annals relational data model",
+    "source": "~/.codex/sessions/2026/08/11/rollout-2026-08-11T18-51-03-019ff33c-9c39-7812-af3f-1fa67f8175c9.jsonl"
+  },
+  {
+    "label": "GitHub-only release and versioning contract",
+    "source": "~/.codex/sessions/2026/08/11/rollout-2026-08-11T19-03-06-019ff347-a5c3-7ce0-abea-c40e6d4108cc.jsonl"
+  },
+  {
+    "label": "Model-guided corpus construction",
+    "source": "~/.codex/sessions/2026/08/11/rollout-2026-08-11T19-05-52-019ff34a-2c5d-75c0-8018-481b10594315.jsonl"
+  },
+  {
+    "label": "Annals CLI surface and search changes",
+    "source": "~/.codex/sessions/2026/08/11/rollout-2026-08-11T21-22-13-019ff3c7-02b5-7812-9eaf-8bbcd9f5a6a9.jsonl"
+  },
+  {
+    "label": "Query semantics and segmentation behavior",
+    "source": "~/.codex/sessions/2026/08/11/rollout-2026-08-11T21-55-47-019ff3e5-bbb9-72b2-a4e1-63812fd281cf.jsonl"
+  },
+  {
+    "label": "Liaison models and corpus-change assembly",
+    "source": "~/.codex/sessions/2026/08/11/rollout-2026-08-11T22-43-29-019ff411-66bd-7f71-ab6c-ae0cb507ab15.jsonl"
+  },
+  {
+    "label": "Human-readable change requests",
+    "source": "~/.codex/sessions/2026/08/12/rollout-2026-08-12T00-04-30-019ff45b-9418-73a2-b868-fce15687c53b.jsonl"
+  },
+  {
+    "label": "Natural-language human/model interfaces",
+    "source": "~/.codex/sessions/2026/08/12/rollout-2026-08-12T11-31-56-019ff6d0-f2ce-7fd0-81a3-f5e25eff4e12.jsonl"
+  },
+  {
+    "label": "Pointer prompts and side-effectful integration",
+    "source": "~/.codex/sessions/2026/08/12/rollout-2026-08-12T12-25-54-019ff702-5a3e-7860-bc8f-55c43149e02b.jsonl"
+  },
+  {
+    "label": "Corpus forests and concept levels",
+    "source": "~/.codex/sessions/2026/08/12/rollout-2026-08-12T15-15-19-019ff79d-7491-7000-bfa0-25bf4bd57381.jsonl"
+  },
+  {
+    "label": "Multi-parent concept graphs",
+    "source": "~/.codex/sessions/2026/08/12/rollout-2026-08-12T15-24-28-019ff7a5-d507-7d60-ba75-f4a76bf32645.jsonl"
+  }
+]

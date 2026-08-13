@@ -104,4 +104,5 @@ See the [documentation index](docs/README.md) for the command, protocol,
 architecture, storage, search, and runtime contracts.
 
 The [experiment archive](experiments/README.md) documents the three-chat
-baseline, its higher-grade rerun, and the scaled 20-chat preset comparison.
+baseline, its higher-grade rerun, the original scaled 20-chat comparison, and
+the same 20-work comparison under the reconciliation-v2 contract.
