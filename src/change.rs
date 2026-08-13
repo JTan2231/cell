@@ -5,62 +5,43 @@ use serde_json::Value;
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
 
-/// One complete semantic proposal submitted for a host-scoped work and corpus revision.
+/// One complete semantic reconciliation submitted for a host-scoped work and corpus revision.
 ///
-/// The host supplies and records the work and base revision. The proposal deliberately
+/// The host supplies and records the work and base revision. The reconciliation deliberately
 /// contains neither storage identifiers nor ordering indices.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
-pub(crate) enum ChangeProposal {
-    Change {
-        summary: String,
-        operations: Vec<ChangeOperation>,
-        uncertainties: Vec<String>,
-    },
-    NoChange {
-        summary: String,
-        reason: String,
-        uncertainties: Vec<String>,
-    },
+#[serde(deny_unknown_fields)]
+pub(crate) struct Reconciliation {
+    pub(crate) summary: String,
+    pub(crate) operations: Vec<ChangeOperation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) annotations: Vec<String>,
 }
 
-impl ChangeProposal {
+impl Reconciliation {
     pub(crate) fn summary(&self) -> &str {
-        match self {
-            Self::Change { summary, .. } | Self::NoChange { summary, .. } => summary,
-        }
+        &self.summary
     }
 
-    pub(crate) fn uncertainties(&self) -> &[String] {
-        match self {
-            Self::Change { uncertainties, .. } | Self::NoChange { uncertainties, .. } => {
-                uncertainties
-            }
-        }
-    }
-
-    #[cfg(test)]
     pub(crate) fn operations(&self) -> &[ChangeOperation] {
-        match self {
-            Self::Change { operations, .. } => operations,
-            Self::NoChange { .. } => &[],
-        }
+        &self.operations
     }
 
-    fn validate(&self) -> Result<(), ChangeContractError> {
-        validate_narrative("summary", self.summary())?;
-        for uncertainty in self.uncertainties() {
-            validate_narrative("uncertainty", uncertainty)?;
-        }
+    pub(crate) fn annotations(&self) -> &[String] {
+        &self.annotations
+    }
 
-        match self {
-            Self::Change { operations, .. } => validate_operations(operations),
-            Self::NoChange { reason, .. } => validate_narrative("reason", reason),
+    fn validate(&self) -> Result<(), ReconciliationContractError> {
+        validate_narrative("summary", self.summary())?;
+        validate_operations(self.operations())?;
+        for annotation in self.annotations() {
+            validate_narrative("annotation", annotation)?;
         }
+        Ok(())
     }
 }
 
-/// A path at the proposal's frozen base revision, or a meaningful local reference.
+/// A path at the reconciliation's frozen base revision, or a meaningful local reference.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged, deny_unknown_fields)]
 pub(crate) enum ConceptSelector {
@@ -94,7 +75,7 @@ pub(crate) enum EvidenceDisposition {
     Remove,
 }
 
-/// One semantic operation in an atomic proposal.
+/// One semantic operation in an atomic reconciliation.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum ChangeOperation {
@@ -139,34 +120,36 @@ pub(crate) enum ChangeOperation {
 
 /// A syntax or language-level contract failure, before corpus resolution begins.
 #[derive(Debug, Error)]
-pub(crate) enum ChangeContractError {
-    #[error("change proposal is not valid contract JSON: {0}")]
+pub(crate) enum ReconciliationContractError {
+    #[error("reconciliation is not valid contract JSON: {0}")]
     InvalidJson(#[source] serde_json::Error),
-    #[error("invalid change proposal: {0}")]
-    InvalidProposal(String),
+    #[error("invalid reconciliation: {0}")]
+    InvalidReconciliation(String),
 }
 
-/// Parse and validate one strict JSON change proposal.
-pub(crate) fn parse_change_proposal(document: &str) -> Result<ChangeProposal, ChangeContractError> {
-    let proposal: ChangeProposal =
-        serde_json::from_str(document).map_err(ChangeContractError::InvalidJson)?;
-    proposal.validate()?;
-    Ok(proposal)
+/// Parse and validate one strict JSON reconciliation.
+pub(crate) fn parse_reconciliation(
+    document: &str,
+) -> Result<Reconciliation, ReconciliationContractError> {
+    let reconciliation: Reconciliation =
+        serde_json::from_str(document).map_err(ReconciliationContractError::InvalidJson)?;
+    reconciliation.validate()?;
+    Ok(reconciliation)
 }
 
-/// Parse and validate an already-decoded JSON change proposal.
-pub(crate) fn parse_change_proposal_value(
+/// Parse and validate an already-decoded JSON reconciliation.
+pub(crate) fn parse_reconciliation_value(
     value: Value,
-) -> Result<ChangeProposal, ChangeContractError> {
-    let proposal: ChangeProposal =
-        serde_json::from_value(value).map_err(ChangeContractError::InvalidJson)?;
-    proposal.validate()?;
-    Ok(proposal)
+) -> Result<Reconciliation, ReconciliationContractError> {
+    let reconciliation: Reconciliation =
+        serde_json::from_value(value).map_err(ReconciliationContractError::InvalidJson)?;
+    reconciliation.validate()?;
+    Ok(reconciliation)
 }
 
-fn validate_operations(operations: &[ChangeOperation]) -> Result<(), ChangeContractError> {
+fn validate_operations(operations: &[ChangeOperation]) -> Result<(), ReconciliationContractError> {
     if operations.is_empty() {
-        return invalid("a change outcome must contain at least one operation");
+        return invalid("a reconciliation must contain at least one operation");
     }
 
     let mut created_labels = BTreeSet::new();
@@ -190,7 +173,7 @@ fn validate_operations(operations: &[ChangeOperation]) -> Result<(), ChangeContr
 fn validate_operation(
     operation: &ChangeOperation,
     created_labels: &BTreeSet<String>,
-) -> Result<(), ChangeContractError> {
+) -> Result<(), ReconciliationContractError> {
     match operation {
         ChangeOperation::CreateConcept {
             under,
@@ -251,7 +234,7 @@ fn validate_placement(
     before: Option<&ConceptSelector>,
     after: Option<&ConceptSelector>,
     created_labels: &BTreeSet<String>,
-) -> Result<(), ChangeContractError> {
+) -> Result<(), ReconciliationContractError> {
     if before.is_some() && after.is_some() {
         return invalid("a placement may specify before or after, but not both");
     }
@@ -264,7 +247,7 @@ fn validate_placement(
 fn validate_selector(
     selector: &ConceptSelector,
     created_labels: &BTreeSet<String>,
-) -> Result<(), ChangeContractError> {
+) -> Result<(), ReconciliationContractError> {
     match selector {
         ConceptSelector::Existing { path } => {
             if path.is_empty() {
@@ -291,7 +274,7 @@ fn validate_selector(
 fn validate_evidence_list(
     action: &str,
     evidence: &[EvidenceSelector],
-) -> Result<(), ChangeContractError> {
+) -> Result<(), ReconciliationContractError> {
     if evidence.is_empty() {
         return invalid(format!(
             "{action} must include at least one exact evidence selector"
@@ -319,7 +302,7 @@ fn validate_evidence_list(
     Ok(())
 }
 
-fn validate_label(name: &str, value: &str) -> Result<(), ChangeContractError> {
+fn validate_label(name: &str, value: &str) -> Result<(), ReconciliationContractError> {
     validate_narrative(name, value)?;
     if value.trim() != value {
         return invalid(format!("{name} cannot have leading or trailing whitespace"));
@@ -327,15 +310,17 @@ fn validate_label(name: &str, value: &str) -> Result<(), ChangeContractError> {
     Ok(())
 }
 
-fn validate_narrative(name: &str, value: &str) -> Result<(), ChangeContractError> {
+fn validate_narrative(name: &str, value: &str) -> Result<(), ReconciliationContractError> {
     if value.trim().is_empty() {
         return invalid(format!("{name} cannot be empty"));
     }
     Ok(())
 }
 
-fn invalid<T>(message: impl Into<String>) -> Result<T, ChangeContractError> {
-    Err(ChangeContractError::InvalidProposal(message.into()))
+fn invalid<T>(message: impl Into<String>) -> Result<T, ReconciliationContractError> {
+    Err(ReconciliationContractError::InvalidReconciliation(
+        message.into(),
+    ))
 }
 
 fn normalize_label(label: &str) -> String {
@@ -358,18 +343,17 @@ fn normalize_label(label: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        ChangeContractError, ChangeOperation, ChangeProposal, ConceptSelector, EvidenceDisposition,
-        parse_change_proposal, parse_change_proposal_value,
+        ChangeOperation, ConceptSelector, EvidenceDisposition, ReconciliationContractError,
+        parse_reconciliation, parse_reconciliation_value,
     };
     use serde_json::json;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
     #[test]
-    fn parses_a_complete_language_level_change() -> TestResult {
-        let proposal = parse_change_proposal(
+    fn parses_a_complete_language_level_reconciliation() -> TestResult {
+        let reconciliation = parse_reconciliation(
             r#"{
-                "outcome": "change",
                 "summary": "Integrate serializable execution",
                 "operations": [
                     {
@@ -394,23 +378,23 @@ mod tests {
                         "evidence_disposition": "retain"
                     }
                 ],
-                "uncertainties": []
+                "annotations": [
+                    "The work presents predicate locking as a phantom-prevention technique."
+                ]
             }"#,
         )?;
 
-        let ChangeProposal::Change { operations, .. } = proposal else {
-            return Err("expected a change proposal".into());
-        };
-        assert_eq!(operations.len(), 3);
+        assert_eq!(reconciliation.operations().len(), 3);
+        assert_eq!(reconciliation.annotations().len(), 1);
         assert!(matches!(
-            &operations[1],
+            &reconciliation.operations()[1],
             ChangeOperation::MoveConcept {
                 under: Some(ConceptSelector::New { label }),
                 ..
             } if label == "Predicate locking"
         ));
         assert!(matches!(
-            operations[2],
+            reconciliation.operations()[2],
             ChangeOperation::RewordConcept {
                 evidence_disposition: EvidenceDisposition::Retain,
                 ..
@@ -420,62 +404,70 @@ mod tests {
     }
 
     #[test]
-    fn parses_a_no_change_result_without_operations() -> TestResult {
-        let proposal = parse_change_proposal_value(json!({
-            "outcome": "no_change",
-            "summary": "The relevant material is already represented",
-            "reason": "Every distinct claim and quotation is already present.",
-            "uncertainties": []
+    fn annotations_are_optional_and_inert_contract_data() -> TestResult {
+        let reconciliation = parse_reconciliation_value(json!({
+            "summary": "Attach supporting evidence",
+            "operations": [{
+                "action": "add_evidence",
+                "concept": {"path": ["Serializable execution"]},
+                "evidence": [{"quote": "Equivalent to a serial execution."}]
+            }]
         }))?;
 
-        assert!(matches!(proposal, ChangeProposal::NoChange { .. }));
-        assert!(proposal.operations().is_empty());
+        assert!(reconciliation.annotations().is_empty());
+        let serialized = serde_json::to_value(reconciliation)?;
+        assert!(serialized.get("annotations").is_none());
         Ok(())
     }
 
     #[test]
     fn rejects_unknown_fields_at_every_level() -> TestResult {
         assert_invalid_json(
-            r#"{"outcome":"no_change","summary":"Done","reason":"Covered","uncertainties":[],"base_revision":17}"#,
+            r#"{"outcome":"no_change","summary":"Done","reason":"Covered","operations":[{"action":"retire_concept","concept":{"path":["Old"]}}]}"#,
         )?;
         assert_invalid_json(
-            r#"{"outcome":"change","summary":"Update","operations":[{"action":"retire_concept","concept":{"path":["Old"]},"position":2}],"uncertainties":[]}"#,
+            r#"{"summary":"Update","operations":[{"action":"retire_concept","concept":{"path":["Old"]},"position":2}]}"#,
         )?;
         assert_invalid_json(
-            r#"{"outcome":"change","summary":"Update","operations":[{"action":"retire_concept","concept":{"path":["Old"],"node_id":7}}],"uncertainties":[]}"#,
+            r#"{"summary":"Update","operations":[{"action":"retire_concept","concept":{"path":["Old"],"node_id":7}}]}"#,
         )?;
         assert_invalid_json(
-            r#"{"outcome":"change","summary":"Update","operations":[{"action":"add_evidence","concept":{"path":["Old"]},"evidence":[{"quote":"Exact language","start_byte":12}]}],"uncertainties":[]}"#,
+            r#"{"summary":"Update","operations":[{"action":"add_evidence","concept":{"path":["Old"]},"evidence":[{"quote":"Exact language","start_byte":12}]}]}"#,
+        )?;
+        assert_invalid_json(
+            r#"{"summary":"Update","operations":[{"action":"retire_concept","concept":{"path":["Old"]}}],"uncertainties":[]}"#,
         )?;
         Ok(())
     }
 
     #[test]
-    fn rejects_empty_changes_and_evidence() -> TestResult {
-        assert_invalid_proposal(
-            r#"{"outcome":"change","summary":"Update","operations":[],"uncertainties":[]}"#,
+    fn rejects_empty_reconciliations_evidence_and_annotations() -> TestResult {
+        assert_invalid_reconciliation(
+            r#"{"summary":"Update","operations":[]}"#,
             "at least one operation",
         )?;
-        assert_invalid_proposal(
-            r#"{"outcome":"change","summary":"Update","operations":[{"action":"add_evidence","concept":{"path":["Concurrency"]},"evidence":[]}],"uncertainties":[]}"#,
+        assert_invalid_reconciliation(
+            r#"{"summary":"Update","operations":[{"action":"add_evidence","concept":{"path":["Concurrency"]},"evidence":[]}]}"#,
             "at least one exact evidence",
+        )?;
+        assert_invalid_reconciliation(
+            r#"{"summary":"Update","operations":[{"action":"retire_concept","concept":{"path":["Old"]}}],"annotations":["  "]}"#,
+            "annotation cannot be empty",
         )?;
         Ok(())
     }
 
     #[test]
     fn rejects_ambiguous_placement() -> TestResult {
-        assert_invalid_proposal(
+        assert_invalid_reconciliation(
             r#"{
-                "outcome":"change",
                 "summary":"Move a concept",
                 "operations":[{
                     "action":"move_concept",
                     "concept":{"path":["Old"]},
                     "before":{"path":["Before"]},
                     "after":{"path":["After"]}
-                }],
-                "uncertainties":[]
+                }]
             }"#,
             "before or after",
         )?;
@@ -484,15 +476,13 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_normalized_creation_labels() -> TestResult {
-        assert_invalid_proposal(
+        assert_invalid_reconciliation(
             r#"{
-                "outcome":"change",
                 "summary":"Create concepts",
                 "operations":[
                     {"action":"create_concept","label":"Predicate  Locking","evidence":[{"quote":"First quote"}]},
                     {"action":"create_concept","label":"ＰＲＥＤＩＣＡＴＥ locking","evidence":[{"quote":"Second quote"}]}
-                ],
-                "uncertainties":[]
+                ]
             }"#,
             "unique after normalization",
         )?;
@@ -501,16 +491,14 @@ mod tests {
 
     #[test]
     fn rejects_a_dangling_new_concept_reference() -> TestResult {
-        assert_invalid_proposal(
+        assert_invalid_reconciliation(
             r#"{
-                "outcome":"change",
                 "summary":"Move a concept",
                 "operations":[{
                     "action":"move_concept",
                     "concept":{"path":["Existing"]},
                     "under":{"new":"Missing concept"}
-                }],
-                "uncertainties":[]
+                }]
             }"#,
             "no matching create_concept",
         )?;
@@ -519,15 +507,13 @@ mod tests {
 
     #[test]
     fn accepts_a_normalized_new_concept_reference() -> TestResult {
-        parse_change_proposal(
+        parse_reconciliation(
             r#"{
-                "outcome":"change",
                 "summary":"Create and populate a concept",
                 "operations":[
                     {"action":"create_concept","label":"Predicate Locking","evidence":[{"quote":"A grounded claim"}]},
                     {"action":"add_evidence","concept":{"new":"predicate locking"},"evidence":[{"quote":"More evidence"}]}
-                ],
-                "uncertainties":[]
+                ]
             }"#,
         )?;
         Ok(())
@@ -535,38 +521,38 @@ mod tests {
 
     #[test]
     fn root_placement_needs_no_integer_position() -> TestResult {
-        let proposal = parse_change_proposal(
+        let reconciliation = parse_reconciliation(
             r#"{
-                "outcome":"change",
                 "summary":"Promote a concept to a root",
                 "operations":[{
                     "action":"move_concept",
                     "concept":{"path":["Database systems", "Transactions"]}
-                }],
-                "uncertainties":[]
+                }]
             }"#,
         )?;
-        let serialized = serde_json::to_value(proposal)?;
+        let serialized = serde_json::to_value(reconciliation)?;
         assert!(serialized["operations"][0].get("under").is_none());
         assert!(serialized["operations"][0].get("position").is_none());
         Ok(())
     }
 
     fn assert_invalid_json(document: &str) -> TestResult {
-        match parse_change_proposal(document) {
-            Err(ChangeContractError::InvalidJson(_)) => Ok(()),
+        match parse_reconciliation(document) {
+            Err(ReconciliationContractError::InvalidJson(_)) => Ok(()),
             Err(error) => Err(format!("expected a JSON contract error, got {error}").into()),
-            Ok(_) => Err("expected the proposal to be rejected".into()),
+            Ok(_) => Err("expected the reconciliation to be rejected".into()),
         }
     }
 
-    fn assert_invalid_proposal(document: &str, expected: &str) -> TestResult {
-        match parse_change_proposal(document) {
-            Err(ChangeContractError::InvalidProposal(message)) if message.contains(expected) => {
+    fn assert_invalid_reconciliation(document: &str, expected: &str) -> TestResult {
+        match parse_reconciliation(document) {
+            Err(ReconciliationContractError::InvalidReconciliation(message))
+                if message.contains(expected) =>
+            {
                 Ok(())
             }
             Err(error) => Err(format!("expected {expected:?} in error, got {error}").into()),
-            Ok(_) => Err("expected the proposal to be rejected".into()),
+            Ok(_) => Err("expected the reconciliation to be rejected".into()),
         }
     }
 }

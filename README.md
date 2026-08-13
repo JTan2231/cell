@@ -2,8 +2,8 @@
 
 Annals is a local CLI for maintaining an evidence-grounded conceptual corpus.
 Source works are retained unchanged. Corpus concepts belong to the library, may
-be supported by many works, and change only through one validated proposal and
-one atomic revision commit.
+be supported by many works, and change only when one validated reconciliation
+produces an atomic revision commit.
 
 The public interface uses work labels, concept paths, and exact quotations.
 SQLite identifiers, byte ranges, and sibling positions remain implementation
@@ -21,8 +21,9 @@ medium` selects `gpt-5.6-terra` with medium reasoning. `--model` provides an
 exact model override. Annals gives the liaison a short pointer prompt and
 exactly six session-scoped tools through an isolated Codex app-server; no
 shell, web, planning, user-input, or multi-agent tools are available. The
-complete work is not placed in the prompt. Its recorded `submit_change` tool
-call, rather than its final response, is the deliverable.
+complete work is not placed in the prompt. Its recorded
+`submit_reconciliation` tool call, rather than its final response, is the
+deliverable.
 
 ## Build and use
 
@@ -31,7 +32,8 @@ call, rather than its final response, is the deliverable.
 cargo build --release
 ```
 
-Create a library, examine a work, review the proposal, and apply it:
+Create a library, examine a work, review the reconciliation, and apply its
+projected corpus transition:
 
 ```sh
 annals --library ./annals.db init
@@ -42,13 +44,27 @@ annals --library ./annals.db change apply
 annals --library ./annals.db show
 ```
 
-`integrate` retains the immutable work before model examination. It records a
-proposal without changing the corpus unless `--apply` is supplied and the
-proposal contains no uncertainties. An already retained work can be examined
-again by label:
+`integrate` content-addresses the immutable work by its exact SHA-256 digest
+before model examination. It records a provisional, best-current
+reconciliation. With `--apply`, a projected state transition is committed; if
+the projected corpus is mechanically equal to the base, the reconciliation is
+stored with status `recorded` and the revision stays where it is.
+Optional free-form annotations are retained with the reconciliation and have
+no validation or application semantics.
+
+An already retained work can be selected by label. Annals reuses a successful
+examination only when the work, corpus revision, prompt version, model, and
+reasoning effort all match:
 
 ```sh
 annals --library ./annals.db integrate --work "Serializable execution"
+```
+
+Use `--reexamine` to bypass that exact-context reuse:
+
+```sh
+annals --library ./annals.db integrate --work "Serializable execution" \
+  --reexamine
 ```
 
 Choose a lower-cost preset or an exact model when needed:
@@ -63,8 +79,8 @@ annals --library ./annals.db integrate --work "Serializable execution" \
 An explicit model changes only the model; `--quality` continues to select its
 reasoning effort and defaults to `high`.
 
-A human or another program can submit the same strict change contract without
-invoking a model:
+A human or another program can submit the same strict reconciliation contract
+without invoking a model:
 
 ```sh
 annals --library ./annals.db change submit request.json \

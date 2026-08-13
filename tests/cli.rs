@@ -65,8 +65,14 @@ impl Library {
         ])
     }
 
-    fn submit(&self, work: &str, base: i64, filename: &str, proposal: &Value) -> TestResult<Value> {
-        let request = self.file(filename, &serde_json::to_string_pretty(&proposal)?)?;
+    fn submit(
+        &self,
+        work: &str,
+        base: i64,
+        filename: &str,
+        reconciliation: &Value,
+    ) -> TestResult<Value> {
+        let request = self.file(filename, &serde_json::to_string_pretty(reconciliation)?)?;
         self.json_ok([
             OsStr::new("change"),
             OsStr::new("submit"),
@@ -131,9 +137,8 @@ fn assert_no_storage_selectors(value: &Value) {
     }
 }
 
-fn initial_change() -> Value {
+fn initial_reconciliation() -> Value {
     json!({
-        "outcome": "change",
         "summary": "Integrate serializable execution and predicate locking",
         "operations": [
             {
@@ -160,7 +165,9 @@ fn initial_change() -> Value {
                 }]
             }
         ],
-        "uncertainties": []
+        "annotations": [
+            "The source reports these claims; external implementation was not evaluated."
+        ]
     })
 }
 
@@ -179,6 +186,10 @@ fn work_add_and_show_retain_exact_source_without_changing_corpus() -> TestResult
     assert_eq!(added["size_bytes"], u64::try_from(text.len())?);
     assert_eq!(added["corpus_revision"], 0);
 
+    let duplicate = library.add_work("Duplicate label", "copy.md", text)?;
+    assert_eq!(duplicate["work"], "Serializable execution");
+    assert_eq!(duplicate["sha256"], added["sha256"]);
+
     let shown = library.json_ok(["work", "show", "Serializable execution"])?;
     assert_eq!(shown["work"], "Serializable execution");
     assert_eq!(shown["text"], text);
@@ -193,7 +204,7 @@ fn work_add_and_show_retain_exact_source_without_changing_corpus() -> TestResult
 }
 
 #[test]
-fn one_change_moves_from_submission_through_history_and_revert() -> TestResult {
+fn one_reconciliation_moves_from_submission_through_history_and_revert() -> TestResult {
     let library = Library::initialized()?;
     let text = concat!(
         "Serializable transactions behave as some serial execution.\n",
@@ -204,8 +215,8 @@ fn one_change_moves_from_submission_through_history_and_revert() -> TestResult {
     let submitted = library.submit(
         "Serializable execution",
         0,
-        "change.json",
-        &initial_change(),
+        "reconciliation.json",
+        &initial_reconciliation(),
     )?;
     assert_eq!(submitted["work"], "Serializable execution");
     assert_eq!(submitted["base_revision"], 0);
@@ -213,10 +224,14 @@ fn one_change_moves_from_submission_through_history_and_revert() -> TestResult {
     assert_eq!(submitted["operation_count"], 3);
     assert_eq!(library.json_ok(["stats"])?["revision"], 0);
 
-    let shown_change = library.json_ok(["change", "show"])?;
+    let shown_reconciliation = library.json_ok(["change", "show"])?;
     assert_eq!(
-        shown_change["proposal"]["operations"][1]["under"]["new"],
+        shown_reconciliation["reconciliation"]["operations"][1]["under"]["new"],
         "Database systems"
+    );
+    assert_eq!(
+        shown_reconciliation["annotations"],
+        json!(["The source reports these claims; external implementation was not evaluated."])
     );
     let quiet_show = Command::new(env!("CARGO_BIN_EXE_annals"))
         .arg("--library")
@@ -226,7 +241,7 @@ fn one_change_moves_from_submission_through_history_and_revert() -> TestResult {
         .output()?;
     assert!(quiet_show.status.success());
     assert!(quiet_show.stderr.is_empty());
-    assert!(String::from_utf8(quiet_show.stdout)?.contains("Pending change"));
+    assert!(String::from_utf8(quiet_show.stdout)?.contains("Pending reconciliation"));
     let validated = library.json_ok(["change", "validate"])?;
     assert_eq!(validated["status"], "valid");
     assert_eq!(validated["operations"].as_array().map(Vec::len), Some(3));
@@ -258,7 +273,10 @@ fn one_change_moves_from_submission_through_history_and_revert() -> TestResult {
     assert_eq!(log["head_revision"], 1);
     assert_eq!(log["commits"][0]["revision"], 1);
     assert_eq!(log["commits"][0]["parent_revision"], 0);
-    assert_eq!(log["commits"][0]["summary"], initial_change()["summary"]);
+    assert_eq!(
+        log["commits"][0]["summary"],
+        initial_reconciliation()["summary"]
+    );
 
     let diff = library.json_ok(["diff", "0", "1"])?;
     assert_eq!(diff["from_revision"], 0);
@@ -294,7 +312,8 @@ fn one_change_moves_from_submission_through_history_and_revert() -> TestResult {
 }
 
 #[test]
-fn applied_change_remains_inspectable_by_revision() -> TestResult {
+#[allow(clippy::too_many_lines)]
+fn applied_reconciliation_remains_inspectable_after_an_equal_reconciliation() -> TestResult {
     let library = Library::initialized()?;
     library.add_work(
         "Serializable execution",
@@ -304,33 +323,47 @@ fn applied_change_remains_inspectable_by_revision() -> TestResult {
     library.submit(
         "Serializable execution",
         0,
-        "initial-change.json",
-        &initial_change(),
+        "initial-reconciliation.json",
+        &initial_reconciliation(),
     )?;
     library.json_ok(["change", "apply"])?;
-    library.submit(
+    let recorded = library.submit(
         "Serializable execution",
         1,
-        "later-examination.json",
+        "later-reconciliation.json",
         &json!({
-            "outcome": "no_change",
-            "summary": "No additional change",
-            "reason": "The accepted revision already represents this work.",
-            "uncertainties": []
+            "summary": "Associate the work with its represented predicate-locking concept",
+            "operations": [{
+                "action": "add_evidence",
+                "concept": {
+                    "path": [
+                        "Database systems",
+                        "Serializable execution",
+                        "Predicate locking"
+                    ]
+                },
+                "evidence": [{"quote": "Predicate locks prevent phantom inserts."}]
+            }],
+            "annotations": ["This relationship was already materialized at the base revision."]
         }),
     )?;
+    assert_eq!(recorded["status"], "recorded");
+    assert_eq!(recorded["base_revision"], 1);
+    assert_eq!(recorded["annotations"].as_array().map(Vec::len), Some(1));
+    let stats = library.json_ok(["stats"])?;
+    assert_eq!(stats["revision"], 1);
+    assert_eq!(stats["commit_count"], 1);
 
-    assert_eq!(
-        library.json_ok(["change", "show"])?["proposal"]["outcome"],
-        "no_change"
-    );
+    let shown = library.json_ok(["change", "show"])?;
+    assert_eq!(shown["status"], "recorded");
+    assert_eq!(shown["reconciliation"], recorded["reconciliation"]);
     let archived = library.json_ok(["change", "show", "--at", "1"])?;
     assert_eq!(archived["revision"], 1);
     assert_eq!(archived["status"], "applied");
     assert_eq!(archived["parent_revision"], 0);
     assert_eq!(archived["base_revision"], 0);
     assert_eq!(archived["kind"], "change");
-    assert_eq!(archived["submitted_request"], initial_change());
+    assert_eq!(archived["submitted_request"], initial_reconciliation());
     assert_eq!(
         archived["resolved_operations"][2]["path"],
         json!([
@@ -339,7 +372,7 @@ fn applied_change_remains_inspectable_by_revision() -> TestResult {
             "Predicate locking"
         ])
     );
-    assert_eq!(archived["metadata"]["proposal_actor"], "human");
+    assert_eq!(archived["metadata"]["reconciliation_actor"], "human");
 
     let historical_human = Command::new(env!("CARGO_BIN_EXE_annals"))
         .arg("--library")
@@ -390,25 +423,28 @@ fn applied_change_remains_inspectable_by_revision() -> TestResult {
 }
 
 #[test]
-fn stale_change_is_rejected_without_partial_corpus_or_history_writes() -> TestResult {
+fn stale_reconciliation_is_rejected_without_partial_corpus_or_history_writes() -> TestResult {
     let library = Library::initialized()?;
     let source = "Serializable transactions behave as some serial execution.\nPredicate locks prevent phantom inserts.\n";
     library.add_work("First work", "first.txt", source)?;
     library.add_work("Second work", "second.txt", "A distinct source claim.\n")?;
-    library.submit("First work", 0, "first-change.json", &initial_change())?;
+    library.submit(
+        "First work",
+        0,
+        "first-reconciliation.json",
+        &initial_reconciliation(),
+    )?;
     library.submit(
         "Second work",
         0,
-        "second-change.json",
+        "second-reconciliation.json",
         &json!({
-            "outcome": "change",
             "summary": "Add a stale concept",
             "operations": [{
                 "action": "create_concept",
                 "label": "Stale concept",
                 "evidence": [{"quote": "A distinct source claim."}]
-            }],
-            "uncertainties": []
+            }]
         }),
     )?;
 
@@ -479,14 +515,12 @@ fn public_help_and_request_contract_exclude_storage_selectors() -> TestResult {
     let invalid = library.file(
         "opaque.json",
         r#"{
-            "outcome": "change",
             "summary": "Try an opaque selector",
             "operations": [{
                 "action": "add_evidence",
                 "concept": {"node_id": 41},
                 "evidence": [{"quote": "Exact source language."}]
-            }],
-            "uncertainties": []
+            }]
         }"#,
     )?;
     library.json_error(
@@ -499,8 +533,11 @@ fn public_help_and_request_contract_exclude_storage_selectors() -> TestResult {
             OsStr::new("--base"),
             OsStr::new("0"),
         ],
-        "invalid_change",
+        "invalid_reconciliation",
     )?;
-    assert_eq!(library.json_ok(["stats"])?["pending_change_count"], 0);
+    assert_eq!(
+        library.json_ok(["stats"])?["pending_reconciliation_count"],
+        0
+    );
     Ok(())
 }

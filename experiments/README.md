@@ -29,21 +29,11 @@ The 20-chat experiment keeps two manifests:
 Paths beginning with `~/.codex/sessions` refer to the local Codex session
 archive. No source transcript is copied into this repository.
 
-## Reproducing the 20-chat experiment
+## Historical runner
 
-Build Annals, then choose a new run directory that does not already exist:
-
-```sh
-./ci.sh
-python3 experiments/03-twenty-chat-medium-high/run.py start \
-  --manifest experiments/03-twenty-chat-medium-high/manifest.json \
-  --run-dir /tmp/annals-medium-high-20 \
-  --annals target/release/annals
-```
-
-The runner creates one revision-zero seed library, copies it into medium and
-high arms, alternates which arm runs first, retains full proposal output, and
-applies only changes with no uncertainties. It snapshots its inputs, itself,
-and the Annals binary; verifies hashes on resume; refuses concurrent runs; and
-emits comparison reports. Generated databases remain run artifacts and should
-not be committed.
+The 20-chat runner is preserved with the experiment it produced. It targets
+the earlier proposal/outcome/uncertainty contract and its database schema; it
+does not run against the current reconciliation contract. The locked manifest,
+runner, and walkthrough remain available to audit that historical method. A
+new comparison should use a new experiment directory and runner so its results
+are not conflated with experiment 03.

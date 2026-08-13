@@ -140,7 +140,7 @@ impl Runner {
     /// Run one isolated Codex liaison whose only model-visible tools are Annals' six tools.
     ///
     /// The returned final response is diagnostic only. Application success is determined by the
-    /// proposal side effect recorded through `submit_change`.
+    /// reconciliation side effect recorded through `submit_reconciliation`.
     pub(crate) fn run_liaison(
         &self,
         settings: &ModelSettings,
@@ -340,7 +340,7 @@ impl<B: Backend> ProtocolClient<'_, B> {
                 "approvalPolicy": "never",
                 "sandbox": "read-only",
                 "baseInstructions": tool_server::instructions(),
-                "developerInstructions": "Use only the six supplied Annals tools. Complete the session with exactly one successful submit_change call.",
+                "developerInstructions": "Use only the six supplied Annals tools. Complete the session with exactly one successful submit_reconciliation call.",
                 "ephemeral": true,
                 "environments": [],
                 "dynamicTools": dynamic_tools
@@ -584,14 +584,14 @@ impl<B: Backend> ProtocolClient<'_, B> {
                 format!("unknown Annals tool {name:?}"),
             ));
         };
-        if tool == Tool::SubmitChange && self.submitted {
+        if tool == Tool::SubmitReconciliation && self.submitted {
             return Err(ToolFailure::new(
-                "change_already_submitted",
-                "this liaison session has already recorded its change proposal",
+                "reconciliation_already_submitted",
+                "this liaison session has already recorded its reconciliation",
             ));
         }
         let result = self.backend.call(tool, arguments);
-        if tool == Tool::SubmitChange && result.is_ok() {
+        if tool == Tool::SubmitReconciliation && result.is_ok() {
             self.submitted = true;
         }
         result
@@ -1023,7 +1023,7 @@ mod tests {
                 "work_search",
                 "corpus_search",
                 "corpus_inspect",
-                "submit_change"
+                "submit_reconciliation"
             ]
         );
         assert!(tools.iter().all(|tool| tool["type"] == "function"));

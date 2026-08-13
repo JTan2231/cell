@@ -32,10 +32,17 @@ The CLI search limit must be positive and defaults to 10.
 ## Cost shape
 
 Works and current corpus snapshots are held in memory while resolving a
-proposal. Applying a change validates and materializes the complete projected
-corpus, rebuilds all derived search rows, and stores complete before-and-after
-snapshots in the commit. Mutation time and history storage therefore grow with
-corpus size.
+reconciliation. Applying a pending transition validates and materializes the
+complete projected corpus, rebuilds all derived search rows, and stores
+complete before-and-after snapshots in the commit. Mutation time and history
+storage therefore grow with corpus size. A mechanically equal projection is
+stored as a `recorded` reconciliation without rebuilding materialized state or
+creating a commit or revision.
+
+Exact-context examination reuse can avoid external model latency when work,
+base revision, prompt version, model, and reasoning effort all match a prior
+successful run. `--reexamine` bypasses that lookup. No latency claim is made
+for either path.
 
 Current CLI search scans materialized concept labels and paths, sorts matching
 candidates, and returns the requested prefix. Historical `show` reads the

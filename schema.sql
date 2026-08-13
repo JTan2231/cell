@@ -82,6 +82,10 @@ CREATE TABLE model_runs (
     completed_at     TEXT
 );
 
+CREATE UNIQUE INDEX model_runs_one_active_context
+    ON model_runs(work_id, base_revision, model, reasoning_effort, prompt_version)
+    WHERE status = 'running';
+
 CREATE TABLE tool_calls (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     model_run_id INTEGER NOT NULL REFERENCES model_runs(id) ON DELETE CASCADE,
@@ -96,42 +100,36 @@ CREATE TABLE tool_calls (
 
 CREATE UNIQUE INDEX tool_calls_one_successful_submission
     ON tool_calls(model_run_id)
-    WHERE tool_name = 'submit_change' AND succeeded = 1;
+    WHERE tool_name = 'submit_reconciliation' AND succeeded = 1;
 
-CREATE TABLE proposals (
+CREATE TABLE reconciliations (
     id                       INTEGER PRIMARY KEY AUTOINCREMENT,
     work_id                  INTEGER NOT NULL REFERENCES works(id) ON DELETE RESTRICT,
     base_revision            INTEGER NOT NULL CHECK (base_revision >= 0),
     model_run_id             INTEGER REFERENCES model_runs(id) ON DELETE RESTRICT,
     status                   TEXT NOT NULL
-                                 CHECK (status IN ('pending', 'applied', 'superseded', 'no_change')),
-    outcome                  TEXT NOT NULL CHECK (outcome IN ('change', 'no_change')),
+                                 CHECK (status IN ('pending', 'applied', 'superseded', 'recorded')),
     summary                  TEXT NOT NULL CHECK (length(trim(summary)) > 0),
     submitted_request        TEXT NOT NULL CHECK (json_valid(submitted_request)),
-    resolved_change          TEXT NOT NULL CHECK (json_valid(resolved_change)),
-    uncertainties            TEXT NOT NULL CHECK (json_valid(uncertainties)),
+    resolved_reconciliation  TEXT NOT NULL CHECK (json_valid(resolved_reconciliation)),
     actor                    TEXT NOT NULL,
     created_at               TEXT NOT NULL,
     applied_revision         INTEGER REFERENCES commits(revision) ON DELETE RESTRICT,
     CHECK (
         (status = 'applied' AND applied_revision IS NOT NULL)
         OR (status <> 'applied' AND applied_revision IS NULL)
-    ),
-    CHECK (
-        (outcome = 'change' AND status IN ('pending', 'applied', 'superseded'))
-        OR (outcome = 'no_change' AND status = 'no_change')
     )
 );
 
-CREATE INDEX proposals_by_work_status
-    ON proposals(work_id, status, id DESC);
+CREATE INDEX reconciliations_by_work_status
+    ON reconciliations(work_id, status, id DESC);
 
-CREATE UNIQUE INDEX proposals_one_pending_per_work
-    ON proposals(work_id)
+CREATE UNIQUE INDEX reconciliations_one_pending_per_work
+    ON reconciliations(work_id)
     WHERE status = 'pending';
 
-CREATE UNIQUE INDEX proposals_one_per_model_run
-    ON proposals(model_run_id)
+CREATE UNIQUE INDEX reconciliations_one_per_model_run
+    ON reconciliations(model_run_id)
     WHERE model_run_id IS NOT NULL;
 
 CREATE TABLE commits (
@@ -139,7 +137,7 @@ CREATE TABLE commits (
     parent_revision      INTEGER NOT NULL CHECK (parent_revision >= 0),
     base_revision        INTEGER NOT NULL CHECK (base_revision >= 0),
     work_id              INTEGER REFERENCES works(id) ON DELETE RESTRICT,
-    proposal_id          INTEGER REFERENCES proposals(id) ON DELETE RESTRICT,
+    reconciliation_id    INTEGER REFERENCES reconciliations(id) ON DELETE RESTRICT,
     kind                 TEXT NOT NULL CHECK (kind IN ('change', 'revert')),
     summary              TEXT NOT NULL CHECK (length(trim(summary)) > 0),
     submitted_request    TEXT NOT NULL CHECK (json_valid(submitted_request)),
@@ -152,14 +150,14 @@ CREATE TABLE commits (
     CHECK (parent_revision = revision - 1),
     CHECK (base_revision = parent_revision),
     CHECK (
-        (kind = 'change' AND work_id IS NOT NULL AND proposal_id IS NOT NULL)
-        OR (kind = 'revert' AND proposal_id IS NULL)
+        (kind = 'change' AND work_id IS NOT NULL AND reconciliation_id IS NOT NULL)
+        OR (kind = 'revert' AND reconciliation_id IS NULL)
     )
 );
 
-CREATE UNIQUE INDEX commits_one_per_proposal
-    ON commits(proposal_id)
-    WHERE proposal_id IS NOT NULL;
+CREATE UNIQUE INDEX commits_one_per_reconciliation
+    ON commits(reconciliation_id)
+    WHERE reconciliation_id IS NOT NULL;
 
 CREATE TABLE concept_search (
     id                INTEGER PRIMARY KEY,

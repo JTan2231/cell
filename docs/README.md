@@ -1,7 +1,7 @@
 # Annals documentation
 
-Annals integrates one immutable work into one frozen view of a conceptual
-corpus through one coherent, evidence-grounded change request.
+Annals reconciles one immutable work with one frozen view of a conceptual
+corpus through a provisional, evidence-grounded interpretation.
 
 ```text
 immutable work + corpus revision
@@ -9,17 +9,17 @@ immutable work + corpus revision
        bounded inspection
               |
               v
-       complete proposal
+    best-current reconciliation
               |
      resolve / validate / apply
               |
               v
-       next corpus revision
+ recorded interpretation or revision
 ```
 
 The implemented contracts are:
 
-- [CLI](cli.md): human commands, change JSON, and output behavior;
+- [CLI](cli.md): human commands, reconciliation JSON, and output behavior;
 - [Architecture](architecture.md): liaison tools, resolution, transactions,
   and revision history;
 - [Data model](data-model.md): canonical, examination, history, and derived
@@ -44,13 +44,16 @@ The implemented contracts are:
 : An exact quotation from a retained work supporting one concept. Exact source
   ranges are resolved and stored internally.
 
-**Proposal**
-: One strict language-level `change` or `no_change` request, scoped by the host
-  to a work and base revision.
+**Reconciliation**
+: One strict language-level request with a summary, one or more semantic
+  operations, and optional inert annotations. The host scopes it to a work and
+  base revision. It is a provisional interpretation, not a claim of unique or
+  final semantic decomposition.
 
-**Resolved change**
+**Resolved reconciliation**
 : The validated semantic operations and complete projected corpus resulting
-  from a proposal.
+  from a reconciliation. The host compares that projection with its base
+  mechanically.
 
 **Model run**
 : A liaison examination record, including its frozen context and tool-call

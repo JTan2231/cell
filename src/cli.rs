@@ -37,7 +37,7 @@ pub struct Cli {
 pub enum Command {
     /// Create a new library without replacing an existing file.
     Init,
-    /// Report corpus, work, proposal, history, and index statistics.
+    /// Report corpus, work, reconciliation, history, and index statistics.
     Stats,
     /// Check canonical, historical, provenance, and index invariants.
     Validate,
@@ -48,9 +48,9 @@ pub enum Command {
     /// Retain and inspect immutable source works.
     #[command(subcommand)]
     Work(WorkCommand),
-    /// Ask the liaison to examine one work and record one proposal.
+    /// Ask the liaison to examine one work and record one reconciliation.
     Integrate(IntegrateArgs),
-    /// Submit, inspect, validate, and apply coherent corpus changes.
+    /// Submit, inspect, validate, and apply coherent corpus reconciliations.
     #[command(subcommand)]
     Change(ChangeCommand),
     /// Show the complete corpus at HEAD or an earlier revision.
@@ -77,7 +77,7 @@ pub struct BackupArgs {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum WorkCommand {
-    /// Retain a nonempty UTF-8 work without changing the corpus revision.
+    /// Retain a UTF-8 work containing source text without changing the corpus revision.
     Add(WorkAddArgs),
     /// List retained works.
     List,
@@ -119,22 +119,25 @@ pub struct IntegrateArgs {
     /// Exact Codex model, overriding the model selected by --quality.
     #[arg(long, value_name = "MODEL")]
     pub model: Option<String>,
-    /// Apply a certain change immediately after the liaison submits it.
+    /// Examine again even when this exact liaison context was already reconciled.
+    #[arg(long)]
+    pub reexamine: bool,
+    /// Apply a pending reconciliation immediately after the liaison submits it.
     #[arg(long)]
     pub apply: bool,
 }
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum ChangeCommand {
-    /// Submit one language-level request without invoking a model.
+    /// Submit one reconciliation without invoking a model.
     Submit(ChangeSubmitArgs),
-    /// Show a selected proposal or an accepted change at a corpus revision.
+    /// Show a selected reconciliation or an accepted change at a corpus revision.
     Show(ChangeShowArgs),
-    /// Re-resolve and validate the selected pending proposal without writing corpus state.
+    /// Re-resolve and validate the selected pending reconciliation without writing corpus state.
     Validate(ChangeSelectArgs),
-    /// Atomically apply the selected pending proposal.
+    /// Atomically apply the selected pending reconciliation.
     Apply(ChangeSelectArgs),
-    /// List proposal and no-change examination records.
+    /// List reconciliation records.
     List,
 }
 
@@ -150,7 +153,7 @@ pub struct ChangeShowArgs {
 
 #[derive(Debug, Clone, Args)]
 pub struct ChangeSubmitArgs {
-    /// UTF-8 change-request JSON path, or - for standard input.
+    /// UTF-8 reconciliation JSON path, or - for standard input.
     #[arg(value_name = "INPUT")]
     pub input: PathBuf,
     /// Exact retained-work label providing evidence for this request.
@@ -262,6 +265,7 @@ mod tests {
         };
         assert_eq!(default.quality, ModelQuality::High);
         assert_eq!(default.model, None);
+        assert!(!default.reexamine);
 
         for (quality, expected) in [
             ("low", ModelQuality::Low),
@@ -283,6 +287,18 @@ mod tests {
             assert_eq!(args.quality, expected);
             assert_eq!(args.model.as_deref(), Some("custom-model"));
         }
+
+        let reexamined = Cli::try_parse_from([
+            "annals",
+            "integrate",
+            "--work",
+            "Existing paper",
+            "--reexamine",
+        ]);
+        let Ok(Command::Integrate(reexamined)) = reexamined.map(|cli| cli.command) else {
+            panic!("integrate --reexamine arguments did not parse");
+        };
+        assert!(reexamined.reexamine);
 
         assert!(
             Cli::try_parse_from(["annals", "integrate", "paper.txt", "--quality", "invalid"])

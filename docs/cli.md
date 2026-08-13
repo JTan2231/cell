@@ -22,8 +22,9 @@ annals reindex
 ```
 
 `init` creates revision zero and refuses to replace an existing library.
-`stats` reports corpus revision and concept, work, evidence, pending-change,
-commit, and model-run counts, plus database size and index freshness.
+`stats` reports corpus revision and concept, work, evidence, pending
+reconciliation, commit, and model-run counts, plus database size and index
+freshness.
 
 `validate` checks SQLite, foreign keys, retained-work digests, current corpus
 invariants, linear history and its snapshots, agreement between materialized
@@ -41,9 +42,11 @@ annals work list
 annals work show LABEL
 ```
 
-`INPUT` is a nonempty UTF-8 file or `-`. A file defaults to its UTF-8 filename
+`INPUT` is a UTF-8 file containing non-whitespace source text, or `-`. A file defaults to its UTF-8 filename
 stem; stdin requires `--name`. Work labels are nonempty and normalized-unique.
-The same retained bytes also cannot be added under another label.
+Exact retained bytes are content-addressed by SHA-256. Supplying them again,
+even with another requested label, selects the original work and its label. A
+label already attached to different bytes remains a conflict.
 
 Adding a work does not change the corpus revision. The human `work list` shows
 labels and sizes; `work list --json` also reports SHA-256 integrity digests and
@@ -69,14 +72,22 @@ Example JSON from `work add`:
 ## Model-assisted integration
 
 ```text
-annals integrate INPUT [--name LABEL] [--quality QUALITY] [--model MODEL] [--apply]
-annals integrate --work LABEL [--quality QUALITY] [--model MODEL] [--apply]
+annals integrate INPUT [--name LABEL] [--quality QUALITY] [--model MODEL] [--apply] [--reexamine]
+annals integrate --work LABEL [--quality QUALITY] [--model MODEL] [--apply] [--reexamine]
 ```
 
 The first form retains a new work and then examines it. The second examines an
 already retained work. Annals freezes the current corpus revision, invokes the
-liaison, and expects one recorded `change` or `no_change` result through its
-tool interface. The model's final response is not parsed as the proposal.
+liaison, and expects one `submit_reconciliation` call through its tool
+interface. The model's final response is diagnostic and is not parsed as the
+reconciliation.
+
+Before invoking the liaison, Annals may reuse the newest successful
+reconciliation for the exact same work, base revision, prompt version, model,
+and reasoning effort. `--reexamine` bypasses this lookup and replaces an
+incomplete matching run that has not submitted. A later corpus
+revision or changed liaison configuration naturally starts a new examination;
+file identity alone never marks a source as semantically exhausted.
 
 `--quality` accepts three presets and defaults to `high`:
 
@@ -91,13 +102,19 @@ reasoning effort, so `--model MODEL` uses max reasoning by default, while
 `--quality medium --model MODEL` uses medium reasoning. The exact resolved
 model and effort are recorded with the model run.
 
-Without `--apply`, a valid change remains pending. `--apply` immediately
-commits a change only when its `uncertainties` array is empty. An uncertain
-change remains pending with status `review required`; submit a revised certain
-proposal before applying it. A `no_change` examination is recorded but never
-creates a corpus commit.
+The liaison submits a provisional, best-current interpretation with one or more
+operations. It does not filter source material by estimated novelty, salience,
+familiarity, or likely usefulness, and it does not claim an objective final
+decomposition into atomic knowledge units.
 
-## Changes
+Without `--apply`, a reconciliation whose projected corpus differs from its
+base remains pending. `--apply` immediately commits that pending transition. A
+mechanically equal projection is stored with status `recorded`; it creates no
+commit and does not advance the revision. Optional annotations are inert and
+never block application. Human output reports this as “Reconciliation
+recorded; corpus remains at revision N.”
+
+## Reconciliations and corpus changes
 
 ```text
 annals change submit INPUT --work LABEL --base REVISION
@@ -107,46 +124,49 @@ annals change validate [--work LABEL]
 annals change apply [--work LABEL]
 ```
 
-`change submit` reads strict proposal JSON from a file or `-`. The flags provide
-the immutable evidence work and the corpus revision examined by the submitter;
-those values are deliberately absent from the semantic proposal.
+`change submit` reads strict reconciliation JSON from a file or `-`. The flags
+provide the immutable evidence work and the corpus revision examined by the
+submitter; those values are deliberately absent from the semantic
+reconciliation.
 
-Submitting resolves and validates the complete transition but does not mutate
-the corpus. A result based on the same or a later revision supersedes that
-work's previous pending proposal. An older-base result is retained without
-displacing a newer pending proposal. `change list` includes pending, applied,
-superseded, and no-change records.
+Submitting resolves and validates the complete projected state but does not
+mutate the corpus. A result based on the same or a later revision supersedes
+that work's previous pending reconciliation. An older-base result is retained
+without displacing a newer pending reconciliation. `change list` includes
+pending, applied, superseded, and recorded reconciliations.
 
-With `--work`, `change show` selects that work's pending proposal when one
+With `--work`, `change show` selects that work's pending reconciliation when one
 exists, otherwise its newest record. Without `--work`, it selects the sole
-pending proposal; when none is pending, it succeeds only if exactly one work
-has recorded results. `change validate` and `change apply` select pending
-changes only and require `--work` when more than one exists.
+pending reconciliation; when none is pending, it succeeds only if exactly one
+work has recorded results. `change validate` and `change apply` select pending
+reconciliations only and require `--work` when more than one exists.
 
 `change show --at REVISION` retrieves the accepted corpus change recorded by
 that revision, even when later examinations exist for the same work. For an
-accepted proposal it shows the original language-level proposal and resolved
-semantic operations. For a revert it shows the target revision and resolved
-inverse transition. Both include commit metadata, actor, and timestamp.
+applied reconciliation it shows the original language-level request and
+resolved semantic operations. For a revert it shows the target revision and
+resolved inverse transition. Both include commit metadata, actor, and
+timestamp.
 
 Human `integrate`, `change submit`, and `change show` output renders every
 requested operation with its language-level paths, parent and relative-order
 placement, exact evidence quotations and disambiguating context, evidence
-disposition, replacement, and uncertainties. `change validate` re-resolves the
+disposition, replacement, and annotations. `change validate` re-resolves the
 request and renders the resulting paths, quotations, parent and ordering
-relations, dispositions, replacements, and uncertainties without writing.
+relations, dispositions, replacements, and annotations without writing.
 
-`change apply` additionally requires HEAD to equal the proposal's base revision
-and the uncertainty list to be empty. Success updates the current corpus,
-search projection, proposal status, commit log, and revision in one transaction.
+`change apply` additionally requires HEAD to equal the reconciliation's base
+revision. Success updates the current corpus, search projection,
+reconciliation status, commit log, and revision in one transaction. Annotation
+content has no application semantics.
 
-### Proposal variants
+### Reconciliation contract
 
-A change contains one or more operations:
+A reconciliation contains a summary, one or more operations, and optional
+free-form annotations:
 
 ```json
 {
-  "outcome": "change",
   "summary": "Integrate the work's treatment of serializable execution",
   "operations": [
     {
@@ -189,24 +209,19 @@ A change contains one or more operations:
       "under": {"new": "Predicate locking"}
     }
   ],
-  "uncertainties": []
+  "annotations": [
+    "The work presents predicate locking as a phantom-prevention technique."
+  ]
 }
 ```
 
-A no-change result has no operations:
-
-```json
-{
-  "outcome": "no_change",
-  "summary": "The work is already represented",
-  "reason": "Its distinct claims and evidence are already present.",
-  "uncertainties": []
-}
-```
-
-Every object rejects unknown fields. Summaries, reasons, uncertainties, labels,
-paths, and quotations must be nonempty. Concept labels have no outer
-whitespace.
+Every object rejects unknown fields. Summaries, annotations, labels, paths,
+and quotations must be nonempty when present. Concept labels have no outer
+whitespace. `annotations` may be omitted and defaults to an empty list. Its
+strings are retained as meta-level context only: they are not confidence
+levels, review flags, or corpus evidence, and they do not affect corpus
+validation or application. Source-derived qualifications still belong in
+grounded corpus operations.
 
 ### Selectors, evidence, and placement
 
@@ -249,7 +264,8 @@ integer ordering positions in the contract.
 
 - `create_concept` requires `label` and nonempty `evidence`; `under`, `before`,
   and `after` are optional.
-- `add_evidence` attaches one or more exact quotations from the scoped work.
+- `add_evidence` ensures one or more exact quotations from the scoped work are
+  attached. An already-satisfied concept/work/range mapping is idempotent.
 - `remove_evidence` removes quotations from the scoped work that are already
   attached to the selected concept.
 - `move_concept` preserves concept identity and moves its complete subtree.
@@ -261,7 +277,7 @@ integer ordering positions in the contract.
 
 Splits and merges are atomic combinations of these operations. A concept with
 children cannot be retired until every child is explicitly moved or retired in
-the same proposal.
+the same reconciliation.
 
 ## Corpus reads and search
 
@@ -289,8 +305,8 @@ annals revert REVISION
 ```
 
 `log` lists newest commits first; its default limit is 20. Work retention,
-proposals, model runs, failed attempts, and no-change examinations are absent
-because they are not corpus transitions.
+recorded reconciliations, model runs, and failed attempts are absent because
+they are not corpus transitions.
 
 `diff` compares any two retained revision snapshots and reports created,
 retired, moved, reordered, and reworded paths plus added or removed quotations.
@@ -312,8 +328,8 @@ JSON success and failure envelopes are:
 ```
 
 Public corpus JSON uses work labels, path arrays, exact quotations, and revision
-numbers. Internal concept, work, proposal, evidence, commit-row, and model-run
-identifiers are not exposed.
+numbers. Internal concept, work, reconciliation, evidence, commit-row, and
+model-run identifiers are not exposed.
 
 Exit categories are:
 
@@ -322,8 +338,8 @@ Exit categories are:
 | 0 | Success |
 | 1 | Unexpected process, I/O, or JSON failure |
 | 2 | Invalid command or input |
-| 3 | Missing library, work, concept, proposal, or revision |
-| 4 | Stale state, invariant, review, or reversion conflict |
+| 3 | Missing library, work, concept, reconciliation, or revision |
+| 4 | Stale state, invariant, or reversion conflict |
 | 5 | SQLite, integrity, history, or index failure |
 
 Human rendering escapes control characters from retained text and labels.

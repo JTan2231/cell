@@ -7,15 +7,16 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::change::{
-    ChangeOperation, ChangeProposal, ConceptSelector, EvidenceDisposition, EvidenceSelector,
+    ChangeOperation, ConceptSelector, EvidenceDisposition, EvidenceSelector, Reconciliation,
 };
 use crate::cli::{
     ChangeCommand, ChangeSelectArgs, ChangeShowArgs, Cli, Command, IntegrateArgs, WorkAddArgs,
     WorkCommand,
 };
 use crate::corpus::{
-    ProposalRecord, corpus_view, diff, get_work, list_commits, list_proposals, list_works,
-    proposal_view, recorded_change_at, revision, select_proposal, store_work, work_view,
+    ReconciliationRecord, corpus_view, diff, get_work, list_commits, list_reconciliations,
+    list_works, reconciliation_view, recorded_change_at, revision, select_reconciliation,
+    store_work, work_view,
 };
 use crate::db;
 use crate::error::{AppError, AppResult};
@@ -88,7 +89,11 @@ fn stats(path: &Path) -> Result<CommandOutput, AppError> {
         concept_count: count(&connection, "concepts")?,
         work_count: count(&connection, "works")?,
         evidence_count: count(&connection, "evidence")?,
-        pending_change_count: count_where(&connection, "proposals", "status = 'pending'")?,
+        pending_reconciliation_count: count_where(
+            &connection,
+            "reconciliations",
+            "status = 'pending'",
+        )?,
         commit_count: count(&connection, "commits")?,
         model_run_count: count(&connection, "model_runs")?,
         database_size_bytes: fs::metadata(path).map(|metadata| metadata.len()).map_err(
@@ -102,12 +107,12 @@ fn stats(path: &Path) -> Result<CommandOutput, AppError> {
         index_current: index::status(&connection)?.is_current(),
     };
     let human = format!(
-        "Revision: {}\nConcepts: {}\nWorks: {}\nEvidence links: {}\nPending changes: {}\nCommits: {}\nModel runs: {}\nDatabase size: {} bytes\nIndex current: {}",
+        "Revision: {}\nConcepts: {}\nWorks: {}\nEvidence links: {}\nPending reconciliations: {}\nCommits: {}\nModel runs: {}\nDatabase size: {} bytes\nIndex current: {}",
         value.revision,
         value.concept_count,
         value.work_count,
         value.evidence_count,
-        value.pending_change_count,
+        value.pending_reconciliation_count,
         value.commit_count,
         value.model_run_count,
         value.database_size_bytes,
@@ -165,8 +170,8 @@ fn reindex(path: &Path) -> Result<CommandOutput, AppError> {
 fn add_work(path: &Path, args: &WorkAddArgs) -> Result<CommandOutput, AppError> {
     let text = read_utf8(&args.input, "work")?;
     let label = work_label(&args.input, args.name.as_deref())?;
-    let connection = db::open_write(path)?;
-    let work = store_work(&connection, &label, &text)?;
+    let mut connection = db::open_write(path)?;
+    let work = store_work(&mut connection, &label, &text)?;
     let corpus_revision = revision(&connection)?;
     Ok(CommandOutput::new(
         json!({
@@ -177,7 +182,7 @@ fn add_work(path: &Path, args: &WorkAddArgs) -> Result<CommandOutput, AppError> 
             "corpus_revision": corpus_revision
         }),
         format!(
-            "Stored work {:?} ({} bytes)\nCorpus remains at revision {corpus_revision}",
+            "Retained work {:?} ({} bytes)\nCorpus remains at revision {corpus_revision}",
             work.label,
             work.text.len()
         ),
@@ -243,17 +248,28 @@ fn integrate(
         })?;
         let text = read_utf8(input, "work")?;
         let label = work_label(input, args.name.as_deref())?;
-        let connection = db::open_write(path)?;
-        store_work(&connection, &label, &text)?
+        let mut connection = db::open_write(path)?;
+        store_work(&mut connection, &label, &text)?
     };
     let settings = ModelSettings::new(args.quality, args.model.as_deref());
-    let record = liaison::integrate(path, &work, &settings, forward_progress)?;
-    if args.apply && record.outcome == "change" && record.uncertainties.is_empty() {
-        let mut connection = db::open_write(path)?;
-        let applied = resolver::apply_record(&mut connection, &record)?;
-        return Ok(applied_output(&record, applied));
+    let record = liaison::integrate(path, &work, &settings, forward_progress, args.reexamine)?;
+    if args.apply {
+        match record.status.as_str() {
+            "pending" => {
+                let mut connection = db::open_write(path)?;
+                let applied = resolver::apply_record(&mut connection, &record)?;
+                return applied_output(&record, applied);
+            }
+            "recorded" => {}
+            _ => {
+                return Err(AppError::conflict(
+                    "nothing_to_apply",
+                    "the reusable reconciliation is not pending; use --reexamine for a fresh examination",
+                ));
+            }
+        }
     }
-    proposal_output(&record)
+    reconciliation_output(&record)
 }
 
 fn submit_change(
@@ -266,7 +282,7 @@ fn submit_change(
     let mut connection = db::open_write(path)?;
     let work = get_work(&connection, work_label)?;
     let record = resolver::submit_document(&mut connection, &work, base, &document, "human", None)?;
-    proposal_output(&record)
+    reconciliation_output(&record)
 }
 
 fn show_change(path: &Path, args: &ChangeShowArgs) -> Result<CommandOutput, AppError> {
@@ -276,8 +292,8 @@ fn show_change(path: &Path, args: &ChangeShowArgs) -> Result<CommandOutput, AppE
         let human = render_recorded_change(&change)?;
         return Ok(CommandOutput::new(to_value(&change)?, human));
     }
-    let record = select_proposal(&connection, args.work.as_deref(), false)?;
-    let mut output = proposal_output(&record)?;
+    let record = select_reconciliation(&connection, args.work.as_deref(), false)?;
+    let mut output = reconciliation_output(&record)?;
     output.quietable = false;
     Ok(output)
 }
@@ -289,7 +305,7 @@ fn render_recorded_change(change: &crate::model::RecordedChangeView) -> Result<S
         .map_or_else(|| "none".to_owned(), render_quoted);
     let metadata = render_terminal_text(&serde_json::to_string(&change.metadata)?, false);
     let details = match change.kind.as_str() {
-        "change" => render_recorded_proposal(change)?,
+        "change" => render_recorded_reconciliation(change)?,
         "revert" => render_recorded_revert(change)?,
         _ => {
             return Err(AppError::database(
@@ -313,31 +329,19 @@ fn render_recorded_change(change: &crate::model::RecordedChangeView) -> Result<S
     ))
 }
 
-fn render_recorded_proposal(change: &crate::model::RecordedChangeView) -> Result<String, AppError> {
-    let proposal: ChangeProposal = serde_json::from_value(change.submitted_request.clone())
+fn render_recorded_reconciliation(
+    change: &crate::model::RecordedChangeView,
+) -> Result<String, AppError> {
+    let reconciliation: Reconciliation = serde_json::from_value(change.submitted_request.clone())
         .map_err(|error| {
-            AppError::database(
-                "invalid_commit_request",
-                format!(
-                    "revision {} has an invalid change proposal: {error}",
-                    change.revision
-                ),
-            )
-        })?;
-    let ChangeProposal::Change {
-        operations,
-        uncertainties,
-        ..
-    } = proposal
-    else {
-        return Err(AppError::database(
+        AppError::database(
             "invalid_commit_request",
             format!(
-                "revision {} stores a no-change result as a commit",
+                "revision {} has an invalid reconciliation: {error}",
                 change.revision
             ),
-        ));
-    };
+        )
+    })?;
     let resolved: Vec<ResolvedOperation> =
         serde_json::from_value(change.resolved_operations.clone()).map_err(|error| {
             AppError::database(
@@ -350,11 +354,11 @@ fn render_recorded_proposal(change: &crate::model::RecordedChangeView) -> Result
         })?;
     Ok(format!(
         "Submitted operations ({}):\n{}\nResolved operations ({}):\n{}\n{}",
-        operations.len(),
-        render_requested_operations(&operations),
+        reconciliation.operations().len(),
+        render_requested_operations(reconciliation.operations()),
         resolved.len(),
-        render_resolved_operations(&resolved, &operations),
-        render_uncertainties(&uncertainties),
+        render_resolved_operations(&resolved, reconciliation.operations()),
+        render_annotations(reconciliation.annotations()),
     ))
 }
 
@@ -396,33 +400,17 @@ fn render_recorded_revert(change: &crate::model::RecordedChangeView) -> Result<S
 
 fn validate_change(path: &Path, args: &ChangeSelectArgs) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let record = select_proposal(&connection, args.work.as_deref(), true)?;
+    let record = select_reconciliation(&connection, args.work.as_deref(), true)?;
     let resolved = resolver::validate_record(&connection, &record)?;
-    let proposal: ChangeProposal = serde_json::from_str(&record.submitted_request)?;
-    let ChangeProposal::Change {
-        operations,
-        uncertainties,
-        ..
-    } = proposal
-    else {
-        return Err(AppError::database(
-            "invalid_resolved_change",
-            "a pending change contains a no-change request",
-        ));
-    };
-    let application = if uncertainties.is_empty() {
-        "ready"
-    } else {
-        "review required"
-    };
+    let reconciliation: Reconciliation = serde_json::from_str(&record.submitted_request)?;
     let human = format!(
-        "Valid pending change for {}\nBase revision: {}\nSummary: {}\nResolved operations ({}):\n{}\n{}\nApplication: {application}",
+        "Valid pending reconciliation for {}\nBase revision: {}\nSummary: {}\nResolved operations ({}):\n{}\n{}\nApplication: ready",
         render_quoted(&record.work_label),
         record.base_revision,
         render_terminal_text(&record.summary, false),
         resolved.operations.len(),
-        render_resolved_operations(&resolved.operations, &operations),
-        render_uncertainties(&uncertainties),
+        render_resolved_operations(&resolved.operations, reconciliation.operations()),
+        render_annotations(reconciliation.annotations()),
     );
     Ok(CommandOutput::new(
         json!({
@@ -438,100 +426,78 @@ fn validate_change(path: &Path, args: &ChangeSelectArgs) -> Result<CommandOutput
 
 fn apply_change(path: &Path, args: &ChangeSelectArgs) -> Result<CommandOutput, AppError> {
     let mut connection = db::open_write(path)?;
-    let record = select_proposal(&connection, args.work.as_deref(), true)?;
+    let record = select_reconciliation(&connection, args.work.as_deref(), true)?;
     let applied = resolver::apply_record(&mut connection, &record)?;
-    Ok(applied_output(&record, applied))
+    applied_output(&record, applied)
 }
 
 fn change_list(path: &Path) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let proposals = list_proposals(&connection)?;
-    let human = if proposals.is_empty() {
-        "No recorded changes or examinations".to_owned()
+    let reconciliations = list_reconciliations(&connection)?;
+    let human = if reconciliations.is_empty() {
+        "No recorded reconciliations".to_owned()
     } else {
-        proposals
+        reconciliations
             .iter()
-            .map(|proposal| {
+            .map(|reconciliation| {
                 format!(
                     "{}\t{}\t{}\t{}",
-                    proposal.status,
-                    render_terminal_text(&proposal.work, false),
-                    proposal.base_revision,
-                    render_terminal_text(&proposal.summary, false)
+                    reconciliation.status,
+                    render_terminal_text(&reconciliation.work, false),
+                    reconciliation.base_revision,
+                    render_terminal_text(&reconciliation.summary, false)
                 )
             })
             .collect::<Vec<_>>()
             .join("\n")
     };
-    Ok(CommandOutput::new(to_value(&proposals)?, human))
+    Ok(CommandOutput::new(to_value(&reconciliations)?, human))
 }
 
-fn proposal_output(record: &ProposalRecord) -> Result<CommandOutput, AppError> {
-    let view = proposal_view(record)?;
-    let proposal: ChangeProposal = serde_json::from_value(view.request.clone())?;
+fn reconciliation_output(record: &ReconciliationRecord) -> Result<CommandOutput, AppError> {
+    let view = reconciliation_view(record)?;
+    let reconciliation: Reconciliation = serde_json::from_value(view.request.clone())?;
     let operation_count = view.request["operations"].as_array().map_or(0, Vec::len);
-    let reason = view.request.get("reason").cloned();
     let data = json!({
         "work": view.work,
         "base_revision": view.base_revision,
-        "outcome": view.outcome,
         "status": view.status,
         "summary": view.summary,
         "operation_count": operation_count,
-        "uncertainties": view.uncertainties,
-        "reason": reason,
-        "proposal": view.request,
+        "annotations": view.annotations,
+        "reconciliation": view.request,
         "created_at": view.created_at,
         "applied_revision": view.applied_revision
     });
-    let human = match &proposal {
-        ChangeProposal::NoChange {
-            reason,
-            uncertainties,
-            ..
-        } => format!(
-            "No corpus change proposed for {}\nBase revision: {}\nSummary: {}\nReason: {}\n{}\nCorpus remains unchanged",
-            render_quoted(&view.work),
-            view.base_revision,
-            render_terminal_text(&view.summary, false),
-            render_terminal_text(reason, false),
-            render_uncertainties(uncertainties),
-        ),
-        ChangeProposal::Change {
-            operations,
-            uncertainties,
-            ..
-        } => {
-            let heading = match view.status.as_str() {
-                "applied" => "Applied change",
-                "superseded" => "Superseded change",
-                _ => "Pending change",
-            };
-            let status = match view.status.as_str() {
-                "applied" => view.applied_revision.map_or_else(
-                    || "applied".to_owned(),
-                    |revision| format!("applied at revision {revision}"),
-                ),
-                "superseded" => "superseded".to_owned(),
-                _ if uncertainties.is_empty() => "valid".to_owned(),
-                _ => "review required".to_owned(),
-            };
-            let corpus_state = if view.status == "applied" {
-                String::new()
-            } else {
-                "\nCorpus remains unchanged".to_owned()
-            };
-            format!(
-                "{heading} for {}\nBase revision: {}\nSummary: {}\nOperations ({}):\n{}\n{}\nStatus: {status}{corpus_state}",
-                render_quoted(&view.work),
-                view.base_revision,
-                render_terminal_text(&view.summary, false),
-                operations.len(),
-                render_requested_operations(operations),
-                render_uncertainties(uncertainties),
-            )
-        }
+    let heading = match view.status.as_str() {
+        "applied" => "Applied reconciliation",
+        "superseded" => "Superseded reconciliation",
+        "recorded" => "Reconciliation recorded",
+        _ => "Pending reconciliation",
     };
+    let status = match view.status.as_str() {
+        "applied" => view.applied_revision.map_or_else(
+            || "applied".to_owned(),
+            |revision| format!("applied at revision {revision}"),
+        ),
+        "superseded" => "superseded".to_owned(),
+        "recorded" => "recorded".to_owned(),
+        _ => "valid".to_owned(),
+    };
+    let corpus_state = if view.status == "recorded" {
+        format!("\nCorpus remained at revision {}", view.base_revision)
+    } else {
+        String::new()
+    };
+    let human = format!(
+        "{heading} for {}\nBase revision: {}\nSummary: {}\nOperations ({}):\n{}\n{}\nStatus: {status}{corpus_state}",
+        render_quoted(&view.work),
+        view.base_revision,
+        render_terminal_text(&view.summary, false),
+        reconciliation.operations().len(),
+        render_requested_operations(reconciliation.operations()),
+        render_annotations(reconciliation.annotations()),
+    );
     Ok(CommandOutput::new(data, human).mutation())
 }
 
@@ -821,36 +787,41 @@ fn render_evidence_disposition(disposition: EvidenceDisposition) -> &'static str
     }
 }
 
-fn render_uncertainties(uncertainties: &[String]) -> String {
-    if uncertainties.is_empty() {
-        "Uncertainties: none".to_owned()
+fn render_annotations(annotations: &[String]) -> String {
+    if annotations.is_empty() {
+        "Annotations: none".to_owned()
     } else {
         format!(
-            "Uncertainties:\n{}",
-            uncertainties
+            "Annotations:\n{}",
+            annotations
                 .iter()
-                .map(|uncertainty| { format!("  - {}", render_terminal_text(uncertainty, false)) })
+                .map(|annotation| { format!("  - {}", render_terminal_text(annotation, false)) })
                 .collect::<Vec<_>>()
                 .join("\n")
         )
     }
 }
 
-fn applied_output(record: &ProposalRecord, applied: i64) -> CommandOutput {
-    CommandOutput::new(
+fn applied_output(record: &ReconciliationRecord, applied: i64) -> Result<CommandOutput, AppError> {
+    let request: Reconciliation = serde_json::from_str(&record.submitted_request)?;
+    let reconciliation: Value = serde_json::from_str(&record.submitted_request)?;
+    Ok(CommandOutput::new(
         json!({
             "work": record.work_label,
             "base_revision": record.base_revision,
             "revision": applied,
             "status": "applied",
-            "summary": record.summary
+            "summary": record.summary,
+            "annotations": request.annotations(),
+            "reconciliation": reconciliation
         }),
         format!(
-            "Applied revision {applied}:\n{}",
-            render_terminal_text(&record.summary, false)
+            "Applied reconciliation at revision {applied}:\n{}\n{}",
+            render_terminal_text(&record.summary, false),
+            render_annotations(request.annotations())
         ),
     )
-    .mutation()
+    .mutation())
 }
 
 fn show_corpus(path: &Path, requested: Option<i64>) -> Result<CommandOutput, AppError> {
@@ -1098,9 +1069,9 @@ fn to_value<T: Serialize>(value: &T) -> Result<Value, AppError> {
 mod tests {
     use serde_json::json;
 
-    use super::{proposal_output, render_resolved_operations};
+    use super::{reconciliation_output, render_resolved_operations};
     use crate::change::{ChangeOperation, ConceptSelector, EvidenceDisposition, EvidenceSelector};
-    use crate::corpus::ProposalRecord;
+    use crate::corpus::ReconciliationRecord;
     use crate::resolver::ResolvedOperation;
 
     fn existing(path: &[&str]) -> ConceptSelector {
@@ -1120,10 +1091,9 @@ mod tests {
 
     #[test]
     #[allow(clippy::too_many_lines)]
-    fn proposal_output_renders_every_semantic_field_and_escapes_controls()
+    fn reconciliation_output_renders_every_semantic_field_and_escapes_controls()
     -> Result<(), Box<dyn std::error::Error>> {
         let request = json!({
-            "outcome": "change",
             "summary": "Audit the complete request",
             "operations": [
                 {
@@ -1166,27 +1136,25 @@ mod tests {
                     "replacement": {"path": ["Root", "Successor"]}
                 }
             ],
-            "uncertainties": ["Confirm\tplacement"]
+            "annotations": ["Placement considered\tprovisionally"]
         });
-        let record = ProposalRecord {
+        let record = ReconciliationRecord {
             id: 1,
             work_id: 1,
             work_label: "Work\u{1b}[2J".to_owned(),
             base_revision: 7,
             status: "pending".to_owned(),
-            outcome: "change".to_owned(),
             summary: "Audit the complete request".to_owned(),
             submitted_request: serde_json::to_string(&request)?,
-            resolved_change: "{}".to_owned(),
-            uncertainties: vec!["Confirm\tplacement".to_owned()],
+            resolved_reconciliation: "{}".to_owned(),
             actor: "human".to_owned(),
             created_at: "2026-08-12T00:00:00Z".to_owned(),
             applied_revision: None,
         };
 
-        let output = proposal_output(&record)?;
+        let output = reconciliation_output(&record)?;
         let human = output.human;
-        assert!(human.contains("Pending change for “Work\\u{1b}[2J”"));
+        assert!(human.contains("Pending reconciliation for “Work\\u{1b}[2J”"));
         assert!(human.contains("1. Create concept “Created\\u{1b}[31m”"));
         assert!(human.contains("Parent: “Root”"));
         assert!(human.contains("Order: after “Root” › “Earlier”"));
@@ -1202,7 +1170,7 @@ mod tests {
         assert!(human.contains("Evidence disposition: remove existing evidence"));
         assert!(human.contains("6. Retire “Root” › “Retired”"));
         assert!(human.contains("Replacement: “Root” › “Successor”"));
-        assert!(human.contains("- Confirm\\u{9}placement"));
+        assert!(human.contains("- Placement considered\\u{9}provisionally"));
         assert!(!human.contains('\u{1b}'));
         Ok(())
     }

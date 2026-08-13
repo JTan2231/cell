@@ -5,12 +5,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::change::{
-    ChangeContractError, ChangeOperation, ChangeProposal, ConceptSelector, EvidenceDisposition,
-    EvidenceSelector, parse_change_proposal, parse_change_proposal_value,
+    ChangeOperation, ConceptSelector, EvidenceDisposition, EvidenceSelector, Reconciliation,
+    ReconciliationContractError, parse_reconciliation, parse_reconciliation_value,
 };
 use crate::corpus::{
-    ProposalRecord, Snapshot, SnapshotConcept, SnapshotEvidence, Work, head_snapshot,
-    heading_for_offset, insert_commit, insert_proposal, materialize_snapshot, next_position,
+    ReconciliationRecord, Snapshot, SnapshotConcept, SnapshotEvidence, Work, head_snapshot,
+    heading_for_offset, insert_commit, insert_reconciliation, materialize_snapshot, next_position,
     path_lookup, paths, renumber_siblings, revision, sequence_next, snapshot_at, validate_snapshot,
 };
 use crate::error::AppError;
@@ -18,7 +18,7 @@ use crate::index;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ResolvedChange {
+pub(crate) struct ResolvedReconciliation {
     pub base_revision: i64,
     pub operations: Vec<ResolvedOperation>,
     pub resulting_snapshot: Snapshot,
@@ -66,19 +66,22 @@ pub(crate) fn submit_document(
     document: &str,
     actor: &str,
     model_run_id: Option<i64>,
-) -> Result<ProposalRecord, AppError> {
-    let proposal = parse_change_proposal(document).map_err(|error| contract_error(&error))?;
+) -> Result<ReconciliationRecord, AppError> {
+    let reconciliation = parse_reconciliation(document).map_err(|error| contract_error(&error))?;
+    let request: Value = serde_json::from_str(document)?;
     submit(
         connection,
         work,
         base_revision,
-        &proposal,
+        &request,
+        &reconciliation,
         actor,
         model_run_id,
     )
 }
 
 #[cfg(test)]
+#[allow(clippy::needless_pass_by_value)]
 pub(crate) fn submit_value(
     connection: &mut Connection,
     work: &Work,
@@ -86,14 +89,16 @@ pub(crate) fn submit_value(
     value: Value,
     actor: &str,
     model_run_id: Option<i64>,
-) -> Result<ProposalRecord, AppError> {
-    let proposal = parse_change_proposal_value(value).map_err(|error| contract_error(&error))?;
+) -> Result<ReconciliationRecord, AppError> {
+    let reconciliation =
+        parse_reconciliation_value(value.clone()).map_err(|error| contract_error(&error))?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let record = submit_parsed(
         &transaction,
         work,
         base_revision,
-        &proposal,
+        &value,
+        &reconciliation,
         actor,
         model_run_id,
     )?;
@@ -101,6 +106,7 @@ pub(crate) fn submit_value(
     Ok(record)
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub(crate) fn submit_value_in_transaction(
     transaction: &Transaction<'_>,
     work: &Work,
@@ -108,13 +114,15 @@ pub(crate) fn submit_value_in_transaction(
     value: Value,
     actor: &str,
     model_run_id: Option<i64>,
-) -> Result<ProposalRecord, AppError> {
-    let proposal = parse_change_proposal_value(value).map_err(|error| contract_error(&error))?;
+) -> Result<ReconciliationRecord, AppError> {
+    let reconciliation =
+        parse_reconciliation_value(value.clone()).map_err(|error| contract_error(&error))?;
     submit_parsed(
         transaction,
         work,
         base_revision,
-        &proposal,
+        &value,
+        &reconciliation,
         actor,
         model_run_id,
     )
@@ -124,16 +132,18 @@ fn submit(
     connection: &mut Connection,
     work: &Work,
     base_revision: i64,
-    proposal: &ChangeProposal,
+    request: &Value,
+    reconciliation: &Reconciliation,
     actor: &str,
     model_run_id: Option<i64>,
-) -> Result<ProposalRecord, AppError> {
+) -> Result<ReconciliationRecord, AppError> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let record = submit_parsed(
         &transaction,
         work,
         base_revision,
-        proposal,
+        request,
+        reconciliation,
         actor,
         model_run_id,
     )?;
@@ -145,118 +155,122 @@ fn submit_parsed(
     connection: &Transaction<'_>,
     work: &Work,
     base_revision: i64,
-    proposal: &ChangeProposal,
+    request: &Value,
+    reconciliation: &Reconciliation,
     actor: &str,
     model_run_id: Option<i64>,
-) -> Result<ProposalRecord, AppError> {
+) -> Result<ReconciliationRecord, AppError> {
     let base = snapshot_at(connection, base_revision)?;
     let resolution_timestamp = crate::corpus::now()?;
-    let (outcome, resolved_json) = match proposal {
-        ChangeProposal::Change { .. } => (
-            "change",
-            serde_json::to_string(&resolve(
-                connection,
-                work,
-                base_revision,
-                &base,
-                proposal,
-                &resolution_timestamp,
-            )?)?,
-        ),
-        ChangeProposal::NoChange { .. } => (
-            "no_change",
-            serde_json::to_string(&json!({
-                "base_revision": base_revision,
-                "operations": [],
-                "resulting_snapshot": base
-            }))?,
-        ),
-    };
-    let request_json = serde_json::to_string(proposal)?;
-    insert_proposal(
+    let resolved = resolve(
+        connection,
+        work,
+        base_revision,
+        &base,
+        reconciliation,
+        &resolution_timestamp,
+    )?;
+    let changes_corpus = !snapshots_corpus_equal(&base, &resolved.resulting_snapshot);
+    let resolved_json = serde_json::to_string(&resolved)?;
+    let request_json = serde_json::to_string(request)?;
+    insert_reconciliation(
         connection,
         work.id,
         base_revision,
         model_run_id,
-        outcome,
-        proposal.summary(),
+        changes_corpus,
+        reconciliation.summary(),
         &request_json,
         &resolved_json,
-        proposal.uncertainties(),
         actor,
     )
 }
 
 pub(crate) fn validate_record(
     connection: &Connection,
-    record: &ProposalRecord,
-) -> Result<ResolvedChange, AppError> {
-    if record.outcome != "change" {
+    record: &ReconciliationRecord,
+) -> Result<ResolvedReconciliation, AppError> {
+    if record.status != "pending" {
         return Err(AppError::conflict(
             "nothing_to_apply",
-            "the selected examination recorded no corpus change",
+            "the selected reconciliation is not pending",
         ));
     }
     let head_revision = revision(connection)?;
     if head_revision != record.base_revision {
         return Err(stale_change(record.base_revision, head_revision));
     }
-    let expected: ResolvedChange =
-        serde_json::from_str(&record.resolved_change).map_err(|error| {
-            AppError::database(
-                "invalid_resolved_change",
-                format!("the stored resolved change is invalid: {error}"),
-            )
-        })?;
-    if expected.base_revision != record.base_revision {
+    let expected: ResolvedReconciliation = serde_json::from_str(&record.resolved_reconciliation)?;
+    let base = snapshot_at(connection, record.base_revision)?;
+    if snapshots_corpus_equal(&base, &expected.resulting_snapshot) {
         return Err(AppError::database(
-            "invalid_resolved_change",
-            "the stored resolved change names a different base revision",
+            "invalid_resolved_reconciliation",
+            "a pending reconciliation must project a corpus transition",
         ));
     }
-    let proposal =
-        parse_change_proposal(&record.submitted_request).map_err(|error| contract_error(&error))?;
-    let work = crate::corpus::get_work_by_id(connection, record.work_id)?;
-    let base = snapshot_at(connection, record.base_revision)?;
     validate_snapshot(connection, &expected.resulting_snapshot).map_err(|error| {
         AppError::database(
-            "invalid_resolved_change",
+            "invalid_resolved_reconciliation",
             format!("the stored resulting corpus is invalid: {error}"),
         )
     })?;
-    let timestamp = resolution_timestamp(&base, &expected);
-    let actual = resolve(
-        connection,
-        &work,
-        record.base_revision,
-        &base,
-        &proposal,
-        &timestamp,
-    )?;
+    let actual = replay_record(connection, record)?;
     if actual != expected {
         return Err(AppError::database(
-            "invalid_resolved_change",
-            "the stored resolved change does not match its submitted request",
+            "invalid_resolved_reconciliation",
+            "the stored resolved reconciliation does not match its submitted request",
         ));
     }
     Ok(expected)
 }
 
+pub(crate) fn replay_record(
+    connection: &Connection,
+    record: &ReconciliationRecord,
+) -> Result<ResolvedReconciliation, AppError> {
+    let expected: ResolvedReconciliation = serde_json::from_str(&record.resolved_reconciliation)
+        .map_err(|error| {
+            AppError::database(
+                "invalid_resolved_reconciliation",
+                format!("the stored resolved reconciliation is invalid: {error}"),
+            )
+        })?;
+    if expected.base_revision != record.base_revision {
+        return Err(AppError::database(
+            "invalid_resolved_reconciliation",
+            "the stored resolved reconciliation names a different base revision",
+        ));
+    }
+    let reconciliation =
+        parse_reconciliation(&record.submitted_request).map_err(|error| contract_error(&error))?;
+    let work = crate::corpus::get_work_by_id(connection, record.work_id)?;
+    let base = snapshot_at(connection, record.base_revision)?;
+    let timestamp = resolution_timestamp(&base, &expected);
+    resolve(
+        connection,
+        &work,
+        record.base_revision,
+        &base,
+        &reconciliation,
+        &timestamp,
+    )
+}
+
 pub(crate) fn apply_record(
     connection: &mut Connection,
-    record: &ProposalRecord,
+    record: &ReconciliationRecord,
 ) -> Result<i64, AppError> {
-    if !record.uncertainties.is_empty() {
+    if record.status != "pending" {
         return Err(AppError::conflict(
-            "review_required",
-            "the proposal contains uncertainties and requires review before application",
+            "nothing_to_apply",
+            "the selected reconciliation is not pending",
         ));
     }
     let resolved = validate_record(connection, record)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let current_status: Option<String> = transaction
         .query_row(
-            "SELECT status FROM proposals WHERE id = ?1",
+            "SELECT status FROM reconciliations WHERE id = ?1",
             [record.id],
             |row| row.get(0),
         )
@@ -266,13 +280,13 @@ pub(crate) fn apply_record(
         Some(_) => {
             return Err(AppError::conflict(
                 "nothing_to_apply",
-                "the selected proposal is no longer pending",
+                "the selected reconciliation is no longer pending",
             ));
         }
         None => {
             return Err(AppError::not_found(
-                "pending_change_not_found",
-                "the selected proposal no longer exists",
+                "pending_reconciliation_not_found",
+                "the selected reconciliation no longer exists",
             ));
         }
     }
@@ -281,8 +295,8 @@ pub(crate) fn apply_record(
         return Err(stale_change(record.base_revision, head_revision));
     }
     let before = head_snapshot(&transaction)?;
-    let proposal =
-        parse_change_proposal(&record.submitted_request).map_err(|error| contract_error(&error))?;
+    let reconciliation =
+        parse_reconciliation(&record.submitted_request).map_err(|error| contract_error(&error))?;
     let work = crate::corpus::get_work_by_id(&transaction, record.work_id)?;
     let timestamp = resolution_timestamp(&before, &resolved);
     let revalidated = resolve(
@@ -290,13 +304,13 @@ pub(crate) fn apply_record(
         &work,
         record.base_revision,
         &before,
-        &proposal,
+        &reconciliation,
         &timestamp,
     )?;
     if revalidated != resolved {
         return Err(AppError::conflict(
-            "change_resolution_changed",
-            "the stored change no longer resolves to the same transition",
+            "reconciliation_resolution_changed",
+            "the stored reconciliation no longer resolves to the same transition",
         ));
     }
     let new_revision = head_revision.checked_add(1).ok_or_else(|| {
@@ -315,25 +329,25 @@ pub(crate) fn apply_record(
         &serde_json::to_value(&resolved.operations)?,
         &before,
         &resolved.resulting_snapshot,
-        &json!({ "proposal_actor": record.actor }),
+        &json!({ "reconciliation_actor": record.actor }),
         &record.actor,
     )?;
     let updated = transaction.execute(
-        "UPDATE proposals SET status = 'applied', applied_revision = ?1 \
+        "UPDATE reconciliations SET status = 'applied', applied_revision = ?1 \
          WHERE id = ?2 AND status = 'pending'",
         params![new_revision, record.id],
     )?;
     if updated != 1 {
         return Err(AppError::conflict(
             "nothing_to_apply",
-            "the selected proposal is no longer pending",
+            "the selected reconciliation is no longer pending",
         ));
     }
     transaction.commit()?;
     Ok(new_revision)
 }
 
-fn resolution_timestamp(base: &Snapshot, resolved: &ResolvedChange) -> String {
+fn resolution_timestamp(base: &Snapshot, resolved: &ResolvedReconciliation) -> String {
     let base_ids = base
         .evidence
         .iter()
@@ -354,7 +368,7 @@ fn stale_change(base_revision: i64, head_revision: i64) -> AppError {
     AppError::conflict(
         "stale_change",
         format!(
-            "the proposal examined revision {base_revision}, but HEAD is revision {head_revision}"
+            "the reconciliation examined revision {base_revision}, but HEAD is revision {head_revision}"
         ),
     )
 }
@@ -365,15 +379,10 @@ fn resolve(
     work: &Work,
     base_revision: i64,
     base: &Snapshot,
-    proposal: &ChangeProposal,
+    reconciliation: &Reconciliation,
     timestamp: &str,
-) -> Result<ResolvedChange, AppError> {
-    let ChangeProposal::Change { operations, .. } = proposal else {
-        return Err(AppError::conflict(
-            "nothing_to_apply",
-            "a no-change examination has no transition",
-        ));
-    };
+) -> Result<ResolvedReconciliation, AppError> {
+    let operations = reconciliation.operations();
     validate_snapshot(connection, base).map_err(|error| {
         AppError::database(
             "invalid_history_snapshot",
@@ -637,7 +646,9 @@ fn resolve(
                 },
             ) => {
                 let old_path = initial_paths.get(concept).cloned().ok_or_else(|| {
-                    invalid_change("a moved concept has no path in the proposal's initial corpus")
+                    invalid_change(
+                        "a moved concept has no path in the reconciliation's initial corpus",
+                    )
                 })?;
                 let old_previous_sibling = previous_sibling_path(base, *concept)?;
                 let old_parent = original_parents.get(concept).copied().flatten();
@@ -645,7 +656,6 @@ fn resolve(
                     placement_position(&mut result, *under, *before, *after, Some(*concept))?;
                 let item = concept_mut(&mut result, *concept)?;
                 item.position = position;
-                item.updated_revision = new_revision;
                 renumber_siblings(&mut result, old_parent);
                 renumber_siblings(&mut result, *under);
                 let new_path = concept_path(&result, *concept)?;
@@ -668,7 +678,6 @@ fn resolve(
                 let old_path = concept_path(&result, *concept)?;
                 let item = concept_mut(&mut result, *concept)?;
                 item.label.clone_from(label);
-                item.updated_revision = new_revision;
                 if *evidence_disposition == EvidenceDisposition::Remove {
                     result.evidence.retain(|item| {
                         item.concept_id != *concept || !base_evidence_ids.contains(&item.id)
@@ -768,23 +777,23 @@ fn resolve(
     for parent in affected_parents {
         renumber_siblings(&mut result, parent);
     }
-    if snapshots_semantically_equal(base, &result) {
-        return Err(invalid_change(
-            "the proposed operations do not change the corpus",
-        ));
-    }
+    let unchanged = snapshots_corpus_equal(base, &result);
     let base_concepts = base
         .concepts
         .iter()
         .map(|concept| (concept.id, concept))
         .collect::<HashMap<_, _>>();
-    for concept in &mut result.concepts {
-        if base_concepts.get(&concept.id).is_some_and(|base_concept| {
-            concept.parent_id != base_concept.parent_id
-                || concept.label != base_concept.label
-                || concept.position != base_concept.position
-        }) {
-            concept.updated_revision = new_revision;
+    if unchanged {
+        result = base.clone();
+    } else {
+        for concept in &mut result.concepts {
+            if base_concepts.get(&concept.id).is_some_and(|base_concept| {
+                concept.parent_id != base_concept.parent_id
+                    || concept.label != base_concept.label
+                    || concept.position != base_concept.position
+            }) {
+                concept.updated_revision = new_revision;
+            }
         }
     }
     validate_snapshot(connection, &result)?;
@@ -797,7 +806,7 @@ fn resolve(
                 "a validated operation has no resolved receipt",
             )
         })?;
-    Ok(ResolvedChange {
+    Ok(ResolvedReconciliation {
         base_revision,
         operations: receipts,
         resulting_snapshot: result,
@@ -986,7 +995,7 @@ fn apply_ordering_constraints(
                 .ok_or_else(|| {
                     AppError::conflict(
                         "invalid_placement",
-                        "the proposal contains contradictory before/after ordering constraints",
+                        "the reconciliation contains contradictory before/after ordering constraints",
                     )
                 })?;
             ordered.push(next);
@@ -1017,7 +1026,7 @@ fn apply_ordering_constraints(
     Ok(())
 }
 
-fn snapshots_semantically_equal(left: &Snapshot, right: &Snapshot) -> bool {
+pub(crate) fn snapshots_corpus_equal(left: &Snapshot, right: &Snapshot) -> bool {
     let concepts = |snapshot: &Snapshot| {
         snapshot
             .concepts
@@ -1133,10 +1142,7 @@ fn add_evidence(
                 && item.start_byte == start
                 && item.end_byte == end
         }) {
-            return Err(AppError::conflict(
-                "duplicate_evidence",
-                format!("the quotation {:?} is already attached", selector.quote),
-            ));
+            continue;
         }
         snapshot.evidence.push(SnapshotEvidence {
             id: *next_id,
@@ -1258,11 +1264,11 @@ fn display_path(path: &[String]) -> String {
 }
 
 fn invalid_change(message: impl Into<String>) -> AppError {
-    AppError::invalid("invalid_change", message)
+    AppError::invalid("invalid_reconciliation", message)
 }
 
-fn contract_error(error: &ChangeContractError) -> AppError {
-    AppError::invalid("invalid_change", error.to_string())
+fn contract_error(error: &ReconciliationContractError) -> AppError {
+    AppError::invalid("invalid_reconciliation", error.to_string())
 }
 
 #[cfg(test)]
@@ -1306,13 +1312,12 @@ mod tests {
     #[test]
     fn forward_local_references_resolve_independently_of_create_order() -> TestResult {
         let mut connection = test_connection()?;
-        let work = store_work(&connection, "Paper", "Parent claim. Child claim.")?;
+        let work = store_work(&mut connection, "Paper", "Parent claim. Child claim.")?;
         let record = submit_value(
             &mut connection,
             &work,
             0,
             json!({
-                "outcome": "change",
                 "summary": "Create a grounded hierarchy",
                 "operations": [
                     {
@@ -1326,8 +1331,7 @@ mod tests {
                         "label": "Parent",
                         "evidence": [{"quote": "Parent claim."}]
                     }
-                ],
-                "uncertainties": []
+                ]
             }),
             "test",
             None,
@@ -1351,19 +1355,21 @@ mod tests {
     #[test]
     fn retiring_a_branch_accepts_children_listed_before_the_parent() -> TestResult {
         let mut connection = seeded_hierarchy()?;
-        let work = store_work(&connection, "Retirement", "Retire the represented branch.")?;
+        let work = store_work(
+            &mut connection,
+            "Retirement",
+            "Retire the represented branch.",
+        )?;
         let record = submit_value(
             &mut connection,
             &work,
             1,
             json!({
-                "outcome": "change",
                 "summary": "Retire a represented branch",
                 "operations": [
                     {"action": "retire_concept", "concept": {"path": ["Parent"]}},
                     {"action": "retire_concept", "concept": {"path": ["Parent", "Child"]}}
-                ],
-                "uncertainties": []
+                ]
             }),
             "test",
             None,
@@ -1377,7 +1383,7 @@ mod tests {
     fn move_then_retire_transition_is_independent_of_operation_order() -> TestResult {
         let mut connection = seeded_hierarchy()?;
         let work = store_work(
-            &connection,
+            &mut connection,
             "Merge",
             "Replacement claim. The child belongs under the replacement.",
         )?;
@@ -1386,14 +1392,12 @@ mod tests {
             &work,
             1,
             json!({
-                "outcome": "change",
                 "summary": "Replace a parent while preserving its child",
                 "operations": [
                     {"action": "retire_concept", "concept": {"path": ["Parent"]}, "replacement": {"new": "Replacement"}},
                     {"action": "move_concept", "concept": {"path": ["Parent", "Child"]}, "under": {"new": "Replacement"}},
                     {"action": "create_concept", "label": "Replacement", "evidence": [{"quote": "Replacement claim."}]}
-                ],
-                "uncertainties": []
+                ]
             }),
             "test",
             None,
@@ -1418,19 +1422,17 @@ mod tests {
     #[test]
     fn contradictory_retire_and_move_is_rejected() -> TestResult {
         let mut connection = seeded_hierarchy()?;
-        let work = store_work(&connection, "Contradiction", "Contradictory request.")?;
+        let work = store_work(&mut connection, "Contradiction", "Contradictory request.")?;
         let result = submit_value(
             &mut connection,
             &work,
             1,
             json!({
-                "outcome": "change",
                 "summary": "Contradictory transition",
                 "operations": [
                     {"action": "retire_concept", "concept": {"path": ["Parent", "Child"]}},
                     {"action": "move_concept", "concept": {"path": ["Parent", "Child"]}}
-                ],
-                "uncertainties": []
+                ]
             }),
             "test",
             None,
@@ -1438,7 +1440,7 @@ mod tests {
         let Err(error) = result else {
             return Err("contradictory transition unexpectedly resolved".into());
         };
-        assert_eq!(error.code(), "invalid_change");
+        assert_eq!(error.code(), "invalid_reconciliation");
         assert_eq!(head_snapshot(&connection)?.concepts.len(), 2);
         Ok(())
     }
@@ -1446,13 +1448,12 @@ mod tests {
     #[test]
     fn contradictory_ordering_constraints_are_rejected() -> TestResult {
         let mut connection = test_connection()?;
-        let work = store_work(&connection, "Ordering", "First claim. Second claim.")?;
+        let work = store_work(&mut connection, "Ordering", "First claim. Second claim.")?;
         let result = submit_value(
             &mut connection,
             &work,
             0,
             json!({
-                "outcome": "change",
                 "summary": "Contradictory ordering",
                 "operations": [
                     {
@@ -1467,8 +1468,7 @@ mod tests {
                         "before": {"new": "First"},
                         "evidence": [{"quote": "Second claim."}]
                     }
-                ],
-                "uncertainties": []
+                ]
             }),
             "test",
             None,
@@ -1485,7 +1485,7 @@ mod tests {
     fn coherent_ordering_constraints_are_resolved_as_one_final_order() -> TestResult {
         let mut connection = test_connection()?;
         let work = store_work(
-            &connection,
+            &mut connection,
             "Ordering chain",
             "Alpha claim. Beta claim. Gamma claim.",
         )?;
@@ -1494,14 +1494,12 @@ mod tests {
             &work,
             0,
             json!({
-                "outcome": "change",
                 "summary": "Create a constrained ordering",
                 "operations": [
                     {"action": "create_concept", "label": "Alpha", "after": {"new": "Beta"}, "evidence": [{"quote": "Alpha claim."}]},
                     {"action": "create_concept", "label": "Beta", "after": {"new": "Gamma"}, "evidence": [{"quote": "Beta claim."}]},
                     {"action": "create_concept", "label": "Gamma", "evidence": [{"quote": "Gamma claim."}]}
-                ],
-                "uncertainties": []
+                ]
             }),
             "test",
             None,
@@ -1521,14 +1519,14 @@ mod tests {
     }
 
     #[test]
-    fn superseded_proposal_cannot_be_applied_from_a_stale_record() -> TestResult {
+    fn superseded_reconciliation_cannot_be_applied_from_a_stale_record() -> TestResult {
         let mut connection = test_connection()?;
-        let work = store_work(&connection, "Superseded", "First claim. Second claim.")?;
+        let work = store_work(&mut connection, "Superseded", "First claim. Second claim.")?;
         let old = submit_value(
             &mut connection,
             &work,
             0,
-            create_root_proposal("First", "First claim."),
+            create_root_reconciliation("First", "First claim."),
             "test",
             None,
         )?;
@@ -1536,12 +1534,12 @@ mod tests {
             &mut connection,
             &work,
             0,
-            create_root_proposal("Second", "Second claim."),
+            create_root_reconciliation("Second", "Second claim."),
             "test",
             None,
         )?;
         let Err(error) = apply_record(&mut connection, &old) else {
-            return Err("a superseded proposal unexpectedly applied".into());
+            return Err("a superseded reconciliation unexpectedly applied".into());
         };
         assert_eq!(error.code(), "nothing_to_apply");
         assert_eq!(apply_record(&mut connection, &current)?, 1);
@@ -1552,7 +1550,7 @@ mod tests {
     fn late_older_examinations_do_not_supersede_a_newer_pending_change() -> TestResult {
         let mut connection = test_connection()?;
         let work = store_work(
-            &connection,
+            &mut connection,
             "Concurrent examination",
             "Seed claim. Current claim. Late claim.",
         )?;
@@ -1560,7 +1558,7 @@ mod tests {
             &mut connection,
             &work,
             0,
-            create_root_proposal("Seed", "Seed claim."),
+            create_root_reconciliation("Seed", "Seed claim."),
             "test",
             None,
         )?;
@@ -1570,7 +1568,7 @@ mod tests {
             &mut connection,
             &work,
             1,
-            create_root_proposal("Current", "Current claim."),
+            create_root_reconciliation("Current", "Current claim."),
             "test",
             None,
         )?;
@@ -1580,32 +1578,20 @@ mod tests {
             &mut connection,
             &work,
             0,
-            create_root_proposal("Late", "Late claim."),
+            create_root_reconciliation("Late", "Late claim."),
             "test",
             None,
         )?;
         assert_eq!(late_change.status, "superseded");
-        let late_no_change = submit_value(
-            &mut connection,
-            &work,
-            0,
-            json!({
-                "outcome": "no_change",
-                "summary": "Late examination",
-                "reason": "The older view appeared complete",
-                "uncertainties": []
-            }),
-            "test",
-            None,
+        let selected = crate::corpus::select_reconciliation(
+            &connection,
+            Some("Concurrent examination"),
+            false,
         )?;
-        assert_eq!(late_no_change.status, "no_change");
-
-        let selected =
-            crate::corpus::select_proposal(&connection, Some("Concurrent examination"), false)?;
         assert_eq!(selected.id, current.id);
         assert_eq!(
             connection.query_row(
-                "SELECT id FROM proposals WHERE work_id = ?1 AND status = 'pending'",
+                "SELECT id FROM reconciliations WHERE work_id = ?1 AND status = 'pending'",
                 [work.id],
                 |row| row.get::<_, i64>(0),
             )?,
@@ -1616,49 +1602,63 @@ mod tests {
     }
 
     #[test]
-    fn a_no_op_change_is_rejected() -> TestResult {
+    fn an_equal_projection_is_recorded_without_a_revision() -> TestResult {
         let mut connection = seeded_hierarchy()?;
-        let work = store_work(&connection, "No op", "No additional evidence.")?;
-        let result = submit_value(
+        let work = store_work(
+            &mut connection,
+            "Equivalent placement",
+            "No additional evidence.",
+        )?;
+        let record = submit_value(
             &mut connection,
             &work,
             1,
             json!({
-                "outcome": "change",
                 "summary": "Move the sole child to the same place",
                 "operations": [{
                     "action": "move_concept",
                     "concept": {"path": ["Parent", "Child"]},
                     "under": {"path": ["Parent"]}
-                }],
-                "uncertainties": []
+                }]
             }),
             "test",
             None,
+        )?;
+        assert_eq!(record.status, "recorded");
+        assert_eq!(crate::corpus::revision(&connection)?, 1);
+        assert_eq!(
+            connection.query_row("SELECT COUNT(*) FROM commits", [], |row| row
+                .get::<_, i64>(0))?,
+            1
         );
-        let Err(error) = result else {
-            return Err("no-op transition unexpectedly resolved".into());
+        connection.execute(
+            "UPDATE reconciliations SET status = 'pending' WHERE id = ?1",
+            [record.id],
+        )?;
+        let pending =
+            crate::corpus::select_reconciliation(&connection, Some("Equivalent placement"), true)?;
+        let Err(error) = apply_record(&mut connection, &pending) else {
+            return Err("an equal projection unexpectedly created a revision".into());
         };
-        assert_eq!(error.code(), "invalid_change");
+        assert_eq!(error.code(), "invalid_resolved_reconciliation");
+        assert_eq!(crate::corpus::revision(&connection)?, 1);
         Ok(())
     }
 
     #[test]
     fn sibling_reorder_receipt_contains_semantic_neighbor_context() -> TestResult {
         let mut connection = test_connection()?;
-        let work = store_work(&connection, "Roots", "First claim. Second claim.")?;
+        let work = store_work(&mut connection, "Roots", "First claim. Second claim.")?;
         let seed = submit_value(
             &mut connection,
             &work,
             0,
             json!({
-                "outcome": "change",
                 "summary": "Create roots",
                 "operations": [
                     {"action": "create_concept", "label": "First", "evidence": [{"quote": "First claim."}]},
                     {"action": "create_concept", "label": "Second", "evidence": [{"quote": "Second claim."}]}
-                ],
-                "uncertainties": []
+                ]
             }),
             "test",
             None,
@@ -1669,14 +1669,12 @@ mod tests {
             &work,
             1,
             json!({
-                "outcome": "change",
                 "summary": "Reorder roots",
                 "operations": [{
                     "action": "move_concept",
                     "concept": {"path": ["Second"]},
                     "before": {"path": ["First"]}
-                }],
-                "uncertainties": []
+                }]
             }),
             "test",
             None,
@@ -1697,12 +1695,16 @@ mod tests {
     #[test]
     fn reverting_reword_after_later_evidence_conflicts_atomically() -> TestResult {
         let mut connection = test_connection()?;
-        let work = store_work(&connection, "Evolving claim", "Old evidence. New evidence.")?;
+        let work = store_work(
+            &mut connection,
+            "Evolving claim",
+            "Old evidence. New evidence.",
+        )?;
         let create = submit_value(
             &mut connection,
             &work,
             0,
-            create_root_proposal("A", "Old evidence."),
+            create_root_reconciliation("A", "Old evidence."),
             "test",
             None,
         )?;
@@ -1712,15 +1714,13 @@ mod tests {
             &work,
             1,
             json!({
-                "outcome": "change",
                 "summary": "Reword A as B",
                 "operations": [{
                     "action": "reword_concept",
                     "concept": {"path": ["A"]},
                     "label": "B",
                     "evidence_disposition": "retain"
-                }],
-                "uncertainties": []
+                }]
             }),
             "test",
             None,
@@ -1731,14 +1731,12 @@ mod tests {
             &work,
             2,
             json!({
-                "outcome": "change",
                 "summary": "Support B with later evidence",
                 "operations": [{
                     "action": "add_evidence",
                     "concept": {"path": ["B"]},
                     "evidence": [{"quote": "New evidence."}]
-                }],
-                "uncertainties": []
+                }]
             }),
             "test",
             None,
@@ -1764,13 +1762,12 @@ mod tests {
 
     fn seeded_hierarchy() -> TestResult<Connection> {
         let mut connection = test_connection()?;
-        let work = store_work(&connection, "Seed", "Parent claim. Child claim.")?;
+        let work = store_work(&mut connection, "Seed", "Parent claim. Child claim.")?;
         let record = submit_value(
             &mut connection,
             &work,
             0,
             json!({
-                "outcome": "change",
                 "summary": "Seed hierarchy",
                 "operations": [
                     {
@@ -1784,8 +1781,7 @@ mod tests {
                         "under": {"new": "Parent"},
                         "evidence": [{"quote": "Child claim."}]
                     }
-                ],
-                "uncertainties": []
+                ]
             }),
             "test",
             None,
@@ -1794,16 +1790,14 @@ mod tests {
         Ok(connection)
     }
 
-    fn create_root_proposal(label: &str, quote: &str) -> serde_json::Value {
+    fn create_root_reconciliation(label: &str, quote: &str) -> serde_json::Value {
         json!({
-            "outcome": "change",
             "summary": format!("Create {label}"),
             "operations": [{
                 "action": "create_concept",
                 "label": label,
                 "evidence": [{"quote": quote}]
-            }],
-            "uncertainties": []
+            }]
         })
     }
 

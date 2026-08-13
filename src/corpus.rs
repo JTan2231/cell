@@ -8,11 +8,12 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
+use crate::change::Reconciliation;
 use crate::error::AppError;
 use crate::index;
 use crate::model::{
-    CommitView, ConceptView, CorpusView, DiffEntry, DiffKind, DiffView, EvidenceView, ProposalView,
-    RecordedChangeView, SearchOutput, SearchResult, WorkSummary, WorkView,
+    CommitView, ConceptView, CorpusView, DiffEntry, DiffKind, DiffView, EvidenceView,
+    ReconciliationView, RecordedChangeView, SearchOutput, SearchResult, WorkSummary, WorkView,
 };
 
 const POSITION_STEP: i64 = 1024;
@@ -66,17 +67,15 @@ pub(crate) struct SnapshotEvidence {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ProposalRecord {
+pub(crate) struct ReconciliationRecord {
     pub id: i64,
     pub work_id: i64,
     pub work_label: String,
     pub base_revision: i64,
     pub status: String,
-    pub outcome: String,
     pub summary: String,
     pub submitted_request: String,
-    pub resolved_change: String,
-    pub uncertainties: Vec<String>,
+    pub resolved_reconciliation: String,
     pub actor: String,
     pub created_at: String,
     pub applied_revision: Option<i64>,
@@ -102,52 +101,54 @@ pub(crate) fn revision(connection: &Connection) -> Result<i64, AppError> {
 }
 
 pub(crate) fn store_work(
-    connection: &Connection,
+    connection: &mut Connection,
     label: &str,
     text: &str,
 ) -> Result<Work, AppError> {
     validate_label(label, "work label")?;
-    if text.is_empty() {
+    if text.trim().is_empty() {
         return Err(AppError::invalid(
             "empty_work",
-            "an immutable work cannot be empty",
+            "an immutable work must contain non-whitespace source text",
         ));
     }
+    let transaction =
+        connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let normalized = index::normalize(label);
     let digest = sha256_hex(text.as_bytes());
-    if let Some(existing) = work_by_normalized_label(connection, &normalized)? {
-        let code = if existing.sha256 == digest {
-            "work_already_exists"
-        } else {
-            "work_name_exists"
-        };
+    if let Some(existing) = work_by_normalized_label(&transaction, &normalized)?
+        && existing.sha256 != digest
+    {
         return Err(AppError::conflict(
-            code,
+            "work_name_exists",
             format!("a retained work named {:?} already exists", existing.label),
         ));
     }
-    if let Some(existing) = work_by_digest(connection, &digest)? {
+    if let Some(existing) = work_by_digest(&transaction, &digest)? {
+        transaction.commit()?;
+        return Ok(existing);
+    }
+    if let Some(existing) = work_by_normalized_label(&transaction, &normalized)? {
         return Err(AppError::conflict(
-            "work_already_exists",
-            format!(
-                "the same immutable work is already retained as {:?}",
-                existing.label
-            ),
+            "work_name_exists",
+            format!("a retained work named {:?} already exists", existing.label),
         ));
     }
     let created_at = now()?;
-    connection.execute(
+    transaction.execute(
         "INSERT INTO works(label, normalized_label, text, sha256, created_at) \
          VALUES(?1, ?2, ?3, ?4, ?5)",
         params![label, normalized, text, digest, created_at],
     )?;
-    Ok(Work {
-        id: connection.last_insert_rowid(),
+    let work = Work {
+        id: transaction.last_insert_rowid(),
         label: label.to_owned(),
         text: text.to_owned(),
         sha256: digest,
         created_at,
-    })
+    };
+    transaction.commit()?;
+    Ok(work)
 }
 
 pub(crate) fn get_work(connection: &Connection, label: &str) -> Result<Work, AppError> {
@@ -757,7 +758,7 @@ pub(crate) fn recorded_change_at(
         kind,
         summary,
         work,
-        proposal,
+        reconciliation,
         resolved_operations,
         metadata,
         actor,
@@ -787,7 +788,7 @@ pub(crate) fn recorded_change_at(
         kind,
         summary,
         work,
-        submitted_request: serde_json::from_str(&proposal).map_err(|error| {
+        submitted_request: serde_json::from_str(&reconciliation).map_err(|error| {
             AppError::database(
                 "invalid_commit_request",
                 format!("revision {requested_revision} has an invalid submitted request: {error}"),
@@ -976,77 +977,82 @@ fn append_evidence_diff(
     Ok(())
 }
 
-pub(crate) fn proposal_view(record: &ProposalRecord) -> Result<ProposalView, AppError> {
-    Ok(ProposalView {
+pub(crate) fn reconciliation_view(
+    record: &ReconciliationRecord,
+) -> Result<ReconciliationView, AppError> {
+    let request: Reconciliation = serde_json::from_str(&record.submitted_request)?;
+    Ok(ReconciliationView {
         work: record.work_label.clone(),
         base_revision: record.base_revision,
         status: record.status.clone(),
-        outcome: record.outcome.clone(),
         summary: record.summary.clone(),
         request: serde_json::from_str(&record.submitted_request)?,
-        uncertainties: record.uncertainties.clone(),
+        annotations: request.annotations().to_vec(),
         created_at: record.created_at.clone(),
         applied_revision: record.applied_revision,
     })
 }
 
-pub(crate) fn select_proposal(
+pub(crate) fn select_reconciliation(
     connection: &Connection,
     work_label: Option<&str>,
     pending_only: bool,
-) -> Result<ProposalRecord, AppError> {
+) -> Result<ReconciliationRecord, AppError> {
     if let Some(label) = work_label {
         let work = get_work(connection, label)?;
         let status_clause = if pending_only {
-            "AND p.status = 'pending'"
+            "AND r.status = 'pending'"
         } else {
             ""
         };
         let order_clause = if pending_only {
-            "p.id DESC"
+            "r.id DESC"
         } else {
-            "CASE WHEN p.status = 'pending' THEN 0 ELSE 1 END, p.id DESC"
+            "CASE WHEN r.status = 'pending' THEN 0 ELSE 1 END, r.id DESC"
         };
         let sql = format!(
-            "SELECT p.id, p.work_id, w.label, p.base_revision, p.status, p.outcome, \
-                    p.summary, p.submitted_request, p.resolved_change, p.uncertainties, \
-                    p.actor, p.created_at, p.applied_revision \
-             FROM proposals AS p JOIN works AS w ON w.id = p.work_id \
-             WHERE p.work_id = ?1 {status_clause} ORDER BY {order_clause} LIMIT 1"
+            "SELECT r.id, r.work_id, w.label, r.base_revision, r.status, r.summary, \
+                    r.submitted_request, r.resolved_reconciliation, r.actor, r.created_at, \
+                    r.applied_revision \
+             FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id \
+             WHERE r.work_id = ?1 {status_clause} ORDER BY {order_clause} LIMIT 1"
         );
-        return proposal_query(connection, &sql, [work.id])?.ok_or_else(|| {
+        return reconciliation_query(connection, &sql, [work.id])?.ok_or_else(|| {
             AppError::not_found(
-                "pending_change_not_found",
-                format!("no applicable change was found for work {:?}", work.label),
+                "pending_reconciliation_not_found",
+                format!(
+                    "no applicable reconciliation was found for work {:?}",
+                    work.label
+                ),
             )
         });
     }
-    let pending_sql = "SELECT p.id, p.work_id, w.label, p.base_revision, p.status, p.outcome, \
-                p.summary, p.submitted_request, p.resolved_change, p.uncertainties, \
-                p.actor, p.created_at, p.applied_revision \
-         FROM proposals AS p JOIN works AS w ON w.id = p.work_id \
-         WHERE p.status = 'pending' ORDER BY p.id DESC";
-    let mut records = proposal_rows(connection, pending_sql, [])?;
+    let pending_sql = "SELECT r.id, r.work_id, w.label, r.base_revision, r.status, r.summary, \
+                r.submitted_request, r.resolved_reconciliation, r.actor, r.created_at, \
+                r.applied_revision \
+         FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id \
+         WHERE r.status = 'pending' ORDER BY r.id DESC";
+    let mut records = reconciliation_rows(connection, pending_sql, [])?;
     if records.is_empty() && !pending_only {
-        let latest_per_work_sql = "SELECT p.id, p.work_id, w.label, p.base_revision, p.status, p.outcome, \
-                    p.summary, p.submitted_request, p.resolved_change, p.uncertainties, \
-                    p.actor, p.created_at, p.applied_revision \
-             FROM proposals AS p JOIN works AS w ON w.id = p.work_id \
-             WHERE p.id = (SELECT MAX(latest.id) FROM proposals AS latest \
-                           WHERE latest.work_id = p.work_id) \
-             ORDER BY p.id DESC";
-        records = proposal_rows(connection, latest_per_work_sql, [])?;
+        let latest_per_work_sql = "SELECT r.id, r.work_id, w.label, r.base_revision, r.status, \
+                    r.summary, r.submitted_request, r.resolved_reconciliation, r.actor, \
+                    r.created_at, r.applied_revision \
+             FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id \
+             WHERE r.id = (SELECT MAX(latest.id) FROM reconciliations AS latest \
+                           WHERE latest.work_id = r.work_id) \
+             ORDER BY r.id DESC";
+        records = reconciliation_rows(connection, latest_per_work_sql, [])?;
     }
     match records.as_slice() {
         [record] => Ok(record.clone()),
         [] => Err(AppError::not_found(
-            "pending_change_not_found",
-            "no applicable recorded change was found",
+            "pending_reconciliation_not_found",
+            "no applicable reconciliation was found",
         )),
         _ => Err(AppError::conflict(
-            "change_selector_required",
+            "reconciliation_selector_required",
             format!(
-                "several changes are available; select one with --work: {}",
+                "several reconciliations are available; select one with --work: {}",
                 records
                     .iter()
                     .map(|record| format!("{:?}", record.work_label))
@@ -1057,75 +1063,72 @@ pub(crate) fn select_proposal(
     }
 }
 
-pub(crate) fn list_proposals(connection: &Connection) -> Result<Vec<ProposalView>, AppError> {
-    let sql = "SELECT p.id, p.work_id, w.label, p.base_revision, p.status, p.outcome, \
-                      p.summary, p.submitted_request, p.resolved_change, p.uncertainties, \
-                      p.actor, p.created_at, p.applied_revision \
-               FROM proposals AS p JOIN works AS w ON w.id = p.work_id ORDER BY p.id DESC";
-    proposal_rows(connection, sql, [])?
+pub(crate) fn list_reconciliations(
+    connection: &Connection,
+) -> Result<Vec<ReconciliationView>, AppError> {
+    let sql = "SELECT r.id, r.work_id, w.label, r.base_revision, r.status, r.summary, \
+                      r.submitted_request, r.resolved_reconciliation, r.actor, r.created_at, \
+                      r.applied_revision \
+               FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id ORDER BY r.id DESC";
+    reconciliation_rows(connection, sql, [])?
         .iter()
-        .map(proposal_view)
+        .map(reconciliation_view)
         .collect()
 }
 
-fn proposal_query<P: rusqlite::Params>(
+pub(crate) fn reconciliation_query<P: rusqlite::Params>(
     connection: &Connection,
     sql: &str,
     parameters: P,
-) -> Result<Option<ProposalRecord>, AppError> {
+) -> Result<Option<ReconciliationRecord>, AppError> {
     Ok(connection
-        .query_row(sql, parameters, proposal_from_row)
+        .query_row(sql, parameters, reconciliation_from_row)
         .optional()?)
 }
 
-fn proposal_rows<P: rusqlite::Params>(
+fn reconciliation_rows<P: rusqlite::Params>(
     connection: &Connection,
     sql: &str,
     parameters: P,
-) -> Result<Vec<ProposalRecord>, AppError> {
+) -> Result<Vec<ReconciliationRecord>, AppError> {
     let mut statement = connection.prepare(sql)?;
-    let rows = statement.query_map(parameters, proposal_from_row)?;
+    let rows = statement.query_map(parameters, reconciliation_from_row)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-fn proposal_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProposalRecord> {
-    let uncertainties_json: String = row.get(9)?;
-    let uncertainties = serde_json::from_str(&uncertainties_json).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(9, rusqlite::types::Type::Text, Box::new(error))
-    })?;
-    Ok(ProposalRecord {
+pub(crate) fn reconciliation_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<ReconciliationRecord> {
+    Ok(ReconciliationRecord {
         id: row.get(0)?,
         work_id: row.get(1)?,
         work_label: row.get(2)?,
         base_revision: row.get(3)?,
         status: row.get(4)?,
-        outcome: row.get(5)?,
-        summary: row.get(6)?,
-        submitted_request: row.get(7)?,
-        resolved_change: row.get(8)?,
-        uncertainties,
-        actor: row.get(10)?,
-        created_at: row.get(11)?,
-        applied_revision: row.get(12)?,
+        summary: row.get(5)?,
+        submitted_request: row.get(6)?,
+        resolved_reconciliation: row.get(7)?,
+        actor: row.get(8)?,
+        created_at: row.get(9)?,
+        applied_revision: row.get(10)?,
     })
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn insert_proposal(
+pub(crate) fn insert_reconciliation(
     transaction: &Transaction<'_>,
     work_id: i64,
     base_revision: i64,
     model_run_id: Option<i64>,
-    outcome: &str,
+    changes_corpus: bool,
     summary: &str,
     request_json: &str,
     resolved_json: &str,
-    uncertainties: &[String],
     actor: &str,
-) -> Result<ProposalRecord, AppError> {
+) -> Result<ReconciliationRecord, AppError> {
     let pending_base = transaction
         .query_row(
-            "SELECT base_revision FROM proposals \
+            "SELECT base_revision FROM reconciliations \
              WHERE work_id = ?1 AND status = 'pending'",
             [work_id],
             |row| row.get::<_, i64>(0),
@@ -1134,46 +1137,49 @@ pub(crate) fn insert_proposal(
     let replaces_pending = pending_base.is_none_or(|pending| base_revision >= pending);
     if replaces_pending {
         transaction.execute(
-            "UPDATE proposals SET status = 'superseded' \
+            "UPDATE reconciliations SET status = 'superseded' \
              WHERE work_id = ?1 AND status = 'pending'",
             [work_id],
         )?;
     }
-    let status = match (outcome, replaces_pending) {
-        ("change", true) => "pending",
-        ("change", false) => "superseded",
-        _ => "no_change",
+    let status = match (changes_corpus, replaces_pending) {
+        (false, _) => "recorded",
+        (true, true) => "pending",
+        (true, false) => "superseded",
     };
     let created_at = now()?;
     transaction.execute(
-        "INSERT INTO proposals(\
-             work_id, base_revision, model_run_id, status, outcome, summary, submitted_request, \
-             resolved_change, uncertainties, actor, created_at\
-         ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        "INSERT INTO reconciliations(\
+             work_id, base_revision, model_run_id, status, summary, submitted_request, \
+             resolved_reconciliation, actor, created_at\
+         ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             work_id,
             base_revision,
             model_run_id,
             status,
-            outcome,
             summary,
             request_json,
             resolved_json,
-            serde_json::to_string(uncertainties)?,
             actor,
             created_at
         ],
     )?;
     let id = transaction.last_insert_rowid();
-    proposal_query(
+    reconciliation_query(
         transaction,
-        "SELECT p.id, p.work_id, w.label, p.base_revision, p.status, p.outcome, \
-                p.summary, p.submitted_request, p.resolved_change, p.uncertainties, \
-                p.actor, p.created_at, p.applied_revision \
-         FROM proposals AS p JOIN works AS w ON w.id = p.work_id WHERE p.id = ?1",
+        "SELECT r.id, r.work_id, w.label, r.base_revision, r.status, r.summary, \
+                r.submitted_request, r.resolved_reconciliation, r.actor, r.created_at, \
+                r.applied_revision \
+         FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id WHERE r.id = ?1",
         [id],
     )?
-    .ok_or_else(|| AppError::database("proposal_insert_failed", "proposal was not stored"))
+    .ok_or_else(|| {
+        AppError::database(
+            "reconciliation_insert_failed",
+            "reconciliation was not stored",
+        )
+    })
 }
 
 pub(crate) fn sequence_next(connection: &Connection, table: &str) -> Result<i64, AppError> {
@@ -1198,7 +1204,7 @@ pub(crate) fn insert_commit(
     transaction: &Transaction<'_>,
     revision: i64,
     work_id: Option<i64>,
-    proposal_id: Option<i64>,
+    reconciliation_id: Option<i64>,
     kind: &str,
     summary: &str,
     request: &Value,
@@ -1213,7 +1219,7 @@ pub(crate) fn insert_commit(
     })?;
     transaction.execute(
         "INSERT INTO commits(\
-             revision, parent_revision, base_revision, work_id, proposal_id, kind, summary, \
+             revision, parent_revision, base_revision, work_id, reconciliation_id, kind, summary, \
              submitted_request, resolved_operations, before_snapshot, after_snapshot, metadata, \
              actor, created_at\
          ) VALUES(?1, ?2, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
@@ -1221,7 +1227,7 @@ pub(crate) fn insert_commit(
             revision,
             parent,
             work_id,
-            proposal_id,
+            reconciliation_id,
             kind,
             summary,
             serde_json::to_string(request)?,
@@ -1702,7 +1708,7 @@ pub(crate) fn path_lookup(snapshot: &Snapshot) -> Result<HashMap<Vec<String>, i6
 mod tests {
     use super::{
         Snapshot, SnapshotConcept, SnapshotEvidence, diff_snapshot_entries, heading_for_offset,
-        invert_snapshot_change, markdown_headings, sha256_hex,
+        invert_snapshot_change, markdown_headings, sha256_hex, store_work,
     };
     use rusqlite::Connection;
 
@@ -1724,6 +1730,46 @@ mod tests {
             sha256_hex(b"abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
+    }
+
+    #[test]
+    fn work_storage_uses_content_identity_before_labels() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let mut connection = test_connection()?;
+        let retained = store_work(&mut connection, "Original", "same bytes")?;
+        let repeated = store_work(&mut connection, "Another label", "same bytes")?;
+
+        assert_eq!(repeated.id, retained.id);
+        assert_eq!(repeated.label, "Original");
+        assert_eq!(
+            connection.query_row("SELECT COUNT(*) FROM works", [], |row| row.get::<_, i64>(0))?,
+            1
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_label_collision_still_rejects_different_content() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let mut connection = test_connection()?;
+        store_work(&mut connection, "Paper", "first bytes")?;
+        let Err(error) = store_work(&mut connection, "PAPER", "different bytes") else {
+            return Err("different content unexpectedly reused an occupied label".into());
+        };
+
+        assert_eq!(error.code(), "work_name_exists");
+        Ok(())
+    }
+
+    #[test]
+    fn whitespace_only_work_is_rejected() -> Result<(), Box<dyn std::error::Error>> {
+        let mut connection = test_connection()?;
+        let Err(error) = store_work(&mut connection, "Blank", " \n\t") else {
+            return Err("whitespace-only source text was unexpectedly retained".into());
+        };
+
+        assert_eq!(error.code(), "empty_work");
+        Ok(())
     }
 
     #[test]
@@ -1883,5 +1929,12 @@ mod tests {
             end_byte,
             created_at: "2026-08-12T00:00:00Z".to_owned(),
         }
+    }
+
+    fn test_connection() -> Result<Connection, Box<dyn std::error::Error>> {
+        let connection = Connection::open_in_memory()?;
+        connection.execute_batch(include_str!("../schema.sql"))?;
+        connection.pragma_update(None, "foreign_keys", true)?;
+        Ok(connection)
     }
 }

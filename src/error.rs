@@ -36,7 +36,7 @@ impl AppError {
         }
     }
 
-    /// Construct a missing library, work, concept, proposal, or revision error (exit code 3).
+    /// Construct a missing library, work, concept, reconciliation, or revision error (exit code 3).
     #[must_use]
     pub fn not_found(code: &'static str, message: impl Into<String>) -> Self {
         Self::NotFound {
