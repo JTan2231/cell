@@ -86,3 +86,6 @@ then `ANNALS_LIBRARY`, then `./annals.db`.
 
 See the [documentation index](docs/README.md) for the command, protocol,
 architecture, storage, search, and runtime contracts.
+
+The [experiment archive](experiments/README.md) documents the three-chat
+baseline, its higher-grade rerun, and the scaled 20-chat preset comparison.
