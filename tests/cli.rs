@@ -2,9 +2,9 @@ use std::collections::BTreeSet;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -77,6 +77,25 @@ impl Library {
         );
         assert!(output.stderr.is_empty());
         Ok(String::from_utf8(output.stdout)?)
+    }
+
+    fn human_with_input<I, S>(&self, arguments: I, input: &str) -> TestResult<Output>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_annals"))
+            .arg("--library")
+            .arg(&self.path)
+            .args(arguments)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        let mut stdin = child.stdin.take().ok_or("child had no standard input")?;
+        stdin.write_all(input.as_bytes())?;
+        drop(stdin);
+        Ok(child.wait_with_output()?)
     }
 
     fn add_work(&self, name: &str, filename: &str, text: &str) -> TestResult<Value> {
@@ -219,6 +238,24 @@ fn concept_ids(items: &Value) -> TestResult<BTreeSet<String>> {
     Ok(ids)
 }
 
+fn edge_labels(edges: &Value) -> TestResult<BTreeSet<(String, String)>> {
+    let edges = edges
+        .as_array()
+        .ok_or_else(|| format!("expected edge array, got {edges}"))?;
+    edges
+        .iter()
+        .map(|edge| {
+            let parent = edge["parent"]["label"]
+                .as_str()
+                .ok_or_else(|| format!("edge has no parent label: {edge}"))?;
+            let child = edge["child"]["label"]
+                .as_str()
+                .ok_or_else(|| format!("edge has no child label: {edge}"))?;
+            Ok((parent.to_owned(), child.to_owned()))
+        })
+        .collect()
+}
+
 fn diamond_source() -> &'static str {
     concat!(
         "Database systems organize persistent information.\n",
@@ -281,6 +318,46 @@ fn seed_diamond(library: &Library, work: &str) -> TestResult {
     let applied = library.json_ok(["change", "apply", "--work", work])?;
     assert_eq!(applied["revision"], 1);
     Ok(())
+}
+
+fn complete_order_reconciliation() -> Value {
+    json!({
+        "summary": "Build a complete conceptual order",
+        "operations": [
+            {
+                "action": "create_concept",
+                "ref": "alpha",
+                "label": "Alpha scope",
+                "parents": [],
+                "evidence": [{"quote": "Alpha is the broadest scope."}]
+            },
+            {
+                "action": "create_concept",
+                "ref": "beta",
+                "label": "Beta scope",
+                "parents": [{"new": "alpha"}],
+                "evidence": [{"quote": "Beta is narrower than alpha."}]
+            },
+            {
+                "action": "create_concept",
+                "ref": "gamma",
+                "label": "Gamma scope",
+                "parents": [{"new": "alpha"}, {"new": "beta"}],
+                "evidence": [{"quote": "Gamma is narrower than beta."}]
+            },
+            {
+                "action": "create_concept",
+                "ref": "delta",
+                "label": "Delta claim",
+                "parents": [
+                    {"new": "alpha"},
+                    {"new": "beta"},
+                    {"new": "gamma"}
+                ],
+                "evidence": [{"quote": "Delta is the narrowest claim."}]
+            }
+        ]
+    })
 }
 
 fn search_concept_id(library: &Library, revision: i64, label: &str) -> TestResult<String> {
@@ -673,6 +750,174 @@ fn stale_reconciliation_is_rejected_without_partial_graph_or_history_writes() ->
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
+fn shake_reports_confirms_commits_preserves_ancestry_and_is_revertible() -> TestResult {
+    let library = Library::initialized()?;
+    library.add_work(
+        "Ordered scopes",
+        "ordered.txt",
+        concat!(
+            "Alpha is the broadest scope.\n",
+            "Beta is narrower than alpha.\n",
+            "Gamma is narrower than beta.\n",
+            "Delta is the narrowest claim.\n"
+        ),
+    )?;
+    library.submit(
+        "Ordered scopes",
+        0,
+        "ordered.json",
+        &complete_order_reconciliation(),
+    )?;
+    assert_eq!(
+        library.json_ok(["change", "apply", "--work", "Ordered scopes"])?["revision"],
+        1
+    );
+    let before_stats = library.json_ok(["stats"])?;
+    assert_eq!(before_stats["edge_count"], 6);
+    let before_search = library.json_ok(["search", "Alpha scope", "--at", "1"])?;
+    let before_items = &before_search["results"]["items"];
+    let before_ids = concept_ids(before_items)?;
+    let alpha_id = concept_id(before_items, "Alpha scope")?;
+
+    let preview = library.json_ok(["shake"])?;
+    assert_eq!(preview["status"], "confirmation_required");
+    assert_eq!(preview["base_revision"], 1);
+    assert_eq!(preview["revision"], 1);
+    assert_eq!(preview["edge_count_before"], 6);
+    assert_eq!(preview["removed_edge_count"], 3);
+    assert_eq!(preview["edge_count_after"], 3);
+    assert_eq!(
+        edge_labels(&preview["removed_edges"])?,
+        BTreeSet::from([
+            ("Alpha scope".to_owned(), "Gamma scope".to_owned()),
+            ("Alpha scope".to_owned(), "Delta claim".to_owned()),
+            ("Beta scope".to_owned(), "Delta claim".to_owned()),
+        ])
+    );
+    assert_eq!(library.json_ok(["stats"])?["revision"], 1);
+
+    let declined = library.human_with_input(["shake", "--quiet"], "no\n")?;
+    assert!(declined.status.success());
+    let declined_stdout = String::from_utf8(declined.stdout)?;
+    let declined_stderr = String::from_utf8(declined.stderr)?;
+    assert!(declined_stdout.contains("Shake cancelled"));
+    assert!(declined_stdout.contains("3 of 6 parent edges will be removed"));
+    assert!(declined_stdout.contains("Alpha scope"));
+    assert!(declined_stdout.contains("Gamma scope"));
+    assert!(declined_stdout.contains("Delta claim"));
+    assert!(declined_stderr.ends_with("[y/N] "));
+    assert_eq!(library.json_ok(["stats"])?, before_stats);
+
+    let eof = library.human_with_input(["shake"], "")?;
+    assert!(eof.status.success());
+    assert!(String::from_utf8(eof.stdout)?.contains("Shake cancelled"));
+    assert_eq!(library.json_ok(["stats"])?, before_stats);
+
+    let confirmed = library.human_with_input(["shake"], "YES\n")?;
+    assert!(
+        confirmed.status.success(),
+        "shake failed: {}",
+        String::from_utf8_lossy(&confirmed.stderr)
+    );
+    let confirmed_stdout = String::from_utf8(confirmed.stdout)?;
+    assert!(confirmed_stdout.contains("Applied shake as revision 2"));
+    assert!(confirmed_stdout.contains("3 of 6 parent edges"));
+    assert!(String::from_utf8(confirmed.stderr)?.ends_with("[y/N] "));
+
+    let overview = library.json_ok(["overview"])?;
+    assert_eq!(overview["revision"], 2);
+    assert_eq!(overview["concept_count"], 4);
+    assert_eq!(overview["edge_count"], 3);
+    assert_eq!(overview["root_count"], 1);
+    assert_eq!(overview["leaf_count"], 1);
+    assert_eq!(overview["shared_concept_count"], 0);
+    let graph = library.json_ok([
+        "graph",
+        alpha_id.as_str(),
+        "--at",
+        "2",
+        "--direction",
+        "children",
+        "--depth",
+        "3",
+        "--max-nodes",
+        "10",
+    ])?;
+    assert_eq!(
+        edge_labels(&graph["edges"])?,
+        BTreeSet::from([
+            ("Alpha scope".to_owned(), "Beta scope".to_owned()),
+            ("Beta scope".to_owned(), "Gamma scope".to_owned()),
+            ("Gamma scope".to_owned(), "Delta claim".to_owned()),
+        ])
+    );
+    let after_search = library.json_ok(["search", "Alpha scope", "--at", "2"])?;
+    assert_eq!(concept_ids(&after_search["results"]["items"])?, before_ids);
+
+    let changes = library.json_ok(["diff", "1", "2"])?;
+    let entries = changes["entries"].as_array().ok_or("diff had no entries")?;
+    assert_eq!(entries.len(), 3);
+    assert!(
+        entries
+            .iter()
+            .all(|entry| entry["kind"] == "parent_removed")
+    );
+    let recorded = library.json_ok(["change", "show", "--at", "2"])?;
+    assert_eq!(recorded["kind"], "shake");
+    assert_eq!(
+        recorded["submitted_request"]["operation"],
+        "transitive_reduction"
+    );
+    assert_eq!(recorded["metadata"]["removed_edge_count"], 3);
+    assert!(
+        library
+            .human_ok(["change", "show", "--at", "2"])?
+            .contains("transitively reduce the concept graph")
+    );
+    let log = library.json_ok(["log"])?;
+    assert_eq!(log["commits"][0]["kind"], "shake");
+    assert_eq!(library.json_ok(["validate"])?["valid"], true);
+
+    let no_op = library.human_with_input(["shake"], "")?;
+    assert!(no_op.status.success());
+    assert!(String::from_utf8(no_op.stdout)?.contains("already transitively reduced"));
+    assert!(no_op.stderr.is_empty());
+
+    let second = library.json_ok(["shake", "--yes"])?;
+    assert_eq!(second["status"], "unchanged");
+    assert_eq!(second["removed_edge_count"], 0);
+    assert_eq!(second["revision"], 2);
+    assert_eq!(library.json_ok(["stats"])?["commit_count"], 2);
+
+    assert_eq!(library.json_ok(["revert", "2"])?["revision"], 3);
+    assert_eq!(library.json_ok(["overview"])?["edge_count"], 6);
+    assert_eq!(library.json_ok(["validate"])?["valid"], true);
+
+    let automatic = library.json_ok(["shake", "--yes"])?;
+    assert_eq!(automatic["status"], "applied");
+    assert_eq!(automatic["base_revision"], 3);
+    assert_eq!(automatic["revision"], 4);
+    assert_eq!(automatic["removed_edge_count"], 3);
+    assert_eq!(automatic["removed_edges"].as_array().map(Vec::len), Some(3));
+    assert_eq!(library.json_ok(["validate"])?["valid"], true);
+
+    assert_eq!(library.json_ok(["revert", "4"])?["revision"], 5);
+    let quiet = library.human_with_input(["shake", "--yes", "--quiet"], "")?;
+    assert!(
+        quiet.status.success(),
+        "quiet shake failed: {}",
+        String::from_utf8_lossy(&quiet.stderr)
+    );
+    assert!(quiet.stdout.is_empty());
+    assert!(quiet.stderr.is_empty());
+    assert_eq!(library.json_ok(["overview"])?["revision"], 6);
+    assert_eq!(library.json_ok(["overview"])?["edge_count"], 3);
+    assert_eq!(library.json_ok(["validate"])?["valid"], true);
+    Ok(())
+}
+
+#[test]
 fn public_help_uses_graph_commands_and_legacy_tree_contract_is_rejected() -> TestResult {
     let help = Command::new(env!("CARGO_BIN_EXE_annals"))
         .arg("--help")
@@ -687,6 +932,7 @@ fn public_help_uses_graph_commands_and_legacy_tree_contract_is_rejected() -> Tes
         "roots",
         "concept",
         "graph",
+        "shake",
         "search",
         "log",
         "diff",

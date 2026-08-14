@@ -49,6 +49,8 @@ pub enum Command {
     Concept(ConceptCommand),
     /// Expand a bounded local concept graph.
     Graph(GraphArgs),
+    /// Remove parent edges already implied by longer graph paths.
+    Shake(ShakeArgs),
     /// Check canonical, historical, provenance, and index invariants.
     Validate,
     /// Create a consistent backup without replacing the destination.
@@ -154,6 +156,13 @@ pub struct GraphArgs {
     /// Maximum distinct concepts in the result.
     #[arg(long, value_name = "N", default_value_t = 100)]
     pub max_nodes: usize,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct ShakeArgs {
+    /// Apply without an interactive confirmation prompt.
+    #[arg(long)]
+    pub yes: bool,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -373,6 +382,10 @@ mod tests {
             ])
             .map(|cli| cli.command),
             Ok(Command::Graph(_))
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "shake", "--yes"]).map(|cli| cli.command),
+            Ok(Command::Shake(args)) if args.yes
         ));
         assert!(matches!(
             Cli::try_parse_from([

@@ -8,12 +8,13 @@ broader-to-narrower edges between them. Evidence is many-to-many: a work may
 support many concepts and a concept may be supported by many works. Model runs
 own examinations and reconciliations, never concepts.
 
-Only an applied reconciliation whose projected corpus differs mechanically
-from its base advances the corpus. Retaining a work, reading state, running a
-model, recording a reconciliation, validating, backing up, and rebuilding
-search data do not advance the revision. A mechanically equal projection is
-retained as an interpretive record with status `recorded` and has no commit or
-revision of its own.
+An applied reconciliation whose projected corpus differs mechanically from
+its base, a confirmed nonempty shake, or a revert advances the corpus.
+Retaining a work, reading state, running a model, recording a reconciliation,
+canceling or finding no removable edges in a shake, validating, backing up,
+and rebuilding search data do not advance the revision. A mechanically equal
+projection is retained as an interpretive record with status `recorded` and
+has no commit or revision of its own.
 
 ## Corpus graph
 
@@ -30,11 +31,28 @@ and may change when one edge is added or removed.
 There are no concept paths, placement slots, sibling positions, or subtree
 moves. Presentation code uses deterministic ordering only to make output and
 pagination repeatable; that order has no corpus meaning. Each edge is an
-explicit semantic assertion and is retained independently of the concept and
-its other edges.
+explicit semantic assertion. Reconciliation accepts an edge even when longer
+paths imply the same ancestry and does not remove it merely for that reason;
+an explicit shake can remove such shortcuts mechanically.
 
 Evidence is attached to a concept as a whole, not to a parent edge or one view
 of the graph. Every projected leaf must have at least one evidence link.
+
+### Transitive reduction
+
+`annals shake` proposes HEAD's transitive reduction: it removes edge `A -> C`
+exactly when another directed path still leads from `A` to `C`. The reduced
+DAG is a compact representation of the same ancestor-descendant relation; it
+does not preserve every original path or direct-neighbor count.
+
+Interactive human mode reports the exact plan and asks once for confirmation.
+Application binds to the persistent library identity and the reported revision
+and materialized graph. It removes every reported edge, rebuilds search state,
+appends a `shake` commit and full snapshot, and advances the revision in one
+immediate transaction. A stale,
+cancelled, or empty plan writes nothing. `--yes` supplies noninteractive
+confirmation. JSON without `--yes` returns an exit-zero informational preview;
+a later invocation with `--yes` computes a fresh plan for its current HEAD.
 
 ## Liaison flow
 
@@ -204,7 +222,8 @@ validation, semantic diff, and inversion do not depend on the current graph.
 Diffs describe semantic facts: concept creation, retirement, and rewording;
 one parent edge added or removed; and evidence added or removed. They do not
 report moves or order changes. A concept with two parents remains one identity
-in a diff and in every graph view.
+in a diff and in every graph view. A shake appears as one commit whose resolved
+transition contains its removed parent edges.
 
 `revert REVISION` applies that revision's inverse to current HEAD and appends a
 new `revert` commit. It never removes the original commit. Inversion checks the

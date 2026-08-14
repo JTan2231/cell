@@ -44,11 +44,12 @@ validating a reconciliation. A graph snapshot contains concepts, explicit
 edges, and evidence, so basic materialization grows with all three. Cycle
 checks and derived root/leaf classification also traverse the edge set.
 
-Applying a pending transition validates and materializes the complete projected
-graph, rebuilds derived search rows, and retains complete corpus snapshots in
-history. Mutation time and history storage therefore grow with corpus size. A
-mechanically equal projection is stored as a `recorded` reconciliation without
-rebuilding materialized state or creating a commit or revision.
+Applying a pending transition or confirmed shake validates and materializes the
+complete projected graph, rebuilds derived search rows, and retains complete
+corpus snapshots in history. Mutation time and history storage therefore grow
+with corpus size. A mechanically equal projection is stored as a `recorded`
+reconciliation without rebuilding materialized state or creating a commit or
+revision; an empty shake likewise creates no commit.
 
 The search projection has one row per concept, including a deduplicated set of
 ancestor labels. It does not multiply rows by the number of root-to-concept

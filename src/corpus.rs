@@ -100,6 +100,17 @@ pub(crate) struct ReconciliationRecord {
     pub applied_revision: Option<i64>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct ShakePlan {
+    pub base_revision: i64,
+    pub edge_count_before: usize,
+    pub edge_count_after: usize,
+    pub removed_edges: Vec<GraphEdge>,
+    library_id: String,
+    before: Snapshot,
+    after: Snapshot,
+}
+
 pub(crate) fn now() -> Result<String, AppError> {
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
@@ -265,6 +276,134 @@ fn work_query<P: rusqlite::Params>(
 
 pub(crate) fn head_snapshot(connection: &Connection) -> Result<Snapshot, AppError> {
     load_materialized_snapshot(connection)
+}
+
+pub(crate) fn plan_shake(connection: &Connection) -> Result<ShakePlan, AppError> {
+    let transaction = connection.unchecked_transaction()?;
+    let base_revision = revision(&transaction)?;
+    let library_id = library_id(&transaction)?;
+    let before = head_snapshot(&transaction)?;
+    validate_snapshot(&transaction, &before)?;
+    transaction.commit()?;
+    let (after, removed) = transitive_reduction(&before)?;
+    let index = SnapshotIndex::new(&before);
+    let removed_edges = removed
+        .iter()
+        .map(|edge| {
+            Ok(GraphEdge {
+                parent: index.reference(edge.parent_id)?,
+                child: index.reference(edge.child_id)?,
+            })
+        })
+        .collect::<Result<Vec<_>, AppError>>()?;
+    Ok(ShakePlan {
+        base_revision,
+        edge_count_before: before.edges.len(),
+        edge_count_after: after.edges.len(),
+        removed_edges,
+        library_id,
+        before,
+        after,
+    })
+}
+
+pub(crate) fn apply_shake(connection: &mut Connection, plan: &ShakePlan) -> Result<i64, AppError> {
+    let transaction =
+        connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let head_revision = revision(&transaction)?;
+    let head_library_id = library_id(&transaction)?;
+    let head = head_snapshot(&transaction)?;
+    if head_library_id != plan.library_id
+        || head_revision != plan.base_revision
+        || head != plan.before
+    {
+        return Err(AppError::conflict(
+            "shake_stale",
+            format!(
+                "the shake examined revision {}, but the library identity, HEAD, or its graph changed; run shake again",
+                plan.base_revision
+            ),
+        ));
+    }
+    if plan.removed_edges.is_empty() {
+        return Err(AppError::conflict(
+            "nothing_to_shake",
+            "the concept graph has no transitively implied parent edges",
+        ));
+    }
+    let (after, removed) = transitive_reduction(&head)?;
+    if after != plan.after || removed.len() != plan.removed_edges.len() {
+        return Err(AppError::conflict(
+            "shake_stale",
+            "the confirmed shake plan no longer matches HEAD; run shake again",
+        ));
+    }
+    validate_snapshot(&transaction, &after)?;
+    let new_revision = head_revision.checked_add(1).ok_or_else(|| {
+        AppError::database("revision_overflow", "the corpus revision is too large")
+    })?;
+    let resolved = diff_snapshot_entries(&transaction, &head, &after)?;
+    materialize_snapshot(&transaction, &after)?;
+    index::rebuild_all(&transaction)?;
+    insert_commit(
+        &transaction,
+        new_revision,
+        None,
+        None,
+        "shake",
+        &shake_summary(removed.len()),
+        &json!({ "operation": "transitive_reduction" }),
+        &serde_json::to_value(&resolved)?,
+        &after,
+        &json!({ "removed_edge_count": removed.len() }),
+        "human",
+    )?;
+    transaction.commit()?;
+    Ok(new_revision)
+}
+
+pub(crate) fn shake_summary(removed_edge_count: usize) -> String {
+    let noun = if removed_edge_count == 1 {
+        "edge"
+    } else {
+        "edges"
+    };
+    format!("Shake {removed_edge_count} transitively implied parent {noun}")
+}
+
+pub(crate) fn transitive_reduction(
+    snapshot: &Snapshot,
+) -> Result<(Snapshot, Vec<SnapshotEdge>), AppError> {
+    let before_ancestors = ancestor_sets(snapshot)?;
+    let index = SnapshotIndex::new(snapshot);
+    let removed = snapshot
+        .edges
+        .iter()
+        .filter(|edge| {
+            index
+                .parents
+                .get(&edge.child_id)
+                .into_iter()
+                .flatten()
+                .any(|candidate| {
+                    *candidate != edge.parent_id
+                        && before_ancestors
+                            .get(candidate)
+                            .is_some_and(|ancestors| ancestors.contains(&edge.parent_id))
+                })
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let removed_set = removed.iter().collect::<BTreeSet<_>>();
+    let mut after = snapshot.clone();
+    after.edges.retain(|edge| !removed_set.contains(edge));
+    if ancestor_sets(&after)? != before_ancestors {
+        return Err(AppError::unexpected(
+            "transitive_reduction_failed",
+            "transitive reduction changed concept reachability",
+        ));
+    }
+    Ok((after, removed))
 }
 
 pub(crate) fn snapshot_at(connection: &Connection, requested: i64) -> Result<Snapshot, AppError> {
@@ -2084,12 +2223,15 @@ fn usize_from_i64(value: i64, description: &str) -> rusqlite::Result<usize> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
     use rusqlite::Connection;
 
     use super::{
-        Snapshot, SnapshotConcept, SnapshotEdge, SnapshotEvidence, diff_snapshot_entries,
-        heading_for_offset, invert_snapshot_change, markdown_headings, page, sha256_hex,
-        store_work, validate_snapshot,
+        Snapshot, SnapshotConcept, SnapshotEdge, SnapshotEvidence, apply_shake,
+        diff_snapshot_entries, heading_for_offset, invert_snapshot_change, markdown_headings,
+        materialize_snapshot, page, plan_shake, sha256_hex, store_work, transitive_reduction,
+        validate_snapshot,
     };
     use crate::model::DiffEntry;
 
@@ -2176,6 +2318,142 @@ mod tests {
         };
         assert_eq!(order_error.code(), "invalid_change");
         Ok(())
+    }
+
+    #[test]
+    fn transitive_reduction_keeps_both_sides_of_a_diamond() {
+        let snapshot = graph_snapshot(&[1, 2, 3, 4], &[(1, 2), (1, 3), (2, 4), (3, 4)]);
+        let (reduced, removed) = transitive_reduction(&snapshot)
+            .unwrap_or_else(|error| panic!("reduction failed: {error}"));
+        assert!(removed.is_empty());
+        assert_eq!(reduced, snapshot);
+    }
+
+    #[test]
+    fn one_reduction_removes_interacting_shortcuts_from_a_complete_order() {
+        let snapshot = graph_snapshot(
+            &[1, 2, 3, 4],
+            &[(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)],
+        );
+        let (reduced, removed) = transitive_reduction(&snapshot)
+            .unwrap_or_else(|error| panic!("reduction failed: {error}"));
+        assert_eq!(removed, [edge(1, 3), edge(1, 4), edge(2, 4)]);
+        assert_eq!(reduced.edges, [edge(1, 2), edge(2, 3), edge(3, 4)]);
+        assert_eq!(reachable_pairs(&reduced), reachable_pairs(&snapshot));
+    }
+
+    #[test]
+    fn confirmed_shake_rejects_a_changed_library_or_materialized_graph()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut connection = test_connection()?;
+        let work = store_work(&mut connection, "Source", "grounded")?;
+        let snapshot = Snapshot {
+            concepts: vec![concept(1, "A"), concept(2, "B"), concept(3, "C")],
+            edges: vec![edge(1, 2), edge(1, 3), edge(2, 3)],
+            evidence: vec![SnapshotEvidence {
+                concept_id: 3,
+                work_id: work.id,
+                start_byte: 0,
+                end_byte: 8,
+            }],
+        };
+        let transaction = connection.transaction()?;
+        materialize_snapshot(&transaction, &snapshot)?;
+        transaction.commit()?;
+        let plan = plan_shake(&connection)?;
+        let mut other_library_id = plan.library_id.clone();
+        let replacement = if other_library_id.starts_with('0') {
+            "1"
+        } else {
+            "0"
+        };
+        other_library_id.replace_range(..1, replacement);
+        connection.execute(
+            "UPDATE library_state SET library_id = ?1",
+            [&other_library_id],
+        )?;
+
+        let Err(error) = apply_shake(&mut connection, &plan) else {
+            panic!("shake was applied to a different library identity");
+        };
+        assert_eq!(error.code(), "shake_stale");
+        connection.execute(
+            "UPDATE library_state SET library_id = ?1",
+            [&plan.library_id],
+        )?;
+        connection.execute(
+            "DELETE FROM concept_edges WHERE parent_id = 1 AND child_id = 3",
+            [],
+        )?;
+
+        let Err(error) = apply_shake(&mut connection, &plan) else {
+            panic!("stale shake was applied");
+        };
+        assert_eq!(error.code(), "shake_stale");
+        assert_eq!(
+            connection.query_row("SELECT COUNT(*) FROM commits", [], |row| row
+                .get::<_, i64>(0))?,
+            0
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn transitive_reduction_is_exhaustively_minimal_for_five_node_dags() {
+        let ids = [40, 7, 90, 2, 55];
+        let possible_edges = (0..ids.len())
+            .flat_map(|parent| {
+                ((parent + 1)..ids.len()).map(move |child| (ids[parent], ids[child]))
+            })
+            .collect::<Vec<_>>();
+        for mask in 0..(1_usize << possible_edges.len()) {
+            let selected = possible_edges
+                .iter()
+                .enumerate()
+                .filter_map(|(bit, edge)| ((mask & (1 << bit)) != 0).then_some(*edge))
+                .collect::<Vec<_>>();
+            let snapshot = graph_snapshot(&ids, &selected);
+            let original_reachability = reachable_pairs(&snapshot);
+            let (reduced, removed) = transitive_reduction(&snapshot)
+                .unwrap_or_else(|error| panic!("reduction failed for mask {mask}: {error}"));
+            let repeated = transitive_reduction(&snapshot).unwrap_or_else(|error| {
+                panic!("repeated reduction failed for mask {mask}: {error}")
+            });
+
+            assert_eq!(
+                reachable_pairs(&reduced),
+                original_reachability,
+                "mask {mask}"
+            );
+            assert_eq!(repeated, (reduced.clone(), removed.clone()), "mask {mask}");
+            assert_eq!(roots_and_leaves(&reduced), roots_and_leaves(&snapshot));
+            assert!(
+                reduced.edges.windows(2).all(|pair| pair[0] < pair[1]),
+                "mask {mask}"
+            );
+            for removed_edge in &removed {
+                let mut without_edge = snapshot.clone();
+                without_edge.edges.retain(|edge| edge != removed_edge);
+                assert_eq!(
+                    reachable_pairs(&without_edge),
+                    original_reachability,
+                    "reported edge was not redundant: {removed_edge:?} for mask {mask}"
+                );
+            }
+            for retained_edge in &reduced.edges {
+                let mut without_edge = reduced.clone();
+                without_edge.edges.retain(|edge| edge != retained_edge);
+                assert_ne!(
+                    reachable_pairs(&without_edge),
+                    original_reachability,
+                    "retained redundant edge {retained_edge:?} for mask {mask}"
+                );
+            }
+            let (second, removed_again) = transitive_reduction(&reduced)
+                .unwrap_or_else(|error| panic!("second reduction failed for mask {mask}: {error}"));
+            assert_eq!(second, reduced, "mask {mask}");
+            assert!(removed_again.is_empty(), "mask {mask}");
+        }
     }
 
     #[test]
@@ -2329,6 +2607,69 @@ mod tests {
             parent_id,
             child_id,
         }
+    }
+
+    fn graph_snapshot(ids: &[i64], edges: &[(i64, i64)]) -> Snapshot {
+        let mut snapshot = Snapshot {
+            concepts: ids
+                .iter()
+                .map(|id| concept(*id, &format!("Concept {id}")))
+                .collect(),
+            edges: edges
+                .iter()
+                .map(|(parent, child)| edge(*parent, *child))
+                .collect(),
+            evidence: Vec::new(),
+        };
+        snapshot.canonicalize();
+        snapshot
+    }
+
+    fn reachable_pairs(snapshot: &Snapshot) -> BTreeSet<(i64, i64)> {
+        let mut children = BTreeMap::<i64, Vec<i64>>::new();
+        for edge in &snapshot.edges {
+            children
+                .entry(edge.parent_id)
+                .or_default()
+                .push(edge.child_id);
+        }
+        let mut pairs = BTreeSet::new();
+        for concept in &snapshot.concepts {
+            let mut frontier = children
+                .get(&concept.id)
+                .into_iter()
+                .flatten()
+                .copied()
+                .collect::<Vec<_>>();
+            while let Some(descendant) = frontier.pop() {
+                if pairs.insert((concept.id, descendant)) {
+                    frontier.extend(children.get(&descendant).into_iter().flatten().copied());
+                }
+            }
+        }
+        pairs
+    }
+
+    fn roots_and_leaves(snapshot: &Snapshot) -> (BTreeSet<i64>, BTreeSet<i64>) {
+        let parents = snapshot
+            .edges
+            .iter()
+            .map(|edge| edge.child_id)
+            .collect::<BTreeSet<_>>();
+        let children = snapshot
+            .edges
+            .iter()
+            .map(|edge| edge.parent_id)
+            .collect::<BTreeSet<_>>();
+        let ids = snapshot
+            .concepts
+            .iter()
+            .map(|concept| concept.id)
+            .collect::<BTreeSet<_>>();
+        (
+            ids.difference(&parents).copied().collect(),
+            ids.difference(&children).copied().collect(),
+        )
     }
 
     fn test_connection() -> Result<Connection, Box<dyn std::error::Error>> {

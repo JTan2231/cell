@@ -95,8 +95,11 @@ deterministic hash, and indexer version. A shared concept has one row, not one
 row per graph route. The external-content `concept_fts` table is kept
 consistent by triggers.
 
-The projection is not authoritative. Applying a change or revert rebuilds it
-inside the canonical transaction, and `annals reindex` rebuilds it without
-advancing the corpus revision. Current search requires that projection to be
-fresh and otherwise returns `reindex_required`. Historical search derives its
-candidate context from the selected full revision snapshot.
+The projection is not authoritative. Applying a change, shake, or revert
+rebuilds it inside the canonical transaction, and `annals reindex` rebuilds it
+without advancing the corpus revision. Current search requires that projection
+to be fresh and otherwise returns `reindex_required`. Historical search derives
+its candidate context from the selected full revision snapshot. A shake leaves
+label and ancestor context—and therefore matching and ranking—unchanged because
+it preserves reachability. Direct-relationship metadata in each result and the
+response revision may still change.

@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, TransactionBehavior};
@@ -12,13 +12,13 @@ use crate::change::{
 use crate::cli::{
     ChangeCommand, ChangeSelectArgs, ChangeShowArgs, Cli, CliGraphDirection, Command,
     ConceptCommand, ConceptPageArgs, ConceptShowArgs, GraphArgs, IntegrateArgs, PagedAtArgs,
-    SearchArgs, WorkAddArgs, WorkCommand,
+    SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand,
 };
 use crate::corpus::{
-    ReconciliationRecord, concept_detail, corpus_overview, diff, evidence_page, get_work,
-    graph_view, list_commits, list_reconciliations, list_works, neighbor_page, page_revision,
-    reconciliation_view, recorded_change_at, revision, roots_page, search_at,
-    select_reconciliation, store_work, work_view,
+    ReconciliationRecord, ShakePlan, apply_shake, concept_detail, corpus_overview, diff,
+    evidence_page, get_work, graph_view, list_commits, list_reconciliations, list_works,
+    neighbor_page, page_revision, plan_shake, reconciliation_view, recorded_change_at, revision,
+    roots_page, search_at, select_reconciliation, store_work, work_view,
 };
 use crate::db;
 use crate::error::{AppError, AppResult};
@@ -55,6 +55,7 @@ pub fn run(cli: &Cli, path: &Path) -> AppResult<CommandOutput> {
             ConceptCommand::Evidence(args) => concept_evidence(path, args),
         },
         Command::Graph(args) => graph(path, args),
+        Command::Shake(args) => shake(path, args, cli.json),
         Command::Validate => validate_library(path),
         Command::Backup(args) => backup(path, &args.output),
         Command::Reindex => reindex(path),
@@ -324,6 +325,7 @@ fn render_recorded_change(change: &crate::model::RecordedChangeView) -> Result<S
     let details = match change.kind.as_str() {
         "change" => render_recorded_reconciliation(change)?,
         "revert" => render_recorded_revert(change)?,
+        "shake" => render_recorded_shake(change)?,
         _ => {
             return Err(AppError::database(
                 "invalid_commit_kind",
@@ -343,6 +345,28 @@ fn render_recorded_change(change: &crate::model::RecordedChangeView) -> Result<S
         render_terminal_text(&change.actor, false),
         metadata,
         render_terminal_text(&change.created_at, false),
+    ))
+}
+
+fn render_recorded_shake(change: &crate::model::RecordedChangeView) -> Result<String, AppError> {
+    let resolved: Vec<DiffEntry> = serde_json::from_value(change.resolved_operations.clone())
+        .map_err(|error| {
+            AppError::database(
+                "invalid_commit_operations",
+                format!(
+                    "revision {} has invalid resolved operations: {error}",
+                    change.revision
+                ),
+            )
+        })?;
+    let transition = resolved
+        .iter()
+        .map(|entry| format!("  {}", render_diff_entry(entry)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(format!(
+        "Submitted request: transitively reduce the concept graph\nResolved transition ({}):\n{transition}",
+        resolved.len()
     ))
 }
 
@@ -1198,6 +1222,115 @@ fn render_graph(graph: &GraphView) -> String {
         nodes,
         graph.edges.len()
     )
+}
+
+fn shake(path: &Path, args: &ShakeArgs, json_output: bool) -> Result<CommandOutput, AppError> {
+    let connection = db::open_read(path)?;
+    let plan = plan_shake(&connection)?;
+    drop(connection);
+    let report = render_shake_plan(&plan);
+    if plan.removed_edges.is_empty() {
+        return Ok(CommandOutput::new(
+            shake_data(&plan, "unchanged", plan.base_revision),
+            format!(
+                "{report}\n\nThe graph is already transitively reduced; corpus remains at revision {}",
+                plan.base_revision
+            ),
+        ));
+    }
+    if json_output && !args.yes {
+        return Ok(CommandOutput::new(
+            shake_data(&plan, "confirmation_required", plan.base_revision),
+            "",
+        ));
+    }
+    if !args.yes {
+        println!("{report}\n");
+        io::stdout().flush().map_err(|error| {
+            AppError::unexpected(
+                "report_write_failed",
+                format!("unable to write shake report: {error}"),
+            )
+        })?;
+        eprint!(
+            "Remove {} transitively implied parent {}? [y/N] ",
+            plan.removed_edges.len(),
+            if plan.removed_edges.len() == 1 {
+                "edge"
+            } else {
+                "edges"
+            }
+        );
+        io::stderr().flush().map_err(|error| {
+            AppError::unexpected(
+                "confirmation_write_failed",
+                format!("unable to write shake confirmation: {error}"),
+            )
+        })?;
+        let mut answer = String::new();
+        io::stdin().read_line(&mut answer).map_err(|error| {
+            AppError::unexpected(
+                "confirmation_read_failed",
+                format!("unable to read shake confirmation: {error}"),
+            )
+        })?;
+        if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+            return Ok(CommandOutput::new(
+                shake_data(&plan, "cancelled", plan.base_revision),
+                format!(
+                    "Shake cancelled; corpus remains at revision {}",
+                    plan.base_revision
+                ),
+            ));
+        }
+    }
+    let mut connection = db::open_write(path)?;
+    let new_revision = apply_shake(&mut connection, &plan)?;
+    let human = if args.yes {
+        format!("{report}\n\nApplied shake as revision {new_revision}")
+    } else {
+        format!("Applied shake as revision {new_revision}")
+    };
+    Ok(CommandOutput::new(shake_data(&plan, "applied", new_revision), human).mutation())
+}
+
+fn render_shake_plan(plan: &ShakePlan) -> String {
+    let edges = plan
+        .removed_edges
+        .iter()
+        .map(|edge| {
+            format!(
+                "  {} → {}",
+                render_reference(&edge.parent),
+                render_reference(&edge.child)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let edge_list = if edges.is_empty() {
+        String::new()
+    } else {
+        format!("\n\nEdges to remove:\n{edges}")
+    };
+    format!(
+        "Shake revision {}\n\n{} of {} parent edges will be removed.\n{} parent edges will remain.\nConcepts, evidence, and ancestor/descendant reachability will remain unchanged.{edge_list}",
+        plan.base_revision,
+        plan.removed_edges.len(),
+        plan.edge_count_before,
+        plan.edge_count_after
+    )
+}
+
+fn shake_data(plan: &ShakePlan, status: &str, revision: i64) -> Value {
+    json!({
+        "status": status,
+        "base_revision": plan.base_revision,
+        "revision": revision,
+        "edge_count_before": plan.edge_count_before,
+        "removed_edge_count": plan.removed_edges.len(),
+        "edge_count_after": plan.edge_count_after,
+        "removed_edges": plan.removed_edges
+    })
 }
 
 fn log(path: &Path, limit: usize) -> Result<CommandOutput, AppError> {

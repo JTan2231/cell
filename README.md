@@ -2,8 +2,7 @@
 
 Annals is a local CLI for maintaining an evidence-grounded conceptual corpus.
 Source works are retained unchanged. Corpus concepts belong to the library, may
-be supported by many works, and change only when one validated reconciliation
-produces an atomic revision commit.
+be supported by many works, and change only through atomic revision commits.
 
 The public interface uses work labels, durable concept IDs such as `c42`, and
 exact quotations. Concepts form an unordered directed acyclic graph: an edge
@@ -102,6 +101,7 @@ annals --library ./annals.db overview
 annals --library ./annals.db roots --limit 25
 annals --library ./annals.db concept show c42
 annals --library ./annals.db graph c42 --direction both --depth 2
+annals --library ./annals.db shake
 annals --library ./annals.db log
 annals --library ./annals.db diff 0 1
 annals --library ./annals.db overview --at 1
@@ -111,6 +111,10 @@ annals --library ./annals.db revert 1
 Concept, relationship, evidence, root, and search listings are paged locally.
 Graph expansion is bounded by depth and node count and reports a frontier when
 more of the graph exists beyond the returned neighborhood.
+
+`shake` reports HEAD's transitively implied parent edges and asks before
+removing them in one revision. It preserves every ancestor-descendant pair;
+`--yes` supplies noninteractive confirmation.
 
 Every command supports `--json`. The library path resolves from `--library`,
 then `ANNALS_LIBRARY`, then `./annals.db`.

@@ -133,7 +133,7 @@ CREATE TABLE commits (
     base_revision        INTEGER NOT NULL CHECK (base_revision >= 0),
     work_id              INTEGER REFERENCES works(id) ON DELETE RESTRICT,
     reconciliation_id    INTEGER REFERENCES reconciliations(id) ON DELETE RESTRICT,
-    kind                 TEXT NOT NULL CHECK (kind IN ('change', 'revert')),
+    kind                 TEXT NOT NULL CHECK (kind IN ('change', 'revert', 'shake')),
     summary              TEXT NOT NULL CHECK (length(trim(summary)) > 0),
     submitted_request    TEXT NOT NULL CHECK (json_valid(submitted_request)),
     resolved_operations  TEXT NOT NULL CHECK (json_valid(resolved_operations)),
@@ -146,6 +146,7 @@ CREATE TABLE commits (
     CHECK (
         (kind = 'change' AND work_id IS NOT NULL AND reconciliation_id IS NOT NULL)
         OR (kind = 'revert' AND reconciliation_id IS NULL)
+        OR (kind = 'shake' AND work_id IS NULL AND reconciliation_id IS NULL)
     )
 );
 

@@ -120,7 +120,8 @@ only and require `--work` when more than one exists.
 `change show --at REVISION` retrieves the accepted change at that revision.
 For an applied reconciliation it shows the original graph-native request and
 resolved operations. For a revert it shows the target revision and resolved
-inverse. Both include commit metadata, actor, and timestamp.
+inverse. For a shake it shows the transitive-reduction request and removed
+parent edges. All include commit metadata, actor, and timestamp.
 
 Human reconciliation output renders public `cN` IDs alongside labels, local
 creation handles, parent-edge changes, exact evidence quotations and source
@@ -297,6 +298,37 @@ command, query, scope, and resolved revision. A later page may request a
 different limit. Deterministic page order is a rendering contract, not a
 conceptual ordering.
 
+## Graph normalization
+
+```text
+annals shake [--yes]
+```
+
+`shake` computes the transitive reduction of HEAD. It removes an explicit
+parent edge exactly when the child remains reachable from that parent through
+another directed path. In interactive mode, the report gives the base revision,
+edge counts before and after, and every edge that would be removed, then asks
+once for confirmation. Only `y` or `yes`, case-insensitively, applies the plan;
+any other answer or end-of-file cancels without writing. `--yes` bypasses the
+prompt. With `--json`, omitting `--yes` returns the plan with status
+`confirmation_required` and exit status zero, without writing. That preview is
+informational: a later invocation with `--yes` computes and applies a fresh
+plan for its then-current HEAD.
+
+Within one invocation, a confirmed shake is bound to the persistent library
+identity and the exact reported HEAD revision and graph. It applies every
+reported removal in one transaction, rebuilds search state, and creates one
+`shake` commit. If the library identity, HEAD, or its graph changes before
+application, it fails with `shake_stale` and removes nothing. A graph with no
+removable edges skips the prompt and remains at its current revision.
+
+Shaking preserves concepts, evidence, every ancestor-descendant pair, roots,
+leaves, label/ancestor-context search matches and ranking, and `--within`
+membership. It does not preserve every original path, direct-neighbor counts,
+`shared` flags, hop distances, or the revision and direct-relationship metadata
+included in search responses. Transitive reduction is optional rather than a
+validation invariant; a later reconciliation may add shortcut edges again.
+
 ## History
 
 ```text
@@ -307,7 +339,8 @@ annals revert REVISION
 
 `log` lists newest commits first. Work retention, recorded reconciliations,
 model runs, and failed attempts are absent because they are not corpus
-transitions.
+transitions. Applied reconciliations, confirmed shakes, and reverts are
+commits.
 
 `diff` compares two retained full snapshots and reports concept creation,
 retirement, and rewording; individual parent edges added or removed; and

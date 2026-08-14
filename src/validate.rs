@@ -650,6 +650,7 @@ fn check_commit_provenance(
     match commit.kind.as_str() {
         "change" => check_reconciliation_commit(commit, reconciliations, issues),
         "revert" => check_revert_commit(connection, commit, commits, issues),
+        "shake" => check_shake_commit(connection, commit, issues),
         _ => {}
     }
 }
@@ -746,6 +747,58 @@ fn check_revert_commit(
             "invalid_revert_provenance",
             format!(
                 "revert revision {} does not consistently identify its target change",
+                commit.revision
+            ),
+        ));
+    }
+}
+
+fn check_shake_commit(
+    connection: &Connection,
+    commit: &StoredCommit,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    let before = corpus::snapshot_at(connection, commit.parent_revision);
+    let actual = serde_json::from_str::<Snapshot>(&commit.after_snapshot);
+    let reduction = before.as_ref().ok().and_then(|snapshot| {
+        corpus::transitive_reduction(snapshot)
+            .ok()
+            .map(|(after, removed)| (after, removed.len()))
+    });
+    let expected_operations = match (before.as_ref(), reduction.as_ref()) {
+        (Ok(before), Some((after, _))) => {
+            corpus::diff_snapshot_entries(connection, before, after).ok()
+        }
+        _ => None,
+    };
+    let stored_operations =
+        serde_json::from_str::<Vec<DiffEntry>>(&commit.resolved_operations).ok();
+    let request = serde_json::from_str::<serde_json::Value>(&commit.submitted_request).ok();
+    let metadata = serde_json::from_str::<serde_json::Value>(&commit.metadata).ok();
+    let removed_count = reduction.as_ref().map(|(_, removed)| *removed);
+    let metadata_count = metadata
+        .as_ref()
+        .and_then(|value| value.get("removed_edge_count"))
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|value| usize::try_from(value).ok());
+    let valid = commit.work_id.is_none()
+        && commit.reconciliation_id.is_none()
+        && commit.actor == "human"
+        && request == Some(serde_json::json!({ "operation": "transitive_reduction" }))
+        && removed_count.is_some_and(|count| count > 0)
+        && metadata_count == removed_count
+        && removed_count.is_some_and(|count| commit.summary == corpus::shake_summary(count))
+        && reduction
+            .as_ref()
+            .zip(actual.as_ref().ok())
+            .is_some_and(|((expected, _), actual)| expected == actual)
+        && expected_operations.is_some()
+        && expected_operations == stored_operations;
+    if !valid {
+        issues.push(error_issue(
+            "invalid_shake_provenance",
+            format!(
+                "shake revision {} does not exactly preserve its transitive-reduction plan",
                 commit.revision
             ),
         ));
@@ -1302,6 +1355,52 @@ mod tests {
         Ok(connection)
     }
 
+    fn shaken_library() -> Result<Connection, Box<dyn std::error::Error>> {
+        let mut connection = initialized_connection()?;
+        let work = corpus::store_work(
+            &mut connection,
+            "Hierarchy",
+            "Broad scope. Middle scope. Narrow claim.",
+        )?;
+        let reconciliation = resolver::submit_value(
+            &mut connection,
+            &work,
+            0,
+            json!({
+                "summary": "Add a complete three-concept order",
+                "operations": [
+                    {
+                        "action": "create_concept",
+                        "ref": "broad",
+                        "label": "Broad",
+                        "parents": [],
+                        "evidence": [{"quote": "Broad scope."}]
+                    },
+                    {
+                        "action": "create_concept",
+                        "ref": "middle",
+                        "label": "Middle",
+                        "parents": [{"new": "broad"}],
+                        "evidence": [{"quote": "Middle scope."}]
+                    },
+                    {
+                        "action": "create_concept",
+                        "ref": "narrow",
+                        "label": "Narrow",
+                        "parents": [{"new": "broad"}, {"new": "middle"}],
+                        "evidence": [{"quote": "Narrow claim."}]
+                    }
+                ]
+            }),
+            "human",
+            None,
+        )?;
+        assert_eq!(resolver::apply_record(&mut connection, &reconciliation)?, 1);
+        let plan = corpus::plan_shake(&connection)?;
+        assert_eq!(corpus::apply_shake(&mut connection, &plan)?, 2);
+        Ok(connection)
+    }
+
     fn record_model_reconciliation(
         connection: &mut Connection,
         run_work_id: i64,
@@ -1368,6 +1467,22 @@ mod tests {
         let connection = applied_library()?;
         let report = validate(&connection)?;
         assert!(report.valid, "{:?}", report.issues);
+        Ok(())
+    }
+
+    #[test]
+    fn validation_replays_shakes_and_detects_tampered_provenance() -> TestResult {
+        let connection = shaken_library()?;
+        let report = validate(&connection)?;
+        assert!(report.valid, "{:?}", report.issues);
+
+        connection.execute(
+            "UPDATE commits SET metadata = '{\"removed_edge_count\":99}' WHERE revision = 2",
+            [],
+        )?;
+        let report = validate(&connection)?;
+        assert!(!report.valid);
+        assert!(has_issue(&report, "invalid_shake_provenance"));
         Ok(())
     }
 

@@ -45,6 +45,11 @@ The implemented contracts are:
   edges form an unordered directed acyclic graph. A concept may have several
   parents; none is primary.
 
+**Shake**
+: A confirmed transitive reduction of HEAD. It removes parent edges already
+  implied by longer directed paths while preserving every ancestor-descendant
+  pair.
+
 **Root / leaf**
 : A root has no parents and a leaf has no children. Both are derived from the
   current edge set rather than stored as placements. Every leaf must have

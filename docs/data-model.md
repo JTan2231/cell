@@ -15,11 +15,12 @@ ranges and non-concept row identifiers remain private mechanics.
 ## Revision state
 
 `library_state` contains one nonnegative `revision` and one random persistent
-library identity. Revision zero is the empty corpus. Only applying a pending
-reconciliation or a revert increments it. Work retention, reconciliation
-submission, mechanically equal projections, validation, backup, and reindexing
-leave it unchanged. Opaque paging cursors bind to the library identity as well
-as their revision and request; a backup intentionally preserves that identity.
+library identity. Revision zero is the empty corpus. Applying a pending
+reconciliation, confirming a nonempty shake, or reverting a commit increments
+it. Work retention, reconciliation submission, mechanically equal projections,
+cancelled or empty shakes, validation, backup, and reindexing leave it
+unchanged. Opaque paging cursors bind to the library identity as well as their
+revision and request; a backup intentionally preserves that identity.
 
 ## Immutable works
 
@@ -65,8 +66,9 @@ cycles.
 
 Edges are untyped, unevidenced assertions about whole concept identities.
 Reachability defines ancestry. Annals stores the asserted direct edge set and
-does not force a transitive reduction: a direct `A -> C` edge may coexist with
-`A -> B -> C`, and each remains independently visible in history.
+does not force a transitive reduction during reconciliation: a direct `A -> C`
+edge may coexist with `A -> B -> C`. An explicit `annals shake` may later
+remove that shortcut while retaining `A` as an ancestor of `C`.
 
 Parents are a set: a child may have several, and no edge is primary. A root is
 a concept with in-degree zero. A leaf is a concept with out-degree zero. A
@@ -143,9 +145,9 @@ the request and commits it only if HEAD still equals the base revision.
 
 `commits` is a linear log keyed by public revision number. A commit records its
 parent and base revision; optional source work and reconciliation association;
-`change` or `revert` kind; summary, actor, timestamp, and metadata; original
-submitted request; resolved semantic operations; and complete corpus snapshot
-state.
+`change`, `shake`, or `revert` kind; summary, actor, timestamp, and metadata;
+original submitted request; resolved semantic operations; and complete corpus
+snapshot state. A shake has no source work or reconciliation.
 
 Snapshots contain the concepts, explicit edges, and evidence for a revision.
 They are full state rather than an edge-event-only reconstruction, so
@@ -174,11 +176,11 @@ not one row for every route from a root. `concept_fts` is an external-content
 FTS5 table mirrored by triggers. `index_metadata` records the active indexer
 version.
 
-The projection is not authoritative. Applying a corpus change or revert
-rebuilds it inside the canonical transaction. `annals reindex` performs the
-same rebuild without changing the revision. Historical search and views read
-the selected revision's full snapshot rather than treating current derived
-rows as history.
+The projection is not authoritative. Applying a corpus change, shake, or
+revert rebuilds it inside the canonical transaction. `annals reindex` performs
+the same rebuild without changing the revision. Historical search and views
+read the selected revision's full snapshot rather than treating current
+derived rows as history.
 
 ## Atomic reconciliation commit
 
@@ -195,14 +197,27 @@ Applying a pending reconciliation uses one immediate transaction:
 
 Any failure rolls back every step.
 
+## Atomic shake commit
+
+`annals shake` computes HEAD's transitive reduction. Interactive mode reports
+its exact edge removals before asking for confirmation. Application starts one
+immediate transaction; requires the persistent library identity, revision, and
+materialized graph to match the computed plan; validates that ancestor
+reachability is unchanged; materializes the reduced graph; rebuilds search
+state; appends a `shake` commit and full snapshot; advances the revision; and
+commits. A stale plan fails atomically; an empty or cancelled plan creates no
+commit.
+
 ## Validation
 
 `annals validate` is read-only. It checks SQLite integrity and foreign keys,
 retained-work digests, the singleton HEAD record, contiguous linear history,
 parseable full snapshots, equality of materialized HEAD with the latest
-historical state, and exact agreement of current search rows.
+historical state, replayable reconciliation, shake, and revert provenance, and
+exact agreement of current search rows.
 
 For every graph snapshot it also checks concept IDs and labels, edge endpoints,
 duplicate and self edges, acyclicity, evidence ranges, and leaf grounding. It
 does not impose label uniqueness, choose primary parents, require one root, or
-derive a canonical path.
+derive a canonical path. It permits transitively implied edges; shaking is an
+explicit normalization operation, not an invariant.
