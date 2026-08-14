@@ -38,6 +38,25 @@ an explicit shake can remove such shortcuts mechanically.
 Evidence is attached to a concept as a whole, not to a parent edge or one view
 of the graph. Every projected leaf must have at least one evidence link.
 
+### Read boundary
+
+Ordinary graph reads do not deserialize a complete corpus snapshot. A
+`GraphReader` is a lightweight database facade that selects one immutable
+revision. It produces bounded owned projections containing only the selected
+concepts, ID-only edges, and evidence coordinates required by the caller.
+Presentation code receives those projections and never queries SQLite or
+reconstructs corpus-wide ancestry.
+
+Roots, direct relationships, evidence, search, and local graph expansion apply
+their limits in SQLite before constructing response objects. Local expansion
+has independent depth, node, and internal edge bounds. Work bodies are outside
+the graph projection; evidence quotations are sliced from only the selected
+page of immutable works.
+
+Complete in-memory snapshots remain explicit exceptional values for
+reconciliation resolution, validation, diff, reversion, and shake planning.
+They are not part of the interactive read path.
+
 ### Transitive reduction
 
 `annals shake` proposes HEAD's transitive reduction: it removes edge `A -> C`
@@ -176,7 +195,7 @@ validates, among other things:
 - the edge set is acyclic;
 - roots and leaves agree with the edge set;
 - every leaf has evidence;
-- evidence ranges are unique valid UTF-8 ranges; and
+- evidence ranges are unique valid UTF-8 ranges no larger than 8 KiB; and
 - rewording explicitly retains or removes existing evidence.
 
 Labels are not required to be unique. Annals does not choose a primary parent,
@@ -206,8 +225,9 @@ Application requires `HEAD == base_revision`, re-resolves the stored request,
 and verifies that it produces the recorded projection. One immediate SQLite
 transaction then materializes concepts, edges, and evidence; rebuilds derived
 search rows; appends the commit with its request, resolved operations,
-metadata, and complete corpus snapshot; marks the reconciliation applied;
-advances the revision once; and commits all state together.
+metadata, and complete corpus snapshot; stores the same revision in immutable
+relational graph rows; marks the reconciliation applied; advances the revision
+once; and commits all state together.
 
 Any error rolls back the entire transition. A stale reconciliation fails with
 `stale_change`; Annals does not automatically rebase it. Annotations never
@@ -215,9 +235,11 @@ block application.
 
 ## History and reversion
 
-HEAD is materialized for ordinary reads. Commits retain complete corpus
-snapshots, including concepts, edges, and evidence, so historical local views,
-validation, semantic diff, and inversion do not depend on the current graph.
+HEAD remains materialized for writes. Every committed revision also has
+immutable relational concept, edge, and evidence rows, so ordinary current and
+historical reads select only the required subset with the same graph API.
+Commits additionally retain complete JSON snapshots for validation, semantic
+diff, inversion, and provenance replay.
 
 Diffs describe semantic facts: concept creation, retirement, and rewording;
 one parent edge added or removed; and evidence added or removed. They do not

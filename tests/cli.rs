@@ -256,6 +256,24 @@ fn edge_labels(edges: &Value) -> TestResult<BTreeSet<(String, String)>> {
         .collect()
 }
 
+fn edge_ids(edges: &Value) -> TestResult<BTreeSet<(String, String)>> {
+    let edges = edges
+        .as_array()
+        .ok_or_else(|| format!("expected edge array, got {edges}"))?;
+    edges
+        .iter()
+        .map(|edge| {
+            let parent = edge["parent_id"]
+                .as_str()
+                .ok_or_else(|| format!("edge has no parent ID: {edge}"))?;
+            let child = edge["child_id"]
+                .as_str()
+                .ok_or_else(|| format!("edge has no child ID: {edge}"))?;
+            Ok((parent.to_owned(), child.to_owned()))
+        })
+        .collect()
+}
+
 fn diamond_source() -> &'static str {
     concat!(
         "Database systems organize persistent information.\n",
@@ -545,7 +563,7 @@ fn diamond_reconciliation_supports_local_browsing_edge_history_and_revert() -> T
         "10",
     ])?;
     assert_eq!(graph["revision"], 1);
-    assert_eq!(graph["seed"]["id"], serializable_id);
+    assert_eq!(graph["seed"], serializable_id);
     assert_eq!(graph["edges"].as_array().map(Vec::len), Some(3));
     assert_eq!(
         concept_ids(&graph["nodes"])?,
@@ -779,6 +797,9 @@ fn shake_reports_confirms_commits_preserves_ancestry_and_is_revertible() -> Test
     let before_items = &before_search["results"]["items"];
     let before_ids = concept_ids(before_items)?;
     let alpha_id = concept_id(before_items, "Alpha scope")?;
+    let beta_id = concept_id(before_items, "Beta scope")?;
+    let gamma_id = concept_id(before_items, "Gamma scope")?;
+    let delta_id = concept_id(before_items, "Delta claim")?;
 
     let preview = library.json_ok(["shake"])?;
     assert_eq!(preview["status"], "confirmation_required");
@@ -845,11 +866,11 @@ fn shake_reports_confirms_commits_preserves_ancestry_and_is_revertible() -> Test
         "10",
     ])?;
     assert_eq!(
-        edge_labels(&graph["edges"])?,
+        edge_ids(&graph["edges"])?,
         BTreeSet::from([
-            ("Alpha scope".to_owned(), "Beta scope".to_owned()),
-            ("Beta scope".to_owned(), "Gamma scope".to_owned()),
-            ("Gamma scope".to_owned(), "Delta claim".to_owned()),
+            (alpha_id.clone(), beta_id.clone()),
+            (beta_id, gamma_id.clone()),
+            (gamma_id, delta_id),
         ])
     );
     let after_search = library.json_ok(["search", "Alpha scope", "--at", "2"])?;

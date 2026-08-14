@@ -9,6 +9,10 @@ this implementation.
 limit. It runs formatting, Clippy, tests, documentation, and a release build
 under Rust 1.97.1. Exceeding 60 seconds is a CI failure.
 
+Focused graph tests also inspect SQLite query plans for parent, child, and
+evidence pages. They require revision-leading indexes and reject temporary
+sorts on those local selectors.
+
 ## Explicit liaison bounds
 
 - a liaison process has a 30-minute timeout;
@@ -57,10 +61,19 @@ routes, but dense reachability can enlarge ancestor context. Applying an edge
 change rebuilds the current projection rather than attempting an incremental
 repair.
 
-Paged commands bound returned and rendered output; they do not claim that
-loading or validating a selected full snapshot is constant-space. A bounded
-graph expansion visits each returned concept once and stops at its depth or
-node limit, reporting omitted adjacency as a frontier.
+Ordinary graph reads use a revision-scoped database facade and allocate only a
+bounded projection between SQLite and presentation. Root, relationship,
+evidence, and search pages apply `LIMIT` before response hydration. Evidence
+loads only returned byte ranges, each capped at 8 KiB, and graph edges carry IDs
+throughout so labels are owned once per selected concept. Local expansion stops
+at its depth, node, or internal edge bound. Its exact frontier is derived from
+stored revision degrees and the bounded returned edge set rather than
+additional edge scans.
+
+Whole snapshots are still intentionally loaded by reconciliation resolution,
+validation, diff, reversion, and shake planning. Immutable relational revision
+rows retain the existing full-snapshot history storage asymptotics while making
+interactive historical reads subset-addressable.
 
 Exact-context examination reuse can avoid external model latency when work,
 base revision, prompt version, model, and reasoning effort match a prior

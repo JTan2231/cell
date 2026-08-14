@@ -6,11 +6,12 @@ use serde_json::{Value, json};
 
 use crate::corpus::{
     ReconciliationRecord, Work, get_work_by_id, heading_for_offset, now, reconciliation_from_row,
-    revision, snapshot_at,
+    revision,
 };
 use crate::db;
 use crate::error::AppError;
-use crate::model::{ConceptId, ConceptReference, GraphDirection};
+use crate::graph::{GraphReader, NeighborDirection};
+use crate::model::{ConceptId, GraphDirection};
 use crate::model_runner::{ModelSettings, Runner};
 use crate::resolver;
 use crate::tool_server::{Backend, Tool, ToolFailure};
@@ -351,7 +352,7 @@ impl LiaisonBackend {
             ));
         }
         let work = get_work_by_id(&connection, work_id)?;
-        snapshot_at(&connection, base_revision)?;
+        GraphReader::new(&connection).at(base_revision)?;
         let sequence = connection.query_row(
             "SELECT COALESCE(MAX(sequence) + 1, 0) FROM tool_calls WHERE model_run_id = ?1",
             [run_id],
@@ -576,18 +577,19 @@ impl LiaisonBackend {
     fn corpus_search(&self, arguments: Value) -> Result<Value, ToolFailure> {
         let args = decode_corpus_search(arguments)?;
         let connection = db::open_read(&self.path).map_err(app_failure)?;
+        let reader = GraphReader::new(&connection);
+        let graph = reader.at(self.base_revision).map_err(app_failure)?;
         let mut results = Vec::with_capacity(args.queries.len());
         for query in args.queries {
             results.push(
-                crate::corpus::search_at(
-                    &connection,
-                    self.base_revision,
-                    &query.query,
-                    query.within,
-                    query.limit,
-                    query.cursor.as_deref(),
-                )
-                .map_err(app_failure)?,
+                graph
+                    .search(
+                        &query.query,
+                        query.within,
+                        query.limit,
+                        query.cursor.as_deref(),
+                    )
+                    .map_err(app_failure)?,
             );
         }
         Ok(json!({ "results": results }))
@@ -597,23 +599,19 @@ impl LiaisonBackend {
     fn corpus_inspect(&self, arguments: Value) -> Result<Value, ToolFailure> {
         let args = decode_corpus_inspect(arguments)?;
         let connection = db::open_read(&self.path).map_err(app_failure)?;
+        let reader = GraphReader::new(&connection);
+        let graph = reader.at(self.base_revision).map_err(app_failure)?;
         let mut results = Vec::with_capacity(args.requests.len());
         for request in args.requests {
             let mut result = match request {
                 CorpusInspectRequest::Overview => json!({
                     "kind": "overview",
-                    "overview": crate::corpus::corpus_overview(
-                        &connection,
-                        self.base_revision,
-                    )
-                    .map_err(app_failure)?
+                    "overview": graph.overview().map_err(app_failure)?
                 }),
                 CorpusInspectRequest::Roots { limit, cursor } => json!({
                     "kind": "roots",
                     "revision": self.base_revision,
-                    "roots": crate::corpus::roots_page(
-                        &connection,
-                        self.base_revision,
+                    "roots": graph.roots_page(
                         limit,
                         cursor.as_deref(),
                     )
@@ -622,25 +620,18 @@ impl LiaisonBackend {
                 CorpusInspectRequest::Concept { id, preview_limit } => json!({
                     "kind": "concept",
                     "revision": self.base_revision,
-                    "concept": crate::corpus::concept_detail(
-                        &connection,
-                        self.base_revision,
-                        id,
-                        preview_limit,
-                    )
+                    "concept": graph.concept_detail(id, preview_limit)
                     .map_err(app_failure)?
                 }),
                 CorpusInspectRequest::Parents { id, limit, cursor } => {
-                    let concept = inspect_concept_reference(&connection, self.base_revision, id)?;
+                    let concept = graph.reference(id).map_err(app_failure)?;
                     json!({
                         "kind": "parents",
                         "revision": self.base_revision,
                         "concept": concept,
-                        "parents": crate::corpus::neighbor_page(
-                            &connection,
-                            self.base_revision,
+                        "parents": graph.neighbor_page(
                             id,
-                            GraphDirection::Parents,
+                            NeighborDirection::Parents,
                             limit,
                             cursor.as_deref(),
                         )
@@ -648,16 +639,14 @@ impl LiaisonBackend {
                     })
                 }
                 CorpusInspectRequest::Children { id, limit, cursor } => {
-                    let concept = inspect_concept_reference(&connection, self.base_revision, id)?;
+                    let concept = graph.reference(id).map_err(app_failure)?;
                     json!({
                         "kind": "children",
                         "revision": self.base_revision,
                         "concept": concept,
-                        "children": crate::corpus::neighbor_page(
-                            &connection,
-                            self.base_revision,
+                        "children": graph.neighbor_page(
                             id,
-                            GraphDirection::Children,
+                            NeighborDirection::Children,
                             limit,
                             cursor.as_deref(),
                         )
@@ -665,18 +654,12 @@ impl LiaisonBackend {
                     })
                 }
                 CorpusInspectRequest::Evidence { id, limit, cursor } => {
-                    let concept = inspect_concept_reference(&connection, self.base_revision, id)?;
+                    let concept = graph.reference(id).map_err(app_failure)?;
                     json!({
                         "kind": "evidence",
                         "revision": self.base_revision,
                         "concept": concept,
-                        "evidence": crate::corpus::evidence_page(
-                            &connection,
-                            self.base_revision,
-                            id,
-                            limit,
-                            cursor.as_deref(),
-                        )
+                        "evidence": graph.evidence_page(id, limit, cursor.as_deref())
                         .map_err(app_failure)?
                     })
                 }
@@ -687,14 +670,7 @@ impl LiaisonBackend {
                     max_nodes,
                 } => json!({
                     "kind": "graph",
-                    "graph": crate::corpus::graph_view(
-                        &connection,
-                        self.base_revision,
-                        id,
-                        direction,
-                        depth,
-                        max_nodes,
-                    )
+                    "graph": graph.graph_view(id, direction, depth, max_nodes)
                     .map_err(app_failure)?
                 }),
             };
@@ -836,18 +812,6 @@ impl Backend for LiaisonBackend {
         }
         result
     }
-}
-
-fn inspect_concept_reference(
-    connection: &Connection,
-    revision: i64,
-    id: ConceptId,
-) -> Result<ConceptReference, ToolFailure> {
-    let detail = crate::corpus::concept_detail(connection, revision, id, 0).map_err(app_failure)?;
-    Ok(ConceptReference {
-        id: detail.summary.id,
-        label: detail.summary.label,
-    })
 }
 
 #[derive(Deserialize)]
@@ -1423,10 +1387,32 @@ mod tests {
         drop(connection);
 
         let mut backend = LiaisonBackend::open(&path, &token)?;
+        let mut writer = db::open_write(&path)?;
+        let later_work = store_work(&mut writer, "Later paper", "Later source.")?;
+        let later = resolver::submit_value(
+            &mut writer,
+            &later_work,
+            1,
+            json!({
+                "summary": "Add a later root",
+                "operations": [{
+                    "action": "create_concept",
+                    "ref": "later",
+                    "label": "Later",
+                    "parents": [],
+                    "evidence": [{"quote": "Later source."}]
+                }]
+            }),
+            "test",
+            None,
+        )?;
+        assert_eq!(resolver::apply_record(&mut writer, &later)?, 2);
+        drop(writer);
+
         let search = backend
             .execute(
                 Tool::CorpusSearch,
-                json!({ "queries": [{"query": "anything"}] }),
+                json!({ "queries": [{"query": "Later"}] }),
             )
             .map_err(|error| format!("{}: {}", error.code(), error.message()))?;
         assert_eq!(search["results"][0]["revision"], 1);

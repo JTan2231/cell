@@ -11,6 +11,7 @@ use crate::error::AppError;
 use crate::index;
 use crate::model::{DiffEntry, ValidationIssue, ValidationReport, ValidationSeverity};
 use crate::resolver::{ResolvedOperation, ResolvedReconciliation, snapshots_corpus_equal};
+use crate::revision_store;
 
 #[derive(Debug)]
 struct StoredCommit {
@@ -82,6 +83,7 @@ pub fn validate(connection: &Connection) -> Result<ValidationReport, AppError> {
     let head_revision = load_head_revision(connection, &mut issues)?;
     let commits = load_commits(connection)?;
     let history_head = check_history(connection, head_revision, &commits, &mut issues);
+    check_revision_projections(connection, &commits, &mut issues);
     check_provenance(connection, head_revision, &commits, &mut issues)?;
 
     let current_snapshot = match corpus::head_snapshot(connection) {
@@ -107,6 +109,54 @@ pub fn validate(connection: &Connection) -> Result<ValidationReport, AppError> {
     }
 
     Ok(report(issues))
+}
+
+fn check_revision_projections(
+    connection: &Connection,
+    commits: &[StoredCommit],
+    issues: &mut Vec<ValidationIssue>,
+) {
+    for commit in commits {
+        let Ok(expected) = serde_json::from_str::<Snapshot>(&commit.after_snapshot) else {
+            continue;
+        };
+        match revision_store::load_revision_snapshot(connection, commit.revision) {
+            Ok(Some(actual)) => {
+                if actual != expected {
+                    issues.push(error_issue(
+                        "revision_projection_mismatch",
+                        format!(
+                            "relational graph revision {} does not match its committed after-state",
+                            commit.revision
+                        ),
+                    ));
+                }
+                if let Err(error) = corpus::validate_snapshot(connection, &actual) {
+                    issues.push(error_issue(
+                        "invalid_revision_projection",
+                        format!(
+                            "relational graph revision {} violates corpus invariants: {error}",
+                            commit.revision
+                        ),
+                    ));
+                }
+            }
+            Ok(None) => issues.push(error_issue(
+                "revision_projection_missing",
+                format!(
+                    "committed revision {} has no relational graph projection",
+                    commit.revision
+                ),
+            )),
+            Err(error) => issues.push(error_issue(
+                "invalid_revision_projection",
+                format!(
+                    "relational graph revision {} could not be read: {error}",
+                    commit.revision
+                ),
+            )),
+        }
+    }
 }
 
 fn check_sqlite_integrity(
@@ -1467,6 +1517,23 @@ mod tests {
         let connection = applied_library()?;
         let report = validate(&connection)?;
         assert!(report.valid, "{:?}", report.issues);
+        Ok(())
+    }
+
+    #[test]
+    fn validation_detects_a_tampered_relational_revision() -> TestResult {
+        let connection = applied_library()?;
+        connection.execute("DROP TRIGGER revision_concepts_immutable_update", [])?;
+        connection.execute(
+            "UPDATE revision_concepts SET label = 'Tampered', normalized_label = 'tampered' \
+             WHERE revision = 1 AND concept_id = (\
+                 SELECT MIN(concept_id) FROM revision_concepts WHERE revision = 1\
+             )",
+            [],
+        )?;
+        let report = validate(&connection)?;
+        assert!(!report.valid);
+        assert!(has_issue(&report, "revision_projection_mismatch"));
         Ok(())
     }
 

@@ -15,13 +15,13 @@ use crate::cli::{
     SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand,
 };
 use crate::corpus::{
-    ReconciliationRecord, ShakePlan, apply_shake, concept_detail, corpus_overview, diff,
-    evidence_page, get_work, graph_view, list_commits, list_reconciliations, list_works,
-    neighbor_page, page_revision, plan_shake, reconciliation_view, recorded_change_at, revision,
-    roots_page, search_at, select_reconciliation, store_work, work_view,
+    ReconciliationRecord, ShakePlan, apply_shake, diff, get_work, list_commits,
+    list_reconciliations, list_works, plan_shake, reconciliation_view, recorded_change_at,
+    revision, select_reconciliation, store_work, work_view,
 };
 use crate::db;
 use crate::error::{AppError, AppResult};
+use crate::graph::{GraphReader, NeighborDirection};
 use crate::index;
 use crate::model::{
     ConceptReference, ConceptSummary, DiffEntry, GraphDirection, GraphView, LibraryStats, Page,
@@ -846,8 +846,9 @@ fn applied_output(record: &ReconciliationRecord, applied: i64) -> Result<Command
 
 fn overview(path: &Path, requested: Option<i64>) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let requested = requested.unwrap_or(revision(&connection)?);
-    let value = corpus_overview(&connection, requested)?;
+    let reader = GraphReader::new(&connection);
+    let graph = requested.map_or_else(|| reader.head(), |revision| reader.at(revision))?;
+    let value = graph.overview()?;
     let human = format!(
         "Corpus revision {}\n{} concepts · {} scope edges\n{} roots · {} leaves · {} shared concepts\n{} evidence links",
         value.revision,
@@ -863,13 +864,9 @@ fn overview(path: &Path, requested: Option<i64>) -> Result<CommandOutput, AppErr
 
 fn roots(path: &Path, args: &PagedAtArgs) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let requested = page_revision(&connection, args.at, args.cursor.as_deref())?;
-    let roots = roots_page(
-        &connection,
-        requested,
-        cli_page_limit(args.limit)?,
-        args.cursor.as_deref(),
-    )?;
+    let graph = GraphReader::new(&connection).paged_at(args.at, args.cursor.as_deref())?;
+    let requested = graph.revision();
+    let roots = graph.roots_page(cli_page_limit(args.limit)?, args.cursor.as_deref())?;
     let human = render_summary_page("Roots", &roots, requested);
     Ok(CommandOutput::new(
         json!({ "revision": requested, "roots": roots }),
@@ -879,8 +876,12 @@ fn roots(path: &Path, args: &PagedAtArgs) -> Result<CommandOutput, AppError> {
 
 fn show_concept(path: &Path, args: &ConceptShowArgs) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let requested = args.at.unwrap_or(revision(&connection)?);
-    let detail = concept_detail(&connection, requested, args.id, args.preview_limit)?;
+    let reader = GraphReader::new(&connection);
+    let graph = args
+        .at
+        .map_or_else(|| reader.head(), |revision| reader.at(revision))?;
+    let requested = graph.revision();
+    let detail = graph.concept_detail(args.id, args.preview_limit)?;
     let evidence_preview = if detail.evidence.items.is_empty() {
         "  None".to_owned()
     } else {
@@ -928,13 +929,23 @@ fn concept_neighbors(
     direction: GraphDirection,
 ) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let requested = page_revision(&connection, args.page.at, args.page.cursor.as_deref())?;
-    let concept = concept_detail(&connection, requested, args.id, 0)?;
-    let page = neighbor_page(
-        &connection,
-        requested,
+    let graph =
+        GraphReader::new(&connection).paged_at(args.page.at, args.page.cursor.as_deref())?;
+    let requested = graph.revision();
+    let neighbor_direction = match direction {
+        GraphDirection::Parents => NeighborDirection::Parents,
+        GraphDirection::Children => NeighborDirection::Children,
+        GraphDirection::Both => {
+            return Err(AppError::invalid(
+                "invalid_direction",
+                "concept neighbors must be parents or children",
+            ));
+        }
+    };
+    let reference = graph.reference(args.id)?;
+    let page = graph.neighbor_page(
         args.id,
-        direction,
+        neighbor_direction,
         cli_page_limit(args.page.limit)?,
         args.page.cursor.as_deref(),
     )?;
@@ -947,10 +958,6 @@ fn concept_neighbors(
                 "concept neighbors must be parents or children",
             ));
         }
-    };
-    let reference = ConceptReference {
-        id: concept.summary.id,
-        label: concept.summary.label,
     };
     let human = render_reference_page_heading(heading, &reference, &page, requested);
     let data = match direction {
@@ -967,19 +974,15 @@ fn concept_neighbors(
 
 fn concept_evidence(path: &Path, args: &ConceptPageArgs) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let requested = page_revision(&connection, args.page.at, args.page.cursor.as_deref())?;
-    let detail = concept_detail(&connection, requested, args.id, 0)?;
-    let evidence = evidence_page(
-        &connection,
-        requested,
+    let graph =
+        GraphReader::new(&connection).paged_at(args.page.at, args.page.cursor.as_deref())?;
+    let requested = graph.revision();
+    let reference = graph.reference(args.id)?;
+    let evidence = graph.evidence_page(
         args.id,
         cli_page_limit(args.page.limit)?,
         args.page.cursor.as_deref(),
     )?;
-    let reference = ConceptReference {
-        id: detail.summary.id,
-        label: detail.summary.label,
-    };
     let body = if evidence.items.is_empty() {
         "  None".to_owned()
     } else {
@@ -1011,30 +1014,25 @@ fn concept_evidence(path: &Path, args: &ConceptPageArgs) -> Result<CommandOutput
 
 fn graph(path: &Path, args: &GraphArgs) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let requested = args.at.unwrap_or(revision(&connection)?);
+    let reader = GraphReader::new(&connection);
+    let graph = args
+        .at
+        .map_or_else(|| reader.head(), |revision| reader.at(revision))?;
     let direction = match args.direction {
         CliGraphDirection::Parents => GraphDirection::Parents,
         CliGraphDirection::Children => GraphDirection::Children,
         CliGraphDirection::Both => GraphDirection::Both,
     };
-    let graph = graph_view(
-        &connection,
-        requested,
-        args.id,
-        direction,
-        args.depth,
-        args.max_nodes,
-    )?;
-    let human = render_graph(&graph);
-    Ok(CommandOutput::new(to_value(&graph)?, human))
+    let output = graph.graph_view(args.id, direction, args.depth, args.max_nodes)?;
+    let human = render_graph(&output);
+    Ok(CommandOutput::new(to_value(&output)?, human))
 }
 
 fn search(path: &Path, args: &SearchArgs) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let requested = page_revision(&connection, args.at, args.cursor.as_deref())?;
-    let output = search_at(
-        &connection,
-        requested,
+    let graph = GraphReader::new(&connection).paged_at(args.at, args.cursor.as_deref())?;
+    let requested = graph.revision();
+    let output = graph.search(
         &args.query,
         args.within,
         cli_search_limit(args.limit)?,
@@ -1176,13 +1174,7 @@ fn render_graph(graph: &GraphView) -> String {
         graph
             .edges
             .iter()
-            .map(|edge| {
-                format!(
-                    "  {} -> {}",
-                    render_reference(&edge.parent),
-                    render_reference(&edge.child)
-                )
-            })
+            .map(|edge| format!("  {} -> {}", edge.parent_id, edge.child_id))
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -1211,11 +1203,16 @@ fn render_graph(graph: &GraphView) -> String {
     } else {
         "Expansion is incomplete; continue from a frontier concept".to_owned()
     };
+    let direction = match graph.direction {
+        GraphDirection::Parents => "parents",
+        GraphDirection::Children => "children",
+        GraphDirection::Both => "both",
+    };
     format!(
         "Graph around {} at revision {}\nDirection: {} · depth: {} · max nodes: {}\n\nNodes ({})\n{}\n\nEdges ({})\n{edges}\n\nFrontier\n{frontier}\n\n{coverage}",
-        render_reference(&graph.seed),
+        graph.seed,
         graph.revision,
-        graph.direction,
+        direction,
         graph.depth,
         graph.max_nodes,
         graph.nodes.len(),

@@ -192,10 +192,10 @@ pub struct GraphNode {
     pub distance: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphEdge {
-    pub parent: ConceptReference,
-    pub child: ConceptReference,
+    pub parent_id: ConceptId,
+    pub child_id: ConceptId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -205,11 +205,11 @@ pub struct FrontierEntry {
     pub unreturned_child_count: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphView {
     pub revision: i64,
-    pub seed: ConceptReference,
-    pub direction: String,
+    pub seed: ConceptId,
+    pub direction: GraphDirection,
     pub depth: usize,
     pub max_nodes: usize,
     pub nodes: Vec<GraphNode>,

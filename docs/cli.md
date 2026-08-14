@@ -285,7 +285,9 @@ through work-and-quotation pairs.
 chooses incoming parent edges, outgoing child edges, or both. Each concept
 appears once even when several routes reach it. When depth or node limits cut
 off the expansion, the response reports a frontier instead of implying that
-the returned neighborhood is complete.
+the returned neighborhood is complete. The response names its seed by ID,
+stores each selected label once in `nodes`, and represents edges as
+`{parent_id, child_id}` references into those nodes.
 
 `search` matches labels and ancestor-label context. `--within cN` restricts the
 search to the graph below one concept. Search results remain distinct by

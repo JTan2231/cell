@@ -4,12 +4,14 @@ mod cli;
 mod corpus;
 mod db;
 mod error;
+mod graph;
 mod index;
 mod liaison;
 mod model;
 mod model_runner;
 mod render;
 mod resolver;
+mod revision_store;
 mod tool_server;
 mod validate;
 

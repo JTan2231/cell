@@ -26,6 +26,16 @@ CREATE TABLE works (
     created_at        TEXT NOT NULL
 );
 
+CREATE TRIGGER works_immutable_update
+BEFORE UPDATE ON works BEGIN
+    SELECT RAISE(ABORT, 'works are immutable');
+END;
+
+CREATE TRIGGER works_immutable_delete
+BEFORE DELETE ON works BEGIN
+    SELECT RAISE(ABORT, 'works are immutable');
+END;
+
 CREATE TABLE concepts (
     id     INTEGER PRIMARY KEY AUTOINCREMENT,
     label  TEXT NOT NULL CHECK (length(trim(label)) > 0),
@@ -54,7 +64,8 @@ CREATE TABLE evidence (
     work_id     INTEGER NOT NULL
                     REFERENCES works(id) ON DELETE RESTRICT,
     start_byte  INTEGER NOT NULL CHECK (start_byte >= 0),
-    end_byte    INTEGER NOT NULL CHECK (end_byte > start_byte),
+    end_byte    INTEGER NOT NULL
+                    CHECK (end_byte > start_byte AND end_byte - start_byte <= 8192),
     PRIMARY KEY(concept_id, work_id, start_byte, end_byte)
 ) WITHOUT ROWID;
 
@@ -153,6 +164,111 @@ CREATE TABLE commits (
 CREATE UNIQUE INDEX commits_one_per_reconciliation
     ON commits(reconciliation_id)
     WHERE reconciliation_id IS NOT NULL;
+
+-- Queryable, immutable full snapshots of committed corpus revisions. Revision
+-- zero remains the implicit empty corpus and therefore has no stored row.
+CREATE TABLE revision_snapshots (
+    revision        INTEGER PRIMARY KEY
+                        REFERENCES commits(revision) ON DELETE RESTRICT,
+    concept_count   INTEGER NOT NULL CHECK (concept_count >= 0),
+    edge_count      INTEGER NOT NULL CHECK (edge_count >= 0),
+    evidence_count  INTEGER NOT NULL CHECK (evidence_count >= 0),
+    CHECK (revision > 0)
+);
+
+CREATE TABLE revision_concepts (
+    revision         INTEGER NOT NULL
+                         REFERENCES revision_snapshots(revision)
+                         ON DELETE RESTRICT
+                         DEFERRABLE INITIALLY DEFERRED,
+    concept_id       INTEGER NOT NULL CHECK (concept_id > 0),
+    label            TEXT NOT NULL CHECK (length(trim(label)) > 0),
+    normalized_label TEXT NOT NULL,
+    parent_count     INTEGER NOT NULL CHECK (parent_count >= 0),
+    child_count      INTEGER NOT NULL CHECK (child_count >= 0),
+    evidence_count   INTEGER NOT NULL CHECK (evidence_count >= 0),
+    PRIMARY KEY(revision, concept_id)
+) WITHOUT ROWID;
+
+CREATE INDEX revision_concepts_by_label
+    ON revision_concepts(revision, normalized_label, concept_id);
+
+CREATE TABLE revision_edges (
+    revision   INTEGER NOT NULL,
+    parent_id  INTEGER NOT NULL,
+    child_id   INTEGER NOT NULL,
+    CHECK (parent_id <> child_id),
+    PRIMARY KEY(revision, parent_id, child_id),
+    FOREIGN KEY(revision, parent_id)
+        REFERENCES revision_concepts(revision, concept_id)
+        ON DELETE RESTRICT
+        DEFERRABLE INITIALLY DEFERRED,
+    FOREIGN KEY(revision, child_id)
+        REFERENCES revision_concepts(revision, concept_id)
+        ON DELETE RESTRICT
+        DEFERRABLE INITIALLY DEFERRED
+) WITHOUT ROWID;
+
+CREATE INDEX revision_edges_by_child
+    ON revision_edges(revision, child_id, parent_id);
+
+CREATE TABLE revision_evidence (
+    revision    INTEGER NOT NULL,
+    concept_id  INTEGER NOT NULL,
+    work_id     INTEGER NOT NULL
+                    REFERENCES works(id) ON DELETE RESTRICT,
+    start_byte  INTEGER NOT NULL CHECK (start_byte >= 0),
+    end_byte    INTEGER NOT NULL
+                    CHECK (end_byte > start_byte AND end_byte - start_byte <= 8192),
+    PRIMARY KEY(revision, concept_id, work_id, start_byte, end_byte),
+    FOREIGN KEY(revision, concept_id)
+        REFERENCES revision_concepts(revision, concept_id)
+        ON DELETE RESTRICT
+        DEFERRABLE INITIALLY DEFERRED
+) WITHOUT ROWID;
+
+CREATE INDEX revision_evidence_by_work_range
+    ON revision_evidence(revision, work_id, start_byte, end_byte, concept_id);
+
+CREATE TRIGGER revision_snapshots_immutable_update
+BEFORE UPDATE ON revision_snapshots BEGIN
+    SELECT RAISE(ABORT, 'revision snapshots are immutable');
+END;
+
+CREATE TRIGGER revision_snapshots_immutable_delete
+BEFORE DELETE ON revision_snapshots BEGIN
+    SELECT RAISE(ABORT, 'revision snapshots are immutable');
+END;
+
+CREATE TRIGGER revision_concepts_immutable_update
+BEFORE UPDATE ON revision_concepts BEGIN
+    SELECT RAISE(ABORT, 'revision concepts are immutable');
+END;
+
+CREATE TRIGGER revision_concepts_immutable_delete
+BEFORE DELETE ON revision_concepts BEGIN
+    SELECT RAISE(ABORT, 'revision concepts are immutable');
+END;
+
+CREATE TRIGGER revision_edges_immutable_update
+BEFORE UPDATE ON revision_edges BEGIN
+    SELECT RAISE(ABORT, 'revision edges are immutable');
+END;
+
+CREATE TRIGGER revision_edges_immutable_delete
+BEFORE DELETE ON revision_edges BEGIN
+    SELECT RAISE(ABORT, 'revision edges are immutable');
+END;
+
+CREATE TRIGGER revision_evidence_immutable_update
+BEFORE UPDATE ON revision_evidence BEGIN
+    SELECT RAISE(ABORT, 'revision evidence is immutable');
+END;
+
+CREATE TRIGGER revision_evidence_immutable_delete
+BEFORE DELETE ON revision_evidence BEGIN
+    SELECT RAISE(ABORT, 'revision evidence is immutable');
+END;
 
 CREATE TABLE concept_search (
     concept_id            INTEGER PRIMARY KEY REFERENCES concepts(id) ON DELETE CASCADE,

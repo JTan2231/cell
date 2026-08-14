@@ -8,7 +8,8 @@ annals search QUERY [--at REVISION] [--within cN]
   [--limit N] [--cursor TOKEN]
 ```
 
-The query must be nonempty after normalization and the limit must be positive.
+The query must be nonempty after normalization, contain at most 512 UTF-8
+bytes and 16 normalized terms, and the limit must be positive.
 Search reads HEAD by default; `--at` selects an immutable historical revision.
 `--within cN` narrows candidates to the graph below one concept at that
 revision.
@@ -87,19 +88,15 @@ valid only for the same library, query, `within` scope, and resolved revision.
 A later page may request a different limit. Paging order is deterministic but
 has no conceptual meaning.
 
-## Derived projection
+## Execution
 
-`concept_search` stores one rebuildable row per current concept with exact and
-normalized label, deduplicated exact and normalized ancestor context, a
-deterministic hash, and indexer version. A shared concept has one row, not one
-row per graph route. The external-content `concept_fts` table is kept
-consistent by triggers.
+Search runs against the selected revision's immutable relational concepts and
+edges. For each normalized term, a recursive query starts at matching labels
+and propagates that match to descendants while deduplicating `(term, concept)`
+states. Candidates must receive every term. This preserves ancestor-context
+semantics without materializing transitive ancestor sets or joined context
+strings in Rust.
 
-The projection is not authoritative. Applying a change, shake, or revert
-rebuilds it inside the canonical transaction, and `annals reindex` rebuilds it
-without advancing the corpus revision. Current search requires that projection
-to be fresh and otherwise returns `reindex_required`. Historical search derives
-its candidate context from the selected full revision snapshot. A shake leaves
-label and ancestor context—and therefore matching and ranking—unchanged because
-it preserves reachability. Direct-relationship metadata in each result and the
-response revision may still change.
+Only the requested page is converted into owned response objects. A shake
+leaves matching and ranking unchanged because it preserves reachability;
+direct-relationship counts and the response revision may still change.

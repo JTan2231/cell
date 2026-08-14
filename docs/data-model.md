@@ -1,12 +1,13 @@
 # Data model
 
-`schema.sql` is the authoritative SQLite schema. The database contains four
+`schema.sql` is the authoritative SQLite schema. The database contains five
 kinds of state:
 
 1. immutable source works;
 2. the current materialized concept graph and its evidence;
-3. model examinations, reconciliations, and append-only commits; and
-4. a rebuildable concept-search projection.
+3. immutable relational graph snapshots for addressable revisions;
+4. model examinations, reconciliations, and append-only commits; and
+5. a rebuildable concept-search projection.
 
 Public commands and liaison tools address works by label, concepts by durable
 IDs such as `c42`, evidence by quotation, and history by revision. Exact source
@@ -82,9 +83,10 @@ Deterministic query ordering exists only for stable output and cursor paging.
 ### `evidence`
 
 Each evidence row joins one concept to one immutable work and stores an exact
-UTF-8 byte range. The composite key prevents duplicate
-concept/work/range links. Validation checks range bounds and UTF-8 boundaries
-and requires every derived leaf to have at least one evidence link.
+UTF-8 byte range of at most 8 KiB. The composite key prevents duplicate
+concept/work/range links. Validation and SQLite constraints enforce the byte
+ceiling, range bounds, and UTF-8 boundaries; every derived leaf must have at
+least one evidence link.
 
 Evidence supports the concept identity as a whole. It is not duplicated per
 parent, attached to an edge, or scoped to one traversal through the graph.
@@ -154,6 +156,23 @@ They are full state rather than an edge-event-only reconstruction, so
 historical reads preserve duplicate labels, shared concepts, retired
 identities, and old evidence exactly.
 
+### Relational revision snapshots
+
+`revision_snapshots` records the expected concept, edge, and evidence counts
+for each positive revision. `revision_concepts`, `revision_edges`, and
+`revision_evidence` store that revision's immutable graph rows. Their keys all
+begin with `revision`, so bounded historical queries do not parse the commit's
+complete JSON snapshot. Each revision concept also stores immutable parent,
+child, and evidence counts, so summaries and frontier accounting do not rescan
+incident edge sets. Revision zero is the implicit empty graph and has no rows.
+
+These tables preserve the existing full-snapshot history cost rather than
+introducing event replay or validity intervals. They are written after the
+canonical graph and commit, but before `library_state.revision` is committed,
+inside the same transaction. Validation compares every relational revision
+with its committed JSON after-state. Schema triggers reject updates or deletes
+to both retained works and relational revision rows.
+
 History renders changes at semantic granularity:
 
 - concept created, retired, or reworded;
@@ -178,9 +197,9 @@ version.
 
 The projection is not authoritative. Applying a corpus change, shake, or
 revert rebuilds it inside the canonical transaction. `annals reindex` performs
-the same rebuild without changing the revision. Historical search and views
-read the selected revision's full snapshot rather than treating current
-derived rows as history.
+the same rebuild without changing the revision. Ordinary graph search uses the
+selected revision's relational concept and edge rows; it does not treat current
+derived rows as historical state.
 
 ## Atomic reconciliation commit
 
@@ -191,8 +210,9 @@ Applying a pending reconciliation uses one immediate transaction:
 3. validate the complete projected concepts, edges, and evidence;
 4. replace current materialized graph state with that projection;
 5. rebuild current derived search state;
-6. append the commit and mark the reconciliation applied;
-7. advance `library_state.revision`; and
+6. append the commit, guard-and-advance `library_state.revision`, and store the
+   matching immutable relational revision snapshot;
+7. mark the reconciliation applied; and
 8. commit.
 
 Any failure rolls back every step.
@@ -213,8 +233,9 @@ commit.
 `annals validate` is read-only. It checks SQLite integrity and foreign keys,
 retained-work digests, the singleton HEAD record, contiguous linear history,
 parseable full snapshots, equality of materialized HEAD with the latest
-historical state, replayable reconciliation, shake, and revert provenance, and
-exact agreement of current search rows.
+historical state, equality of every relational graph projection with its
+committed after-state, replayable reconciliation, shake, and revert provenance,
+and exact agreement of current search rows.
 
 For every graph snapshot it also checks concept IDs and labels, edge endpoints,
 duplicate and self edges, acyclicity, evidence ranges, and leaf grounding. It
