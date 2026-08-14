@@ -1,7 +1,9 @@
 #![allow(clippy::too_many_lines)]
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -12,11 +14,11 @@ use crate::change::Reconciliation;
 use crate::error::AppError;
 use crate::index;
 use crate::model::{
-    CommitView, ConceptView, CorpusView, DiffEntry, DiffKind, DiffView, EvidenceView,
-    ReconciliationView, RecordedChangeView, SearchOutput, SearchResult, WorkSummary, WorkView,
+    CommitView, ConceptDetail, ConceptId, ConceptReference, ConceptSummary, CorpusOverview,
+    DiffEntry, DiffView, EvidenceView, FrontierEntry, GraphDirection, GraphEdge, GraphNode,
+    GraphView, Page, PageInfo, ReconciliationView, RecordedChangeView, SearchOutput, SearchResult,
+    WorkSummary, WorkView,
 };
-
-const POSITION_STEP: i64 = 1024;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Work {
@@ -31,6 +33,7 @@ pub(crate) struct Work {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Snapshot {
     pub concepts: Vec<SnapshotConcept>,
+    pub edges: Vec<SnapshotEdge>,
     pub evidence: Vec<SnapshotEvidence>,
 }
 
@@ -39,31 +42,47 @@ impl Snapshot {
     pub fn empty() -> Self {
         Self {
             concepts: Vec::new(),
+            edges: Vec::new(),
             evidence: Vec::new(),
         }
     }
+
+    pub fn canonicalize(&mut self) {
+        self.concepts.sort_by_key(|concept| concept.id);
+        self.edges
+            .sort_by_key(|edge| (edge.parent_id, edge.child_id));
+        self.evidence.sort_by_key(|evidence| {
+            (
+                evidence.concept_id,
+                evidence.work_id,
+                evidence.start_byte,
+                evidence.end_byte,
+            )
+        });
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SnapshotConcept {
     pub id: i64,
-    pub parent_id: Option<i64>,
     pub label: String,
-    pub position: i64,
-    pub created_revision: i64,
-    pub updated_revision: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SnapshotEdge {
+    pub parent_id: i64,
+    pub child_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SnapshotEvidence {
-    pub id: i64,
     pub concept_id: i64,
     pub work_id: i64,
     pub start_byte: usize,
     pub end_byte: usize,
-    pub created_at: String,
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +114,14 @@ pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
 pub(crate) fn revision(connection: &Connection) -> Result<i64, AppError> {
     Ok(connection.query_row(
         "SELECT revision FROM library_state WHERE singleton = 1",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+fn library_id(connection: &Connection) -> Result<String, AppError> {
+    Ok(connection.query_row(
+        "SELECT library_id FROM library_state WHERE singleton = 1",
         [],
         |row| row.get(0),
     )?)
@@ -271,39 +298,45 @@ fn revision_not_found(requested: i64) -> AppError {
 }
 
 fn load_materialized_snapshot(connection: &Connection) -> Result<Snapshot, AppError> {
-    let mut concepts_statement = connection.prepare(
-        "SELECT id, parent_id, label, position, created_revision, updated_revision \
-         FROM concepts ORDER BY id",
-    )?;
+    let mut concepts_statement =
+        connection.prepare("SELECT id, label FROM concepts ORDER BY id")?;
     let concepts = concepts_statement
         .query_map([], |row| {
             Ok(SnapshotConcept {
                 id: row.get(0)?,
-                parent_id: row.get(1)?,
-                label: row.get(2)?,
-                position: row.get(3)?,
-                created_revision: row.get(4)?,
-                updated_revision: row.get(5)?,
+                label: row.get(1)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut edges_statement = connection
+        .prepare("SELECT parent_id, child_id FROM concept_edges ORDER BY parent_id, child_id")?;
+    let edges = edges_statement
+        .query_map([], |row| {
+            Ok(SnapshotEdge {
+                parent_id: row.get(0)?,
+                child_id: row.get(1)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
     let mut evidence_statement = connection.prepare(
-        "SELECT id, concept_id, work_id, start_byte, end_byte, created_at \
-         FROM evidence ORDER BY id",
+        "SELECT concept_id, work_id, start_byte, end_byte FROM evidence \
+         ORDER BY concept_id, work_id, start_byte, end_byte",
     )?;
     let evidence = evidence_statement
         .query_map([], |row| {
             Ok(SnapshotEvidence {
-                id: row.get(0)?,
-                concept_id: row.get(1)?,
-                work_id: row.get(2)?,
-                start_byte: usize_from_i64(row.get(3)?, "evidence start byte")?,
-                end_byte: usize_from_i64(row.get(4)?, "evidence end byte")?,
-                created_at: row.get(5)?,
+                concept_id: row.get(0)?,
+                work_id: row.get(1)?,
+                start_byte: usize_from_i64(row.get(2)?, "evidence start byte")?,
+                end_byte: usize_from_i64(row.get(3)?, "evidence end byte")?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(Snapshot { concepts, evidence })
+    Ok(Snapshot {
+        concepts,
+        edges,
+        evidence,
+    })
 }
 
 pub(crate) fn materialize_snapshot(
@@ -312,48 +345,30 @@ pub(crate) fn materialize_snapshot(
 ) -> Result<(), AppError> {
     validate_snapshot(transaction, snapshot)?;
     transaction.execute("DELETE FROM evidence", [])?;
+    transaction.execute("DELETE FROM concept_edges", [])?;
     transaction.execute("DELETE FROM concepts", [])?;
 
-    let concepts = snapshot
-        .concepts
-        .iter()
-        .map(|concept| (concept.id, concept))
-        .collect::<BTreeMap<_, _>>();
-    for id in preorder(snapshot)? {
-        let concept = concepts.get(&id).ok_or_else(|| {
-            AppError::database(
-                "snapshot_materialization_failed",
-                "the validated corpus snapshot lost a concept during traversal",
-            )
-        })?;
+    for concept in &snapshot.concepts {
         transaction.execute(
-            "INSERT INTO concepts(\
-                 id, parent_id, label, normalized_label, position, created_revision, \
-                 updated_revision\
-             ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![
-                concept.id,
-                concept.parent_id,
-                concept.label,
-                index::normalize(&concept.label),
-                concept.position,
-                concept.created_revision,
-                concept.updated_revision
-            ],
+            "INSERT INTO concepts(id, label) VALUES(?1, ?2)",
+            params![concept.id, concept.label],
+        )?;
+    }
+    for edge in &snapshot.edges {
+        transaction.execute(
+            "INSERT INTO concept_edges(parent_id, child_id) VALUES(?1, ?2)",
+            params![edge.parent_id, edge.child_id],
         )?;
     }
     for evidence in &snapshot.evidence {
         transaction.execute(
-            "INSERT INTO evidence(\
-                 id, concept_id, work_id, start_byte, end_byte, created_at\
-             ) VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO evidence(concept_id, work_id, start_byte, end_byte) \
+             VALUES(?1, ?2, ?3, ?4)",
             params![
-                evidence.id,
                 evidence.concept_id,
                 evidence.work_id,
                 i64_from_usize(evidence.start_byte, "evidence start byte")?,
-                i64_from_usize(evidence.end_byte, "evidence end byte")?,
-                evidence.created_at
+                i64_from_usize(evidence.end_byte, "evidence end byte")?
             ],
         )?;
     }
@@ -364,75 +379,94 @@ pub(crate) fn validate_snapshot(
     connection: &Connection,
     snapshot: &Snapshot,
 ) -> Result<(), AppError> {
+    if !strictly_sorted_by(&snapshot.concepts, |concept| concept.id) {
+        return Err(invalid_change(
+            "snapshot concepts must be strictly ordered by positive ID",
+        ));
+    }
     let concepts = snapshot
         .concepts
         .iter()
         .map(|concept| (concept.id, concept))
         .collect::<BTreeMap<_, _>>();
-    if concepts.len() != snapshot.concepts.len() || concepts.keys().any(|id| *id <= 0) {
-        return Err(invalid_change("the corpus contains duplicate concepts"));
-    }
-
-    let mut sibling_labels = HashSet::new();
-    let mut sibling_positions = HashSet::new();
     for concept in &snapshot.concepts {
+        if concept.id <= 0 {
+            return Err(invalid_change("concept IDs must be positive"));
+        }
         validate_label(&concept.label, "concept label")?;
-        if concept.created_revision <= 0 || concept.updated_revision < concept.created_revision {
-            return Err(invalid_change(
-                "concept revision metadata must be positive and monotonic",
-            ));
-        }
-        if concept.position < 0 {
-            return Err(invalid_change("concept positions cannot be negative"));
-        }
-        if let Some(parent) = concept.parent_id
-            && (parent == concept.id || !concepts.contains_key(&parent))
-        {
-            return Err(invalid_change(format!(
-                "concept {:?} has an invalid parent",
-                concept.label
-            )));
-        }
-        let label_key = (concept.parent_id, index::normalize(&concept.label));
-        if !sibling_labels.insert(label_key) {
-            return Err(AppError::conflict(
-                "duplicate_sibling_label",
-                format!(
-                    "concept label {:?} duplicates one of its siblings",
-                    concept.label
-                ),
-            ));
-        }
-        if !sibling_positions.insert((concept.parent_id, concept.position)) {
-            return Err(invalid_change(
-                "two siblings have the same internal ordering value",
-            ));
-        }
-        let mut seen = BTreeSet::new();
-        let mut current = Some(concept.id);
-        while let Some(id) = current {
-            if !seen.insert(id) {
-                return Err(AppError::conflict(
-                    "would_create_cycle",
-                    format!("concept {:?} would belong to a cycle", concept.label),
-                ));
-            }
-            current = concepts.get(&id).and_then(|item| item.parent_id);
-        }
     }
 
+    if !strictly_sorted_by(&snapshot.edges, |edge| (edge.parent_id, edge.child_id)) {
+        return Err(invalid_change(
+            "snapshot edges must be strictly ordered by parent and child ID",
+        ));
+    }
+    let mut indegree = concepts
+        .keys()
+        .map(|id| (*id, 0_usize))
+        .collect::<BTreeMap<_, _>>();
+    let mut children = BTreeMap::<i64, BTreeSet<i64>>::new();
+    for edge in &snapshot.edges {
+        if edge.parent_id == edge.child_id {
+            return Err(AppError::conflict(
+                "would_create_cycle",
+                format!("concept c{} cannot be its own parent", edge.parent_id),
+            ));
+        }
+        if !concepts.contains_key(&edge.parent_id) || !concepts.contains_key(&edge.child_id) {
+            return Err(invalid_change("an edge names a missing concept"));
+        }
+        children
+            .entry(edge.parent_id)
+            .or_default()
+            .insert(edge.child_id);
+        *indegree
+            .get_mut(&edge.child_id)
+            .ok_or_else(|| invalid_change("an edge names a missing child concept"))? += 1;
+    }
+    let mut ready = indegree
+        .iter()
+        .filter_map(|(id, degree)| (*degree == 0).then_some(*id))
+        .collect::<BTreeSet<_>>();
+    let mut visited = 0_usize;
+    while let Some(id) = ready.pop_first() {
+        visited += 1;
+        for child in children.get(&id).into_iter().flatten() {
+            let degree = indegree
+                .get_mut(child)
+                .ok_or_else(|| invalid_change("an edge names a missing child concept"))?;
+            *degree -= 1;
+            if *degree == 0 {
+                ready.insert(*child);
+            }
+        }
+    }
+    if visited != concepts.len() {
+        return Err(AppError::conflict(
+            "would_create_cycle",
+            "the concept graph contains a directed cycle",
+        ));
+    }
+
+    if !strictly_sorted_by(&snapshot.evidence, |evidence| {
+        (
+            evidence.concept_id,
+            evidence.work_id,
+            evidence.start_byte,
+            evidence.end_byte,
+        )
+    }) {
+        return Err(invalid_change(
+            "snapshot evidence must be strictly ordered by its composite identity",
+        ));
+    }
     let work_ids = snapshot
         .evidence
         .iter()
         .map(|evidence| evidence.work_id)
         .collect::<BTreeSet<_>>();
     let works = load_work_texts(connection, &work_ids)?;
-    let mut evidence_keys = HashSet::new();
-    let mut evidence_ids = HashSet::new();
     for evidence in &snapshot.evidence {
-        if evidence.id <= 0 || !evidence_ids.insert(evidence.id) {
-            return Err(invalid_change("the corpus contains duplicate evidence"));
-        }
         if !concepts.contains_key(&evidence.concept_id) {
             return Err(invalid_change("evidence names a missing concept"));
         }
@@ -446,24 +480,9 @@ pub(crate) fn validate_snapshot(
         {
             return Err(invalid_change("evidence has an invalid UTF-8 source range"));
         }
-        if !evidence_keys.insert((
-            evidence.concept_id,
-            evidence.work_id,
-            evidence.start_byte,
-            evidence.end_byte,
-        )) {
-            return Err(invalid_change(
-                "the same evidence is attached more than once",
-            ));
-        }
     }
-
     for concept in &snapshot.concepts {
-        let is_leaf = !snapshot
-            .concepts
-            .iter()
-            .any(|candidate| candidate.parent_id == Some(concept.id));
-        if is_leaf
+        if !children.contains_key(&concept.id)
             && !snapshot
                 .evidence
                 .iter()
@@ -471,225 +490,777 @@ pub(crate) fn validate_snapshot(
         {
             return Err(AppError::conflict(
                 "ungrounded_leaf",
-                format!("leaf concept {:?} has no source evidence", concept.label),
+                format!("leaf concept c{} has no source evidence", concept.id),
             ));
         }
     }
     Ok(())
 }
 
-pub(crate) fn corpus_view(
-    connection: &Connection,
-    requested_revision: i64,
-) -> Result<CorpusView, AppError> {
-    let snapshot = snapshot_at(connection, requested_revision)?;
-    snapshot_view(connection, requested_revision, &snapshot)
+fn strictly_sorted_by<T, K: Ord>(items: &[T], key: impl Fn(&T) -> K) -> bool {
+    items.windows(2).all(|pair| key(&pair[0]) < key(&pair[1]))
 }
 
-pub(crate) fn snapshot_view(
-    connection: &Connection,
-    requested_revision: i64,
-    snapshot: &Snapshot,
-) -> Result<CorpusView, AppError> {
-    let paths = paths(snapshot)?;
-    let work_ids = snapshot
-        .evidence
-        .iter()
-        .map(|evidence| evidence.work_id)
-        .collect::<BTreeSet<_>>();
-    let works = load_works(connection, &work_ids)?;
-    let by_id = snapshot
-        .concepts
-        .iter()
-        .map(|concept| (concept.id, concept))
-        .collect::<BTreeMap<_, _>>();
-    let ordered = preorder(snapshot)?;
-    let concepts = ordered
-        .into_iter()
-        .map(|id| {
-            let concept = by_id.get(&id).ok_or_else(|| {
-                AppError::database("snapshot_concept_missing", "snapshot traversal failed")
-            })?;
-            let evidence = evidence_views(snapshot, id, &works)?;
-            let mut children = snapshot
-                .concepts
-                .iter()
-                .filter(|candidate| candidate.parent_id == Some(id))
-                .collect::<Vec<_>>();
-            children.sort_by_key(|child| (child.position, child.id));
-            Ok(ConceptView {
-                path: paths.get(&id).cloned().ok_or_else(|| {
-                    AppError::database("snapshot_path_missing", "snapshot path is missing")
-                })?,
-                label: concept.label.clone(),
-                parent: concept
-                    .parent_id
-                    .and_then(|parent| paths.get(&parent).cloned()),
-                children: children.iter().map(|child| child.label.clone()).collect(),
-                evidence,
-            })
+struct SnapshotIndex<'a> {
+    concepts: BTreeMap<i64, &'a SnapshotConcept>,
+    parents: BTreeMap<i64, BTreeSet<i64>>,
+    children: BTreeMap<i64, BTreeSet<i64>>,
+    evidence_count: BTreeMap<i64, u64>,
+}
+
+impl<'a> SnapshotIndex<'a> {
+    fn new(snapshot: &'a Snapshot) -> Self {
+        let concepts = snapshot
+            .concepts
+            .iter()
+            .map(|concept| (concept.id, concept))
+            .collect();
+        let mut parents = BTreeMap::<i64, BTreeSet<i64>>::new();
+        let mut children = BTreeMap::<i64, BTreeSet<i64>>::new();
+        for edge in &snapshot.edges {
+            parents
+                .entry(edge.child_id)
+                .or_default()
+                .insert(edge.parent_id);
+            children
+                .entry(edge.parent_id)
+                .or_default()
+                .insert(edge.child_id);
+        }
+        let mut evidence_count = BTreeMap::new();
+        for evidence in &snapshot.evidence {
+            *evidence_count.entry(evidence.concept_id).or_insert(0) += 1;
+        }
+        Self {
+            concepts,
+            parents,
+            children,
+            evidence_count,
+        }
+    }
+
+    fn require(&self, id: ConceptId) -> Result<&'a SnapshotConcept, AppError> {
+        self.concepts.get(&id.storage_id()).copied().ok_or_else(|| {
+            AppError::not_found(
+                "concept_not_found",
+                format!("concept {id} was not found in the requested revision"),
+            )
         })
-        .collect::<Result<Vec<_>, AppError>>()?;
-    Ok(CorpusView {
-        revision: requested_revision,
-        concepts,
+    }
+
+    fn reference(&self, id: i64) -> Result<ConceptReference, AppError> {
+        let concept = self.concepts.get(&id).copied().ok_or_else(|| {
+            AppError::database(
+                "concept_reference_missing",
+                format!("concept c{id} is missing"),
+            )
+        })?;
+        Ok(ConceptReference {
+            id: public_id(id)?,
+            label: concept.label.clone(),
+        })
+    }
+
+    fn summary(&self, id: i64) -> Result<ConceptSummary, AppError> {
+        let reference = self.reference(id)?;
+        let parent_count = count_u64(self.parents.get(&id).map_or(0, BTreeSet::len))?;
+        let child_count = count_u64(self.children.get(&id).map_or(0, BTreeSet::len))?;
+        Ok(ConceptSummary {
+            id: reference.id,
+            label: reference.label,
+            parent_count,
+            child_count,
+            evidence_count: self.evidence_count.get(&id).copied().unwrap_or(0),
+            root: parent_count == 0,
+            leaf: child_count == 0,
+            shared: parent_count > 1,
+        })
+    }
+}
+
+fn public_id(id: i64) -> Result<ConceptId, AppError> {
+    ConceptId::from_storage(id).map_err(|error| {
+        AppError::database(
+            "invalid_concept_id",
+            format!("stored concept ID {id}: {error}"),
+        )
     })
 }
 
-fn evidence_views(
+fn count_u64(value: usize) -> Result<u64, AppError> {
+    u64::try_from(value)
+        .map_err(|_| AppError::database("numeric_overflow", "a corpus count is too large"))
+}
+
+fn read_snapshot(connection: &Connection, requested_revision: i64) -> Result<Snapshot, AppError> {
+    let snapshot = snapshot_at(connection, requested_revision)?;
+    validate_snapshot(connection, &snapshot).map_err(|error| {
+        AppError::database(
+            "invalid_history_snapshot",
+            format!("revision {requested_revision} is invalid: {error}"),
+        )
+    })?;
+    Ok(snapshot)
+}
+
+pub(crate) fn corpus_overview(
+    connection: &Connection,
+    requested_revision: i64,
+) -> Result<CorpusOverview, AppError> {
+    let snapshot = read_snapshot(connection, requested_revision)?;
+    let index = SnapshotIndex::new(&snapshot);
+    Ok(CorpusOverview {
+        revision: requested_revision,
+        concept_count: count_u64(snapshot.concepts.len())?,
+        edge_count: count_u64(snapshot.edges.len())?,
+        root_count: count_u64(
+            snapshot
+                .concepts
+                .iter()
+                .filter(|concept| !index.parents.contains_key(&concept.id))
+                .count(),
+        )?,
+        leaf_count: count_u64(
+            snapshot
+                .concepts
+                .iter()
+                .filter(|concept| !index.children.contains_key(&concept.id))
+                .count(),
+        )?,
+        shared_concept_count: count_u64(
+            snapshot
+                .concepts
+                .iter()
+                .filter(|concept| {
+                    index
+                        .parents
+                        .get(&concept.id)
+                        .is_some_and(|set| set.len() > 1)
+                })
+                .count(),
+        )?,
+        evidence_count: count_u64(snapshot.evidence.len())?,
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Cursor {
+    version: u8,
+    library_id: String,
+    revision: i64,
+    context: String,
+    offset: usize,
+}
+
+fn encode_cursor(
+    library_id: &str,
+    revision: i64,
+    context: &str,
+    offset: usize,
+) -> Result<String, AppError> {
+    let bytes = serde_json::to_vec(&Cursor {
+        version: 2,
+        library_id: library_id.to_owned(),
+        revision,
+        context: context.to_owned(),
+        offset,
+    })?;
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn decode_cursor_value(encoded: &str) -> Result<Cursor, AppError> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(encoded)
+        .map_err(|_| AppError::invalid("invalid_cursor", "the pagination cursor is not valid"))?;
+    let cursor: Cursor = serde_json::from_slice(&bytes)
+        .map_err(|_| AppError::invalid("invalid_cursor", "the pagination cursor is not valid"))?;
+    if cursor.version != 2 {
+        return Err(AppError::invalid(
+            "invalid_cursor",
+            "the pagination cursor version is not supported",
+        ));
+    }
+    Ok(cursor)
+}
+
+fn decode_cursor(
+    encoded: Option<&str>,
+    library_id: &str,
+    revision: i64,
+    context: &str,
+) -> Result<usize, AppError> {
+    let Some(encoded) = encoded else {
+        return Ok(0);
+    };
+    let cursor = decode_cursor_value(encoded)?;
+    if cursor.library_id != library_id || cursor.revision != revision || cursor.context != context {
+        return Err(AppError::invalid(
+            "invalid_cursor",
+            "the pagination cursor belongs to a different library, revision, or request",
+        ));
+    }
+    Ok(cursor.offset)
+}
+
+pub(crate) fn page_revision(
+    connection: &Connection,
+    requested: Option<i64>,
+    cursor: Option<&str>,
+) -> Result<i64, AppError> {
+    let expected_library_id = library_id(connection)?;
+    let cursor_revision = cursor
+        .map(decode_cursor_value)
+        .transpose()?
+        .map(|cursor| {
+            if cursor.library_id == expected_library_id {
+                Ok(cursor.revision)
+            } else {
+                Err(AppError::invalid(
+                    "invalid_cursor",
+                    "the pagination cursor belongs to a different library",
+                ))
+            }
+        })
+        .transpose()?;
+    let resolved = match (requested, cursor_revision) {
+        (Some(requested), Some(from_cursor)) if requested != from_cursor => {
+            return Err(AppError::invalid(
+                "invalid_cursor",
+                "the pagination cursor belongs to a different revision",
+            ));
+        }
+        (Some(requested), _) => requested,
+        (None, Some(from_cursor)) => from_cursor,
+        (None, None) => revision(connection)?,
+    };
+    snapshot_at(connection, resolved)?;
+    Ok(resolved)
+}
+
+fn page<T>(
+    connection: &Connection,
+    items: Vec<T>,
+    revision: i64,
+    context: &str,
+    limit: usize,
+    cursor: Option<&str>,
+    allow_zero: bool,
+) -> Result<Page<T>, AppError> {
+    if limit == 0 && !allow_zero {
+        return Err(AppError::invalid(
+            "invalid_limit",
+            "a page limit must be at least one",
+        ));
+    }
+    if limit > 200 {
+        return Err(AppError::invalid(
+            "invalid_limit",
+            "a page limit cannot exceed 200",
+        ));
+    }
+    let total = items.len();
+    if limit == 0 {
+        return Ok(Page {
+            items: Vec::new(),
+            page: PageInfo {
+                limit,
+                returned: 0,
+                total,
+                next_cursor: None,
+            },
+        });
+    }
+    let expected_library_id = library_id(connection)?;
+    let offset = decode_cursor(cursor, &expected_library_id, revision, context)?;
+    if offset > total {
+        return Err(AppError::invalid(
+            "invalid_cursor",
+            "the pagination cursor is beyond the end of this result",
+        ));
+    }
+    let end = offset.saturating_add(limit).min(total);
+    let returned = end - offset;
+    let next_cursor = (end < total)
+        .then(|| encode_cursor(&expected_library_id, revision, context, end))
+        .transpose()?;
+    Ok(Page {
+        items: items.into_iter().skip(offset).take(returned).collect(),
+        page: PageInfo {
+            limit,
+            returned,
+            total,
+            next_cursor,
+        },
+    })
+}
+
+pub(crate) fn roots_page(
+    connection: &Connection,
+    requested_revision: i64,
+    limit: usize,
+    cursor: Option<&str>,
+) -> Result<Page<ConceptSummary>, AppError> {
+    let snapshot = read_snapshot(connection, requested_revision)?;
+    let index = SnapshotIndex::new(&snapshot);
+    let mut items = snapshot
+        .concepts
+        .iter()
+        .filter(|concept| !index.parents.contains_key(&concept.id))
+        .map(|concept| index.summary(concept.id))
+        .collect::<Result<Vec<_>, _>>()?;
+    items.sort_by_key(|item| (index::normalize(&item.label), item.id));
+    page(
+        connection,
+        items,
+        requested_revision,
+        "roots",
+        limit,
+        cursor,
+        false,
+    )
+}
+
+fn references(
+    ids: Option<&BTreeSet<i64>>,
+    index: &SnapshotIndex<'_>,
+) -> Result<Vec<ConceptReference>, AppError> {
+    let mut references = ids
+        .into_iter()
+        .flatten()
+        .map(|id| index.reference(*id))
+        .collect::<Result<Vec<_>, _>>()?;
+    references.sort_by_key(|item| (index::normalize(&item.label), item.id));
+    Ok(references)
+}
+
+fn evidence_items(
+    connection: &Connection,
     snapshot: &Snapshot,
     concept_id: i64,
-    works: &BTreeMap<i64, Work>,
 ) -> Result<Vec<EvidenceView>, AppError> {
-    snapshot
+    let mut items = snapshot
         .evidence
         .iter()
         .filter(|evidence| evidence.concept_id == concept_id)
         .map(|evidence| {
-            let work = works.get(&evidence.work_id).ok_or_else(|| {
-                AppError::database("work_reference_missing", "evidence work is missing")
-            })?;
-            Ok(EvidenceView {
-                work: work.label.clone(),
-                quote: work.text[evidence.start_byte..evidence.end_byte].to_owned(),
-            })
+            let work = get_work_by_id(connection, evidence.work_id)?;
+            Ok((
+                index::normalize(&work.label),
+                evidence.work_id,
+                evidence.start_byte,
+                evidence.end_byte,
+                EvidenceView {
+                    work: work.label,
+                    quote: work.text[evidence.start_byte..evidence.end_byte].to_owned(),
+                },
+            ))
         })
-        .collect()
+        .collect::<Result<Vec<_>, AppError>>()?;
+    items.sort_by(|left, right| {
+        (&left.0, left.1, left.2, left.3).cmp(&(&right.0, right.1, right.2, right.3))
+    });
+    Ok(items.into_iter().map(|(_, _, _, _, view)| view).collect())
 }
 
-pub(crate) fn paths(snapshot: &Snapshot) -> Result<BTreeMap<i64, Vec<String>>, AppError> {
-    let by_id = snapshot
-        .concepts
-        .iter()
-        .map(|concept| (concept.id, concept))
-        .collect::<BTreeMap<_, _>>();
-    let mut output = BTreeMap::new();
-    for concept in &snapshot.concepts {
-        let mut path = Vec::new();
-        let mut current = Some(concept.id);
-        let mut seen = BTreeSet::new();
-        while let Some(id) = current {
-            if !seen.insert(id) {
-                return Err(AppError::database(
-                    "concept_cycle",
-                    "a historical concept belongs to a cycle",
-                ));
-            }
-            let item = by_id.get(&id).ok_or_else(|| {
-                AppError::database(
-                    "concept_parent_missing",
-                    "a historical concept parent is missing",
-                )
-            })?;
-            path.push(item.label.clone());
-            current = item.parent_id;
+pub(crate) fn neighbor_page(
+    connection: &Connection,
+    requested_revision: i64,
+    id: ConceptId,
+    direction: GraphDirection,
+    limit: usize,
+    cursor: Option<&str>,
+) -> Result<Page<ConceptReference>, AppError> {
+    let snapshot = read_snapshot(connection, requested_revision)?;
+    let index = SnapshotIndex::new(&snapshot);
+    index.require(id)?;
+    let (kind, ids) = match direction {
+        GraphDirection::Parents => ("parents", index.parents.get(&id.storage_id())),
+        GraphDirection::Children => ("children", index.children.get(&id.storage_id())),
+        GraphDirection::Both => {
+            return Err(AppError::invalid(
+                "invalid_direction",
+                "a neighbor page direction must be parents or children",
+            ));
         }
-        path.reverse();
-        output.insert(concept.id, path);
-    }
-    Ok(output)
+    };
+    let items = references(ids, &index)?;
+    page(
+        connection,
+        items,
+        requested_revision,
+        &format!("{kind}:{id}"),
+        limit,
+        cursor,
+        false,
+    )
 }
 
-fn preorder(snapshot: &Snapshot) -> Result<Vec<i64>, AppError> {
-    let mut children = BTreeMap::<Option<i64>, Vec<&SnapshotConcept>>::new();
-    for concept in &snapshot.concepts {
-        children.entry(concept.parent_id).or_default().push(concept);
-    }
-    for siblings in children.values_mut() {
-        siblings.sort_by_key(|concept| (concept.position, concept.id));
-    }
-    let mut output = Vec::with_capacity(snapshot.concepts.len());
-    let mut pending = children
-        .get(&None)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .rev()
-        .collect::<Vec<_>>();
-    while let Some(concept) = pending.pop() {
-        output.push(concept.id);
-        if let Some(descendants) = children.get(&Some(concept.id)) {
-            pending.extend(descendants.iter().rev().copied());
-        }
-    }
-    if output.len() != snapshot.concepts.len() {
-        return Err(AppError::database(
-            "snapshot_not_forest",
-            "the corpus snapshot is not one complete forest",
+pub(crate) fn evidence_page(
+    connection: &Connection,
+    requested_revision: i64,
+    id: ConceptId,
+    limit: usize,
+    cursor: Option<&str>,
+) -> Result<Page<EvidenceView>, AppError> {
+    let snapshot = read_snapshot(connection, requested_revision)?;
+    let index = SnapshotIndex::new(&snapshot);
+    index.require(id)?;
+    let items = evidence_items(connection, &snapshot, id.storage_id())?;
+    page(
+        connection,
+        items,
+        requested_revision,
+        &format!("evidence:{id}"),
+        limit,
+        cursor,
+        false,
+    )
+}
+
+pub(crate) fn concept_detail(
+    connection: &Connection,
+    requested_revision: i64,
+    id: ConceptId,
+    preview_limit: usize,
+) -> Result<ConceptDetail, AppError> {
+    if preview_limit > 20 {
+        return Err(AppError::invalid(
+            "invalid_limit",
+            "a concept preview limit cannot exceed 20",
         ));
     }
+    let snapshot = read_snapshot(connection, requested_revision)?;
+    let index = SnapshotIndex::new(&snapshot);
+    index.require(id)?;
+    let parents = page(
+        connection,
+        references(index.parents.get(&id.storage_id()), &index)?,
+        requested_revision,
+        &format!("parents:{id}"),
+        preview_limit,
+        None,
+        true,
+    )?;
+    let children = page(
+        connection,
+        references(index.children.get(&id.storage_id()), &index)?,
+        requested_revision,
+        &format!("children:{id}"),
+        preview_limit,
+        None,
+        true,
+    )?;
+    let evidence = page(
+        connection,
+        evidence_items(connection, &snapshot, id.storage_id())?,
+        requested_revision,
+        &format!("evidence:{id}"),
+        preview_limit,
+        None,
+        true,
+    )?;
+    Ok(ConceptDetail {
+        summary: index.summary(id.storage_id())?,
+        parents,
+        children,
+        evidence,
+    })
+}
+
+pub(crate) fn graph_view(
+    connection: &Connection,
+    requested_revision: i64,
+    seed: ConceptId,
+    direction: GraphDirection,
+    depth: usize,
+    max_nodes: usize,
+) -> Result<GraphView, AppError> {
+    if depth > 10 {
+        return Err(AppError::invalid(
+            "invalid_depth",
+            "graph depth cannot exceed 10",
+        ));
+    }
+    if !(1..=1_000).contains(&max_nodes) {
+        return Err(AppError::invalid(
+            "invalid_limit",
+            "graph max_nodes must be between 1 and 1000",
+        ));
+    }
+    let snapshot = read_snapshot(connection, requested_revision)?;
+    let index = SnapshotIndex::new(&snapshot);
+    let seed_concept = index.require(seed)?;
+    let mut distances = BTreeMap::from([(seed.storage_id(), 0_usize)]);
+    let mut queue = VecDeque::from([seed.storage_id()]);
+    let mut node_limit_reached = false;
+    while let Some(id) = queue.pop_front() {
+        let distance = distances[&id];
+        if distance == depth {
+            continue;
+        }
+        let mut neighbors = BTreeSet::new();
+        if matches!(direction, GraphDirection::Parents | GraphDirection::Both) {
+            neighbors.extend(index.parents.get(&id).into_iter().flatten().copied());
+        }
+        if matches!(direction, GraphDirection::Children | GraphDirection::Both) {
+            neighbors.extend(index.children.get(&id).into_iter().flatten().copied());
+        }
+        for neighbor in neighbors {
+            if distances.contains_key(&neighbor) {
+                continue;
+            }
+            if distances.len() == max_nodes {
+                node_limit_reached = true;
+                continue;
+            }
+            distances.insert(neighbor, distance + 1);
+            queue.push_back(neighbor);
+        }
+    }
+    let returned = distances.keys().copied().collect::<BTreeSet<_>>();
+    let mut nodes = distances
+        .iter()
+        .map(|(id, distance)| {
+            Ok(GraphNode {
+                summary: index.summary(*id)?,
+                distance: *distance,
+            })
+        })
+        .collect::<Result<Vec<_>, AppError>>()?;
+    nodes.sort_by_key(|node| (node.distance, node.summary.id));
+    let edges = snapshot
+        .edges
+        .iter()
+        .filter(|edge| returned.contains(&edge.parent_id) && returned.contains(&edge.child_id))
+        .map(|edge| {
+            Ok(GraphEdge {
+                parent: index.reference(edge.parent_id)?,
+                child: index.reference(edge.child_id)?,
+            })
+        })
+        .collect::<Result<Vec<_>, AppError>>()?;
+    let frontier = returned
+        .iter()
+        .filter_map(|id| {
+            let unreturned_parent_count =
+                if matches!(direction, GraphDirection::Parents | GraphDirection::Both) {
+                    index
+                        .parents
+                        .get(id)
+                        .map_or(0, |parents| parents.difference(&returned).count())
+                } else {
+                    0
+                };
+            let unreturned_child_count =
+                if matches!(direction, GraphDirection::Children | GraphDirection::Both) {
+                    index
+                        .children
+                        .get(id)
+                        .map_or(0, |children| children.difference(&returned).count())
+                } else {
+                    0
+                };
+            (unreturned_parent_count > 0 || unreturned_child_count > 0).then_some((
+                *id,
+                unreturned_parent_count,
+                unreturned_child_count,
+            ))
+        })
+        .map(|(id, parent_count, child_count)| {
+            Ok(FrontierEntry {
+                id: public_id(id)?,
+                unreturned_parent_count: count_u64(parent_count)?,
+                unreturned_child_count: count_u64(child_count)?,
+            })
+        })
+        .collect::<Result<Vec<_>, AppError>>()?;
+    Ok(GraphView {
+        revision: requested_revision,
+        seed: ConceptReference {
+            id: seed,
+            label: seed_concept.label.clone(),
+        },
+        direction: match direction {
+            GraphDirection::Parents => "parents",
+            GraphDirection::Children => "children",
+            GraphDirection::Both => "both",
+        }
+        .to_owned(),
+        depth,
+        max_nodes,
+        nodes,
+        edges,
+        complete_within_depth: !node_limit_reached,
+        node_limit_reached,
+        frontier,
+    })
+}
+
+fn ancestor_sets(snapshot: &Snapshot) -> Result<BTreeMap<i64, BTreeSet<i64>>, AppError> {
+    let index = SnapshotIndex::new(snapshot);
+    let mut indegree = snapshot
+        .concepts
+        .iter()
+        .map(|concept| {
+            (
+                concept.id,
+                index.parents.get(&concept.id).map_or(0, BTreeSet::len),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut output = snapshot
+        .concepts
+        .iter()
+        .map(|concept| (concept.id, BTreeSet::new()))
+        .collect::<BTreeMap<_, _>>();
+    let mut ready = indegree
+        .iter()
+        .filter_map(|(id, degree)| (*degree == 0).then_some(*id))
+        .collect::<BTreeSet<_>>();
+    while let Some(parent) = ready.pop_first() {
+        let mut inherited = output[&parent].clone();
+        inherited.insert(parent);
+        for child in index.children.get(&parent).into_iter().flatten() {
+            output
+                .get_mut(child)
+                .ok_or_else(|| {
+                    AppError::database(
+                        "concept_reference_missing",
+                        format!("concept c{child} has no ancestor set"),
+                    )
+                })?
+                .extend(inherited.iter().copied());
+            let degree = indegree.get_mut(child).ok_or_else(|| {
+                AppError::database(
+                    "concept_reference_missing",
+                    format!("concept c{child} has no indegree"),
+                )
+            })?;
+            *degree -= 1;
+            if *degree == 0 {
+                ready.insert(*child);
+            }
+        }
+    }
     Ok(output)
 }
 
-pub(crate) fn search_current(
+fn descendants(index: &SnapshotIndex<'_>, seed: i64) -> BTreeSet<i64> {
+    let mut output = BTreeSet::from([seed]);
+    let mut pending = VecDeque::from([seed]);
+    while let Some(id) = pending.pop_front() {
+        for child in index.children.get(&id).into_iter().flatten() {
+            if output.insert(*child) {
+                pending.push_back(*child);
+            }
+        }
+    }
+    output
+}
+
+pub(crate) fn search_at(
     connection: &Connection,
+    requested_revision: i64,
     query: &str,
+    within: Option<ConceptId>,
     limit: usize,
+    cursor: Option<&str>,
 ) -> Result<SearchOutput, AppError> {
-    index::require_current(connection)?;
     if query.trim().is_empty() {
         return Err(AppError::invalid(
             "empty_query",
             "a concept search query cannot be empty",
         ));
     }
-    if limit == 0 {
+    if limit > 200 {
         return Err(AppError::invalid(
             "invalid_limit",
-            "a search result limit must be at least one",
+            "a search result limit cannot exceed 200",
         ));
     }
-    let snapshot = head_snapshot(connection)?;
-    let paths = paths(&snapshot)?;
-    let normalized = index::normalize(query);
-    let terms = normalized.split_whitespace().collect::<Vec<_>>();
+    let snapshot = read_snapshot(connection, requested_revision)?;
+    let snapshot_index = SnapshotIndex::new(&snapshot);
+    let eligible = if let Some(within) = within {
+        snapshot_index.require(within)?;
+        descendants(&snapshot_index, within.storage_id())
+    } else {
+        snapshot.concepts.iter().map(|concept| concept.id).collect()
+    };
+    let normalized_query = index::normalize(query);
+    let terms = normalized_query.split_whitespace().collect::<Vec<_>>();
+    // Search from the selected immutable snapshot even at HEAD. Reading the mutable derived
+    // index here could mix that snapshot with a concurrent commit's ancestry projection.
+    let ancestors = ancestor_sets(&snapshot)?;
+    let contexts = snapshot
+        .concepts
+        .iter()
+        .map(|concept| {
+            let context = ancestors[&concept.id]
+                .iter()
+                .filter_map(|id| snapshot_index.concepts.get(id))
+                .map(|ancestor| ancestor.label.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            (
+                concept.id,
+                (index::normalize(&concept.label), index::normalize(&context)),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
     let mut candidates = snapshot
         .concepts
         .iter()
+        .filter(|concept| eligible.contains(&concept.id))
         .filter_map(|concept| {
-            let path = paths.get(&concept.id)?;
-            let haystack = index::normalize(&path.join(" "));
-            let exact = usize::from(
-                haystack == normalized || index::normalize(&concept.label) == normalized,
-            );
-            let matches = terms
+            let (label, ancestor_context) = contexts.get(&concept.id)?;
+            let matches_all = terms
                 .iter()
-                .filter(|term| haystack.contains(**term))
-                .count();
-            (exact > 0 || matches > 0).then_some((concept.id, exact, matches))
+                .all(|term| label.contains(*term) || ancestor_context.contains(*term));
+            matches_all.then(|| {
+                let exact = label == &normalized_query;
+                let prefix = label.starts_with(&normalized_query);
+                let label_matches = terms.iter().filter(|term| label.contains(**term)).count();
+                (concept.id, exact, prefix, label_matches)
+            })
         })
         .collect::<Vec<_>>();
-    candidates.sort_by_key(|(id, exact, matches)| {
-        (std::cmp::Reverse(*exact), std::cmp::Reverse(*matches), *id)
+    candidates.sort_by_key(|(id, exact, prefix, label_matches)| {
+        (
+            std::cmp::Reverse(*exact),
+            std::cmp::Reverse(*prefix),
+            std::cmp::Reverse(*label_matches),
+            *id,
+        )
     });
-    candidates.truncate(limit);
-
-    let work_ids = snapshot
-        .evidence
-        .iter()
-        .map(|evidence| evidence.work_id)
-        .collect::<BTreeSet<_>>();
-    let works = load_works(connection, &work_ids)?;
-    let by_id = snapshot
-        .concepts
-        .iter()
-        .map(|concept| (concept.id, concept))
-        .collect::<BTreeMap<_, _>>();
-    let results = candidates
+    let items = candidates
         .into_iter()
-        .map(|(id, _, _)| {
-            let concept = by_id.get(&id).ok_or_else(|| {
-                AppError::database("search_concept_missing", "search concept is missing")
-            })?;
+        .map(|(id, _, _, _)| {
             Ok(SearchResult {
-                path: paths.get(&id).cloned().unwrap_or_default(),
-                label: concept.label.clone(),
-                evidence: evidence_views(&snapshot, id, &works)?,
+                concept: snapshot_index.summary(id)?,
             })
         })
         .collect::<Result<Vec<_>, AppError>>()?;
+    let context = format!(
+        "search:{}:{}",
+        normalized_query,
+        within.map_or_else(|| "all".to_owned(), |id| id.to_string())
+    );
+    let results = page(
+        connection,
+        items,
+        requested_revision,
+        &context,
+        limit,
+        cursor,
+        false,
+    )?;
     Ok(SearchOutput {
+        revision: requested_revision,
         query: query.to_owned(),
+        within: within
+            .map(|id| snapshot_index.reference(id.storage_id()))
+            .transpose()?,
         results,
     })
 }
@@ -816,8 +1387,8 @@ pub(crate) fn diff(
     from_revision: i64,
     to_revision: i64,
 ) -> Result<DiffView, AppError> {
-    let before = snapshot_at(connection, from_revision)?;
-    let after = snapshot_at(connection, to_revision)?;
+    let before = read_snapshot(connection, from_revision)?;
+    let after = read_snapshot(connection, to_revision)?;
     let entries = diff_snapshot_entries(connection, &before, &after)?;
     Ok(DiffView {
         from_revision,
@@ -831,8 +1402,6 @@ pub(crate) fn diff_snapshot_entries(
     before: &Snapshot,
     after: &Snapshot,
 ) -> Result<Vec<DiffEntry>, AppError> {
-    let before_paths = paths(before)?;
-    let after_paths = paths(after)?;
     let before_concepts = before
         .concepts
         .iter()
@@ -851,130 +1420,79 @@ pub(crate) fn diff_snapshot_entries(
         .collect::<BTreeSet<_>>()
     {
         match (before_concepts.get(&id), after_concepts.get(&id)) {
-            (None, Some(_)) => entries.push(DiffEntry {
-                kind: DiffKind::Created,
-                before: None,
-                after: after_paths.get(&id).cloned(),
-                work: None,
-                quote: None,
+            (None, Some(concept)) => entries.push(DiffEntry::Created {
+                concept: concept_reference(concept)?,
             }),
-            (Some(_), None) => entries.push(DiffEntry {
-                kind: DiffKind::Retired,
-                before: before_paths.get(&id).cloned(),
-                after: None,
-                work: None,
-                quote: None,
+            (Some(concept), None) => entries.push(DiffEntry::Retired {
+                concept: concept_reference(concept)?,
             }),
-            (Some(old), Some(new)) => {
-                if old.parent_id != new.parent_id || sibling_order_changed(id, before, after) {
-                    entries.push(DiffEntry {
-                        kind: DiffKind::Moved,
-                        before: before_paths.get(&id).cloned(),
-                        after: after_paths.get(&id).cloned(),
-                        work: None,
-                        quote: None,
-                    });
-                }
-                if old.label != new.label {
-                    entries.push(DiffEntry {
-                        kind: DiffKind::Reworded,
-                        before: before_paths.get(&id).cloned(),
-                        after: after_paths.get(&id).cloned(),
-                        work: None,
-                        quote: None,
-                    });
-                }
+            (Some(old), Some(new)) if old.label != new.label => {
+                entries.push(DiffEntry::Reworded {
+                    id: public_id(id)?,
+                    before: old.label.clone(),
+                    after: new.label.clone(),
+                });
             }
-            (None, None) => {}
+            (None, None) | (Some(_), Some(_)) => {}
         }
     }
-    append_evidence_diff(
-        connection,
-        before,
-        after,
-        &before_paths,
-        &after_paths,
-        &mut entries,
-    )?;
+
+    let before_edges = before.edges.iter().cloned().collect::<BTreeSet<_>>();
+    let after_edges = after.edges.iter().cloned().collect::<BTreeSet<_>>();
+    for edge in before_edges.difference(&after_edges) {
+        entries.push(DiffEntry::ParentRemoved {
+            parent: snapshot_reference(before, edge.parent_id)?,
+            child: snapshot_reference(before, edge.child_id)?,
+        });
+    }
+    for edge in after_edges.difference(&before_edges) {
+        entries.push(DiffEntry::ParentAdded {
+            parent: snapshot_reference(after, edge.parent_id)?,
+            child: snapshot_reference(after, edge.child_id)?,
+        });
+    }
+
+    let before_evidence = before.evidence.iter().cloned().collect::<BTreeSet<_>>();
+    let after_evidence = after.evidence.iter().cloned().collect::<BTreeSet<_>>();
+    for evidence in before_evidence.difference(&after_evidence) {
+        let work = get_work_by_id(connection, evidence.work_id)?;
+        entries.push(DiffEntry::EvidenceRemoved {
+            concept: snapshot_reference(before, evidence.concept_id)?,
+            work: work.label,
+            quote: work.text[evidence.start_byte..evidence.end_byte].to_owned(),
+        });
+    }
+    for evidence in after_evidence.difference(&before_evidence) {
+        let work = get_work_by_id(connection, evidence.work_id)?;
+        entries.push(DiffEntry::EvidenceAdded {
+            concept: snapshot_reference(after, evidence.concept_id)?,
+            work: work.label,
+            quote: work.text[evidence.start_byte..evidence.end_byte].to_owned(),
+        });
+    }
     Ok(entries)
 }
 
-fn sibling_order_changed(id: i64, before: &Snapshot, after: &Snapshot) -> bool {
-    previous_sibling(before, id) != previous_sibling(after, id)
+fn concept_reference(concept: &SnapshotConcept) -> Result<ConceptReference, AppError> {
+    Ok(ConceptReference {
+        id: public_id(concept.id)?,
+        label: concept.label.clone(),
+    })
 }
 
-fn previous_sibling(snapshot: &Snapshot, id: i64) -> Option<Vec<String>> {
-    let concept = snapshot.concepts.iter().find(|concept| concept.id == id)?;
-    let all_paths = paths(snapshot).ok()?;
-    let mut siblings = snapshot
+fn snapshot_reference(snapshot: &Snapshot, id: i64) -> Result<ConceptReference, AppError> {
+    snapshot
         .concepts
-        .iter()
-        .filter(|candidate| candidate.parent_id == concept.parent_id)
-        .collect::<Vec<_>>();
-    siblings.sort_by_key(|candidate| (candidate.position, candidate.id));
-    let index = siblings.iter().position(|candidate| candidate.id == id)?;
-    index
-        .checked_sub(1)
-        .and_then(|previous| all_paths.get(&siblings[previous].id).cloned())
-}
-
-fn append_evidence_diff(
-    connection: &Connection,
-    before: &Snapshot,
-    after: &Snapshot,
-    before_paths: &BTreeMap<i64, Vec<String>>,
-    after_paths: &BTreeMap<i64, Vec<String>>,
-    entries: &mut Vec<DiffEntry>,
-) -> Result<(), AppError> {
-    let before_by_id = before
-        .evidence
-        .iter()
-        .map(|evidence| (evidence.id, evidence))
-        .collect::<BTreeMap<_, _>>();
-    let after_by_id = after
-        .evidence
-        .iter()
-        .map(|evidence| (evidence.id, evidence))
-        .collect::<BTreeMap<_, _>>();
-    for id in before_by_id
-        .keys()
-        .chain(after_by_id.keys())
-        .copied()
-        .collect::<BTreeSet<_>>()
-    {
-        let (kind, evidence, path) = match (before_by_id.get(&id), after_by_id.get(&id)) {
-            (None, Some(evidence)) => (
-                DiffKind::EvidenceAdded,
-                *evidence,
-                after_paths.get(&evidence.concept_id).cloned(),
-            ),
-            (Some(evidence), None) => (
-                DiffKind::EvidenceRemoved,
-                *evidence,
-                before_paths.get(&evidence.concept_id).cloned(),
-            ),
-            _ => continue,
-        };
-        let work = get_work_by_id(connection, evidence.work_id)?;
-        let (before, after) = match &kind {
-            DiffKind::EvidenceAdded => (None, path),
-            DiffKind::EvidenceRemoved => (path, None),
-            _ => {
-                return Err(AppError::unexpected(
-                    "invalid_evidence_diff",
-                    "an evidence diff had a non-evidence kind",
-                ));
-            }
-        };
-        entries.push(DiffEntry {
-            kind,
-            before,
-            after,
-            work: Some(work.label),
-            quote: Some(work.text[evidence.start_byte..evidence.end_byte].to_owned()),
-        });
-    }
-    Ok(())
+        .binary_search_by_key(&id, |concept| concept.id)
+        .ok()
+        .and_then(|index| snapshot.concepts.get(index))
+        .ok_or_else(|| {
+            AppError::database(
+                "concept_reference_missing",
+                format!("snapshot concept c{id} is missing"),
+            )
+        })
+        .and_then(concept_reference)
 }
 
 pub(crate) fn reconciliation_view(
@@ -1209,7 +1727,6 @@ pub(crate) fn insert_commit(
     summary: &str,
     request: &Value,
     resolved: &Value,
-    before: &Snapshot,
     after: &Snapshot,
     metadata: &Value,
     actor: &str,
@@ -1220,9 +1737,8 @@ pub(crate) fn insert_commit(
     transaction.execute(
         "INSERT INTO commits(\
              revision, parent_revision, base_revision, work_id, reconciliation_id, kind, summary, \
-             submitted_request, resolved_operations, before_snapshot, after_snapshot, metadata, \
-             actor, created_at\
-         ) VALUES(?1, ?2, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+             submitted_request, resolved_operations, after_snapshot, metadata, actor, created_at\
+         ) VALUES(?1, ?2, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
             revision,
             parent,
@@ -1232,7 +1748,6 @@ pub(crate) fn insert_commit(
             summary,
             serde_json::to_string(request)?,
             serde_json::to_string(resolved)?,
-            serde_json::to_string(before)?,
             serde_json::to_string(after)?,
             serde_json::to_string(metadata)?,
             actor,
@@ -1250,16 +1765,16 @@ pub(crate) fn revert(transaction: &Transaction<'_>, target_revision: i64) -> Res
     if target_revision <= 0 {
         return Err(revision_not_found(target_revision));
     }
-    let (before_json, after_json, target_work): (String, String, Option<i64>) = transaction
+    let target_work = transaction
         .query_row(
-            "SELECT before_snapshot, after_snapshot, work_id FROM commits WHERE revision = ?1",
+            "SELECT work_id FROM commits WHERE revision = ?1",
             [target_revision],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| row.get::<_, Option<i64>>(0),
         )
         .optional()?
         .ok_or_else(|| revision_not_found(target_revision))?;
-    let target_before: Snapshot = serde_json::from_str(&before_json)?;
-    let target_after: Snapshot = serde_json::from_str(&after_json)?;
+    let target_before = snapshot_at(transaction, target_revision - 1)?;
+    let target_after = snapshot_at(transaction, target_revision)?;
     let head = load_materialized_snapshot(transaction)?;
     validate_snapshot(transaction, &target_before).map_err(|error| {
         AppError::database(
@@ -1278,13 +1793,7 @@ pub(crate) fn revert(transaction: &Transaction<'_>, target_revision: i64) -> Res
     let new_revision = current.checked_add(1).ok_or_else(|| {
         AppError::database("revision_overflow", "the corpus revision is too large")
     })?;
-    let inverse = invert_snapshot_change(
-        target_revision,
-        new_revision,
-        &target_before,
-        &target_after,
-        &head,
-    )?;
+    let inverse = invert_snapshot_change(target_revision, &target_before, &target_after, &head)?;
     validate_snapshot(transaction, &inverse).map_err(|error| {
         revert_conflict(
             target_revision,
@@ -1304,7 +1813,6 @@ pub(crate) fn revert(transaction: &Transaction<'_>, target_revision: i64) -> Res
         &format!("Revert revision {target_revision}"),
         &request,
         &resolved,
-        &head,
         &inverse,
         &json!({ "reverted_revision": target_revision }),
         "human",
@@ -1312,236 +1820,155 @@ pub(crate) fn revert(transaction: &Transaction<'_>, target_revision: i64) -> Res
     Ok(new_revision)
 }
 
-fn invert_snapshot_change(
+pub(crate) fn invert_snapshot_change(
     target_revision: i64,
-    new_revision: i64,
     target_before: &Snapshot,
     target_after: &Snapshot,
     head: &Snapshot,
 ) -> Result<Snapshot, AppError> {
-    let before_concepts = concept_map(target_before);
-    let after_concepts = concept_map(target_after);
-    let head_concepts = concept_map(head);
-    let mut result_concepts = head_concepts
-        .iter()
-        .map(|(id, concept)| (*id, (*concept).clone()))
-        .collect::<BTreeMap<_, _>>();
+    let before_concepts = owned_concept_map(target_before);
+    let after_concepts = owned_concept_map(target_after);
+    let head_concepts = owned_concept_map(head);
     let concept_ids = before_concepts
         .keys()
         .chain(after_concepts.keys())
         .copied()
         .collect::<BTreeSet<_>>();
-    for id in concept_ids {
-        match (before_concepts.get(&id), after_concepts.get(&id)) {
-            (None, Some(created)) => {
-                require_revert_state(
-                    target_revision,
-                    result_concepts.get(&id) == Some(*created),
-                    format!(
-                        "created concept {} no longer matches the revision's after-state",
-                        semantic_path(target_after, id)
-                    ),
-                )?;
-                result_concepts.remove(&id);
-            }
-            (Some(retired), None) => {
-                require_revert_state(
-                    target_revision,
-                    !result_concepts.contains_key(&id),
-                    format!(
-                        "retired concept {} has since been restored or reused",
-                        semantic_path(target_before, id)
-                    ),
-                )?;
-                let mut restored = (*retired).clone();
-                restored.updated_revision = new_revision;
-                result_concepts.insert(id, restored);
-            }
-            (Some(before), Some(after)) if before != after => {
-                let current = result_concepts.get_mut(&id).ok_or_else(|| {
-                    revert_conflict(
-                        target_revision,
-                        format!(
-                            "changed concept {} no longer exists",
-                            semantic_path(target_after, id)
-                        ),
-                    )
-                })?;
-                invert_concept_fields(target_revision, new_revision, before, after, current)?;
-            }
+    for id in &concept_ids {
+        match (before_concepts.get(id), after_concepts.get(id)) {
+            (None, Some(created)) => require_revert_state(
+                target_revision,
+                head_concepts.get(id) == Some(created),
+                format!("created concept c{id} no longer matches its after-state"),
+            )?,
+            (Some(_), None) => require_revert_state(
+                target_revision,
+                !head_concepts.contains_key(id),
+                format!("retired concept c{id} has since been restored or reused"),
+            )?,
+            (Some(before), Some(after)) if before != after => require_revert_state(
+                target_revision,
+                head_concepts.get(id) == Some(after),
+                format!("changed concept c{id} no longer matches its after-state"),
+            )?,
             _ => {}
         }
     }
 
-    let before_evidence = evidence_map(target_before);
-    let after_evidence = evidence_map(target_after);
-    let head_evidence = evidence_map(head);
-    let mut result_evidence = head_evidence
-        .iter()
-        .map(|(id, evidence)| (*id, (*evidence).clone()))
-        .collect::<BTreeMap<_, _>>();
-    let semantically_changed_concepts = before_concepts
-        .iter()
-        .filter_map(|(id, before)| {
-            after_concepts
-                .get(id)
-                .filter(|after| before.parent_id != after.parent_id || before.label != after.label)
-                .map(|_| *id)
-        })
-        .collect::<BTreeSet<_>>();
-    for concept_id in semantically_changed_concepts {
-        let after_set = evidence_semantic_set(target_after, concept_id);
-        let head_set = evidence_semantic_set(head, concept_id);
+    let before_edges = target_before.edges.iter().cloned().collect::<BTreeSet<_>>();
+    let after_edges = target_after.edges.iter().cloned().collect::<BTreeSet<_>>();
+    let head_edges = head.edges.iter().cloned().collect::<BTreeSet<_>>();
+    for edge in after_edges.difference(&before_edges) {
         require_revert_state(
             target_revision,
-            after_set == head_set,
+            head_edges.contains(edge),
             format!(
-                "source evidence for affected concept {} has changed since the target revision",
-                semantic_path(target_after, concept_id)
+                "added parent edge c{} -> c{} is no longer present",
+                edge.parent_id, edge.child_id
             ),
         )?;
     }
-    let evidence_ids = before_evidence
-        .keys()
-        .chain(after_evidence.keys())
-        .copied()
-        .collect::<BTreeSet<_>>();
-    for id in evidence_ids {
-        match (before_evidence.get(&id), after_evidence.get(&id)) {
-            (None, Some(added)) => {
-                require_revert_state(
-                    target_revision,
-                    result_evidence.get(&id) == Some(*added),
-                    "added source evidence no longer matches the revision's after-state".to_owned(),
-                )?;
-                result_evidence.remove(&id);
-            }
-            (Some(removed), None) => {
-                require_revert_state(
-                    target_revision,
-                    !result_evidence.contains_key(&id),
-                    "removed source evidence has since been restored or replaced".to_owned(),
-                )?;
-                result_evidence.insert(id, (*removed).clone());
-            }
-            (Some(before), Some(after)) if before != after => {
-                require_revert_state(
-                    target_revision,
-                    result_evidence.get(&id) == Some(*after),
-                    "changed source evidence no longer matches the revision's after-state"
-                        .to_owned(),
-                )?;
-                result_evidence.insert(id, (*before).clone());
-            }
-            _ => {}
-        }
+    for edge in before_edges.difference(&after_edges) {
+        require_revert_state(
+            target_revision,
+            !head_edges.contains(edge),
+            format!(
+                "removed parent edge c{} -> c{} has since been restored",
+                edge.parent_id, edge.child_id
+            ),
+        )?;
     }
 
+    let before_evidence = target_before
+        .evidence
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let after_evidence = target_after
+        .evidence
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let head_evidence = head.evidence.iter().cloned().collect::<BTreeSet<_>>();
+    for evidence in after_evidence.difference(&before_evidence) {
+        require_revert_state(
+            target_revision,
+            head_evidence.contains(evidence),
+            "added source evidence is no longer present".to_owned(),
+        )?;
+    }
+    for evidence in before_evidence.difference(&after_evidence) {
+        require_revert_state(
+            target_revision,
+            !head_evidence.contains(evidence),
+            "removed source evidence has since been restored".to_owned(),
+        )?;
+    }
+
+    for id in concept_ids
+        .iter()
+        .filter(|id| !before_concepts.contains_key(id) && after_concepts.contains_key(id))
+    {
+        let target_incident_edges = after_edges
+            .iter()
+            .filter(|edge| edge.parent_id == *id || edge.child_id == *id)
+            .collect::<BTreeSet<_>>();
+        let head_incident_edges = head_edges
+            .iter()
+            .filter(|edge| edge.parent_id == *id || edge.child_id == *id)
+            .collect::<BTreeSet<_>>();
+        let target_incident_evidence = after_evidence
+            .iter()
+            .filter(|evidence| evidence.concept_id == *id)
+            .collect::<BTreeSet<_>>();
+        let head_incident_evidence = head_evidence
+            .iter()
+            .filter(|evidence| evidence.concept_id == *id)
+            .collect::<BTreeSet<_>>();
+        require_revert_state(
+            target_revision,
+            target_incident_edges == head_incident_edges
+                && target_incident_evidence == head_incident_evidence,
+            format!("created concept c{id} has later incident edges or evidence"),
+        )?;
+    }
+
+    let mut result_concepts = head_concepts;
+    for id in concept_ids {
+        match (before_concepts.get(&id), after_concepts.get(&id)) {
+            (None, Some(_)) => {
+                result_concepts.remove(&id);
+            }
+            (Some(before), None | Some(_)) => {
+                result_concepts.insert(id, before.clone());
+            }
+            (None, None) => {}
+        }
+    }
+    let mut result_edges = head_edges;
+    for edge in after_edges.difference(&before_edges) {
+        result_edges.remove(edge);
+    }
+    result_edges.extend(before_edges.difference(&after_edges).cloned());
+    let mut result_evidence = head_evidence;
+    for evidence in after_evidence.difference(&before_evidence) {
+        result_evidence.remove(evidence);
+    }
+    result_evidence.extend(before_evidence.difference(&after_evidence).cloned());
     Ok(Snapshot {
         concepts: result_concepts.into_values().collect(),
-        evidence: result_evidence.into_values().collect(),
+        edges: result_edges.into_iter().collect(),
+        evidence: result_evidence.into_iter().collect(),
     })
 }
 
-fn concept_map(snapshot: &Snapshot) -> BTreeMap<i64, &SnapshotConcept> {
+fn owned_concept_map(snapshot: &Snapshot) -> BTreeMap<i64, SnapshotConcept> {
     snapshot
         .concepts
         .iter()
+        .cloned()
         .map(|concept| (concept.id, concept))
         .collect()
-}
-
-fn semantic_path(snapshot: &Snapshot, concept_id: i64) -> String {
-    paths(snapshot)
-        .ok()
-        .and_then(|all_paths| all_paths.get(&concept_id).cloned())
-        .map_or_else(
-            || "at the recorded path".to_owned(),
-            |path| display_path(&path),
-        )
-}
-
-fn display_path(path: &[String]) -> String {
-    path.iter()
-        .map(|segment| format!("{segment:?}"))
-        .collect::<Vec<_>>()
-        .join(" › ")
-}
-
-fn evidence_map(snapshot: &Snapshot) -> BTreeMap<i64, &SnapshotEvidence> {
-    snapshot
-        .evidence
-        .iter()
-        .map(|evidence| (evidence.id, evidence))
-        .collect()
-}
-
-fn evidence_semantic_set(snapshot: &Snapshot, concept_id: i64) -> BTreeSet<(i64, usize, usize)> {
-    snapshot
-        .evidence
-        .iter()
-        .filter(|evidence| evidence.concept_id == concept_id)
-        .map(|evidence| (evidence.work_id, evidence.start_byte, evidence.end_byte))
-        .collect()
-}
-
-fn invert_concept_fields(
-    target_revision: i64,
-    new_revision: i64,
-    before: &SnapshotConcept,
-    after: &SnapshotConcept,
-    current: &mut SnapshotConcept,
-) -> Result<(), AppError> {
-    if before.created_revision != after.created_revision {
-        return Err(AppError::database(
-            "invalid_history_snapshot",
-            format!("revision {target_revision} changes a concept's creation revision"),
-        ));
-    }
-    let mut changed = invert_field(
-        target_revision,
-        before.parent_id,
-        &after.parent_id,
-        &mut current.parent_id,
-        "parent",
-    )?;
-    changed |= invert_field(
-        target_revision,
-        before.label.clone(),
-        &after.label,
-        &mut current.label,
-        "label",
-    )?;
-    changed |= invert_field(
-        target_revision,
-        before.position,
-        &after.position,
-        &mut current.position,
-        "ordering",
-    )?;
-    if changed {
-        current.updated_revision = new_revision;
-    }
-    Ok(())
-}
-
-fn invert_field<T: PartialEq + Clone>(
-    target_revision: i64,
-    before: T,
-    after: &T,
-    current: &mut T,
-    field: &str,
-) -> Result<bool, AppError> {
-    if &before == after {
-        return Ok(false);
-    }
-    require_revert_state(
-        target_revision,
-        current == after,
-        format!("an affected concept's {field} has changed since the target revision"),
-    )?;
-    *current = before;
-    Ok(true)
 }
 
 fn require_revert_state(
@@ -1614,15 +2041,6 @@ fn load_work_texts(
         .collect()
 }
 
-fn load_works(
-    connection: &Connection,
-    ids: &BTreeSet<i64>,
-) -> Result<BTreeMap<i64, Work>, AppError> {
-    ids.iter()
-        .map(|id| Ok((*id, get_work_by_id(connection, *id)?)))
-        .collect()
-}
-
 fn validate_label(label: &str, description: &str) -> Result<(), AppError> {
     if label.is_empty() || label.trim() != label {
         return Err(AppError::invalid(
@@ -1664,53 +2082,16 @@ fn usize_from_i64(value: i64, description: &str) -> rusqlite::Result<usize> {
     })
 }
 
-pub(crate) fn next_position(snapshot: &Snapshot, parent_id: Option<i64>) -> Result<i64, AppError> {
-    snapshot
-        .concepts
-        .iter()
-        .filter(|concept| concept.parent_id == parent_id)
-        .map(|concept| concept.position)
-        .max()
-        .unwrap_or(-POSITION_STEP)
-        .checked_add(POSITION_STEP)
-        .ok_or_else(|| AppError::database("position_overflow", "concept order is too large"))
-}
-
-pub(crate) fn renumber_siblings(snapshot: &mut Snapshot, parent_id: Option<i64>) {
-    let mut siblings = snapshot
-        .concepts
-        .iter_mut()
-        .filter(|concept| concept.parent_id == parent_id)
-        .collect::<Vec<_>>();
-    siblings.sort_by_key(|concept| (concept.position, concept.id));
-    for (index, concept) in siblings.into_iter().enumerate() {
-        concept.position = i64::try_from(index)
-            .unwrap_or(i64::MAX / POSITION_STEP)
-            .saturating_mul(POSITION_STEP);
-    }
-}
-
-pub(crate) fn path_lookup(snapshot: &Snapshot) -> Result<HashMap<Vec<String>, i64>, AppError> {
-    Ok(paths(snapshot)?
-        .into_iter()
-        .map(|(id, path)| {
-            (
-                path.into_iter()
-                    .map(|segment| index::normalize(&segment))
-                    .collect(),
-                id,
-            )
-        })
-        .collect())
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        Snapshot, SnapshotConcept, SnapshotEvidence, diff_snapshot_entries, heading_for_offset,
-        invert_snapshot_change, markdown_headings, sha256_hex, store_work,
-    };
     use rusqlite::Connection;
+
+    use super::{
+        Snapshot, SnapshotConcept, SnapshotEdge, SnapshotEvidence, diff_snapshot_entries,
+        heading_for_offset, invert_snapshot_change, markdown_headings, page, sha256_hex,
+        store_work, validate_snapshot,
+    };
+    use crate::model::DiffEntry;
 
     #[test]
     fn markdown_outline_tracks_nesting_and_offsets() {
@@ -1738,7 +2119,6 @@ mod tests {
         let mut connection = test_connection()?;
         let retained = store_work(&mut connection, "Original", "same bytes")?;
         let repeated = store_work(&mut connection, "Another label", "same bytes")?;
-
         assert_eq!(repeated.id, retained.id);
         assert_eq!(repeated.label, "Original");
         assert_eq!(
@@ -1749,185 +2129,205 @@ mod tests {
     }
 
     #[test]
-    fn a_label_collision_still_rejects_different_content() -> Result<(), Box<dyn std::error::Error>>
-    {
+    fn dag_validation_allows_duplicate_labels_multiple_parents_and_redundant_edges()
+    -> Result<(), Box<dyn std::error::Error>> {
         let mut connection = test_connection()?;
-        store_work(&mut connection, "Paper", "first bytes")?;
-        let Err(error) = store_work(&mut connection, "PAPER", "different bytes") else {
-            return Err("different content unexpectedly reused an occupied label".into());
+        let work = store_work(&mut connection, "Source", "grounded")?;
+        let snapshot = Snapshot {
+            concepts: vec![
+                concept(1, "Same"),
+                concept(2, "Same"),
+                concept(3, "Shared"),
+                concept(4, "Leaf"),
+            ],
+            edges: vec![edge(1, 3), edge(1, 4), edge(2, 3), edge(3, 4)],
+            evidence: vec![SnapshotEvidence {
+                concept_id: 4,
+                work_id: work.id,
+                start_byte: 0,
+                end_byte: 8,
+            }],
         };
-
-        assert_eq!(error.code(), "work_name_exists");
+        validate_snapshot(&connection, &snapshot)?;
         Ok(())
     }
 
     #[test]
-    fn whitespace_only_work_is_rejected() -> Result<(), Box<dyn std::error::Error>> {
-        let mut connection = test_connection()?;
-        let Err(error) = store_work(&mut connection, "Blank", " \n\t") else {
-            return Err("whitespace-only source text was unexpectedly retained".into());
+    fn dag_validation_rejects_cycles_and_noncanonical_sets()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let connection = test_connection()?;
+        let cycle = Snapshot {
+            concepts: vec![concept(1, "A"), concept(2, "B")],
+            edges: vec![edge(1, 2), edge(2, 1)],
+            evidence: Vec::new(),
         };
+        let Err(cycle_error) = validate_snapshot(&connection, &cycle) else {
+            panic!("cycle was accepted");
+        };
+        assert_eq!(cycle_error.code(), "would_create_cycle");
 
-        assert_eq!(error.code(), "empty_work");
+        let unordered = Snapshot {
+            concepts: vec![concept(2, "B"), concept(1, "A")],
+            edges: Vec::new(),
+            evidence: Vec::new(),
+        };
+        let Err(order_error) = validate_snapshot(&connection, &unordered) else {
+            panic!("unordered concepts were accepted");
+        };
+        assert_eq!(order_error.code(), "invalid_change");
         Ok(())
     }
 
     #[test]
-    fn non_head_inverse_preserves_later_independent_fields() {
+    fn page_cursors_are_revision_and_context_bound() -> Result<(), Box<dyn std::error::Error>> {
+        let connection = test_connection()?;
+        let first = page(&connection, vec![1, 2, 3], 7, "roots", 2, None, false)?;
+        assert_eq!(first.items, [1, 2]);
+        let cursor = first.page.next_cursor.as_deref().ok_or("missing cursor")?;
+        let second = page(
+            &connection,
+            vec![1, 2, 3],
+            7,
+            "roots",
+            2,
+            Some(cursor),
+            false,
+        )?;
+        assert_eq!(second.items, [3]);
+        let resized = page(
+            &connection,
+            vec![1, 2, 3],
+            7,
+            "roots",
+            1,
+            Some(cursor),
+            false,
+        )?;
+        assert_eq!(resized.items, [3]);
+        assert!(
+            page(
+                &connection,
+                vec![1, 2, 3],
+                8,
+                "roots",
+                2,
+                Some(cursor),
+                false
+            )
+            .is_err()
+        );
+        assert!(
+            page(
+                &connection,
+                vec![1, 2, 3],
+                7,
+                "parents:c1",
+                2,
+                Some(cursor),
+                false
+            )
+            .is_err()
+        );
+        let another_library = test_connection()?;
+        assert!(
+            page(
+                &another_library,
+                vec![1, 2, 3],
+                7,
+                "roots",
+                2,
+                Some(cursor),
+                false
+            )
+            .is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn set_wise_inverse_preserves_unrelated_later_graph_changes() {
         let before = Snapshot {
-            concepts: vec![concept(1, None, "Old wording", 0, 1)],
+            concepts: vec![concept(1, "Old"), concept(2, "Other")],
+            edges: Vec::new(),
             evidence: Vec::new(),
         };
         let after = Snapshot {
-            concepts: vec![concept(1, None, "New wording", 0, 2)],
+            concepts: vec![concept(1, "New"), concept(2, "Other")],
+            edges: Vec::new(),
             evidence: Vec::new(),
         };
         let head = Snapshot {
-            concepts: vec![
-                concept(1, Some(2), "New wording", 0, 3),
-                concept(2, None, "Parent", 0, 3),
-            ],
+            concepts: after.concepts.clone(),
+            edges: vec![edge(2, 1)],
             evidence: Vec::new(),
         };
-        let inverse = invert_snapshot_change(2, 4, &before, &after, &head)
-            .unwrap_or_else(|error| panic!("inverse unexpectedly failed: {error}"));
-        let restored = inverse
-            .concepts
-            .iter()
-            .find(|item| item.id == 1)
-            .unwrap_or_else(|| panic!("restored concept is missing"));
-        assert_eq!(restored.label, "Old wording");
-        assert_eq!(restored.parent_id, Some(2));
-        assert_eq!(restored.updated_revision, 4);
+        let inverse = invert_snapshot_change(1, &before, &after, &head)
+            .unwrap_or_else(|error| panic!("inverse failed: {error}"));
+        assert_eq!(inverse.concepts[0].label, "Old");
+        assert_eq!(inverse.edges, [edge(2, 1)]);
     }
 
     #[test]
-    fn non_head_inverse_rejects_a_changed_postcondition() {
+    fn set_wise_inverse_conflicts_if_a_created_concept_gained_a_later_edge() {
         let before = Snapshot {
-            concepts: vec![concept(1, None, "Old wording", 0, 1)],
+            concepts: vec![concept(1, "Parent"), concept(3, "Later parent")],
+            edges: Vec::new(),
             evidence: Vec::new(),
         };
         let after = Snapshot {
-            concepts: vec![concept(1, None, "New wording", 0, 2)],
+            concepts: vec![
+                concept(1, "Parent"),
+                concept(2, "Created"),
+                concept(3, "Later parent"),
+            ],
+            edges: vec![edge(1, 2)],
             evidence: Vec::new(),
         };
         let head = Snapshot {
-            concepts: vec![concept(1, None, "Later wording", 0, 3)],
+            concepts: after.concepts.clone(),
+            edges: vec![edge(1, 2), edge(3, 2)],
             evidence: Vec::new(),
         };
-        let Err(error) = invert_snapshot_change(2, 4, &before, &after, &head) else {
-            panic!("conflicting inverse unexpectedly succeeded");
+        let Err(error) = invert_snapshot_change(1, &before, &after, &head) else {
+            panic!("destructive inverse succeeded");
         };
         assert_eq!(error.code(), "revert_conflict");
     }
 
     #[test]
-    fn reword_inverse_rejects_later_evidence_without_exposing_ids() {
+    fn edge_diff_is_graph_native() {
         let before = Snapshot {
-            concepts: vec![concept(987_654, None, "Old meaning", 0, 1)],
-            evidence: vec![evidence(765_432, 987_654, 1, 0, 3)],
-        };
-        let after = Snapshot {
-            concepts: vec![concept(987_654, None, "New meaning", 0, 2)],
-            evidence: before.evidence.clone(),
-        };
-        let mut head = after.clone();
-        head.evidence.push(evidence(765_433, 987_654, 2, 4, 8));
-        let Err(error) = invert_snapshot_change(2, 4, &before, &after, &head) else {
-            panic!("reword with later evidence unexpectedly reverted");
-        };
-        assert_eq!(error.code(), "revert_conflict");
-        let message = error.to_string();
-        assert!(message.contains("New meaning"));
-        assert!(!message.contains("987654"));
-        assert!(!message.contains("765433"));
-    }
-
-    #[test]
-    fn move_inverse_rejects_later_evidence() {
-        let concepts_before = vec![
-            concept(1, None, "Old parent", 0, 1),
-            concept(2, None, "New parent", 1024, 1),
-            concept(3, Some(1), "Moved", 0, 1),
-        ];
-        let before = Snapshot {
-            concepts: concepts_before,
-            evidence: vec![evidence(1, 3, 1, 0, 3)],
-        };
-        let after = Snapshot {
-            concepts: vec![
-                concept(1, None, "Old parent", 0, 1),
-                concept(2, None, "New parent", 1024, 1),
-                concept(3, Some(2), "Moved", 0, 2),
-            ],
-            evidence: before.evidence.clone(),
-        };
-        let mut head = after.clone();
-        head.evidence.push(evidence(2, 3, 2, 4, 8));
-        let Err(error) = invert_snapshot_change(2, 4, &before, &after, &head) else {
-            panic!("move with later evidence unexpectedly reverted");
-        };
-        assert_eq!(error.code(), "revert_conflict");
-        assert!(error.to_string().contains("New parent"));
-    }
-
-    #[test]
-    fn sibling_reordering_appears_in_semantic_diff() {
-        let before = Snapshot {
-            concepts: vec![
-                concept(1, None, "First", 0, 1),
-                concept(2, None, "Second", 1024, 1),
-            ],
+            concepts: vec![concept(1, "Parent"), concept(2, "Child")],
+            edges: Vec::new(),
             evidence: Vec::new(),
         };
         let after = Snapshot {
-            concepts: vec![
-                concept(1, None, "First", 1024, 2),
-                concept(2, None, "Second", 0, 2),
-            ],
+            concepts: before.concepts.clone(),
+            edges: vec![edge(1, 2)],
             evidence: Vec::new(),
         };
         let connection = Connection::open_in_memory()
             .unwrap_or_else(|error| panic!("in-memory database failed: {error}"));
         let entries = diff_snapshot_entries(&connection, &before, &after)
-            .unwrap_or_else(|error| panic!("semantic diff failed: {error}"));
-        assert!(entries.iter().any(|entry| {
-            entry.kind == crate::model::DiffKind::Moved
-                && entry.before == Some(vec!["Second".to_owned()])
-        }));
+            .unwrap_or_else(|error| panic!("diff failed: {error}"));
+        assert!(matches!(
+            entries.as_slice(),
+            [DiffEntry::ParentAdded { parent, child }]
+                if parent.id.to_string() == "c1" && child.id.to_string() == "c2"
+        ));
     }
 
-    fn concept(
-        id: i64,
-        parent_id: Option<i64>,
-        label: &str,
-        position: i64,
-        updated_revision: i64,
-    ) -> SnapshotConcept {
+    fn concept(id: i64, label: &str) -> SnapshotConcept {
         SnapshotConcept {
             id,
-            parent_id,
             label: label.to_owned(),
-            position,
-            created_revision: 1,
-            updated_revision,
         }
     }
 
-    fn evidence(
-        id: i64,
-        concept_id: i64,
-        work_id: i64,
-        start_byte: usize,
-        end_byte: usize,
-    ) -> SnapshotEvidence {
-        SnapshotEvidence {
-            id,
-            concept_id,
-            work_id,
-            start_byte,
-            end_byte,
-            created_at: "2026-08-12T00:00:00Z".to_owned(),
+    fn edge(parent_id: i64, child_id: i64) -> SnapshotEdge {
+        SnapshotEdge {
+            parent_id,
+            child_id,
         }
     }
 

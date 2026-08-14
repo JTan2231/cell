@@ -24,7 +24,7 @@ The implemented contracts are:
   and revision history;
 - [Data model](data-model.md): canonical, examination, history, and derived
   SQLite state;
-- [Search](search.md): current label-and-path retrieval;
+- [Search](search.md): revision-scoped label and ancestor-context retrieval;
 - [Runtime characteristics](performance-results.md): enforced limits and cost
   shape, without unsupported benchmark claims.
 
@@ -37,12 +37,23 @@ The implemented contracts are:
 : A named, immutable, retained UTF-8 source object.
 
 **Concept**
-: A corpus-owned label in an ordered forest. A concept is addressed publicly by
-  its complete root-to-concept path at a particular revision.
+: A corpus-owned semantic identity addressed by a durable public ID such as
+  `c42`. Its label is descriptive and need not be unique.
+
+**Parent edge**
+: An explicit broader-to-narrower relationship between two concepts. Parent
+  edges form an unordered directed acyclic graph. A concept may have several
+  parents; none is primary.
+
+**Root / leaf**
+: A root has no parents and a leaf has no children. Both are derived from the
+  current edge set rather than stored as placements. Every leaf must have
+  evidence.
 
 **Evidence**
 : An exact quotation from a retained work supporting one concept. Exact source
-  ranges are resolved and stored internally.
+  ranges are resolved and stored internally. Evidence supports the concept
+  across all of its parent relationships; it is not attached to an edge.
 
 **Reconciliation**
 : One strict language-level request with a summary, one or more semantic

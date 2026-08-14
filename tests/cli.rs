@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fs;
@@ -9,6 +10,11 @@ use serde_json::{Value, json};
 use tempfile::TempDir;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
+
+const DATABASE_LABEL: &str = "Database systems";
+const CONCURRENCY_LABEL: &str = "Concurrency control";
+const SERIALIZABLE_LABEL: &str = "Serializable execution";
+const LOCKING_LABEL: &str = "Predicate locking";
 
 struct Library {
     directory: TempDir,
@@ -52,6 +58,25 @@ impl Library {
         S: AsRef<OsStr>,
     {
         error_json(&self.output(arguments)?, code)
+    }
+
+    fn human_ok<I, S>(&self, arguments: I) -> TestResult<String>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let output = Command::new(env!("CARGO_BIN_EXE_annals"))
+            .arg("--library")
+            .arg(&self.path)
+            .args(arguments)
+            .output()?;
+        assert!(
+            output.status.success(),
+            "command failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stderr.is_empty());
+        Ok(String::from_utf8(output.stdout)?)
     }
 
     fn add_work(&self, name: &str, filename: &str, text: &str) -> TestResult<Value> {
@@ -101,7 +126,7 @@ fn successful_json(output: &Output) -> TestResult<Value> {
     let envelope = serde_json::from_slice::<Value>(&output.stdout)?;
     assert_eq!(envelope["ok"], true);
     let data = envelope["data"].clone();
-    assert_no_storage_selectors(&data);
+    assert_no_storage_coordinates(&data);
     Ok(data)
 }
 
@@ -114,65 +139,158 @@ fn error_json(output: &Output, code: &str) -> TestResult<Value> {
     Ok(envelope)
 }
 
-fn assert_no_storage_selectors(value: &Value) {
+fn assert_no_storage_coordinates(value: &Value) {
     match value {
         Value::Object(object) => {
             for (key, child) in object {
                 assert!(
-                    key != "id"
-                        && !key.ends_with("_id")
-                        && !key.ends_with("_ids")
-                        && !matches!(key.as_str(), "position" | "start_byte" | "end_byte"),
-                    "public JSON exposed storage field {key:?}: {value}"
+                    !matches!(key.as_str(), "position" | "start_byte" | "end_byte"),
+                    "public JSON exposed storage coordinate {key:?}: {value}"
                 );
-                assert_no_storage_selectors(child);
+                assert_no_storage_coordinates(child);
             }
         }
         Value::Array(array) => {
             for child in array {
-                assert_no_storage_selectors(child);
+                assert_no_storage_coordinates(child);
             }
         }
         _ => {}
     }
 }
 
-fn initial_reconciliation() -> Value {
+fn assert_public_id(id: &str) {
+    let Some(digits) = id.strip_prefix('c') else {
+        panic!("public concept ID does not start with c: {id:?}");
+    };
+    assert!(
+        !digits.is_empty(),
+        "public concept ID has no digits: {id:?}"
+    );
+    assert!(
+        !digits.starts_with('0'),
+        "public concept ID is not canonical: {id:?}"
+    );
+    assert!(
+        digits.bytes().all(|byte| byte.is_ascii_digit()),
+        "public concept ID is not decimal: {id:?}"
+    );
+}
+
+fn find_concept_id(items: &Value, label: &str) -> Option<String> {
+    items.as_array()?.iter().find_map(|item| {
+        let concept = item.get("concept").unwrap_or(item);
+        if concept["label"].as_str() == Some(label) {
+            concept["id"].as_str().map(ToOwned::to_owned)
+        } else {
+            None
+        }
+    })
+}
+
+fn concept_id(items: &Value, label: &str) -> TestResult<String> {
+    let id = find_concept_id(items, label)
+        .ok_or_else(|| format!("no concept labelled {label:?} in {items}"))?;
+    assert_public_id(&id);
+    Ok(id)
+}
+
+fn concept_id_across_pages(first: &Value, second: &Value, label: &str) -> TestResult<String> {
+    let id = find_concept_id(first, label)
+        .or_else(|| find_concept_id(second, label))
+        .ok_or_else(|| format!("no concept labelled {label:?} across root pages"))?;
+    assert_public_id(&id);
+    Ok(id)
+}
+
+fn concept_ids(items: &Value) -> TestResult<BTreeSet<String>> {
+    let entries = items
+        .as_array()
+        .ok_or_else(|| format!("expected concept array, got {items}"))?;
+    let mut ids = BTreeSet::new();
+    for entry in entries {
+        let concept = entry.get("concept").unwrap_or(entry);
+        let id = concept["id"]
+            .as_str()
+            .ok_or_else(|| format!("concept has no public ID: {concept}"))?;
+        assert_public_id(id);
+        ids.insert(id.to_owned());
+    }
+    Ok(ids)
+}
+
+fn diamond_source() -> &'static str {
+    concat!(
+        "Database systems organize persistent information.\n",
+        "Concurrency control coordinates overlapping transactions.\n",
+        "Serializable transactions behave as some serial execution.\n",
+        "Predicate locks prevent phantom inserts.\n"
+    )
+}
+
+fn diamond_reconciliation() -> Value {
     json!({
-        "summary": "Integrate serializable execution and predicate locking",
+        "summary": "Build a shared serializability concept",
         "operations": [
             {
                 "action": "create_concept",
-                "label": "Database systems",
+                "ref": "database",
+                "label": DATABASE_LABEL,
+                "parents": [],
+                "evidence": [{
+                    "quote": "Database systems organize persistent information."
+                }]
+            },
+            {
+                "action": "create_concept",
+                "ref": "concurrency",
+                "label": CONCURRENCY_LABEL,
+                "parents": [],
+                "evidence": [{
+                    "quote": "Concurrency control coordinates overlapping transactions."
+                }]
+            },
+            {
+                "action": "create_concept",
+                "ref": "serializable",
+                "label": SERIALIZABLE_LABEL,
+                "parents": [{"new": "database"}, {"new": "concurrency"}],
                 "evidence": [{
                     "quote": "Serializable transactions behave as some serial execution."
                 }]
             },
             {
                 "action": "create_concept",
-                "label": "Serializable execution",
-                "under": {"new": "Database systems"},
-                "evidence": [{
-                    "quote": "Serializable transactions behave as some serial execution."
-                }]
-            },
-            {
-                "action": "create_concept",
-                "label": "Predicate locking",
-                "under": {"new": "Serializable execution"},
+                "ref": "locking",
+                "label": LOCKING_LABEL,
+                "parents": [{"new": "serializable"}],
                 "evidence": [{
                     "quote": "Predicate locks prevent phantom inserts."
                 }]
             }
         ],
         "annotations": [
-            "The source reports these claims; external implementation was not evaluated."
+            "Serializable execution belongs to both broader scopes."
         ]
     })
 }
 
+fn seed_diamond(library: &Library, work: &str) -> TestResult {
+    library.add_work(work, "diamond.txt", diamond_source())?;
+    library.submit(work, 0, "diamond.json", &diamond_reconciliation())?;
+    let applied = library.json_ok(["change", "apply", "--work", work])?;
+    assert_eq!(applied["revision"], 1);
+    Ok(())
+}
+
+fn search_concept_id(library: &Library, revision: i64, label: &str) -> TestResult<String> {
+    let revision = revision.to_string();
+    let search = library.json_ok(["search", label, "--at", revision.as_str(), "--limit", "20"])?;
+    concept_id(&search["results"]["items"], label)
+}
+
 #[test]
-fn work_add_and_show_retain_exact_source_without_changing_corpus() -> TestResult {
+fn init_work_add_and_show_retain_exact_source_without_changing_corpus() -> TestResult {
     let library = Library::initialized()?;
     let text = concat!(
         "# Concurrency\n",
@@ -195,263 +313,340 @@ fn work_add_and_show_retain_exact_source_without_changing_corpus() -> TestResult
     assert_eq!(shown["text"], text);
     assert_eq!(shown["headings"][0]["path"], json!(["Concurrency"]));
 
+    let overview = library.json_ok(["overview"])?;
+    assert_eq!(overview["revision"], 0);
+    assert_eq!(overview["concept_count"], 0);
+    assert_eq!(overview["edge_count"], 0);
     let stats = library.json_ok(["stats"])?;
     assert_eq!(stats["revision"], 0);
     assert_eq!(stats["work_count"], 1);
-    assert_eq!(stats["concept_count"], 0);
+    assert_eq!(stats["edge_count"], 0);
     assert_eq!(stats["commit_count"], 0);
     Ok(())
 }
 
 #[test]
-fn one_reconciliation_moves_from_submission_through_history_and_revert() -> TestResult {
+#[allow(clippy::too_many_lines)]
+fn diamond_reconciliation_supports_local_browsing_edge_history_and_revert() -> TestResult {
     let library = Library::initialized()?;
-    let text = concat!(
-        "Serializable transactions behave as some serial execution.\n",
-        "Predicate locks prevent phantom inserts.\n"
-    );
-    library.add_work("Serializable execution", "serializable.txt", text)?;
+    library.add_work("Graph source", "graph.txt", diamond_source())?;
 
-    let submitted = library.submit(
-        "Serializable execution",
-        0,
-        "reconciliation.json",
-        &initial_reconciliation(),
-    )?;
-    assert_eq!(submitted["work"], "Serializable execution");
+    let submitted = library.submit("Graph source", 0, "initial.json", &diamond_reconciliation())?;
     assert_eq!(submitted["base_revision"], 0);
     assert_eq!(submitted["status"], "pending");
-    assert_eq!(submitted["operation_count"], 3);
-    assert_eq!(library.json_ok(["stats"])?["revision"], 0);
+    assert_eq!(submitted["operation_count"], 4);
+    assert_eq!(
+        submitted["reconciliation"]["operations"][2]["parents"]
+            .as_array()
+            .map(Vec::len),
+        Some(2)
+    );
 
-    let shown_reconciliation = library.json_ok(["change", "show"])?;
-    assert_eq!(
-        shown_reconciliation["reconciliation"]["operations"][1]["under"]["new"],
-        "Database systems"
-    );
-    assert_eq!(
-        shown_reconciliation["annotations"],
-        json!(["The source reports these claims; external implementation was not evaluated."])
-    );
-    let quiet_show = Command::new(env!("CARGO_BIN_EXE_annals"))
-        .arg("--library")
-        .arg(&library.path)
-        .arg("--quiet")
-        .args(["change", "show"])
-        .output()?;
-    assert!(quiet_show.status.success());
-    assert!(quiet_show.stderr.is_empty());
-    assert!(String::from_utf8(quiet_show.stdout)?.contains("Pending reconciliation"));
+    let shown = library.json_ok(["change", "show"])?;
+    assert_eq!(shown["reconciliation"], diamond_reconciliation());
     let validated = library.json_ok(["change", "validate"])?;
     assert_eq!(validated["status"], "valid");
-    assert_eq!(validated["operations"].as_array().map(Vec::len), Some(3));
+    assert_eq!(validated["operations"].as_array().map(Vec::len), Some(4));
 
     let applied = library.json_ok(["change", "apply"])?;
     assert_eq!(applied["revision"], 1);
     assert_eq!(applied["status"], "applied");
 
-    let genesis = library.json_ok(["show", "--at", "0"])?;
-    assert_eq!(genesis["revision"], 0);
-    assert_eq!(genesis["concepts"], json!([]));
-    let revision_one = library.json_ok(["show", "--at", "1"])?;
-    assert_eq!(revision_one["revision"], 1);
-    assert_eq!(revision_one["concepts"].as_array().map(Vec::len), Some(3));
+    let genesis = library.json_ok(["overview", "--at", "0"])?;
+    assert_eq!(genesis["concept_count"], 0);
+    assert_eq!(genesis["edge_count"], 0);
+    let overview = library.json_ok(["overview", "--at", "1"])?;
+    assert_eq!(overview["revision"], 1);
+    assert_eq!(overview["concept_count"], 4);
+    assert_eq!(overview["edge_count"], 3);
+    assert_eq!(overview["root_count"], 2);
+    assert_eq!(overview["leaf_count"], 1);
+    assert_eq!(overview["shared_concept_count"], 1);
+
+    let first_roots = library.json_ok(["roots", "--at", "1", "--limit", "1"])?;
+    assert_eq!(first_roots["revision"], 1);
+    assert_eq!(first_roots["roots"]["page"]["limit"], 1);
+    assert_eq!(first_roots["roots"]["page"]["returned"], 1);
+    assert_eq!(first_roots["roots"]["page"]["total"], 2);
+    let cursor = first_roots["roots"]["page"]["next_cursor"]
+        .as_str()
+        .ok_or("first roots page had no continuation cursor")?;
+    let roots_human = library.human_ok(["roots", "--at", "1", "--limit", "1"])?;
+    assert!(roots_human.contains("More at revision 1"));
+    assert!(roots_human.contains("--at 1 --cursor"));
+    let second_roots =
+        library.json_ok(["roots", "--at", "1", "--limit", "1", "--cursor", cursor])?;
+    assert!(second_roots["roots"]["page"]["next_cursor"].is_null());
+    let database_id = concept_id_across_pages(
+        &first_roots["roots"]["items"],
+        &second_roots["roots"]["items"],
+        DATABASE_LABEL,
+    )?;
+    let concurrency_id = concept_id_across_pages(
+        &first_roots["roots"]["items"],
+        &second_roots["roots"]["items"],
+        CONCURRENCY_LABEL,
+    )?;
+
+    let database_children = library.json_ok([
+        "concept",
+        "children",
+        &database_id,
+        "--at",
+        "1",
+        "--limit",
+        "10",
+    ])?;
+    let serializable_id = concept_id(&database_children["children"]["items"], SERIALIZABLE_LABEL)?;
+
+    let serializable = library.json_ok([
+        "concept",
+        "show",
+        &serializable_id,
+        "--at",
+        "1",
+        "--preview-limit",
+        "1",
+    ])?;
+    assert_eq!(serializable["concept"]["id"], serializable_id);
+    assert_eq!(serializable["concept"]["parent_count"], 2);
+    assert_eq!(serializable["concept"]["child_count"], 1);
+    assert_eq!(serializable["concept"]["shared"], true);
+    assert_eq!(serializable["concept"]["parents"]["page"]["returned"], 1);
+    assert_eq!(serializable["concept"]["parents"]["page"]["total"], 2);
+
+    let parents = library.json_ok([
+        "concept",
+        "parents",
+        &serializable_id,
+        "--at",
+        "1",
+        "--limit",
+        "10",
+    ])?;
+    assert_eq!(parents["concept"]["id"], serializable_id);
     assert_eq!(
-        revision_one["concepts"][2]["path"],
-        json!([
-            "Database systems",
-            "Serializable execution",
-            "Predicate locking"
+        concept_ids(&parents["parents"]["items"])?,
+        BTreeSet::from([database_id.clone(), concurrency_id.clone()])
+    );
+
+    let children = library.json_ok([
+        "concept",
+        "children",
+        &serializable_id,
+        "--at",
+        "1",
+        "--limit",
+        "10",
+    ])?;
+    let locking_id = concept_id(&children["children"]["items"], LOCKING_LABEL)?;
+    let evidence = library.json_ok([
+        "concept",
+        "evidence",
+        &serializable_id,
+        "--at",
+        "1",
+        "--limit",
+        "10",
+    ])?;
+    assert_eq!(evidence["evidence"]["page"]["total"], 1);
+    assert_eq!(
+        evidence["evidence"]["items"][0]["quote"],
+        "Serializable transactions behave as some serial execution."
+    );
+
+    let graph = library.json_ok([
+        "graph",
+        &serializable_id,
+        "--at",
+        "1",
+        "--direction",
+        "both",
+        "--depth",
+        "1",
+        "--max-nodes",
+        "10",
+    ])?;
+    assert_eq!(graph["revision"], 1);
+    assert_eq!(graph["seed"]["id"], serializable_id);
+    assert_eq!(graph["edges"].as_array().map(Vec::len), Some(3));
+    assert_eq!(
+        concept_ids(&graph["nodes"])?,
+        BTreeSet::from([
+            database_id.clone(),
+            concurrency_id.clone(),
+            serializable_id.clone(),
+            locking_id.clone(),
         ])
     );
+    let graph_human = library.human_ok([
+        "graph",
+        &serializable_id,
+        "--at",
+        "1",
+        "--direction",
+        "both",
+        "--depth",
+        "1",
+        "--max-nodes",
+        "10",
+    ])?;
+    assert!(graph_human.contains("Nodes (4)"));
+    assert!(graph_human.contains("Edges (3)"));
+    assert!(graph_human.contains(" -> "));
+    assert!(graph_human.contains("Frontier"));
+    assert!(graph_human.contains("Complete through requested depth 1"));
+
+    let search = library.json_ok([
+        "search",
+        DATABASE_LABEL,
+        "--at",
+        "1",
+        "--within",
+        &serializable_id,
+        "--limit",
+        "10",
+    ])?;
+    assert_eq!(search["revision"], 1);
+    assert_eq!(search["within"]["id"], serializable_id);
+    assert!(
+        concept_ids(&search["results"]["items"])?.contains(&locking_id),
+        "descendant was not found through ancestor context: {search}"
+    );
+    let search_human = library.human_ok([
+        "search",
+        DATABASE_LABEL,
+        "--at",
+        "1",
+        "--within",
+        &serializable_id,
+        "--limit",
+        "1",
+    ])?;
+    assert!(search_human.contains("More at revision 1"));
+
+    let remove_parent = json!({
+        "summary": "Remove one of the shared concept's parents",
+        "operations": [{
+            "action": "remove_parent",
+            "concept": {"id": serializable_id},
+            "parent": {"id": concurrency_id}
+        }]
+    });
+    library.submit("Graph source", 1, "remove-parent.json", &remove_parent)?;
+    assert_eq!(library.json_ok(["change", "apply"])?["revision"], 2);
+    let revision_two_parents = library.json_ok([
+        "concept",
+        "parents",
+        &serializable_id,
+        "--at",
+        "2",
+        "--limit",
+        "10",
+    ])?;
     assert_eq!(
-        revision_one["concepts"][2]["evidence"][0]["quote"],
-        "Predicate locks prevent phantom inserts."
+        concept_ids(&revision_two_parents["parents"]["items"])?,
+        BTreeSet::from([database_id.clone()])
     );
 
-    let log = library.json_ok(["log"])?;
-    assert_eq!(log["head_revision"], 1);
-    assert_eq!(log["commits"][0]["revision"], 1);
-    assert_eq!(log["commits"][0]["parent_revision"], 0);
-    assert_eq!(
-        log["commits"][0]["summary"],
-        initial_reconciliation()["summary"]
-    );
+    let removed = library.json_ok(["diff", "1", "2"])?;
+    assert_eq!(removed["entries"].as_array().map(Vec::len), Some(1));
+    assert_eq!(removed["entries"][0]["kind"], "parent_removed");
+    assert_eq!(removed["entries"][0]["parent"]["id"], concurrency_id);
+    assert_eq!(removed["entries"][0]["child"]["id"], serializable_id);
 
-    let diff = library.json_ok(["diff", "0", "1"])?;
-    assert_eq!(diff["from_revision"], 0);
-    assert_eq!(diff["to_revision"], 1);
-    assert!(diff["entries"].as_array().is_some_and(|entries| {
-        entries.iter().any(|entry| {
-            entry["kind"] == "created"
-                && entry["after"]
-                    == json!([
-                        "Database systems",
-                        "Serializable execution",
-                        "Predicate locking"
-                    ])
-        })
-    }));
-    assert_eq!(library.json_ok(["validate"])?["valid"], true);
-    let reverted = library.json_ok(["revert", "1"])?;
-    assert_eq!(reverted["revision"], 2);
-    assert_eq!(reverted["reverted_revision"], 1);
+    let reverted = library.json_ok(["revert", "2"])?;
+    assert_eq!(reverted["revision"], 3);
+    assert_eq!(reverted["reverted_revision"], 2);
+    let restored = library.json_ok([
+        "concept",
+        "parents",
+        &serializable_id,
+        "--at",
+        "3",
+        "--limit",
+        "10",
+    ])?;
     assert_eq!(
-        library.json_ok(["show", "--at", "2"])?["concepts"],
-        json!([])
+        concept_ids(&restored["parents"]["items"])?,
+        BTreeSet::from([database_id, concurrency_id])
     );
-    assert_eq!(
-        library.json_ok(["show", "--at", "1"])?["concepts"],
-        revision_one["concepts"]
-    );
-    let log = library.json_ok(["log"])?;
-    assert_eq!(log["head_revision"], 2);
-    assert_eq!(log["commits"].as_array().map(Vec::len), Some(2));
+    let restored_diff = library.json_ok(["diff", "2", "3"])?;
+    assert_eq!(restored_diff["entries"][0]["kind"], "parent_added");
+    assert_eq!(library.json_ok(["log"])?["head_revision"], 3);
     assert_eq!(library.json_ok(["validate"])?["valid"], true);
     Ok(())
 }
 
 #[test]
-#[allow(clippy::too_many_lines)]
-fn applied_reconciliation_remains_inspectable_after_an_equal_reconciliation() -> TestResult {
+fn an_equal_reconciliation_is_recorded_without_a_commit() -> TestResult {
     let library = Library::initialized()?;
-    library.add_work(
-        "Serializable execution",
-        "serializable.txt",
-        "Serializable transactions behave as some serial execution.\nPredicate locks prevent phantom inserts.\n",
-    )?;
-    library.submit(
-        "Serializable execution",
-        0,
-        "initial-reconciliation.json",
-        &initial_reconciliation(),
-    )?;
-    library.json_ok(["change", "apply"])?;
+    seed_diamond(&library, "Graph source")?;
+    let serializable_id = search_concept_id(&library, 1, SERIALIZABLE_LABEL)?;
+
     let recorded = library.submit(
-        "Serializable execution",
+        "Graph source",
         1,
-        "later-reconciliation.json",
+        "equal.json",
         &json!({
-            "summary": "Associate the work with its represented predicate-locking concept",
+            "summary": "Repeat an already represented evidence mapping",
             "operations": [{
                 "action": "add_evidence",
-                "concept": {
-                    "path": [
-                        "Database systems",
-                        "Serializable execution",
-                        "Predicate locking"
-                    ]
-                },
-                "evidence": [{"quote": "Predicate locks prevent phantom inserts."}]
+                "concept": {"id": serializable_id},
+                "evidence": [{
+                    "quote": "Serializable transactions behave as some serial execution."
+                }]
             }],
-            "annotations": ["This relationship was already materialized at the base revision."]
+            "annotations": ["This mapping is already present at the base revision."]
         }),
     )?;
     assert_eq!(recorded["status"], "recorded");
     assert_eq!(recorded["base_revision"], 1);
-    assert_eq!(recorded["annotations"].as_array().map(Vec::len), Some(1));
+
     let stats = library.json_ok(["stats"])?;
     assert_eq!(stats["revision"], 1);
     assert_eq!(stats["commit_count"], 1);
-
-    let shown = library.json_ok(["change", "show"])?;
-    assert_eq!(shown["status"], "recorded");
-    assert_eq!(shown["reconciliation"], recorded["reconciliation"]);
+    let current = library.json_ok(["change", "show"])?;
+    assert_eq!(current["status"], "recorded");
     let archived = library.json_ok(["change", "show", "--at", "1"])?;
-    assert_eq!(archived["revision"], 1);
     assert_eq!(archived["status"], "applied");
-    assert_eq!(archived["parent_revision"], 0);
-    assert_eq!(archived["base_revision"], 0);
-    assert_eq!(archived["kind"], "change");
-    assert_eq!(archived["submitted_request"], initial_reconciliation());
+    assert_eq!(archived["submitted_request"], diamond_reconciliation());
     assert_eq!(
-        archived["resolved_operations"][2]["path"],
-        json!([
-            "Database systems",
-            "Serializable execution",
-            "Predicate locking"
-        ])
+        archived["resolved_operations"].as_array().map(Vec::len),
+        Some(4)
     );
-    assert_eq!(archived["metadata"]["reconciliation_actor"], "human");
-
-    let historical_human = Command::new(env!("CARGO_BIN_EXE_annals"))
-        .arg("--library")
-        .arg(&library.path)
-        .args(["change", "show", "--at", "1"])
-        .output()?;
-    assert!(historical_human.status.success());
-    assert!(historical_human.stderr.is_empty());
-    let historical_human = String::from_utf8(historical_human.stdout)?;
-    assert!(historical_human.contains("Applied change at revision 1"));
-    assert!(historical_human.contains("Submitted operations (3)"));
-    assert!(historical_human.contains("Resolved operations (3)"));
-    assert!(historical_human.contains("Metadata:"));
-
-    let diff_human = Command::new(env!("CARGO_BIN_EXE_annals"))
-        .arg("--library")
-        .arg(&library.path)
-        .args(["diff", "0", "1"])
-        .output()?;
-    assert!(diff_human.status.success());
-    assert!(diff_human.stderr.is_empty());
-    let diff_human = String::from_utf8(diff_human.stdout)?;
-    assert!(diff_human.contains("Created: “Database systems”"));
-    assert!(diff_human.contains("Evidence added:"));
-    assert!(!diff_human.contains("Created: - ->"));
-
-    library.json_ok(["revert", "1"])?;
-    let archived_revert = library.json_ok(["change", "show", "--at", "2"])?;
-    assert_eq!(archived_revert["kind"], "revert");
-    assert_eq!(archived_revert["status"], "applied");
-    assert_eq!(archived_revert["submitted_request"]["revert_revision"], 1);
-    assert!(
-        archived_revert["resolved_operations"]
-            .as_array()
-            .is_some_and(|operations| !operations.is_empty())
-    );
-    let revert_human = Command::new(env!("CARGO_BIN_EXE_annals"))
-        .arg("--library")
-        .arg(&library.path)
-        .args(["change", "show", "--at", "2"])
-        .output()?;
-    assert!(revert_human.status.success());
-    let revert_human = String::from_utf8(revert_human.stdout)?;
-    assert!(revert_human.contains("Applied revert at revision 2"));
-    assert!(revert_human.contains("Submitted request: revert revision 1"));
-    assert!(revert_human.contains("Resolved transition"));
+    assert_eq!(library.json_ok(["validate"])?["valid"], true);
     Ok(())
 }
 
 #[test]
-fn stale_reconciliation_is_rejected_without_partial_corpus_or_history_writes() -> TestResult {
+fn stale_reconciliation_is_rejected_without_partial_graph_or_history_writes() -> TestResult {
     let library = Library::initialized()?;
-    let source = "Serializable transactions behave as some serial execution.\nPredicate locks prevent phantom inserts.\n";
-    library.add_work("First work", "first.txt", source)?;
+    library.add_work("First work", "first.txt", diamond_source())?;
     library.add_work("Second work", "second.txt", "A distinct source claim.\n")?;
-    library.submit(
-        "First work",
-        0,
-        "first-reconciliation.json",
-        &initial_reconciliation(),
-    )?;
+    library.submit("First work", 0, "first.json", &diamond_reconciliation())?;
     library.submit(
         "Second work",
         0,
-        "second-reconciliation.json",
+        "second.json",
         &json!({
             "summary": "Add a stale concept",
             "operations": [{
                 "action": "create_concept",
+                "ref": "stale",
                 "label": "Stale concept",
+                "parents": [],
                 "evidence": [{"quote": "A distinct source claim."}]
             }]
         }),
     )?;
 
-    let first = library.json_ok(["change", "apply", "--work", "First work"])?;
-    assert_eq!(first["revision"], 1);
-    let before = library.json_ok(["stats"])?;
-    let before_corpus = library.json_ok(["show"])?;
+    assert_eq!(
+        library.json_ok(["change", "apply", "--work", "First work"])?["revision"],
+        1
+    );
+    let before_stats = library.json_ok(["stats"])?;
+    let before_overview = library.json_ok(["overview"])?;
     let before_log = library.json_ok(["log"])?;
 
     let error = library.json_error(["change", "apply", "--work", "Second work"], "stale_change")?;
@@ -459,32 +654,49 @@ fn stale_reconciliation_is_rejected_without_partial_corpus_or_history_writes() -
         message.contains("revision 0") && message.contains("revision 1")
     }));
 
-    let after = library.json_ok(["stats"])?;
-    assert_eq!(after["revision"], before["revision"]);
-    assert_eq!(after["concept_count"], before["concept_count"]);
-    assert_eq!(after["evidence_count"], before["evidence_count"]);
-    assert_eq!(after["commit_count"], before["commit_count"]);
-    assert_eq!(library.json_ok(["show"])?, before_corpus);
+    let after_stats = library.json_ok(["stats"])?;
+    for field in [
+        "revision",
+        "concept_count",
+        "edge_count",
+        "work_count",
+        "evidence_count",
+        "pending_reconciliation_count",
+        "commit_count",
+    ] {
+        assert_eq!(after_stats[field], before_stats[field], "changed {field}");
+    }
+    assert_eq!(library.json_ok(["overview"])?, before_overview);
     assert_eq!(library.json_ok(["log"])?, before_log);
     assert_eq!(library.json_ok(["validate"])?["valid"], true);
     Ok(())
 }
 
 #[test]
-fn public_help_and_request_contract_exclude_storage_selectors() -> TestResult {
+fn public_help_uses_graph_commands_and_legacy_tree_contract_is_rejected() -> TestResult {
     let help = Command::new(env!("CARGO_BIN_EXE_annals"))
         .arg("--help")
         .output()?;
     assert!(help.status.success());
     let help = String::from_utf8(help.stdout)?;
+    for required in [
+        "work",
+        "integrate",
+        "change",
+        "overview",
+        "roots",
+        "concept",
+        "graph",
+        "search",
+        "log",
+        "diff",
+        "revert",
+    ] {
+        assert!(help.contains(required), "help omitted {required:?}\n{help}");
+    }
     for forbidden in [
-        "NODE_ID",
-        "ROOT_NODE_ID",
         "--position",
-        "node add",
-        "node edit",
         "node move",
-        "node delete",
         "tree create",
         "tree delete",
         "ingest",
@@ -494,17 +706,6 @@ fn public_help_and_request_contract_exclude_storage_selectors() -> TestResult {
             "help exposed {forbidden:?}\n{help}"
         );
     }
-    for required in [
-        "work",
-        "integrate",
-        "change",
-        "show",
-        "log",
-        "diff",
-        "revert",
-    ] {
-        assert!(help.contains(required), "help omitted {required:?}\n{help}");
-    }
 
     let library = Library::initialized()?;
     library.add_work(
@@ -512,29 +713,52 @@ fn public_help_and_request_contract_exclude_storage_selectors() -> TestResult {
         "language.txt",
         "Exact source language.\n",
     )?;
-    let invalid = library.file(
-        "opaque.json",
-        r#"{
-            "summary": "Try an opaque selector",
+    let legacy_requests = [
+        json!({
+            "summary": "Try a path selector",
             "operations": [{
                 "action": "add_evidence",
-                "concept": {"node_id": 41},
+                "concept": {"path": ["Old tree node"]},
                 "evidence": [{"quote": "Exact source language."}]
             }]
-        }"#,
-    )?;
-    library.json_error(
-        [
-            OsStr::new("change"),
-            OsStr::new("submit"),
-            invalid.as_os_str(),
-            OsStr::new("--work"),
-            OsStr::new("Language source"),
-            OsStr::new("--base"),
-            OsStr::new("0"),
-        ],
-        "invalid_reconciliation",
-    )?;
+        }),
+        json!({
+            "summary": "Try ordered placement",
+            "operations": [{
+                "action": "create_concept",
+                "ref": "old",
+                "label": "Old tree node",
+                "parents": [],
+                "before": {"id": "c1"},
+                "position": 0,
+                "evidence": [{"quote": "Exact source language."}]
+            }]
+        }),
+        json!({
+            "summary": "Try moving a subtree",
+            "operations": [{
+                "action": "move_concept",
+                "concept": {"id": "c1"},
+                "under": {"id": "c2"}
+            }]
+        }),
+    ];
+    for (index, request) in legacy_requests.iter().enumerate() {
+        let filename = format!("legacy-{index}.json");
+        let input = library.file(&filename, &serde_json::to_string_pretty(request)?)?;
+        library.json_error(
+            [
+                OsStr::new("change"),
+                OsStr::new("submit"),
+                input.as_os_str(),
+                OsStr::new("--work"),
+                OsStr::new("Language source"),
+                OsStr::new("--base"),
+                OsStr::new("0"),
+            ],
+            "invalid_reconciliation",
+        )?;
+    }
     assert_eq!(
         library.json_ok(["stats"])?["pending_reconciliation_count"],
         0

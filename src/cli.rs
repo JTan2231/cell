@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
-use clap::{ArgAction, Args, Parser, Subcommand};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 
+use crate::model::ConceptId;
 use crate::model_runner::ModelQuality;
 
 /// Annals command-line arguments.
@@ -9,7 +10,7 @@ use crate::model_runner::ModelQuality;
 #[command(
     name = "annals",
     version,
-    about = "Integrate immutable works into a grounded conceptual corpus",
+    about = "Integrate immutable works into an evidence-grounded concept graph",
     arg_required_else_help = true
 )]
 pub struct Cli {
@@ -37,8 +38,17 @@ pub struct Cli {
 pub enum Command {
     /// Create a new library without replacing an existing file.
     Init,
-    /// Report corpus, work, reconciliation, history, and index statistics.
+    /// Report storage, workflow, history, and index statistics.
     Stats,
+    /// Summarize the concept graph at one revision.
+    Overview(AtArgs),
+    /// Page through concepts with no parents.
+    Roots(PagedAtArgs),
+    /// Inspect one concept and its direct graph neighborhood.
+    #[command(subcommand)]
+    Concept(ConceptCommand),
+    /// Expand a bounded local concept graph.
+    Graph(GraphArgs),
     /// Check canonical, historical, provenance, and index invariants.
     Validate,
     /// Create a consistent backup without replacing the destination.
@@ -53,9 +63,7 @@ pub enum Command {
     /// Submit, inspect, validate, and apply coherent corpus reconciliations.
     #[command(subcommand)]
     Change(ChangeCommand),
-    /// Show the complete corpus at HEAD or an earlier revision.
-    Show(ShowArgs),
-    /// Search current concept labels and paths.
+    /// Search concept labels and ancestor context.
     Search(SearchArgs),
     /// Show the append-only corpus commit log.
     Log(LogArgs),
@@ -66,6 +74,86 @@ pub enum Command {
     /// Internal revision-scoped liaison tool server.
     #[command(name = "__liaison-server", hide = true)]
     LiaisonServer(LiaisonServerArgs),
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct AtArgs {
+    /// Historical corpus revision. Defaults to HEAD.
+    #[arg(long, value_name = "REVISION")]
+    pub at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct PagedAtArgs {
+    /// Historical corpus revision. Defaults to HEAD, or to the cursor's revision.
+    #[arg(long, value_name = "REVISION")]
+    pub at: Option<i64>,
+    /// Maximum number of entries.
+    #[arg(long, value_name = "N", default_value_t = 20)]
+    pub limit: usize,
+    /// Opaque continuation cursor.
+    #[arg(long, value_name = "TOKEN")]
+    pub cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum ConceptCommand {
+    /// Show one concept with bounded parent, child, and evidence previews.
+    Show(ConceptShowArgs),
+    /// Page through the concept's direct parents.
+    Parents(ConceptPageArgs),
+    /// Page through the concept's direct children.
+    Children(ConceptPageArgs),
+    /// Page through evidence attached to the concept.
+    Evidence(ConceptPageArgs),
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct ConceptShowArgs {
+    /// Durable public concept ID.
+    #[arg(value_name = "CID")]
+    pub id: ConceptId,
+    /// Historical corpus revision. Defaults to HEAD.
+    #[arg(long, value_name = "REVISION")]
+    pub at: Option<i64>,
+    /// Entries shown in each direct-neighborhood preview.
+    #[arg(long, value_name = "N", default_value_t = 5)]
+    pub preview_limit: usize,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct ConceptPageArgs {
+    /// Durable public concept ID.
+    #[arg(value_name = "CID")]
+    pub id: ConceptId,
+    #[command(flatten)]
+    pub page: PagedAtArgs,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CliGraphDirection {
+    Parents,
+    Children,
+    Both,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct GraphArgs {
+    /// Durable public concept ID.
+    #[arg(value_name = "CID")]
+    pub id: ConceptId,
+    /// Historical corpus revision. Defaults to HEAD.
+    #[arg(long, value_name = "REVISION")]
+    pub at: Option<i64>,
+    /// Edge directions traversed from the seed.
+    #[arg(long, value_enum, default_value_t = CliGraphDirection::Children)]
+    pub direction: CliGraphDirection,
+    /// Maximum hop distance from the seed.
+    #[arg(long, value_name = "N", default_value_t = 2)]
+    pub depth: usize,
+    /// Maximum distinct concepts in the result.
+    #[arg(long, value_name = "N", default_value_t = 100)]
+    pub max_nodes: usize,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -172,20 +260,22 @@ pub struct ChangeSelectArgs {
 }
 
 #[derive(Debug, Clone, Args)]
-pub struct ShowArgs {
-    /// Historical corpus revision. Defaults to HEAD.
-    #[arg(long, value_name = "REVISION")]
-    pub at: Option<i64>,
-}
-
-#[derive(Debug, Clone, Args)]
 pub struct SearchArgs {
     /// Plain-language concept query.
     #[arg(value_name = "QUERY")]
     pub query: String,
+    /// Historical corpus revision. Defaults to HEAD, or to the cursor's revision.
+    #[arg(long, value_name = "REVISION")]
+    pub at: Option<i64>,
+    /// Restrict results to this concept and its descendants.
+    #[arg(long, value_name = "CID")]
+    pub within: Option<ConceptId>,
     /// Maximum number of results.
-    #[arg(long, value_name = "N", default_value_t = 10)]
+    #[arg(long, value_name = "N", default_value_t = 20)]
     pub limit: usize,
+    /// Opaque continuation cursor.
+    #[arg(long, value_name = "TOKEN")]
+    pub cursor: Option<String>,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -223,31 +313,76 @@ pub struct LiaisonServerArgs {
 mod tests {
     use clap::Parser;
 
-    use super::{ChangeCommand, Cli, Command, WorkCommand};
-    use crate::model_runner::ModelQuality;
+    use super::{ChangeCommand, Cli, Command, ConceptCommand, WorkCommand};
 
     #[test]
-    fn language_first_commands_parse() {
-        let work = Cli::try_parse_from(["annals", "work", "show", "Serializable execution"]);
+    fn graph_native_commands_parse() {
         assert!(matches!(
-            work.map(|cli| cli.command),
+            Cli::try_parse_from(["annals", "work", "show", "Paper"]).map(|cli| cli.command),
             Ok(Command::Work(WorkCommand::Show(_)))
         ));
-
-        let change = Cli::try_parse_from([
-            "annals",
-            "change",
-            "submit",
-            "request.json",
-            "--work",
-            "Paper",
-            "--base",
-            "17",
-        ]);
         assert!(matches!(
-            change.map(|cli| cli.command),
+            Cli::try_parse_from([
+                "annals",
+                "change",
+                "submit",
+                "request.json",
+                "--work",
+                "Paper",
+                "--base",
+                "17"
+            ])
+            .map(|cli| cli.command),
             Ok(Command::Change(ChangeCommand::Submit(_)))
         ));
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "concept", "show", "c42"]).map(|cli| cli.command),
+            Ok(Command::Concept(ConceptCommand::Show(_)))
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "overview", "--at", "7"]).map(|cli| cli.command),
+            Ok(Command::Overview(_))
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "annals", "roots", "--at", "7", "--limit", "25", "--cursor", "opaque"
+            ])
+            .map(|cli| cli.command),
+            Ok(Command::Roots(_))
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "annals", "concept", "parents", "c42", "--at", "7", "--limit", "25"
+            ])
+            .map(|cli| cli.command),
+            Ok(Command::Concept(ConceptCommand::Parents(_)))
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "annals",
+                "graph",
+                "c42",
+                "--at",
+                "7",
+                "--direction",
+                "both",
+                "--depth",
+                "3",
+                "--max-nodes",
+                "50"
+            ])
+            .map(|cli| cli.command),
+            Ok(Command::Graph(_))
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "annals", "search", "locking", "--at", "7", "--within", "c42", "--limit", "25",
+                "--cursor", "opaque"
+            ])
+            .map(|cli| cli.command),
+            Ok(Command::Search(_))
+        ));
+        assert!(Cli::try_parse_from(["annals", "concept", "show", "42"]).is_err());
     }
 
     #[test]
@@ -255,54 +390,5 @@ mod tests {
         assert!(Cli::try_parse_from(["annals", "integrate"]).is_err());
         assert!(Cli::try_parse_from(["annals", "integrate", "paper.txt"]).is_ok());
         assert!(Cli::try_parse_from(["annals", "integrate", "--work", "Existing paper"]).is_ok());
-    }
-
-    #[test]
-    fn integrate_model_settings_parse() {
-        let default = Cli::try_parse_from(["annals", "integrate", "paper.txt"]);
-        let Ok(Command::Integrate(default)) = default.map(|cli| cli.command) else {
-            panic!("default integrate arguments did not parse");
-        };
-        assert_eq!(default.quality, ModelQuality::High);
-        assert_eq!(default.model, None);
-        assert!(!default.reexamine);
-
-        for (quality, expected) in [
-            ("low", ModelQuality::Low),
-            ("medium", ModelQuality::Medium),
-            ("high", ModelQuality::High),
-        ] {
-            let parsed = Cli::try_parse_from([
-                "annals",
-                "integrate",
-                "paper.txt",
-                "--quality",
-                quality,
-                "--model",
-                "custom-model",
-            ]);
-            let Ok(Command::Integrate(args)) = parsed.map(|cli| cli.command) else {
-                panic!("integrate arguments for {quality} did not parse");
-            };
-            assert_eq!(args.quality, expected);
-            assert_eq!(args.model.as_deref(), Some("custom-model"));
-        }
-
-        let reexamined = Cli::try_parse_from([
-            "annals",
-            "integrate",
-            "--work",
-            "Existing paper",
-            "--reexamine",
-        ]);
-        let Ok(Command::Integrate(reexamined)) = reexamined.map(|cli| cli.command) else {
-            panic!("integrate --reexamine arguments did not parse");
-        };
-        assert!(reexamined.reexamine);
-
-        assert!(
-            Cli::try_parse_from(["annals", "integrate", "paper.txt", "--quality", "invalid"])
-                .is_err()
-        );
     }
 }

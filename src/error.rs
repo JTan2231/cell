@@ -108,7 +108,7 @@ mod tests {
     fn constructors_keep_stable_codes_and_exit_categories() {
         let invalid = AppError::invalid("empty_label", "a label is required");
         let missing = AppError::not_found("work_not_found", "the work was not found");
-        let conflict = AppError::conflict("would_create_cycle", "move rejected");
+        let conflict = AppError::conflict("would_create_cycle", "edge would create a cycle");
         let database = AppError::database("index_stale", "run annals reindex");
         let unexpected = AppError::unexpected("internal_error", "unexpected failure");
 

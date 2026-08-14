@@ -227,6 +227,84 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn canonical_graph_constraints_are_enforced() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("annals.db");
+        let connection = init(&path)?;
+
+        connection.execute(
+            "INSERT INTO concepts(label) VALUES('Same'), ('Same'), ('Shared'), ('Leaf')",
+            [],
+        )?;
+        assert_eq!(
+            connection.query_row("SELECT COUNT(*) FROM concepts", [], |row| row
+                .get::<_, i64>(0))?,
+            4
+        );
+        connection.execute(
+            "INSERT INTO concept_edges(parent_id, child_id) VALUES(1, 3), (2, 3), (3, 4)",
+            [],
+        )?;
+        assert!(
+            connection
+                .execute(
+                    "INSERT INTO concept_edges(parent_id, child_id) VALUES(1, 1)",
+                    [],
+                )
+                .is_err()
+        );
+        assert!(
+            connection
+                .execute(
+                    "INSERT INTO concept_edges(parent_id, child_id) VALUES(999, 1)",
+                    [],
+                )
+                .is_err()
+        );
+        assert!(
+            connection
+                .execute(
+                    "INSERT INTO concept_edges(parent_id, child_id) VALUES(1, 3)",
+                    [],
+                )
+                .is_err()
+        );
+
+        connection.execute(
+            "INSERT INTO works(label, normalized_label, text, sha256, created_at) \
+             VALUES(?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params!["Source", "source", "x", "0".repeat(64), "now"],
+        )?;
+        connection.execute(
+            "INSERT INTO evidence(concept_id, work_id, start_byte, end_byte) VALUES(3, 1, 0, 1)",
+            [],
+        )?;
+        assert!(
+            connection
+                .execute(
+                    "INSERT INTO evidence(concept_id, work_id, start_byte, end_byte) \
+                     VALUES(3, 1, 0, 1)",
+                    [],
+                )
+                .is_err()
+        );
+
+        connection.execute("DELETE FROM concepts WHERE id = 3", [])?;
+        assert_eq!(
+            connection.query_row("SELECT COUNT(*) FROM concept_edges", [], |row| {
+                row.get::<_, i64>(0)
+            })?,
+            0
+        );
+        assert_eq!(
+            connection.query_row("SELECT COUNT(*) FROM evidence", [], |row| row
+                .get::<_, i64>(0))?,
+            0
+        );
+        Ok(())
+    }
+
     fn library_revision(connection: &Connection) -> rusqlite::Result<i64> {
         connection.query_row(
             "SELECT revision FROM library_state WHERE singleton = 1",

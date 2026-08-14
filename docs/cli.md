@@ -22,17 +22,16 @@ annals reindex
 ```
 
 `init` creates revision zero and refuses to replace an existing library.
-`stats` reports corpus revision and concept, work, evidence, pending
-reconciliation, commit, and model-run counts, plus database size and index
-freshness.
+`stats` reports revision and corpus, graph, work, reconciliation, history,
+model-run, database-size, and index information.
 
-`validate` checks SQLite, foreign keys, retained-work digests, current corpus
-invariants, linear history and its snapshots, agreement between materialized
-HEAD and history, and the derived search projection. It does not repair state.
+`validate` checks SQLite, foreign keys, retained-work digests, current graph
+invariants, linear history and its full snapshots, agreement between
+materialized HEAD and history, and derived search state. It does not repair
+state.
 
 `backup` makes a consistent SQLite copy and refuses to replace its destination.
-`reindex` recreates derived concept search rows without advancing the corpus
-revision.
+`reindex` recreates current concept-search rows without advancing the revision.
 
 ## Immutable works
 
@@ -42,32 +41,17 @@ annals work list
 annals work show LABEL
 ```
 
-`INPUT` is a UTF-8 file containing non-whitespace source text, or `-`. A file defaults to its UTF-8 filename
-stem; stdin requires `--name`. Work labels are nonempty and normalized-unique.
-Exact retained bytes are content-addressed by SHA-256. Supplying them again,
-even with another requested label, selects the original work and its label. A
-label already attached to different bytes remains a conflict.
+`INPUT` is a UTF-8 file containing non-whitespace source text, or `-`. A file
+defaults to its UTF-8 filename stem; stdin requires `--name`. Work labels are
+nonempty and normalized-unique. Exact retained bytes are content-addressed by
+SHA-256. Supplying them again, even with another requested label, selects the
+original work and label. A label already attached to different bytes is a
+conflict.
 
-Adding a work does not change the corpus revision. The human `work list` shows
-labels and sizes; `work list --json` also reports SHA-256 integrity digests and
-creation times. `work show` reports that metadata, Markdown heading paths, and
-the complete unchanged text. Labels, not digests or database identifiers,
-select works.
-
-Example JSON from `work add`:
-
-```json
-{
-  "ok": true,
-  "data": {
-    "work": "Serializable execution",
-    "size_bytes": 18420,
-    "sha256": "...",
-    "created_at": "2026-08-12T12:00:00Z",
-    "corpus_revision": 0
-  }
-}
-```
+Adding a work does not change the corpus revision. Human `work list` shows
+labels and sizes; JSON also reports SHA-256 digests and creation times. `work
+show` reports that metadata, Markdown heading paths, and the complete unchanged
+text. Source heading paths describe the document; they are not concept paths.
 
 ## Model-assisted integration
 
@@ -76,18 +60,15 @@ annals integrate INPUT [--name LABEL] [--quality QUALITY] [--model MODEL] [--app
 annals integrate --work LABEL [--quality QUALITY] [--model MODEL] [--apply] [--reexamine]
 ```
 
-The first form retains a new work and then examines it. The second examines an
-already retained work. Annals freezes the current corpus revision, invokes the
-liaison, and expects one `submit_reconciliation` call through its tool
-interface. The model's final response is diagnostic and is not parsed as the
-reconciliation.
+The first form retains and examines a new work. The second examines an already
+retained work. Annals freezes the current corpus revision, invokes the liaison,
+and expects one `submit_reconciliation` tool call. The model's final response
+is diagnostic and is not parsed as the reconciliation.
 
-Before invoking the liaison, Annals may reuse the newest successful
-reconciliation for the exact same work, base revision, prompt version, model,
-and reasoning effort. `--reexamine` bypasses this lookup and replaces an
-incomplete matching run that has not submitted. A later corpus
-revision or changed liaison configuration naturally starts a new examination;
-file identity alone never marks a source as semantically exhausted.
+Annals may reuse the newest successful reconciliation for the exact same work,
+base revision, prompt version, model, and reasoning effort. `--reexamine`
+bypasses this lookup. A later corpus revision or changed liaison configuration
+starts a fresh examination.
 
 `--quality` accepts three presets and defaults to `high`:
 
@@ -97,22 +78,18 @@ file identity alone never marks a source as semantically exhausted.
 | `medium` | `gpt-5.6-terra` | `medium` |
 | `high` | `gpt-5.6-sol` | `max` |
 
-`--model` overrides only the preset model. The selected quality still controls
-reasoning effort, so `--model MODEL` uses max reasoning by default, while
-`--quality medium --model MODEL` uses medium reasoning. The exact resolved
-model and effort are recorded with the model run.
+`--model` overrides only the model selected by the preset; the selected
+quality continues to choose reasoning effort.
 
-The liaison submits a provisional, best-current interpretation with one or more
-operations. It does not filter source material by estimated novelty, salience,
-familiarity, or likely usefulness, and it does not claim an objective final
-decomposition into atomic knowledge units.
+The liaison submits a provisional, best-current interpretation. It does not
+filter source material by estimated novelty or salience and does not claim an
+objective final decomposition into atomic concepts.
 
-Without `--apply`, a reconciliation whose projected corpus differs from its
+Without `--apply`, a reconciliation whose projected graph differs from its
 base remains pending. `--apply` immediately commits that pending transition. A
 mechanically equal projection is stored with status `recorded`; it creates no
 commit and does not advance the revision. Optional annotations are inert and
-never block application. Human output reports this as “Reconciliation
-recorded; corpus remains at revision N.”
+never block application.
 
 ## Reconciliations and corpus changes
 
@@ -125,40 +102,36 @@ annals change apply [--work LABEL]
 ```
 
 `change submit` reads strict reconciliation JSON from a file or `-`. The flags
-provide the immutable evidence work and the corpus revision examined by the
-submitter; those values are deliberately absent from the semantic
-reconciliation.
+provide the immutable evidence work and frozen corpus revision; both are
+deliberately absent from the semantic request.
 
-Submitting resolves and validates the complete projected state but does not
+Submission resolves and validates the complete projected graph but does not
 mutate the corpus. A result based on the same or a later revision supersedes
 that work's previous pending reconciliation. An older-base result is retained
-without displacing a newer pending reconciliation. `change list` includes
-pending, applied, superseded, and recorded reconciliations.
+without displacing a newer pending result. `change list` includes pending,
+applied, superseded, and recorded reconciliations.
 
-With `--work`, `change show` selects that work's pending reconciliation when one
-exists, otherwise its newest record. Without `--work`, it selects the sole
-pending reconciliation; when none is pending, it succeeds only if exactly one
-work has recorded results. `change validate` and `change apply` select pending
-reconciliations only and require `--work` when more than one exists.
+With `--work`, `change show` selects that work's pending reconciliation when
+one exists, otherwise its newest record. Without `--work`, it selects the sole
+pending result; when none is pending, it succeeds only if exactly one work has
+recorded results. `change validate` and `change apply` select pending results
+only and require `--work` when more than one exists.
 
-`change show --at REVISION` retrieves the accepted corpus change recorded by
-that revision, even when later examinations exist for the same work. For an
-applied reconciliation it shows the original language-level request and
-resolved semantic operations. For a revert it shows the target revision and
-resolved inverse transition. Both include commit metadata, actor, and
-timestamp.
+`change show --at REVISION` retrieves the accepted change at that revision.
+For an applied reconciliation it shows the original graph-native request and
+resolved operations. For a revert it shows the target revision and resolved
+inverse. Both include commit metadata, actor, and timestamp.
 
-Human `integrate`, `change submit`, and `change show` output renders every
-requested operation with its language-level paths, parent and relative-order
-placement, exact evidence quotations and disambiguating context, evidence
-disposition, replacement, and annotations. `change validate` re-resolves the
-request and renders the resulting paths, quotations, parent and ordering
-relations, dispositions, replacements, and annotations without writing.
+Human reconciliation output renders public `cN` IDs alongside labels, local
+creation handles, parent-edge changes, exact evidence quotations and source
+context, evidence dispositions, replacements, and annotations. `change
+validate` re-resolves and renders the same semantic facts without writing.
+Resolved operations are request receipts, so an idempotent ensure may appear
+there even when it contributes no diff entry.
 
-`change apply` additionally requires HEAD to equal the reconciliation's base
-revision. Success updates the current corpus, search projection,
-reconciliation status, commit log, and revision in one transaction. Annotation
-content has no application semantics.
+`change apply` additionally requires HEAD to equal the base revision. Success
+updates concepts, edges, evidence, search state, reconciliation status,
+history, and revision in one transaction.
 
 ### Reconciliation contract
 
@@ -167,17 +140,11 @@ free-form annotations:
 
 ```json
 {
-  "summary": "Integrate the work's treatment of serializable execution",
+  "summary": "Integrate predicate locking and phantom prevention",
   "operations": [
     {
       "action": "add_evidence",
-      "concept": {
-        "path": [
-          "Database systems",
-          "Concurrency control",
-          "Serializable execution"
-        ]
-      },
+      "concept": {"id": "c12"},
       "evidence": [
         {
           "quote": "A serializable execution has the same effect as some serial execution."
@@ -186,14 +153,9 @@ free-form annotations:
     },
     {
       "action": "create_concept",
+      "ref": "predicate_locking",
       "label": "Predicate locking",
-      "under": {
-        "path": [
-          "Database systems",
-          "Concurrency control",
-          "Serializable execution"
-        ]
-      },
+      "parents": [{"id": "c12"}, {"id": "c27"}],
       "evidence": [
         {
           "quote": "Predicate locks prevent inserts that would change the result of a previously evaluated predicate.",
@@ -202,11 +164,9 @@ free-form annotations:
       ]
     },
     {
-      "action": "move_concept",
-      "concept": {
-        "path": ["Database systems", "Phantom prevention"]
-      },
-      "under": {"new": "Predicate locking"}
+      "action": "add_parent",
+      "concept": {"id": "c31"},
+      "parent": {"new": "predicate_locking"}
     }
   ],
   "annotations": [
@@ -215,31 +175,39 @@ free-form annotations:
 }
 ```
 
-Every object rejects unknown fields. Summaries, annotations, labels, paths,
-and quotations must be nonempty when present. Concept labels have no outer
-whitespace. `annotations` may be omitted and defaults to an empty list. Its
-strings are retained as meta-level context only: they are not confidence
-levels, review flags, or corpus evidence, and they do not affect corpus
-validation or application. Source-derived qualifications still belong in
-grounded corpus operations.
+Every object rejects unknown fields. Summaries, annotations, labels, handles,
+and quotations must be nonempty when present. Labels and handles have no outer
+whitespace or control characters. `annotations` may be omitted and defaults to
+an empty list. Annotations are retained as meta-level context only; they are
+not evidence, confidence levels, or review flags and do not affect validation
+or application.
 
-### Selectors, evidence, and placement
+### Concept selectors
 
-An existing concept is addressed by its complete path at the base revision:
-
-```json
-{"path":["Database systems","Concurrency control"]}
-```
-
-A concept created anywhere in the same request is addressed by its label:
+An existing concept is addressed by its durable public ID:
 
 ```json
-{"new":"Predicate locking"}
+{"id":"c42"}
 ```
 
-Created labels must be request-global unique after normalization. Root and
-sibling labels are also normalized-unique in the projected corpus. Paths are
-arrays so punctuation in a label has no structural meaning.
+Public IDs have a lowercase `c` followed by a positive canonical decimal
+integer. They preserve identity across rewording and relationship changes.
+
+A concept created in the same request declares a request-unique `ref` and is
+selected by that handle:
+
+```json
+{"new":"predicate_locking"}
+```
+
+Local handles may be referenced anywhere in the request, including before the
+corresponding creation appears. They are not labels. Different concepts may
+have identical labels, so labels never select a concept.
+
+There are no concept-path selectors. The only path arrays in the public
+contract locate headings within source works.
+
+### Evidence
 
 Evidence always belongs to the work supplied by the host:
 
@@ -252,49 +220,82 @@ Evidence always belongs to the work supplied by the host:
 }
 ```
 
-`quote` is required; the other fields disambiguate repeated text. Public input
-never contains source offsets.
-
-New and moved concepts append by default. `under` selects the parent;
-`before` or `after` optionally selects a sibling ordering anchor. `before` and
-`after` cannot both appear. Omitting `under` means root placement. There are no
-integer ordering positions in the contract.
+`quote` is required; the other fields disambiguate repeated source text.
+Public input never contains source offsets. Once resolved, evidence supports
+the concept across all of its parent relationships. Every leaf in the final
+projected graph must have at least one evidence link.
 
 ### Operations
 
-- `create_concept` requires `label` and nonempty `evidence`; `under`, `before`,
-  and `after` are optional.
-- `add_evidence` ensures one or more exact quotations from the scoped work are
-  attached. An already-satisfied concept/work/range mapping is idempotent.
-- `remove_evidence` removes quotations from the scoped work that are already
-  attached to the selected concept.
-- `move_concept` preserves concept identity and moves its complete subtree.
-- `reword_concept` preserves identity and requires
+- `create_concept` requires request-unique `ref`, `label`, an unordered
+  `parents` array, and nonempty `evidence`. An empty parent array creates a
+  derived root. Labels may duplicate existing or newly created labels.
+- `add_parent` ensures one broader-parent edge exists for `concept` without
+  changing any other parent. An already-present edge is idempotent.
+- `remove_parent` removes one parent edge without relocating the concept or its
+  descendants. If it removes the final parent, the concept becomes a root.
+- `add_evidence` ensures one or more quotations from the scoped work are
+  attached to the selected concept. An already-satisfied mapping is
+  idempotent.
+- `remove_evidence` removes quotations from the scoped work that are attached
+  to the selected concept.
+- `reword_concept` preserves the public ID and requires
   `evidence_disposition: "retain" | "remove"`.
-- `retire_concept` removes one childless concept and its evidence. Optional
-  `replacement` records a semantic successor; it does not move children or
-  evidence automatically.
+- `retire_concept` removes one concept and its incident edges. Retirement is
+  nonrecursive: children survive, and a child with no remaining parents
+  becomes a root. Optional `replacement` records a semantic successor but does
+  not transfer edges or evidence.
 
-Splits and merges are atomic combinations of these operations. A concept with
-children cannot be retired until every child is explicitly moved or retired in
-the same reconciliation.
+The complete projected result must be an acyclic graph with valid endpoints,
+no self or duplicate edges, and evidence on every leaf. There is no parent
+priority, sibling placement, integer position, path, or move operation.
 
-## Corpus reads and search
+## Local corpus browsing
+
+Corpus reads are deliberately local and bounded. HEAD is the default; `--at`
+selects an immutable historical revision.
 
 ```text
-annals show [--at REVISION]
-annals search QUERY [--limit N]
+annals overview [--at REVISION]
+annals roots [--at REVISION] [--limit N] [--cursor TOKEN]
+
+annals concept show cN [--at REVISION] [--preview-limit N]
+annals concept parents cN [--at REVISION] [--limit N] [--cursor TOKEN]
+annals concept children cN [--at REVISION] [--limit N] [--cursor TOKEN]
+annals concept evidence cN [--at REVISION] [--limit N] [--cursor TOKEN]
+
+annals graph cN [--at REVISION] [--direction parents|children|both]
+  [--depth N] [--max-nodes N]
+
+annals search QUERY [--at REVISION] [--within cN]
+  [--limit N] [--cursor TOKEN]
 ```
 
-`show` displays HEAD by default. Historical revisions are immutable and
-available through `--at`; revision zero is the empty corpus. JSON returns a
-revision and a preorder concept array. Each concept contains `path`, `label`,
-optional parent path, immediate child labels, and evidence as work-label and
-quotation pairs.
+`overview` returns revision-wide counts for concepts, explicit edges, roots,
+leaves, shared concepts, and evidence. It does not dump the graph.
 
-`search` queries current concept labels and complete paths. The default limit is
-10 and zero is invalid. Results contain paths, labels, and evidence, with no
-storage identifiers.
+`roots` pages through concept summaries with no parents. `concept show` returns
+one concept's ID, label, relationship and evidence counts, derived
+root/leaf/shared flags, and bounded previews. The `parents` and `children`
+subcommands page through compact `{id, label}` references; `evidence` pages
+through work-and-quotation pairs.
+
+`graph` performs a bounded local expansion around one concept. `direction`
+chooses incoming parent edges, outgoing child edges, or both. Each concept
+appears once even when several routes reach it. When depth or node limits cut
+off the expansion, the response reports a frontier instead of implying that
+the returned neighborhood is complete.
+
+`search` matches labels and ancestor-label context. `--within cN` restricts the
+search to the graph below one concept. Search results remain distinct by
+public ID when labels repeat.
+
+Paged responses contain `items` plus `page` with the requested limit,
+returned count, total count, and optional `next_cursor`. The cursor is omitted
+when the page is complete. Cursors are opaque and tied to the same library,
+command, query, scope, and resolved revision. A later page may request a
+different limit. Deterministic page order is a rendering contract, not a
+conceptual ordering.
 
 ## History
 
@@ -304,16 +305,18 @@ annals diff FROM TO
 annals revert REVISION
 ```
 
-`log` lists newest commits first; its default limit is 20. Work retention,
-recorded reconciliations, model runs, and failed attempts are absent because
-they are not corpus transitions.
+`log` lists newest commits first. Work retention, recorded reconciliations,
+model runs, and failed attempts are absent because they are not corpus
+transitions.
 
-`diff` compares any two retained revision snapshots and reports created,
-retired, moved, reordered, and reworded paths plus added or removed quotations.
+`diff` compares two retained full snapshots and reports concept creation,
+retirement, and rewording; individual parent edges added or removed; and
+evidence added or removed. It never synthesizes a move or reorder event.
 
 `revert` inverses one earlier commit against current HEAD and creates a new
-commit. It does not erase history. If relevant state has changed since the
-target transition, it fails atomically with `revert_conflict`.
+commit. It does not erase history. If a relevant concept, edge, or evidence
+fact has changed since the target transition, it fails atomically with
+`revert_conflict`; unrelated relationships survive.
 
 ## Output and exit behavior
 
@@ -327,9 +330,11 @@ JSON success and failure envelopes are:
 {"ok":false,"error":{"code":"stable_code","message":"description"}}
 ```
 
-Public corpus JSON uses work labels, path arrays, exact quotations, and revision
-numbers. Internal concept, work, reconciliation, evidence, commit-row, and
-model-run identifiers are not exposed.
+Public corpus JSON uses `cN` concept IDs, labels, exact quotations, edge
+endpoints, opaque pagination cursors, and revision numbers. It does not expose
+work, reconciliation, evidence, commit-row, or model-run IDs, nor source byte
+ranges. Source-document heading paths remain public where they locate work
+text.
 
 Exit categories are:
 

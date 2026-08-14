@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use rusqlite::Connection;
@@ -23,7 +23,6 @@ struct StoredCommit {
     summary: String,
     submitted_request: String,
     resolved_operations: String,
-    before_snapshot: String,
     after_snapshot: String,
     metadata: String,
     actor: String,
@@ -59,12 +58,11 @@ struct SuccessfulSubmission {
 
 #[derive(Debug, PartialEq, Eq)]
 struct ExpectedIndexRow {
-    id: i64,
     concept_id: i64,
     label: String,
-    path: String,
+    ancestors: String,
     normalized_label: String,
-    normalized_path: String,
+    normalized_ancestors: String,
     content_hash: String,
     indexer_version: i64,
 }
@@ -222,19 +220,32 @@ fn load_head_revision(
     connection: &Connection,
     issues: &mut Vec<ValidationIssue>,
 ) -> Result<Option<i64>, AppError> {
-    let mut statement =
-        connection.prepare("SELECT singleton, revision FROM library_state ORDER BY singleton")?;
+    let mut statement = connection
+        .prepare("SELECT singleton, revision, library_id FROM library_state ORDER BY singleton")?;
     let rows = statement
-        .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))?
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?
         .collect::<Result<Vec<_>, _>>()?;
     match rows.as_slice() {
-        [(1, revision)] => Ok(Some(*revision)),
+        [(1, revision, library_id)] if valid_library_id(library_id) => Ok(Some(*revision)),
         [] => {
             issues.push(error_issue(
                 "library_state_missing",
                 "the library has no HEAD revision record",
             ));
             Ok(None)
+        }
+        [(1, revision, _)] => {
+            issues.push(error_issue(
+                "invalid_library_id",
+                "the library identity must be 32 lowercase hexadecimal characters",
+            ));
+            Ok(Some(*revision))
         }
         _ => {
             issues.push(error_issue(
@@ -243,16 +254,22 @@ fn load_head_revision(
             ));
             Ok(rows
                 .iter()
-                .find_map(|(singleton, revision)| (*singleton == 1).then_some(*revision)))
+                .find_map(|(singleton, revision, _)| (*singleton == 1).then_some(*revision)))
         }
     }
+}
+
+fn valid_library_id(value: &str) -> bool {
+    value.len() == 32
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn load_commits(connection: &Connection) -> Result<Vec<StoredCommit>, AppError> {
     let mut statement = connection.prepare(
         "SELECT revision, parent_revision, base_revision, work_id, reconciliation_id, kind, summary, \
-                submitted_request, resolved_operations, before_snapshot, after_snapshot, \
-                metadata, actor \
+                submitted_request, resolved_operations, after_snapshot, metadata, actor \
          FROM commits ORDER BY revision",
     )?;
     let rows = statement.query_map([], |row| {
@@ -266,10 +283,9 @@ fn load_commits(connection: &Connection) -> Result<Vec<StoredCommit>, AppError> 
             summary: row.get(6)?,
             submitted_request: row.get(7)?,
             resolved_operations: row.get(8)?,
-            before_snapshot: row.get(9)?,
-            after_snapshot: row.get(10)?,
-            metadata: row.get(11)?,
-            actor: row.get(12)?,
+            after_snapshot: row.get(9)?,
+            metadata: row.get(10)?,
+            actor: row.get(11)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -409,7 +425,7 @@ fn check_reconciliation_payload(
     }
     let request = check_reconciliation_request(reconciliation, issues);
     check_reconciliation_resolution(connection, reconciliation, request.as_ref(), issues);
-    if reconciliation.status == "recorded" {
+    if corpus::snapshot_at(connection, reconciliation.base_revision).is_ok() {
         check_reconciliation_replay(connection, reconciliation, issues);
     }
 }
@@ -554,7 +570,6 @@ fn check_reconciliation_resolution(
         connection,
         &resolved.resulting_snapshot,
         expected_revision,
-        expected_revision,
         "reconciliation result",
         issues,
     );
@@ -593,14 +608,17 @@ fn operation_kinds_match(requested: &[ChangeOperation], resolved: &[ResolvedOper
                     ChangeOperation::CreateConcept { .. },
                     ResolvedOperation::CreateConcept { .. }
                 ) | (
+                    ChangeOperation::AddParent { .. },
+                    ResolvedOperation::AddParent { .. }
+                ) | (
+                    ChangeOperation::RemoveParent { .. },
+                    ResolvedOperation::RemoveParent { .. }
+                ) | (
                     ChangeOperation::AddEvidence { .. },
                     ResolvedOperation::AddEvidence { .. }
                 ) | (
                     ChangeOperation::RemoveEvidence { .. },
                     ResolvedOperation::RemoveEvidence { .. }
-                ) | (
-                    ChangeOperation::MoveConcept { .. },
-                    ResolvedOperation::MoveConcept { .. }
                 ) | (
                     ChangeOperation::RewordConcept { .. },
                     ResolvedOperation::RewordConcept { .. }
@@ -619,7 +637,11 @@ fn check_commit_provenance(
     commits: &[StoredCommit],
     issues: &mut Vec<ValidationIssue>,
 ) {
-    if commit.before_snapshot == commit.after_snapshot {
+    if let (Ok(before), Ok(after)) = (
+        corpus::snapshot_at(connection, commit.parent_revision),
+        serde_json::from_str::<Snapshot>(&commit.after_snapshot),
+    ) && snapshots_corpus_equal(&before, &after)
+    {
         issues.push(error_issue(
             "empty_commit",
             format!("revision {} does not change the corpus", commit.revision),
@@ -711,11 +733,14 @@ fn check_revert_commit(
             .find(|candidate| candidate.revision == target && target < commit.revision)
     });
     let resolved_matches = revert_operations_match(connection, commit);
+    let projection_matches =
+        target.is_some_and(|target| revert_projection_matches(connection, commit, target));
     if commit.reconciliation_id.is_some()
         || target_commit.is_none()
         || target_commit.is_some_and(|target| target.work_id != commit.work_id)
         || target.is_some_and(|target| commit.summary != format!("Revert revision {target}"))
         || !resolved_matches
+        || !projection_matches
     {
         issues.push(error_issue(
             "invalid_revert_provenance",
@@ -727,8 +752,26 @@ fn check_revert_commit(
     }
 }
 
+fn revert_projection_matches(
+    connection: &Connection,
+    commit: &StoredCommit,
+    target_revision: i64,
+) -> bool {
+    let snapshots = (
+        corpus::snapshot_at(connection, target_revision.saturating_sub(1)),
+        corpus::snapshot_at(connection, target_revision),
+        corpus::snapshot_at(connection, commit.parent_revision),
+        serde_json::from_str::<Snapshot>(&commit.after_snapshot),
+    );
+    let (Ok(target_before), Ok(target_after), Ok(head_before), Ok(actual)) = snapshots else {
+        return false;
+    };
+    corpus::invert_snapshot_change(target_revision, &target_before, &target_after, &head_before)
+        .is_ok_and(|expected| expected == actual)
+}
+
 fn revert_operations_match(connection: &Connection, commit: &StoredCommit) -> bool {
-    let Ok(before) = serde_json::from_str::<Snapshot>(&commit.before_snapshot) else {
+    let Ok(before) = corpus::snapshot_at(connection, commit.parent_revision) else {
         return false;
     };
     let Ok(after) = serde_json::from_str::<Snapshot>(&commit.after_snapshot) else {
@@ -816,7 +859,7 @@ fn json_integer(source: &str, field: &str) -> Option<i64> {
         .as_i64()
 }
 
-/// Check the linear log and return the parsed after-state at HEAD, when available.
+/// Check the linear after-state log and return the parsed snapshot at HEAD, when available.
 #[allow(clippy::too_many_lines)]
 fn check_history(
     connection: &Connection,
@@ -845,7 +888,6 @@ fn check_history(
         }
     }
 
-    let mut previous_after = Some(Snapshot::empty());
     let mut head_after = None;
     for (offset, commit) in commits.iter().enumerate() {
         let expected_revision = i64::try_from(offset)
@@ -884,43 +926,13 @@ fn check_history(
             ));
         }
 
-        let before = parse_snapshot(&commit.before_snapshot, commit.revision, "before", issues);
         let after = parse_snapshot(&commit.after_snapshot, commit.revision, "after", issues);
-        if let Some(snapshot) = &before {
-            validate_historical_snapshot(
-                connection,
-                snapshot,
-                commit.parent_revision,
-                commit.revision,
-                "before",
-                issues,
-            );
-        }
         if let Some(snapshot) = &after {
-            validate_historical_snapshot(
-                connection,
-                snapshot,
-                commit.revision,
-                commit.revision,
-                "after",
-                issues,
-            );
-        }
-        if let (Some(expected), Some(actual)) = (previous_after.as_ref(), before.as_ref())
-            && actual != expected
-        {
-            issues.push(error_issue(
-                "commit_history_mismatch",
-                format!(
-                    "revision {} does not begin with the preceding revision's after-state",
-                    commit.revision
-                ),
-            ));
+            validate_historical_snapshot(connection, snapshot, commit.revision, "after", issues);
         }
         if head_revision == Some(commit.revision) {
             head_after.clone_from(&after);
         }
-        previous_after = after;
     }
 
     if head_revision == Some(0) {
@@ -933,7 +945,6 @@ fn check_history(
 fn validate_historical_snapshot(
     connection: &Connection,
     snapshot: &Snapshot,
-    snapshot_revision: i64,
     commit_revision: i64,
     side: &str,
     issues: &mut Vec<ValidationIssue>,
@@ -943,19 +954,6 @@ fn validate_historical_snapshot(
             "invalid_historical_snapshot",
             format!("revision {commit_revision} has an invalid {side}-snapshot: {error}"),
         ));
-    }
-    for concept in &snapshot.concepts {
-        if concept.created_revision > snapshot_revision
-            || concept.updated_revision > snapshot_revision
-        {
-            issues.push(error_issue(
-                "future_concept_revision",
-                format!(
-                    "revision {commit_revision} has a {side}-snapshot whose concept revision metadata is later than snapshot revision {snapshot_revision}"
-                ),
-            ));
-            break;
-        }
     }
 }
 
@@ -1021,54 +1019,32 @@ fn check_index(
         ));
     }
 
-    let paths = match corpus::paths(snapshot) {
-        Ok(paths) => paths,
+    let expected = match expected_index_rows(snapshot) {
+        Ok(expected) => expected,
         Err(error) => {
             issues.push(error_issue(
-                "index_paths_unavailable",
-                format!("canonical concept paths could not be derived: {error}"),
+                "index_ancestors_unavailable",
+                format!("concept ancestor contexts could not be derived: {error}"),
             ));
             return Ok(());
         }
     };
-    let expected = snapshot
-        .concepts
-        .iter()
-        .filter_map(|concept| {
-            let segments = paths.get(&concept.id)?;
-            let path = segments.join(" › ");
-            Some((
-                concept.id,
-                ExpectedIndexRow {
-                    id: concept.id,
-                    concept_id: concept.id,
-                    label: concept.label.clone(),
-                    normalized_label: index::normalize(&concept.label),
-                    normalized_path: index::normalize(&path),
-                    content_hash: index_content_hash(concept.id, &concept.label, &path),
-                    path,
-                    indexer_version: index::INDEXER_VERSION,
-                },
-            ))
-        })
-        .collect::<BTreeMap<_, _>>();
 
     let mut statement = connection.prepare(
-        "SELECT id, concept_id, label, path, normalized_label, normalized_path, content_hash, \
-                indexer_version \
+        "SELECT concept_id, label, ancestors, normalized_label, normalized_ancestors, \
+                content_hash, indexer_version \
          FROM concept_search ORDER BY concept_id",
     )?;
     let stored = statement
         .query_map([], |row| {
             Ok(ExpectedIndexRow {
-                id: row.get(0)?,
-                concept_id: row.get(1)?,
-                label: row.get(2)?,
-                path: row.get(3)?,
-                normalized_label: row.get(4)?,
-                normalized_path: row.get(5)?,
-                content_hash: row.get(6)?,
-                indexer_version: row.get(7)?,
+                concept_id: row.get(0)?,
+                label: row.get(1)?,
+                ancestors: row.get(2)?,
+                normalized_label: row.get(3)?,
+                normalized_ancestors: row.get(4)?,
+                content_hash: row.get(5)?,
+                indexer_version: row.get(6)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -1101,12 +1077,158 @@ fn check_index(
     Ok(())
 }
 
-fn index_content_hash(id: i64, label: &str, path: &str) -> String {
+#[allow(clippy::too_many_lines)]
+fn expected_index_rows(snapshot: &Snapshot) -> Result<BTreeMap<i64, ExpectedIndexRow>, AppError> {
+    let concepts = snapshot
+        .concepts
+        .iter()
+        .map(|concept| (concept.id, concept.label.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    let mut ancestors = concepts
+        .keys()
+        .map(|id| (*id, BTreeSet::new()))
+        .collect::<BTreeMap<_, _>>();
+    let mut indegree = concepts
+        .keys()
+        .map(|id| (*id, 0_usize))
+        .collect::<BTreeMap<_, _>>();
+    let mut children = BTreeMap::<i64, BTreeSet<i64>>::new();
+
+    for edge in &snapshot.edges {
+        if edge.parent_id == edge.child_id
+            || !concepts.contains_key(&edge.parent_id)
+            || !concepts.contains_key(&edge.child_id)
+            || !children
+                .entry(edge.parent_id)
+                .or_default()
+                .insert(edge.child_id)
+        {
+            return Err(AppError::database(
+                "invalid_concept_graph",
+                "the concept graph has an invalid or duplicate edge",
+            ));
+        }
+        let degree = indegree.get_mut(&edge.child_id).ok_or_else(|| {
+            AppError::database(
+                "invalid_concept_graph",
+                format!("concept c{} is missing", edge.child_id),
+            )
+        })?;
+        *degree = degree.checked_add(1).ok_or_else(|| {
+            AppError::database(
+                "concept_indegree_overflow",
+                "a concept has too many parents",
+            )
+        })?;
+    }
+
+    let mut ready = indegree
+        .iter()
+        .filter_map(|(id, degree)| (*degree == 0).then_some(*id))
+        .collect::<BTreeSet<_>>();
+    let mut visited = 0_usize;
+    while let Some(parent) = ready.pop_first() {
+        visited += 1;
+        let mut inherited = ancestors.get(&parent).cloned().ok_or_else(|| {
+            AppError::database(
+                "index_ancestors_missing",
+                format!("concept c{parent} has no computed ancestor set"),
+            )
+        })?;
+        inherited.insert(parent);
+        for child in children.get(&parent).into_iter().flatten() {
+            ancestors
+                .get_mut(child)
+                .ok_or_else(|| {
+                    AppError::database(
+                        "index_ancestors_missing",
+                        format!("concept c{child} has no computed ancestor set"),
+                    )
+                })?
+                .extend(inherited.iter().copied());
+            let degree = indegree.get_mut(child).ok_or_else(|| {
+                AppError::database(
+                    "invalid_concept_graph",
+                    format!("concept c{child} has no indegree"),
+                )
+            })?;
+            *degree = degree.checked_sub(1).ok_or_else(|| {
+                AppError::database(
+                    "invalid_concept_graph",
+                    "a concept edge was processed more than once",
+                )
+            })?;
+            if *degree == 0 {
+                ready.insert(*child);
+            }
+        }
+    }
+    if visited != concepts.len() {
+        return Err(AppError::database(
+            "concept_cycle",
+            "the concept graph contains a directed cycle",
+        ));
+    }
+
+    snapshot
+        .concepts
+        .iter()
+        .map(|concept| {
+            let ids = ancestors.get(&concept.id).ok_or_else(|| {
+                AppError::database(
+                    "index_ancestors_missing",
+                    format!("concept c{} has no computed ancestor set", concept.id),
+                )
+            })?;
+            let mut labels = ids
+                .iter()
+                .map(|id| {
+                    concepts.get(id).map_or_else(
+                        || {
+                            Err(AppError::database(
+                                "index_ancestor_missing",
+                                format!("ancestor c{id} is missing"),
+                            ))
+                        },
+                        |label| Ok((index::normalize(label), (*label).to_owned(), *id)),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            labels.sort();
+            let mut exact = Vec::new();
+            let mut normalized = Vec::new();
+            for (normalized_label, label, _) in labels {
+                if exact.last() != Some(&label) {
+                    exact.push(label);
+                }
+                if normalized.last() != Some(&normalized_label) {
+                    normalized.push(normalized_label);
+                }
+            }
+            let ancestors = exact.join("\n");
+            let normalized_ancestors = normalized.join(" ");
+            Ok((
+                concept.id,
+                ExpectedIndexRow {
+                    concept_id: concept.id,
+                    label: concept.label.clone(),
+                    ancestors: ancestors.clone(),
+                    normalized_label: index::normalize(&concept.label),
+                    normalized_ancestors,
+                    content_hash: index_content_hash(concept.id, &concept.label, &ancestors),
+                    indexer_version: index::INDEXER_VERSION,
+                },
+            ))
+        })
+        .collect()
+}
+
+fn index_content_hash(id: i64, label: &str, ancestors: &str) -> String {
     let mut digest = Sha256::new();
     digest.update(id.to_le_bytes());
     digest.update(label.as_bytes());
     digest.update([0]);
-    digest.update(path.as_bytes());
+    digest.update(ancestors.as_bytes());
     digest.update(index::INDEXER_VERSION.to_le_bytes());
     format!("{:x}", digest.finalize())
 }
@@ -1165,7 +1287,9 @@ mod tests {
                 "summary": "Add predicate locking",
                 "operations": [{
                     "action": "create_concept",
+                    "ref": "predicate_locking",
                     "label": "Predicate locking",
+                    "parents": [],
                     "evidence": [{
                         "quote": "Predicate locks prevent phantom rows."
                     }]
@@ -1195,7 +1319,9 @@ mod tests {
             "summary": "Represent the source claim",
             "operations": [{
                 "action": "create_concept",
+                "ref": "source_claim",
                 "label": "Source claim",
+                "parents": [],
                 "evidence": [{"quote": reconciliation_work.text}]
             }]
         });
@@ -1246,6 +1372,89 @@ mod tests {
     }
 
     #[test]
+    fn validation_accepts_shared_dag_ancestry_and_its_index() -> TestResult {
+        let mut connection = initialized_connection()?;
+        let work = corpus::store_work(
+            &mut connection,
+            "Graph paper",
+            "Alpha scope. Beta scope. Shared claim.",
+        )?;
+        let reconciliation = resolver::submit_value(
+            &mut connection,
+            &work,
+            0,
+            json!({
+                "summary": "Create a shared concept",
+                "operations": [
+                    {
+                        "action": "create_concept",
+                        "ref": "alpha",
+                        "label": "Alpha",
+                        "parents": [],
+                        "evidence": [{"quote": "Alpha scope."}]
+                    },
+                    {
+                        "action": "create_concept",
+                        "ref": "beta",
+                        "label": "Beta",
+                        "parents": [],
+                        "evidence": [{"quote": "Beta scope."}]
+                    },
+                    {
+                        "action": "create_concept",
+                        "ref": "shared",
+                        "label": "Shared",
+                        "parents": [{"new": "alpha"}, {"new": "beta"}],
+                        "evidence": [{"quote": "Shared claim."}]
+                    }
+                ]
+            }),
+            "human",
+            None,
+        )?;
+        resolver::apply_record(&mut connection, &reconciliation)?;
+
+        let report = validate(&connection)?;
+        assert!(report.valid, "{:?}", report.issues);
+        assert_eq!(
+            connection.query_row(
+                "SELECT normalized_ancestors FROM concept_search WHERE label = 'Shared'",
+                [],
+                |row| row.get::<_, String>(0),
+            )?,
+            "alpha beta"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn validation_reports_a_cycle_in_a_historical_after_snapshot() -> TestResult {
+        let connection = applied_library()?;
+        let snapshot = json!({
+            "concepts": [
+                {"id": 1, "label": "Predicate locking"},
+                {"id": 2, "label": "Cycle peer"}
+            ],
+            "edges": [
+                {"parent_id": 1, "child_id": 2},
+                {"parent_id": 2, "child_id": 1}
+            ],
+            "evidence": [
+                {"concept_id": 1, "work_id": 1, "start_byte": 0, "end_byte": 37}
+            ]
+        });
+        connection.execute(
+            "UPDATE commits SET after_snapshot = ?1 WHERE revision = 1",
+            [serde_json::to_string(&snapshot)?],
+        )?;
+
+        let report = validate(&connection)?;
+        assert!(!report.valid);
+        assert!(has_issue(&report, "invalid_historical_snapshot"));
+        Ok(())
+    }
+
+    #[test]
     fn validation_detects_a_commit_that_no_longer_matches_its_reconciliation() -> TestResult {
         let connection = applied_library()?;
         connection.execute(
@@ -1279,6 +1488,26 @@ mod tests {
     }
 
     #[test]
+    fn validation_detects_a_revert_that_does_not_apply_the_inverse() -> TestResult {
+        let mut connection = applied_library()?;
+        let transaction = connection.transaction()?;
+        assert_eq!(corpus::revert(&transaction, 1)?, 2);
+        transaction.commit()?;
+
+        let non_inverse = corpus::snapshot_at(&connection, 1)?;
+        connection.execute(
+            "UPDATE commits SET after_snapshot = ?1, resolved_operations = '[]' \
+             WHERE revision = 2",
+            [serde_json::to_string(&non_inverse)?],
+        )?;
+
+        let report = validate(&connection)?;
+        assert!(!report.valid);
+        assert!(has_issue(&report, "invalid_revert_provenance"));
+        Ok(())
+    }
+
+    #[test]
     fn validation_detects_a_reconciliation_payload_mismatch() -> TestResult {
         let connection = applied_library()?;
         connection.execute(
@@ -1304,7 +1533,7 @@ mod tests {
                 "summary": "Reconcile evidence already attached",
                 "operations": [{
                     "action": "add_evidence",
-                    "concept": {"path": ["Predicate locking"]},
+                    "concept": {"id": "c1"},
                     "evidence": [{"quote": "Predicate locks prevent phantom rows."}]
                 }],
                 "annotations": ["This note has no application semantics."]
@@ -1336,7 +1565,7 @@ mod tests {
                 "summary": "Reconcile evidence already attached",
                 "operations": [{
                     "action": "add_evidence",
-                    "concept": {"path": ["Predicate locking"]},
+                    "concept": {"id": "c1"},
                     "evidence": [{"quote": "Predicate locks prevent phantom rows."}]
                 }]
             }),
@@ -1345,7 +1574,7 @@ mod tests {
         )?;
         connection.execute(
             "UPDATE reconciliations SET submitted_request = json_set(\
-                 submitted_request, '$.operations[0].concept.path[0]', 'Missing') \
+                 submitted_request, '$.operations[0].concept.id', 'c999') \
              WHERE status = 'recorded'",
             [],
         )?;
@@ -1353,6 +1582,70 @@ mod tests {
         let report = validate(&connection)?;
         assert!(!report.valid);
         assert!(has_issue(&report, "reconciliation_resolution_mismatch"));
+        Ok(())
+    }
+
+    #[test]
+    fn validation_replays_an_applied_reconciliation_request() -> TestResult {
+        let connection = applied_library()?;
+        connection.execute(
+            "UPDATE reconciliations SET resolved_reconciliation = json_set(\
+                 resolved_reconciliation, '$.operations[0].concept.label', 'Tampered') \
+             WHERE status = 'applied'",
+            [],
+        )?;
+
+        let report = validate(&connection)?;
+        assert!(!report.valid);
+        assert!(has_issue(&report, "reconciliation_resolution_mismatch"));
+        Ok(())
+    }
+
+    #[test]
+    fn validation_replays_pending_and_superseded_reconciliations() -> TestResult {
+        let mut connection = applied_library()?;
+        let work = corpus::get_work(&connection, "Transactions")?;
+        resolver::submit_value(
+            &mut connection,
+            &work,
+            1,
+            json!({
+                "summary": "Add another grounded concept",
+                "operations": [{
+                    "action": "create_concept",
+                    "ref": "another_claim",
+                    "label": "Another claim",
+                    "parents": [],
+                    "evidence": [{"quote": "Predicate locks prevent phantom rows."}]
+                }]
+            }),
+            "human",
+            None,
+        )?;
+        connection.execute(
+            "UPDATE reconciliations SET resolved_reconciliation = json_set(\
+                 resolved_reconciliation, '$.operations[0].concept.label', 'Tampered') \
+             WHERE status = 'pending'",
+            [],
+        )?;
+
+        let pending_report = validate(&connection)?;
+        assert!(!pending_report.valid);
+        assert!(has_issue(
+            &pending_report,
+            "reconciliation_resolution_mismatch"
+        ));
+
+        connection.execute(
+            "UPDATE reconciliations SET status = 'superseded' WHERE status = 'pending'",
+            [],
+        )?;
+        let superseded_report = validate(&connection)?;
+        assert!(!superseded_report.valid);
+        assert!(has_issue(
+            &superseded_report,
+            "reconciliation_resolution_mismatch"
+        ));
         Ok(())
     }
 
@@ -1368,7 +1661,7 @@ mod tests {
                 "summary": "Reconcile evidence already attached",
                 "operations": [{
                     "action": "add_evidence",
-                    "concept": {"path": ["Predicate locking"]},
+                    "concept": {"id": "c1"},
                     "evidence": [{"quote": "Predicate locks prevent phantom rows."}]
                 }]
             }),

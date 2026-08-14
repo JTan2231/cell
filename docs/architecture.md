@@ -3,16 +3,38 @@
 ## Boundary and ownership
 
 Annals is one Rust executable and one SQLite database per library. A work is an
-immutable source object. The corpus owns concepts. Evidence is many-to-many: a
-work may support many concepts and a concept may be supported by many works.
-Model runs own examinations and reconciliations, never concepts.
+immutable source object. The corpus owns concepts and the explicit
+broader-to-narrower edges between them. Evidence is many-to-many: a work may
+support many concepts and a concept may be supported by many works. Model runs
+own examinations and reconciliations, never concepts.
 
 Only an applied reconciliation whose projected corpus differs mechanically
 from its base advances the corpus. Retaining a work, reading state, running a
 model, recording a reconciliation, validating, backing up, and rebuilding
-search data do not advance the corpus revision. A mechanically equal
-projection is retained as an interpretive record with status `recorded` and
-has no commit or revision of its own.
+search data do not advance the revision. A mechanically equal projection is
+retained as an interpretive record with status `recorded` and has no commit or
+revision of its own.
+
+## Corpus graph
+
+Each concept has a durable public ID such as `c42` and a descriptive label.
+Labels may repeat; the ID, not the label, carries identity. Rewording and edge
+changes preserve that identity.
+
+Concept edges point from broader scopes to narrower scopes. They form an
+unordered directed acyclic graph. A concept may have any number of parents,
+and no parent is primary. Roots are concepts with no parents; leaves are
+concepts with no children. These classifications are derived from the edge set
+and may change when one edge is added or removed.
+
+There are no concept paths, placement slots, sibling positions, or subtree
+moves. Presentation code uses deterministic ordering only to make output and
+pagination repeatable; that order has no corpus meaning. Each edge is an
+explicit semantic assertion and is retained independently of the concept and
+its other edges.
+
+Evidence is attached to a concept as a whole, not to a parent edge or one view
+of the graph. Every projected leaf must have at least one evidence link.
 
 ## Liaison flow
 
@@ -27,161 +49,169 @@ and base revision and starts an isolated Codex app-server process. The
 high-quality default uses `gpt-5.6-sol` with max reasoning. The low and medium
 presets use `gpt-5.6-luna` and `gpt-5.6-terra`, respectively, both with medium
 reasoning. An exact model override changes the model while the selected preset
-continues to control reasoning effort. Annals records the resolved model and
-effort, loads the installed Codex model catalog, and narrows that model to
-direct tool mode. The process uses an empty temporary directory, a private
-temporary Codex home, and no execution environment, and disables the shell,
-web, planning, user-input, multi-agent, plugin, skill, and other built-in tool
-sources.
+continues to control reasoning effort.
 
-The prompt is deliberately a pointer. It contains the work label, base
-revision, and operating instructions, but not the complete work. The work is
-presented through read tools as source content, never as operating
-instructions.
+The process uses an empty temporary directory, a private temporary Codex home,
+and no execution environment. Shell, web, planning, user-input, multi-agent,
+plugin, skill, and other built-in tool sources are disabled. The prompt is a
+short pointer containing the work label, base revision, and operating
+instructions, not the complete work. Work text is presented through read
+tools as source content, never as operating instructions.
 
 The liaison constructs a provisional, best-current reconciliation. It does not
 exclude source-grounded material because it appears familiar, minor,
 speculative, redundant, obvious, or unlikely to be useful. It chooses coherent
-granularity relative to the work and frozen corpus without claiming a unique,
-objective, or final decomposition into semantic units. It avoids mechanical
-sentence-per-concept splitting, but estimated salience or novelty is not an
-inclusion test.
+granularity relative to the work and frozen corpus without claiming a unique
+or final semantic decomposition.
 
-At thread start Annals supplies exactly six direct, session-scoped dynamic
-tools through the app-server protocol:
+At thread start Annals supplies exactly six direct, session-scoped tools:
 
 - `work_overview()` returns byte size and a bounded Markdown-heading outline;
 - `work_read(regions[])` performs bounded reads by heading path, unique quote,
-  beginning/end anchor, or an exact quotation returned as a continuation;
-- `work_search(queries[])` returns compact paragraph excerpts and heading paths;
-- `corpus_search(queries[])` searches the frozen base revision and returns paths
-  and evidence;
-- `corpus_inspect(paths[])` returns topology and evidence for exact paths;
-- `submit_reconciliation(reconciliation)` records the session's reconciliation.
+  beginning/end anchor, or exact continuation quotation;
+- `work_search(queries[])` returns compact paragraph excerpts and heading
+  paths;
+- `corpus_search(queries[])` searches the frozen graph by label and ancestor
+  context, with independent cursors and optional descendant scopes;
+- `corpus_inspect(requests[])` batches overview, root, concept, direct
+  relationship, evidence, and bounded local-graph reads addressed by public
+  concept ID; and
+- `submit_reconciliation(reconciliation)` records the session's sole semantic
+  write request.
 
-Read and search calls accept batches. One successful `submit_reconciliation`
-closes the session's sole write boundary. Failed submissions are returned as
-recoverable tool errors and may be corrected. Tool arguments and results are
-retained in the model-run transcript.
+Read and search calls accept batches. Responses are bounded, and the liaison
+follows opaque cursors or graph frontiers when it needs more context. One
+successful `submit_reconciliation` closes the session's write boundary. Failed
+submissions are recoverable tool errors and may be corrected. Tool arguments
+and results are retained in the model-run transcript.
 
 App-server sends each dynamic tool call back to the host, which dispatches it
-to the same in-process liaison backend used by the standalone private MCP
-transport. The MCP server remains a transport adapter and test surface; it is
-not attached to the Codex liaison, so Codex's MCP resource tools never enter
-the model-visible inventory.
+to the same in-process backend used by the private MCP transport. The MCP
+server remains a transport adapter and test surface; it is not attached to the
+Codex liaison.
 
 The model's final response is diagnostic only. `integrate` succeeds from the
-recorded `submit_reconciliation` side effect. If the process fails after
-recording a valid reconciliation, that reconciliation remains the result; if
-the process exits without one, Annals returns
-`model_did_not_submit_reconciliation`.
+recorded `submit_reconciliation` side effect. If the process fails after a
+valid submission, that reconciliation remains the result; if it exits without
+one, Annals returns `model_did_not_submit_reconciliation`.
 
 No SQLite write transaction is held while the model examines the work. For an
-ordinary unstructured work, the liaison can start at the beginning and pass a
-read's exact `continue_after` quotation into the next read. Each result reports
-`region_complete` and `work_complete`. A highly repetitive work may not yield a
-unique continuation quotation; exhaustive sequential traversal is not
-guaranteed in that case, so the liaison must use another available natural
-anchor when possible.
+ordinary unstructured work, sequential reads can continue from exact returned
+text. Highly repetitive text may require another natural anchor; exhaustive
+sequential traversal is not guaranteed when no unique continuation exists.
 
 ## Language-level reconciliation
 
-The host supplies the immutable work and base revision. The model submits one
-strict object containing a summary, one or more operations, and optional
-free-form annotations. It does not submit an outcome or confidence judgment.
-Annotations preserve meta-level observations about this reconciliation, have
-no validation, review, confidence, or application semantics, and do not
-replace source-derived content in grounded operations.
+The host supplies the immutable evidence work and frozen base revision. The
+submitted object contains a summary, one or more semantic operations, and
+optional inert annotations. It contains neither the work selector nor base
+revision.
 
-Existing concepts use complete path arrays from the frozen base revision:
+An existing concept selector uses its public ID:
 
 ```json
-{"path":["Database systems","Concurrency control"]}
+{"id":"c42"}
 ```
 
-Concepts created in the same reconciliation use their meaningful label:
+A created concept declares a request-unique local handle in `ref`. Any
+operation in that request may select it with `new`, including a forward
+reference:
 
 ```json
-{"new":"Predicate locking"}
+{"new":"predicate_locking"}
 ```
 
-Created labels must be unique within the request after Unicode NFKC,
-lowercasing, and whitespace collapse. Existing paths and
-reconciliation-local labels are all resolved before operations execute. A move
-or reword therefore cannot silently change what a later selector denotes.
+Handles identify creations only within one request. They are not labels and
+are replaced by durable `cN` IDs when the request resolves. Duplicate concept
+labels are valid.
 
-Evidence uses an exact quotation from the scoped work. When it is repeated,
-`within_heading` (an exact heading path), `preceded_by`, or `followed_by`
-disambiguates it. The public protocol never asks for a byte offset.
+The graph-native operations are:
 
-Placement appends by default. Optional `before` and `after` selectors express
-relative ordering; they are mutually exclusive. Omitting `under` places a
-created or moved concept at the root level.
+- `create_concept`, with `ref`, `label`, an unordered `parents` array, and
+  evidence from the scoped work;
+- `add_parent`, which idempotently ensures one explicit edge, and
+  `remove_parent`, which strictly removes one explicit edge;
+- `add_evidence` and `remove_evidence`;
+- `reword_concept`, preserving the concept ID and explicitly retaining or
+  removing its evidence; and
+- `retire_concept`, optionally recording a replacement concept.
+
+There is no move operation. Reclassification is expressed as the exact parent
+edges to remove and add; unrelated parents and descendants are unchanged.
+Retirement is nonrecursive: other concepts survive, and a child that loses its
+last parent becomes a root.
+
+Evidence uses an exact quotation from the scoped work. When text repeats,
+`within_heading` (a source-document heading path), `preceded_by`, or
+`followed_by` disambiguates it. Concept paths do not exist; source heading
+paths remain part of evidence location. Public input never uses byte offsets.
 
 ## Resolution and validation
 
-Submission parses a strict JSON contract and projects the complete resulting
-corpus in memory. An already-satisfied evidence mapping is idempotent: it
-continues to express the requested relationship without creating a duplicate
-row. Annals validates, among other things:
+Submission parses the strict JSON contract, resolves all base-revision IDs and
+request-local handles, and projects the complete final graph in memory. Annals
+validates, among other things:
 
-- every path and reconciliation-local selector resolves;
+- every public ID and local handle resolves;
 - quotations resolve uniquely in the immutable work;
-- roots and siblings have normalized-unique labels;
-- ordering anchors belong to the selected destination;
-- the result is one acyclic ordered forest;
-- every leaf has source evidence;
-- evidence ranges are unique valid UTF-8 ranges;
-- retirement leaves no children behind; and
+- every edge has two existing, distinct endpoints and occurs at most once;
+- the edge set is acyclic;
+- roots and leaves agree with the edge set;
+- every leaf has evidence;
+- evidence ranges are unique valid UTF-8 ranges; and
 - rewording explicitly retains or removes existing evidence.
 
-Annals does not repair a reconciliation, assign it a confidence level, or
-judge whether its conceptual claims are true. It validates the deterministic
+Labels are not required to be unique. Annals does not choose a primary parent,
+invent a path, reorder concepts, repair a reconciliation, assign confidence,
+or judge whether a conceptual claim is true. It validates the deterministic
 boundary around that judgment.
 
 A stored reconciliation includes its original request, resolved semantic
-operations, and complete projected result. If that projection differs
+operations, and complete projected result. If the projection differs
 mechanically from the base, the current result is `pending`. A result based on
 the same or a later revision supersedes the same work's pending
 reconciliation. An older-base result remains an examination record without
-displacing a newer pending reconciliation.
+displacing a newer pending result.
 
-If the projected corpus is mechanically equal to the base, Annals stores the
-reconciliation with status `recorded`. This equality describes only the
-materialized corpus state produced by this interpretation; it makes no claim
-about semantic completeness or future usefulness. Annotations are excluded
-from the comparison.
+If the projection is mechanically equal to the base, Annals stores the result
+with status `recorded`. This says only that this interpretation makes no
+material corpus change. Annotations are excluded from the comparison.
+
+Resolved operations are receipts for what the request addressed, not a diff.
+They retain idempotent ensure operations even when the selected edge or
+evidence already exists; reconciliation status and revision diffs describe
+the actual state effect.
 
 ## Atomic application
 
 Application requires `HEAD == base_revision`, re-resolves the stored request,
-and verifies that it produces the same transition. One immediate SQLite
-transaction then:
-
-1. materializes the resulting concepts and evidence;
-2. rebuilds derived concept-search rows;
-3. inserts the append-only commit with request, resolved operations, metadata,
-   and before/after snapshots;
-4. marks the reconciliation applied;
-5. advances the revision once; and
-6. commits all state together.
+and verifies that it produces the recorded projection. One immediate SQLite
+transaction then materializes concepts, edges, and evidence; rebuilds derived
+search rows; appends the commit with its request, resolved operations,
+metadata, and complete corpus snapshot; marks the reconciliation applied;
+advances the revision once; and commits all state together.
 
 Any error rolls back the entire transition. A stale reconciliation fails with
 `stale_change`; Annals does not automatically rebase it. Annotations never
-block application; choosing not to apply a pending reconciliation is an
-operator decision.
+block application.
 
 ## History and reversion
 
-HEAD is materialized for ordinary reads. Every commit stores sufficient
-before-and-after state for historical `show`, semantic `diff`, validation, and
-inversion.
+HEAD is materialized for ordinary reads. Commits retain complete corpus
+snapshots, including concepts, edges, and evidence, so historical local views,
+validation, semantic diff, and inversion do not depend on the current graph.
 
-`revert REVISION` applies the inverse of that revision to current HEAD and
-creates a new `revert` commit. It never removes the original commit. Inversion
-checks that each affected field still matches the target revision's after-state;
-otherwise it fails atomically with `revert_conflict`.
+Diffs describe semantic facts: concept creation, retirement, and rewording;
+one parent edge added or removed; and evidence added or removed. They do not
+report moves or order changes. A concept with two parents remains one identity
+in a diff and in every graph view.
 
-Retired concepts disappear from HEAD but remain represented in historical
-snapshots. Works are independently retained and are never deleted by concept
-retirement, reorganization, or reversion.
+`revert REVISION` applies that revision's inverse to current HEAD and appends a
+new `revert` commit. It never removes the original commit. Inversion checks the
+affected concepts, edges, and evidence against the target transition; a later
+conflicting change fails atomically with `revert_conflict`. An unrelated edge
+on the same shared concept is not silently discarded.
+
+Retired concepts disappear from HEAD but remain in historical snapshots.
+Works are retained independently and are never deleted by concept retirement
+or reversion.

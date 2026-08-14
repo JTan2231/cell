@@ -5,9 +5,15 @@ Source works are retained unchanged. Corpus concepts belong to the library, may
 be supported by many works, and change only when one validated reconciliation
 produces an atomic revision commit.
 
-The public interface uses work labels, concept paths, and exact quotations.
-SQLite identifiers, byte ranges, and sibling positions remain implementation
-details.
+The public interface uses work labels, durable concept IDs such as `c42`, and
+exact quotations. Concepts form an unordered directed acyclic graph: an edge
+points from a broader concept to a narrower one, and a concept may have several
+parents. Labels may repeat. There is no canonical path, primary parent, sibling
+order, or move operation.
+
+Source byte ranges and non-concept SQLite identifiers remain implementation
+details. Evidence belongs to a concept as a whole rather than to one of its
+parent edges, and every derived leaf must remain evidence-grounded.
 
 ## Requirements
 
@@ -41,7 +47,8 @@ annals --library ./annals.db integrate ./serializable-execution.md \
   --name "Serializable execution"
 annals --library ./annals.db change show
 annals --library ./annals.db change apply
-annals --library ./annals.db show
+annals --library ./annals.db overview
+annals --library ./annals.db roots
 ```
 
 `integrate` content-addresses the immutable work by its exact SHA-256 digest
@@ -87,15 +94,23 @@ annals --library ./annals.db change submit request.json \
   --work "Serializable execution" --base 0
 ```
 
-Inspect current and historical state with language-level output:
+Browse current and historical state with bounded, language-level output:
 
 ```sh
 annals --library ./annals.db search "predicate locking"
+annals --library ./annals.db overview
+annals --library ./annals.db roots --limit 25
+annals --library ./annals.db concept show c42
+annals --library ./annals.db graph c42 --direction both --depth 2
 annals --library ./annals.db log
 annals --library ./annals.db diff 0 1
-annals --library ./annals.db show --at 1
+annals --library ./annals.db overview --at 1
 annals --library ./annals.db revert 1
 ```
+
+Concept, relationship, evidence, root, and search listings are paged locally.
+Graph expansion is bounded by depth and node count and reports a frontier when
+more of the graph exists beyond the returned neighborhood.
 
 Every command supports `--json`. The library path resolves from `--library`,
 then `ANNALS_LIBRARY`, then `./annals.db`.

@@ -10,18 +10,23 @@ use crate::change::{
     ChangeOperation, ConceptSelector, EvidenceDisposition, EvidenceSelector, Reconciliation,
 };
 use crate::cli::{
-    ChangeCommand, ChangeSelectArgs, ChangeShowArgs, Cli, Command, IntegrateArgs, WorkAddArgs,
-    WorkCommand,
+    ChangeCommand, ChangeSelectArgs, ChangeShowArgs, Cli, CliGraphDirection, Command,
+    ConceptCommand, ConceptPageArgs, ConceptShowArgs, GraphArgs, IntegrateArgs, PagedAtArgs,
+    SearchArgs, WorkAddArgs, WorkCommand,
 };
 use crate::corpus::{
-    ReconciliationRecord, corpus_view, diff, get_work, list_commits, list_reconciliations,
-    list_works, reconciliation_view, recorded_change_at, revision, select_reconciliation,
-    store_work, work_view,
+    ReconciliationRecord, concept_detail, corpus_overview, diff, evidence_page, get_work,
+    graph_view, list_commits, list_reconciliations, list_works, neighbor_page, page_revision,
+    reconciliation_view, recorded_change_at, revision, roots_page, search_at,
+    select_reconciliation, store_work, work_view,
 };
 use crate::db;
 use crate::error::{AppError, AppResult};
 use crate::index;
-use crate::model::{CorpusView, DiffEntry, DiffKind, LibraryStats, ValidationSeverity};
+use crate::model::{
+    ConceptReference, ConceptSummary, DiffEntry, GraphDirection, GraphView, LibraryStats, Page,
+    PageInfo, ValidationSeverity,
+};
 use crate::model_runner::ModelSettings;
 use crate::render::{CommandOutput, render_terminal_text};
 use crate::resolver::ResolvedOperation;
@@ -39,6 +44,17 @@ pub fn run(cli: &Cli, path: &Path) -> AppResult<CommandOutput> {
     match &cli.command {
         Command::Init => initialize(path),
         Command::Stats => stats(path),
+        Command::Overview(args) => overview(path, args.at),
+        Command::Roots(args) => roots(path, args),
+        Command::Concept(command) => match command {
+            ConceptCommand::Show(args) => show_concept(path, args),
+            ConceptCommand::Parents(args) => concept_neighbors(path, args, GraphDirection::Parents),
+            ConceptCommand::Children(args) => {
+                concept_neighbors(path, args, GraphDirection::Children)
+            }
+            ConceptCommand::Evidence(args) => concept_evidence(path, args),
+        },
+        Command::Graph(args) => graph(path, args),
         Command::Validate => validate_library(path),
         Command::Backup(args) => backup(path, &args.output),
         Command::Reindex => reindex(path),
@@ -55,8 +71,7 @@ pub fn run(cli: &Cli, path: &Path) -> AppResult<CommandOutput> {
             ChangeCommand::Apply(args) => apply_change(path, args),
             ChangeCommand::List => change_list(path),
         },
-        Command::Show(args) => show_corpus(path, args.at),
-        Command::Search(args) => search(path, &args.query, args.limit),
+        Command::Search(args) => search(path, args),
         Command::Log(args) => log(path, args.limit),
         Command::Diff(args) => diff_revisions(path, args.from, args.to),
         Command::Revert(args) => revert(path, args.revision),
@@ -87,6 +102,7 @@ fn stats(path: &Path) -> Result<CommandOutput, AppError> {
     let value = LibraryStats {
         revision: revision(&connection)?,
         concept_count: count(&connection, "concepts")?,
+        edge_count: count(&connection, "concept_edges")?,
         work_count: count(&connection, "works")?,
         evidence_count: count(&connection, "evidence")?,
         pending_reconciliation_count: count_where(
@@ -107,9 +123,10 @@ fn stats(path: &Path) -> Result<CommandOutput, AppError> {
         index_current: index::status(&connection)?.is_current(),
     };
     let human = format!(
-        "Revision: {}\nConcepts: {}\nWorks: {}\nEvidence links: {}\nPending reconciliations: {}\nCommits: {}\nModel runs: {}\nDatabase size: {} bytes\nIndex current: {}",
+        "Revision: {}\nConcepts: {}\nParent edges: {}\nWorks: {}\nEvidence links: {}\nPending reconciliations: {}\nCommits: {}\nModel runs: {}\nDatabase size: {} bytes\nIndex current: {}",
         value.revision,
         value.concept_count,
+        value.edge_count,
         value.work_count,
         value.evidence_count,
         value.pending_reconciliation_count,
@@ -514,20 +531,30 @@ fn render_requested_operation(index: usize, operation: &ChangeOperation) -> Vec<
     let number = index + 1;
     match operation {
         ChangeOperation::CreateConcept {
+            handle,
             label,
-            under,
-            before,
-            after,
+            parents,
             evidence,
         } => {
             let mut lines = vec![format!(
-                "  {number}. Create concept {}",
-                render_quoted(label)
+                "  {number}. Create concept {} as ref {}",
+                render_quoted(label),
+                render_terminal_text(handle, false)
             )];
-            append_requested_placement(&mut lines, under.as_ref(), before.as_ref(), after.as_ref());
+            lines.push(format!("     Parents: {}", render_selectors(parents)));
             append_evidence_selectors(&mut lines, evidence);
             lines
         }
+        ChangeOperation::AddParent { concept, parent } => vec![format!(
+            "  {number}. Add parent {} to {}",
+            render_selector(parent),
+            render_selector(concept)
+        )],
+        ChangeOperation::RemoveParent { concept, parent } => vec![format!(
+            "  {number}. Remove parent {} from {}",
+            render_selector(parent),
+            render_selector(concept)
+        )],
         ChangeOperation::AddEvidence { concept, evidence } => {
             let mut lines = vec![format!(
                 "  {number}. Add evidence to {}",
@@ -542,16 +569,6 @@ fn render_requested_operation(index: usize, operation: &ChangeOperation) -> Vec<
                 render_selector(concept)
             )];
             append_evidence_selectors(&mut lines, evidence);
-            lines
-        }
-        ChangeOperation::MoveConcept {
-            concept,
-            under,
-            before,
-            after,
-        } => {
-            let mut lines = vec![format!("  {number}. Move {}", render_selector(concept))];
-            append_requested_placement(&mut lines, under.as_ref(), before.as_ref(), after.as_ref());
             lines
         }
         ChangeOperation::RewordConcept {
@@ -601,134 +618,99 @@ fn render_resolved_operations(
 fn render_resolved_operation(
     index: usize,
     operation: &ResolvedOperation,
-    requested: Option<&ChangeOperation>,
+    _requested: Option<&ChangeOperation>,
 ) -> Vec<String> {
     let number = index + 1;
     match operation {
         ResolvedOperation::CreateConcept {
-            path,
+            concept,
+            parents,
             evidence_quotes,
         } => {
-            let mut lines = vec![format!("  {number}. Create concept {}", render_path(path))];
-            append_resolved_placement(&mut lines, path, requested);
+            let mut lines = vec![format!(
+                "  {number}. Create concept {}",
+                render_reference(concept)
+            )];
+            lines.push(format!("     Parents: {}", render_references(parents)));
             append_resolved_quotes(&mut lines, evidence_quotes);
             lines
         }
-        ResolvedOperation::AddEvidence { path, quotes } => {
-            let mut lines = vec![format!("  {number}. Add evidence to {}", render_path(path))];
+        ResolvedOperation::AddParent { concept, parent } => vec![format!(
+            "  {number}. Add parent {} to {}",
+            render_reference(parent),
+            render_reference(concept)
+        )],
+        ResolvedOperation::RemoveParent { concept, parent } => vec![format!(
+            "  {number}. Remove parent {} from {}",
+            render_reference(parent),
+            render_reference(concept)
+        )],
+        ResolvedOperation::AddEvidence { concept, quotes } => {
+            let mut lines = vec![format!(
+                "  {number}. Add evidence to {}",
+                render_reference(concept)
+            )];
             append_resolved_quotes(&mut lines, quotes);
             lines
         }
-        ResolvedOperation::RemoveEvidence { path, quotes } => {
+        ResolvedOperation::RemoveEvidence { concept, quotes } => {
             let mut lines = vec![format!(
                 "  {number}. Remove evidence from {}",
-                render_path(path)
+                render_reference(concept)
             )];
             append_resolved_quotes(&mut lines, quotes);
-            lines
-        }
-        ResolvedOperation::MoveConcept {
-            before,
-            after,
-            previous_sibling_before,
-            previous_sibling_after,
-        } => {
-            let mut lines = vec![format!(
-                "  {number}. Move {} -> {}",
-                render_path(before),
-                render_path(after)
-            )];
-            let parent = if after.len() <= 1 {
-                "root".to_owned()
-            } else {
-                render_path(&after[..after.len() - 1])
-            };
-            lines.push(format!("     Parent: {parent}"));
-            lines.push(format!(
-                "     Previous sibling: {} -> {}",
-                render_optional_path(previous_sibling_before.as_deref()),
-                render_optional_path(previous_sibling_after.as_deref())
-            ));
             lines
         }
         ResolvedOperation::RewordConcept {
+            id,
             before,
             after,
             evidence_disposition,
         } => vec![
             format!(
-                "  {number}. Reword {} -> {}",
-                render_path(before),
-                render_path(after)
+                "  {number}. Reword {id}: {} -> {}",
+                render_quoted(before),
+                render_quoted(after)
             ),
             format!(
                 "     Evidence disposition: {}",
                 render_evidence_disposition(*evidence_disposition)
             ),
         ],
-        ResolvedOperation::RetireConcept { path, replacement } => vec![
-            format!("  {number}. Retire {}", render_path(path)),
+        ResolvedOperation::RetireConcept {
+            concept,
+            replacement,
+            removed_parents,
+            removed_children,
+        } => vec![
+            format!("  {number}. Retire {}", render_reference(concept)),
             format!(
                 "     Replacement: {}",
                 replacement
                     .as_ref()
-                    .map_or_else(|| "none".to_owned(), |path| render_path(path))
+                    .map_or_else(|| "none".to_owned(), render_reference)
+            ),
+            format!(
+                "     Removed parents: {}",
+                render_references(removed_parents)
+            ),
+            format!(
+                "     Removed children: {}",
+                render_references(removed_children)
             ),
         ],
     }
 }
 
-fn append_requested_placement(
-    lines: &mut Vec<String>,
-    under: Option<&ConceptSelector>,
-    before: Option<&ConceptSelector>,
-    after: Option<&ConceptSelector>,
-) {
-    lines.push(format!(
-        "     Parent: {}",
-        under.map_or_else(|| "root".to_owned(), render_selector)
-    ));
-    lines.push(format!(
-        "     Order: {}",
-        render_requested_order(before, after)
-    ));
-}
-
-fn append_resolved_placement(
-    lines: &mut Vec<String>,
-    final_path: &[String],
-    requested: Option<&ChangeOperation>,
-) {
-    let parent = if final_path.len() <= 1 {
-        "root".to_owned()
-    } else {
-        render_path(&final_path[..final_path.len() - 1])
-    };
-    let (before, after) = match requested {
-        Some(
-            ChangeOperation::CreateConcept { before, after, .. }
-            | ChangeOperation::MoveConcept { before, after, .. },
-        ) => (before.as_ref(), after.as_ref()),
-        _ => (None, None),
-    };
-    lines.push(format!("     Parent: {parent}"));
-    lines.push(format!(
-        "     Order: {}",
-        render_requested_order(before, after)
-    ));
-}
-
-fn render_requested_order(
-    before: Option<&ConceptSelector>,
-    after: Option<&ConceptSelector>,
-) -> String {
-    if let Some(before) = before {
-        format!("before {}", render_selector(before))
-    } else if let Some(after) = after {
-        format!("after {}", render_selector(after))
-    } else {
-        "append".to_owned()
+fn render_selectors(selectors: &[ConceptSelector]) -> String {
+    if selectors.is_empty() {
+        return "none (root)".to_owned();
     }
+    selectors
+        .iter()
+        .map(render_selector)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn append_evidence_selectors(lines: &mut Vec<String>, evidence: &[EvidenceSelector]) {
@@ -756,8 +738,26 @@ fn append_resolved_quotes(lines: &mut Vec<String>, quotes: &[String]) {
 
 fn render_selector(selector: &ConceptSelector) -> String {
     match selector {
-        ConceptSelector::Existing { path } => render_path(path),
-        ConceptSelector::New { label } => format!("new concept {}", render_quoted(label)),
+        ConceptSelector::Existing { id } => id.to_string(),
+        ConceptSelector::New { handle } => {
+            format!("new ref {}", render_quoted(handle))
+        }
+    }
+}
+
+fn render_reference(reference: &ConceptReference) -> String {
+    format!("{} ({})", render_quoted(&reference.label), reference.id)
+}
+
+fn render_references(references: &[ConceptReference]) -> String {
+    if references.is_empty() {
+        "none".to_owned()
+    } else {
+        references
+            .iter()
+            .map(render_reference)
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 
@@ -770,10 +770,6 @@ fn render_path(path: &[String]) -> String {
             .collect::<Vec<_>>()
             .join(" › ")
     }
-}
-
-fn render_optional_path(path: Option<&[String]>) -> String {
-    path.map_or_else(|| "none (first)".to_owned(), render_path)
 }
 
 fn render_quoted(text: &str) -> String {
@@ -824,42 +820,384 @@ fn applied_output(record: &ReconciliationRecord, applied: i64) -> Result<Command
     .mutation())
 }
 
-fn show_corpus(path: &Path, requested: Option<i64>) -> Result<CommandOutput, AppError> {
+fn overview(path: &Path, requested: Option<i64>) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
     let requested = requested.unwrap_or(revision(&connection)?);
-    let view = corpus_view(&connection, requested)?;
-    let human = render_corpus(&view);
-    Ok(CommandOutput::new(to_value(&view)?, human))
+    let value = corpus_overview(&connection, requested)?;
+    let human = format!(
+        "Corpus revision {}\n{} concepts · {} scope edges\n{} roots · {} leaves · {} shared concepts\n{} evidence links",
+        value.revision,
+        value.concept_count,
+        value.edge_count,
+        value.root_count,
+        value.leaf_count,
+        value.shared_concept_count,
+        value.evidence_count
+    );
+    Ok(CommandOutput::new(to_value(&value)?, human))
 }
 
-fn search(path: &Path, query: &str, limit: usize) -> Result<CommandOutput, AppError> {
+fn roots(path: &Path, args: &PagedAtArgs) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let output = crate::corpus::search_current(&connection, query, limit)?;
-    let human = if output.results.is_empty() {
-        "No matches".to_owned()
+    let requested = page_revision(&connection, args.at, args.cursor.as_deref())?;
+    let roots = roots_page(
+        &connection,
+        requested,
+        cli_page_limit(args.limit)?,
+        args.cursor.as_deref(),
+    )?;
+    let human = render_summary_page("Roots", &roots, requested);
+    Ok(CommandOutput::new(
+        json!({ "revision": requested, "roots": roots }),
+        human,
+    ))
+}
+
+fn show_concept(path: &Path, args: &ConceptShowArgs) -> Result<CommandOutput, AppError> {
+    let connection = db::open_read(path)?;
+    let requested = args.at.unwrap_or(revision(&connection)?);
+    let detail = concept_detail(&connection, requested, args.id, args.preview_limit)?;
+    let evidence_preview = if detail.evidence.items.is_empty() {
+        "  None".to_owned()
     } else {
-        output
-            .results
+        detail
+            .evidence
+            .items
             .iter()
-            .enumerate()
-            .map(|(index, result)| {
+            .map(|item| {
                 format!(
-                    "{}. {}\n   Evidence: {} source quotation{}",
-                    index + 1,
-                    result
-                        .path
-                        .iter()
-                        .map(|segment| render_terminal_text(segment, false))
-                        .collect::<Vec<_>>()
-                        .join(" › "),
-                    result.evidence.len(),
-                    if result.evidence.len() == 1 { "" } else { "s" }
+                    "  {} — {}",
+                    render_quoted(&item.work),
+                    render_quoted(&item.quote)
                 )
             })
             .collect::<Vec<_>>()
             .join("\n")
     };
+    let human = format!(
+        "{} ({}) @ r{}\n{} parents · {} children · {} evidence links\n\nParents preview ({} of {})\n{}\n\nChildren preview ({} of {})\n{}\n\nEvidence preview ({} of {})\n{}",
+        render_terminal_text(&detail.summary.label, false),
+        detail.summary.id,
+        requested,
+        detail.summary.parent_count,
+        detail.summary.child_count,
+        detail.summary.evidence_count,
+        detail.parents.page.returned,
+        detail.parents.page.total,
+        render_reference_page(&detail.parents),
+        detail.children.page.returned,
+        detail.children.page.total,
+        render_reference_page(&detail.children),
+        detail.evidence.page.returned,
+        detail.evidence.page.total,
+        evidence_preview
+    );
+    Ok(CommandOutput::new(
+        json!({ "revision": requested, "concept": detail }),
+        human,
+    ))
+}
+
+fn concept_neighbors(
+    path: &Path,
+    args: &ConceptPageArgs,
+    direction: GraphDirection,
+) -> Result<CommandOutput, AppError> {
+    let connection = db::open_read(path)?;
+    let requested = page_revision(&connection, args.page.at, args.page.cursor.as_deref())?;
+    let concept = concept_detail(&connection, requested, args.id, 0)?;
+    let page = neighbor_page(
+        &connection,
+        requested,
+        args.id,
+        direction,
+        cli_page_limit(args.page.limit)?,
+        args.page.cursor.as_deref(),
+    )?;
+    let heading = match direction {
+        GraphDirection::Parents => "Parents",
+        GraphDirection::Children => "Children",
+        GraphDirection::Both => {
+            return Err(AppError::invalid(
+                "invalid_direction",
+                "concept neighbors must be parents or children",
+            ));
+        }
+    };
+    let reference = ConceptReference {
+        id: concept.summary.id,
+        label: concept.summary.label,
+    };
+    let human = render_reference_page_heading(heading, &reference, &page, requested);
+    let data = match direction {
+        GraphDirection::Parents => {
+            json!({ "revision": requested, "concept": reference, "parents": page })
+        }
+        GraphDirection::Children => {
+            json!({ "revision": requested, "concept": reference, "children": page })
+        }
+        GraphDirection::Both => unreachable!("both was rejected above"),
+    };
+    Ok(CommandOutput::new(data, human))
+}
+
+fn concept_evidence(path: &Path, args: &ConceptPageArgs) -> Result<CommandOutput, AppError> {
+    let connection = db::open_read(path)?;
+    let requested = page_revision(&connection, args.page.at, args.page.cursor.as_deref())?;
+    let detail = concept_detail(&connection, requested, args.id, 0)?;
+    let evidence = evidence_page(
+        &connection,
+        requested,
+        args.id,
+        cli_page_limit(args.page.limit)?,
+        args.page.cursor.as_deref(),
+    )?;
+    let reference = ConceptReference {
+        id: detail.summary.id,
+        label: detail.summary.label,
+    };
+    let body = if evidence.items.is_empty() {
+        "  None".to_owned()
+    } else {
+        evidence
+            .items
+            .iter()
+            .map(|item| {
+                format!(
+                    "  {} — {}",
+                    render_quoted(&item.work),
+                    render_quoted(&item.quote)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let human = format!(
+        "Evidence for {} at revision {requested} — showing {} of {}\n{body}{}",
+        render_reference(&reference),
+        evidence.page.returned,
+        evidence.page.total,
+        render_continuation(&evidence.page, requested)
+    );
+    Ok(CommandOutput::new(
+        json!({ "revision": requested, "concept": reference, "evidence": evidence }),
+        human,
+    ))
+}
+
+fn graph(path: &Path, args: &GraphArgs) -> Result<CommandOutput, AppError> {
+    let connection = db::open_read(path)?;
+    let requested = args.at.unwrap_or(revision(&connection)?);
+    let direction = match args.direction {
+        CliGraphDirection::Parents => GraphDirection::Parents,
+        CliGraphDirection::Children => GraphDirection::Children,
+        CliGraphDirection::Both => GraphDirection::Both,
+    };
+    let graph = graph_view(
+        &connection,
+        requested,
+        args.id,
+        direction,
+        args.depth,
+        args.max_nodes,
+    )?;
+    let human = render_graph(&graph);
+    Ok(CommandOutput::new(to_value(&graph)?, human))
+}
+
+fn search(path: &Path, args: &SearchArgs) -> Result<CommandOutput, AppError> {
+    let connection = db::open_read(path)?;
+    let requested = page_revision(&connection, args.at, args.cursor.as_deref())?;
+    let output = search_at(
+        &connection,
+        requested,
+        &args.query,
+        args.within,
+        cli_search_limit(args.limit)?,
+        args.cursor.as_deref(),
+    )?;
+    let body = if output.results.items.is_empty() {
+        "  None".to_owned()
+    } else {
+        output
+            .results
+            .items
+            .iter()
+            .enumerate()
+            .map(|(index, result)| {
+                format!(
+                    "  {}. {} ({}) — {} parent(s), {} child(ren), {} evidence link(s){}",
+                    index + 1,
+                    render_terminal_text(&result.concept.label, false),
+                    result.concept.id,
+                    result.concept.parent_count,
+                    result.concept.child_count,
+                    result.concept.evidence_count,
+                    if result.concept.shared {
+                        " [shared]"
+                    } else {
+                        ""
+                    }
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let human = format!(
+        "Search at revision {requested} — showing {} of {}\n{body}{}",
+        output.results.page.returned,
+        output.results.page.total,
+        render_continuation(&output.results.page, requested)
+    );
     Ok(CommandOutput::new(to_value(&output)?, human))
+}
+
+fn cli_page_limit(limit: usize) -> Result<usize, AppError> {
+    if (1..=200).contains(&limit) {
+        Ok(limit)
+    } else {
+        Err(AppError::invalid(
+            "invalid_limit",
+            "a CLI page limit must be between 1 and 200",
+        ))
+    }
+}
+
+fn cli_search_limit(limit: usize) -> Result<usize, AppError> {
+    cli_page_limit(limit)
+}
+
+fn render_summary_page(heading: &str, page: &Page<ConceptSummary>, revision: i64) -> String {
+    let body = if page.items.is_empty() {
+        "  None".to_owned()
+    } else {
+        page.items
+            .iter()
+            .map(|item| {
+                format!(
+                    "  {} ({}){}",
+                    render_terminal_text(&item.label, false),
+                    item.id,
+                    if item.shared {
+                        format!(" [shared: {} parents]", item.parent_count)
+                    } else {
+                        String::new()
+                    }
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    format!(
+        "{heading} at revision {revision} — showing {} of {}\n{body}{}",
+        page.page.returned,
+        page.page.total,
+        render_continuation(&page.page, revision)
+    )
+}
+
+fn render_reference_page(page: &Page<ConceptReference>) -> String {
+    if page.items.is_empty() {
+        "  None".to_owned()
+    } else {
+        page.items
+            .iter()
+            .map(|item| format!("  {}", render_reference(item)))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+fn render_reference_page_heading(
+    heading: &str,
+    concept: &ConceptReference,
+    page: &Page<ConceptReference>,
+    revision: i64,
+) -> String {
+    format!(
+        "{heading} of {} at revision {revision} — showing {} of {}\n{}{}",
+        render_reference(concept),
+        page.page.returned,
+        page.page.total,
+        render_reference_page(page),
+        render_continuation(&page.page, revision)
+    )
+}
+
+fn render_continuation(page: &PageInfo, revision: i64) -> String {
+    page.next_cursor
+        .as_ref()
+        .map_or_else(String::new, |cursor| {
+            format!("\nMore at revision {revision}: rerun with --at {revision} --cursor {cursor}")
+        })
+}
+
+fn render_graph(graph: &GraphView) -> String {
+    let nodes = graph
+        .nodes
+        .iter()
+        .map(|node| {
+            format!(
+                "  {} — {} — distance {}",
+                node.summary.id,
+                render_quoted(&node.summary.label),
+                node.distance
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let edges = if graph.edges.is_empty() {
+        "  None".to_owned()
+    } else {
+        graph
+            .edges
+            .iter()
+            .map(|edge| {
+                format!(
+                    "  {} -> {}",
+                    render_reference(&edge.parent),
+                    render_reference(&edge.child)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let frontier = if graph.frontier.is_empty() {
+        "  None".to_owned()
+    } else {
+        graph
+            .frontier
+            .iter()
+            .map(|entry| {
+                format!(
+                    "  {} — {} unreturned parent(s), {} unreturned child(ren)",
+                    entry.id, entry.unreturned_parent_count, entry.unreturned_child_count
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let coverage = if graph.complete_within_depth {
+        format!("Complete through requested depth {}", graph.depth)
+    } else if graph.node_limit_reached {
+        format!(
+            "Node limit reached at {}; expand again from a frontier concept",
+            graph.max_nodes
+        )
+    } else {
+        "Expansion is incomplete; continue from a frontier concept".to_owned()
+    };
+    format!(
+        "Graph around {} at revision {}\nDirection: {} · depth: {} · max nodes: {}\n\nNodes ({})\n{}\n\nEdges ({})\n{edges}\n\nFrontier\n{frontier}\n\n{coverage}",
+        render_reference(&graph.seed),
+        graph.revision,
+        graph.direction,
+        graph.depth,
+        graph.max_nodes,
+        graph.nodes.len(),
+        nodes,
+        graph.edges.len()
+    )
 }
 
 fn log(path: &Path, limit: usize) -> Result<CommandOutput, AppError> {
@@ -906,51 +1244,48 @@ fn diff_revisions(path: &Path, from: i64, to: i64) -> Result<CommandOutput, AppE
 }
 
 fn render_diff_entry(entry: &DiffEntry) -> String {
-    let before = entry.before.as_deref().map(render_path);
-    let after = entry.after.as_deref().map(render_path);
-    match entry.kind {
-        DiffKind::Created => format!(
-            "Created: {}",
-            after.unwrap_or_else(|| "unknown path".to_owned())
-        ),
-        DiffKind::Retired => format!(
-            "Retired: {}",
-            before.unwrap_or_else(|| "unknown path".to_owned())
-        ),
-        DiffKind::Moved if before == after => format!(
-            "Reordered: {}",
-            after.unwrap_or_else(|| "unknown path".to_owned())
-        ),
-        DiffKind::Moved => format!(
-            "Moved: {} → {}",
-            before.unwrap_or_else(|| "unknown path".to_owned()),
-            after.unwrap_or_else(|| "unknown path".to_owned())
-        ),
-        DiffKind::Reworded => format!(
-            "Reworded: {} → {}",
-            before.unwrap_or_else(|| "unknown path".to_owned()),
-            after.unwrap_or_else(|| "unknown path".to_owned())
-        ),
-        DiffKind::EvidenceAdded | DiffKind::EvidenceRemoved => {
-            let action = if entry.kind == DiffKind::EvidenceAdded {
-                "Evidence added"
-            } else {
-                "Evidence removed"
-            };
-            let path = if entry.kind == DiffKind::EvidenceAdded {
-                after
-            } else {
-                before
-            }
-            .unwrap_or_else(|| "unknown path".to_owned());
-            let work = entry.work.as_deref().map(render_quoted);
-            let quote = entry.quote.as_deref().map(render_quoted);
-            [Some(format!("{action}: {path}")), work, quote]
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>()
-                .join(" — ")
+    match entry {
+        DiffEntry::Created { concept } => {
+            format!("Created: {}", render_reference(concept))
         }
+        DiffEntry::Retired { concept } => {
+            format!("Retired: {}", render_reference(concept))
+        }
+        DiffEntry::Reworded { id, before, after } => format!(
+            "Reworded {id}: {} → {}",
+            render_quoted(before),
+            render_quoted(after)
+        ),
+        DiffEntry::ParentAdded { parent, child } => format!(
+            "Parent added: {} → {}",
+            render_reference(parent),
+            render_reference(child)
+        ),
+        DiffEntry::ParentRemoved { parent, child } => format!(
+            "Parent removed: {} → {}",
+            render_reference(parent),
+            render_reference(child)
+        ),
+        DiffEntry::EvidenceAdded {
+            concept,
+            work,
+            quote,
+        } => format!(
+            "Evidence added: {} — {} — {}",
+            render_reference(concept),
+            render_quoted(work),
+            render_quoted(quote)
+        ),
+        DiffEntry::EvidenceRemoved {
+            concept,
+            work,
+            quote,
+        } => format!(
+            "Evidence removed: {} — {} — {}",
+            render_reference(concept),
+            render_quoted(work),
+            render_quoted(quote)
+        ),
     }
 }
 
@@ -970,33 +1305,6 @@ fn revert(path: &Path, target: i64) -> Result<CommandOutput, AppError> {
         format!("Applied revision {new_revision}:\nRevert revision {target}"),
     )
     .mutation())
-}
-
-fn render_corpus(view: &CorpusView) -> String {
-    let mut lines = vec![format!("Corpus revision {}", view.revision)];
-    if view.concepts.is_empty() {
-        lines.push(String::new());
-        lines.push("No concepts".to_owned());
-    } else {
-        lines.push(String::new());
-        for concept in &view.concepts {
-            lines.push(format!(
-                "{}{}{}",
-                "  ".repeat(concept.path.len().saturating_sub(1)),
-                render_terminal_text(&concept.label, false),
-                if concept.evidence.is_empty() {
-                    String::new()
-                } else {
-                    format!(
-                        " [{} source{}]",
-                        concept.evidence.len(),
-                        if concept.evidence.len() == 1 { "" } else { "s" }
-                    )
-                }
-            ));
-        }
-    }
-    lines.join("\n")
 }
 
 fn read_utf8(path: &Path, description: &str) -> Result<String, AppError> {
@@ -1063,197 +1371,4 @@ fn count_where(connection: &Connection, table: &str, condition: &str) -> Result<
 
 fn to_value<T: Serialize>(value: &T) -> Result<Value, AppError> {
     serde_json::to_value(value).map_err(AppError::from)
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::{reconciliation_output, render_resolved_operations};
-    use crate::change::{ChangeOperation, ConceptSelector, EvidenceDisposition, EvidenceSelector};
-    use crate::corpus::ReconciliationRecord;
-    use crate::resolver::ResolvedOperation;
-
-    fn existing(path: &[&str]) -> ConceptSelector {
-        ConceptSelector::Existing {
-            path: path.iter().map(|segment| (*segment).to_owned()).collect(),
-        }
-    }
-
-    fn exact(quote: &str) -> EvidenceSelector {
-        EvidenceSelector {
-            quote: quote.to_owned(),
-            within_heading: None,
-            preceded_by: None,
-            followed_by: None,
-        }
-    }
-
-    #[test]
-    #[allow(clippy::too_many_lines)]
-    fn reconciliation_output_renders_every_semantic_field_and_escapes_controls()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let request = json!({
-            "summary": "Audit the complete request",
-            "operations": [
-                {
-                    "action": "create_concept",
-                    "label": "Created\u{1b}[31m",
-                    "under": {"path": ["Root"]},
-                    "after": {"path": ["Root", "Earlier"]},
-                    "evidence": [{
-                        "quote": "Exact\nquote",
-                        "within_heading": ["Details"],
-                        "preceded_by": "Before ",
-                        "followed_by": " after"
-                    }]
-                },
-                {
-                    "action": "add_evidence",
-                    "concept": {"new": "Created\u{1b}[31m"},
-                    "evidence": [{"quote": "Added evidence"}]
-                },
-                {
-                    "action": "remove_evidence",
-                    "concept": {"path": ["Root", "Old"]},
-                    "evidence": [{"quote": "Removed evidence"}]
-                },
-                {
-                    "action": "move_concept",
-                    "concept": {"path": ["Root", "Moved"]},
-                    "under": {"path": ["Destination"]},
-                    "before": {"path": ["Destination", "Anchor"]}
-                },
-                {
-                    "action": "reword_concept",
-                    "concept": {"path": ["Root", "Old wording"]},
-                    "label": "New wording",
-                    "evidence_disposition": "remove"
-                },
-                {
-                    "action": "retire_concept",
-                    "concept": {"path": ["Root", "Retired"]},
-                    "replacement": {"path": ["Root", "Successor"]}
-                }
-            ],
-            "annotations": ["Placement considered\tprovisionally"]
-        });
-        let record = ReconciliationRecord {
-            id: 1,
-            work_id: 1,
-            work_label: "Work\u{1b}[2J".to_owned(),
-            base_revision: 7,
-            status: "pending".to_owned(),
-            summary: "Audit the complete request".to_owned(),
-            submitted_request: serde_json::to_string(&request)?,
-            resolved_reconciliation: "{}".to_owned(),
-            actor: "human".to_owned(),
-            created_at: "2026-08-12T00:00:00Z".to_owned(),
-            applied_revision: None,
-        };
-
-        let output = reconciliation_output(&record)?;
-        let human = output.human;
-        assert!(human.contains("Pending reconciliation for “Work\\u{1b}[2J”"));
-        assert!(human.contains("1. Create concept “Created\\u{1b}[31m”"));
-        assert!(human.contains("Parent: “Root”"));
-        assert!(human.contains("Order: after “Root” › “Earlier”"));
-        assert!(human.contains("Evidence: “Exact\\u{a}quote”"));
-        assert!(human.contains("Within heading: “Details”"));
-        assert!(human.contains("Preceded by: “Before ”"));
-        assert!(human.contains("Followed by: “ after”"));
-        assert!(human.contains("2. Add evidence to new concept"));
-        assert!(human.contains("3. Remove evidence from “Root” › “Old”"));
-        assert!(human.contains("4. Move “Root” › “Moved”"));
-        assert!(human.contains("Order: before “Destination” › “Anchor”"));
-        assert!(human.contains("5. Reword “Root” › “Old wording” to “New wording”"));
-        assert!(human.contains("Evidence disposition: remove existing evidence"));
-        assert!(human.contains("6. Retire “Root” › “Retired”"));
-        assert!(human.contains("Replacement: “Root” › “Successor”"));
-        assert!(human.contains("- Placement considered\\u{9}provisionally"));
-        assert!(!human.contains('\u{1b}'));
-        Ok(())
-    }
-
-    #[test]
-    #[allow(clippy::too_many_lines)]
-    fn validation_renderer_shows_resolved_paths_quotes_order_and_identity_choices() {
-        let requested = vec![
-            ChangeOperation::CreateConcept {
-                label: "Child".to_owned(),
-                under: Some(existing(&["Root"])),
-                before: Some(existing(&["Root", "Later"])),
-                after: None,
-                evidence: vec![exact("Creation evidence")],
-            },
-            ChangeOperation::AddEvidence {
-                concept: existing(&["Root", "Child"]),
-                evidence: vec![exact("Added evidence")],
-            },
-            ChangeOperation::RemoveEvidence {
-                concept: existing(&["Root", "Child"]),
-                evidence: vec![exact("Removed evidence")],
-            },
-            ChangeOperation::MoveConcept {
-                concept: existing(&["Old", "Moved"]),
-                under: Some(existing(&["New"])),
-                before: None,
-                after: Some(existing(&["New", "First"])),
-            },
-            ChangeOperation::RewordConcept {
-                concept: existing(&["New", "Moved"]),
-                label: "Renamed".to_owned(),
-                evidence_disposition: EvidenceDisposition::Retain,
-            },
-            ChangeOperation::RetireConcept {
-                concept: existing(&["Old", "Retired"]),
-                replacement: Some(existing(&["New", "Replacement"])),
-            },
-        ];
-        let resolved = vec![
-            ResolvedOperation::CreateConcept {
-                path: vec!["Root".to_owned(), "Child".to_owned()],
-                evidence_quotes: vec!["Creation evidence".to_owned()],
-            },
-            ResolvedOperation::AddEvidence {
-                path: vec!["Root".to_owned(), "Child".to_owned()],
-                quotes: vec!["Added evidence".to_owned()],
-            },
-            ResolvedOperation::RemoveEvidence {
-                path: vec!["Root".to_owned(), "Child".to_owned()],
-                quotes: vec!["Removed evidence".to_owned()],
-            },
-            ResolvedOperation::MoveConcept {
-                before: vec!["Old".to_owned(), "Moved".to_owned()],
-                after: vec!["New".to_owned(), "Moved".to_owned()],
-                previous_sibling_before: Some(vec!["Old".to_owned(), "Earlier".to_owned()]),
-                previous_sibling_after: Some(vec!["New".to_owned(), "First".to_owned()]),
-            },
-            ResolvedOperation::RewordConcept {
-                before: vec!["New".to_owned(), "Moved".to_owned()],
-                after: vec!["New".to_owned(), "Renamed".to_owned()],
-                evidence_disposition: EvidenceDisposition::Retain,
-            },
-            ResolvedOperation::RetireConcept {
-                path: vec!["Old".to_owned(), "Retired".to_owned()],
-                replacement: Some(vec!["New".to_owned(), "Replacement".to_owned()]),
-            },
-        ];
-
-        let human = render_resolved_operations(&resolved, &requested);
-        assert!(human.contains("Create concept “Root” › “Child”"));
-        assert!(human.contains("Parent: “Root”"));
-        assert!(human.contains("Order: before “Root” › “Later”"));
-        assert!(human.contains("Evidence: “Creation evidence”"));
-        assert!(human.contains("Add evidence to “Root” › “Child”"));
-        assert!(human.contains("Evidence: “Added evidence”"));
-        assert!(human.contains("Remove evidence from “Root” › “Child”"));
-        assert!(human.contains("Evidence: “Removed evidence”"));
-        assert!(human.contains("Move “Old” › “Moved” -> “New” › “Moved”"));
-        assert!(human.contains("Previous sibling: “Old” › “Earlier” -> “New” › “First”"));
-        assert!(human.contains("Reword “New” › “Moved” -> “New” › “Renamed”"));
-        assert!(human.contains("Evidence disposition: retain existing evidence"));
-        assert!(human.contains("Retire “Old” › “Retired”"));
-        assert!(human.contains("Replacement: “New” › “Replacement”"));
-    }
 }

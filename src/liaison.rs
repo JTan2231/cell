@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
@@ -6,20 +5,19 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::corpus::{
-    ReconciliationRecord, Work, corpus_view, get_work_by_id, heading_for_offset, now,
-    reconciliation_from_row, revision, snapshot_at,
+    ReconciliationRecord, Work, get_work_by_id, heading_for_offset, now, reconciliation_from_row,
+    revision, snapshot_at,
 };
 use crate::db;
 use crate::error::AppError;
+use crate::model::{ConceptId, ConceptReference, GraphDirection};
 use crate::model_runner::{ModelSettings, Runner};
 use crate::resolver;
 use crate::tool_server::{Backend, Tool, ToolFailure};
 
-const PROMPT_VERSION: &str = "liaison-v2";
+const PROMPT_VERSION: &str = "liaison-v3";
 const MAX_READ_CHARACTERS: usize = 12_000;
 const MAX_OVERVIEW_CHARACTERS: usize = 16_000;
-const MAX_CONCEPT_EVIDENCE: usize = 10;
-const MAX_CONCEPT_CHILDREN: usize = 50;
 const MAX_EVIDENCE_QUOTE_CHARACTERS: usize = 2_000;
 const MAX_SEARCH_EXCERPT_CHARACTERS: usize = 1_000;
 
@@ -176,11 +174,14 @@ fn pointer_prompt(work: &str, base_revision: i64) -> String {
          to the work and current corpus. Do not assume a unique, objective, or final decomposition \
          into atomic semantic units. Avoid mechanically creating one concept per sentence, but do \
          not use estimated importance or novelty as an inclusion test.\n\nUse the Annals read tools \
-         to inspect the work and relevant corpus regions. Existing concepts are addressed by exact \
-         path arrays returned by those tools. When an existing concept can represent part of the \
-         work, associate exact evidence from this work with it. Otherwise create or revise the \
-         corpus structure needed by your present interpretation. Treat the organization as \
-         provisional and revisable by later evidence.\n\nSubmit one reconciliation for this present interpretation with \
+         to inspect the work and relevant corpus regions. Existing concepts are addressed by their \
+         durable public IDs. The corpus is a directed acyclic graph: a parent is a broader scope, \
+         several parents are symmetric, and there is no primary placement or sibling ordering. \
+         Follow returned cursors or graph frontiers rather than guessing what a truncated result \
+         omitted. When an \
+         existing concept can represent part of the work, associate exact evidence from this work \
+         with it. Otherwise create or revise the corpus graph needed by your present interpretation. \
+         Treat the organization as provisional and revisable by later evidence.\n\nSubmit one reconciliation for this present interpretation with \
          submit_reconciliation. Optional annotations are free-form observations with no confidence, \
          review, validation, or application semantics; source information must still be expressed \
          through grounded operations. Do not decide whether the reconciliation changes materialized \
@@ -552,7 +553,7 @@ impl LiaisonBackend {
     }
 
     fn work_search(&self, arguments: Value) -> Result<Value, ToolFailure> {
-        let args = decode_search(arguments)?;
+        let args = decode_work_search(arguments)?;
         let results = args
             .queries
             .iter()
@@ -573,85 +574,134 @@ impl LiaisonBackend {
     }
 
     fn corpus_search(&self, arguments: Value) -> Result<Value, ToolFailure> {
-        let args = decode_search(arguments)?;
+        let args = decode_corpus_search(arguments)?;
         let connection = db::open_read(&self.path).map_err(app_failure)?;
-        let view = corpus_view(&connection, self.base_revision).map_err(app_failure)?;
-        let results = args
-            .queries
-            .iter()
-            .map(|query| {
-                let terms = crate::index::normalize(query)
-                    .split_whitespace()
-                    .map(str::to_owned)
-                    .collect::<Vec<_>>();
-                let matches = view
-                    .concepts
-                    .iter()
-                    .filter(|concept| {
-                        let haystack = crate::index::normalize(&concept.path.join(" "));
-                        terms.iter().all(|term| haystack.contains(term))
-                    })
-                    .take(args.max_results_per_query)
-                    .map(|concept| bounded_concept(concept, 3, 0))
-                    .collect::<Vec<_>>();
-                json!({ "query": query, "matches": matches })
-            })
-            .collect::<Vec<_>>();
+        let mut results = Vec::with_capacity(args.queries.len());
+        for query in args.queries {
+            results.push(
+                crate::corpus::search_at(
+                    &connection,
+                    self.base_revision,
+                    &query.query,
+                    query.within,
+                    query.limit,
+                    query.cursor.as_deref(),
+                )
+                .map_err(app_failure)?,
+            );
+        }
         Ok(json!({ "results": results }))
     }
 
+    #[allow(clippy::too_many_lines)]
     fn corpus_inspect(&self, arguments: Value) -> Result<Value, ToolFailure> {
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct Args {
-            paths: Vec<Vec<String>>,
-        }
-        let args: Args = decode(arguments)?;
-        if args.paths.is_empty() || args.paths.len() > 20 {
-            return Err(failure(
-                "invalid_tool_input",
-                "paths must contain 1 to 20 paths",
-            ));
-        }
+        let args = decode_corpus_inspect(arguments)?;
         let connection = db::open_read(&self.path).map_err(app_failure)?;
-        let view = corpus_view(&connection, self.base_revision).map_err(app_failure)?;
-        let indexed = view
-            .concepts
-            .into_iter()
-            .map(|concept| {
-                (
-                    concept
-                        .path
-                        .iter()
-                        .map(|segment| crate::index::normalize(segment))
-                        .collect::<Vec<_>>(),
-                    concept,
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-        let concepts = args
-            .paths
-            .iter()
-            .map(|path| {
-                indexed
-                    .get(
-                        &path
-                            .iter()
-                            .map(|segment| crate::index::normalize(segment))
-                            .collect::<Vec<_>>(),
+        let mut results = Vec::with_capacity(args.requests.len());
+        for request in args.requests {
+            let mut result = match request {
+                CorpusInspectRequest::Overview => json!({
+                    "kind": "overview",
+                    "overview": crate::corpus::corpus_overview(
+                        &connection,
+                        self.base_revision,
                     )
-                    .map(|concept| {
-                        bounded_concept(concept, MAX_CONCEPT_EVIDENCE, MAX_CONCEPT_CHILDREN)
-                    })
-                    .ok_or_else(|| {
-                        failure(
-                            "concept_not_found",
-                            format!("concept path {path:?} was not found"),
+                    .map_err(app_failure)?
+                }),
+                CorpusInspectRequest::Roots { limit, cursor } => json!({
+                    "kind": "roots",
+                    "revision": self.base_revision,
+                    "roots": crate::corpus::roots_page(
+                        &connection,
+                        self.base_revision,
+                        limit,
+                        cursor.as_deref(),
+                    )
+                    .map_err(app_failure)?
+                }),
+                CorpusInspectRequest::Concept { id, preview_limit } => json!({
+                    "kind": "concept",
+                    "revision": self.base_revision,
+                    "concept": crate::corpus::concept_detail(
+                        &connection,
+                        self.base_revision,
+                        id,
+                        preview_limit,
+                    )
+                    .map_err(app_failure)?
+                }),
+                CorpusInspectRequest::Parents { id, limit, cursor } => {
+                    let concept = inspect_concept_reference(&connection, self.base_revision, id)?;
+                    json!({
+                        "kind": "parents",
+                        "revision": self.base_revision,
+                        "concept": concept,
+                        "parents": crate::corpus::neighbor_page(
+                            &connection,
+                            self.base_revision,
+                            id,
+                            GraphDirection::Parents,
+                            limit,
+                            cursor.as_deref(),
                         )
+                        .map_err(app_failure)?
                     })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(json!({ "concepts": concepts }))
+                }
+                CorpusInspectRequest::Children { id, limit, cursor } => {
+                    let concept = inspect_concept_reference(&connection, self.base_revision, id)?;
+                    json!({
+                        "kind": "children",
+                        "revision": self.base_revision,
+                        "concept": concept,
+                        "children": crate::corpus::neighbor_page(
+                            &connection,
+                            self.base_revision,
+                            id,
+                            GraphDirection::Children,
+                            limit,
+                            cursor.as_deref(),
+                        )
+                        .map_err(app_failure)?
+                    })
+                }
+                CorpusInspectRequest::Evidence { id, limit, cursor } => {
+                    let concept = inspect_concept_reference(&connection, self.base_revision, id)?;
+                    json!({
+                        "kind": "evidence",
+                        "revision": self.base_revision,
+                        "concept": concept,
+                        "evidence": crate::corpus::evidence_page(
+                            &connection,
+                            self.base_revision,
+                            id,
+                            limit,
+                            cursor.as_deref(),
+                        )
+                        .map_err(app_failure)?
+                    })
+                }
+                CorpusInspectRequest::Graph {
+                    id,
+                    direction,
+                    depth,
+                    max_nodes,
+                } => json!({
+                    "kind": "graph",
+                    "graph": crate::corpus::graph_view(
+                        &connection,
+                        self.base_revision,
+                        id,
+                        direction,
+                        depth,
+                        max_nodes,
+                    )
+                    .map_err(app_failure)?
+                }),
+            };
+            truncate_evidence_quotes(&mut result);
+            results.push(result);
+        }
+        Ok(json!({ "results": results }))
     }
 
     fn submit_reconciliation(&mut self, arguments: &Value) -> Result<Value, ToolFailure> {
@@ -788,16 +838,28 @@ impl Backend for LiaisonBackend {
     }
 }
 
+fn inspect_concept_reference(
+    connection: &Connection,
+    revision: i64,
+    id: ConceptId,
+) -> Result<ConceptReference, ToolFailure> {
+    let detail = crate::corpus::concept_detail(connection, revision, id, 0).map_err(app_failure)?;
+    Ok(ConceptReference {
+        id: detail.summary.id,
+        label: detail.summary.label,
+    })
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct SearchArgs {
+struct WorkSearchArgs {
     queries: Vec<String>,
-    #[serde(default = "default_search_limit")]
+    #[serde(default = "default_work_search_limit")]
     max_results_per_query: usize,
 }
 
-fn decode_search(arguments: Value) -> Result<SearchArgs, ToolFailure> {
-    let args: SearchArgs = decode(arguments)?;
+fn decode_work_search(arguments: Value) -> Result<WorkSearchArgs, ToolFailure> {
+    let args: WorkSearchArgs = decode(arguments)?;
     if args.queries.is_empty()
         || args.queries.len() > 20
         || args.queries.iter().any(|query| query.trim().is_empty())
@@ -811,8 +873,165 @@ fn decode_search(arguments: Value) -> Result<SearchArgs, ToolFailure> {
     Ok(args)
 }
 
-const fn default_search_limit() -> usize {
+const fn default_work_search_limit() -> usize {
     5
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CorpusSearchArgs {
+    queries: Vec<CorpusSearchQuery>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CorpusSearchQuery {
+    query: String,
+    within: Option<ConceptId>,
+    #[serde(default = "default_corpus_search_limit")]
+    limit: usize,
+    cursor: Option<String>,
+}
+
+fn decode_corpus_search(arguments: Value) -> Result<CorpusSearchArgs, ToolFailure> {
+    let args: CorpusSearchArgs = decode(arguments)?;
+    if args.queries.is_empty()
+        || args.queries.len() > 20
+        || args.queries.iter().any(|query| {
+            query.query.trim().is_empty()
+                || !(1..=50).contains(&query.limit)
+                || query.cursor.as_deref().is_some_and(str::is_empty)
+        })
+    {
+        return Err(failure(
+            "invalid_tool_input",
+            "queries must contain 1 to 20 nonempty query objects with limits from 1 to 50 and nonempty cursors",
+        ));
+    }
+    Ok(args)
+}
+
+const fn default_corpus_search_limit() -> usize {
+    10
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum CorpusInspectRequest {
+    Overview,
+    Roots {
+        #[serde(default = "default_inspect_limit")]
+        limit: usize,
+        cursor: Option<String>,
+    },
+    Concept {
+        id: ConceptId,
+        #[serde(default = "default_preview_limit")]
+        preview_limit: usize,
+    },
+    Parents {
+        id: ConceptId,
+        #[serde(default = "default_inspect_limit")]
+        limit: usize,
+        cursor: Option<String>,
+    },
+    Children {
+        id: ConceptId,
+        #[serde(default = "default_inspect_limit")]
+        limit: usize,
+        cursor: Option<String>,
+    },
+    Evidence {
+        id: ConceptId,
+        #[serde(default = "default_inspect_limit")]
+        limit: usize,
+        cursor: Option<String>,
+    },
+    Graph {
+        id: ConceptId,
+        #[serde(default = "default_graph_direction")]
+        direction: GraphDirection,
+        #[serde(default = "default_graph_depth")]
+        depth: usize,
+        #[serde(default = "default_graph_max_nodes")]
+        max_nodes: usize,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CorpusInspectArgs {
+    requests: Vec<CorpusInspectRequest>,
+}
+
+fn decode_corpus_inspect(arguments: Value) -> Result<CorpusInspectArgs, ToolFailure> {
+    let args: CorpusInspectArgs = decode(arguments)?;
+    if args.requests.is_empty() || args.requests.len() > 20 {
+        return Err(failure(
+            "invalid_tool_input",
+            "requests must contain 1 to 20 corpus inspections",
+        ));
+    }
+    for request in &args.requests {
+        match request {
+            CorpusInspectRequest::Overview => {}
+            CorpusInspectRequest::Roots { limit, cursor }
+            | CorpusInspectRequest::Parents { limit, cursor, .. }
+            | CorpusInspectRequest::Children { limit, cursor, .. }
+            | CorpusInspectRequest::Evidence { limit, cursor, .. } => {
+                validate_inspect_page(*limit, cursor.as_deref())?;
+            }
+            CorpusInspectRequest::Concept { preview_limit, .. } => {
+                if *preview_limit > 20 {
+                    return Err(failure(
+                        "invalid_tool_input",
+                        "preview_limit must be from 0 to 20",
+                    ));
+                }
+            }
+            CorpusInspectRequest::Graph {
+                depth, max_nodes, ..
+            } => {
+                if *depth > 5 || !(1..=500).contains(max_nodes) {
+                    return Err(failure(
+                        "invalid_tool_input",
+                        "graph depth must be from 0 to 5 and max_nodes from 1 to 500",
+                    ));
+                }
+            }
+        }
+    }
+    Ok(args)
+}
+
+fn validate_inspect_page(limit: usize, cursor: Option<&str>) -> Result<(), ToolFailure> {
+    if !(1..=100).contains(&limit) || cursor.is_some_and(str::is_empty) {
+        return Err(failure(
+            "invalid_tool_input",
+            "inspection limits must be from 1 to 100 and cursors must be nonempty",
+        ));
+    }
+    Ok(())
+}
+
+const fn default_inspect_limit() -> usize {
+    25
+}
+
+const fn default_preview_limit() -> usize {
+    5
+}
+
+const fn default_graph_depth() -> usize {
+    2
+}
+
+const fn default_graph_direction() -> GraphDirection {
+    GraphDirection::Children
+}
+
+const fn default_graph_max_nodes() -> usize {
+    100
 }
 
 fn decode<T: for<'de> Deserialize<'de>>(arguments: Value) -> Result<T, ToolFailure> {
@@ -952,39 +1171,25 @@ fn continuation_quote(text: &str, start: usize, end: usize) -> Option<String> {
     (!candidate.is_empty() && text.matches(candidate).count() == 1).then(|| candidate.to_owned())
 }
 
-fn bounded_concept(
-    concept: &crate::model::ConceptView,
-    evidence_limit: usize,
-    child_limit: usize,
-) -> Value {
-    let evidence = concept
-        .evidence
-        .iter()
-        .take(evidence_limit)
-        .map(|evidence| {
-            let (quote, quote_truncated) =
-                truncate_text(&evidence.quote, MAX_EVIDENCE_QUOTE_CHARACTERS);
-            json!({
-                "work": evidence.work,
-                "quote": quote,
-                "quote_truncated": quote_truncated
-            })
-        })
-        .collect::<Vec<_>>();
-    let children = concept
-        .children
-        .iter()
-        .take(child_limit)
-        .cloned()
-        .collect::<Vec<_>>();
-    json!({
-        "path": concept.path,
-        "parent": concept.parent,
-        "children": children,
-        "children_truncated": children.len() < concept.children.len(),
-        "evidence": evidence,
-        "evidence_truncated": evidence.len() < concept.evidence.len()
-    })
+fn truncate_evidence_quotes(value: &mut Value) {
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                truncate_evidence_quotes(item);
+            }
+        }
+        Value::Object(object) => {
+            if let Some(quote) = object.get("quote").and_then(Value::as_str) {
+                let (quote, truncated) = truncate_text(quote, MAX_EVIDENCE_QUOTE_CHARACTERS);
+                object.insert("quote".to_owned(), Value::String(quote));
+                object.insert("quote_truncated".to_owned(), Value::Bool(truncated));
+            }
+            for item in object.values_mut() {
+                truncate_evidence_quotes(item);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn truncate_text(text: &str, max_characters: usize) -> (String, bool) {
@@ -1080,11 +1285,59 @@ mod tests {
         assert!(prompt.contains("revision 7"));
         assert!(prompt.contains("provisional best-current reconciliation"));
         assert!(prompt.contains("provisional and revisable"));
+        assert!(prompt.contains("durable public IDs"));
+        assert!(prompt.contains("several parents are symmetric"));
         assert!(prompt.contains("submit_reconciliation"));
         assert!(prompt.contains("Annals determines that mechanically"));
         assert!(!prompt.contains("smallest distinct conceptual delta"));
         assert!(!prompt.contains("no-change"));
         assert!(!prompt.contains("UNIQUE_BODY_SENTINEL"));
+    }
+
+    #[test]
+    fn corpus_tool_inputs_decode_public_ids_and_graph_requests() -> TestResult {
+        let search = decode_corpus_search(json!({
+            "queries": [{"query": "predicate locking", "within": "c7"}]
+        }))
+        .map_err(|error| format!("{}: {}", error.code(), error.message()))?;
+        assert_eq!(search.queries.len(), 1);
+        assert_eq!(
+            search.queries[0].within.map(|id| id.to_string()).as_deref(),
+            Some("c7")
+        );
+        assert_eq!(search.queries[0].limit, 10);
+
+        let inspect = decode_corpus_inspect(json!({
+            "requests": [
+                {"kind": "overview"},
+                {"kind": "parents", "id": "c42", "limit": 3},
+                {"kind": "graph", "id": "c42", "direction": "both"}
+            ]
+        }))
+        .map_err(|error| format!("{}: {}", error.code(), error.message()))?;
+        assert_eq!(inspect.requests.len(), 3);
+        let CorpusInspectRequest::Graph {
+            id,
+            direction,
+            depth,
+            max_nodes,
+        } = &inspect.requests[2]
+        else {
+            return Err("third inspection was not a graph request".into());
+        };
+        assert_eq!(id.to_string(), "c42");
+        assert_eq!(*direction, GraphDirection::Both);
+        assert_eq!(*depth, 2);
+        assert_eq!(*max_nodes, 100);
+
+        assert!(decode_corpus_search(json!({ "queries": ["old path search"] })).is_err());
+        assert!(
+            decode_corpus_inspect(json!({
+                "requests": [{"kind": "concept", "id": "42"}]
+            }))
+            .is_err()
+        );
+        Ok(())
     }
 
     #[test]
@@ -1110,6 +1363,97 @@ mod tests {
         assert!(excerpt.contains("unique match"));
         assert!(excerpt.chars().count() <= MAX_SEARCH_EXCERPT_CHARACTERS);
         assert!(!excerpt.contains("Unrelated material."));
+    }
+
+    #[test]
+    fn corpus_evidence_quotes_are_bounded_for_model_context() {
+        let mut value = json!({
+            "evidence": {
+                "items": [
+                    {"work": "Paper", "quote": "界".repeat(2_001)},
+                    {"work": "Paper", "quote": "short"}
+                ]
+            }
+        });
+        truncate_evidence_quotes(&mut value);
+
+        assert_eq!(
+            value["evidence"]["items"][0]["quote"]
+                .as_str()
+                .map(|quote| quote.chars().count()),
+            Some(MAX_EVIDENCE_QUOTE_CHARACTERS)
+        );
+        assert_eq!(value["evidence"]["items"][0]["quote_truncated"], true);
+        assert_eq!(value["evidence"]["items"][1]["quote"], "short");
+        assert_eq!(value["evidence"]["items"][1]["quote_truncated"], false);
+    }
+
+    #[test]
+    fn corpus_tools_read_the_run_frozen_revision() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("annals.db");
+        let mut connection = db::init(&path)?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        index::rebuild_all(&transaction)?;
+        transaction.commit()?;
+        let work = store_work(&mut connection, "Paper", "Source text.")?;
+        let record = resolver::submit_value(
+            &mut connection,
+            &work,
+            0,
+            json!({
+                "summary": "Represent the source",
+                "operations": [{
+                    "action": "create_concept",
+                    "ref": "source",
+                    "label": "Source",
+                    "parents": [],
+                    "evidence": [{"quote": "Source text."}]
+                }]
+            }),
+            "test",
+            None,
+        )?;
+        assert_eq!(resolver::apply_record(&mut connection, &record)?, 1);
+        let settings = ModelSettings::new(
+            crate::model_runner::ModelQuality::Medium,
+            Some("custom-model"),
+        );
+        let token = create_run(&mut connection, work.id, 1, &settings)?;
+        drop(connection);
+
+        let mut backend = LiaisonBackend::open(&path, &token)?;
+        let search = backend
+            .execute(
+                Tool::CorpusSearch,
+                json!({ "queries": [{"query": "anything"}] }),
+            )
+            .map_err(|error| format!("{}: {}", error.code(), error.message()))?;
+        assert_eq!(search["results"][0]["revision"], 1);
+        assert_eq!(search["results"][0]["results"]["items"], json!([]));
+
+        let inspect = backend
+            .execute(
+                Tool::CorpusInspect,
+                json!({
+                    "requests": [
+                        {"kind": "overview"},
+                        {"kind": "roots"},
+                        {"kind": "parents", "id": "c1"},
+                        {"kind": "children", "id": "c1"},
+                        {"kind": "evidence", "id": "c1"}
+                    ]
+                }),
+            )
+            .map_err(|error| format!("{}: {}", error.code(), error.message()))?;
+        assert_eq!(inspect["results"][0]["overview"]["revision"], 1);
+        assert_eq!(inspect["results"][1]["revision"], 1);
+        assert_eq!(inspect["results"][1]["roots"]["items"][0]["id"], "c1");
+        for result in &inspect["results"].as_array().ok_or("missing results")?[2..] {
+            assert_eq!(result["concept"], json!({"id": "c1", "label": "Source"}));
+            assert!(result.get("id").is_none());
+        }
+        Ok(())
     }
 
     #[test]
@@ -1147,7 +1491,9 @@ mod tests {
             "summary": "Represent the source language",
             "operations": [{
                 "action": "create_concept",
+                "ref": "exact_source_language",
                 "label": "Exact source language",
+                "parents": [],
                 "evidence": [{"quote": "Exact source language."}]
             }],
             "annotations": ["This is the present interpretation at revision zero."]
@@ -1225,7 +1571,9 @@ mod tests {
                 "summary": "Represent the source language",
                 "operations": [{
                     "action": "create_concept",
+                    "ref": "exact_source_language",
                     "label": "Exact source language",
+                    "parents": [],
                     "evidence": [{"quote": "Exact source language."}]
                 }]
             }),
@@ -1259,7 +1607,7 @@ mod tests {
                 .is_none()
         );
         assert!(
-            reconciliation_for_context(&connection, work.id, 0, &settings, "liaison-v1")?.is_none()
+            reconciliation_for_context(&connection, work.id, 0, &settings, "liaison-v2")?.is_none()
         );
         drop(connection);
 

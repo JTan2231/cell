@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+base64 = "0.22.1"
 clap = { version = "4.5.46", features = ["derive"] }
 rusqlite = { version = "0.37.0", features = ["backup", "bundled"] }
 serde = { version = "1.0.219", features = ["derive"] }
