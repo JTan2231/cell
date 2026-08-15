@@ -23,10 +23,9 @@ use crate::corpus::{
 use crate::db;
 use crate::error::{AppError, AppResult};
 use crate::graph::{GraphReader, NeighborDirection};
-use crate::index;
 use crate::model::{
     ConceptReference, ConceptSummary, DiffEntry, GraphDirection, GraphView, LibraryStats, Page,
-    PageInfo, ValidationSeverity,
+    PageInfo,
 };
 use crate::model_runner::{ModelSettings, Runner};
 use crate::render::{CommandOutput, render_terminal_text};
@@ -61,7 +60,6 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
         Command::Shake(args) => shake(path, args, cli.json),
         Command::Validate => validate_library(path),
         Command::Backup(args) => backup(path, &args.output),
-        Command::Reindex => reindex(path),
         Command::Work(command) => match command {
             WorkCommand::Add(args) => add_work(path, args),
             WorkCommand::List => work_list(path),
@@ -83,18 +81,11 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
         Command::Log(args) => log(path, args.limit),
         Command::Diff(args) => diff_revisions(path, args.from, args.to),
         Command::Revert(args) => revert(path, args.revision),
-        Command::LiaisonServer(args) => {
-            liaison::serve(path, &args.token)?;
-            Ok(CommandOutput::new(Value::Null, ""))
-        }
     }
 }
 
 fn initialize(path: &Path) -> Result<CommandOutput, AppError> {
-    let mut connection = db::init(path)?;
-    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    index::rebuild_all(&transaction)?;
-    transaction.commit()?;
+    db::init(path)?;
     Ok(CommandOutput::new(
         json!({ "library": path.display().to_string(), "revision": 0 }),
         format!(
@@ -128,10 +119,9 @@ fn stats(path: &Path) -> Result<CommandOutput, AppError> {
                 )
             },
         )?,
-        index_current: index::status(&connection)?.is_current(),
     };
     let human = format!(
-        "Revision: {}\nConcepts: {}\nParent edges: {}\nWorks: {}\nEvidence links: {}\nPending reconciliations: {}\nCommits: {}\nModel runs: {}\nDatabase size: {} bytes\nIndex current: {}",
+        "Revision: {}\nConcepts: {}\nParent edges: {}\nWorks: {}\nEvidence links: {}\nPending reconciliations: {}\nCommits: {}\nModel runs: {}\nDatabase size: {} bytes",
         value.revision,
         value.concept_count,
         value.edge_count,
@@ -140,26 +130,19 @@ fn stats(path: &Path) -> Result<CommandOutput, AppError> {
         value.pending_reconciliation_count,
         value.commit_count,
         value.model_run_count,
-        value.database_size_bytes,
-        value.index_current
+        value.database_size_bytes
     );
     Ok(CommandOutput::new(to_value(&value)?, human))
 }
 
 fn validate_library(path: &Path) -> Result<CommandOutput, AppError> {
-    let connection = db::open_validation(path)?;
+    let connection = db::open_read(path)?;
     let report = validate::validate(&connection)?;
     if !report.valid {
         let messages = report
             .issues
             .iter()
-            .map(|issue| {
-                let severity = match issue.severity {
-                    ValidationSeverity::Warning => "warning",
-                    ValidationSeverity::Error => "error",
-                };
-                format!("{severity} [{}]: {}", issue.code, issue.message)
-            })
+            .map(|issue| format!("error [{}]: {}", issue.code, issue.message))
             .collect::<Vec<_>>()
             .join("\n");
         return Err(AppError::database(
@@ -176,18 +159,6 @@ fn backup(path: &Path, output: &Path) -> Result<CommandOutput, AppError> {
     Ok(CommandOutput::new(
         json!({ "output": output.display().to_string() }),
         format!("Backed up {} to {}", path.display(), output.display()),
-    )
-    .mutation())
-}
-
-fn reindex(path: &Path) -> Result<CommandOutput, AppError> {
-    let mut connection = db::open_write(path)?;
-    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let indexed = index::rebuild_all(&transaction)?;
-    transaction.commit()?;
-    Ok(CommandOutput::new(
-        json!({ "indexed_concepts": indexed.concepts }),
-        format!("Indexed {} concepts", indexed.concepts),
     )
     .mutation())
 }
@@ -339,7 +310,6 @@ fn render_recorded_change(change: &crate::model::RecordedChangeView) -> Result<S
         .work
         .as_deref()
         .map_or_else(|| "none".to_owned(), render_quoted);
-    let metadata = render_terminal_text(&serde_json::to_string(&change.metadata)?, false);
     let details = match change.kind.as_str() {
         "change" => render_recorded_reconciliation(change)?,
         "revert" => render_recorded_revert(change)?,
@@ -353,17 +323,14 @@ fn render_recorded_change(change: &crate::model::RecordedChangeView) -> Result<S
     };
     let effects = render_commit_effects(&change.effects);
     Ok(format!(
-        "Applied {} at revision {}\nParent revision: {}\nBase revision: {}\nWork: {}\nSummary: {}\n{}\n{}\nActor: {}\nMetadata: {}\nRecorded: {}",
+        "Applied {} at revision {}\nWork: {}\nSummary: {}\n{}\n{}\nActor: {}\nRecorded: {}",
         change.kind,
         change.revision,
-        change.parent_revision,
-        change.base_revision,
         work,
         render_terminal_text(&change.summary, false),
         details,
         effects,
         render_terminal_text(&change.actor, false),
-        metadata,
         render_terminal_text(&change.created_at, false),
     ))
 }
@@ -1024,7 +991,7 @@ fn search(path: &Path, args: &SearchArgs) -> Result<CommandOutput, AppError> {
     let output = graph.search(
         &args.query,
         args.within,
-        cli_search_limit(args.limit)?,
+        cli_page_limit(args.limit)?,
         args.cursor.as_deref(),
     )?;
     let body = if output.results.items.is_empty() {
@@ -1072,10 +1039,6 @@ fn cli_page_limit(limit: usize) -> Result<usize, AppError> {
             "a CLI page limit must be between 1 and 200",
         ))
     }
-}
-
-fn cli_search_limit(limit: usize) -> Result<usize, AppError> {
-    cli_page_limit(limit)
 }
 
 fn render_summary_page(heading: &str, page: &Page<ConceptSummary>, revision: i64) -> String {
@@ -1182,15 +1145,13 @@ fn render_graph(graph: &GraphView) -> String {
             .collect::<Vec<_>>()
             .join("\n")
     };
-    let coverage = if graph.complete_within_depth {
-        format!("Complete through requested depth {}", graph.depth)
-    } else if graph.node_limit_reached {
+    let coverage = if graph.node_limit_reached {
         format!(
             "Node limit reached at {}; expand again from a frontier concept",
             graph.max_nodes
         )
     } else {
-        "Expansion is incomplete; continue from a frontier concept".to_owned()
+        format!("Complete through requested depth {}", graph.depth)
     };
     let direction = match graph.direction {
         GraphDirection::Parents => "parents",
@@ -1330,9 +1291,8 @@ fn log(path: &Path, limit: usize) -> Result<CommandOutput, AppError> {
             .iter()
             .map(|commit| {
                 format!(
-                    "r{} <- r{}\t{}\t{}",
+                    "r{}\t{}\t{}",
                     commit.revision,
-                    commit.parent_revision,
                     commit.kind,
                     render_terminal_text(&commit.summary, false)
                 )
@@ -1416,9 +1376,7 @@ fn revert(path: &Path, target: i64) -> Result<CommandOutput, AppError> {
     Ok(CommandOutput::new(
         json!({
             "revision": new_revision,
-            "parent_revision": new_revision - 1,
             "reverted_revision": target,
-            "status": "applied",
             "summary": format!("Revert revision {target}")
         }),
         format!("Applied revision {new_revision}:\nRevert revision {target}"),

@@ -1,23 +1,17 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::time::Duration;
+use std::collections::BTreeMap;
 
 use rusqlite::Connection;
-use rusqlite::backup::Backup;
-use sha2::{Digest, Sha256};
 
 use crate::change::{ChangeOperation, Reconciliation, parse_reconciliation};
 use crate::corpus::{self, Snapshot};
 use crate::error::AppError;
-use crate::index;
-use crate::model::{DiffEntry, ValidationIssue, ValidationReport, ValidationSeverity};
+use crate::model::{DiffEntry, ValidationIssue, ValidationReport};
 use crate::resolver::{ResolvedOperation, ResolvedReconciliation, snapshots_corpus_equal};
 use crate::revision_store;
 
 #[derive(Debug)]
 struct StoredCommit {
     revision: i64,
-    parent_revision: i64,
-    base_revision: i64,
     work_id: Option<i64>,
     reconciliation_id: Option<i64>,
     kind: String,
@@ -25,7 +19,6 @@ struct StoredCommit {
     submitted_request: String,
     resolved_operations: String,
     after_snapshot: String,
-    metadata: String,
     actor: String,
 }
 
@@ -57,27 +50,15 @@ struct SuccessfulSubmission {
     arguments: String,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct ExpectedIndexRow {
-    concept_id: i64,
-    label: String,
-    ancestors: String,
-    normalized_label: String,
-    normalized_ancestors: String,
-    content_hash: String,
-    indexer_version: i64,
-}
-
-/// Validate the authoritative corpus, its append-only history, and its derived index.
+/// Validate the authoritative corpus and its append-only history.
 ///
 /// Validation is deliberately read-only. Every detected invariant violation is returned in
-/// the report; no canonical or derived state is repaired here.
+/// the report; no state is repaired here.
 pub fn validate(connection: &Connection) -> Result<ValidationReport, AppError> {
     let mut issues = Vec::new();
 
     check_sqlite_integrity(connection, &mut issues)?;
     check_foreign_keys(connection, &mut issues)?;
-    check_fts_integrity(connection, &mut issues);
     check_work_hashes(connection, &mut issues)?;
 
     let head_revision = load_head_revision(connection, &mut issues)?;
@@ -105,7 +86,6 @@ pub fn validate(connection: &Connection) -> Result<ValidationReport, AppError> {
             ));
         }
         check_materialized_head(head_revision, snapshot, history_head.as_ref(), &mut issues);
-        check_index(connection, snapshot, &mut issues)?;
     }
 
     Ok(report(issues))
@@ -202,37 +182,6 @@ fn check_foreign_keys(
     Ok(())
 }
 
-fn check_fts_integrity(connection: &Connection, issues: &mut Vec<ValidationIssue>) {
-    let mut copy = match Connection::open_in_memory() {
-        Ok(copy) => copy,
-        Err(error) => {
-            issues.push(error_issue(
-                "fts_integrity",
-                format!("could not create a temporary validation snapshot: {error}"),
-            ));
-            return;
-        }
-    };
-    let backup_result = Backup::new(connection, &mut copy)
-        .and_then(|backup| backup.run_to_completion(128, Duration::from_millis(1), None));
-    if let Err(error) = backup_result {
-        issues.push(error_issue(
-            "fts_integrity",
-            format!("could not copy the library for FTS validation: {error}"),
-        ));
-        return;
-    }
-    if let Err(error) = copy.execute(
-        "INSERT INTO concept_fts(concept_fts, rank) VALUES ('integrity-check', 1)",
-        [],
-    ) {
-        issues.push(error_issue(
-            "fts_integrity",
-            format!("FTS integrity check failed: {error}"),
-        ));
-    }
-}
-
 fn check_work_hashes(
     connection: &Connection,
     issues: &mut Vec<ValidationIssue>,
@@ -318,24 +267,21 @@ fn valid_library_id(value: &str) -> bool {
 
 fn load_commits(connection: &Connection) -> Result<Vec<StoredCommit>, AppError> {
     let mut statement = connection.prepare(
-        "SELECT revision, parent_revision, base_revision, work_id, reconciliation_id, kind, summary, \
-                submitted_request, resolved_operations, after_snapshot, metadata, actor \
+        "SELECT revision, work_id, reconciliation_id, kind, summary, submitted_request, \
+                resolved_operations, after_snapshot, actor \
          FROM commits ORDER BY revision",
     )?;
     let rows = statement.query_map([], |row| {
         Ok(StoredCommit {
             revision: row.get(0)?,
-            parent_revision: row.get(1)?,
-            base_revision: row.get(2)?,
-            work_id: row.get(3)?,
-            reconciliation_id: row.get(4)?,
-            kind: row.get(5)?,
-            summary: row.get(6)?,
-            submitted_request: row.get(7)?,
-            resolved_operations: row.get(8)?,
-            after_snapshot: row.get(9)?,
-            metadata: row.get(10)?,
-            actor: row.get(11)?,
+            work_id: row.get(1)?,
+            reconciliation_id: row.get(2)?,
+            kind: row.get(3)?,
+            summary: row.get(4)?,
+            submitted_request: row.get(5)?,
+            resolved_operations: row.get(6)?,
+            after_snapshot: row.get(7)?,
+            actor: row.get(8)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -688,7 +634,7 @@ fn check_commit_provenance(
     issues: &mut Vec<ValidationIssue>,
 ) {
     if let (Ok(before), Ok(after)) = (
-        corpus::snapshot_at(connection, commit.parent_revision),
+        corpus::snapshot_at(connection, commit.revision - 1),
         serde_json::from_str::<Snapshot>(&commit.after_snapshot),
     ) && snapshots_corpus_equal(&before, &after)
     {
@@ -740,21 +686,12 @@ fn check_reconciliation_commit(
                 serde_json::from_str::<Snapshot>(&commit.after_snapshot)
                     .is_ok_and(|after| after == resolved.resulting_snapshot)
             });
-    let metadata_actor = serde_json::from_str::<serde_json::Value>(&commit.metadata)
-        .ok()
-        .and_then(|metadata| {
-            metadata
-                .get("reconciliation_actor")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned)
-        });
     if reconciliation.status != "applied"
         || reconciliation.applied_revision != Some(commit.revision)
         || commit.work_id != Some(reconciliation.work_id)
-        || commit.base_revision != reconciliation.base_revision
+        || commit.revision - 1 != reconciliation.base_revision
         || commit.summary != reconciliation.summary
         || commit.actor != reconciliation.actor
-        || metadata_actor.as_deref() != Some(reconciliation.actor.as_str())
         || !request_matches
         || !resolved_matches
         || !snapshot_matches
@@ -775,9 +712,7 @@ fn check_revert_commit(
     commits: &[StoredCommit],
     issues: &mut Vec<ValidationIssue>,
 ) {
-    let request_target = json_integer(&commit.submitted_request, "revert_revision");
-    let metadata_target = json_integer(&commit.metadata, "reverted_revision");
-    let target = request_target.filter(|target| Some(*target) == metadata_target);
+    let target = json_integer(&commit.submitted_request, "revert_revision");
     let target_commit = target.and_then(|target| {
         commits
             .iter()
@@ -808,7 +743,7 @@ fn check_shake_commit(
     commit: &StoredCommit,
     issues: &mut Vec<ValidationIssue>,
 ) {
-    let before = corpus::snapshot_at(connection, commit.parent_revision);
+    let before = corpus::snapshot_at(connection, commit.revision - 1);
     let actual = serde_json::from_str::<Snapshot>(&commit.after_snapshot);
     let reduction = before.as_ref().ok().and_then(|snapshot| {
         corpus::transitive_reduction(snapshot)
@@ -824,19 +759,12 @@ fn check_shake_commit(
     let stored_operations =
         serde_json::from_str::<Vec<DiffEntry>>(&commit.resolved_operations).ok();
     let request = serde_json::from_str::<serde_json::Value>(&commit.submitted_request).ok();
-    let metadata = serde_json::from_str::<serde_json::Value>(&commit.metadata).ok();
     let removed_count = reduction.as_ref().map(|(_, removed)| *removed);
-    let metadata_count = metadata
-        .as_ref()
-        .and_then(|value| value.get("removed_edge_count"))
-        .and_then(serde_json::Value::as_u64)
-        .and_then(|value| usize::try_from(value).ok());
     let valid = commit.work_id.is_none()
         && commit.reconciliation_id.is_none()
         && commit.actor == "human"
         && request == Some(serde_json::json!({ "operation": "transitive_reduction" }))
         && removed_count.is_some_and(|count| count > 0)
-        && metadata_count == removed_count
         && removed_count.is_some_and(|count| commit.summary == corpus::shake_summary(count))
         && reduction
             .as_ref()
@@ -863,7 +791,7 @@ fn revert_projection_matches(
     let snapshots = (
         corpus::snapshot_at(connection, target_revision.saturating_sub(1)),
         corpus::snapshot_at(connection, target_revision),
-        corpus::snapshot_at(connection, commit.parent_revision),
+        corpus::snapshot_at(connection, commit.revision - 1),
         serde_json::from_str::<Snapshot>(&commit.after_snapshot),
     );
     let (Ok(target_before), Ok(target_after), Ok(head_before), Ok(actual)) = snapshots else {
@@ -874,7 +802,7 @@ fn revert_projection_matches(
 }
 
 fn revert_operations_match(connection: &Connection, commit: &StoredCommit) -> bool {
-    let Ok(before) = corpus::snapshot_at(connection, commit.parent_revision) else {
+    let Ok(before) = corpus::snapshot_at(connection, commit.revision - 1) else {
         return false;
     };
     let Ok(after) = serde_json::from_str::<Snapshot>(&commit.after_snapshot) else {
@@ -1006,29 +934,6 @@ fn check_history(
                 ),
             ));
         }
-        let expected_parent = commit.revision.checked_sub(1);
-        if expected_parent != Some(commit.parent_revision) {
-            issues.push(error_issue(
-                "commit_parent_mismatch",
-                format!(
-                    "revision {} names parent {}, expected {}",
-                    commit.revision,
-                    commit.parent_revision,
-                    expected_parent
-                        .map_or_else(|| "no valid parent".to_owned(), |value| value.to_string())
-                ),
-            ));
-        }
-        if commit.base_revision != commit.parent_revision {
-            issues.push(error_issue(
-                "commit_base_mismatch",
-                format!(
-                    "revision {} targets base {}, but its parent is {}",
-                    commit.revision, commit.base_revision, commit.parent_revision
-                ),
-            ));
-        }
-
         let after = parse_snapshot(&commit.after_snapshot, commit.revision, "after", issues);
         if let Some(snapshot) = &after {
             validate_historical_snapshot(connection, snapshot, commit.revision, "after", issues);
@@ -1106,248 +1011,15 @@ fn check_materialized_head(
     }
 }
 
-fn check_index(
-    connection: &Connection,
-    snapshot: &Snapshot,
-    issues: &mut Vec<ValidationIssue>,
-) -> Result<(), AppError> {
-    let status = index::status(connection)?;
-    if !status.is_current() {
-        issues.push(error_issue(
-            "index_stale",
-            format!(
-                "concept index status is stale (version {:?}, {} concepts, {} indexed rows)",
-                status.stored_version, status.concept_count, status.indexed_count
-            ),
-        ));
-    }
-
-    let expected = match expected_index_rows(snapshot) {
-        Ok(expected) => expected,
-        Err(error) => {
-            issues.push(error_issue(
-                "index_ancestors_unavailable",
-                format!("concept ancestor contexts could not be derived: {error}"),
-            ));
-            return Ok(());
-        }
-    };
-
-    let mut statement = connection.prepare(
-        "SELECT concept_id, label, ancestors, normalized_label, normalized_ancestors, \
-                content_hash, indexer_version \
-         FROM concept_search ORDER BY concept_id",
-    )?;
-    let stored = statement
-        .query_map([], |row| {
-            Ok(ExpectedIndexRow {
-                concept_id: row.get(0)?,
-                label: row.get(1)?,
-                ancestors: row.get(2)?,
-                normalized_label: row.get(3)?,
-                normalized_ancestors: row.get(4)?,
-                content_hash: row.get(5)?,
-                indexer_version: row.get(6)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-    let stored = stored
-        .into_iter()
-        .map(|row| (row.concept_id, row))
-        .collect::<BTreeMap<_, _>>();
-
-    for (concept_id, expected_row) in &expected {
-        match stored.get(concept_id) {
-            None => issues.push(error_issue(
-                "index_row_missing",
-                format!("concept {concept_id} has no derived search row"),
-            )),
-            Some(stored_row) if stored_row != expected_row => issues.push(error_issue(
-                "index_row_mismatch",
-                format!("derived search row for concept {concept_id} differs from the corpus"),
-            )),
-            Some(_) => {}
-        }
-    }
-    for concept_id in stored.keys() {
-        if !expected.contains_key(concept_id) {
-            issues.push(error_issue(
-                "orphan_index_row",
-                format!("derived search row for missing concept {concept_id} is orphaned"),
-            ));
-        }
-    }
-    Ok(())
-}
-
-#[allow(clippy::too_many_lines)]
-fn expected_index_rows(snapshot: &Snapshot) -> Result<BTreeMap<i64, ExpectedIndexRow>, AppError> {
-    let concepts = snapshot
-        .concepts
-        .iter()
-        .map(|concept| (concept.id, concept.label.as_str()))
-        .collect::<BTreeMap<_, _>>();
-    let mut ancestors = concepts
-        .keys()
-        .map(|id| (*id, BTreeSet::new()))
-        .collect::<BTreeMap<_, _>>();
-    let mut indegree = concepts
-        .keys()
-        .map(|id| (*id, 0_usize))
-        .collect::<BTreeMap<_, _>>();
-    let mut children = BTreeMap::<i64, BTreeSet<i64>>::new();
-
-    for edge in &snapshot.edges {
-        if edge.parent_id == edge.child_id
-            || !concepts.contains_key(&edge.parent_id)
-            || !concepts.contains_key(&edge.child_id)
-            || !children
-                .entry(edge.parent_id)
-                .or_default()
-                .insert(edge.child_id)
-        {
-            return Err(AppError::database(
-                "invalid_concept_graph",
-                "the concept graph has an invalid or duplicate edge",
-            ));
-        }
-        let degree = indegree.get_mut(&edge.child_id).ok_or_else(|| {
-            AppError::database(
-                "invalid_concept_graph",
-                format!("concept c{} is missing", edge.child_id),
-            )
-        })?;
-        *degree = degree.checked_add(1).ok_or_else(|| {
-            AppError::database(
-                "concept_indegree_overflow",
-                "a concept has too many parents",
-            )
-        })?;
-    }
-
-    let mut ready = indegree
-        .iter()
-        .filter_map(|(id, degree)| (*degree == 0).then_some(*id))
-        .collect::<BTreeSet<_>>();
-    let mut visited = 0_usize;
-    while let Some(parent) = ready.pop_first() {
-        visited += 1;
-        let mut inherited = ancestors.get(&parent).cloned().ok_or_else(|| {
-            AppError::database(
-                "index_ancestors_missing",
-                format!("concept c{parent} has no computed ancestor set"),
-            )
-        })?;
-        inherited.insert(parent);
-        for child in children.get(&parent).into_iter().flatten() {
-            ancestors
-                .get_mut(child)
-                .ok_or_else(|| {
-                    AppError::database(
-                        "index_ancestors_missing",
-                        format!("concept c{child} has no computed ancestor set"),
-                    )
-                })?
-                .extend(inherited.iter().copied());
-            let degree = indegree.get_mut(child).ok_or_else(|| {
-                AppError::database(
-                    "invalid_concept_graph",
-                    format!("concept c{child} has no indegree"),
-                )
-            })?;
-            *degree = degree.checked_sub(1).ok_or_else(|| {
-                AppError::database(
-                    "invalid_concept_graph",
-                    "a concept edge was processed more than once",
-                )
-            })?;
-            if *degree == 0 {
-                ready.insert(*child);
-            }
-        }
-    }
-    if visited != concepts.len() {
-        return Err(AppError::database(
-            "concept_cycle",
-            "the concept graph contains a directed cycle",
-        ));
-    }
-
-    snapshot
-        .concepts
-        .iter()
-        .map(|concept| {
-            let ids = ancestors.get(&concept.id).ok_or_else(|| {
-                AppError::database(
-                    "index_ancestors_missing",
-                    format!("concept c{} has no computed ancestor set", concept.id),
-                )
-            })?;
-            let mut labels = ids
-                .iter()
-                .map(|id| {
-                    concepts.get(id).map_or_else(
-                        || {
-                            Err(AppError::database(
-                                "index_ancestor_missing",
-                                format!("ancestor c{id} is missing"),
-                            ))
-                        },
-                        |label| Ok((index::normalize(label), (*label).to_owned(), *id)),
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            labels.sort();
-            let mut exact = Vec::new();
-            let mut normalized = Vec::new();
-            for (normalized_label, label, _) in labels {
-                if exact.last() != Some(&label) {
-                    exact.push(label);
-                }
-                if normalized.last() != Some(&normalized_label) {
-                    normalized.push(normalized_label);
-                }
-            }
-            let ancestors = exact.join("\n");
-            let normalized_ancestors = normalized.join(" ");
-            Ok((
-                concept.id,
-                ExpectedIndexRow {
-                    concept_id: concept.id,
-                    label: concept.label.clone(),
-                    ancestors: ancestors.clone(),
-                    normalized_label: index::normalize(&concept.label),
-                    normalized_ancestors,
-                    content_hash: index_content_hash(concept.id, &concept.label, &ancestors),
-                    indexer_version: index::INDEXER_VERSION,
-                },
-            ))
-        })
-        .collect()
-}
-
-fn index_content_hash(id: i64, label: &str, ancestors: &str) -> String {
-    let mut digest = Sha256::new();
-    digest.update(id.to_le_bytes());
-    digest.update(label.as_bytes());
-    digest.update([0]);
-    digest.update(ancestors.as_bytes());
-    digest.update(index::INDEXER_VERSION.to_le_bytes());
-    format!("{:x}", digest.finalize())
-}
-
 fn report(issues: Vec<ValidationIssue>) -> ValidationReport {
     ValidationReport {
-        valid: !issues
-            .iter()
-            .any(|issue| issue.severity == ValidationSeverity::Error),
+        valid: issues.is_empty(),
         issues,
     }
 }
 
 fn error_issue(code: &str, message: impl Into<String>) -> ValidationIssue {
     ValidationIssue {
-        severity: ValidationSeverity::Error,
         code: code.to_owned(),
         message: message.into(),
     }
@@ -1360,18 +1032,14 @@ mod tests {
 
     use super::validate;
     use crate::corpus::{self, ReconciliationRecord};
-    use crate::index;
     use crate::resolver;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
     fn initialized_connection() -> Result<Connection, Box<dyn std::error::Error>> {
-        let mut connection = Connection::open_in_memory()?;
+        let connection = Connection::open_in_memory()?;
         connection.pragma_update(None, "foreign_keys", true)?;
         connection.execute_batch(include_str!("../schema.sql"))?;
-        let transaction = connection.transaction()?;
-        index::rebuild_all(&transaction)?;
-        transaction.commit()?;
         Ok(connection)
     }
 
@@ -1502,7 +1170,7 @@ mod tests {
     }
 
     #[test]
-    fn a_new_empty_library_is_valid_after_index_initialization() -> TestResult {
+    fn a_new_empty_library_is_valid() -> TestResult {
         let connection = initialized_connection()?;
 
         let changes_before = connection.total_changes();
@@ -1544,7 +1212,7 @@ mod tests {
         assert!(report.valid, "{:?}", report.issues);
 
         connection.execute(
-            "UPDATE commits SET metadata = '{\"removed_edge_count\":99}' WHERE revision = 2",
+            "UPDATE commits SET summary = 'Tampered summary' WHERE revision = 2",
             [],
         )?;
         let report = validate(&connection)?;
@@ -1554,7 +1222,7 @@ mod tests {
     }
 
     #[test]
-    fn validation_accepts_shared_dag_ancestry_and_its_index() -> TestResult {
+    fn validation_accepts_shared_dag_ancestry() -> TestResult {
         let mut connection = initialized_connection()?;
         let work = corpus::store_work(
             &mut connection,
@@ -1598,14 +1266,6 @@ mod tests {
 
         let report = validate(&connection)?;
         assert!(report.valid, "{:?}", report.issues);
-        assert_eq!(
-            connection.query_row(
-                "SELECT normalized_ancestors FROM concept_search WHERE label = 'Shared'",
-                [],
-                |row| row.get::<_, String>(0),
-            )?,
-            "alpha beta"
-        );
         Ok(())
     }
 

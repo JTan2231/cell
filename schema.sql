@@ -93,7 +93,6 @@ CREATE UNIQUE INDEX model_runs_one_active_context
     WHERE status = 'running';
 
 CREATE TABLE tool_calls (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
     model_run_id INTEGER NOT NULL REFERENCES model_runs(id) ON DELETE CASCADE,
     sequence     INTEGER NOT NULL CHECK (sequence >= 0),
     tool_name    TEXT NOT NULL,
@@ -101,8 +100,8 @@ CREATE TABLE tool_calls (
     result       TEXT NOT NULL CHECK (json_valid(result)),
     succeeded    INTEGER NOT NULL CHECK (succeeded IN (0, 1)),
     created_at   TEXT NOT NULL,
-    UNIQUE(model_run_id, sequence)
-);
+    PRIMARY KEY(model_run_id, sequence)
+) WITHOUT ROWID;
 
 CREATE UNIQUE INDEX tool_calls_one_successful_submission
     ON tool_calls(model_run_id)
@@ -140,8 +139,6 @@ CREATE UNIQUE INDEX reconciliations_one_per_model_run
 
 CREATE TABLE commits (
     revision             INTEGER PRIMARY KEY CHECK (revision > 0),
-    parent_revision      INTEGER NOT NULL CHECK (parent_revision >= 0),
-    base_revision        INTEGER NOT NULL CHECK (base_revision >= 0),
     work_id              INTEGER REFERENCES works(id) ON DELETE RESTRICT,
     reconciliation_id    INTEGER REFERENCES reconciliations(id) ON DELETE RESTRICT,
     kind                 TEXT NOT NULL CHECK (kind IN ('change', 'revert', 'shake')),
@@ -149,11 +146,8 @@ CREATE TABLE commits (
     submitted_request    TEXT NOT NULL CHECK (json_valid(submitted_request)),
     resolved_operations  TEXT NOT NULL CHECK (json_valid(resolved_operations)),
     after_snapshot       TEXT NOT NULL CHECK (json_valid(after_snapshot)),
-    metadata             TEXT NOT NULL CHECK (json_valid(metadata)),
     actor                TEXT NOT NULL,
     created_at           TEXT NOT NULL,
-    CHECK (parent_revision = revision - 1),
-    CHECK (base_revision = parent_revision),
     CHECK (
         (kind = 'change' AND work_id IS NOT NULL AND reconciliation_id IS NOT NULL)
         OR (kind = 'revert' AND reconciliation_id IS NULL)
@@ -269,50 +263,3 @@ CREATE TRIGGER revision_evidence_immutable_delete
 BEFORE DELETE ON revision_evidence BEGIN
     SELECT RAISE(ABORT, 'revision evidence is immutable');
 END;
-
-CREATE TABLE concept_search (
-    concept_id            INTEGER PRIMARY KEY REFERENCES concepts(id) ON DELETE CASCADE,
-    label                 TEXT NOT NULL,
-    ancestors             TEXT NOT NULL,
-    normalized_label      TEXT NOT NULL,
-    normalized_ancestors  TEXT NOT NULL,
-    content_hash          TEXT NOT NULL,
-    indexer_version       INTEGER NOT NULL CHECK (indexer_version > 0)
-);
-
-CREATE VIRTUAL TABLE concept_fts USING fts5(
-    label,
-    ancestors,
-    content = 'concept_search',
-    content_rowid = 'concept_id',
-    tokenize = 'unicode61 remove_diacritics 2',
-    prefix = '2 3 4'
-);
-
-CREATE TRIGGER concept_search_after_insert
-AFTER INSERT ON concept_search
-BEGIN
-    INSERT INTO concept_fts(rowid, label, ancestors)
-    VALUES (new.concept_id, new.label, new.ancestors);
-END;
-
-CREATE TRIGGER concept_search_after_delete
-AFTER DELETE ON concept_search
-BEGIN
-    INSERT INTO concept_fts(concept_fts, rowid, label, ancestors)
-    VALUES ('delete', old.concept_id, old.label, old.ancestors);
-END;
-
-CREATE TRIGGER concept_search_after_update
-AFTER UPDATE ON concept_search
-BEGIN
-    INSERT INTO concept_fts(concept_fts, rowid, label, ancestors)
-    VALUES ('delete', old.concept_id, old.label, old.ancestors);
-    INSERT INTO concept_fts(rowid, label, ancestors)
-    VALUES (new.concept_id, new.label, new.ancestors);
-END;
-
-CREATE TABLE index_metadata (
-    key    TEXT PRIMARY KEY,
-    value  TEXT NOT NULL
-);

@@ -174,11 +174,6 @@ fn close_incomplete_context(
     Ok(())
 }
 
-pub(crate) fn serve(path: &Path, token: &str) -> Result<(), AppError> {
-    let mut backend = LiaisonBackend::open(path, token)?;
-    crate::tool_server::serve_stdio(&mut backend).map_err(AppError::from)
-}
-
 fn pointer_prompt(work: &str, base_revision: i64) -> String {
     format!(
         "You are the Annals liaison for the immutable work {work:?}, examining corpus revision \
@@ -1255,11 +1250,8 @@ fn app_failure(error: AppError) -> ToolFailure {
 mod tests {
     use std::time::Duration;
 
-    use rusqlite::TransactionBehavior;
-
     use super::*;
     use crate::corpus::store_work;
-    use crate::index;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -1378,9 +1370,6 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("annals.db");
         let mut connection = db::init(&path)?;
-        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        index::rebuild_all(&transaction)?;
-        transaction.commit()?;
         let work = store_work(&mut connection, "Paper", "Source text.")?;
         let record = resolver::submit_value(
             &mut connection,
@@ -1468,9 +1457,6 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("annals.db");
         let mut connection = db::init(&path)?;
-        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        index::rebuild_all(&transaction)?;
-        transaction.commit()?;
         let work = store_work(&mut connection, "Paper", "Exact source language.")?;
         let settings = ModelSettings::new(
             crate::model_runner::ModelQuality::Medium,
@@ -1584,9 +1570,6 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("annals.db");
         let mut connection = db::init(&path)?;
-        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        index::rebuild_all(&transaction)?;
-        transaction.commit()?;
         let work = store_work(&mut connection, "Paper", "Exact source language.")?;
         let settings = ModelSettings::new(
             crate::model_runner::ModelQuality::Medium,

@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::change::{
     ChangeOperation, ConceptSelector, EvidenceDisposition, EvidenceSelector, Reconciliation,
@@ -311,7 +311,6 @@ pub(crate) fn apply_record(
         AppError::database("revision_overflow", "the corpus revision is too large")
     })?;
     materialize_snapshot(&transaction, &resolved.resulting_snapshot)?;
-    index::rebuild_all(&transaction)?;
     insert_commit(
         &transaction,
         new_revision,
@@ -322,7 +321,6 @@ pub(crate) fn apply_record(
         &serde_json::from_str(&record.submitted_request)?,
         &serde_json::to_value(&resolved.operations)?,
         &resolved.resulting_snapshot,
-        &json!({ "reconciliation_actor": record.actor }),
         &record.actor,
     )?;
     let updated = transaction.execute(

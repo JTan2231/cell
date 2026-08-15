@@ -11,10 +11,10 @@ own examinations and reconciliations, never concepts.
 An applied reconciliation whose projected corpus differs mechanically from
 its base, a confirmed nonempty shake, or a revert advances the corpus.
 Retaining a work, reading state, running a model, recording a reconciliation,
-canceling or finding no removable edges in a shake, validating, backing up,
-and rebuilding search data do not advance the revision. A mechanically equal
-projection is retained as an interpretive record with status `recorded` and
-has no commit or revision of its own.
+canceling or finding no removable edges in a shake, validating, and backing up
+do not advance the revision. A mechanically equal projection is retained as an
+interpretive record with status `recorded` and has no commit or revision of its
+own.
 
 ## Corpus graph
 
@@ -66,9 +66,8 @@ does not preserve every original path or direct-neighbor count.
 
 Interactive human mode reports the exact plan and asks once for confirmation.
 Application binds to the persistent library identity and the reported revision
-and materialized graph. It removes every reported edge, rebuilds search state,
-appends a `shake` commit and full snapshot, and advances the revision in one
-immediate transaction. A stale,
+and materialized graph. It removes every reported edge, appends a `shake` commit
+and full snapshot, and advances the revision in one immediate transaction. A stale,
 cancelled, or empty plan writes nothing. `--yes` supplies noninteractive
 confirmation. JSON without `--yes` returns an exit-zero informational preview;
 a later invocation with `--yes` computes a fresh plan for its current HEAD.
@@ -123,9 +122,7 @@ submissions are recoverable tool errors and may be corrected. Tool arguments
 and results are retained in the model-run transcript.
 
 App-server sends each dynamic tool call back to the host, which dispatches it
-to the same in-process backend used by the private MCP transport. The MCP
-server remains a transport adapter and test surface; it is not attached to the
-Codex liaison.
+to the in-process liaison backend.
 
 The model's final response is diagnostic only. `integrate` succeeds from the
 recorded `submit_reconciliation` side effect. If the process fails after a
@@ -223,9 +220,9 @@ revision diffs describe the actual state effect.
 
 Application requires `HEAD == base_revision`, re-resolves the stored request,
 and verifies that it produces the recorded projection. One immediate SQLite
-transaction then materializes concepts, edges, and evidence; rebuilds derived
-search rows; appends the commit with its request, resolved operations,
-metadata, and complete corpus snapshot; stores the same revision in immutable
+transaction then materializes concepts, edges, and evidence; appends the commit
+with its request, resolved operations, and complete corpus snapshot; stores the
+same revision in immutable
 relational graph rows; marks the reconciliation applied; advances the revision
 once; and commits all state together.
 

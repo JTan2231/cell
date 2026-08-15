@@ -347,7 +347,6 @@ pub(crate) fn apply_shake(connection: &mut Connection, plan: &ShakePlan) -> Resu
     })?;
     let resolved = diff_snapshot_entries(&transaction, &head, &after)?;
     materialize_snapshot(&transaction, &after)?;
-    index::rebuild_all(&transaction)?;
     insert_commit(
         &transaction,
         new_revision,
@@ -358,7 +357,6 @@ pub(crate) fn apply_shake(connection: &mut Connection, plan: &ShakePlan) -> Resu
         &json!({ "operation": "transitive_reduction" }),
         &serde_json::to_value(&resolved)?,
         &after,
-        &json!({ "removed_edge_count": removed.len() }),
         "human",
     )?;
     transaction.commit()?;
@@ -773,19 +771,18 @@ pub(crate) fn list_commits(
     let sql_limit = i64::try_from(limit)
         .map_err(|_| AppError::invalid("invalid_limit", "commit limit is too large"))?;
     let mut statement = connection.prepare(
-        "SELECT c.revision, c.parent_revision, c.kind, c.summary, w.label, c.actor, c.created_at \
+        "SELECT c.revision, c.kind, c.summary, w.label, c.actor, c.created_at \
          FROM commits AS c LEFT JOIN works AS w ON w.id = c.work_id \
          ORDER BY c.revision DESC LIMIT ?1",
     )?;
     let rows = statement.query_map([sql_limit], |row| {
         Ok(CommitView {
             revision: row.get(0)?,
-            parent_revision: row.get(1)?,
-            kind: row.get(2)?,
-            summary: row.get(3)?,
-            work: row.get(4)?,
-            actor: row.get(5)?,
-            created_at: row.get(6)?,
+            kind: row.get(1)?,
+            summary: row.get(2)?,
+            work: row.get(3)?,
+            actor: row.get(4)?,
+            created_at: row.get(5)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -797,39 +794,32 @@ pub(crate) fn recorded_change_at(
 ) -> Result<RecordedChangeView, AppError> {
     let row = connection
         .query_row(
-            "SELECT c.revision, c.parent_revision, c.base_revision, c.kind, c.summary, \
-                    w.label, c.submitted_request, c.resolved_operations, c.metadata, \
-                    c.actor, c.created_at \
+            "SELECT c.revision, c.kind, c.summary, w.label, c.submitted_request, \
+                    c.resolved_operations, c.actor, c.created_at \
              FROM commits AS c LEFT JOIN works AS w ON w.id = c.work_id \
              WHERE c.revision = ?1",
             [requested_revision],
             |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
                     row.get::<_, String>(4)?,
-                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, String>(5)?,
                     row.get::<_, String>(6)?,
                     row.get::<_, String>(7)?,
-                    row.get::<_, String>(8)?,
-                    row.get::<_, String>(9)?,
-                    row.get::<_, String>(10)?,
                 ))
             },
         )
         .optional()?;
     let Some((
         revision,
-        parent_revision,
-        base_revision,
         kind,
         summary,
         work,
         reconciliation,
         resolved_operations,
-        metadata,
         actor,
         created_at,
     )) = row
@@ -849,12 +839,9 @@ pub(crate) fn recorded_change_at(
             format!("revision {requested_revision} does not contain a recorded corpus change"),
         ));
     };
-    let effects = diff(connection, parent_revision, revision)?.entries;
+    let effects = diff(connection, revision - 1, revision)?.entries;
     Ok(RecordedChangeView {
         revision,
-        parent_revision,
-        base_revision,
-        status: "applied".to_owned(),
         kind,
         summary,
         work,
@@ -871,12 +858,6 @@ pub(crate) fn recorded_change_at(
             )
         })?,
         effects,
-        metadata: serde_json::from_str(&metadata).map_err(|error| {
-            AppError::database(
-                "invalid_commit_metadata",
-                format!("revision {requested_revision} has invalid metadata: {error}"),
-            )
-        })?,
         actor,
         created_at,
     })
@@ -1228,7 +1209,6 @@ pub(crate) fn insert_commit(
     request: &Value,
     resolved: &Value,
     after: &Snapshot,
-    metadata: &Value,
     actor: &str,
 ) -> Result<(), AppError> {
     let parent = revision.checked_sub(1).ok_or_else(|| {
@@ -1256,12 +1236,11 @@ pub(crate) fn insert_commit(
     }
     transaction.execute(
         "INSERT INTO commits(\
-             revision, parent_revision, base_revision, work_id, reconciliation_id, kind, summary, \
-             submitted_request, resolved_operations, after_snapshot, metadata, actor, created_at\
-         ) VALUES(?1, ?2, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+             revision, work_id, reconciliation_id, kind, summary, submitted_request, \
+             resolved_operations, after_snapshot, actor, created_at\
+         ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             revision,
-            parent,
             work_id,
             reconciliation_id,
             kind,
@@ -1269,7 +1248,6 @@ pub(crate) fn insert_commit(
             serde_json::to_string(request)?,
             serde_json::to_string(resolved)?,
             serde_json::to_string(after)?,
-            serde_json::to_string(metadata)?,
             actor,
             now()?
         ],
@@ -1328,7 +1306,6 @@ pub(crate) fn revert(transaction: &Transaction<'_>, target_revision: i64) -> Res
         )
     })?;
     materialize_snapshot(transaction, &inverse)?;
-    index::rebuild_all(transaction)?;
     let request = json!({ "revert_revision": target_revision });
     let resolved = serde_json::to_value(diff_snapshot_entries(transaction, &head, &inverse)?)?;
     insert_commit(
@@ -1341,7 +1318,6 @@ pub(crate) fn revert(transaction: &Transaction<'_>, target_revision: i64) -> Res
         &request,
         &resolved,
         &inverse,
-        &json!({ "reverted_revision": target_revision }),
         "human",
     )?;
     Ok(new_revision)

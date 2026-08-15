@@ -1,13 +1,12 @@
 # Data model
 
-`schema.sql` is the authoritative SQLite schema. The database contains five
+`schema.sql` is the authoritative SQLite schema. The database contains four
 kinds of state:
 
 1. immutable source works;
 2. the current materialized concept graph and its evidence;
-3. immutable relational graph snapshots for addressable revisions;
-4. model examinations, reconciliations, and append-only commits; and
-5. a rebuildable concept-search projection.
+3. immutable relational graph snapshots for addressable revisions; and
+4. model examinations, reconciliations, and append-only commits.
 
 Public commands and liaison tools address works by label, concepts by durable
 IDs such as `c42`, evidence by quotation, and history by revision. Exact source
@@ -19,8 +18,8 @@ ranges and non-concept row identifiers remain private mechanics.
 library identity. Revision zero is the empty corpus. Applying a pending
 reconciliation, confirming a nonempty shake, or reverting a commit increments
 it. Work retention, reconciliation submission, mechanically equal projections,
-cancelled or empty shakes, validation, backup, and reindexing leave it
-unchanged. Opaque paging cursors bind to the library identity as well as their
+cancelled or empty shakes, validation, and backup leave it unchanged. Opaque
+paging cursors bind to the library identity as well as their
 revision and request; a backup intentionally preserves that identity.
 
 ## Immutable works
@@ -146,10 +145,10 @@ the request and commits it only if HEAD still equals the base revision.
 ## Append-only history
 
 `commits` is a linear log keyed by public revision number. A commit records its
-parent and base revision; optional source work and reconciliation association;
-`change`, `shake`, or `revert` kind; summary, actor, timestamp, and metadata;
-original submitted request; resolved semantic operations; and complete corpus
-snapshot state. A shake has no source work or reconciliation.
+optional source work and reconciliation association; `change`, `shake`, or
+`revert` kind; summary, actor, and timestamp; original submitted request;
+resolved semantic operations; and complete corpus snapshot state. Its parent
+is always the preceding revision. A shake has no source work or reconciliation.
 
 Snapshots contain the concepts, explicit edges, and evidence for a revision.
 They are full state rather than an edge-event-only reconstruction, so
@@ -188,22 +187,7 @@ one edge change and does not imply changes to its other parents or descendants.
 A revert appends another commit; it never updates or deletes the target. Every
 accepted transition remains inspectable by revision through `annals change
 show --at REVISION`, including its request, resolved operations, exact effects,
-and metadata.
-
-## Derived search state
-
-`concept_search` contains one rebuildable row per current concept with exact
-and normalized label, its deduplicated ancestor-label context, a deterministic
-content hash, and indexer version. A shared concept still has one search row,
-not one row for every route from a root. `concept_fts` is an external-content
-FTS5 table mirrored by triggers. `index_metadata` records the active indexer
-version.
-
-The projection is not authoritative. Applying a corpus change, shake, or
-revert rebuilds it inside the canonical transaction. `annals reindex` performs
-the same rebuild without changing the revision. Ordinary graph search uses the
-selected revision's relational concept and edge rows; it does not treat current
-derived rows as historical state.
+actor, and timestamp.
 
 ## Atomic reconciliation commit
 
@@ -213,11 +197,10 @@ Applying a pending reconciliation uses one immediate transaction:
 2. re-resolve the original request and compare it with the stored result;
 3. validate the complete projected concepts, edges, and evidence;
 4. replace current materialized graph state with that projection;
-5. rebuild current derived search state;
-6. append the commit, guard-and-advance `library_state.revision`, and store the
+5. append the commit, guard-and-advance `library_state.revision`, and store the
    matching immutable relational revision snapshot;
-7. mark the reconciliation applied; and
-8. commit.
+6. mark the reconciliation applied; and
+7. commit.
 
 Any failure rolls back every step.
 
@@ -227,10 +210,9 @@ Any failure rolls back every step.
 its exact edge removals before asking for confirmation. Application starts one
 immediate transaction; requires the persistent library identity, revision, and
 materialized graph to match the computed plan; validates that ancestor
-reachability is unchanged; materializes the reduced graph; rebuilds search
-state; appends a `shake` commit and full snapshot; advances the revision; and
-commits. A stale plan fails atomically; an empty or cancelled plan creates no
-commit.
+reachability is unchanged; materializes the reduced graph; appends a `shake`
+commit and full snapshot; advances the revision; and commits. A stale plan
+fails atomically; an empty or cancelled plan creates no commit.
 
 ## Validation
 
@@ -239,7 +221,7 @@ retained-work digests, the singleton HEAD record, contiguous linear history,
 parseable full snapshots, equality of materialized HEAD with the latest
 historical state, equality of every relational graph projection with its
 committed after-state, replayable reconciliation, shake, and revert provenance,
-and exact agreement of current search rows.
+and current corpus invariants.
 
 For every graph snapshot it also checks concept IDs and labels, edge endpoints,
 duplicate and self edges, acyclicity, evidence ranges, and leaf grounding. It

@@ -402,7 +402,6 @@ impl GraphView<'_> {
             max_nodes,
             nodes,
             edges: projection.edges,
-            complete_within_depth: !projection.node_limit_reached,
             node_limit_reached: projection.node_limit_reached,
             frontier,
         })

@@ -138,7 +138,7 @@ impl Runner {
     }
 
     #[must_use]
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub(crate) fn new(program: impl Into<PathBuf>, timeout: Duration) -> Self {
         Self {
             program: program.into(),
@@ -568,7 +568,7 @@ impl<B: Backend> ProtocolClient<'_, B> {
         let arguments = params.get("arguments").cloned();
         let result = match (namespace, name, arguments) {
             (None | Some(Value::Null), Some(name), Some(arguments)) if arguments.is_object() => {
-                self.call_tool(name, arguments)
+                dispatch_tool_call(self.backend, &mut self.submitted, name, arguments)
             }
             _ => Err(ToolFailure::new(
                 "invalid_tool_call",
@@ -587,26 +587,6 @@ impl<B: Backend> ProtocolClient<'_, B> {
         Ok(true)
     }
 
-    fn call_tool(&mut self, name: &str, arguments: Value) -> Result<Value, ToolFailure> {
-        let Some(tool) = Tool::from_name(name) else {
-            return Err(ToolFailure::new(
-                "unknown_tool",
-                format!("unknown Annals tool {name:?}"),
-            ));
-        };
-        if tool == Tool::SubmitReconciliation && self.submitted {
-            return Err(ToolFailure::new(
-                "reconciliation_already_submitted",
-                "this liaison session has already recorded its reconciliation",
-            ));
-        }
-        let result = self.backend.call(tool, arguments);
-        if tool == Tool::SubmitReconciliation && result.is_ok() {
-            self.submitted = true;
-        }
-        result
-    }
-
     fn record_agent_message(&mut self, message: &Value) {
         if message.get("method").and_then(Value::as_str) != Some("item/completed") {
             return;
@@ -623,6 +603,31 @@ impl<B: Backend> ProtocolClient<'_, B> {
             text.clone_into(&mut self.final_response);
         }
     }
+}
+
+fn dispatch_tool_call(
+    backend: &mut impl Backend,
+    submitted: &mut bool,
+    name: &str,
+    arguments: Value,
+) -> Result<Value, ToolFailure> {
+    let Some(tool) = Tool::from_name(name) else {
+        return Err(ToolFailure::new(
+            "unknown_tool",
+            format!("unknown Annals tool {name:?}"),
+        ));
+    };
+    if tool == Tool::SubmitReconciliation && *submitted {
+        return Err(ToolFailure::new(
+            "reconciliation_already_submitted",
+            "this liaison session has already recorded its reconciliation",
+        ));
+    }
+    let result = backend.call(tool, arguments);
+    if tool == Tool::SubmitReconciliation && result.is_ok() {
+        *submitted = true;
+    }
+    result
 }
 
 #[derive(Debug)]
@@ -937,8 +942,8 @@ mod tests {
     use crate::tool_server::{Backend, Tool, ToolFailure};
 
     use super::{
-        CONFIG_OVERRIDES, ModelQuality, ModelSettings, Runner, dynamic_tool_specs,
-        restricted_model_catalog,
+        CONFIG_OVERRIDES, ModelQuality, ModelSettings, Runner, dispatch_tool_call,
+        dynamic_tool_specs, model_tool_result, restricted_model_catalog,
     };
 
     #[test]
@@ -1044,13 +1049,83 @@ mod tests {
     #[derive(Default)]
     struct StubBackend {
         calls: Vec<Tool>,
+        reject_next_submission: bool,
     }
 
     impl Backend for StubBackend {
         fn call(&mut self, tool: Tool, _arguments: Value) -> Result<Value, ToolFailure> {
             self.calls.push(tool);
+            if tool == Tool::SubmitReconciliation && self.reject_next_submission {
+                self.reject_next_submission = false;
+                return Err(ToolFailure::new(
+                    "invalid_reconciliation",
+                    "the reconciliation is incomplete",
+                ));
+            }
             Ok(json!({ "ok": true }))
         }
+    }
+
+    #[test]
+    fn submission_retries_until_the_first_success() {
+        let mut backend = StubBackend {
+            calls: Vec::new(),
+            reject_next_submission: true,
+        };
+        let mut submitted = false;
+
+        let first = dispatch_tool_call(
+            &mut backend,
+            &mut submitted,
+            "submit_reconciliation",
+            json!({}),
+        );
+        assert_eq!(
+            first.as_ref().err().map(ToolFailure::code),
+            Some("invalid_reconciliation")
+        );
+        assert!(!submitted);
+
+        assert!(
+            dispatch_tool_call(
+                &mut backend,
+                &mut submitted,
+                "submit_reconciliation",
+                json!({}),
+            )
+            .is_ok()
+        );
+        assert!(submitted);
+
+        let duplicate = dispatch_tool_call(
+            &mut backend,
+            &mut submitted,
+            "submit_reconciliation",
+            json!({}),
+        );
+        assert_eq!(
+            duplicate.as_ref().err().map(ToolFailure::code),
+            Some("reconciliation_already_submitted")
+        );
+        assert_eq!(
+            backend.calls,
+            [Tool::SubmitReconciliation, Tool::SubmitReconciliation]
+        );
+    }
+
+    #[test]
+    fn direct_tool_failures_preserve_structured_details() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let failure = ToolFailure::new("ambiguous_quote", "the quote occurs twice")
+            .with_details(json!({ "matches": 2 }));
+        let (text, success) = model_tool_result(Err(failure));
+        let body: Value = serde_json::from_str(&text)?;
+
+        assert!(!success);
+        assert_eq!(body["error"]["code"], "ambiguous_quote");
+        assert_eq!(body["error"]["message"], "the quote occurs twice");
+        assert_eq!(body["error"]["details"]["matches"], 2);
+        Ok(())
     }
 
     #[test]

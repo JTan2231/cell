@@ -23,20 +23,17 @@ annals init
 annals stats
 annals validate
 annals backup OUTPUT
-annals reindex
 ```
 
 `init` creates revision zero and refuses to replace an existing library.
 `stats` reports revision and corpus, graph, work, reconciliation, history,
-model-run, database-size, and index information.
+model-run, and database-size information.
 
 `validate` checks SQLite, foreign keys, retained-work digests, current graph
 invariants, linear history and its full snapshots, agreement between
-materialized HEAD and history, and derived search state. It does not repair
-state.
+materialized HEAD and history, and commit provenance. It does not repair state.
 
 `backup` makes a consistent SQLite copy and refuses to replace its destination.
-`reindex` recreates current concept-search rows without advancing the revision.
 
 ## Immutable works
 
@@ -156,12 +153,12 @@ recorded results. `change validate` and `change apply` select pending results
 only and require `--work` when more than one exists.
 
 `change show --at REVISION` retrieves the commit at that revision. Its
-`effects` are the exact material transition from `parent_revision` to
-`revision`, using the same semantic entries as `diff PARENT REVISION`. For an
-applied reconciliation it also shows the original graph-native request and
-resolved operations. For a revert it shows the target revision and resolved
-inverse. For a shake it shows the transitive-reduction request and removed
-parent edges. All include commit metadata, actor, and timestamp.
+`effects` are the exact material transition from the preceding revision to the
+selected revision, using the same semantic entries as `diff PARENT REVISION`.
+For an applied reconciliation it also shows the original graph-native request
+and resolved operations. For a revert it shows the target revision and
+resolved inverse. For a shake it shows the transitive-reduction request and
+removed parent edges. All include the actor and timestamp.
 
 Human reconciliation output renders public `cN` IDs alongside labels, local
 creation handles, parent-edge changes, exact evidence quotations and source
@@ -172,7 +169,7 @@ changed. An idempotent ensure may therefore appear in `resolved_operations`
 without a matching effect.
 
 `change apply` additionally requires HEAD to equal the base revision. Success
-updates concepts, edges, evidence, search state, reconciliation status,
+updates concepts, edges, evidence, reconciliation status,
 history, and revision in one transaction.
 
 ### Reconciliation contract
@@ -360,10 +357,10 @@ plan for its then-current HEAD.
 
 Within one invocation, a confirmed shake is bound to the persistent library
 identity and the exact reported HEAD revision and graph. It applies every
-reported removal in one transaction, rebuilds search state, and creates one
-`shake` commit. If the library identity, HEAD, or its graph changes before
-application, it fails with `shake_stale` and removes nothing. A graph with no
-removable edges skips the prompt and remains at its current revision.
+reported removal and creates one `shake` commit in one transaction. If the
+library identity, HEAD, or its graph changes before application, it fails with
+`shake_stale` and removes nothing. A graph with no removable edges skips the
+prompt and remains at its current revision.
 
 Shaking preserves concepts, evidence, every ancestor-descendant pair, roots,
 leaves, label/ancestor-context search matches and ranking, and `--within`
@@ -421,6 +418,6 @@ Exit categories are:
 | 2 | Invalid command or input |
 | 3 | Missing library, work, concept, reconciliation, or revision |
 | 4 | Stale state, invariant, or reversion conflict |
-| 5 | SQLite, integrity, history, or index failure |
+| 5 | SQLite, integrity, or history failure |
 
 Human rendering escapes control characters from retained text and labels.

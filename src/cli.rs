@@ -42,7 +42,7 @@ pub struct Cli {
 pub enum Command {
     /// Create a new library without replacing an existing file.
     Init,
-    /// Report storage, workflow, history, and index statistics.
+    /// Report storage, workflow, and history statistics.
     Stats,
     /// Summarize the concept graph at one revision.
     Overview(AtArgs),
@@ -55,12 +55,10 @@ pub enum Command {
     Graph(GraphArgs),
     /// Remove parent edges already implied by longer graph paths.
     Shake(ShakeArgs),
-    /// Check canonical, historical, provenance, and index invariants.
+    /// Check canonical, historical, and provenance invariants.
     Validate,
     /// Create a consistent backup without replacing the destination.
     Backup(BackupArgs),
-    /// Rebuild derived concept-search data.
-    Reindex,
     /// Retain and inspect immutable source works.
     #[command(subcommand)]
     Work(WorkCommand),
@@ -80,9 +78,6 @@ pub enum Command {
     Diff(DiffArgs),
     /// Create a new commit that inverses an earlier commit.
     Revert(RevertArgs),
-    /// Internal revision-scoped liaison tool server.
-    #[command(name = "__liaison-server", hide = true)]
-    LiaisonServer(LiaisonServerArgs),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -337,13 +332,6 @@ pub struct RevertArgs {
     /// Revision whose transition should be inversed.
     #[arg(value_name = "REVISION")]
     pub revision: i64,
-}
-
-#[derive(Debug, Clone, Args)]
-pub struct LiaisonServerArgs {
-    /// Opaque model-run scope token.
-    #[arg(value_name = "TOKEN")]
-    pub token: String,
 }
 
 #[cfg(test)]

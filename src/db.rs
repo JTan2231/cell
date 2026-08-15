@@ -32,11 +32,6 @@ pub fn open_read(path: &Path) -> Result<Connection, AppError> {
     Ok(connection)
 }
 
-/// Open an existing library for read-only validation.
-pub fn open_validation(path: &Path) -> Result<Connection, AppError> {
-    open_read(path)
-}
-
 /// Open an existing library for writes.
 pub fn open_write(path: &Path) -> Result<Connection, AppError> {
     let connection = open_existing(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
@@ -60,7 +55,6 @@ fn initialize_reserved_file(path: &Path) -> Result<Connection, AppError> {
     let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
         .map_err(|error| open_error(path, &error))?;
     configure_connection(&connection)?;
-    probe_fts5(&connection)?;
     connection.execute_batch(SCHEMA).map_err(|error| {
         AppError::database(
             "schema_creation_failed",
@@ -106,20 +100,6 @@ fn enable_wal(connection: &Connection) -> Result<(), AppError> {
             AppError::database(
                 "database_configuration_failed",
                 format!("unable to enable SQLite WAL mode: {error}"),
-            )
-        })
-}
-
-fn probe_fts5(connection: &Connection) -> Result<(), AppError> {
-    connection
-        .execute_batch(
-            "CREATE VIRTUAL TABLE temp.annals_fts5_probe USING fts5(value); \
-             DROP TABLE temp.annals_fts5_probe;",
-        )
-        .map_err(|error| {
-            AppError::database(
-                "fts5_unavailable",
-                format!("this SQLite build does not provide working FTS5 support: {error}"),
             )
         })
 }

@@ -119,7 +119,7 @@ printf '%s\n' '==> rustfmt'
 cargo fmt --all -- --check
 
 printf '%s\n' '==> clippy'
-cargo clippy --all-targets --all-features --locked --keep-going -- \
+cargo clippy --all-targets --locked --keep-going -- \
     -D warnings \
     -F unsafe_code \
     -D clippy::all \
@@ -131,12 +131,12 @@ cargo clippy --all-targets --all-features --locked --keep-going -- \
     -D clippy::expect_used
 
 printf '%s\n' '==> tests'
-cargo test --all-features --locked --no-fail-fast
+cargo test --locked --no-fail-fast
 
 printf '%s\n' '==> rustdoc'
-RUSTDOCFLAGS='-D warnings' cargo doc --all-features --no-deps --locked
+RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --locked
 
 printf '%s\n' '==> release build'
-cargo build --all-features --release --locked
+cargo build --release --locked
 
 printf '%s\n' 'ci.sh: green'

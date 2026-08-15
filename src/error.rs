@@ -54,7 +54,7 @@ impl AppError {
         }
     }
 
-    /// Construct a database, integrity, or index error (exit code 5).
+    /// Construct a database or integrity error (exit code 5).
     #[must_use]
     pub fn database(code: &'static str, message: impl Into<String>) -> Self {
         Self::Database {
@@ -109,7 +109,7 @@ mod tests {
         let invalid = AppError::invalid("empty_label", "a label is required");
         let missing = AppError::not_found("work_not_found", "the work was not found");
         let conflict = AppError::conflict("would_create_cycle", "edge would create a cycle");
-        let database = AppError::database("index_stale", "run annals reindex");
+        let database = AppError::database("database_invalid", "library is invalid");
         let unexpected = AppError::unexpected("internal_error", "unexpected failure");
 
         assert_eq!((invalid.code(), invalid.exit_code()), ("empty_label", 2));
@@ -118,7 +118,10 @@ mod tests {
             (conflict.code(), conflict.exit_code()),
             ("would_create_cycle", 4)
         );
-        assert_eq!((database.code(), database.exit_code()), ("index_stale", 5));
+        assert_eq!(
+            (database.code(), database.exit_code()),
+            ("database_invalid", 5)
+        );
         assert_eq!(
             (unexpected.code(), unexpected.exit_code()),
             ("internal_error", 1)

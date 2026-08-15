@@ -214,7 +214,6 @@ pub struct GraphView {
     pub max_nodes: usize,
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,
-    pub complete_within_depth: bool,
     pub node_limit_reached: bool,
     pub frontier: Vec<FrontierEntry>,
 }
@@ -235,7 +234,6 @@ pub struct ReconciliationView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommitView {
     pub revision: i64,
-    pub parent_revision: i64,
     pub kind: String,
     pub summary: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -247,16 +245,12 @@ pub struct CommitView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecordedChangeView {
     pub revision: i64,
-    pub parent_revision: i64,
-    pub base_revision: i64,
-    pub status: String,
     pub kind: String,
     pub summary: String,
     pub work: Option<String>,
     pub submitted_request: serde_json::Value,
     pub resolved_operations: serde_json::Value,
     pub effects: Vec<DiffEntry>,
-    pub metadata: serde_json::Value,
     pub actor: String,
     pub created_at: String,
 }
@@ -327,19 +321,10 @@ pub struct LibraryStats {
     pub commit_count: u64,
     pub model_run_count: u64,
     pub database_size_bytes: u64,
-    pub index_current: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ValidationSeverity {
-    Warning,
-    Error,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidationIssue {
-    pub severity: ValidationSeverity,
     pub code: String,
     pub message: String,
 }

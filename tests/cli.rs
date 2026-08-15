@@ -733,7 +733,10 @@ fn an_equal_reconciliation_is_recorded_without_a_commit() -> TestResult {
     let current = library.json_ok(["change", "show"])?;
     assert_eq!(current["status"], "recorded");
     let archived = library.json_ok(["change", "show", "--at", "1"])?;
-    assert_eq!(archived["status"], "applied");
+    assert!(archived.get("status").is_none());
+    assert!(archived.get("parent_revision").is_none());
+    assert!(archived.get("base_revision").is_none());
+    assert!(archived.get("metadata").is_none());
     assert_eq!(archived["submitted_request"], diamond_reconciliation());
     assert_eq!(
         archived["resolved_operations"].as_array().map(Vec::len),
@@ -922,7 +925,7 @@ fn shake_reports_confirms_commits_preserves_ancestry_and_is_revertible() -> Test
         "transitive_reduction"
     );
     assert_eq!(recorded["effects"], changes["entries"]);
-    assert_eq!(recorded["metadata"]["removed_edge_count"], 3);
+    assert!(recorded.get("metadata").is_none());
     assert!(
         library
             .human_ok(["change", "show", "--at", "2"])?

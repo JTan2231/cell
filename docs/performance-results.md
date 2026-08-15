@@ -49,17 +49,11 @@ edges, and evidence, so basic materialization grows with all three. Cycle
 checks and derived root/leaf classification also traverse the edge set.
 
 Applying a pending transition or confirmed shake validates and materializes the
-complete projected graph, rebuilds derived search rows, and retains complete
-corpus snapshots in history. Mutation time and history storage therefore grow
-with corpus size. A mechanically equal projection is stored as a `recorded`
-reconciliation without rebuilding materialized state or creating a commit or
-revision; an empty shake likewise creates no commit.
-
-The search projection has one row per concept, including a deduplicated set of
-ancestor labels. It does not multiply rows by the number of root-to-concept
-routes, but dense reachability can enlarge ancestor context. Applying an edge
-change rebuilds the current projection rather than attempting an incremental
-repair.
+complete projected graph and retains complete corpus snapshots in history.
+Mutation time and history storage therefore grow with corpus size. A
+mechanically equal projection is stored as a `recorded` reconciliation without
+rebuilding materialized state or creating a commit or revision; an empty shake
+likewise creates no commit.
 
 Ordinary graph reads use a revision-scoped database facade and allocate only a
 bounded projection between SQLite and presentation. Root, relationship,
@@ -80,6 +74,6 @@ base revision, prompt version, model, and reasoning effort match a prior
 successful run. `--reexamine` bypasses that lookup. No latency claim is made
 for either path.
 
-External model latency is not part of CI. Tests exercise an injected runner,
-the direct dynamic-tool bridge, and the private MCP adapter in isolation; they
-do not invoke the external model.
+External model latency is not part of CI. Tests exercise an injected runner
+and the direct dynamic-tool bridge in isolation; they do not invoke the
+external model.

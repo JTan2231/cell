@@ -85,21 +85,7 @@ pub(crate) fn insert_canonical_revision(
         params![revision, stats.concepts, stats.edges, stats.evidence],
     )?;
 
-    let concepts = transaction.execute(
-        "INSERT INTO revision_concepts(\
-             revision, concept_id, label, normalized_label, \
-             parent_count, child_count, evidence_count\
-         ) \
-         SELECT ?1, concepts.id, concepts.label, concept_search.normalized_label, \
-                (SELECT COUNT(*) FROM concept_edges AS parents \
-                 WHERE parents.child_id = concepts.id), \
-                (SELECT COUNT(*) FROM concept_edges AS children \
-                 WHERE children.parent_id = concepts.id), \
-                (SELECT COUNT(*) FROM evidence WHERE evidence.concept_id = concepts.id) \
-         FROM concepts JOIN concept_search ON concept_search.concept_id = concepts.id \
-         ORDER BY concepts.id",
-        [revision],
-    )?;
+    let concepts = insert_revision_concepts(transaction, revision)?;
     let edges = transaction.execute(
         "INSERT INTO revision_edges(revision, parent_id, child_id) \
          SELECT ?1, parent_id, child_id FROM concept_edges ORDER BY parent_id, child_id",
@@ -118,6 +104,53 @@ pub(crate) fn insert_canonical_revision(
     require_insert_count("evidence", revision, evidence, stats.evidence)?;
     require_revision_matches(transaction, revision, expected)?;
     Ok(stats)
+}
+
+fn insert_revision_concepts(
+    transaction: &Transaction<'_>,
+    revision: i64,
+) -> Result<usize, AppError> {
+    let canonical_concepts = {
+        let mut statement = transaction.prepare(
+            "SELECT concepts.id, concepts.label, \
+                    (SELECT COUNT(*) FROM concept_edges AS parents \
+                     WHERE parents.child_id = concepts.id), \
+                    (SELECT COUNT(*) FROM concept_edges AS children \
+                     WHERE children.parent_id = concepts.id), \
+                    (SELECT COUNT(*) FROM evidence WHERE evidence.concept_id = concepts.id) \
+             FROM concepts ORDER BY concepts.id",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+            ))
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()?
+    };
+    let mut statement = transaction.prepare(
+        "INSERT INTO revision_concepts(\
+             revision, concept_id, label, normalized_label, \
+             parent_count, child_count, evidence_count\
+         ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+    )?;
+    let mut inserted = 0;
+    for (id, label, parent_count, child_count, evidence_count) in canonical_concepts {
+        let normalized_label = index::normalize(&label);
+        inserted += statement.execute(params![
+            revision,
+            id,
+            label,
+            normalized_label,
+            parent_count,
+            child_count,
+            evidence_count
+        ])?;
+    }
+    Ok(inserted)
 }
 
 /// Return whether a complete relational snapshot is available for a revision.
@@ -441,11 +474,12 @@ mod tests {
 
         connection.execute("UPDATE concepts SET label = 'Changed' WHERE id = 2", [])?;
         let stored = connection.query_row(
-            "SELECT label FROM revision_concepts WHERE revision = 1 AND concept_id = 2",
+            "SELECT label, normalized_label FROM revision_concepts \
+             WHERE revision = 1 AND concept_id = 2",
             [],
-            |row| row.get::<_, String>(0),
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
         )?;
-        assert_eq!(stored, "Leaf");
+        assert_eq!(stored, ("Leaf".to_owned(), "leaf".to_owned()));
         assert!(
             connection
                 .execute(
@@ -550,24 +584,16 @@ mod tests {
             [],
         )?;
         connection.execute(
-            "INSERT INTO concept_search(\
-                 concept_id, label, ancestors, normalized_label, normalized_ancestors, \
-                 content_hash, indexer_version\
-             ) VALUES(1, 'Root', '', 'root', '', 'root', 1), \
-                     (2, 'Leaf', 'Root', 'leaf', 'root', 'leaf', 1)",
-            [],
-        )?;
-        connection.execute(
             "INSERT INTO evidence(concept_id, work_id, start_byte, end_byte) \
              VALUES(2, 1, 0, 4)",
             [],
         )?;
         connection.execute(
             "INSERT INTO commits(\
-                 revision, parent_revision, base_revision, kind, summary, submitted_request, \
-                 resolved_operations, after_snapshot, metadata, actor, created_at\
-             ) VALUES(1, 0, 0, 'revert', 'Fixture', '{}', '[]', \
-                      '{\"concepts\":[],\"edges\":[],\"evidence\":[]}', '{}', 'test', \
+                 revision, kind, summary, submitted_request, resolved_operations, \
+                 after_snapshot, actor, created_at\
+             ) VALUES(1, 'revert', 'Fixture', '{}', '[]', \
+                      '{\"concepts\":[],\"edges\":[],\"evidence\":[]}', 'test', \
                       '2026-01-01T00:00:00Z')",
             [],
         )?;
