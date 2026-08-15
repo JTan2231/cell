@@ -155,8 +155,10 @@ pending result; when none is pending, it succeeds only if exactly one work has
 recorded results. `change validate` and `change apply` select pending results
 only and require `--work` when more than one exists.
 
-`change show --at REVISION` retrieves the accepted change at that revision.
-For an applied reconciliation it shows the original graph-native request and
+`change show --at REVISION` retrieves the commit at that revision. Its
+`effects` are the exact material transition from `parent_revision` to
+`revision`, using the same semantic entries as `diff PARENT REVISION`. For an
+applied reconciliation it also shows the original graph-native request and
 resolved operations. For a revert it shows the target revision and resolved
 inverse. For a shake it shows the transitive-reduction request and removed
 parent edges. All include commit metadata, actor, and timestamp.
@@ -165,8 +167,9 @@ Human reconciliation output renders public `cN` IDs alongside labels, local
 creation handles, parent-edge changes, exact evidence quotations and source
 context, evidence dispositions, replacements, and annotations. `change
 validate` re-resolves and renders the same semantic facts without writing.
-Resolved operations are request receipts, so an idempotent ensure may appear
-there even when it contributes no diff entry.
+Resolved operations are request receipts, while `effects` report what actually
+changed. An idempotent ensure may therefore appear in `resolved_operations`
+without a matching effect.
 
 `change apply` additionally requires HEAD to equal the base revision. Success
 updates concepts, edges, evidence, search state, reconciliation status,

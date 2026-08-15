@@ -622,11 +622,20 @@ fn diamond_reconciliation_supports_local_browsing_edge_history_and_revert() -> T
 
     let remove_parent = json!({
         "summary": "Remove one of the shared concept's parents",
-        "operations": [{
-            "action": "remove_parent",
-            "concept": {"id": serializable_id},
-            "parent": {"id": concurrency_id}
-        }]
+        "operations": [
+            {
+                "action": "add_evidence",
+                "concept": {"id": serializable_id},
+                "evidence": [{
+                    "quote": "Serializable transactions behave as some serial execution."
+                }]
+            },
+            {
+                "action": "remove_parent",
+                "concept": {"id": serializable_id},
+                "parent": {"id": concurrency_id}
+            }
+        ]
     });
     library.submit("Graph source", 1, "remove-parent.json", &remove_parent)?;
     assert_eq!(library.json_ok(["change", "apply"])?["revision"], 2);
@@ -649,6 +658,23 @@ fn diamond_reconciliation_supports_local_browsing_edge_history_and_revert() -> T
     assert_eq!(removed["entries"][0]["kind"], "parent_removed");
     assert_eq!(removed["entries"][0]["parent"]["id"], concurrency_id);
     assert_eq!(removed["entries"][0]["child"]["id"], serializable_id);
+    let recorded_removal = library.json_ok(["change", "show", "--at", "2"])?;
+    assert_eq!(
+        recorded_removal["resolved_operations"]
+            .as_array()
+            .map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(recorded_removal["effects"], removed["entries"]);
+    assert_eq!(
+        recorded_removal["effects"].as_array().map(Vec::len),
+        Some(1)
+    );
+    assert!(
+        library
+            .human_ok(["change", "show", "--at", "2"])?
+            .contains("Material effects (1)")
+    );
 
     let reverted = library.json_ok(["revert", "2"])?;
     assert_eq!(reverted["revision"], 3);
@@ -668,6 +694,9 @@ fn diamond_reconciliation_supports_local_browsing_edge_history_and_revert() -> T
     );
     let restored_diff = library.json_ok(["diff", "2", "3"])?;
     assert_eq!(restored_diff["entries"][0]["kind"], "parent_added");
+    let recorded_revert = library.json_ok(["change", "show", "--at", "3"])?;
+    assert_eq!(recorded_revert["kind"], "revert");
+    assert_eq!(recorded_revert["effects"], restored_diff["entries"]);
     assert_eq!(library.json_ok(["log"])?["head_revision"], 3);
     assert_eq!(library.json_ok(["validate"])?["valid"], true);
     Ok(())
@@ -710,6 +739,8 @@ fn an_equal_reconciliation_is_recorded_without_a_commit() -> TestResult {
         archived["resolved_operations"].as_array().map(Vec::len),
         Some(4)
     );
+    let genesis_diff = library.json_ok(["diff", "0", "1"])?;
+    assert_eq!(archived["effects"], genesis_diff["entries"]);
     assert_eq!(library.json_ok(["validate"])?["valid"], true);
     Ok(())
 }
@@ -890,11 +921,12 @@ fn shake_reports_confirms_commits_preserves_ancestry_and_is_revertible() -> Test
         recorded["submitted_request"]["operation"],
         "transitive_reduction"
     );
+    assert_eq!(recorded["effects"], changes["entries"]);
     assert_eq!(recorded["metadata"]["removed_edge_count"], 3);
     assert!(
         library
             .human_ok(["change", "show", "--at", "2"])?
-            .contains("transitively reduce the concept graph")
+            .contains("Material effects (3)")
     );
     let log = library.json_ok(["log"])?;
     assert_eq!(log["commits"][0]["kind"], "shake");

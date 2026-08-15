@@ -216,8 +216,8 @@ material corpus change. Annotations are excluded from the comparison.
 
 Resolved operations are receipts for what the request addressed, not a diff.
 They retain idempotent ensure operations even when the selected edge or
-evidence already exists; reconciliation status and revision diffs describe
-the actual state effect.
+evidence already exists; reconciliation status, recorded-change effects, and
+revision diffs describe the actual state effect.
 
 ## Atomic application
 
@@ -240,6 +240,9 @@ immutable relational concept, edge, and evidence rows, so ordinary current and
 historical reads select only the required subset with the same graph API.
 Commits additionally retain complete JSON snapshots for validation, semantic
 diff, inversion, and provenance replay.
+
+`change show --at REVISION` derives that commit's exact effects by comparing
+its parent snapshot with its resulting snapshot.
 
 Diffs describe semantic facts: concept creation, retirement, and rewording;
 one parent edge added or removed; and evidence added or removed. They do not

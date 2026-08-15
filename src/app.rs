@@ -343,7 +343,7 @@ fn render_recorded_change(change: &crate::model::RecordedChangeView) -> Result<S
     let details = match change.kind.as_str() {
         "change" => render_recorded_reconciliation(change)?,
         "revert" => render_recorded_revert(change)?,
-        "shake" => render_recorded_shake(change)?,
+        "shake" => render_recorded_shake(),
         _ => {
             return Err(AppError::database(
                 "invalid_commit_kind",
@@ -351,8 +351,9 @@ fn render_recorded_change(change: &crate::model::RecordedChangeView) -> Result<S
             ));
         }
     };
+    let effects = render_commit_effects(&change.effects);
     Ok(format!(
-        "Applied {} at revision {}\nParent revision: {}\nBase revision: {}\nWork: {}\nSummary: {}\n{}\nActor: {}\nMetadata: {}\nRecorded: {}",
+        "Applied {} at revision {}\nParent revision: {}\nBase revision: {}\nWork: {}\nSummary: {}\n{}\n{}\nActor: {}\nMetadata: {}\nRecorded: {}",
         change.kind,
         change.revision,
         change.parent_revision,
@@ -360,32 +361,15 @@ fn render_recorded_change(change: &crate::model::RecordedChangeView) -> Result<S
         work,
         render_terminal_text(&change.summary, false),
         details,
+        effects,
         render_terminal_text(&change.actor, false),
         metadata,
         render_terminal_text(&change.created_at, false),
     ))
 }
 
-fn render_recorded_shake(change: &crate::model::RecordedChangeView) -> Result<String, AppError> {
-    let resolved: Vec<DiffEntry> = serde_json::from_value(change.resolved_operations.clone())
-        .map_err(|error| {
-            AppError::database(
-                "invalid_commit_operations",
-                format!(
-                    "revision {} has invalid resolved operations: {error}",
-                    change.revision
-                ),
-            )
-        })?;
-    let transition = resolved
-        .iter()
-        .map(|entry| format!("  {}", render_diff_entry(entry)))
-        .collect::<Vec<_>>()
-        .join("\n");
-    Ok(format!(
-        "Submitted request: transitively reduce the concept graph\nResolved transition ({}):\n{transition}",
-        resolved.len()
-    ))
+fn render_recorded_shake() -> String {
+    "Submitted request: transitively reduce the concept graph".to_owned()
 }
 
 fn render_recorded_reconciliation(
@@ -432,29 +416,16 @@ fn render_recorded_revert(change: &crate::model::RecordedChangeView) -> Result<S
                 format!("revision {} has an invalid revert request", change.revision),
             )
         })?;
-    let resolved: Vec<DiffEntry> = serde_json::from_value(change.resolved_operations.clone())
-        .map_err(|error| {
-            AppError::database(
-                "invalid_commit_operations",
-                format!(
-                    "revision {} has invalid resolved operations: {error}",
-                    change.revision
-                ),
-            )
-        })?;
-    let transition = if resolved.is_empty() {
-        "  No semantic difference".to_owned()
-    } else {
-        resolved
-            .iter()
-            .map(|entry| format!("  {}", render_diff_entry(entry)))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-    Ok(format!(
-        "Submitted request: revert revision {target}\nResolved transition ({}):\n{transition}",
-        resolved.len()
-    ))
+    Ok(format!("Submitted request: revert revision {target}"))
+}
+
+fn render_commit_effects(effects: &[DiffEntry]) -> String {
+    let rendered = effects
+        .iter()
+        .map(|entry| format!("  {}", render_diff_entry(entry)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("Material effects ({}):\n{rendered}", effects.len())
 }
 
 fn validate_change(path: &Path, args: &ChangeSelectArgs) -> Result<CommandOutput, AppError> {

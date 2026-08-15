@@ -255,6 +255,7 @@ pub struct RecordedChangeView {
     pub work: Option<String>,
     pub submitted_request: serde_json::Value,
     pub resolved_operations: serde_json::Value,
+    pub effects: Vec<DiffEntry>,
     pub metadata: serde_json::Value,
     pub actor: String,
     pub created_at: String,

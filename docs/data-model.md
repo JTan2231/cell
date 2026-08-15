@@ -156,6 +156,9 @@ They are full state rather than an edge-event-only reconstruction, so
 historical reads preserve duplicate labels, shared concepts, retired
 identities, and old evidence exactly.
 
+Commit effects are derived from the parent and resulting snapshots; they are
+not stored as a second event log.
+
 ### Relational revision snapshots
 
 `revision_snapshots` records the expected concept, edge, and evidence counts
@@ -184,7 +187,8 @@ one edge change and does not imply changes to its other parents or descendants.
 
 A revert appends another commit; it never updates or deletes the target. Every
 accepted transition remains inspectable by revision through `annals change
-show --at REVISION`, including its request, resolved operations, and metadata.
+show --at REVISION`, including its request, resolved operations, exact effects,
+and metadata.
 
 ## Derived search state
 

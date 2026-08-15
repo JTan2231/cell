@@ -849,6 +849,7 @@ pub(crate) fn recorded_change_at(
             format!("revision {requested_revision} does not contain a recorded corpus change"),
         ));
     };
+    let effects = diff(connection, parent_revision, revision)?.entries;
     Ok(RecordedChangeView {
         revision,
         parent_revision,
@@ -869,6 +870,7 @@ pub(crate) fn recorded_change_at(
                 format!("revision {requested_revision} has invalid resolved operations: {error}"),
             )
         })?,
+        effects,
         metadata: serde_json::from_str(&metadata).map_err(|error| {
             AppError::database(
                 "invalid_commit_metadata",
