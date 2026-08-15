@@ -14,7 +14,11 @@ use crate::model_runner::ModelQuality;
     arg_required_else_help = true
 )]
 pub struct Cli {
-    /// `SQLite` library path. Defaults to `ANNALS_LIBRARY`, then `./annals.db`.
+    /// Annals TOML configuration path. Defaults to `ANNALS_CONFIG` when set.
+    #[arg(long, global = true, value_name = "PATH")]
+    pub config: Option<PathBuf>,
+
+    /// `SQLite` library path. Defaults to `ANNALS_LIBRARY`, config, then `./annals.db`.
     #[arg(long, global = true, value_name = "PATH")]
     pub library: Option<PathBuf>,
 
@@ -62,6 +66,9 @@ pub enum Command {
     Work(WorkCommand),
     /// Ask the liaison to examine one work and record one reconciliation.
     Integrate(IntegrateArgs),
+    /// Process and inspect the configured filesystem inbox.
+    #[command(subcommand)]
+    Inbox(InboxCommand),
     /// Submit, inspect, validate, and apply coherent corpus reconciliations.
     #[command(subcommand)]
     Change(ChangeCommand),
@@ -211,8 +218,8 @@ pub struct IntegrateArgs {
     #[arg(long, value_name = "LABEL", requires = "input")]
     pub name: Option<String>,
     /// Liaison quality preset.
-    #[arg(long, value_enum, default_value_t)]
-    pub quality: ModelQuality,
+    #[arg(long, value_enum)]
+    pub quality: Option<ModelQuality>,
     /// Exact Codex model, overriding the model selected by --quality.
     #[arg(long, value_name = "MODEL")]
     pub model: Option<String>,
@@ -222,6 +229,27 @@ pub struct IntegrateArgs {
     /// Apply a pending reconciliation immediately after the liaison submits it.
     #[arg(long)]
     pub apply: bool,
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum InboxCommand {
+    /// Process a bounded batch of settled inbox files sequentially.
+    Run(InboxRunArgs),
+    /// Report queued, active, completed, and failed inbox state.
+    Status,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct InboxRunArgs {
+    /// Maximum jobs attempted in this invocation.
+    #[arg(long, value_name = "N")]
+    pub max_items: Option<usize>,
+    /// Soft wall-clock limit checked between jobs.
+    #[arg(long, value_name = "SECONDS")]
+    pub max_elapsed_seconds: Option<u64>,
+    /// Minimum age of an unchanged incoming file.
+    #[arg(long, value_name = "SECONDS")]
+    pub settle_seconds: Option<u64>,
 }
 
 #[derive(Debug, Clone, Subcommand)]
@@ -322,7 +350,7 @@ pub struct LiaisonServerArgs {
 mod tests {
     use clap::Parser;
 
-    use super::{ChangeCommand, Cli, Command, ConceptCommand, WorkCommand};
+    use super::{ChangeCommand, Cli, Command, ConceptCommand, InboxCommand, WorkCommand};
 
     #[test]
     fn graph_native_commands_parse() {
@@ -403,5 +431,19 @@ mod tests {
         assert!(Cli::try_parse_from(["annals", "integrate"]).is_err());
         assert!(Cli::try_parse_from(["annals", "integrate", "paper.txt"]).is_ok());
         assert!(Cli::try_parse_from(["annals", "integrate", "--work", "Existing paper"]).is_ok());
+    }
+
+    #[test]
+    fn inbox_commands_parse() {
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "inbox", "run", "--max-items", "5"])
+                .map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Run(args))) if args.max_items == Some(5)
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "--config", "annals.toml", "inbox", "status"])
+                .map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Status))
+        ));
     }
 }

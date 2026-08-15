@@ -22,23 +22,6 @@ const MAX_OVERVIEW_CHARACTERS: usize = 16_000;
 const MAX_EVIDENCE_QUOTE_CHARACTERS: usize = 2_000;
 const MAX_SEARCH_EXCERPT_CHARACTERS: usize = 1_000;
 
-pub(crate) fn integrate(
-    path: &Path,
-    work: &Work,
-    settings: &ModelSettings,
-    forward_progress: bool,
-    reexamine: bool,
-) -> Result<ReconciliationRecord, AppError> {
-    integrate_with_runner(
-        path,
-        work,
-        settings,
-        forward_progress,
-        reexamine,
-        &Runner::default(),
-    )
-}
-
 pub(crate) fn integrate_with_runner(
     path: &Path,
     work: &Work,
@@ -46,6 +29,27 @@ pub(crate) fn integrate_with_runner(
     forward_progress: bool,
     reexamine: bool,
     runner: &Runner,
+) -> Result<ReconciliationRecord, AppError> {
+    integrate_with_runner_token(
+        path,
+        work,
+        settings,
+        forward_progress,
+        reexamine,
+        runner,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn integrate_with_runner_token(
+    path: &Path,
+    work: &Work,
+    settings: &ModelSettings,
+    forward_progress: bool,
+    reexamine: bool,
+    runner: &Runner,
+    run_token: Option<&str>,
 ) -> Result<ReconciliationRecord, AppError> {
     let mut connection = db::open_write(path)?;
     let base_revision = revision(&connection)?;
@@ -63,7 +67,7 @@ pub(crate) fn integrate_with_runner(
     {
         return Ok(record);
     }
-    let token = match create_run(&mut connection, work.id, base_revision, settings) {
+    let token = match create_run(&mut connection, work.id, base_revision, settings, run_token) {
         Ok(token) => token,
         Err(error) if !reexamine => {
             if let Some(record) = reconciliation_for_context(
@@ -133,6 +137,17 @@ pub(crate) fn integrate_with_runner(
     }
 }
 
+pub(crate) fn abandon_run(path: &Path, token: &str, work_id: i64) -> Result<(), AppError> {
+    let connection = db::open_write(path)?;
+    connection.execute(
+        "UPDATE model_runs SET status = 'failed', \
+             failure = COALESCE(failure, 'interrupted inbox examination'), completed_at = ?1 \
+         WHERE token = ?2 AND work_id = ?3 AND status = 'running' AND completed_at IS NULL",
+        params![now()?, token, work_id],
+    )?;
+    Ok(())
+}
+
 fn close_incomplete_context(
     connection: &Connection,
     work_id: i64,
@@ -196,10 +211,16 @@ fn create_run(
     work_id: i64,
     base_revision: i64,
     settings: &ModelSettings,
+    requested_token: Option<&str>,
 ) -> Result<String, AppError> {
-    let token = connection.query_row("SELECT lower(hex(randomblob(32)))", [], |row| {
-        row.get::<_, String>(0)
-    })?;
+    let token = requested_token.map_or_else(
+        || {
+            connection.query_row("SELECT lower(hex(randomblob(32)))", [], |row| {
+                row.get::<_, String>(0)
+            })
+        },
+        |token| Ok(token.to_owned()),
+    )?;
     let inserted = connection.execute(
         "INSERT INTO model_runs(\
              token, work_id, base_revision, status, model, reasoning_effort, prompt_version, \
@@ -1383,7 +1404,7 @@ mod tests {
             crate::model_runner::ModelQuality::Medium,
             Some("custom-model"),
         );
-        let token = create_run(&mut connection, work.id, 1, &settings)?;
+        let token = create_run(&mut connection, work.id, 1, &settings, None)?;
         drop(connection);
 
         let mut backend = LiaisonBackend::open(&path, &token)?;
@@ -1455,8 +1476,8 @@ mod tests {
             crate::model_runner::ModelQuality::Medium,
             Some("custom-model"),
         );
-        let token = create_run(&mut connection, work.id, 0, &settings)?;
-        let Err(error) = create_run(&mut connection, work.id, 0, &settings) else {
+        let token = create_run(&mut connection, work.id, 0, &settings, None)?;
+        let Err(error) = create_run(&mut connection, work.id, 0, &settings, None) else {
             return Err("a concurrent identical examination was unexpectedly accepted".into());
         };
         assert_eq!(error.code(), "examination_in_progress");
@@ -1534,6 +1555,31 @@ mod tests {
     }
 
     #[test]
+    fn abandoning_an_inbox_run_does_not_close_another_run() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("annals.db");
+        let mut connection = db::init(&path)?;
+        let first = store_work(&mut connection, "First", "First source.")?;
+        let second = store_work(&mut connection, "Second", "Second source.")?;
+        let settings = ModelSettings::default();
+        let first_token = create_run(&mut connection, first.id, 0, &settings, None)?;
+        let second_token = create_run(&mut connection, second.id, 0, &settings, None)?;
+        drop(connection);
+
+        abandon_run(&path, &first_token, first.id)?;
+        let connection = db::open_read(&path)?;
+        let statuses = connection.query_row(
+            "SELECT \
+                 (SELECT status FROM model_runs WHERE token = ?1), \
+                 (SELECT status FROM model_runs WHERE token = ?2)",
+            params![first_token, second_token],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )?;
+        assert_eq!(statuses, ("failed".to_owned(), "running".to_owned()));
+        Ok(())
+    }
+
+    #[test]
     fn exact_successful_context_is_reused_unless_reexamination_is_requested() -> TestResult {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("annals.db");
@@ -1546,7 +1592,7 @@ mod tests {
             crate::model_runner::ModelQuality::Medium,
             Some("custom-model"),
         );
-        let token = create_run(&mut connection, work.id, 0, &settings)?;
+        let token = create_run(&mut connection, work.id, 0, &settings, None)?;
         drop(connection);
 
         let mut backend = LiaisonBackend::open(&path, &token)?;
@@ -1618,7 +1664,7 @@ mod tests {
             })?,
             2
         );
-        let orphan = create_run(&mut connection, work.id, 0, &different_model)?;
+        let orphan = create_run(&mut connection, work.id, 0, &different_model, None)?;
         let runner = Runner::new("/usr/bin/false", Duration::from_secs(1));
         assert!(
             integrate_with_runner(&path, &work, &different_model, false, true, &runner,).is_err()

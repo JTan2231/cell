@@ -1,0 +1,12 @@
+library = "/var/lib/annals/annals.db"
+
+[inbox]
+root = "/var/spool/annals"
+max_items = 5
+max_elapsed_seconds = 2700
+settle_seconds = 60
+
+[liaison]
+quality = "medium"
+codex = "/usr/local/bin/codex"
+# model = "gpt-5.6-sol"

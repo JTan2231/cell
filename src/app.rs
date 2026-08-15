@@ -11,9 +11,10 @@ use crate::change::{
 };
 use crate::cli::{
     ChangeCommand, ChangeSelectArgs, ChangeShowArgs, Cli, CliGraphDirection, Command,
-    ConceptCommand, ConceptPageArgs, ConceptShowArgs, GraphArgs, IntegrateArgs, PagedAtArgs,
-    SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand,
+    ConceptCommand, ConceptPageArgs, ConceptShowArgs, GraphArgs, InboxCommand, IntegrateArgs,
+    PagedAtArgs, SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand,
 };
+use crate::config::Config;
 use crate::corpus::{
     ReconciliationRecord, ShakePlan, apply_shake, diff, get_work, list_commits,
     list_reconciliations, list_works, plan_shake, reconciliation_view, recorded_change_at,
@@ -27,20 +28,22 @@ use crate::model::{
     ConceptReference, ConceptSummary, DiffEntry, GraphDirection, GraphView, LibraryStats, Page,
     PageInfo, ValidationSeverity,
 };
-use crate::model_runner::ModelSettings;
+use crate::model_runner::{ModelSettings, Runner};
 use crate::render::{CommandOutput, render_terminal_text};
 use crate::resolver::ResolvedOperation;
-use crate::{liaison, resolver, validate};
+use crate::{inbox, liaison, resolver, validate};
 
 #[must_use]
-pub fn library_path(explicit: Option<&PathBuf>) -> PathBuf {
+pub fn library_path(explicit: Option<&PathBuf>, config: &Config) -> PathBuf {
     explicit.cloned().unwrap_or_else(|| {
         std::env::var_os("ANNALS_LIBRARY")
-            .map_or_else(|| PathBuf::from("./annals.db"), PathBuf::from)
+            .map(PathBuf::from)
+            .or_else(|| config.library.clone())
+            .unwrap_or_else(|| PathBuf::from("./annals.db"))
     })
 }
 
-pub fn run(cli: &Cli, path: &Path) -> AppResult<CommandOutput> {
+pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> {
     match &cli.command {
         Command::Init => initialize(path),
         Command::Stats => stats(path),
@@ -64,7 +67,11 @@ pub fn run(cli: &Cli, path: &Path) -> AppResult<CommandOutput> {
             WorkCommand::List => work_list(path),
             WorkCommand::Show(args) => show_work(path, &args.label),
         },
-        Command::Integrate(args) => integrate(path, args, !cli.json),
+        Command::Integrate(args) => integrate(path, config, args, !cli.json),
+        Command::Inbox(command) => match command {
+            InboxCommand::Run(args) => inbox::run(path, config, args, !cli.json),
+            InboxCommand::Status => inbox::status(config),
+        },
         Command::Change(command) => match command {
             ChangeCommand::Submit(args) => submit_change(path, &args.input, &args.work, args.base),
             ChangeCommand::Show(args) => show_change(path, args),
@@ -254,6 +261,7 @@ fn show_work(path: &Path, label: &str) -> Result<CommandOutput, AppError> {
 
 fn integrate(
     path: &Path,
+    config: &Config,
     args: &IntegrateArgs,
     forward_progress: bool,
 ) -> Result<CommandOutput, AppError> {
@@ -269,8 +277,18 @@ fn integrate(
         let mut connection = db::open_write(path)?;
         store_work(&mut connection, &label, &text)?
     };
-    let settings = ModelSettings::new(args.quality, args.model.as_deref());
-    let record = liaison::integrate(path, &work, &settings, forward_progress, args.reexamine)?;
+    let quality = args.quality.unwrap_or(config.liaison.quality);
+    let model = args.model.as_deref().or(config.liaison.model.as_deref());
+    let settings = ModelSettings::new(quality, model);
+    let runner = Runner::for_program(&config.liaison.codex);
+    let record = liaison::integrate_with_runner(
+        path,
+        &work,
+        &settings,
+        forward_progress,
+        args.reexamine,
+        &runner,
+    )?;
     if args.apply {
         match record.status.as_str() {
             "pending" => {
@@ -1437,7 +1455,7 @@ fn revert(path: &Path, target: i64) -> Result<CommandOutput, AppError> {
     .mutation())
 }
 
-fn read_utf8(path: &Path, description: &str) -> Result<String, AppError> {
+pub(crate) fn read_utf8(path: &Path, description: &str) -> Result<String, AppError> {
     let bytes = if path == Path::new("-") {
         let mut bytes = Vec::new();
         io::stdin().read_to_end(&mut bytes).map_err(|error| {
@@ -1463,7 +1481,7 @@ fn read_utf8(path: &Path, description: &str) -> Result<String, AppError> {
     })
 }
 
-fn work_label(path: &Path, explicit: Option<&str>) -> Result<String, AppError> {
+pub(crate) fn work_label(path: &Path, explicit: Option<&str>) -> Result<String, AppError> {
     if let Some(label) = explicit {
         return Ok(label.to_owned());
     }

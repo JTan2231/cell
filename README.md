@@ -17,7 +17,8 @@ parent edges, and every derived leaf must remain evidence-grounded.
 ## Requirements
 
 - macOS or Linux and Rust 1.97.1 to build the repository;
-- an installed and authenticated `codex` executable for `annals integrate`;
+- an installed and authenticated `codex` executable for `annals integrate` or
+  `annals inbox run`;
 - no daemon or separate database server.
 
 The liaison defaults to high quality: `gpt-5.6-sol` with max reasoning.
@@ -117,7 +118,11 @@ removing them in one revision. It preserves every ancestor-descendant pair;
 `--yes` supplies noninteractive confirmation.
 
 Every command supports `--json`. The library path resolves from `--library`,
-then `ANNALS_LIBRARY`, then `./annals.db`.
+then `ANNALS_LIBRARY`, then the selected config's `library`, then
+`./annals.db`. Select a TOML config with `--config PATH` or `ANNALS_CONFIG`.
+
+For a dedicated library with a bounded filesystem inbox and systemd or launchd
+scheduling, see the [system installation guide](docs/system-installation.md).
 
 See the [documentation index](docs/README.md) for the command, protocol,
 architecture, storage, search, and runtime contracts.

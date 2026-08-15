@@ -25,6 +25,8 @@ The implemented contracts are:
 - [Data model](data-model.md): canonical, examination, history, and derived
   SQLite state;
 - [Search](search.md): revision-scoped label and ancestor-context retrieval;
+- [System installation](system-installation.md): filesystem inbox operation,
+  configuration, and systemd or launchd scheduling;
 - [Runtime characteristics](performance-results.md): enforced limits and cost
   shape, without unsupported benchmark claims.
 

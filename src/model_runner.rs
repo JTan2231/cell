@@ -8,6 +8,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::error::{AppError, AppResult};
@@ -62,7 +63,8 @@ const CONFIG_OVERRIDES: &[&str] = &[
     "web_search=\"disabled\"",
 ];
 
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Eq, PartialEq, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum ModelQuality {
     Low,
     Medium,
@@ -127,6 +129,14 @@ impl Default for Runner {
 }
 
 impl Runner {
+    #[must_use]
+    pub(crate) fn for_program(program: impl Into<PathBuf>) -> Self {
+        Self {
+            program: program.into(),
+            ..Self::default()
+        }
+    }
+
     #[must_use]
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn new(program: impl Into<PathBuf>, timeout: Duration) -> Self {

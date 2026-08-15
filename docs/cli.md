@@ -3,13 +3,18 @@
 ## Global options
 
 ```text
-annals [--library PATH] [--json] [--quiet] [-v...] COMMAND
+annals [--config PATH] [--library PATH] [--json] [--quiet] [-v...] COMMAND
 ```
 
-The library path resolves from `--library`, then `ANNALS_LIBRARY`, then
-`./annals.db`. `--json` emits one success object on stdout or one error object
-on stderr. `--quiet` suppresses successful human mutation messages. `-v`
-prints the resolved library path on stderr in human mode.
+The config path resolves from `--config`, then `ANNALS_CONFIG`; no config is
+loaded when neither is set. The library path resolves from `--library`, then
+`ANNALS_LIBRARY`, then the selected config's `library`, then `./annals.db`.
+Relative `library` and `inbox.root` config paths are resolved from the config
+file's directory; command-line and environment paths remain relative to the
+process working directory.
+`--json` emits one success object on stdout or one error object on stderr.
+`--quiet` suppresses successful human mutation messages. `-v` prints the
+resolved library path on stderr in human mode.
 
 ## Library operations
 
@@ -70,7 +75,8 @@ base revision, prompt version, model, and reasoning effort. `--reexamine`
 bypasses this lookup. A later corpus revision or changed liaison configuration
 starts a fresh examination.
 
-`--quality` accepts three presets and defaults to `high`:
+`--quality` accepts three presets. Its value resolves from the command line,
+then `[liaison].quality` in the selected config, then `high`:
 
 | Quality | Model | Reasoning effort |
 | --- | --- | --- |
@@ -78,8 +84,10 @@ starts a fresh examination.
 | `medium` | `gpt-5.6-terra` | `medium` |
 | `high` | `gpt-5.6-sol` | `max` |
 
-`--model` overrides only the model selected by the preset; the selected
-quality continues to choose reasoning effort.
+`--model` resolves from the command line, then `[liaison].model`, then the
+model selected by the quality preset. It changes only the model; the selected
+quality continues to choose reasoning effort. `[liaison].codex` selects the
+Codex executable and defaults to `codex`.
 
 The liaison submits a provisional, best-current interpretation. It does not
 filter source material by estimated novelty or salience and does not claim an
@@ -90,6 +98,36 @@ base remains pending. `--apply` immediately commits that pending transition. A
 mechanically equal projection is stored with status `recorded`; it creates no
 commit and does not advance the revision. Optional annotations are inert and
 never block application.
+
+## Scheduled inbox
+
+```text
+annals inbox run [--max-items N] [--max-elapsed-seconds SECONDS] [--settle-seconds SECONDS]
+annals inbox status
+```
+
+Both commands require an `[inbox]` config section with `root`. The optional
+config keys `max_items`, `max_elapsed_seconds`, and `settle_seconds` default to
+5, 2700, and 60. Run flags override those values. Item and elapsed limits must
+be positive; a zero settling interval is allowed.
+
+`inbox run` takes an exclusive spool lock and processes files sequentially with
+immediate application. It moves each claimed file, without changing its
+basename or bytes, into `processing/JOB_ID/material/` beside an operational
+`job.json` receipt. Completed and permanently failed envelopes move whole to
+`done` and `failed`. The soft elapsed limit is checked between jobs.
+
+Only visible top-level regular files not ending in `.part` are candidates.
+Eligible files run in persisted first-seen order. Invalid UTF-8, empty input,
+unusable filename-derived labels, and label conflicts are archived as failed;
+other job errors remain retryable in `processing` and stop the run.
+
+Human `inbox status` reports incoming, ready, settling, processing, done,
+failed, and lock state. JSON also reports ignored entries. Human `inbox run`
+reports attempted, applied, recorded, failed, remaining, and stop reason; JSON
+adds effective settings, elapsed time, recovery count, ignored count, and
+per-job results. See the [system installation guide](system-installation.md)
+for the complete spool, recovery, and scheduler contract.
 
 ## Reconciliations and corpus changes
 

@@ -1,10 +1,12 @@
 mod app;
 mod change;
 mod cli;
+mod config;
 mod corpus;
 mod db;
 mod error;
 mod graph;
+mod inbox;
 mod index;
 mod liaison;
 mod model;
@@ -57,11 +59,22 @@ fn run_main() -> i32 {
             return exit_code;
         }
     };
-    let path = app::library_path(cli.library.as_ref());
+    let config = match config::Config::load(cli.config.as_ref()) {
+        Ok(config) => config,
+        Err(error) => {
+            if cli.json {
+                eprintln!("{}", render::error_json(&error));
+            } else {
+                eprintln!("annals: {error}");
+            }
+            return error.exit_code();
+        }
+    };
+    let path = app::library_path(cli.library.as_ref(), &config);
     if cli.verbose > 0 && !cli.json {
         eprintln!("annals: library {}", path.display());
     }
-    match app::run(&cli, &path) {
+    match app::run(&cli, &config, &path) {
         Ok(output) => {
             if cli.json {
                 match render::success_json(&output.data) {
