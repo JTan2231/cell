@@ -2,11 +2,9 @@ library = "/Library/Application Support/Annals/annals.db"
 
 [inbox]
 root = "/Library/Application Support/Annals/spool"
-max_items = 5
-max_elapsed_seconds = 2700
 settle_seconds = 60
 
 [liaison]
-quality = "medium"
+quality = "high"
 codex = "/usr/local/bin/codex"
 # model = "gpt-5.6-sol"

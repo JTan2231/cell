@@ -178,6 +178,46 @@ fn assert_no_storage_coordinates(value: &Value) {
     }
 }
 
+#[test]
+fn command_requires_a_selected_library_and_ignores_empty_environment_values() -> TestResult {
+    let directory = tempfile::tempdir()?;
+
+    let output = Command::new(env!("CARGO_BIN_EXE_annals"))
+        .args(["--json", "init"])
+        .env_remove("ANNALS_CONFIG")
+        .env_remove("ANNALS_LIBRARY")
+        .current_dir(directory.path())
+        .output()?;
+    error_json(&output, "library_not_configured")?;
+    assert!(!directory.path().join("annals.db").exists());
+
+    let config = directory.path().join("annals.toml");
+    let configured_library = directory.path().join("configured.db");
+    fs::write(&config, "library = \"configured.db\"\n")?;
+    let output = Command::new(env!("CARGO_BIN_EXE_annals"))
+        .arg("--config")
+        .arg(&config)
+        .args(["--json", "init"])
+        .env("ANNALS_LIBRARY", "")
+        .current_dir(directory.path())
+        .output()?;
+    successful_json(&output)?;
+    assert!(configured_library.is_file());
+
+    let explicit_library = directory.path().join("explicit.db");
+    let output = Command::new(env!("CARGO_BIN_EXE_annals"))
+        .arg("--library")
+        .arg(&explicit_library)
+        .args(["--json", "init"])
+        .env("ANNALS_CONFIG", "")
+        .env_remove("ANNALS_LIBRARY")
+        .current_dir(directory.path())
+        .output()?;
+    successful_json(&output)?;
+    assert!(explicit_library.is_file());
+    Ok(())
+}
+
 fn assert_public_id(id: &str) {
     let Some(digits) = id.strip_prefix('c') else {
         panic!("public concept ID does not start with c: {id:?}");

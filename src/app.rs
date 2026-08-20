@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -32,14 +33,35 @@ use crate::render::{CommandOutput, render_terminal_text};
 use crate::resolver::ResolvedOperation;
 use crate::{inbox, liaison, resolver, validate};
 
-#[must_use]
-pub fn library_path(explicit: Option<&PathBuf>, config: &Config) -> PathBuf {
-    explicit.cloned().unwrap_or_else(|| {
-        std::env::var_os("ANNALS_LIBRARY")
-            .map(PathBuf::from)
-            .or_else(|| config.library.clone())
-            .unwrap_or_else(|| PathBuf::from("./annals.db"))
-    })
+pub fn library_path(explicit: Option<&PathBuf>, config: &Config) -> Result<PathBuf, AppError> {
+    let environment = std::env::var_os("ANNALS_LIBRARY");
+    resolve_library_path(
+        explicit.map(PathBuf::as_path),
+        environment.as_deref(),
+        config.library.as_deref(),
+    )
+}
+
+fn resolve_library_path(
+    explicit: Option<&Path>,
+    environment: Option<&OsStr>,
+    configured: Option<&Path>,
+) -> Result<PathBuf, AppError> {
+    explicit
+        .map(Path::to_path_buf)
+        .or_else(|| {
+            environment
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+        })
+        .or_else(|| configured.map(Path::to_path_buf))
+        .filter(|path| !path.as_os_str().is_empty())
+        .ok_or_else(|| {
+            AppError::invalid(
+                "library_not_configured",
+                "no library is configured; pass --library, set ANNALS_LIBRARY, or select a configuration that defines library",
+            )
+        })
 }
 
 pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> {
@@ -1448,4 +1470,42 @@ fn count_where(connection: &Connection, table: &str, condition: &str) -> Result<
 
 fn to_value<T: Serialize>(value: &T) -> Result<Value, AppError> {
     serde_json::to_value(value).map_err(AppError::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+    use std::path::Path;
+
+    use super::resolve_library_path;
+
+    #[test]
+    fn library_path_honors_precedence_and_ignores_an_empty_environment()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let explicit = Path::new("explicit.db");
+        let configured = Path::new("configured.db");
+
+        assert_eq!(
+            resolve_library_path(
+                Some(explicit),
+                Some(OsStr::new("environment.db")),
+                Some(configured),
+            )?,
+            explicit
+        );
+        assert_eq!(
+            resolve_library_path(None, Some(OsStr::new("environment.db")), Some(configured))?,
+            Path::new("environment.db")
+        );
+        assert_eq!(
+            resolve_library_path(None, Some(OsStr::new("")), Some(configured))?,
+            configured
+        );
+
+        let error = resolve_library_path(None, Some(OsStr::new("")), None)
+            .err()
+            .ok_or("library resolution unexpectedly succeeded")?;
+        assert_eq!(error.code(), "library_not_configured");
+        Ok(())
+    }
 }

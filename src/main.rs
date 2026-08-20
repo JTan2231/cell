@@ -70,7 +70,17 @@ fn run_main() -> i32 {
             return error.exit_code();
         }
     };
-    let path = app::library_path(cli.library.as_ref(), &config);
+    let path = match app::library_path(cli.library.as_ref(), &config) {
+        Ok(path) => path,
+        Err(error) => {
+            if cli.json {
+                eprintln!("{}", render::error_json(&error));
+            } else {
+                eprintln!("annals: {error}");
+            }
+            return error.exit_code();
+        }
+    };
     if cli.verbose > 0 && !cli.json {
         eprintln!("annals: library {}", path.display());
     }

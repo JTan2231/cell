@@ -117,12 +117,56 @@ more of the graph exists beyond the returned neighborhood.
 removing them in one revision. It preserves every ancestor-descendant pair;
 `--yes` supplies noninteractive confirmation.
 
-Every command supports `--json`. The library path resolves from `--library`,
-then `ANNALS_LIBRARY`, then the selected config's `library`, then
-`./annals.db`. Select a TOML config with `--config PATH` or `ANNALS_CONFIG`.
+Every command supports `--json`. Select a library explicitly with `--library`
+or `ANNALS_LIBRARY`, or select a TOML config with `--config` or
+`ANNALS_CONFIG`. Annals never silently creates or opens `./annals.db`.
 
-For a dedicated library with a bounded filesystem inbox and systemd or launchd
-scheduling, see the [system installation guide](docs/system-installation.md).
+The installed macOS `annals` frontend selects
+`/Library/Application Support/Annals/config.toml` when no explicit library or
+config selection is present. Consequently, commands such as `annals stats`,
+`annals search`, and `annals inbox status` operate on the same system library
+as the scheduled inbox worker. An explicit option or environment variable
+still selects a different target.
+
+## Scheduled macOS installation
+
+The bundled installer assigns the installation to one explicitly named macOS
+operator. That account owns the private library, inbox, and state-local Codex
+home, and launchd runs the scheduled worker as the same account. Build first,
+then pass the operator and absolute paths for both executables:
+
+```sh
+sudo ./packaging/launchd/install.sh \
+  --operator "$(id -un)" \
+  --binary "$PWD/target/release/annals" \
+  --codex "$(command -v codex)"
+```
+
+The installer places a small frontend at `/usr/local/bin/annals` and the Rust
+executable at `/usr/local/libexec/annals/annals`. It completes Codex device
+authentication in the installation's private Codex home when needed,
+initializes or validates the library, and loads the LaunchDaemon only after the
+installation is usable. Running the same command again updates program-owned
+files while retaining configuration, credentials, corpus data, and every
+queued or archived source.
+
+After installation, the operator—and Codex running as that operator—uses the
+system library without `sudo`:
+
+```sh
+annals stats
+annals validate
+annals inbox status
+```
+
+Drop complete UTF-8 files into
+`/Library/Application Support/Annals/spool/incoming`. The one-shot worker runs
+at startup and then receives another wake-up every five minutes while idle. An
+activation registers settled arrivals and drains the durable FIFO queue until
+it is empty; it has no item-count or lifetime cap. New arrivals are rescanned
+between jobs, and each individual liaison is limited to 60 minutes. For
+status, update, uninstall, manual installation, and Linux systemd instructions,
+see the [system installation guide](docs/system-installation.md).
 
 See the [documentation index](docs/README.md) for the command, protocol,
 architecture, storage, search, and runtime contracts.

@@ -1,9 +1,9 @@
 # System installation and scheduled inbox
 
 Annals can run as a scheduled, one-shot service around one system-owned
-library. The service polls a filesystem inbox, integrates a bounded batch in
-sequence, and exits. It is not a resident daemon and does not require a
-separate database server.
+library. Each service activation registers settled inbox files, drains the
+durable queue in sequence, and exits when no runnable work remains. It is not
+a resident daemon and does not require a separate database server.
 
 ## Operational model
 
@@ -40,25 +40,30 @@ One invocation:
 
 1. takes the inbox lock;
 2. recovers a previously claimed job before claiming new work;
-3. registers visible top-level regular files and snapshots those currently
-   eligible;
-4. attempts at most `max_items` from that snapshot, in persisted first-seen
-   order;
-5. integrates and applies each work before beginning the next one; and
-6. exits after the item cap, the soft elapsed-time cap, an error that must be
-   retried, or an empty queue.
+3. registers every eligible visible top-level regular file as a durable job;
+4. integrates and applies the oldest registered job;
+5. rescans and registers newly eligible arrivals between jobs; and
+6. continues until the queue is empty or a retryable failure stops the
+   activation.
 
-New arrivals wait for the next invocation. The elapsed-time cap is checked
-between items and never interrupts a liaison already running. An attempted
-item counts toward `max_items`, including an item that is moved to `failed`.
-Processing is deliberately sequential because every work must see the corpus
-revision produced by the work before it.
+There is no item or activation-lifetime limit. A continuing stream of eligible
+arrivals can therefore keep one worker active indefinitely. Processing is
+deliberately sequential because every work must see the corpus revision
+produced by the work before it. A retryable failure remains at the head of the
+strict FIFO queue and stops that activation; the next scheduled activation
+retries it before later work. Permanently invalid material moves to `failed`,
+and draining continues.
 
 `settle_seconds` protects casual direct copies: a file is eligible only after
 its modification time is old enough. Dotfiles, names ending in `.part`,
 directories, and symlinks are counted as ignored rather than processed. For a
 strict producer handoff, copy the file to a staging directory on the same
 filesystem and atomically move the completed file into `incoming`.
+
+An arrival that is still settling during the final rescan, or that races the
+final empty check, waits for the next scheduled activation. The periodic
+schedule is therefore a wake-up and recovery mechanism rather than a batch
+boundary.
 
 ## Configuration
 
@@ -70,43 +75,44 @@ library = "/var/lib/annals/annals.db"
 
 [inbox]
 root = "/var/spool/annals"
-max_items = 5
-max_elapsed_seconds = 2700
 settle_seconds = 60
 
 [liaison]
-quality = "medium"
+quality = "high"
 codex = "/usr/local/bin/codex"
 # model = "gpt-5.6-sol"
 ```
 
-Annals selects the configuration path from `--config`, then `ANNALS_CONFIG`;
-it does not otherwise search for a config file. The library path resolves from
-`--library`, then `ANNALS_LIBRARY`, then `library` in the selected config, then
-`./annals.db`. Inbox-run options override their corresponding config values. A
-relative `library` or `inbox.root` value is resolved from the config file's
-directory. A manual run can therefore change the batch boundaries without
-editing the installed config:
+The core executable selects a configuration only from `--config`, then a
+nonempty `ANNALS_CONFIG`. The library resolves from `--library`, then a
+nonempty `ANNALS_LIBRARY`, then `library` in the selected config. If none of
+those selects a library, the command fails; Annals does not search the current
+directory or fall back to `./annals.db`.
+
+The macOS frontend described below supplies the system config path when no
+explicit config or library selection is present. The Linux units continue to
+pass `/etc/annals/config.toml` explicitly. Inbox-run options override their
+corresponding config values. A relative `library` or `inbox.root` value is
+resolved from the config file's directory. A manual Linux run can therefore
+disable settling without editing the installed config:
 
 ```sh
 annals --config /etc/annals/config.toml inbox run \
-  --max-items 1 --max-elapsed-seconds 600 --settle-seconds 0
+  --settle-seconds 0
 ```
 
-`max_items` and `max_elapsed_seconds` must be positive; `settle_seconds = 0`
-makes every accepted regular file immediately eligible. Unknown config keys
-are rejected.
+`settle_seconds = 0` makes every accepted regular file immediately eligible.
+Unknown config keys are rejected.
 
 Use `model` only when an exact model override is wanted. Otherwise `quality`
 selects Annals' model and reasoning preset. Annals defaults to `high` when
-`quality` is omitted; the packaged examples deliberately choose `medium` for
-routine queue processing. The
+`quality` is omitted, and the packaged examples make that choice explicit. The
 [reconciliation-v2 experiment](../experiments/04-twenty-chat-medium-high-reconciliation-v2/walkthrough.md)
 averaged about 99 seconds per work at medium and 471 seconds at high over the
 same 20 works. Those historical measurements are sizing guidance, not a
-throughput promise. The five-item and 45-minute defaults bound ordinary
-activations while allowing the current liaison to finish after the soft time
-boundary.
+throughput promise. A single liaison has a 60-minute timeout to bound a hung
+item, independently of the queue-draining activation's otherwise unbounded
+lifetime.
 
 ## Linux with systemd
 
@@ -168,15 +174,19 @@ then verify the login as that same account:
 ```sh
 sudo -u annals env HOME=/var/lib/annals \
   CODEX_HOME=/var/lib/annals/codex-home \
-  /usr/local/bin/codex login --device-auth
+  /usr/local/bin/codex \
+  -c 'cli_auth_credentials_store="file"' login --device-auth
 
 sudo -u annals env HOME=/var/lib/annals \
   CODEX_HOME=/var/lib/annals/codex-home \
-  /usr/local/bin/codex login status
+  /usr/local/bin/codex \
+  -c 'cli_auth_credentials_store="file"' login status
 ```
 
 Keep this credential directory private. The service does not use an
-administrator's personal Codex home.
+administrator's personal Codex home. Annals copies `auth.json` from this
+directory into each isolated liaison runtime, so manual installations force
+file-backed Codex credentials rather than relying on an OS credential store.
 
 Initialize the library and enable the timer:
 
@@ -193,8 +203,8 @@ The timer runs two minutes after boot and five minutes after the previous
 service activation becomes inactive. `Type=oneshot` prevents systemd from
 starting a second copy of the service, and the Annals inbox lock also protects
 against a concurrent manual invocation. The unit deliberately has no systemd
-start timeout because one liaison can run for up to 30 minutes and a batch can
-contain several works.
+start timeout because one liaison can run for up to 60 minutes and an
+activation continues draining for as long as runnable work remains.
 
 Inspect or trigger it with:
 
@@ -209,11 +219,10 @@ sudo -u annals /usr/local/bin/annals \
 Human status output reports incoming files split into ready and settling,
 processing envelopes, completed and failed envelopes, and whether the run lock
 is held. `--json` additionally reports the ignored-entry count. A successful
-run reports attempted, applied, recorded, and failed counts; ready or
-processing work remaining; and one of `empty`, `batch_complete`, `max_items`,
-or `max_elapsed` as its stop reason. Per-job results, recovered-job count,
-effective limits, elapsed seconds, and ignored count are available with
-`--json`.
+run reports registered, attempted, applied, recorded, and failed counts;
+runnable work remaining; settling arrivals; and whether the runnable queue was
+drained. The spool root, recovered-job count, effective settling interval,
+elapsed seconds, and ignored count are also available with `--json`.
 
 ### Dropping files
 
@@ -239,11 +248,18 @@ Annals records that job as failed rather than silently changing the label.
 
 ## macOS with launchd
 
-The launchd example uses one dedicated, non-admin `_annals` account and keeps
-all mutable state under `/Library/Application Support/Annals`:
+The macOS installation belongs to one explicitly selected local operator.
+That same account owns every mutable file and runs the LaunchDaemon. This
+single-UID model lets the operator, including Codex processes running as that
+operator, use the complete CLI and SQLite library without `sudo` or shared-file
+permission rules.
+
+The installed program and state use this layout:
 
 ```text
-/usr/local/bin/annals
+/usr/local/bin/annals                    # system-default frontend
+/usr/local/libexec/annals/annals         # Rust executable payload
+/Library/LaunchDaemons/org.annals.inbox.plist
 /Library/Application Support/Annals/
 |-- config.toml
 |-- annals.db
@@ -258,60 +274,131 @@ all mutable state under `/Library/Application Support/Annals`:
     `-- failed/
 ```
 
-Provision the `_annals` user and group with local directory-management or MDM
-tooling before loading the plist. If the service account or executable paths
-differ, update both the plist and config example first.
+The state directory is private to the operator. The small root-owned frontend
+does not elevate privileges or change the caller's identity. It executes the
+payload with `/Library/Application Support/Annals/config.toml` when neither an
+explicit config nor an explicit library was selected. `--config`,
+`ANNALS_CONFIG`, `--library`, and `ANNALS_LIBRARY` continue to override that
+default, so scratch and project-specific libraries remain easy to use.
 
-Install the files and directories:
+The LaunchDaemon invokes the same frontend as `annals --quiet inbox run`.
+launchd runs it as the operator with `HOME` set to the state directory and
+`CODEX_HOME` set to its private `codex-home`. Interactive invocations keep the
+caller's normal environment and Codex credentials; only their default Annals
+config changes. Scheduled and interactive invocations therefore share a
+corpus without sharing two Unix owners.
+
+This trust boundary is deliberate: the scheduled Annals and Codex processes
+run with the operator's filesystem authority. Select only the account intended
+to own and maintain the consulting library.
+
+### Bundled installer
+
+The installer does not compile Annals or install Codex. Build and check the
+release executable first, resolve Codex before invoking `sudo`, and name the
+operator explicitly:
 
 ```sh
-sudo install -m 0755 target/release/annals /usr/local/bin/annals
-sudo install -d -o _annals -g _annals -m 0700 \
-  "/Library/Application Support/Annals" \
-  "/Library/Application Support/Annals/codex-home" \
-  "/Library/Application Support/Annals/log" \
-  "/Library/Application Support/Annals/spool" \
-  "/Library/Application Support/Annals/spool/incoming" \
-  "/Library/Application Support/Annals/spool/processing" \
-  "/Library/Application Support/Annals/spool/done" \
-  "/Library/Application Support/Annals/spool/failed"
-sudo install -o root -g _annals -m 0640 \
-  packaging/launchd/annals.toml \
-  "/Library/Application Support/Annals/config.toml"
-sudo install -o root -g wheel -m 0644 \
-  packaging/launchd/org.annals.inbox.plist \
-  /Library/LaunchDaemons/org.annals.inbox.plist
+./ci.sh
+sudo ./packaging/launchd/install.sh \
+  --operator "$(id -un)" \
+  --binary "$PWD/target/release/annals" \
+  --codex "$(command -v codex)"
 ```
 
-Authenticate and initialize as the service account:
+The installer accepts absolute executable paths and requires an existing local
+operator account. It then:
+
+- validates the operator, executable, templates, and fixed installation
+  targets before changing the machine;
+- creates private operator-owned state, log, Codex-home, and spool
+  directories;
+- installs the payload, system-default frontend, and rendered LaunchDaemon;
+- creates the Annals and state-local Codex configuration when absent;
+- checks Codex authentication as the operator in the state-local Codex home,
+  using device authentication when login is required;
+- initializes a missing library or validates an existing one as the operator;
+  and
+- loads and starts `system/org.annals.inbox` only after those checks succeed.
+
+If authentication is cancelled or cannot run interactively, the installer
+leaves the provisioned service disabled. Rerun the same command to finish. A
+normal rerun with the same `--operator` is also the update path: it replaces
+the payload, frontend, and project-owned launchd definition while retaining
+configuration, the database, credentials, queued material, logs, and both
+archives.
+
+After installation, direct library access needs no `sudo` and works from any
+directory:
 
 ```sh
-sudo -u _annals env \
-  HOME="/Library/Application Support/Annals" \
-  CODEX_HOME="/Library/Application Support/Annals/codex-home" \
-  /usr/local/bin/codex login --device-auth
-
-sudo -u _annals env \
-  HOME="/Library/Application Support/Annals" \
-  CODEX_HOME="/Library/Application Support/Annals/codex-home" \
-  /usr/local/bin/annals \
-  --config "/Library/Application Support/Annals/config.toml" init
+annals stats
+annals validate
+annals overview
+annals search "predicate locking"
+annals inbox status
 ```
 
-Load and inspect the LaunchDaemon:
+These commands also work from an unattended Codex process running as the
+operator. An explicit target still bypasses the system default:
 
 ```sh
-sudo launchctl bootstrap system \
-  /Library/LaunchDaemons/org.annals.inbox.plist
-sudo launchctl enable system/org.annals.inbox
-sudo launchctl kickstart -k system/org.annals.inbox
+annals --library ./scratch.db init
+annals --config ./project.toml stats
+```
+
+Scheduler administration remains a privileged launchd operation. Inspect its
+definition and the operator-readable logs with:
+
+```sh
 sudo launchctl print system/org.annals.inbox
+tail -f "/Library/Application Support/Annals/log/inbox.stdout.log"
+tail -f "/Library/Application Support/Annals/log/inbox.stderr.log"
 ```
 
 `RunAtLoad` handles startup and `StartInterval` requests another activation
 every five minutes. launchd does not run another instance while the job is
 still active; Annals' own lock remains authoritative for invocations outside
-launchd. Standard output and error go to the two files in the `log` directory.
+launchd. Each activation drains all runnable FIFO work, so the interval only
+wakes an idle worker and provides retry and final-race recovery.
+
+For example, the operator can submit this repository's README under a new
+immutable work label without elevation:
+
+```sh
+install -m 0600 README.md \
+  "/Library/Application Support/Annals/spool/incoming/annals-readme.md"
+```
+
+Choose an unused destination name. The default 60-second settling interval
+ensures launchd does not claim a file still being copied; the next eligible
+activation processes and applies it automatically.
+
+### Uninstall
+
+To remove scheduling and installed program files without deleting the corpus:
+
+```sh
+sudo ./packaging/launchd/uninstall.sh
+```
+
+The uninstaller disables and removes the LaunchDaemon, then removes the
+frontend and executable payload. It deliberately retains everything under
+`/Library/Application Support/Annals`, including configuration, the database,
+state-local Codex credentials, logs, queued material, and both archives. The
+operator is an existing user account and is never removed. Delete retained
+state manually only after making any required backup.
+
+### Manual installation
+
+The bundled installer is the reference implementation for the fixed layout.
+An MDM or other manual deployment must preserve the same invariants: install a
+root-owned frontend separately from the payload; make all mutable state private
+and writable by one named operator; render that operator into the LaunchDaemon;
+set only the scheduled process's `HOME` and `CODEX_HOME` to state-local paths;
+and have launchd call the frontend without a duplicated config argument. Load
+the plist only after authentication, `annals validate`, and `annals inbox
+status` all succeed as the operator.
 
 ## Failure recovery and maintenance
 
@@ -320,11 +407,12 @@ and failed state; `--json` also includes ignored entries. Inspect
 `failed/JOB_ID/job.json` alongside the unchanged source in
 `failed/JOB_ID/material/` to diagnose a permanent failure. Invalid UTF-8,
 empty material, unusable labels, and label collisions are permanent failures;
-Annals archives them and continues the batch. Other failures leave the
+Annals archives them and continues draining. Other failures leave the
 envelope in `processing`, stop the command with a nonzero exit, and are retried
-before new incoming work on the next activation. On recovery, the receipt's
-exact linked reconciliation lets Annals finish or archive completed work
-without adopting an unrelated proposal for the same retained work.
+at the head of the queue before later work on the next activation. On recovery,
+the receipt's exact linked reconciliation lets Annals finish or archive
+completed work without adopting an unrelated proposal for the same retained
+work.
 Startup also removes an empty envelope left before a claim move and
 reconstructs a missing receipt when its envelope already contains exactly one
 moved material file.

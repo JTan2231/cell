@@ -1,5 +1,5 @@
 [Unit]
-Description=Run the Annals inbox after boot and between completed batches
+Description=Run the Annals inbox after boot and between queue-drain activations
 
 [Timer]
 OnBootSec=2min

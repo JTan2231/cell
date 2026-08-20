@@ -8,16 +8,15 @@
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/annals</string>
-        <string>--config</string>
-        <string>/Library/Application Support/Annals/config.toml</string>
+        <string>--quiet</string>
         <string>inbox</string>
         <string>run</string>
     </array>
 
     <key>UserName</key>
-    <string>_annals</string>
+    <string>__ANNALS_OPERATOR__</string>
     <key>GroupName</key>
-    <string>_annals</string>
+    <string>__ANNALS_GROUP__</string>
     <key>WorkingDirectory</key>
     <string>/Library/Application Support/Annals</string>
 
@@ -35,6 +34,8 @@
     <integer>300</integer>
     <key>ProcessType</key>
     <string>Background</string>
+    <key>Umask</key>
+    <string>077</string>
 
     <key>StandardOutPath</key>
     <string>/Library/Application Support/Annals/log/inbox.stdout.log</string>

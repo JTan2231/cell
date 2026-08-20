@@ -115,6 +115,26 @@ fi
 
 export CARGO_BUILD_WARNINGS=deny
 
+printf '%s\n' '==> packaging'
+for script in \
+    packaging/launchd/annals \
+    packaging/launchd/install.sh \
+    packaging/launchd/test-frontend.sh \
+    packaging/launchd/uninstall.sh
+do
+    if [ ! -f "$script" ]; then
+        printf 'ci.sh: required packaging script not found: %s\n' "$script" >&2
+        exit 1
+    fi
+    sh -n "$script"
+done
+
+packaging/launchd/test-frontend.sh
+
+if command -v plutil >/dev/null 2>&1; then
+    plutil -lint packaging/launchd/org.annals.inbox.plist >/dev/null
+fi
+
 printf '%s\n' '==> rustfmt'
 cargo fmt --all -- --check
 

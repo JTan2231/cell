@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use crate::error::{AppError, AppResult};
 use crate::tool_server::{self, Backend, Tool, ToolFailure};
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_mins(30);
+const DEFAULT_TIMEOUT: Duration = Duration::from_hours(1);
 const DEFAULT_MAX_STDOUT_BYTES: usize = 64 * 1024 * 1024;
 const DEFAULT_STDERR_TAIL_BYTES: usize = 64 * 1024;
 const MAX_MODEL_CATALOG_BYTES: usize = 4 * 1024 * 1024;

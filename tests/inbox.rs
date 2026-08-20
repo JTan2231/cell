@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::OsStr;
-use std::fs::{self, OpenOptions};
+use std::fs::{self, FileTimes, OpenOptions};
 use std::io;
 use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
-use std::time::SystemTime;
+use std::process::{Command, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::Value;
 use tempfile::TempDir;
@@ -31,7 +32,7 @@ struct Material {
 }
 
 impl Installation {
-    fn new(max_items: usize, settle_seconds: u64) -> TestResult<Self> {
+    fn new(settle_seconds: u64) -> TestResult<Self> {
         let directory = tempfile::tempdir()?;
         let config = directory.path().join("annals.toml");
         let library = directory.path().join("state/annals.db");
@@ -48,8 +49,6 @@ impl Installation {
                     "\n",
                     "[inbox]\n",
                     "root = {}\n",
-                    "max_items = {max_items}\n",
-                    "max_elapsed_seconds = 300\n",
                     "settle_seconds = {settle_seconds}\n",
                     "\n",
                     "[liaison]\n",
@@ -60,7 +59,6 @@ impl Installation {
                 toml_string(&library),
                 toml_string(&inbox),
                 toml_string(&codex),
-                max_items = max_items,
                 settle_seconds = settle_seconds,
             ),
         )?;
@@ -156,6 +154,23 @@ fn material(path: &Path) -> TestResult<Material> {
     })
 }
 
+fn set_modified(path: &Path, modified: SystemTime) -> TestResult {
+    let file = OpenOptions::new().read(true).open(path)?;
+    file.set_times(FileTimes::new().set_modified(modified))?;
+    Ok(())
+}
+
+fn wait_for_file(path: &Path) -> TestResult {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !path.is_file() {
+        if Instant::now() >= deadline {
+            return Err(format!("timed out waiting for {}", path.display()).into());
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    Ok(())
+}
+
 fn incoming_names(root: &Path) -> TestResult<Vec<String>> {
     let path = root.join("incoming");
     if !path.exists() {
@@ -244,7 +259,7 @@ fn status_count(value: &Value, state: &str) -> Option<u64> {
 
 #[test]
 fn configuration_selects_paths_and_library_overrides_follow_precedence() -> TestResult {
-    let installation = Installation::new(2, 0)?;
+    let installation = Installation::new(0)?;
     installation.init()?;
     assert!(installation.library.is_file());
 
@@ -275,58 +290,72 @@ fn configuration_selects_paths_and_library_overrides_follow_precedence() -> Test
 }
 
 #[test]
-fn run_honors_settling_and_max_items_and_moves_sources_unchanged() -> TestResult {
-    let installation = Installation::new(2, 3_600)?;
+fn run_honors_settling_and_drains_more_than_five_sources_unchanged() -> TestResult {
+    let installation = Installation::new(3_600)?;
     installation.init()?;
-    let expected = BTreeMap::from([
+    let mut expected = BTreeMap::new();
+    for (name, bytes, mode) in [
         (
-            "01-one.md".to_owned(),
-            installation.incoming("01-one.md", b"Shared inbox claim.\nFirst source.\n", 0o640)?,
+            "01-one.md",
+            b"Shared inbox claim.\nFirst source.\n".as_slice(),
+            0o640,
         ),
         (
-            "02-two.txt".to_owned(),
-            installation.incoming(
-                "02-two.txt",
-                b"Shared inbox claim.\nSecond source.\n",
-                0o600,
-            )?,
+            "02-two.txt",
+            b"Shared inbox claim.\nSecond source.\n".as_slice(),
+            0o600,
         ),
         (
-            "job.json".to_owned(),
-            installation.incoming("job.json", b"Shared inbox claim.\nThird source.\n", 0o644)?,
+            "03-three.md",
+            b"Shared inbox claim.\nThird source.\n".as_slice(),
+            0o644,
         ),
-    ]);
+        (
+            "04-four.txt",
+            b"Shared inbox claim.\nFourth source.\n".as_slice(),
+            0o640,
+        ),
+        (
+            "05-five.md",
+            b"Shared inbox claim.\nFifth source.\n".as_slice(),
+            0o600,
+        ),
+        (
+            "06-six.txt",
+            b"Shared inbox claim.\nSixth source.\n".as_slice(),
+            0o644,
+        ),
+        (
+            "job.json",
+            b"Shared inbox claim.\nSeventh source.\n".as_slice(),
+            0o640,
+        ),
+    ] {
+        expected.insert(name.to_owned(), installation.incoming(name, bytes, mode)?);
+    }
 
     installation.json_ok(["inbox", "run"])?;
     assert!(!installation.counter.exists());
     assert_eq!(
         incoming_names(&installation.inbox)?,
-        ["01-one.md", "02-two.txt", "job.json"]
+        [
+            "01-one.md",
+            "02-two.txt",
+            "03-three.md",
+            "04-four.txt",
+            "05-five.md",
+            "06-six.txt",
+            "job.json",
+        ]
     );
     assert!(archived_material(&installation.inbox, "done")?.is_empty());
 
-    installation.json_ok(["inbox", "run", "--settle-seconds", "0", "--max-items", "2"])?;
-    assert_eq!(incoming_names(&installation.inbox)?, ["job.json"]);
-    let done = archived_material(&installation.inbox, "done")?;
-    assert_eq!(
-        done.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["01-one.md", "02-two.txt"]
-    );
-    for (name, actual) in &done {
-        assert_unchanged(
-            expected.get(name).ok_or("unexpected archived source")?,
-            actual,
-        );
-    }
-
-    let status = installation.json_ok(["inbox", "status"])?;
-    assert_eq!(status_count(&status, "incoming"), Some(1), "{status}");
-    assert_eq!(status_count(&status, "done"), Some(2), "{status}");
-
-    installation.json_ok(["inbox", "run", "--settle-seconds", "0"])?;
+    let run = installation.json_ok(["inbox", "run", "--settle-seconds", "0"])?;
+    assert_eq!(run["attempted"], 7);
+    assert_eq!(run["applied"], 7);
     assert!(incoming_names(&installation.inbox)?.is_empty());
     let done = archived_material(&installation.inbox, "done")?;
-    assert_eq!(done.len(), 3);
+    assert_eq!(done.len(), 7);
     for (name, actual) in &done {
         assert_unchanged(
             expected.get(name).ok_or("unexpected archived source")?,
@@ -335,16 +364,109 @@ fn run_honors_settling_and_max_items_and_moves_sources_unchanged() -> TestResult
     }
     assert!(archived_material(&installation.inbox, "processing")?.is_empty());
     assert!(archived_material(&installation.inbox, "failed")?.is_empty());
+    assert_eq!(fs::read_to_string(&installation.counter)?, "7\n");
 
     let library_stats = installation.json_ok(["stats"])?;
-    assert_eq!(library_stats["work_count"], 3);
-    assert_eq!(library_stats["revision"], 3);
+    assert_eq!(library_stats["work_count"], 7);
+    assert_eq!(library_stats["revision"], 7);
+    Ok(())
+}
+
+#[test]
+fn run_rescans_for_ready_arrivals_and_leaves_settling_arrivals_for_later() -> TestResult {
+    let installation = Installation::new(60)?;
+    installation.init()?;
+    let old = SystemTime::now()
+        .checked_sub(Duration::from_mins(2))
+        .ok_or("could not construct an old modification time")?;
+
+    installation.incoming(
+        "01-first.md",
+        b"Shared inbox claim.\nFirst source.\n",
+        0o640,
+    )?;
+    set_modified(&installation.inbox.join("incoming/01-first.md"), old)?;
+
+    installation.incoming(
+        "02-already-queued.md",
+        b"Shared inbox claim.\nAlready queued source.\n",
+        0o600,
+    )?;
+    set_modified(
+        &installation.inbox.join("incoming/02-already-queued.md"),
+        old,
+    )?;
+
+    installation.incoming(
+        "03-arrived.md",
+        b"Shared inbox claim.\nReady arrival.\n",
+        0o640,
+    )?;
+    let staged = installation.directory.path().join("03-arrived.md");
+    fs::rename(installation.inbox.join("incoming/03-arrived.md"), &staged)?;
+    set_modified(&staged, old)?;
+
+    let ready = installation.directory.path().join("fake-codex-ready");
+    let release = installation.directory.path().join("fake-codex-release");
+    let mut command = installation.command();
+    let child = command
+        .args(["inbox", "run"])
+        .env("ANNALS_FAKE_BLOCK_READY", &ready)
+        .env("ANNALS_FAKE_BLOCK_RELEASE", &release)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    if let Err(error) = wait_for_file(&ready) {
+        fs::write(&release, b"release\n")?;
+        let _ = child.wait_with_output();
+        return Err(error);
+    }
+    assert!(incoming_names(&installation.inbox)?.is_empty());
+    assert_eq!(
+        archived_material(&installation.inbox, "processing")?.len(),
+        2
+    );
+    fs::rename(&staged, installation.inbox.join("incoming/03-arrived.md"))?;
+    installation.incoming(
+        "04-settling.md",
+        b"Shared inbox claim.\nStill settling.\n",
+        0o644,
+    )?;
+    fs::write(&release, b"release\n")?;
+
+    let first = successful_json(&child.wait_with_output()?)?;
+    assert_eq!(first["attempted"], 3);
+    assert_eq!(first["applied"], 3);
+    assert_eq!(incoming_names(&installation.inbox)?, ["04-settling.md"]);
+    assert_eq!(archived_material(&installation.inbox, "done")?.len(), 3);
+    assert!(archived_material(&installation.inbox, "processing")?.is_empty());
+    assert_eq!(fs::read_to_string(&installation.counter)?, "3\n");
+
+    let status = installation.json_ok(["inbox", "status"])?;
+    assert_eq!(status_count(&status, "incoming"), Some(1), "{status}");
+    assert_eq!(status_count(&status, "ready"), Some(0), "{status}");
+    assert_eq!(status_count(&status, "settling"), Some(1), "{status}");
+
+    let second = installation.json_ok(["inbox", "run", "--settle-seconds", "0"])?;
+    assert_eq!(second["attempted"], 1);
+    assert_eq!(second["applied"], 1);
+    assert!(incoming_names(&installation.inbox)?.is_empty());
+    assert_eq!(archived_material(&installation.inbox, "done")?.len(), 4);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "4\n");
+
+    let log = installation.json_ok(["log"])?;
+    assert_eq!(log["head_revision"], 4);
+    assert_eq!(log["commits"][0]["summary"], "Integrate inbox source 4");
+    assert_eq!(log["commits"][1]["summary"], "Integrate inbox source 3");
+    assert_eq!(log["commits"][2]["summary"], "Integrate inbox source 2");
+    assert_eq!(log["commits"][3]["summary"], "Integrate inbox source 1");
     Ok(())
 }
 
 #[test]
 fn permanent_input_failures_are_archived_unchanged_and_do_not_stop_the_batch() -> TestResult {
-    let installation = Installation::new(3, 0)?;
+    let installation = Installation::new(0)?;
     installation.init()?;
     let invalid = installation.incoming("01-invalid.bin", b"\xff\xfe", 0o640)?;
     let empty = installation.incoming("02-empty.txt", b" \n\t", 0o600)?;
@@ -394,7 +516,7 @@ fn permanent_input_failures_are_archived_unchanged_and_do_not_stop_the_batch() -
 
 #[test]
 fn an_exclusive_spool_lock_prevents_overlapping_runs() -> TestResult {
-    let installation = Installation::new(1, 0)?;
+    let installation = Installation::new(0)?;
     installation.init()?;
     fs::create_dir_all(&installation.inbox)?;
     let lock = OpenOptions::new()
@@ -418,7 +540,7 @@ fn an_exclusive_spool_lock_prevents_overlapping_runs() -> TestResult {
 
 #[test]
 fn terminal_processing_receipts_are_archived_without_reprocessing() -> TestResult {
-    let installation = Installation::new(2, 0)?;
+    let installation = Installation::new(0)?;
     installation.init()?;
     installation.incoming(
         "01-valid.txt",
@@ -459,7 +581,7 @@ fn terminal_processing_receipts_are_archived_without_reprocessing() -> TestResul
 
 #[test]
 fn startup_repairs_pre_receipt_claim_crashes() -> TestResult {
-    let installation = Installation::new(2, 0)?;
+    let installation = Installation::new(0)?;
     installation.init()?;
     let processing = installation.inbox.join("processing");
     let recoverable = processing.join("j00000000000000000001");
@@ -501,7 +623,7 @@ fn startup_repairs_pre_receipt_claim_crashes() -> TestResult {
 
 #[test]
 fn fresh_jobs_do_not_adopt_unrelated_reconciliations_for_the_same_work() -> TestResult {
-    let installation = Installation::new(1, 0)?;
+    let installation = Installation::new(0)?;
     installation.init()?;
     let bytes = b"Shared inbox claim.\nHuman pending proposal.\n";
     let retained_source = installation.directory.path().join("linked.txt");
@@ -542,7 +664,6 @@ fn fresh_jobs_do_not_adopt_unrelated_reconciliations_for_the_same_work() -> Test
     installation.incoming("linked.txt", bytes, 0o640)?;
     let first = installation.json_ok(["inbox", "run"])?;
     assert_eq!(first["applied"], 1);
-    assert_eq!(first["items"][0]["revision"], 1);
     assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
 
     let changes = installation.json_ok(["change", "list"])?;
@@ -561,7 +682,6 @@ fn fresh_jobs_do_not_adopt_unrelated_reconciliations_for_the_same_work() -> Test
     installation.incoming("linked.txt", bytes, 0o600)?;
     let second = installation.json_ok(["inbox", "run"])?;
     assert_eq!(second["applied"], 1);
-    assert_eq!(second["items"][0]["revision"], 2);
     assert_eq!(fs::read_to_string(&installation.counter)?, "2\n");
 
     let status = installation.json_ok(["inbox", "status"])?;
@@ -601,6 +721,13 @@ if [ -f "$counter" ]; then
 fi
 number=$((number + 1))
 printf '%s\n' "$number" > "$counter"
+if [ "$number" -eq 1 ] && [ -n "${ANNALS_FAKE_BLOCK_READY:-}" ]; then
+  release=${ANNALS_FAKE_BLOCK_RELEASE:?}
+  printf '%s\n' ready > "$ANNALS_FAKE_BLOCK_READY"
+  while [ ! -f "$release" ]; do
+    sleep 0.01
+  done
+fi
 printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":20,\"method\":\"item/tool/call\",\"params\":{\"threadId\":\"thread\",\"turnId\":\"turn\",\"callId\":\"call\",\"namespace\":null,\"tool\":\"submit_reconciliation\",\"arguments\":{\"summary\":\"Integrate inbox source $number\",\"operations\":[{\"action\":\"create_concept\",\"ref\":\"inbox_item\",\"label\":\"Inbox concept $number\",\"parents\":[],\"evidence\":[{\"quote\":\"Shared inbox claim.\"}]}]}}}"
 IFS= read -r ignored
 printf '%s\n' '{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thread","turn":{"id":"turn","status":"completed"}}}'

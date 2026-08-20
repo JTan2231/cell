@@ -15,7 +15,7 @@ sorts on those local selectors.
 
 ## Explicit liaison bounds
 
-- a liaison process has a 30-minute timeout;
+- a liaison process has a 60-minute timeout;
 - the app-server JSON-RPC transcript is limited to 64 MiB;
 - the retained model-error tail is limited to 64 KiB;
 - one `work_read` call accepts 1 through 20 regions;

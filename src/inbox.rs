@@ -1,6 +1,6 @@
 #![allow(clippy::too_many_lines)]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions};
 use std::os::unix::ffi::OsStrExt as _;
@@ -11,11 +11,10 @@ use std::time::{Duration, Instant, SystemTime};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
 
 use crate::app::{read_utf8, work_label};
 use crate::cli::InboxRunArgs;
-use crate::config::{Config, InboxConfig};
+use crate::config::Config;
 use crate::corpus::{ReconciliationRecord, now, reconciliation_query, store_work};
 use crate::db;
 use crate::error::AppError;
@@ -118,28 +117,18 @@ struct InboxStatus {
 #[derive(Debug, Serialize)]
 struct RunSummary {
     root: String,
-    max_items: usize,
-    max_elapsed_seconds: u64,
     settle_seconds: u64,
+    registered: usize,
     attempted: usize,
     applied: usize,
     recorded: usize,
     failed: usize,
     recovered: usize,
-    elapsed_seconds: f64,
-    stopped: &'static str,
     remaining: usize,
-    items: Vec<JobResult>,
-}
-
-#[derive(Debug, Serialize)]
-struct JobResult {
-    job: String,
-    file: String,
-    work: Option<String>,
-    status: String,
-    revision: Option<i64>,
-    error_code: Option<String>,
+    settling: usize,
+    ignored: usize,
+    elapsed_seconds: f64,
+    queue_drained: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,13 +206,6 @@ struct ReceiptError {
 }
 
 #[derive(Debug)]
-struct EffectiveRun {
-    max_items: usize,
-    max_elapsed_seconds: u64,
-    settle_seconds: u64,
-}
-
-#[derive(Debug)]
 enum Completion {
     Applied(i64),
     Recorded,
@@ -236,73 +218,50 @@ pub(crate) fn run(
     forward_progress: bool,
 ) -> Result<CommandOutput, AppError> {
     let inbox = config.inbox()?;
-    let effective = EffectiveRun::resolve(inbox, args)?;
+    let settle_seconds = args.settle_seconds.unwrap_or(inbox.settle_seconds);
     let spool = Spool::new(&inbox.root);
     spool.create()?;
     let _lock = spool.acquire_lock()?;
     let started = Instant::now();
     let mut index = read_index(&spool.index)?;
-    let (mut incoming, ignored) = scan_incoming(&spool, &mut index, effective.settle_seconds)?;
-    write_index(&spool.index, &index)?;
-    let mut processing = scan_envelopes(&spool.processing)?;
-    processing.sort_by(|left, right| left.id.cmp(&right.id));
-    incoming.sort_by(|left, right| {
-        left.sequence
-            .cmp(&right.sequence)
-            .then_with(|| left.name.as_bytes().cmp(right.name.as_bytes()))
-    });
+    let recovered_envelopes = scan_envelopes(&spool.processing)?;
+    let recovered = recovered_envelopes.len();
+    let mut queue = BTreeMap::new();
+    for envelope in recovered_envelopes {
+        insert_queued(&mut queue, envelope)?;
+    }
 
     let settings = ModelSettings::new(config.liaison.quality, config.liaison.model.as_deref());
     let runner = Runner::for_program(&config.liaison.codex);
     let mut summary = RunSummary {
         root: spool.root.display().to_string(),
-        max_items: effective.max_items,
-        max_elapsed_seconds: effective.max_elapsed_seconds,
-        settle_seconds: effective.settle_seconds,
+        settle_seconds,
+        registered: 0,
         attempted: 0,
         applied: 0,
         recorded: 0,
         failed: 0,
-        recovered: 0,
-        elapsed_seconds: 0.0,
-        stopped: "empty",
+        recovered,
         remaining: 0,
-        items: Vec::new(),
+        settling: 0,
+        ignored: 0,
+        elapsed_seconds: 0.0,
+        queue_drained: false,
     };
 
-    for envelope in processing {
-        if should_stop(&summary, &effective, started) {
-            summary.stopped = stop_reason(&summary, &effective, started);
-            break;
+    loop {
+        let registered = register_settled(&spool, &mut index, settle_seconds)?;
+        summary.registered = summary.registered.saturating_add(registered.len());
+        for envelope in registered {
+            insert_queued(&mut queue, envelope)?;
         }
-        summary.recovered += 1;
-        process_one(
-            library,
-            &spool,
-            envelope,
-            true,
-            &settings,
-            &runner,
-            forward_progress,
-            &mut summary,
-        )?;
-    }
-
-    for candidate in incoming.iter().filter(|candidate| candidate.ready) {
-        if should_stop(&summary, &effective, started) {
-            summary.stopped = stop_reason(&summary, &effective, started);
+        let Some((_, envelope)) = queue.pop_first() else {
             break;
-        }
-        let Some(envelope) = claim(&spool, candidate)? else {
-            continue;
         };
-        index.entries.remove(&candidate.key);
-        write_index(&spool.index, &index)?;
         process_one(
             library,
             &spool,
             envelope,
-            false,
             &settings,
             &runner,
             forward_progress,
@@ -310,26 +269,24 @@ pub(crate) fn run(
         )?;
     }
 
-    if summary.attempted > 0 && summary.stopped == "empty" {
-        summary.stopped = "batch_complete";
-    }
-    let final_status = inspect(&spool, effective.settle_seconds)?;
+    let final_status = inspect(&spool, settle_seconds)?;
     summary.remaining = final_status.ready + final_status.processing;
+    summary.settling = final_status.settling;
+    summary.ignored = final_status.ignored;
     summary.elapsed_seconds = started.elapsed().as_secs_f64();
+    summary.queue_drained = summary.remaining == 0;
     let human = format!(
-        "Inbox run: {} attempted, {} applied, {} recorded, {} failed\nRemaining ready or processing: {}\nStopped: {}",
+        "Inbox run: {} registered, {} attempted, {} applied, {} recorded, {} failed\nRemaining queued: {}; settling: {}\nQueue drained: {}",
+        summary.registered,
         summary.attempted,
         summary.applied,
         summary.recorded,
         summary.failed,
         summary.remaining,
-        summary.stopped,
+        summary.settling,
+        summary.queue_drained,
     );
-    let mut value = serde_json::to_value(&summary)?;
-    if let Value::Object(object) = &mut value {
-        object.insert("ignored".to_owned(), json!(ignored));
-    }
-    Ok(CommandOutput::new(value, human).mutation())
+    Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
 }
 
 pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
@@ -350,97 +307,32 @@ pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
     Ok(CommandOutput::new(serde_json::to_value(value)?, human))
 }
 
-impl EffectiveRun {
-    fn resolve(config: &InboxConfig, args: &InboxRunArgs) -> Result<Self, AppError> {
-        let resolved = Self {
-            max_items: args.max_items.unwrap_or(config.max_items),
-            max_elapsed_seconds: args
-                .max_elapsed_seconds
-                .unwrap_or(config.max_elapsed_seconds),
-            settle_seconds: args.settle_seconds.unwrap_or(config.settle_seconds),
-        };
-        if resolved.max_items == 0 {
-            return Err(AppError::invalid(
-                "invalid_limit",
-                "--max-items must be positive",
-            ));
-        }
-        if resolved.max_elapsed_seconds == 0 {
-            return Err(AppError::invalid(
-                "invalid_limit",
-                "--max-elapsed-seconds must be positive",
-            ));
-        }
-        Ok(resolved)
-    }
-}
-
-fn should_stop(summary: &RunSummary, effective: &EffectiveRun, started: Instant) -> bool {
-    summary.attempted >= effective.max_items
-        || summary.attempted > 0
-            && started.elapsed() >= Duration::from_secs(effective.max_elapsed_seconds)
-}
-
-fn stop_reason(summary: &RunSummary, effective: &EffectiveRun, started: Instant) -> &'static str {
-    if summary.attempted >= effective.max_items {
-        "max_items"
-    } else if started.elapsed() >= Duration::from_secs(effective.max_elapsed_seconds) {
-        "max_elapsed"
-    } else {
-        "batch_complete"
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 fn process_one(
     library: &Path,
     spool: &Spool,
     mut envelope: Envelope,
-    recovered: bool,
     settings: &ModelSettings,
     runner: &Runner,
     forward_progress: bool,
     summary: &mut RunSummary,
 ) -> Result<(), AppError> {
-    if recovered && envelope.receipt.state == "done" {
+    if envelope.receipt.state == "done" {
         let completion = completion_from_receipt(&envelope.receipt)?;
-        let (status, revision) = match completion {
-            Completion::Applied(revision) => {
+        match completion {
+            Completion::Applied(_) => {
                 summary.applied += 1;
-                ("applied", Some(revision))
             }
             Completion::Recorded => {
                 summary.recorded += 1;
-                ("recorded", None)
             }
-        };
+        }
         move_envelope(&envelope, &spool.done)?;
-        summary.items.push(JobResult {
-            job: envelope.id,
-            file: envelope.receipt.original_name,
-            work: envelope.receipt.work,
-            status: status.to_owned(),
-            revision,
-            error_code: None,
-        });
         return Ok(());
     }
-    if recovered && envelope.receipt.state == "failed" {
-        let error_code = envelope
-            .receipt
-            .last_error
-            .as_ref()
-            .map(|error| error.code.clone());
+    if envelope.receipt.state == "failed" {
         move_envelope(&envelope, &spool.failed)?;
         summary.failed += 1;
-        summary.items.push(JobResult {
-            job: envelope.id,
-            file: envelope.receipt.original_name,
-            work: envelope.receipt.work,
-            status: "failed".to_owned(),
-            revision: None,
-            error_code,
-        });
         return Ok(());
     }
     summary.attempted += 1;
@@ -449,15 +341,7 @@ fn process_one(
     envelope.receipt.started_at = Some(now()?);
     envelope.receipt.last_error = None;
     write_receipt(&envelope)?;
-    let file = envelope.receipt.original_name.clone();
-    match process_work(
-        library,
-        &mut envelope,
-        recovered,
-        settings,
-        runner,
-        forward_progress,
-    ) {
+    match process_work(library, &mut envelope, settings, runner, forward_progress) {
         Ok(completion) => {
             let (status, result_revision) = match completion {
                 Completion::Applied(revision) => {
@@ -475,14 +359,6 @@ fn process_one(
             envelope.receipt.result_revision = result_revision;
             write_receipt(&envelope)?;
             move_envelope(&envelope, &spool.done)?;
-            summary.items.push(JobResult {
-                job: envelope.id,
-                file,
-                work: envelope.receipt.work,
-                status: status.to_owned(),
-                revision: result_revision,
-                error_code: None,
-            });
             Ok(())
         }
         Err(error) if permanent_source_error(&error) => {
@@ -496,14 +372,6 @@ fn process_one(
             write_receipt(&envelope)?;
             move_envelope(&envelope, &spool.failed)?;
             summary.failed += 1;
-            summary.items.push(JobResult {
-                job: envelope.id,
-                file,
-                work: envelope.receipt.work,
-                status: "failed".to_owned(),
-                revision: None,
-                error_code: Some(code),
-            });
             Ok(())
         }
         Err(error) => {
@@ -526,7 +394,6 @@ fn process_one(
 fn process_work(
     library: &Path,
     envelope: &mut Envelope,
-    recovered: bool,
     settings: &ModelSettings,
     runner: &Runner,
     forward_progress: bool,
@@ -612,7 +479,7 @@ fn process_work(
         row.get::<_, String>(0)
     })?;
     drop(connection);
-    if recovered && let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
+    if let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
         liaison::abandon_run(library, previous_token, work.id)?;
     }
     envelope.receipt.model_run_token = Some(run_token.clone());
@@ -712,6 +579,48 @@ fn permanent_source_error(error: &AppError) -> bool {
             | "invalid_inbox_source"
             | "work_name_exists"
     )
+}
+
+fn register_settled(
+    spool: &Spool,
+    index: &mut QueueIndex,
+    settle_seconds: u64,
+) -> Result<Vec<Envelope>, AppError> {
+    let (mut incoming, _) = scan_incoming(spool, index, settle_seconds)?;
+    write_index(&spool.index, index)?;
+    incoming.sort_by(|left, right| {
+        left.sequence
+            .cmp(&right.sequence)
+            .then_with(|| left.name.as_bytes().cmp(right.name.as_bytes()))
+    });
+
+    let mut registered = Vec::new();
+    for candidate in incoming.iter().filter(|candidate| candidate.ready) {
+        let Some(envelope) = claim(spool, candidate)? else {
+            continue;
+        };
+        index.entries.remove(&candidate.key);
+        write_index(&spool.index, index)?;
+        registered.push(envelope);
+    }
+    Ok(registered)
+}
+
+fn insert_queued(
+    queue: &mut BTreeMap<String, Envelope>,
+    envelope: Envelope,
+) -> Result<(), AppError> {
+    let id = envelope.id.clone();
+    match queue.entry(id.clone()) {
+        Entry::Vacant(entry) => {
+            entry.insert(envelope);
+            Ok(())
+        }
+        Entry::Occupied(_) => Err(AppError::unexpected(
+            "invalid_job_envelope",
+            format!("duplicate inbox job identifier {id}"),
+        )),
+    }
 }
 
 fn claim(spool: &Spool, candidate: &IncomingFile) -> Result<Option<Envelope>, AppError> {

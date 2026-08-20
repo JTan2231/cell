@@ -18,7 +18,7 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "PATH")]
     pub config: Option<PathBuf>,
 
-    /// `SQLite` library path. Defaults to `ANNALS_LIBRARY`, config, then `./annals.db`.
+    /// `SQLite` library path. Defaults to nonempty `ANNALS_LIBRARY`, then config.
     #[arg(long, global = true, value_name = "PATH")]
     pub library: Option<PathBuf>,
 
@@ -228,7 +228,7 @@ pub struct IntegrateArgs {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum InboxCommand {
-    /// Process a bounded batch of settled inbox files sequentially.
+    /// Register and drain settled inbox files sequentially until the queue is empty.
     Run(InboxRunArgs),
     /// Report queued, active, completed, and failed inbox state.
     Status,
@@ -236,12 +236,6 @@ pub enum InboxCommand {
 
 #[derive(Debug, Clone, Args)]
 pub struct InboxRunArgs {
-    /// Maximum jobs attempted in this invocation.
-    #[arg(long, value_name = "N")]
-    pub max_items: Option<usize>,
-    /// Soft wall-clock limit checked between jobs.
-    #[arg(long, value_name = "SECONDS")]
-    pub max_elapsed_seconds: Option<u64>,
     /// Minimum age of an unchanged incoming file.
     #[arg(long, value_name = "SECONDS")]
     pub settle_seconds: Option<u64>,
@@ -424,9 +418,9 @@ mod tests {
     #[test]
     fn inbox_commands_parse() {
         assert!(matches!(
-            Cli::try_parse_from(["annals", "inbox", "run", "--max-items", "5"])
+            Cli::try_parse_from(["annals", "inbox", "run", "--settle-seconds", "0"])
                 .map(|cli| cli.command),
-            Ok(Command::Inbox(InboxCommand::Run(args))) if args.max_items == Some(5)
+            Ok(Command::Inbox(InboxCommand::Run(args))) if args.settle_seconds == Some(0)
         ));
         assert!(matches!(
             Cli::try_parse_from(["annals", "--config", "annals.toml", "inbox", "status"])

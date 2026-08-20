@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -6,8 +7,6 @@ use serde::Deserialize;
 use crate::error::AppError;
 use crate::model_runner::ModelQuality;
 
-const DEFAULT_MAX_ITEMS: usize = 5;
-const DEFAULT_MAX_ELAPSED_SECONDS: u64 = 45 * 60;
 const DEFAULT_SETTLE_SECONDS: u64 = 60;
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -23,10 +22,6 @@ pub(crate) struct Config {
 #[serde(deny_unknown_fields)]
 pub(crate) struct InboxConfig {
     pub root: PathBuf,
-    #[serde(default = "default_max_items")]
-    pub max_items: usize,
-    #[serde(default = "default_max_elapsed_seconds")]
-    pub max_elapsed_seconds: u64,
     #[serde(default = "default_settle_seconds")]
     pub settle_seconds: u64,
 }
@@ -51,11 +46,8 @@ impl Default for LiaisonConfig {
 
 impl Config {
     pub fn load(explicit: Option<&PathBuf>) -> Result<Self, AppError> {
-        let path = explicit.cloned().or_else(|| {
-            std::env::var_os("ANNALS_CONFIG")
-                .filter(|value| !value.is_empty())
-                .map(PathBuf::from)
-        });
+        let environment = std::env::var_os("ANNALS_CONFIG");
+        let path = resolve_config_path(explicit.map(PathBuf::as_path), environment.as_deref());
         let Some(path) = path else {
             return Ok(Self::default());
         };
@@ -104,25 +96,13 @@ impl Config {
                 "library must not be empty",
             ));
         }
-        if let Some(inbox) = &self.inbox {
-            if inbox.root.as_os_str().is_empty() {
-                return Err(AppError::invalid(
-                    "invalid_config",
-                    "inbox.root must not be empty",
-                ));
-            }
-            if inbox.max_items == 0 {
-                return Err(AppError::invalid(
-                    "invalid_config",
-                    "inbox.max_items must be positive",
-                ));
-            }
-            if inbox.max_elapsed_seconds == 0 {
-                return Err(AppError::invalid(
-                    "invalid_config",
-                    "inbox.max_elapsed_seconds must be positive",
-                ));
-            }
+        if let Some(inbox) = &self.inbox
+            && inbox.root.as_os_str().is_empty()
+        {
+            return Err(AppError::invalid(
+                "invalid_config",
+                "inbox.root must not be empty",
+            ));
         }
         if self.liaison.codex.as_os_str().is_empty() {
             return Err(AppError::invalid(
@@ -154,12 +134,12 @@ impl Config {
     }
 }
 
-const fn default_max_items() -> usize {
-    DEFAULT_MAX_ITEMS
-}
-
-const fn default_max_elapsed_seconds() -> u64 {
-    DEFAULT_MAX_ELAPSED_SECONDS
+fn resolve_config_path(explicit: Option<&Path>, environment: Option<&OsStr>) -> Option<PathBuf> {
+    explicit.map(Path::to_path_buf).or_else(|| {
+        environment
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+    })
 }
 
 const fn default_settle_seconds() -> u64 {
@@ -168,9 +148,11 @@ const fn default_settle_seconds() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
     use std::fs;
+    use std::path::Path;
 
-    use super::Config;
+    use super::{Config, resolve_config_path};
     use crate::model_runner::ModelQuality;
 
     #[test]
@@ -183,8 +165,6 @@ mod tests {
         )?;
         let config = Config::read(&path)?;
         let inbox = config.inbox()?;
-        assert_eq!(inbox.max_items, 5);
-        assert_eq!(inbox.max_elapsed_seconds, 2_700);
         assert_eq!(inbox.settle_seconds, 60);
         assert_eq!(inbox.root, directory.path().join("spool"));
         assert_eq!(config.library, Some(directory.path().join("library.db")));
@@ -196,15 +176,19 @@ mod tests {
     }
 
     #[test]
-    fn rejects_zero_batch_bounds() -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let path = directory.path().join("annals.toml");
-        fs::write(
-            &path,
-            "[inbox]\nroot = \"spool\"\nmax_items = 0\nmax_elapsed_seconds = 1\n",
-        )?;
-        let error = Config::read(&path).err().ok_or("configuration succeeded")?;
-        assert_eq!(error.code(), "invalid_config");
-        Ok(())
+    fn config_path_honors_precedence_and_ignores_an_empty_environment() {
+        let explicit = Path::new("explicit.toml");
+        let environment = OsStr::new("environment.toml");
+
+        assert_eq!(
+            resolve_config_path(Some(explicit), Some(environment)).as_deref(),
+            Some(explicit)
+        );
+        assert_eq!(
+            resolve_config_path(None, Some(environment)).as_deref(),
+            Some(Path::new("environment.toml"))
+        );
+        assert_eq!(resolve_config_path(None, Some(OsStr::new(""))), None);
+        assert_eq!(resolve_config_path(None, None), None);
     }
 }

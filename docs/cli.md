@@ -6,9 +6,29 @@
 annals [--config PATH] [--library PATH] [--json] [--quiet] [-v...] COMMAND
 ```
 
-The config path resolves from `--config`, then `ANNALS_CONFIG`; no config is
-loaded when neither is set. The library path resolves from `--library`, then
-`ANNALS_LIBRARY`, then the selected config's `library`, then `./annals.db`.
+The config path resolves from `--config`, then a nonempty `ANNALS_CONFIG`.
+The library path resolves from `--library`, then a nonempty `ANNALS_LIBRARY`,
+then the selected config's `library`. If neither a library nor a usable config
+selects one, the command fails with `library_not_configured`; Annals never
+falls back to `./annals.db`.
+
+The installed macOS frontend selects
+`/Library/Application Support/Annals/config.toml` only when the invocation has
+no explicit config or library selection. Thus bare installed commands such as
+`annals stats` use the system installation. Explicit selections such as these
+target independent libraries. The literal `annals` invocation with no
+subcommand still displays help.
+
+```text
+annals --config ./project.toml stats
+annals --library ./scratch.db init
+ANNALS_CONFIG=./project.toml annals stats
+ANNALS_LIBRARY=./scratch.db annals stats
+```
+
+An explicit library suppresses the frontend's system-config default. The
+uninstalled executable has no implicit config path, so repository and Linux
+uses must provide a config or library unless their own launcher supplies one.
 Relative `library` and `inbox.root` config paths are resolved from the config
 file's directory; command-line and environment paths remain relative to the
 process working directory.
@@ -99,32 +119,37 @@ never block application.
 ## Scheduled inbox
 
 ```text
-annals inbox run [--max-items N] [--max-elapsed-seconds SECONDS] [--settle-seconds SECONDS]
+annals inbox run [--settle-seconds SECONDS]
 annals inbox status
 ```
 
 Both commands require an `[inbox]` config section with `root`. The optional
-config keys `max_items`, `max_elapsed_seconds`, and `settle_seconds` default to
-5, 2700, and 60. Run flags override those values. Item and elapsed limits must
-be positive; a zero settling interval is allowed.
+config key `settle_seconds` defaults to 60, and the run flag overrides it. A
+zero settling interval is allowed.
 
-`inbox run` takes an exclusive spool lock and processes files sequentially with
-immediate application. It moves each claimed file, without changing its
-basename or bytes, into `processing/JOB_ID/material/` beside an operational
-`job.json` receipt. Completed and permanently failed envelopes move whole to
-`done` and `failed`. The soft elapsed limit is checked between jobs.
+`inbox run` takes an exclusive spool lock, registers every settled file as a
+durable job, and drains registered jobs sequentially with immediate
+application. It moves each claimed file, without changing its basename or
+bytes, into `processing/JOB_ID/material/` beside an operational `job.json`
+receipt. Completed and permanently failed envelopes move whole to `done` and
+`failed`. There is no item or activation-lifetime limit, and newly settled
+arrivals are registered between jobs.
 
 Only visible top-level regular files not ending in `.part` are candidates.
 Eligible files run in persisted first-seen order. Invalid UTF-8, empty input,
 unusable filename-derived labels, and label conflicts are archived as failed;
-other job errors remain retryable in `processing` and stop the run.
+other job errors remain retryable at the head of `processing` and stop the
+activation. A scheduled activation retries that strict FIFO head before later
+work. An arrival still settling at the final rescan, or racing the final empty
+check, waits for the next activation.
 
 Human `inbox status` reports incoming, ready, settling, processing, done,
 failed, and lock state. JSON also reports ignored entries. Human `inbox run`
-reports attempted, applied, recorded, failed, remaining, and stop reason; JSON
-adds effective settings, elapsed time, recovery count, ignored count, and
-per-job results. See the [system installation guide](system-installation.md)
-for the complete spool, recovery, and scheduler contract.
+reports registered, attempted, applied, recorded, failed, remaining, settling,
+and whether the runnable queue was drained. JSON adds the spool root, effective
+settling interval, elapsed time, recovery count, and ignored count. See the
+[system installation guide](system-installation.md) for the complete spool,
+recovery, and scheduler contract.
 
 ## Reconciliations and corpus changes
 
