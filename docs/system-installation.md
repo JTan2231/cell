@@ -32,9 +32,12 @@ with the receipt. The same-filesystem moves preserve the source's bytes,
 basename, inode, mode, and modification time.
 
 `job.json` is the authoritative receipt after a job is claimed. `.queue.json`
-assigns a monotonic sequence when `inbox run` first observes incoming material;
-pathname bytes break ties. `.run.lock` prevents overlapping workers. These are
-Annals-owned operational files and are not retained works; do not edit them.
+assigns a monotonic sequence and UTC first-seen time when `inbox run` first
+observes incoming material; pathname bytes break ties. The job receipt carries
+that first-seen time, captured filesystem size and timestamps, and a stable key
+for the corresponding database source-delivery receipt. `.run.lock` prevents
+overlapping workers. These are Annals-owned operational files and are not
+retained works; do not edit them.
 
 One invocation:
 
@@ -223,6 +226,11 @@ run reports registered, attempted, applied, recorded, and failed counts;
 runnable work remaining; settling arrivals; and whether the runnable queue was
 drained. The spool root, recovered-job count, effective settling interval,
 elapsed seconds, and ignored count are also available with `--json`.
+
+Use `annals lately --channel inbox` for durable, time-windowed delivery
+history. It includes both successful and permanently failed inbox material;
+moving a terminal envelope back through recovery selects its original delivery
+receipt rather than adding another history row.
 
 ### Dropping files
 

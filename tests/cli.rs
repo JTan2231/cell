@@ -1,11 +1,13 @@
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::ffi::OsStr;
-use std::fs;
+use std::fs::{self, File, FileTimes};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::time::{Duration, SystemTime};
 
+use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -19,6 +21,14 @@ const LOCKING_LABEL: &str = "Predicate locking";
 struct Library {
     directory: TempDir,
     path: PathBuf,
+}
+
+struct IngestionTimes<'a> {
+    created: Option<&'a str>,
+    modified: Option<&'a str>,
+    first_seen: &'a str,
+    ingested: Option<&'a str>,
+    completed: Option<&'a str>,
 }
 
 impl Library {
@@ -127,6 +137,25 @@ impl Library {
             OsStr::new(&base.to_string()),
         ])
     }
+
+    fn set_ingestion_times(&self, source_name: &str, times: &IngestionTimes<'_>) -> TestResult {
+        let connection = Connection::open(&self.path)?;
+        let updated = connection.execute(
+            "UPDATE ingestions SET source_created_at = ?1, source_modified_at = ?2, \
+                 first_seen_at = ?3, ingested_at = ?4, completed_at = ?5 \
+             WHERE source_name = ?6",
+            params![
+                times.created,
+                times.modified,
+                times.first_seen,
+                times.ingested,
+                times.completed,
+                source_name,
+            ],
+        )?;
+        assert_eq!(updated, 1, "expected one ingestion named {source_name:?}");
+        Ok(())
+    }
 }
 
 fn command(path: &Path) -> Command {
@@ -158,6 +187,16 @@ fn error_json(output: &Output, code: &str) -> TestResult<Value> {
     Ok(envelope)
 }
 
+fn only_delivery(report: &Value) -> TestResult<&Value> {
+    let deliveries = report["deliveries"]
+        .as_array()
+        .ok_or("lately deliveries were not an array")?;
+    assert_eq!(deliveries.len(), 1, "expected one delivery: {report}");
+    deliveries
+        .first()
+        .ok_or_else(|| "lately report had no delivery".into())
+}
+
 fn assert_no_storage_coordinates(value: &Value) {
     match value {
         Value::Object(object) => {
@@ -176,6 +215,276 @@ fn assert_no_storage_coordinates(value: &Value) {
         }
         _ => {}
     }
+}
+
+#[test]
+fn lately_reports_manual_new_and_duplicate_deliveries_without_source_content() -> TestResult {
+    const SENTINEL: &str = "SOURCE-CONTENT-SENTINEL-7f3f9a";
+
+    let library = Library::initialized()?;
+    let text = format!("A retained source contains {SENTINEL}.\n");
+    let first_input = library.file("first-source.txt", &text)?;
+    File::open(&first_input)?.set_times(
+        FileTimes::new().set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(1_577_934_245)),
+    )?;
+    let first = library.json_ok([
+        OsStr::new("work"),
+        OsStr::new("add"),
+        first_input.as_os_str(),
+        OsStr::new("--name"),
+        OsStr::new("Original source"),
+    ])?;
+    assert_eq!(first["retention"], "new");
+    assert!(first["first_retained_at"].as_str().is_some());
+    assert!(first.get("created_at").is_none());
+
+    let second = library.add_work("Requested duplicate", "second-source.txt", &text)?;
+    assert_eq!(second["work"], "Original source");
+    assert_eq!(second["retention"], "duplicate");
+
+    let report = library.json_ok([
+        "lately",
+        "--since",
+        "2000-01-01",
+        "--until",
+        "2100-01-01",
+        "--channel",
+        "manual",
+    ])?;
+    assert_eq!(report["time_basis"], "ingested");
+    assert_eq!(report["channel"], "manual");
+    assert_eq!(report["delivery_count"], 2);
+    assert_eq!(report["completed_count"], 2);
+    assert_eq!(report["processing_count"], 0);
+    assert_eq!(report["failed_count"], 0);
+    assert_eq!(report["new_work_count"], 1);
+    assert_eq!(report["duplicate_count"], 1);
+    assert_eq!(report["missing_time_count"], 0);
+
+    let deliveries = report["deliveries"]
+        .as_array()
+        .ok_or("lately deliveries were not an array")?;
+    let first_delivery = deliveries
+        .iter()
+        .find(|delivery| delivery["source_name"] == "first-source.txt")
+        .ok_or("first delivery was missing")?;
+    assert_eq!(first_delivery["channel"], "manual");
+    assert_eq!(first_delivery["status"], "completed");
+    assert_eq!(first_delivery["retention"], "new");
+    assert_eq!(first_delivery["result"], "retained");
+    assert_eq!(first_delivery["work"], "Original source");
+    assert_eq!(first_delivery["size_bytes"], text.len());
+    assert_eq!(first_delivery["source_modified_at"], "2020-01-02T03:04:05Z");
+    assert!(
+        first_delivery["source_created_at"].is_null()
+            || first_delivery["source_created_at"].is_string()
+    );
+    assert!(first_delivery["first_seen_at"].as_str().is_some());
+    assert!(first_delivery["ingested_at"].as_str().is_some());
+    assert!(first_delivery["completed_at"].as_str().is_some());
+    assert!(first_delivery["error"].is_null());
+
+    let duplicate_delivery = deliveries
+        .iter()
+        .find(|delivery| delivery["source_name"] == "second-source.txt")
+        .ok_or("duplicate delivery was missing")?;
+    assert_eq!(duplicate_delivery["retention"], "duplicate");
+    assert_eq!(duplicate_delivery["result"], "retained");
+    assert_eq!(duplicate_delivery["work"], "Original source");
+
+    let report_json = serde_json::to_string(&report)?;
+    assert!(!report_json.contains(SENTINEL));
+    let human = library.human_ok([
+        "lately",
+        "--since",
+        "2000-01-01",
+        "--until",
+        "2100-01-01",
+        "--channel",
+        "manual",
+    ])?;
+    assert!(human.contains("2 deliveries:"));
+    assert!(human.contains("1 new work"));
+    assert!(human.contains("1 duplicate"));
+    assert!(!human.contains(SENTINEL));
+
+    let shown = library.json_ok(["work", "show", "Original source"])?;
+    assert!(shown["first_retained_at"].as_str().is_some());
+    assert!(shown.get("created_at").is_none());
+    let shown_human = library.human_ok(["work", "show", "Original source"])?;
+    assert!(shown_human.contains("\nFirst retained: "));
+    assert!(!shown_human.contains("\nCreated: "));
+    assert_eq!(library.json_ok(["stats"])?["work_count"], 1);
+    Ok(())
+}
+
+#[test]
+fn lately_uses_half_open_windows_for_each_timestamp_and_counts_missing_time() -> TestResult {
+    let library = Library::initialized()?;
+    library.add_work("Earlier delivery", "earlier.txt", "Earlier metadata.\n")?;
+    library.add_work("Boundary delivery", "boundary.txt", "Boundary metadata.\n")?;
+
+    library.set_ingestion_times(
+        "earlier.txt",
+        &IngestionTimes {
+            created: None,
+            modified: Some("2026-08-01T00:00:00Z"),
+            first_seen: "2026-08-02T00:00:00Z",
+            ingested: Some("2026-08-03T00:00:00Z"),
+            completed: Some("2026-08-04T00:00:00Z"),
+        },
+    )?;
+    library.set_ingestion_times(
+        "boundary.txt",
+        &IngestionTimes {
+            created: Some("2026-08-02T00:00:00Z"),
+            modified: Some("2026-08-02T00:00:00Z"),
+            first_seen: "2026-08-03T00:00:00Z",
+            ingested: Some("2026-08-04T00:00:00Z"),
+            completed: Some("2026-08-05T00:00:00Z"),
+        },
+    )?;
+
+    for (basis, since, until) in [
+        ("modified", "2026-08-01T00:00:00Z", "2026-08-02T00:00:00Z"),
+        ("first-seen", "2026-08-02T00:00:00Z", "2026-08-03T00:00:00Z"),
+        ("ingested", "2026-08-03T00:00:00Z", "2026-08-04T00:00:00Z"),
+        ("completed", "2026-08-04T00:00:00Z", "2026-08-05T00:00:00Z"),
+    ] {
+        let report = library.json_ok([
+            "lately",
+            "--since",
+            since,
+            "--until",
+            until,
+            "--by",
+            basis,
+            "--channel",
+            "manual",
+        ])?;
+        assert_eq!(only_delivery(&report)?["source_name"], "earlier.txt");
+        assert_eq!(report["time_basis"], basis);
+        assert_eq!(report["delivery_count"], 1);
+        assert_eq!(report["missing_time_count"], 0);
+    }
+
+    let created = library.json_ok([
+        "lately",
+        "--since",
+        "2026-08-01T00:00:00Z",
+        "--until",
+        "2026-08-03T00:00:00Z",
+        "--by",
+        "created",
+        "--channel",
+        "manual",
+    ])?;
+    assert_eq!(created["time_basis"], "created");
+    assert_eq!(only_delivery(&created)?["source_name"], "boundary.txt");
+    assert_eq!(created["missing_time_count"], 1);
+    Ok(())
+}
+
+#[test]
+fn lately_preserves_a_failed_invalid_utf8_delivery() -> TestResult {
+    const ERROR_SENTINEL: &str = "ERROR-DIAGNOSTIC-SENTINEL-31d4d8";
+    let library = Library::initialized()?;
+    let input = library.directory.path().join("invalid-source.bin");
+    fs::write(&input, [0xff, 0xfe])?;
+    let output = library.output([
+        OsStr::new("work"),
+        OsStr::new("add"),
+        input.as_os_str(),
+        OsStr::new("--name"),
+        OsStr::new("Invalid source"),
+    ])?;
+    error_json(&output, "input_not_utf8")?;
+    Connection::open(&library.path)?.execute(
+        "UPDATE ingestions SET error_message = ?1 WHERE source_name = 'invalid-source.bin'",
+        [ERROR_SENTINEL],
+    )?;
+
+    let completed = library.json_ok([
+        "lately",
+        "--since",
+        "2000-01-01",
+        "--until",
+        "2100-01-01",
+        "--by",
+        "completed",
+        "--status",
+        "failed",
+        "--channel",
+        "manual",
+    ])?;
+    assert_eq!(completed["delivery_count"], 1);
+    assert_eq!(completed["failed_count"], 1);
+    assert_eq!(completed["missing_time_count"], 0);
+    let delivery = only_delivery(&completed)?;
+    assert_eq!(delivery["source_name"], "invalid-source.bin");
+    assert_eq!(delivery["channel"], "manual");
+    assert_eq!(delivery["status"], "failed");
+    assert!(delivery["retention"].is_null());
+    assert!(delivery["result"].is_null());
+    assert!(delivery["work"].is_null());
+    assert!(delivery["ingested_at"].is_null());
+    assert!(delivery["completed_at"].as_str().is_some());
+    assert_eq!(delivery["error"]["code"], "input_not_utf8");
+    assert!(!serde_json::to_string(&completed)?.contains(ERROR_SENTINEL));
+
+    let ingested = library.json_ok([
+        "lately",
+        "--since",
+        "2000-01-01",
+        "--until",
+        "2100-01-01",
+        "--status",
+        "failed",
+        "--channel",
+        "manual",
+    ])?;
+    assert_eq!(ingested["delivery_count"], 0);
+    assert_eq!(ingested["missing_time_count"], 1);
+    Ok(())
+}
+
+#[test]
+fn a_new_manual_delivery_finalizes_an_interrupted_predecessor() -> TestResult {
+    let library = Library::initialized()?;
+    Connection::open(&library.path)?.execute(
+        "INSERT INTO ingestions(source_name, channel, first_seen_at, status) \
+         VALUES('interrupted.txt', 'manual', '2026-08-01T00:00:00Z', 'processing')",
+        [],
+    )?;
+
+    library.add_work(
+        "Recovered workflow",
+        "recovered.txt",
+        "A later manual delivery starts cleanly.\n",
+    )?;
+
+    let connection = Connection::open(&library.path)?;
+    let interrupted = connection.query_row(
+        "SELECT status, error_code FROM ingestions WHERE source_name = 'interrupted.txt'",
+        [],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+    )?;
+    assert_eq!(
+        interrupted,
+        (
+            "failed".to_owned(),
+            "manual_ingestion_interrupted".to_owned()
+        )
+    );
+    assert_eq!(
+        connection.query_row(
+            "SELECT COUNT(*) FROM ingestions WHERE status = 'processing'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )?,
+        0
+    );
+    Ok(())
 }
 
 #[test]
@@ -1030,6 +1339,7 @@ fn public_help_uses_graph_commands_and_legacy_tree_contract_is_rejected() -> Tes
         "graph",
         "shake",
         "search",
+        "lately",
         "log",
         "diff",
         "revert",

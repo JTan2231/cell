@@ -16,6 +16,41 @@ do not advance the revision. A mechanically equal projection is retained as an
 interpretive record with status `recorded` and has no commit or revision of its
 own.
 
+## Source-delivery boundary
+
+A work is the content-addressed identity of immutable bytes. A source delivery
+is one occasion on which material is supplied through a manual command or the
+filesystem inbox. Several deliveries may select the same work, so Annals
+records each delivery separately instead of attaching arrival metadata to the
+deduplicated work.
+
+The delivery receipt captures the source name and byte size, optional
+filesystem creation and modification times, and the Annals-controlled
+first-seen, ingestion, and completion times. It progresses from `processing`
+to `completed` or `failed`. Successful retention records whether the work was
+new or already present independently from the processing result (`retained`,
+`pending`, `applied`, or `recorded`). A failed delivery retains its stable
+error code and reporting-safe message, including failures that occur before a
+work exists. Raw runner diagnostics are outside this reporting record.
+
+Inbox job receipts carry a stable delivery key. Recovery selects the same
+database receipt through that key, so moving or retrying a durable envelope
+cannot create a second source-delivery record. The queue index records the
+first observation timestamp along with FIFO sequence, and the claimed
+envelope preserves the same captured source metadata used for its identity
+check. Manual `integrate --work` creates no delivery because it selects bytes
+already retained in the library.
+
+Source-bearing manual commands share one advisory lock per library. Acquiring
+that lock finalizes any processing receipt left by an interrupted prior manual
+command as failed. `work add` commits retention and its completed receipt in
+one transaction; input-form integration commits an applied result in the same
+transaction as its corpus revision.
+
+`annals lately` is a read-only projection of these receipts. Its selected time
+basis supplies interval membership and reverse-chronological ordering; source
+contents, headings, evidence, and conceptual state are outside this read path.
+
 ## Corpus graph
 
 Each concept has a durable public ID such as `c42` and a descriptive label.

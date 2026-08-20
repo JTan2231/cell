@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
-use std::fs;
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
+use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, TransactionBehavior};
@@ -13,13 +14,13 @@ use crate::change::{
 use crate::cli::{
     ChangeCommand, ChangeSelectArgs, ChangeShowArgs, Cli, CliGraphDirection, Command,
     ConceptCommand, ConceptPageArgs, ConceptShowArgs, GraphArgs, InboxCommand, IntegrateArgs,
-    PagedAtArgs, SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand,
+    LatelyArgs, PagedAtArgs, SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand,
 };
 use crate::config::Config;
 use crate::corpus::{
-    ReconciliationRecord, ShakePlan, apply_shake, diff, get_work, list_commits,
+    ReconciliationRecord, ShakePlan, StoredWork, apply_shake, diff, get_work, list_commits,
     list_reconciliations, list_works, plan_shake, reconciliation_view, recorded_change_at,
-    revision, select_reconciliation, store_work, work_view,
+    revision, select_reconciliation, store_ingested_work, store_retained_ingested_work, work_view,
 };
 use crate::db;
 use crate::error::{AppError, AppResult};
@@ -31,7 +32,7 @@ use crate::model::{
 use crate::model_runner::{ModelSettings, Runner};
 use crate::render::{CommandOutput, render_terminal_text};
 use crate::resolver::ResolvedOperation;
-use crate::{inbox, liaison, resolver, validate};
+use crate::{inbox, ingestion, liaison, resolver, validate};
 
 pub fn library_path(explicit: Option<&PathBuf>, config: &Config) -> Result<PathBuf, AppError> {
     let environment = std::env::var_os("ANNALS_LIBRARY");
@@ -100,6 +101,7 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
             ChangeCommand::List => change_list(path),
         },
         Command::Search(args) => search(path, args),
+        Command::Lately(args) => lately(path, args),
         Command::Log(args) => log(path, args.limit),
         Command::Diff(args) => diff_revisions(path, args.from, args.to),
         Command::Revert(args) => revert(path, args.revision),
@@ -125,6 +127,7 @@ fn stats(path: &Path) -> Result<CommandOutput, AppError> {
         concept_count: count(&connection, "concepts")?,
         edge_count: count(&connection, "concept_edges")?,
         work_count: count(&connection, "works")?,
+        ingestion_count: count(&connection, "ingestions")?,
         evidence_count: count(&connection, "evidence")?,
         pending_reconciliation_count: count_where(
             &connection,
@@ -143,11 +146,12 @@ fn stats(path: &Path) -> Result<CommandOutput, AppError> {
         )?,
     };
     let human = format!(
-        "Revision: {}\nConcepts: {}\nParent edges: {}\nWorks: {}\nEvidence links: {}\nPending reconciliations: {}\nCommits: {}\nModel runs: {}\nDatabase size: {} bytes",
+        "Revision: {}\nConcepts: {}\nParent edges: {}\nWorks: {}\nSource deliveries: {}\nEvidence links: {}\nPending reconciliations: {}\nCommits: {}\nModel runs: {}\nDatabase size: {} bytes",
         value.revision,
         value.concept_count,
         value.edge_count,
         value.work_count,
+        value.ingestion_count,
         value.evidence_count,
         value.pending_reconciliation_count,
         value.commit_count,
@@ -186,21 +190,27 @@ fn backup(path: &Path, output: &Path) -> Result<CommandOutput, AppError> {
 }
 
 fn add_work(path: &Path, args: &WorkAddArgs) -> Result<CommandOutput, AppError> {
-    let text = read_utf8(&args.input, "work")?;
-    let label = work_label(&args.input, args.name.as_deref())?;
-    let mut connection = db::open_write(path)?;
-    let work = store_work(&mut connection, &label, &text)?;
+    let _manual_delivery_lock = acquire_manual_delivery_lock(path)?;
+    let (retained, _) = ingest_manual_work(path, &args.input, args.name.as_deref(), true)?;
+    let work = retained.work;
+    let connection = db::open_read(path)?;
     let corpus_revision = revision(&connection)?;
     Ok(CommandOutput::new(
         json!({
             "work": work.label,
             "size_bytes": work.text.len(),
             "sha256": work.sha256,
-            "created_at": work.created_at,
+            "first_retained_at": work.created_at,
+            "retention": if retained.new_work { "new" } else { "duplicate" },
             "corpus_revision": corpus_revision
         }),
         format!(
-            "Retained work {:?} ({} bytes)\nCorpus remains at revision {corpus_revision}",
+            "{} work {:?} ({} bytes)\nCorpus remains at revision {corpus_revision}",
+            if retained.new_work {
+                "Retained new"
+            } else {
+                "Recognized existing"
+            },
             work.label,
             work.text.len()
         ),
@@ -237,12 +247,12 @@ fn show_work(path: &Path, label: &str) -> Result<CommandOutput, AppError> {
         "work": view.summary.work,
         "size_bytes": view.summary.size_bytes,
         "sha256": view.summary.sha256,
-        "created_at": view.summary.created_at,
+        "first_retained_at": view.summary.first_retained_at,
         "headings": view.headings,
         "text": work.text
     });
     let human = format!(
-        "Work: {}\nSize: {} bytes\nSHA-256: {}\nCreated: {}\n\n{}",
+        "Work: {}\nSize: {} bytes\nSHA-256: {}\nFirst retained: {}\n\n{}",
         render_terminal_text(&work.label, false),
         work.text.len(),
         work.sha256,
@@ -258,17 +268,21 @@ fn integrate(
     args: &IntegrateArgs,
     forward_progress: bool,
 ) -> Result<CommandOutput, AppError> {
-    let work = if let Some(label) = &args.work {
+    let _manual_delivery_lock = args
+        .input
+        .as_ref()
+        .map(|_| acquire_manual_delivery_lock(path))
+        .transpose()?;
+    let (work, ingestion_id) = if let Some(label) = &args.work {
         let connection = db::open_read(path)?;
-        get_work(&connection, label)?
+        (get_work(&connection, label)?, None)
     } else {
         let input = args.input.as_ref().ok_or_else(|| {
             AppError::invalid("invalid_command", "integrate requires an input or --work")
         })?;
-        let text = read_utf8(input, "work")?;
-        let label = work_label(input, args.name.as_deref())?;
-        let mut connection = db::open_write(path)?;
-        store_work(&mut connection, &label, &text)?
+        let (retained, ingestion_id) =
+            ingest_manual_work(path, input, args.name.as_deref(), false)?;
+        (retained.work, Some(ingestion_id))
     };
     let quality = args.quality.unwrap_or(config.liaison.quality);
     let model = args.model.as_deref().or(config.liaison.model.as_deref());
@@ -281,24 +295,154 @@ fn integrate(
         forward_progress,
         args.reexamine,
         &runner,
-    )?;
+    );
+    let record = match record {
+        Ok(record) => record,
+        Err(error) => {
+            if let Some(ingestion_id) = ingestion_id {
+                fail_ingestion(path, ingestion_id, &error)?;
+            }
+            return Err(error);
+        }
+    };
     if args.apply {
         match record.status.as_str() {
             "pending" => {
                 let mut connection = db::open_write(path)?;
-                let applied = resolver::apply_record(&mut connection, &record)?;
+                let application = if let Some(ingestion_id) = ingestion_id {
+                    resolver::apply_record_for_ingestion(&mut connection, &record, ingestion_id)
+                } else {
+                    resolver::apply_record(&mut connection, &record)
+                };
+                let applied = match application {
+                    Ok(applied) => applied,
+                    Err(error) => {
+                        if let Some(ingestion_id) = ingestion_id {
+                            ingestion::fail(&connection, ingestion_id, &error)?;
+                        }
+                        return Err(error);
+                    }
+                };
                 return applied_output(&record, applied);
             }
-            "recorded" => {}
+            "recorded" => {
+                if let Some(ingestion_id) = ingestion_id {
+                    complete_ingestion(path, ingestion_id, "recorded", None)?;
+                }
+            }
             _ => {
-                return Err(AppError::conflict(
+                let error = AppError::conflict(
                     "nothing_to_apply",
                     "the reusable reconciliation is not pending; use --reexamine for a fresh examination",
-                ));
+                );
+                if let Some(ingestion_id) = ingestion_id {
+                    fail_ingestion(path, ingestion_id, &error)?;
+                }
+                return Err(error);
+            }
+        }
+    } else if let Some(ingestion_id) = ingestion_id {
+        match record.status.as_str() {
+            "pending" => complete_ingestion(path, ingestion_id, "pending", None)?,
+            "recorded" => complete_ingestion(path, ingestion_id, "recorded", None)?,
+            "applied" => {
+                complete_ingestion(path, ingestion_id, "applied", record.applied_revision)?;
+            }
+            _ => {
+                let error = AppError::database(
+                    "invalid_reconciliation",
+                    format!("unknown reconciliation status {:?}", record.status),
+                );
+                fail_ingestion(path, ingestion_id, &error)?;
+                return Err(error);
             }
         }
     }
     reconciliation_output(&record)
+}
+
+fn ingest_manual_work(
+    path: &Path,
+    input: &Path,
+    name: Option<&str>,
+    complete_retention: bool,
+) -> Result<(StoredWork, i64), AppError> {
+    let metadata = ingestion::SourceMetadata::manual(input, name)?;
+    let mut connection = db::open_write(path)?;
+    let ingestion_id = ingestion::begin(
+        &connection,
+        &ingestion::NewIngestion {
+            delivery_key: None,
+            channel: "manual",
+            metadata: &metadata,
+        },
+    )?;
+    let retained = (|| {
+        let text = read_utf8(input, "work")?;
+        let label = work_label(input, name)?;
+        if complete_retention {
+            store_retained_ingested_work(&mut connection, ingestion_id, &label, &text)
+        } else {
+            store_ingested_work(&mut connection, ingestion_id, &label, &text)
+        }
+    })();
+    match retained {
+        Ok(retained) => Ok((retained, ingestion_id)),
+        Err(error) => {
+            ingestion::fail(&connection, ingestion_id, &error)?;
+            Err(error)
+        }
+    }
+}
+
+fn acquire_manual_delivery_lock(path: &Path) -> Result<File, AppError> {
+    let connection = db::open_write(path)?;
+    let mut lock_name = path.as_os_str().to_os_string();
+    lock_name.push(".manual.lock");
+    let lock_path = PathBuf::from(lock_name);
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(&lock_path)
+        .map_err(|error| {
+            AppError::unexpected(
+                "manual_ingestion_lock_failed",
+                format!("unable to open manual source-delivery lock: {error}"),
+            )
+        })?;
+    fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
+        if error.kind() == io::ErrorKind::WouldBlock {
+            AppError::conflict(
+                "manual_ingestion_busy",
+                "another manual source delivery is being processed",
+            )
+        } else {
+            AppError::unexpected(
+                "manual_ingestion_lock_failed",
+                format!("unable to lock manual source deliveries: {error}"),
+            )
+        }
+    })?;
+    ingestion::fail_interrupted_manual(&connection)?;
+    Ok(file)
+}
+
+fn complete_ingestion(
+    path: &Path,
+    ingestion_id: i64,
+    result: &str,
+    revision: Option<i64>,
+) -> Result<(), AppError> {
+    let connection = db::open_write(path)?;
+    ingestion::complete(&connection, ingestion_id, result, revision)
+}
+
+fn fail_ingestion(path: &Path, ingestion_id: i64, error: &AppError) -> Result<(), AppError> {
+    let connection = db::open_write(path)?;
+    ingestion::fail(&connection, ingestion_id, error)
 }
 
 fn submit_change(
@@ -1300,6 +1444,105 @@ fn shake_data(plan: &ShakePlan, status: &str, revision: i64) -> Value {
         "edge_count_after": plan.edge_count_after,
         "removed_edges": plan.removed_edges
     })
+}
+
+fn lately(path: &Path, args: &LatelyArgs) -> Result<CommandOutput, AppError> {
+    let connection = db::open_read(path)?;
+    let report = ingestion::lately(&connection, args)?;
+    let mut lines = vec![
+        "Source activity".to_owned(),
+        format!(
+            "Range: {} to {} UTC (end exclusive)",
+            report.since, report.until
+        ),
+        format!("Time basis: {}", args.by.display()),
+    ];
+    if let Some(status) = args.status {
+        lines.push(format!("Status filter: {}", status.as_str()));
+    }
+    if let Some(channel) = args.channel {
+        lines.push(format!("Channel filter: {}", channel.as_str()));
+    }
+    if report.delivery_count == 0 {
+        lines.push("No source activity".to_owned());
+    } else {
+        lines.push(format!(
+            "{} {}: {} completed, {} processing, {} failed; {} {}, {} {}",
+            report.delivery_count,
+            if report.delivery_count == 1 {
+                "delivery"
+            } else {
+                "deliveries"
+            },
+            report.completed_count,
+            report.processing_count,
+            report.failed_count,
+            report.new_work_count,
+            if report.new_work_count == 1 {
+                "new work"
+            } else {
+                "new works"
+            },
+            report.duplicate_count,
+            if report.duplicate_count == 1 {
+                "duplicate"
+            } else {
+                "duplicates"
+            },
+        ));
+        lines.push(String::new());
+        for delivery in &report.deliveries {
+            let timestamp = delivery.selected_timestamp(args.by).ok_or_else(|| {
+                AppError::database(
+                    "missing_selected_timestamp",
+                    "a selected source delivery has no timestamp for the report basis",
+                )
+            })?;
+            let outcome = delivery.result.as_deref().map_or_else(
+                || {
+                    delivery.error.as_ref().map_or_else(
+                        || delivery.status.clone(),
+                        |error| {
+                            if delivery.status == "failed" {
+                                format!("failed ({})", error.code)
+                            } else {
+                                format!("retryable error ({})", error.code)
+                            }
+                        },
+                    )
+                },
+                |result| {
+                    if let Some(revision) = delivery.applied_revision {
+                        format!("{result} r{revision}")
+                    } else {
+                        result.to_owned()
+                    }
+                },
+            );
+            let retention = delivery
+                .retention
+                .as_deref()
+                .map_or_else(String::new, |value| format!("; {value} work"));
+            lines.push(format!(
+                "{}\t{}\t{}\t{}\t{}{}",
+                render_terminal_text(timestamp, false),
+                delivery.channel,
+                delivery.status,
+                render_terminal_text(&delivery.source_name, false),
+                outcome,
+                retention,
+            ));
+        }
+    }
+    if report.missing_time_count > 0 {
+        lines.push(String::new());
+        lines.push(format!(
+            "{} deliveries omitted because {} time is unavailable",
+            report.missing_time_count,
+            args.by.as_str().replace('-', " ")
+        ));
+    }
+    Ok(CommandOutput::new(to_value(&report)?, lines.join("\n")))
 }
 
 fn log(path: &Path, limit: usize) -> Result<CommandOutput, AppError> {

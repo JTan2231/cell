@@ -1,12 +1,13 @@
 # Data model
 
-`schema.sql` is the authoritative SQLite schema. The database contains four
+`schema.sql` is the authoritative SQLite schema. The database contains five
 kinds of state:
 
 1. immutable source works;
-2. the current materialized concept graph and its evidence;
-3. immutable relational graph snapshots for addressable revisions; and
-4. model examinations, reconciliations, and append-only commits.
+2. source-delivery receipts and captured source metadata;
+3. the current materialized concept graph and its evidence;
+4. immutable relational graph snapshots for addressable revisions; and
+5. model examinations, reconciliations, and append-only commits.
 
 Public commands and liaison tools address works by label, concepts by durable
 IDs such as `c42`, evidence by quotation, and history by revision. Exact source
@@ -29,7 +30,7 @@ revision and request; a backup intentionally preserves that identity.
 - a unique normalized human label;
 - the complete UTF-8 text, containing non-whitespace source content;
 - a unique SHA-256 digest; and
-- its UTC creation time.
+- the UTC time it was first retained.
 
 Work labels use Unicode NFKC, lowercase expansion, and collapsed whitespace
 for equality. The original label and text are retained unchanged. Exact source
@@ -40,6 +41,72 @@ different bytes is rejected.
 Works are independent of corpus topology. Foreign keys use `ON DELETE
 RESTRICT`, and there is no public work-deletion command. Retiring or reverting
 a concept therefore cannot delete its source work.
+
+## Source deliveries
+
+`ingestions` contains one durable receipt for each source delivered through a
+manual command or the filesystem inbox. A manual `work add` or `integrate`
+with a new input creates a receipt; selecting an already retained work with
+`integrate --work` does not constitute another delivery. Receipt IDs are
+private storage mechanics.
+
+A delivery and a work have different identities. Works are content-addressed,
+so several deliveries of identical UTF-8 bytes may refer to the same immutable
+`works` row. `new_work` records whether that delivery created the work or
+recognized an existing digest. The public receipt renders this as `new` or
+`duplicate` retention. Work linkage, retention disposition, and `ingested_at`
+are written together in the same immediate transaction. A failure before the
+bytes can be retained or recognized leaves all three fields null.
+
+Each receipt captures source metadata independently of the work's contents:
+
+- `source_name` is the delivered filename or manual source name;
+- `source_size_bytes` is the observed byte length when available and is filled
+  from successfully read input when it was initially unknown;
+- `source_created_at` and `source_modified_at` are optional filesystem values;
+- `first_seen_at` is when Annals first observed the delivery;
+- `ingested_at` is when Annals retained the bytes or recognized their existing
+  work; and
+- `completed_at` is when the delivery reached a terminal success or failure.
+
+All stored times are UTC RFC 3339 timestamps. Filesystem creation and
+modification times are snapshots captured at delivery; Annals does not monitor
+the original path afterward. Creation time remains null when the operating
+system does not provide it and is never replaced with modification time. These
+fields describe source-file metadata, not document authorship or dates parsed
+from the source text. For inbox files, `first_seen_at` is recorded in the queue
+index on the first settling scan and survives later claim and recovery; size,
+creation, and modification metadata come from the scan that claims the settled
+file. A manual delivery records first-seen and filesystem metadata when the
+command begins handling its source, before reading its bytes.
+
+`channel` is `manual` or `inbox`. Manual receipts have no `delivery_key`.
+Inbox receipts use a unique stable delivery key so retry and terminal-envelope
+recovery select the original row instead of creating another receipt.
+Source-bearing manual commands are serialized by a per-library advisory lock.
+On lock acquisition, a processing receipt abandoned by an interrupted manual
+command becomes failed with `manual_ingestion_interrupted`. Work retention and
+the `retained` result for `work add` are atomic, as are an input integration's
+`applied` result and referenced corpus commit.
+
+Receipt lifecycle `status` is `processing`, `completed`, or `failed`:
+
+- `processing` has not reached a terminal outcome and has no completion time or
+  result. A retryable inbox failure may retain its latest error while the
+  delivery remains processing.
+- `completed` has a linked work, completion time, and one result: `retained`
+  for `work add`, `pending` for a reconciliation left pending, `applied` for a
+  reconciliation applied to the corpus, or `recorded` for a mechanically equal
+  reconciliation. Only `applied` has `result_revision`, which references its
+  commit.
+- `failed` has a completion time, error code, and reporting-safe message, with
+  no result or result revision. It may retain work linkage and an ingestion
+  time when the failure happened after successful retention.
+
+The receipt itself does not advance the corpus revision. Only an `applied`
+result corresponds to a corpus commit. The schema indexes created, modified,
+first-seen, ingested, and completed times independently in descending order,
+with receipt ID as the deterministic tie-breaker for time-based reports.
 
 ## Current corpus
 

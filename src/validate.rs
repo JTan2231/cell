@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
 use rusqlite::Connection;
+use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 
 use crate::change::{ChangeOperation, Reconciliation, parse_reconciliation};
 use crate::corpus::{self, Snapshot};
@@ -60,6 +62,7 @@ pub fn validate(connection: &Connection) -> Result<ValidationReport, AppError> {
     check_sqlite_integrity(connection, &mut issues)?;
     check_foreign_keys(connection, &mut issues)?;
     check_work_hashes(connection, &mut issues)?;
+    check_ingestions(connection, &mut issues)?;
 
     let head_revision = load_head_revision(connection, &mut issues)?;
     let commits = load_commits(connection)?;
@@ -213,6 +216,128 @@ fn check_work_hashes(
         }
     }
     Ok(())
+}
+
+fn check_ingestions(
+    connection: &Connection,
+    issues: &mut Vec<ValidationIssue>,
+) -> Result<(), AppError> {
+    let mut statement = connection.prepare(
+        "SELECT id, source_created_at, source_modified_at, first_seen_at, ingested_at, \
+                completed_at, work_id, new_work, error_code, error_message \
+         FROM ingestions ORDER BY id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, Option<String>>(1)?,
+            row.get::<_, Option<String>>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, Option<String>>(4)?,
+            row.get::<_, Option<String>>(5)?,
+            row.get::<_, Option<i64>>(6)?,
+            row.get::<_, Option<bool>>(7)?,
+            row.get::<_, Option<String>>(8)?,
+            row.get::<_, Option<String>>(9)?,
+        ))
+    })?;
+    let mut first_new_delivery = BTreeMap::new();
+    for row in rows {
+        let (
+            id,
+            source_created_at,
+            source_modified_at,
+            first_seen_at,
+            ingested_at,
+            completed_at,
+            work_id,
+            new_work,
+            error_code,
+            error_message,
+        ) = row?;
+        let _source_created_at = parse_ingestion_timestamp(
+            id,
+            "source_created_at",
+            source_created_at.as_deref(),
+            issues,
+        );
+        let _source_modified_at = parse_ingestion_timestamp(
+            id,
+            "source_modified_at",
+            source_modified_at.as_deref(),
+            issues,
+        );
+        let first_seen_at =
+            parse_ingestion_timestamp(id, "first_seen_at", Some(&first_seen_at), issues);
+        let ingested_at =
+            parse_ingestion_timestamp(id, "ingested_at", ingested_at.as_deref(), issues);
+        let completed_at =
+            parse_ingestion_timestamp(id, "completed_at", completed_at.as_deref(), issues);
+
+        if let (Some(first_seen_at), Some(ingested_at)) = (first_seen_at, ingested_at)
+            && ingested_at < first_seen_at
+        {
+            issues.push(error_issue(
+                "invalid_ingestion_time_order",
+                format!("source delivery {id} was ingested before it was first seen"),
+            ));
+        }
+        if let (Some(first_seen_at), Some(completed_at)) = (first_seen_at, completed_at)
+            && completed_at < first_seen_at
+        {
+            issues.push(error_issue(
+                "invalid_ingestion_time_order",
+                format!("source delivery {id} completed before it was first seen"),
+            ));
+        }
+        if let (Some(ingested_at), Some(completed_at)) = (ingested_at, completed_at)
+            && completed_at < ingested_at
+        {
+            issues.push(error_issue(
+                "invalid_ingestion_time_order",
+                format!("source delivery {id} completed before it was ingested"),
+            ));
+        }
+        if error_code.is_some() != error_message.is_some() {
+            issues.push(error_issue(
+                "invalid_ingestion_error",
+                format!("source delivery {id} must store its error code and message together"),
+            ));
+        }
+        if new_work == Some(true)
+            && let Some(work_id) = work_id
+            && let Some(previous) = first_new_delivery.insert(work_id, id)
+        {
+            issues.push(error_issue(
+                "duplicate_new_work_ingestion",
+                format!(
+                    "source deliveries {previous} and {id} both claim to have created work {work_id}"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn parse_ingestion_timestamp(
+    ingestion_id: i64,
+    field: &str,
+    value: Option<&str>,
+    issues: &mut Vec<ValidationIssue>,
+) -> Option<OffsetDateTime> {
+    let value = value?;
+    match OffsetDateTime::parse(value, &Rfc3339) {
+        Ok(timestamp) => Some(timestamp),
+        Err(error) => {
+            issues.push(error_issue(
+                "invalid_ingestion_timestamp",
+                format!(
+                    "source delivery {ingestion_id} has invalid {field} timestamp {value:?}: {error}"
+                ),
+            ));
+            None
+        }
+    }
 }
 
 fn load_head_revision(
@@ -1177,6 +1302,63 @@ mod tests {
         let report = validate(&connection)?;
         assert!(report.valid, "{:?}", report.issues);
         assert_eq!(connection.total_changes(), changes_before);
+        Ok(())
+    }
+
+    #[test]
+    fn validation_checks_ingestion_timestamps_and_lifecycle_order() -> TestResult {
+        let mut connection = initialized_connection()?;
+        let work = corpus::store_work(&mut connection, "Delivered", "Source text.")?;
+        connection.execute(
+            "INSERT INTO ingestions(\
+                 source_name, channel, source_created_at, source_modified_at, first_seen_at, \
+                 ingested_at, completed_at, status, work_id, new_work, result\
+             ) VALUES(\
+                 'source.txt', 'manual', 'not-a-timestamp', '2026-08-20T12:00:00Z', \
+                 '2026-08-20T12:00:03Z', '2026-08-20T12:00:02Z', \
+                 '2026-08-20T12:00:01Z', 'completed', ?1, 1, 'retained'\
+             )",
+            [work.id],
+        )?;
+
+        let report = validate(&connection)?;
+        assert!(!report.valid);
+        assert!(has_issue(&report, "invalid_ingestion_timestamp"));
+        assert!(has_issue(&report, "invalid_ingestion_time_order"));
+        Ok(())
+    }
+
+    #[test]
+    fn validation_checks_ingestion_errors_and_new_work_uniqueness() -> TestResult {
+        let mut connection = initialized_connection()?;
+        let work = corpus::store_work(&mut connection, "Delivered", "Source text.")?;
+        connection.execute("DROP INDEX ingestions_one_new_work_per_work", [])?;
+        connection.pragma_update(None, "ignore_check_constraints", true)?;
+        connection.execute(
+            "INSERT INTO ingestions(\
+                 source_name, channel, first_seen_at, ingested_at, status, work_id, new_work, \
+                 error_code\
+             ) VALUES(\
+                 'first.txt', 'manual', '2026-08-20T12:00:00Z', \
+                 '2026-08-20T12:00:01Z', 'processing', ?1, 1, 'retryable'\
+             )",
+            [work.id],
+        )?;
+        connection.execute(
+            "INSERT INTO ingestions(\
+                 source_name, channel, first_seen_at, ingested_at, status, work_id, new_work\
+             ) VALUES(\
+                 'second.txt', 'manual', '2026-08-20T12:00:00Z', \
+                 '2026-08-20T12:00:01Z', 'processing', ?1, 1\
+             )",
+            [work.id],
+        )?;
+        connection.pragma_update(None, "ignore_check_constraints", false)?;
+
+        let report = validate(&connection)?;
+        assert!(!report.valid);
+        assert!(has_issue(&report, "invalid_ingestion_error"));
+        assert!(has_issue(&report, "duplicate_new_work_ingestion"));
         Ok(())
     }
 

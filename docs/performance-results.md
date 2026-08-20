@@ -41,6 +41,11 @@ CLI root, relationship, evidence, and search lists are cursor-paged. CLI graph
 views are bounded by explicit depth and node-count arguments. Limits must be
 valid positive values where the command represents a page size.
 
+`lately` selects source-delivery receipts by one explicit timestamp basis and
+returns every delivery in the requested UTC interval. Its work join includes
+only labels and content digests; it never loads retained source text or corpus
+snapshots.
+
 ## Cost shape
 
 Works and selected corpus snapshots are held in memory while resolving and

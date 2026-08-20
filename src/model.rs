@@ -108,7 +108,7 @@ pub struct WorkSummary {
     pub work: String,
     pub sha256: String,
     pub size_bytes: usize,
-    pub created_at: String,
+    pub first_retained_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -316,6 +316,7 @@ pub struct LibraryStats {
     pub concept_count: u64,
     pub edge_count: u64,
     pub work_count: u64,
+    pub ingestion_count: u64,
     pub evidence_count: u64,
     pub pending_reconciliation_count: u64,
     pub commit_count: u64,

@@ -26,6 +26,12 @@ pub(crate) struct Work {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct StoredWork {
+    pub work: Work,
+    pub new_work: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Snapshot {
@@ -141,11 +147,136 @@ fn library_id(connection: &Connection) -> Result<String, AppError> {
     )?)
 }
 
+#[cfg(test)]
 pub(crate) fn store_work(
     connection: &mut Connection,
     label: &str,
     text: &str,
 ) -> Result<Work, AppError> {
+    Ok(store_work_with_disposition(connection, label, text)?.work)
+}
+
+#[cfg(test)]
+pub(crate) fn store_work_with_disposition(
+    connection: &mut Connection,
+    label: &str,
+    text: &str,
+) -> Result<StoredWork, AppError> {
+    let transaction =
+        connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let stored = store_work_in_transaction(&transaction, label, text)?;
+    transaction.commit()?;
+    Ok(stored)
+}
+
+pub(crate) fn store_ingested_work(
+    connection: &mut Connection,
+    ingestion_id: i64,
+    label: &str,
+    text: &str,
+) -> Result<StoredWork, AppError> {
+    store_ingested_work_with_result(connection, ingestion_id, label, text, None)
+}
+
+pub(crate) fn store_retained_ingested_work(
+    connection: &mut Connection,
+    ingestion_id: i64,
+    label: &str,
+    text: &str,
+) -> Result<StoredWork, AppError> {
+    store_ingested_work_with_result(connection, ingestion_id, label, text, Some("retained"))
+}
+
+fn store_ingested_work_with_result(
+    connection: &mut Connection,
+    ingestion_id: i64,
+    label: &str,
+    text: &str,
+    result: Option<&str>,
+) -> Result<StoredWork, AppError> {
+    let transaction =
+        connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let stored = store_work_in_transaction(&transaction, label, text)?;
+    let existing = transaction
+        .query_row(
+            "SELECT work_id, new_work, status FROM ingestions WHERE id = ?1",
+            [ingestion_id],
+            |row| {
+                Ok((
+                    row.get::<_, Option<i64>>(0)?,
+                    row.get::<_, Option<bool>>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((existing_work_id, existing_new_work, status)) = existing else {
+        return Err(AppError::database(
+            "ingestion_not_found",
+            "source delivery receipt was not found",
+        ));
+    };
+    if status == "failed" {
+        return Err(AppError::database(
+            "ingestion_not_processing",
+            "failed source delivery cannot be ingested",
+        ));
+    }
+    if let Some(existing_work_id) = existing_work_id {
+        if existing_work_id != stored.work.id {
+            return Err(AppError::database(
+                "ingestion_work_mismatch",
+                "source delivery is linked to a different retained work",
+            ));
+        }
+        let new_work = existing_new_work.ok_or_else(|| {
+            AppError::database(
+                "invalid_ingestion",
+                "an ingested source delivery has no retention disposition",
+            )
+        })?;
+        if let Some(result) = result {
+            crate::ingestion::complete(&transaction, ingestion_id, result, None)?;
+        }
+        transaction.commit()?;
+        return Ok(StoredWork {
+            work: stored.work,
+            new_work,
+        });
+    }
+    let updated = transaction.execute(
+        "UPDATE ingestions SET work_id = ?1, new_work = ?2, ingested_at = ?3, \
+             source_size_bytes = COALESCE(source_size_bytes, ?4) \
+         WHERE id = ?5 AND status = 'processing' AND work_id IS NULL",
+        params![
+            stored.work.id,
+            stored.new_work,
+            now()?,
+            i64::try_from(text.len()).map_err(|_| AppError::invalid(
+                "source_too_large",
+                "source byte length exceeds the supported range"
+            ))?,
+            ingestion_id
+        ],
+    )?;
+    if updated != 1 {
+        return Err(AppError::database(
+            "ingestion_update_failed",
+            "unable to link the source delivery to its retained work",
+        ));
+    }
+    if let Some(result) = result {
+        crate::ingestion::complete(&transaction, ingestion_id, result, None)?;
+    }
+    transaction.commit()?;
+    Ok(stored)
+}
+
+fn store_work_in_transaction(
+    transaction: &Transaction<'_>,
+    label: &str,
+    text: &str,
+) -> Result<StoredWork, AppError> {
     validate_label(label, "work label")?;
     if text.trim().is_empty() {
         return Err(AppError::invalid(
@@ -153,11 +284,9 @@ pub(crate) fn store_work(
             "an immutable work must contain non-whitespace source text",
         ));
     }
-    let transaction =
-        connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let normalized = index::normalize(label);
     let digest = sha256_hex(text.as_bytes());
-    if let Some(existing) = work_by_normalized_label(&transaction, &normalized)?
+    if let Some(existing) = work_by_normalized_label(transaction, &normalized)?
         && existing.sha256 != digest
     {
         return Err(AppError::conflict(
@@ -165,11 +294,13 @@ pub(crate) fn store_work(
             format!("a retained work named {:?} already exists", existing.label),
         ));
     }
-    if let Some(existing) = work_by_digest(&transaction, &digest)? {
-        transaction.commit()?;
-        return Ok(existing);
+    if let Some(existing) = work_by_digest(transaction, &digest)? {
+        return Ok(StoredWork {
+            work: existing,
+            new_work: false,
+        });
     }
-    if let Some(existing) = work_by_normalized_label(&transaction, &normalized)? {
+    if let Some(existing) = work_by_normalized_label(transaction, &normalized)? {
         return Err(AppError::conflict(
             "work_name_exists",
             format!("a retained work named {:?} already exists", existing.label),
@@ -188,8 +319,10 @@ pub(crate) fn store_work(
         sha256: digest,
         created_at,
     };
-    transaction.commit()?;
-    Ok(work)
+    Ok(StoredWork {
+        work,
+        new_work: true,
+    })
 }
 
 pub(crate) fn get_work(connection: &Connection, label: &str) -> Result<Work, AppError> {
@@ -222,7 +355,7 @@ pub(crate) fn list_works(connection: &Connection) -> Result<Vec<WorkSummary>, Ap
             work: row.get(0)?,
             sha256: row.get(1)?,
             size_bytes: bytes,
-            created_at: row.get(3)?,
+            first_retained_at: row.get(3)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -234,7 +367,7 @@ pub(crate) fn work_view(work: &Work) -> WorkView {
             work: work.label.clone(),
             sha256: work.sha256.clone(),
             size_bytes: work.text.len(),
-            created_at: work.created_at.clone(),
+            first_retained_at: work.created_at.clone(),
         },
         headings: markdown_headings(&work.text)
             .into_iter()

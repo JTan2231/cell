@@ -72,6 +72,8 @@ pub enum Command {
     Change(ChangeCommand),
     /// Search concept labels and ancestor context.
     Search(SearchArgs),
+    /// Report source-delivery activity in a wall-clock window.
+    Lately(LatelyArgs),
     /// Show the append-only corpus commit log.
     Log(LogArgs),
     /// Compare two corpus revisions.
@@ -305,6 +307,47 @@ pub struct SearchArgs {
 }
 
 #[derive(Debug, Clone, Args)]
+pub struct LatelyArgs {
+    /// Inclusive window start as a UTC date, RFC 3339 timestamp, or duration such as 24h or 7d.
+    #[arg(long, value_name = "TIME", default_value = "7d")]
+    pub since: String,
+    /// Exclusive window end as a UTC date or RFC 3339 timestamp. Defaults to now.
+    #[arg(long, value_name = "TIME")]
+    pub until: Option<String>,
+    /// Timestamp that determines inclusion and ordering.
+    #[arg(long, value_enum, default_value_t = LatelyTime::Ingested)]
+    pub by: LatelyTime,
+    /// Include only deliveries with this lifecycle status.
+    #[arg(long, value_enum)]
+    pub status: Option<IngestionStatus>,
+    /// Include only deliveries received through this channel.
+    #[arg(long, value_enum)]
+    pub channel: Option<IngestionChannel>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum LatelyTime {
+    Created,
+    Modified,
+    FirstSeen,
+    Ingested,
+    Completed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum IngestionStatus {
+    Processing,
+    Completed,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum IngestionChannel {
+    Manual,
+    Inbox,
+}
+
+#[derive(Debug, Clone, Args)]
 pub struct LogArgs {
     /// Maximum number of newest commits.
     #[arg(long, value_name = "N", default_value_t = 20)]
@@ -332,7 +375,10 @@ pub struct RevertArgs {
 mod tests {
     use clap::Parser;
 
-    use super::{ChangeCommand, Cli, Command, ConceptCommand, InboxCommand, WorkCommand};
+    use super::{
+        ChangeCommand, Cli, Command, ConceptCommand, InboxCommand, IngestionChannel,
+        IngestionStatus, LatelyTime, WorkCommand,
+    };
 
     #[test]
     fn graph_native_commands_parse() {
@@ -406,6 +452,36 @@ mod tests {
             Ok(Command::Search(_))
         ));
         assert!(Cli::try_parse_from(["annals", "concept", "show", "42"]).is_err());
+    }
+
+    #[test]
+    fn lately_filters_parse() {
+        for basis in ["created", "modified", "first-seen", "ingested", "completed"] {
+            assert!(Cli::try_parse_from(["annals", "lately", "--by", basis]).is_ok());
+        }
+        assert!(Cli::try_parse_from(["annals", "lately", "--by", "published"]).is_err());
+        let Ok(cli) = Cli::try_parse_from([
+            "annals",
+            "lately",
+            "--since",
+            "24h",
+            "--until",
+            "2026-08-20T12:00:00Z",
+            "--by",
+            "first-seen",
+            "--status",
+            "completed",
+            "--channel",
+            "inbox",
+        ]) else {
+            panic!("lately command should parse");
+        };
+        let Command::Lately(args) = cli.command else {
+            panic!("expected lately command");
+        };
+        assert_eq!(args.by, LatelyTime::FirstSeen);
+        assert_eq!(args.status, Some(IngestionStatus::Completed));
+        assert_eq!(args.channel, Some(IngestionChannel::Inbox));
     }
 
     #[test]

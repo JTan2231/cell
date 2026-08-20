@@ -511,6 +511,82 @@ fn permanent_input_failures_are_archived_unchanged_and_do_not_stop_the_batch() -
     let library_stats = installation.json_ok(["stats"])?;
     assert_eq!(library_stats["work_count"], 1);
     assert_eq!(library_stats["revision"], 1);
+
+    let lately = installation.json_ok(["lately", "--channel", "inbox", "--by", "completed"])?;
+    assert_eq!(lately["channel"], "inbox");
+    assert_eq!(lately["time_basis"], "completed");
+    assert_eq!(lately["delivery_count"], 3);
+    assert_eq!(lately["completed_count"], 1);
+    assert_eq!(lately["failed_count"], 2);
+    assert_eq!(lately["new_work_count"], 1);
+    assert_eq!(lately["duplicate_count"], 0);
+    assert_eq!(lately["missing_time_count"], 0);
+
+    let deliveries = lately["deliveries"]
+        .as_array()
+        .ok_or("lately deliveries were not an array")?;
+    let valid_delivery = deliveries
+        .iter()
+        .find(|delivery| delivery["source_name"] == "03-valid.txt")
+        .ok_or("valid inbox delivery was absent from lately")?;
+    assert_eq!(valid_delivery["channel"], "inbox");
+    assert_eq!(valid_delivery["status"], "completed");
+    assert_eq!(valid_delivery["retention"], "new");
+    assert_eq!(valid_delivery["result"], "applied");
+    assert_eq!(valid_delivery["work"], "03-valid");
+    assert_eq!(valid_delivery["applied_revision"], 1);
+    assert!(valid_delivery["ingested_at"].is_string());
+    assert!(valid_delivery["completed_at"].is_string());
+    assert!(valid_delivery["error"].is_null());
+
+    let invalid_delivery = deliveries
+        .iter()
+        .find(|delivery| delivery["source_name"] == "01-invalid.bin")
+        .ok_or("invalid inbox delivery was absent from lately")?;
+    assert_eq!(invalid_delivery["status"], "failed");
+    assert!(invalid_delivery["retention"].is_null());
+    assert!(invalid_delivery["result"].is_null());
+    assert!(invalid_delivery["work"].is_null());
+    assert!(invalid_delivery["ingested_at"].is_null());
+    assert_eq!(invalid_delivery["error"]["code"], "input_not_utf8");
+    assert!(invalid_delivery["completed_at"].is_string());
+
+    let empty_delivery = deliveries
+        .iter()
+        .find(|delivery| delivery["source_name"] == "02-empty.txt")
+        .ok_or("empty inbox delivery was absent from lately")?;
+    assert_eq!(empty_delivery["status"], "failed");
+    assert_eq!(empty_delivery["error"]["code"], "empty_work");
+    Ok(())
+}
+
+#[test]
+fn whitespace_source_name_is_recorded_before_label_failure() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    let expected =
+        installation.incoming("   ", b"Shared inbox claim.\nWhitespace filename.\n", 0o640)?;
+
+    let run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(run["attempted"], 1);
+    assert_eq!(run["failed"], 1);
+    let failed = archived_material(&installation.inbox, "failed")?;
+    assert_unchanged(
+        &expected,
+        failed
+            .get("   ")
+            .ok_or("whitespace-named source was not archived")?,
+    );
+
+    let lately = installation.json_ok(["lately", "--channel", "inbox", "--by", "completed"])?;
+    assert_eq!(lately["delivery_count"], 1);
+    let delivery = lately["deliveries"]
+        .as_array()
+        .and_then(|deliveries| deliveries.first())
+        .ok_or("whitespace-named source was absent from lately")?;
+    assert_eq!(delivery["source_name"], "   ");
+    assert_eq!(delivery["status"], "failed");
+    assert_eq!(delivery["error"]["code"], "invalid_label");
     Ok(())
 }
 
@@ -576,6 +652,70 @@ fn terminal_processing_receipts_are_archived_without_reprocessing() -> TestResul
     let library_stats = installation.json_ok(["stats"])?;
     assert_eq!(library_stats["work_count"], 1);
     assert_eq!(library_stats["revision"], 1);
+
+    let lately = installation.json_ok(["lately", "--channel", "inbox", "--by", "completed"])?;
+    assert_eq!(lately["delivery_count"], 2);
+    let deliveries = lately["deliveries"]
+        .as_array()
+        .ok_or("lately deliveries were not an array")?;
+    assert_eq!(
+        deliveries
+            .iter()
+            .filter(|delivery| delivery["source_name"] == "01-valid.txt")
+            .count(),
+        1
+    );
+    assert_eq!(
+        deliveries
+            .iter()
+            .filter(|delivery| delivery["source_name"] == "02-invalid.bin")
+            .count(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn first_seen_time_survives_settling_before_inbox_ingestion() -> TestResult {
+    let installation = Installation::new(3_600)?;
+    installation.init()?;
+    installation.incoming(
+        "settling.txt",
+        b"Shared inbox claim.\nA source observed before it settles.\n",
+        0o640,
+    )?;
+
+    let settling = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(settling["attempted"], 0);
+    assert_eq!(settling["settling"], 1);
+
+    let index: Value = serde_json::from_slice(&fs::read(installation.inbox.join(".queue.json"))?)?;
+    let entries = index["entries"]
+        .as_object()
+        .ok_or("inbox queue entries were not an object")?;
+    assert_eq!(entries.len(), 1);
+    let first_seen_at = entries
+        .values()
+        .next()
+        .and_then(|entry| entry["first_seen_at"].as_str())
+        .ok_or("queue entry omitted first_seen_at")?
+        .to_owned();
+
+    let processed = installation.json_ok(["inbox", "run", "--settle-seconds", "0"])?;
+    assert_eq!(processed["attempted"], 1);
+    assert_eq!(processed["applied"], 1);
+
+    let lately = installation.json_ok(["lately", "--channel", "inbox", "--by", "first-seen"])?;
+    assert_eq!(lately["delivery_count"], 1);
+    assert_eq!(lately["missing_time_count"], 0);
+    let delivery = lately["deliveries"]
+        .as_array()
+        .and_then(|deliveries| deliveries.first())
+        .ok_or("settled inbox delivery was absent from lately")?;
+    assert_eq!(delivery["source_name"], "settling.txt");
+    assert_eq!(delivery["first_seen_at"], first_seen_at);
+    assert_eq!(delivery["status"], "completed");
+    assert_eq!(delivery["result"], "applied");
     Ok(())
 }
 

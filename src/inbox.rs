@@ -15,15 +15,15 @@ use serde::{Deserialize, Serialize};
 use crate::app::{read_utf8, work_label};
 use crate::cli::InboxRunArgs;
 use crate::config::Config;
-use crate::corpus::{ReconciliationRecord, now, reconciliation_query, store_work};
+use crate::corpus::{ReconciliationRecord, now, reconciliation_query, store_ingested_work};
 use crate::db;
 use crate::error::AppError;
 use crate::model_runner::{ModelSettings, Runner};
 use crate::render::CommandOutput;
-use crate::{liaison, resolver};
+use crate::{ingestion, liaison, resolver};
 
-const QUEUE_VERSION: u32 = 1;
-const RECEIPT_VERSION: u32 = 1;
+const QUEUE_VERSION: u32 = 3;
+const RECEIPT_VERSION: u32 = 2;
 
 #[derive(Debug)]
 struct Spool {
@@ -136,7 +136,15 @@ struct RunSummary {
 struct QueueIndex {
     version: u32,
     next_sequence: u64,
-    entries: BTreeMap<String, u64>,
+    entries: BTreeMap<String, QueueEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct QueueEntry {
+    sequence: u64,
+    first_seen_at: String,
+    identity: FileIdentity,
 }
 
 impl Default for QueueIndex {
@@ -156,10 +164,11 @@ struct IncomingFile {
     key: String,
     sequence: u64,
     identity: FileIdentity,
+    metadata: ingestion::SourceMetadata,
     ready: bool,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 struct FileIdentity {
     device: u64,
     inode: u64,
@@ -186,7 +195,13 @@ struct JobReceipt {
     original_name_base64: String,
     state: String,
     attempts: u32,
-    created_at: String,
+    delivery_key: String,
+    ingestion_id: Option<i64>,
+    source_size_bytes: Option<u64>,
+    source_created_at: Option<String>,
+    source_modified_at: Option<String>,
+    first_seen_at: String,
+    claimed_at: String,
     started_at: Option<String>,
     completed_at: Option<String>,
     source_sha256: Option<String>,
@@ -224,7 +239,7 @@ pub(crate) fn run(
     let _lock = spool.acquire_lock()?;
     let started = Instant::now();
     let mut index = read_index(&spool.index)?;
-    let recovered_envelopes = scan_envelopes(&spool.processing)?;
+    let recovered_envelopes = scan_envelopes(&spool.processing, &index)?;
     let recovered = recovered_envelopes.len();
     let mut queue = BTreeMap::new();
     for envelope in recovered_envelopes {
@@ -317,6 +332,7 @@ fn process_one(
     forward_progress: bool,
     summary: &mut RunSummary,
 ) -> Result<(), AppError> {
+    let ingestion_id = ensure_ingestion(library, &mut envelope)?;
     if envelope.receipt.state == "done" {
         let completion = completion_from_receipt(&envelope.receipt)?;
         match completion {
@@ -341,7 +357,14 @@ fn process_one(
     envelope.receipt.started_at = Some(now()?);
     envelope.receipt.last_error = None;
     write_receipt(&envelope)?;
-    match process_work(library, &mut envelope, settings, runner, forward_progress) {
+    match process_work(
+        library,
+        &mut envelope,
+        ingestion_id,
+        settings,
+        runner,
+        forward_progress,
+    ) {
         Ok(completion) => {
             let (status, result_revision) = match completion {
                 Completion::Applied(revision) => {
@@ -353,6 +376,8 @@ fn process_one(
                     ("recorded", None)
                 }
             };
+            let connection = db::open_write(library)?;
+            ingestion::complete(&connection, ingestion_id, status, result_revision)?;
             "done".clone_into(&mut envelope.receipt.state);
             envelope.receipt.completed_at = Some(now()?);
             envelope.receipt.result_status = Some(status.to_owned());
@@ -363,6 +388,8 @@ fn process_one(
         }
         Err(error) if permanent_source_error(&error) => {
             let code = error.code().to_owned();
+            let connection = db::open_write(library)?;
+            ingestion::fail(&connection, ingestion_id, &error)?;
             "failed".clone_into(&mut envelope.receipt.state);
             envelope.receipt.completed_at = Some(now()?);
             envelope.receipt.last_error = Some(ReceiptError {
@@ -375,6 +402,8 @@ fn process_one(
             Ok(())
         }
         Err(error) => {
+            let connection = db::open_write(library)?;
+            ingestion::record_retryable_error(&connection, ingestion_id, &error)?;
             envelope.receipt.last_error = Some(ReceiptError {
                 code: error.code().to_owned(),
                 message: error.to_string(),
@@ -394,6 +423,7 @@ fn process_one(
 fn process_work(
     library: &Path,
     envelope: &mut Envelope,
+    ingestion_id: i64,
     settings: &ModelSettings,
     runner: &Runner,
     forward_progress: bool,
@@ -434,7 +464,7 @@ fn process_work(
     }
     let label = work_label(&envelope.source, None)?;
     let mut connection = db::open_write(library)?;
-    let work = store_work(&mut connection, &label, &text)?;
+    let work = store_ingested_work(&mut connection, ingestion_id, &label, &text)?.work;
     envelope.receipt.source_sha256 = Some(work.sha256.clone());
     envelope.receipt.work = Some(work.label.clone());
     write_receipt(envelope)?;
@@ -657,7 +687,7 @@ fn claim(spool: &Spool, candidate: &IncomingFile) -> Result<Option<Envelope>, Ap
         let _ = fs::remove_dir(&directory);
         return Ok(None);
     }
-    let receipt = new_receipt(&id, &candidate.name)?;
+    let receipt = new_receipt(&id, &candidate.name, &candidate.metadata)?;
     let envelope = Envelope {
         id,
         directory,
@@ -737,7 +767,7 @@ fn write_receipt(envelope: &Envelope) -> Result<(), AppError> {
     )
 }
 
-fn scan_envelopes(path: &Path) -> Result<Vec<Envelope>, AppError> {
+fn scan_envelopes(path: &Path, index: &QueueIndex) -> Result<Vec<Envelope>, AppError> {
     if !path.exists() {
         return Ok(Vec::new());
     }
@@ -784,7 +814,13 @@ fn scan_envelopes(path: &Path) -> Result<Vec<Envelope>, AppError> {
                     format!("source {} has no basename", source.display()),
                 )
             })?;
-            let receipt = new_receipt(&id, name)?;
+            let key = URL_SAFE_NO_PAD.encode(name.as_bytes());
+            let first_seen_at = match index.entries.get(&key) {
+                Some(entry) => entry.first_seen_at.clone(),
+                None => now()?,
+            };
+            let metadata = metadata_for_recovered_source(&source, &first_seen_at)?;
+            let receipt = new_receipt(&id, name, &metadata)?;
             let envelope = Envelope {
                 id: id.clone(),
                 directory: directory.clone(),
@@ -807,7 +843,85 @@ fn scan_envelopes(path: &Path) -> Result<Vec<Envelope>, AppError> {
     Ok(envelopes)
 }
 
-fn new_receipt(id: &str, name: &OsStr) -> Result<JobReceipt, AppError> {
+fn ensure_ingestion(library: &Path, envelope: &mut Envelope) -> Result<i64, AppError> {
+    let connection = db::open_write(library)?;
+    let metadata = ingestion::SourceMetadata {
+        source_name: envelope.receipt.original_name.clone(),
+        source_size_bytes: envelope.receipt.source_size_bytes,
+        source_created_at: envelope.receipt.source_created_at.clone(),
+        source_modified_at: envelope.receipt.source_modified_at.clone(),
+        first_seen_at: envelope.receipt.first_seen_at.clone(),
+    };
+    let ingestion_id = ingestion::begin(
+        &connection,
+        &ingestion::NewIngestion {
+            delivery_key: Some(&envelope.receipt.delivery_key),
+            channel: "inbox",
+            metadata: &metadata,
+        },
+    )?;
+    if envelope
+        .receipt
+        .ingestion_id
+        .is_some_and(|recorded| recorded != ingestion_id)
+    {
+        return Err(AppError::unexpected(
+            "invalid_job_receipt",
+            "job receipt refers to a different source delivery",
+        ));
+    }
+    if envelope.receipt.ingestion_id.is_none() {
+        envelope.receipt.ingestion_id = Some(ingestion_id);
+        write_receipt(envelope)?;
+    }
+    Ok(ingestion_id)
+}
+
+fn metadata_for_recovered_source(
+    source: &Path,
+    first_seen_at: &str,
+) -> Result<ingestion::SourceMetadata, AppError> {
+    let metadata = fs::metadata(source)?;
+    let name = source
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| {
+            AppError::unexpected(
+                "invalid_job_envelope",
+                format!("source {} has no filename", source.display()),
+            )
+        })?;
+    metadata_from_filesystem(OsStr::new(&name), &metadata, first_seen_at)
+}
+
+fn metadata_from_filesystem(
+    name: &OsStr,
+    metadata: &fs::Metadata,
+    first_seen_at: &str,
+) -> Result<ingestion::SourceMetadata, AppError> {
+    Ok(ingestion::SourceMetadata {
+        source_name: name.to_string_lossy().into_owned(),
+        source_size_bytes: Some(metadata.len()),
+        source_created_at: metadata
+            .created()
+            .ok()
+            .map(ingestion::format_system_time)
+            .transpose()?,
+        source_modified_at: metadata
+            .modified()
+            .ok()
+            .map(ingestion::format_system_time)
+            .transpose()?,
+        first_seen_at: first_seen_at.to_owned(),
+    })
+}
+
+fn new_receipt(
+    id: &str,
+    name: &OsStr,
+    metadata: &ingestion::SourceMetadata,
+) -> Result<JobReceipt, AppError> {
     Ok(JobReceipt {
         version: RECEIPT_VERSION,
         id: id.to_owned(),
@@ -815,7 +929,13 @@ fn new_receipt(id: &str, name: &OsStr) -> Result<JobReceipt, AppError> {
         original_name_base64: URL_SAFE_NO_PAD.encode(name.as_bytes()),
         state: "processing".to_owned(),
         attempts: 0,
-        created_at: now()?,
+        delivery_key: format!("inbox:{id}:{}", metadata.first_seen_at),
+        ingestion_id: None,
+        source_size_bytes: metadata.source_size_bytes,
+        source_created_at: metadata.source_created_at.clone(),
+        source_modified_at: metadata.source_modified_at.clone(),
+        first_seen_at: metadata.first_seen_at.clone(),
+        claimed_at: now()?,
         started_at: None,
         completed_at: None,
         source_sha256: None,
@@ -835,6 +955,9 @@ fn validate_receipt(receipt: &JobReceipt, id: &str, source: &Path) -> Result<(),
     if receipt.version != RECEIPT_VERSION
         || receipt.id != id
         || encoded_name.as_deref() != Some(&receipt.original_name_base64)
+        || receipt.delivery_key.trim().is_empty()
+        || receipt.first_seen_at.trim().is_empty()
+        || receipt.claimed_at.trim().is_empty()
         || !matches!(receipt.state.as_str(), "processing" | "done" | "failed")
     {
         return Err(AppError::unexpected(
@@ -891,29 +1014,40 @@ fn scan_incoming(
             ignored += 1;
             continue;
         }
-        let key = URL_SAFE_NO_PAD.encode(name.as_os_str().as_bytes());
-        visible.insert(key.clone());
-        let sequence = if let Some(sequence) = index.entries.get(&key) {
-            *sequence
-        } else {
-            let sequence = index.next_sequence;
-            index.next_sequence = index.next_sequence.checked_add(1).ok_or_else(|| {
-                AppError::unexpected("inbox_sequence_overflow", "inbox sequence is exhausted")
-            })?;
-            index.entries.insert(key.clone(), sequence);
-            sequence
-        };
         let metadata = fs::symlink_metadata(entry.path())?;
         if !metadata.file_type().is_file() {
             ignored += 1;
             continue;
         }
+        let identity = FileIdentity::from(&metadata);
+        let key = URL_SAFE_NO_PAD.encode(name.as_os_str().as_bytes());
+        visible.insert(key.clone());
+        let queue_entry = if let Some(queue_entry) = index
+            .entries
+            .get(&key)
+            .filter(|queue_entry| queue_entry.identity == identity)
+        {
+            queue_entry.clone()
+        } else {
+            let sequence = index.next_sequence;
+            index.next_sequence = index.next_sequence.checked_add(1).ok_or_else(|| {
+                AppError::unexpected("inbox_sequence_overflow", "inbox sequence is exhausted")
+            })?;
+            let queue_entry = QueueEntry {
+                sequence,
+                first_seen_at: now()?,
+                identity,
+            };
+            index.entries.insert(key.clone(), queue_entry.clone());
+            queue_entry
+        };
         files.push(IncomingFile {
             path: entry.path(),
+            metadata: metadata_from_filesystem(&name, &metadata, &queue_entry.first_seen_at)?,
             name,
             key,
-            sequence,
-            identity: FileIdentity::from(&metadata),
+            sequence: queue_entry.sequence,
+            identity,
             ready: settled(&metadata, settle_seconds),
         });
     }
@@ -1081,6 +1215,48 @@ mod tests {
         assert_eq!(first[0].sequence, second[0].sequence);
         assert_eq!(second[0].name, "b.txt");
         assert_eq!(second[1].name, "a.txt");
+        Ok(())
+    }
+
+    #[test]
+    fn queue_index_restarts_replaced_path_identity() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let spool = Spool::new(directory.path());
+        spool.create()?;
+        let source = spool.incoming.join("source.txt");
+        fs::write(&source, "first")?;
+        let mut index = QueueIndex::default();
+        scan_incoming(&spool, &mut index, 3_600)?;
+
+        let key = index
+            .entries
+            .keys()
+            .next()
+            .cloned()
+            .ok_or("queue index omitted the source")?;
+        let original = index
+            .entries
+            .get_mut(&key)
+            .ok_or("queue index omitted the source")?;
+        let original_sequence = original.sequence;
+        let original_identity = original.identity;
+        original.first_seen_at = "2000-01-01T00:00:00Z".to_owned();
+
+        let replacement = directory.path().join("replacement.txt");
+        fs::write(&replacement, "second")?;
+        fs::rename(&replacement, &source)?;
+        let (rescanned, _) = scan_incoming(&spool, &mut index, 3_600)?;
+        let replaced = index
+            .entries
+            .get(&key)
+            .ok_or("queue index omitted the replacement")?;
+
+        assert_eq!(rescanned.len(), 1);
+        assert_ne!(replaced.identity, original_identity);
+        assert_ne!(replaced.sequence, original_sequence);
+        assert_ne!(replaced.first_seen_at, "2000-01-01T00:00:00Z");
+        assert_eq!(rescanned[0].sequence, replaced.sequence);
+        assert_eq!(rescanned[0].metadata.first_seen_at, replaced.first_seen_at);
         Ok(())
     }
 

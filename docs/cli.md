@@ -71,9 +71,12 @@ original work and label. A label already attached to different bytes is a
 conflict.
 
 Adding a work does not change the corpus revision. Human `work list` shows
-labels and sizes; JSON also reports SHA-256 digests and creation times. `work
-show` reports that metadata, Markdown heading paths, and the complete unchanged
-text. Source heading paths describe the document; they are not concept paths.
+labels and sizes; JSON also reports SHA-256 digests and `first_retained_at`.
+Human `work show` labels that timestamp `First retained`. It is the time Annals
+first retained those content-addressed bytes, not the source file's creation or
+modification time. `work show` also reports Markdown heading paths and the
+complete unchanged text. Source heading paths describe the document; they are
+not concept paths.
 
 ## Model-assisted integration
 
@@ -150,6 +153,103 @@ and whether the runnable queue was drained. JSON adds the spool root, effective
 settling interval, elapsed time, recovery count, and ignored count. See the
 [system installation guide](system-installation.md) for the complete spool,
 recovery, and scheduler contract.
+
+## Recent source activity
+
+```text
+annals lately [--since TIME] [--until TIME]
+              [--by created|modified|first-seen|ingested|completed]
+              [--status processing|completed|failed]
+              [--channel manual|inbox]
+```
+
+`lately` reports source-delivery metadata, independently of the source's text
+or interpreted concepts. It never searches source content or emits source
+text, headings, quotations, topics, or dates mentioned inside a work.
+
+The report uses a UTC half-open interval: `since` is inclusive and `until` is
+exclusive. `--until` defaults to the instant at which the report begins.
+`--since` defaults to `7d`. A relative `--since` is subtracted from the resolved
+`until`, so an explicit end and relative start produce a reproducible window.
+Relative durations are a positive integer followed by `s`, `m`, `h`, `d`, or
+`w`. Absolute values are either an RFC 3339 timestamp or a `YYYY-MM-DD` UTC
+date, interpreted as midnight at the start of that date. RFC 3339 offsets are
+accepted and normalized to UTC in output. The start must precede the end.
+
+Examples:
+
+```text
+annals lately
+annals lately --since 24h
+annals lately --since 2026-08-01 --until 2026-08-15
+annals lately --since 7d --by modified
+annals lately --since 30d --status failed --by completed
+annals lately --since 7d --channel inbox
+```
+
+`--by` chooses the timestamp used for both inclusion and newest-first ordering:
+
+| Basis | Meaning |
+| --- | --- |
+| `created` | Filesystem creation time captured when the source arrived, when supplied by the operating system. |
+| `modified` | Filesystem modification time captured when the source arrived. |
+| `first-seen` | When Annals first observed the delivery. |
+| `ingested` | When Annals retained the bytes as a new work or recognized them as an existing work. This is the default. |
+| `completed` | When delivery processing reached the completed or failed state. |
+
+Created and modified times are captured source metadata. They do not represent
+authorship, publication, events described by the source, or continued watching
+of the original path. Standard input has neither filesystem timestamp. A
+failure before work retention has no ingestion time, and an active delivery
+has no completion time.
+
+`--status` accepts `processing`, `completed`, or `failed`. `--channel` accepts
+`manual` or `inbox`. The manual channel covers a source passed to `work add` or
+the input form of `integrate`; `integrate --work LABEL` selects an existing work
+and is not another delivery. Filters are applied before the time window.
+
+Every delivery has its own receipt. Delivering identical bytes again creates a
+second receipt linked to the original immutable work. Retention is therefore
+reported independently as `new` or `duplicate`. Lifecycle status is also
+independent of the terminal result:
+
+| Result | Meaning |
+| --- | --- |
+| `retained` | `work add` completed after retaining or recognizing the work. |
+| `pending` | Integration completed with a reconciliation awaiting application. |
+| `applied` | Integration completed and created the reported corpus revision. |
+| `recorded` | Integration completed without a corpus change. |
+
+A processing delivery has not reached a terminal outcome and has no result. A
+retryable inbox error remains processing. Source-bearing manual commands are
+serialized per library; the next such command finalizes any receipt abandoned
+by an interrupted predecessor with error `manual_ingestion_interrupted`. A
+failed delivery has status `failed`, no result, and a structured error. It can
+still identify a work and retention disposition when failure occurred after
+ingestion. Work retention and a `work add` completion are atomic, as are an
+input integration's applied result and its corpus revision.
+
+When the selected basis is unavailable, the delivery cannot be placed in the
+window and is omitted. `missing_time_count` counts all such receipts matching
+the status and channel filters. Human output states how many were omitted. To
+inspect an early failure with no ingestion time, select `--by first-seen` or
+`--by completed`.
+
+Human output echoes the exact resolved range, time basis, and active filters;
+reports lifecycle and retention counts; and lists the selected timestamp,
+channel, status, source name, result, applied revision when present, and
+retention disposition. Empty windows say `No source activity`.
+
+JSON echoes `since`, `until`, `time_basis`, and the optional `status` and
+`channel` filters. It includes delivery, lifecycle, retention, and missing-time
+counts plus a `deliveries` array. Each delivery reports `source_name`,
+`channel`, `status`, optional `retention` and `result`, optional work label,
+optional source byte size and SHA-256, captured `source_created_at` and
+`source_modified_at`, `first_seen_at`, optional `ingested_at` and
+`completed_at`, optional `applied_revision`, and an optional structured
+`error`. Error messages are reporting-safe lifecycle summaries; raw runner
+diagnostics are never selected by this report. It exposes no storage-row
+identifier or dedicated source-path field.
 
 ## Reconciliations and corpus changes
 

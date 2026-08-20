@@ -49,6 +49,7 @@ annals --library ./annals.db change show
 annals --library ./annals.db change apply
 annals --library ./annals.db overview
 annals --library ./annals.db roots
+annals --library ./annals.db lately
 ```
 
 `integrate` content-addresses the immutable work by its exact SHA-256 digest
@@ -58,6 +59,21 @@ the projected corpus is mechanically equal to the base, the reconciliation is
 stored with status `recorded` and the revision stays where it is.
 Optional free-form annotations are retained with the reconciliation and have
 no validation or application semantics.
+
+Every delivered source receives a durable metadata receipt independently of
+its content-addressed work. `lately` reports those deliveries over an exact UTC
+window without reading or interpreting source text:
+
+```sh
+annals --library ./annals.db lately
+annals --library ./annals.db lately --since 24h --by modified
+annals --library ./annals.db lately \
+  --since 2026-08-01 --until 2026-08-15 --channel inbox
+```
+
+The default is a rolling seven-day window based on ingestion time. Creation
+and modification times are captured from filesystem metadata when available;
+first-seen, ingestion, and completion times describe the Annals lifecycle.
 
 An already retained work can be selected by label. Annals reuses a successful
 examination only when the work, corpus revision, prompt version, model, and
@@ -102,6 +118,7 @@ annals --library ./annals.db overview
 annals --library ./annals.db roots --limit 25
 annals --library ./annals.db concept show c42
 annals --library ./annals.db graph c42 --direction both --depth 2
+annals --library ./annals.db lately --since 30d --by completed
 annals --library ./annals.db shake
 annals --library ./annals.db log
 annals --library ./annals.db diff 0 1

@@ -8,6 +8,7 @@ mod error;
 mod graph;
 mod inbox;
 mod index;
+mod ingestion;
 mod liaison;
 mod model;
 mod model_runner;

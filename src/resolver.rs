@@ -263,6 +263,22 @@ pub(crate) fn apply_record(
     connection: &mut Connection,
     record: &ReconciliationRecord,
 ) -> Result<i64, AppError> {
+    apply_record_with_ingestion(connection, record, None)
+}
+
+pub(crate) fn apply_record_for_ingestion(
+    connection: &mut Connection,
+    record: &ReconciliationRecord,
+    ingestion_id: i64,
+) -> Result<i64, AppError> {
+    apply_record_with_ingestion(connection, record, Some(ingestion_id))
+}
+
+fn apply_record_with_ingestion(
+    connection: &mut Connection,
+    record: &ReconciliationRecord,
+    ingestion_id: Option<i64>,
+) -> Result<i64, AppError> {
     if record.status != "pending" {
         return Err(AppError::conflict(
             "nothing_to_apply",
@@ -333,6 +349,9 @@ pub(crate) fn apply_record(
             "nothing_to_apply",
             "the selected reconciliation is no longer pending",
         ));
+    }
+    if let Some(ingestion_id) = ingestion_id {
+        crate::ingestion::complete(&transaction, ingestion_id, "applied", Some(new_revision))?;
     }
     transaction.commit()?;
     Ok(new_revision)
