@@ -49,19 +49,19 @@ snapshots.
 ## Cost shape
 
 Works and selected corpus snapshots are held in memory while resolving and
-validating a reconciliation. A graph snapshot contains concepts, explicit
+validating a reconciliation. A corpus snapshot contains concepts, explicit
 edges, and evidence, so basic materialization grows with all three. Cycle
 checks and derived root/leaf classification also traverse the edge set.
 
 Applying a pending transition or confirmed shake validates and materializes the
-complete projected graph and retains complete corpus snapshots in history.
-Mutation time and history storage therefore grow with corpus size. A
-mechanically equal projection is stored as a `recorded` reconciliation without
-rebuilding materialized state or creating a commit or revision; an empty shake
-likewise creates no commit.
+complete projected corpus state and retains complete corpus snapshots in
+history. Mutation time and history storage therefore grow with corpus size. A
+projected corpus state mechanically equal to its base is stored as a `recorded`
+reconciliation without rebuilding materialized state or creating a commit or
+revision; an empty shake likewise creates no commit.
 
 Ordinary graph reads use a revision-scoped database facade and allocate only a
-bounded projection between SQLite and presentation. Root, relationship,
+bounded view between SQLite and presentation. Root, relationship,
 evidence, and search pages apply `LIMIT` before response hydration. Evidence
 loads only returned byte ranges, each capped at 8 KiB, and graph edges carry IDs
 throughout so labels are owned once per selected concept. Local expansion stops

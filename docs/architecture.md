@@ -8,13 +8,13 @@ broader-to-narrower edges between them. Evidence is many-to-many: a work may
 support many concepts and a concept may be supported by many works. Model runs
 own examinations and reconciliations, never concepts.
 
-An applied reconciliation whose projected corpus differs mechanically from
-its base, a confirmed nonempty shake, or a revert advances the corpus.
+An applied reconciliation whose projected corpus state differs mechanically
+from its base, a confirmed nonempty shake, or a revert advances the corpus.
 Retaining a work, reading state, running a model, recording a reconciliation,
 canceling or finding no removable edges in a shake, validating, and backing up
-do not advance the revision. A mechanically equal projection is retained as an
-interpretive record with status `recorded` and has no commit or revision of its
-own.
+do not advance the revision. A projected corpus state mechanically equal to its
+base is retained as an interpretive record with status `recorded` and has no
+commit or revision of its own.
 
 ## Source-delivery boundary
 
@@ -77,10 +77,10 @@ of the graph. Every projected leaf must have at least one evidence link.
 
 Ordinary graph reads do not deserialize a complete corpus snapshot. A
 `GraphReader` is a lightweight database facade that selects one immutable
-revision. It produces bounded owned projections containing only the selected
+revision. It produces bounded owned views containing only the selected
 concepts, ID-only edges, and evidence coordinates required by the caller.
-Presentation code receives those projections and never queries SQLite or
-reconstructs corpus-wide ancestry.
+Presentation code receives those views and never queries SQLite or reconstructs
+corpus-wide ancestry.
 
 Roots, direct relationships, evidence, search, and local graph expansion apply
 their limits in SQLite before constructing response objects. Local expansion
@@ -236,17 +236,17 @@ or judge whether a conceptual claim is true. It validates the deterministic
 boundary around that judgment.
 
 A stored reconciliation includes its original request, resolved semantic
-operations, and complete projected result. If the projection differs
+operations, and complete projected corpus state. If that state differs
 mechanically from the base, the current result is `pending`. A result based on
 the same or a later revision supersedes the same work's pending
 reconciliation. An older-base result remains an examination record without
 displacing a newer pending result.
 
-If the projection is mechanically equal to the base, Annals stores the result
-with status `recorded`. This says only that this interpretation makes no
-material corpus change. Annotations are excluded from the comparison.
+If the projected corpus state is mechanically equal to the base, Annals stores
+the result with status `recorded`. This says only that this interpretation
+makes no material corpus change. Annotations are excluded from the comparison.
 
-Resolved operations are receipts for what the request addressed, not a diff.
+Resolved operations record what the request addressed; they are not a diff.
 They retain idempotent ensure operations even when the selected edge or
 evidence already exists; reconciliation status, recorded-change effects, and
 revision diffs describe the actual state effect.
@@ -254,12 +254,12 @@ revision diffs describe the actual state effect.
 ## Atomic application
 
 Application requires `HEAD == base_revision`, re-resolves the stored request,
-and verifies that it produces the recorded projection. One immediate SQLite
-transaction then materializes concepts, edges, and evidence; appends the commit
-with its request, resolved operations, and complete corpus snapshot; stores the
-same revision in immutable
-relational graph rows; marks the reconciliation applied; advances the revision
-once; and commits all state together.
+and verifies that it produces the recorded projected corpus state. One
+immediate SQLite transaction then materializes concepts, edges, and evidence;
+appends the commit with its request, resolved operations, and complete corpus
+snapshot; stores the same revision in immutable relational graph rows; marks
+the reconciliation applied; advances the revision once; and commits all state
+together.
 
 Any error rolls back the entire transition. A stale reconciliation fails with
 `stale_change`; Annals does not automatically rebase it. Annotations never

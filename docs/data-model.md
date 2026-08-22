@@ -18,9 +18,9 @@ ranges and non-concept row identifiers remain private mechanics.
 `library_state` contains one nonnegative `revision` and one random persistent
 library identity. Revision zero is the empty corpus. Applying a pending
 reconciliation, confirming a nonempty shake, or reverting a commit increments
-it. Work retention, reconciliation submission, mechanically equal projections,
-cancelled or empty shakes, validation, and backup leave it unchanged. Opaque
-paging cursors bind to the library identity as well as their
+it. Work retention, reconciliation submission, projected corpus states equal to
+their bases, cancelled or empty shakes, validation, and backup leave it
+unchanged. Opaque paging cursors bind to the library identity as well as their
 revision and request; a backup intentionally preserves that identity.
 
 ## Immutable works
@@ -192,7 +192,7 @@ run. It stores:
 - status: `pending`, `applied`, `superseded`, or `recorded`;
 - the human summary;
 - the exact submitted graph-native request;
-- its resolved reconciliation and complete projected graph;
+- its resolved reconciliation and complete projected corpus state;
 - the actor;
 - creation time and, when applied, revision.
 
@@ -203,11 +203,13 @@ repeat.
 
 At most one reconciliation per work is pending. A result against the same or a
 later base revision supersedes the previous pending result for that work; an
-older-base result does not displace it. A mechanically equal projection has
-status `recorded` and neither an applied revision nor a commit.
+older-base result does not displace it. A projected corpus state mechanically
+equal to its base has status `recorded` and neither an applied revision nor a
+commit.
 
-Submission validates and records a projection. Application later re-resolves
-the request and commits it only if HEAD still equals the base revision.
+Submission validates and records a projected corpus state. Application later
+re-resolves the request and commits it only if HEAD still equals the base
+revision.
 
 ## Append-only history
 
@@ -263,7 +265,7 @@ Applying a pending reconciliation uses one immediate transaction:
 1. require HEAD to equal the reconciliation's base revision;
 2. re-resolve the original request and compare it with the stored result;
 3. validate the complete projected concepts, edges, and evidence;
-4. replace current materialized graph state with that projection;
+4. replace current materialized graph state with that projected corpus state;
 5. append the commit, guard-and-advance `library_state.revision`, and store the
    matching immutable relational revision snapshot;
 6. mark the reconciliation applied; and
@@ -290,7 +292,7 @@ historical state, equality of every relational graph projection with its
 committed after-state, replayable reconciliation, shake, and revert provenance,
 and current corpus invariants.
 
-For every graph snapshot it also checks concept IDs and labels, edge endpoints,
+For every corpus snapshot it also checks concept IDs and labels, edge endpoints,
 duplicate and self edges, acyclicity, evidence ranges, and leaf grounding. It
 does not impose label uniqueness, choose primary parents, require one root, or
 derive a canonical path. It permits transitively implied edges; shaking is an

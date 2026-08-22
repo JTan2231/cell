@@ -118,11 +118,11 @@ The liaison submits a provisional, best-current interpretation. It does not
 filter source material by estimated novelty or salience and does not claim an
 objective final decomposition into atomic concepts.
 
-Without `--apply`, a reconciliation whose projected graph differs from its
-base remains pending. `--apply` immediately commits that pending transition. A
-mechanically equal projection is stored with status `recorded`; it creates no
-commit and does not advance the revision. Optional annotations are inert and
-never block application.
+Without `--apply`, a reconciliation whose projected corpus state differs from
+its base remains pending. `--apply` immediately commits that pending
+transition. A projected corpus state mechanically equal to the base is stored
+with status `recorded`; it creates no commit and does not advance the revision.
+Optional annotations are inert and never block application.
 
 ## Scheduled inbox
 
@@ -270,11 +270,11 @@ annals change apply [--work LABEL]
 provide the immutable evidence work and frozen corpus revision; both are
 deliberately absent from the semantic request.
 
-Submission resolves and validates the complete projected graph but does not
-mutate the corpus. A result based on the same or a later revision supersedes
-that work's previous pending reconciliation. An older-base result is retained
-without displacing a newer pending result. `change list` includes pending,
-applied, superseded, and recorded reconciliations.
+Submission resolves and validates the complete projected corpus state but does
+not mutate the corpus. A result based on the same or a later revision
+supersedes that work's previous pending reconciliation. An older-base result is
+retained without displacing a newer pending result. `change list` includes
+pending, applied, superseded, and recorded reconciliations.
 
 With `--work`, `change show` selects that work's pending reconciliation when
 one exists, otherwise its newest record. Without `--work`, it selects the sole
@@ -294,9 +294,9 @@ Human reconciliation output renders public `cN` IDs alongside labels, local
 creation handles, parent-edge changes, exact evidence quotations and source
 context, evidence dispositions, replacements, and annotations. `change
 validate` re-resolves and renders the same semantic facts without writing.
-Resolved operations are request receipts, while `effects` report what actually
-changed. An idempotent ensure may therefore appear in `resolved_operations`
-without a matching effect.
+Resolved operations record what the request addressed, while `effects` report
+what actually changed. An idempotent ensure may therefore appear in
+`resolved_operations` without a matching effect.
 
 `change apply` additionally requires HEAD to equal the base revision. Success
 updates concepts, edges, evidence, reconciliation status,
@@ -348,8 +348,8 @@ Every object rejects unknown fields. Summaries, annotations, labels, handles,
 and quotations must be nonempty when present. Labels and handles have no outer
 whitespace or control characters. `annotations` may be omitted and defaults to
 an empty list. Annotations are retained as meta-level context only; they are
-not evidence, confidence levels, or review flags and do not affect validation
-or application.
+not evidence, confidence levels, or review flags and do not affect projected
+corpus state, corpus validation, or application.
 
 ### Concept selectors
 
@@ -392,7 +392,7 @@ Evidence always belongs to the work supplied by the host:
 `quote` is required; the other fields disambiguate repeated source text.
 Public input never contains source offsets. Once resolved, evidence supports
 the concept across all of its parent relationships. Every leaf in the final
-projected graph must have at least one evidence link.
+projected corpus state must have at least one evidence link.
 
 ### Operations
 
@@ -415,9 +415,10 @@ projected graph must have at least one evidence link.
   becomes a root. Optional `replacement` records a semantic successor but does
   not transfer edges or evidence.
 
-The complete projected result must be an acyclic graph with valid endpoints,
-no self or duplicate edges, and evidence on every leaf. There is no parent
-priority, sibling placement, integer position, path, or move operation.
+The concept graph in the projected corpus state must be acyclic, have valid
+endpoints and no self or duplicate edges, and have evidence on every leaf.
+There is no parent priority, sibling placement, integer position, path, or move
+operation.
 
 ## Local corpus browsing
 

@@ -14,6 +14,10 @@ Source byte ranges and non-concept SQLite identifiers remain implementation
 details. Evidence belongs to a concept as a whole rather than to one of its
 parent edges, and every derived leaf must remain evidence-grounded.
 
+The [project vocabulary](docs/vocabulary.md) defines the shared terms used by
+contributors and in conversations about Annals. It is documentation guidance,
+not content supplied to the liaison or part of the runtime contract.
+
 ## Requirements
 
 - macOS or Linux and Rust 1.97.1 to build the repository;
@@ -55,10 +59,12 @@ annals --library ./annals.db lately
 `integrate` content-addresses the immutable work by its exact SHA-256 digest
 before model examination. It records a provisional, best-current
 reconciliation. With `--apply`, a projected state transition is committed; if
-the projected corpus is mechanically equal to the base, the reconciliation is
-stored with status `recorded` and the revision stays where it is.
-Optional free-form annotations are retained with the reconciliation and have
-no validation or application semantics.
+the projected corpus state is mechanically equal to the base, the
+reconciliation is stored with status `recorded` and the revision stays where it
+is.
+Optional free-form annotations are retained with the reconciliation. Their
+shape and text are contract-validated, but they have no corpus-validation or
+application semantics.
 
 Every delivered source receives a durable metadata receipt independently of
 its content-addressed work. `lately` reports those deliveries over an exact UTC
