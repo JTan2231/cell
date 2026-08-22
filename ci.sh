@@ -115,6 +115,13 @@ fi
 
 export CARGO_BUILD_WARNINGS=deny
 
+printf '%s\n' '==> release script'
+if [ ! -f release.sh ]; then
+    printf '%s\n' 'ci.sh: required release script not found: release.sh' >&2
+    exit 1
+fi
+sh -n release.sh
+
 printf '%s\n' '==> packaging'
 for script in \
     packaging/launchd/annals \

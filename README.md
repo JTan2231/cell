@@ -151,6 +151,25 @@ or config selection is present. Consequently, commands such as `annals stats`,
 the scheduled inbox worker. An explicit option or environment variable still
 selects a different target.
 
+## Release
+
+Application releases use the package version in `Cargo.toml` and annotated Git
+tags named `vMAJOR.MINOR.PATCH`. From a clean `main` branch that exactly matches
+`origin/main`, run one of:
+
+```sh
+./release.sh --patch
+./release.sh --minor
+./release.sh --major
+```
+
+An empty `origin` is also accepted for the first publication. The script bumps
+the package version, refreshes `Cargo.lock`, runs the complete `ci.sh` suite on
+the bumped tree, creates a `Release vMAJOR.MINOR.PATCH` Git commit, tags that
+commit, and atomically pushes `main` and only that tag. Application SemVer is
+independent of library schema versions, corpus revisions, and the exact
+content-addressed release IDs used by the macOS deployer.
+
 ## Scheduled macOS installation
 
 The macOS installation is deliberately user-owned, so Codex running as that
