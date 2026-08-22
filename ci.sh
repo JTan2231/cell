@@ -118,8 +118,14 @@ export CARGO_BUILD_WARNINGS=deny
 printf '%s\n' '==> packaging'
 for script in \
     packaging/launchd/annals \
+    packaging/launchd/annals-user \
+    packaging/launchd/deploy-user.sh \
     packaging/launchd/install.sh \
+    packaging/launchd/migrate-to-user.sh \
     packaging/launchd/test-frontend.sh \
+    packaging/launchd/test-migrate-to-user.sh \
+    packaging/launchd/test-user-deploy.sh \
+    packaging/launchd/test-user-frontend.sh \
     packaging/launchd/uninstall.sh
 do
     if [ ! -f "$script" ]; then
@@ -131,8 +137,19 @@ done
 
 packaging/launchd/test-frontend.sh
 
-if command -v plutil >/dev/null 2>&1; then
-    plutil -lint packaging/launchd/org.annals.inbox.plist >/dev/null
+if [ "$(uname -s)" = Darwin ]; then
+    packaging/launchd/test-user-frontend.sh
+    packaging/launchd/test-user-deploy.sh
+    packaging/launchd/test-migrate-to-user.sh
+fi
+
+if [ "$(uname -s)" = Darwin ] && command -v plutil >/dev/null 2>&1; then
+    for plist in \
+        packaging/launchd/org.annals.inbox.plist \
+        packaging/launchd/org.annals.inbox.agent.plist
+    do
+        plutil -lint "$plist" >/dev/null
+    done
 fi
 
 printf '%s\n' '==> rustfmt'

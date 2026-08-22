@@ -1,7 +1,7 @@
 # System installation and scheduled inbox
 
-Annals can run as a scheduled, one-shot service around one system-owned
-library. Each service activation registers settled inbox files, drains the
+Annals can run as a scheduled, one-shot service around one configured library.
+Each service activation registers settled inbox files, drains the
 durable queue in sequence, and exits when no runnable work remains. It is not
 a resident daemon and does not require a separate database server.
 
@@ -13,6 +13,7 @@ queue with a small Annals-owned ordering index:
 ```text
 .queue.json
 .run.lock
+.maintenance
 incoming/
 `-- report.md
 processing/
@@ -36,17 +37,19 @@ assigns a monotonic sequence and UTC first-seen time when `inbox run` first
 observes incoming material; pathname bytes break ties. The job receipt carries
 that first-seen time, captured filesystem size and timestamps, and a stable key
 for the corresponding database source-delivery receipt. `.run.lock` prevents
-overlapping workers. These are Annals-owned operational files and are not
-retained works; do not edit them.
+overlapping workers. The macOS deployer temporarily creates `.maintenance` to
+make a running worker stop cleanly before taking another job. These are
+Annals-owned operational files and are not retained works; do not edit them.
 
 One invocation:
 
 1. takes the inbox lock;
-2. recovers a previously claimed job before claiming new work;
-3. registers every eligible visible top-level regular file as a durable job;
-4. integrates and applies the oldest registered job;
-5. rescans and registers newly eligible arrivals between jobs; and
-6. continues until the queue is empty or a retryable failure stops the
+2. recovers the queue description for previously claimed jobs;
+3. stops before processing another job when maintenance is requested;
+4. registers every eligible visible top-level regular file as a durable job;
+5. integrates and applies the oldest registered job;
+6. rescans and registers newly eligible arrivals between jobs; and
+7. continues until the queue is empty or a retryable failure stops the
    activation.
 
 There is no item or activation-lifetime limit. A continuing stream of eligible
@@ -92,7 +95,7 @@ nonempty `ANNALS_LIBRARY`, then `library` in the selected config. If none of
 those selects a library, the command fails; Annals does not search the current
 directory or fall back to `./annals.db`.
 
-The macOS frontend described below supplies the system config path when no
+The macOS frontend described below supplies its per-user config path when no
 explicit config or library selection is present. The Linux units continue to
 pass `/etc/annals/config.toml` explicitly. Inbox-run options override their
 corresponding config values. A relative `library` or `inbox.root` value is
@@ -220,12 +223,13 @@ sudo -u annals /usr/local/bin/annals \
 ```
 
 Human status output reports incoming files split into ready and settling,
-processing envelopes, completed and failed envelopes, and whether the run lock
-is held. `--json` additionally reports the ignored-entry count. A successful
-run reports registered, attempted, applied, recorded, and failed counts;
-runnable work remaining; settling arrivals; and whether the runnable queue was
-drained. The spool root, recovered-job count, effective settling interval,
-elapsed seconds, and ignored count are also available with `--json`.
+processing envelopes, completed and failed envelopes, whether the run lock is
+held, and whether maintenance is requested. `--json` additionally reports the
+ignored-entry count. A successful run reports registered, attempted, applied,
+recorded, and failed counts; runnable work remaining; settling arrivals;
+whether the runnable queue was drained; and whether it stopped for maintenance.
+The spool root, recovered-job count, effective settling interval, elapsed
+seconds, and ignored count are also available with `--json`.
 
 Use `annals lately --channel inbox` for durable, time-windowed delivery
 history. It includes both successful and permanently failed inbox material;
@@ -254,25 +258,29 @@ Do not overwrite an existing inbox pathname. Reusing a basename with different
 bytes may also conflict with the immutable work label derived from that name;
 Annals records that job as failed rather than silently changing the label.
 
-## macOS with launchd
+## macOS user LaunchAgent
 
-The macOS installation belongs to one explicitly selected local operator.
-That same account owns every mutable file and runs the LaunchDaemon. This
-single-UID model lets the operator, including Codex processes running as that
-operator, use the complete CLI and SQLite library without `sudo` or shared-file
-permission rules.
+The macOS installation belongs entirely to the logged-in user. This is the
+important maintenance boundary: Annals, Codex, its scheduler definition, and
+all release files have exactly that user's authority. Updating the complete
+application therefore needs no stored administrator credential, privileged
+helper, or passwordless `sudo` rule.
 
-The installed program and state use this layout:
+The layout is:
 
 ```text
-/usr/local/bin/annals                    # system-default frontend
-/usr/local/libexec/annals/annals         # Rust executable payload
-/Library/LaunchDaemons/org.annals.inbox.plist
-/Library/Application Support/Annals/
+$HOME/.local/bin/annals                 # frontend -> current release
+$HOME/Library/LaunchAgents/org.annals.inbox.plist
+$HOME/Library/Application Support/Annals/
 |-- config.toml
 |-- annals.db
 |-- codex-home/
 |-- log/
+|-- backups/
+|-- install/
+|   |-- releases/RELEASE_ID/
+|   |-- current -> releases/RELEASE_ID
+|   `-- previous -> releases/RELEASE_ID
 `-- spool/
     |-- .queue.json
     |-- .run.lock
@@ -282,131 +290,116 @@ The installed program and state use this layout:
     `-- failed/
 ```
 
-The state directory is private to the operator. The small root-owned frontend
-does not elevate privileges or change the caller's identity. It executes the
-payload with `/Library/Application Support/Annals/config.toml` when neither an
-explicit config nor an explicit library was selected. `--config`,
-`ANNALS_CONFIG`, `--library`, and `ANNALS_LIBRARY` continue to override that
-default, so scratch and project-specific libraries remain easy to use.
+The frontend supplies the state-local config only when no explicit config or
+library was selected. The LaunchAgent runs `annals --quiet inbox run` with the
+user's real `HOME` and a private, state-local `CODEX_HOME`. Add
+`$HOME/.local/bin` to `PATH` for interactive use; launchd uses the absolute
+frontend path.
 
-The LaunchDaemon invokes the same frontend as `annals --quiet inbox run`.
-launchd runs it as the operator with `HOME` set to the state directory and
-`CODEX_HOME` set to its private `codex-home`. Interactive invocations keep the
-caller's normal environment and Codex credentials; only their default Annals
-config changes. Scheduled and interactive invocations therefore share a
-corpus without sharing two Unix owners.
+This LaunchAgent is available only while the user is logged in. It resumes at
+the next login after a logout or restart. A service that must run at the login
+window needs a system LaunchDaemon and cannot also be fully maintained by an
+unprivileged user.
 
-This trust boundary is deliberate: the scheduled Annals and Codex processes
-run with the operator's filesystem authority. Select only the account intended
-to own and maintain the consulting library.
+### State-local Codex authentication
 
-### Bundled installer
+The deployer verifies existing state-local authentication but does not start an
+interactive login. For a fresh installation, authenticate once before the
+first deploy:
 
-The installer does not compile Annals or install Codex. Build and check the
-release executable first, resolve Codex before invoking `sudo`, and name the
-operator explicitly:
+```sh
+STATE_DIR="$HOME/Library/Application Support/Annals"
+install -d -m 0700 "$STATE_DIR/codex-home"
+HOME="$HOME" CODEX_HOME="$STATE_DIR/codex-home" \
+  codex -c 'cli_auth_credentials_store="file"' login --device-auth
+HOME="$HOME" CODEX_HOME="$STATE_DIR/codex-home" codex login status
+```
+
+Keep that directory private. Annals copies its `auth.json` into each isolated
+liaison runtime rather than relying on an OS credential store. Migration from
+the former system installation retains its existing state-local credentials.
+
+### Deploy or update
+
+The deployer does not compile Annals or install Codex. `ci.sh` checks the tree
+and builds the release executable:
 
 ```sh
 ./ci.sh
-sudo ./packaging/launchd/install.sh \
-  --operator "$(id -un)" \
+./packaging/launchd/deploy-user.sh \
   --binary "$PWD/target/release/annals" \
   --codex "$(command -v codex)"
 ```
 
-The installer accepts absolute executable paths and requires an existing local
-operator account. It then:
+That same command is the normal unattended update operation. It preflights the
+candidate, configuration, library, and Codex login before cutover. Complete
+program releases contain the payload, frontend, updater, rendered LaunchAgent,
+and a hash manifest. During an update the deployer disables new activations,
+requests maintenance, waits for the running worker to stop between jobs, makes
+a consistent SQLite backup, applies any required schema migration, and switches
+the `current` selector. It validates through the candidate and installed
+frontends before reloading launchd. A failure restores the old selectors,
+plist, and service. Configuration, authentication, the database, spool, logs,
+and archives are retained.
 
-- validates the operator, executable, templates, and fixed installation
-  targets before changing the machine;
-- creates private operator-owned state, log, Codex-home, and spool
-  directories;
-- installs the payload, system-default frontend, and rendered LaunchDaemon;
-- creates the Annals and state-local Codex configuration when absent;
-- checks Codex authentication as the operator in the state-local Codex home,
-  using device authentication when login is required;
-- initializes a missing library or validates an existing one as the operator;
-  and
-- loads and starts `system/org.annals.inbox` only after those checks succeed.
+The default drain deadline is 3,900 seconds, long enough for one liaison's
+60-minute limit plus headroom. Set `ANNALS_UPDATE_WAIT_SECONDS` to another
+nonnegative number when a caller needs a shorter deadline. `--no-start`
+installs and validates without reading or changing launchd state.
 
-If authentication is cancelled or cannot run interactively, the installer
-leaves the provisioned service disabled. Rerun the same command to finish. A
-normal rerun with the same `--operator` is also the update path: it replaces
-the payload, frontend, and project-owned launchd definition while retaining
-configuration, the database, credentials, queued material, logs, and both
-archives.
+### Migrate the former system installation
 
-After installation, direct library access needs no `sudo` and works from any
-directory:
+The old root-owned LaunchDaemon layout requires one final attended migration.
+Build the current release, then run the bundled migration while logged into the
+operator's graphical session:
+
+```sh
+./ci.sh
+sudo ./packaging/launchd/migrate-to-user.sh \
+  --binary "$PWD/target/release/annals" \
+  --codex "$(command -v codex)"
+```
+
+The migration disables and drains `system/org.annals.inbox`, moves the whole
+state directory on one filesystem so the database and its WAL sidecars stay
+together, rewrites the two legacy absolute state paths, deploys the user
+release, and removes the validated old program files. If deployment fails, it
+puts the state and system service back. Do not run the old and new jobs
+together: launchd domains allow identical labels, while the inbox lock only
+prevents simultaneous workers.
+
+### Operation and removal
+
+Direct access and scheduler inspection need no elevation:
 
 ```sh
 annals stats
 annals validate
-annals overview
-annals search "predicate locking"
 annals inbox status
+launchctl print "gui/$(id -u)/org.annals.inbox"
+tail -f "$HOME/Library/Application Support/Annals/log/inbox.stdout.log"
 ```
 
-These commands also work from an unattended Codex process running as the
-operator. An explicit target still bypasses the system default:
-
-```sh
-annals --library ./scratch.db init
-annals --config ./project.toml stats
-```
-
-Scheduler administration remains a privileged launchd operation. Inspect its
-definition and the operator-readable logs with:
-
-```sh
-sudo launchctl print system/org.annals.inbox
-tail -f "/Library/Application Support/Annals/log/inbox.stdout.log"
-tail -f "/Library/Application Support/Annals/log/inbox.stderr.log"
-```
-
-`RunAtLoad` handles startup and `StartInterval` requests another activation
-every five minutes. launchd does not run another instance while the job is
-still active; Annals' own lock remains authoritative for invocations outside
-launchd. Each activation drains all runnable FIFO work, so the interval only
-wakes an idle worker and provides retry and final-race recovery.
-
-For example, the operator can submit this repository's README under a new
-immutable work label without elevation:
+Submit a complete file under an unused name with:
 
 ```sh
 install -m 0600 README.md \
-  "/Library/Application Support/Annals/spool/incoming/annals-readme.md"
+  "$HOME/Library/Application Support/Annals/spool/incoming/annals-readme.md"
 ```
 
-Choose an unused destination name. The default 60-second settling interval
-ensures launchd does not claim a file still being copied; the next eligible
-activation processes and applies it automatically.
-
-### Uninstall
-
-To remove scheduling and installed program files without deleting the corpus:
+To retire the user installation while retaining its corpus and operational
+state, boot out the LaunchAgent and remove only the scheduler, command link,
+and versioned program directory:
 
 ```sh
-sudo ./packaging/launchd/uninstall.sh
+launchctl bootout "gui/$(id -u)/org.annals.inbox" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/org.annals.inbox.plist"
+rm -f "$HOME/.local/bin/annals"
+rm -rf "$HOME/Library/Application Support/Annals/install"
 ```
 
-The uninstaller disables and removes the LaunchDaemon, then removes the
-frontend and executable payload. It deliberately retains everything under
-`/Library/Application Support/Annals`, including configuration, the database,
-state-local Codex credentials, logs, queued material, and both archives. The
-operator is an existing user account and is never removed. Delete retained
-state manually only after making any required backup.
-
-### Manual installation
-
-The bundled installer is the reference implementation for the fixed layout.
-An MDM or other manual deployment must preserve the same invariants: install a
-root-owned frontend separately from the payload; make all mutable state private
-and writable by one named operator; render that operator into the LaunchDaemon;
-set only the scheduled process's `HOME` and `CODEX_HOME` to state-local paths;
-and have launchd call the frontend without a duplicated config argument. Load
-the plist only after authentication, `annals validate`, and `annals inbox
-status` all succeed as the operator.
+Back up and explicitly remove the remaining state only when the corpus,
+credentials, queued material, logs, and archives are no longer needed.
 
 ## Failure recovery and maintenance
 
@@ -434,13 +427,16 @@ that narrow interval, recovery may examine the retained work again. The work's
 content-addressed storage keeps the exact source bytes idempotent, but model
 examination itself is not guaranteed to run exactly once.
 
-Stop scheduling before maintenance that changes the executable, configuration,
-or library:
+On Linux, stop scheduling before maintenance that changes the executable,
+configuration, or library:
 
 ```sh
 sudo systemctl stop annals-inbox.timer
 sudo systemctl start annals-inbox.timer
 ```
+
+On macOS, `deploy-user.sh` coordinates this boundary with the maintenance
+marker and restores scheduling automatically.
 
 Use `annals backup` for a consistent SQLite backup rather than copying a live
 WAL database, and run `annals validate` periodically. Include the spool when a

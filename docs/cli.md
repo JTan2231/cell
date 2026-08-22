@@ -13,9 +13,9 @@ selects one, the command fails with `library_not_configured`; Annals never
 falls back to `./annals.db`.
 
 The installed macOS frontend selects
-`/Library/Application Support/Annals/config.toml` only when the invocation has
-no explicit config or library selection. Thus bare installed commands such as
-`annals stats` use the system installation. Explicit selections such as these
+`$HOME/Library/Application Support/Annals/config.toml` only when the invocation
+has no explicit config or library selection. Thus bare installed commands such
+as `annals stats` use the user installation. Explicit selections such as these
 target independent libraries. The literal `annals` invocation with no
 subcommand still displays help.
 
@@ -26,7 +26,7 @@ ANNALS_CONFIG=./project.toml annals stats
 ANNALS_LIBRARY=./scratch.db annals stats
 ```
 
-An explicit library suppresses the frontend's system-config default. The
+An explicit library suppresses the frontend's user-config default. The
 uninstalled executable has no implicit config path, so repository and Linux
 uses must provide a config or library unless their own launcher supplies one.
 Relative `library` and `inbox.root` config paths are resolved from the config
@@ -40,12 +40,17 @@ resolved library path on stderr in human mode.
 
 ```text
 annals init
+annals migrate
 annals stats
 annals validate
 annals backup OUTPUT
 ```
 
 `init` creates revision zero and refuses to replace an existing library.
+`migrate` transactionally upgrades an existing library to the schema supported
+by the executable. It is idempotent at the current version and refuses a
+library created by a newer schema version. The macOS deployer runs it after a
+consistent backup and before switching releases.
 `stats` reports revision and corpus, graph, work, reconciliation, history,
 model-run, and database-size information.
 

@@ -139,36 +139,36 @@ or `ANNALS_LIBRARY`, or select a TOML config with `--config` or
 `ANNALS_CONFIG`. Annals never silently creates or opens `./annals.db`.
 
 The installed macOS `annals` frontend selects
-`/Library/Application Support/Annals/config.toml` when no explicit library or
-config selection is present. Consequently, commands such as `annals stats`,
-`annals search`, and `annals inbox status` operate on the same system library
-as the scheduled inbox worker. An explicit option or environment variable
-still selects a different target.
+`$HOME/Library/Application Support/Annals/config.toml` when no explicit library
+or config selection is present. Consequently, commands such as `annals stats`,
+`annals search`, and `annals inbox status` operate on the same user library as
+the scheduled inbox worker. An explicit option or environment variable still
+selects a different target.
 
 ## Scheduled macOS installation
 
-The bundled installer assigns the installation to one explicitly named macOS
-operator. That account owns the private library, inbox, and state-local Codex
-home, and launchd runs the scheduled worker as the same account. Build first,
-then pass the operator and absolute paths for both executables:
+The macOS installation is deliberately user-owned, so Codex running as that
+user can update the whole application without administrator credentials. After
+state-local Codex authentication is prepared as described in the
+[system installation guide](docs/system-installation.md), deploy with:
 
 ```sh
-sudo ./packaging/launchd/install.sh \
-  --operator "$(id -un)" \
+./ci.sh
+./packaging/launchd/deploy-user.sh \
   --binary "$PWD/target/release/annals" \
   --codex "$(command -v codex)"
 ```
 
-The installer places a small frontend at `/usr/local/bin/annals` and the Rust
-executable at `/usr/local/libexec/annals/annals`. It completes Codex device
-authentication in the installation's private Codex home when needed,
-initializes or validates the library, and loads the LaunchDaemon only after the
-installation is usable. Running the same command again updates program-owned
-files while retaining configuration, credentials, corpus data, and every
-queued or archived source.
+The deployer installs `~/.local/bin/annals`, versioned complete releases under
+`~/Library/Application Support/Annals/install`, and a user LaunchAgent under
+`~/Library/LaunchAgents`. Running the same command again is the unattended
+update process. It drains the worker between jobs, takes a consistent database
+backup, switches releases atomically, validates the result, and automatically
+restores the previous release if launchd cutover fails. Configuration,
+credentials, corpus data, logs, and queued or archived sources are retained.
 
-After installation, the operator—and Codex running as that operator—uses the
-system library without `sudo`:
+After installation, the user—and Codex running as that user—uses the default
+library without `sudo`:
 
 ```sh
 annals stats
@@ -177,13 +177,14 @@ annals inbox status
 ```
 
 Drop complete UTF-8 files into
-`/Library/Application Support/Annals/spool/incoming`. The one-shot worker runs
-at startup and then receives another wake-up every five minutes while idle. An
-activation registers settled arrivals and drains the durable FIFO queue until
-it is empty; it has no item-count or lifetime cap. New arrivals are rescanned
-between jobs, and each individual liaison is limited to 60 minutes. For
-status, update, uninstall, manual installation, and Linux systemd instructions,
-see the [system installation guide](docs/system-installation.md).
+`$HOME/Library/Application Support/Annals/spool/incoming`. The one-shot worker
+runs at login and then receives another wake-up every five minutes while idle.
+An activation registers settled arrivals and drains the durable FIFO queue
+until it is empty; it has no item-count or lifetime cap. New arrivals are
+rescanned between jobs, and each individual liaison is limited to 60 minutes.
+The LaunchAgent runs only while that macOS user is logged in and resumes at the
+next login. For migration, status, removal, and Linux systemd instructions, see
+the [system installation guide](docs/system-installation.md).
 
 See the [documentation index](docs/README.md) for the command, protocol,
 architecture, storage, search, and runtime contracts.

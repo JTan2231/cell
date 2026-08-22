@@ -42,6 +42,8 @@ pub struct Cli {
 pub enum Command {
     /// Create a new library without replacing an existing file.
     Init,
+    /// Upgrade an existing library to the current schema.
+    Migrate,
     /// Report storage, workflow, and history statistics.
     Stats,
     /// Summarize the concept graph at one revision.
@@ -382,6 +384,10 @@ mod tests {
 
     #[test]
     fn graph_native_commands_parse() {
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "migrate"]).map(|cli| cli.command),
+            Ok(Command::Migrate)
+        ));
         assert!(matches!(
             Cli::try_parse_from(["annals", "work", "show", "Paper"]).map(|cli| cli.command),
             Ok(Command::Work(WorkCommand::Show(_)))

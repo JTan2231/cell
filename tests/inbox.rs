@@ -14,6 +14,36 @@ use tempfile::TempDir;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
+const LEGACY_QUEUE_WITH_SETTLING_ENTRY: &[u8] = br#"{
+  "version": 1,
+  "next_sequence": 42,
+  "entries": {
+    "c2V0dGxpbmcudHh0": 41
+  }
+}"#;
+
+const LEGACY_PROCESSING_RECEIPT: &[u8] = br#"{
+  "version": 1,
+  "id": "j00000000000000000007",
+  "original_name": "legacy.txt",
+  "original_name_base64": "bGVnYWN5LnR4dA",
+  "state": "processing",
+  "attempts": 1,
+  "created_at": "2026-08-20T19:00:00Z",
+  "started_at": "2026-08-20T19:01:00Z",
+  "completed_at": null,
+  "source_sha256": null,
+  "work": null,
+  "reconciliation_id": null,
+  "model_run_token": null,
+  "result_status": null,
+  "result_revision": null,
+  "last_error": {
+    "code": "model_failed",
+    "message": "predecessor retry"
+  }
+}"#;
+
 struct Installation {
     directory: TempDir,
     config: PathBuf,
@@ -465,6 +495,170 @@ fn run_rescans_for_ready_arrivals_and_leaves_settling_arrivals_for_later() -> Te
 }
 
 #[test]
+fn maintenance_marker_stops_the_worker_between_jobs() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "01-first.md",
+        b"Shared inbox claim.\nFirst source.\n",
+        0o600,
+    )?;
+    installation.incoming(
+        "02-second.md",
+        b"Shared inbox claim.\nSecond source.\n",
+        0o600,
+    )?;
+
+    let ready = installation.directory.path().join("fake-codex-ready");
+    let release = installation.directory.path().join("fake-codex-release");
+    let child = installation
+        .command()
+        .args(["inbox", "run"])
+        .env("ANNALS_FAKE_BLOCK_READY", &ready)
+        .env("ANNALS_FAKE_BLOCK_RELEASE", &release)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    if let Err(error) = wait_for_file(&ready) {
+        fs::write(&release, b"release\n")?;
+        let _ = child.wait_with_output();
+        return Err(error);
+    }
+    fs::write(installation.inbox.join(".maintenance"), b"update\n")?;
+    fs::write(&release, b"release\n")?;
+
+    let stopped = successful_json(&child.wait_with_output()?)?;
+    assert_eq!(stopped["attempted"], 1);
+    assert_eq!(stopped["remaining"], 1);
+    assert_eq!(stopped["queue_drained"], false);
+    assert_eq!(stopped["stopped_for_maintenance"], true);
+    assert_eq!(archived_material(&installation.inbox, "done")?.len(), 1);
+    assert_eq!(
+        archived_material(&installation.inbox, "processing")?.len(),
+        1
+    );
+
+    let status = installation.json_ok(["inbox", "status"])?;
+    assert_eq!(status["maintenance"], true);
+    fs::remove_file(installation.inbox.join(".maintenance"))?;
+
+    let resumed = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(resumed["attempted"], 1);
+    assert_eq!(resumed["remaining"], 0);
+    assert_eq!(resumed["stopped_for_maintenance"], false);
+    assert_eq!(archived_material(&installation.inbox, "done")?.len(), 2);
+    assert!(archived_material(&installation.inbox, "processing")?.is_empty());
+    Ok(())
+}
+
+#[test]
+fn maintenance_smoke_does_not_rewrite_predecessor_spool_state() -> TestResult {
+    let installation = Installation::new(3_600)?;
+    installation.init()?;
+    installation.incoming(
+        "settling.txt",
+        b"Shared inbox claim.\nA settling predecessor source.\n",
+        0o600,
+    )?;
+    fs::write(
+        installation.inbox.join(".queue.json"),
+        LEGACY_QUEUE_WITH_SETTLING_ENTRY,
+    )?;
+
+    let processing = installation.inbox.join("processing");
+    let legacy = processing.join("j00000000000000000007");
+    fs::create_dir_all(legacy.join("material"))?;
+    let legacy_source = legacy.join("material/legacy.txt");
+    fs::write(
+        &legacy_source,
+        b"Shared inbox claim.\nA predecessor processing source.\n",
+    )?;
+    fs::write(legacy.join("job.json"), LEGACY_PROCESSING_RECEIPT)?;
+
+    let missing = processing.join("j00000000000000000008");
+    fs::create_dir_all(missing.join("material"))?;
+    fs::write(
+        missing.join("material/missing-receipt.txt"),
+        b"Shared inbox claim.\nA pre-receipt predecessor source.\n",
+    )?;
+    fs::write(installation.inbox.join(".maintenance"), b"update\n")?;
+
+    let smoke = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(smoke["recovered"], 2);
+    assert_eq!(smoke["attempted"], 0);
+    assert_eq!(smoke["stopped_for_maintenance"], true);
+    assert_eq!(
+        fs::read(installation.inbox.join(".queue.json"))?,
+        LEGACY_QUEUE_WITH_SETTLING_ENTRY
+    );
+    assert_eq!(
+        fs::read(legacy.join("job.json"))?,
+        LEGACY_PROCESSING_RECEIPT
+    );
+    assert!(!missing.join("job.json").exists());
+    assert!(!installation.counter.exists());
+
+    fs::remove_file(installation.inbox.join(".maintenance"))?;
+    let resumed = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(resumed["recovered"], 2);
+    assert_eq!(resumed["attempted"], 2);
+    assert_eq!(resumed["applied"], 2);
+    assert_eq!(resumed["settling"], 1);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "2\n");
+
+    let upgraded_queue: Value =
+        serde_json::from_slice(&fs::read(installation.inbox.join(".queue.json"))?)?;
+    assert_eq!(upgraded_queue["version"], 3);
+    assert_eq!(
+        upgraded_queue["entries"]["c2V0dGxpbmcudHh0"]["sequence"],
+        41
+    );
+    let upgraded_receipt: Value = serde_json::from_slice(&fs::read(
+        installation
+            .inbox
+            .join("done/j00000000000000000007/job.json"),
+    )?)?;
+    assert_eq!(upgraded_receipt["version"], 2);
+    assert_eq!(upgraded_receipt["first_seen_at"], "2026-08-20T19:00:00Z");
+    assert_eq!(upgraded_receipt["claimed_at"], "2026-08-20T19:00:00Z");
+    assert_eq!(
+        upgraded_receipt["delivery_key"],
+        "inbox:j00000000000000000007:2026-08-20T19:00:00Z"
+    );
+    assert!(upgraded_receipt["ingestion_id"].is_number());
+    let repaired_receipt: Value = serde_json::from_slice(&fs::read(
+        installation
+            .inbox
+            .join("done/j00000000000000000008/job.json"),
+    )?)?;
+    assert_eq!(repaired_receipt["version"], 2);
+
+    let settled = installation.json_ok(["inbox", "run", "--settle-seconds", "0"])?;
+    assert_eq!(settled["attempted"], 1);
+    assert!(
+        installation
+            .inbox
+            .join("done/j00000000000000000041")
+            .is_dir()
+    );
+    assert_eq!(fs::read_to_string(&installation.counter)?, "3\n");
+
+    let lately = installation.json_ok(["lately", "--channel", "inbox"])?;
+    assert_eq!(lately["delivery_count"], 3);
+    assert_eq!(
+        lately["deliveries"]
+            .as_array()
+            .ok_or("lately deliveries were not an array")?
+            .iter()
+            .filter(|delivery| delivery["source_name"] == "legacy.txt")
+            .count(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
 fn permanent_input_failures_are_archived_unchanged_and_do_not_stop_the_batch() -> TestResult {
     let installation = Installation::new(0)?;
     installation.init()?;
@@ -672,6 +866,83 @@ fn terminal_processing_receipts_are_archived_without_reprocessing() -> TestResul
             .count(),
         1
     );
+    Ok(())
+}
+
+#[test]
+fn legacy_done_receipt_reuses_its_applied_reconciliation() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "legacy-done.txt",
+        b"Shared inbox claim.\nA predecessor-completed source.\n",
+        0o600,
+    )?;
+    let first = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(first["applied"], 1);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
+
+    let id = "j00000000000000000001";
+    let done = installation.inbox.join("done").join(id);
+    let current: Value = serde_json::from_slice(&fs::read(done.join("job.json"))?)?;
+    let reconciliation_id = current["reconciliation_id"]
+        .as_i64()
+        .ok_or("completed receipt omitted its reconciliation")?;
+    let legacy = serde_json::json!({
+        "version": 1,
+        "id": id,
+        "original_name": "legacy-done.txt",
+        "original_name_base64": "bGVnYWN5LWRvbmUudHh0",
+        "state": "done",
+        "attempts": 1,
+        "created_at": "2026-08-20T20:00:00Z",
+        "started_at": current["started_at"].clone(),
+        "completed_at": current["completed_at"].clone(),
+        "source_sha256": current["source_sha256"].clone(),
+        "work": current["work"].clone(),
+        "reconciliation_id": reconciliation_id,
+        "model_run_token": current["model_run_token"].clone(),
+        "result_status": "applied",
+        "result_revision": 1,
+        "last_error": null,
+    });
+
+    let connection = rusqlite::Connection::open(&installation.library)?;
+    assert_eq!(connection.execute("DELETE FROM ingestions", [])?, 1);
+    drop(connection);
+    let processing = installation.inbox.join("processing").join(id);
+    fs::create_dir_all(processing.parent().ok_or("processing had no parent")?)?;
+    fs::rename(&done, &processing)?;
+    fs::write(
+        processing.join("job.json"),
+        serde_json::to_vec_pretty(&legacy)?,
+    )?;
+    fs::remove_file(&installation.codex)?;
+
+    let recovered = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(recovered["recovered"], 1);
+    assert_eq!(recovered["attempted"], 1);
+    assert_eq!(recovered["applied"], 1);
+    assert_eq!(recovered["remaining"], 0);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
+
+    let upgraded: Value = serde_json::from_slice(&fs::read(
+        installation.inbox.join("done").join(id).join("job.json"),
+    )?)?;
+    assert_eq!(upgraded["version"], 2);
+    assert_eq!(upgraded["state"], "done");
+    assert_eq!(upgraded["first_seen_at"], "2026-08-20T20:00:00Z");
+    assert_eq!(upgraded["reconciliation_id"], reconciliation_id);
+    assert!(upgraded["ingestion_id"].is_number());
+
+    let stats = installation.json_ok(["stats"])?;
+    assert_eq!(stats["revision"], 1);
+    assert_eq!(stats["work_count"], 1);
+    assert_eq!(stats["model_run_count"], 1);
+    let lately = installation.json_ok(["lately", "--channel", "inbox"])?;
+    assert_eq!(lately["delivery_count"], 1);
+    assert_eq!(lately["completed_count"], 1);
+    assert_eq!(lately["deliveries"][0]["result"], "applied");
     Ok(())
 }
 

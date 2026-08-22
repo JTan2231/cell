@@ -34,6 +34,7 @@ struct Spool {
     failed: PathBuf,
     index: PathBuf,
     lock: PathBuf,
+    maintenance: PathBuf,
 }
 
 impl Spool {
@@ -46,6 +47,7 @@ impl Spool {
             failed: root.join("failed"),
             index: root.join(".queue.json"),
             lock: root.join(".run.lock"),
+            maintenance: root.join(".maintenance"),
         }
     }
 
@@ -99,6 +101,27 @@ impl Spool {
         })?;
         Ok(file)
     }
+
+    fn maintenance_requested(&self) -> Result<bool, AppError> {
+        match fs::symlink_metadata(&self.maintenance) {
+            Ok(metadata) if metadata.file_type().is_file() => Ok(true),
+            Ok(_) => Err(AppError::unexpected(
+                "inbox_maintenance_invalid",
+                format!(
+                    "inbox maintenance marker is not a regular file: {}",
+                    self.maintenance.display()
+                ),
+            )),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(AppError::unexpected(
+                "inbox_maintenance_failed",
+                format!(
+                    "unable to inspect inbox maintenance marker {}: {error}",
+                    self.maintenance.display()
+                ),
+            )),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -112,6 +135,7 @@ struct InboxStatus {
     done: usize,
     failed: usize,
     locked: bool,
+    maintenance: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -129,6 +153,7 @@ struct RunSummary {
     ignored: usize,
     elapsed_seconds: f64,
     queue_drained: bool,
+    stopped_for_maintenance: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,6 +162,14 @@ struct QueueIndex {
     version: u32,
     next_sequence: u64,
     entries: BTreeMap<String, QueueEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyQueueIndex {
+    version: u32,
+    next_sequence: u64,
+    entries: BTreeMap<String, u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -213,6 +246,32 @@ struct JobReceipt {
     last_error: Option<ReceiptError>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyJobReceipt {
+    version: u32,
+    id: String,
+    original_name: String,
+    original_name_base64: String,
+    state: String,
+    attempts: u32,
+    created_at: String,
+    started_at: Option<String>,
+    completed_at: Option<String>,
+    source_sha256: Option<String>,
+    work: Option<String>,
+    reconciliation_id: Option<i64>,
+    model_run_token: Option<String>,
+    result_status: Option<String>,
+    result_revision: Option<i64>,
+    last_error: Option<ReceiptError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StoredFormatVersion {
+    version: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ReceiptError {
@@ -238,8 +297,9 @@ pub(crate) fn run(
     spool.create()?;
     let _lock = spool.acquire_lock()?;
     let started = Instant::now();
-    let mut index = read_index(&spool.index)?;
-    let recovered_envelopes = scan_envelopes(&spool.processing, &index)?;
+    let mut index = read_index(&spool)?;
+    let persist_repairs = !spool.maintenance_requested()?;
+    let recovered_envelopes = scan_envelopes(&spool, &index, persist_repairs)?;
     let recovered = recovered_envelopes.len();
     let mut queue = BTreeMap::new();
     for envelope in recovered_envelopes {
@@ -262,9 +322,14 @@ pub(crate) fn run(
         ignored: 0,
         elapsed_seconds: 0.0,
         queue_drained: false,
+        stopped_for_maintenance: false,
     };
 
     loop {
+        if spool.maintenance_requested()? {
+            summary.stopped_for_maintenance = true;
+            break;
+        }
         let registered = register_settled(&spool, &mut index, settle_seconds)?;
         summary.registered = summary.registered.saturating_add(registered.len());
         for envelope in registered {
@@ -291,7 +356,7 @@ pub(crate) fn run(
     summary.elapsed_seconds = started.elapsed().as_secs_f64();
     summary.queue_drained = summary.remaining == 0;
     let human = format!(
-        "Inbox run: {} registered, {} attempted, {} applied, {} recorded, {} failed\nRemaining queued: {}; settling: {}\nQueue drained: {}",
+        "Inbox run: {} registered, {} attempted, {} applied, {} recorded, {} failed\nRemaining queued: {}; settling: {}\nQueue drained: {}; stopped for maintenance: {}",
         summary.registered,
         summary.attempted,
         summary.applied,
@@ -300,6 +365,7 @@ pub(crate) fn run(
         summary.remaining,
         summary.settling,
         summary.queue_drained,
+        summary.stopped_for_maintenance,
     );
     Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
 }
@@ -309,7 +375,7 @@ pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
     let spool = Spool::new(&inbox.root);
     let value = inspect(&spool, inbox.settle_seconds)?;
     let human = format!(
-        "Inbox: {}\nIncoming: {} ({} ready, {} settling)\nProcessing: {}\nDone: {}\nFailed: {}\nLocked: {}",
+        "Inbox: {}\nIncoming: {} ({} ready, {} settling)\nProcessing: {}\nDone: {}\nFailed: {}\nLocked: {}\nMaintenance: {}",
         value.root,
         value.incoming,
         value.ready,
@@ -318,6 +384,7 @@ pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
         value.done,
         value.failed,
         value.locked,
+        value.maintenance,
     );
     Ok(CommandOutput::new(serde_json::to_value(value)?, human))
 }
@@ -767,7 +834,12 @@ fn write_receipt(envelope: &Envelope) -> Result<(), AppError> {
     )
 }
 
-fn scan_envelopes(path: &Path, index: &QueueIndex) -> Result<Vec<Envelope>, AppError> {
+fn scan_envelopes(
+    spool: &Spool,
+    index: &QueueIndex,
+    persist_repairs: bool,
+) -> Result<Vec<Envelope>, AppError> {
+    let path = &spool.processing;
     if !path.exists() {
         return Ok(Vec::new());
     }
@@ -800,13 +872,8 @@ fn scan_envelopes(path: &Path, index: &QueueIndex) -> Result<Vec<Envelope>, AppE
                 ));
             }
         };
-        let receipt = if receipt_path.exists() {
-            serde_json::from_slice(&fs::read(&receipt_path)?).map_err(|error| {
-                AppError::unexpected(
-                    "invalid_job_receipt",
-                    format!("invalid job receipt {}: {error}", receipt_path.display()),
-                )
-            })?
+        let (receipt, upgraded) = if receipt_path.exists() {
+            read_receipt(&receipt_path, &id, &source)?
         } else {
             let name = source.file_name().ok_or_else(|| {
                 AppError::unexpected(
@@ -828,19 +895,164 @@ fn scan_envelopes(path: &Path, index: &QueueIndex) -> Result<Vec<Envelope>, AppE
                 expected_identity: None,
                 receipt: receipt.clone(),
             };
-            write_receipt(&envelope)?;
-            receipt
+            if persist_repairs {
+                write_receipt(&envelope)?;
+            }
+            (receipt, false)
         };
         validate_receipt(&receipt, &id, &source)?;
-        envelopes.push(Envelope {
+        let envelope = Envelope {
             id,
             directory,
             source,
             expected_identity: None,
             receipt,
-        });
+        };
+        if upgraded && persist_repairs {
+            write_receipt(&envelope)?;
+        }
+        envelopes.push(envelope);
     }
     Ok(envelopes)
+}
+
+fn read_receipt(path: &Path, id: &str, source: &Path) -> Result<(JobReceipt, bool), AppError> {
+    let bytes = fs::read(path)?;
+    let version = serde_json::from_slice::<StoredFormatVersion>(&bytes)
+        .map_err(|error| invalid_receipt(path, &error))?
+        .version;
+    match version {
+        RECEIPT_VERSION => serde_json::from_slice(&bytes)
+            .map(|receipt| (receipt, false))
+            .map_err(|error| invalid_receipt(path, &error)),
+        1 => {
+            let legacy: LegacyJobReceipt =
+                serde_json::from_slice(&bytes).map_err(|error| invalid_receipt(path, &error))?;
+            upgrade_legacy_receipt(legacy, id, source).map(|receipt| (receipt, true))
+        }
+        _ => Err(AppError::unexpected(
+            "invalid_job_receipt",
+            format!("unsupported job receipt {}", path.display()),
+        )),
+    }
+}
+
+fn invalid_receipt(path: &Path, error: &serde_json::Error) -> AppError {
+    AppError::unexpected(
+        "invalid_job_receipt",
+        format!("invalid job receipt {}: {error}", path.display()),
+    )
+}
+
+fn upgrade_legacy_receipt(
+    legacy: LegacyJobReceipt,
+    id: &str,
+    source: &Path,
+) -> Result<JobReceipt, AppError> {
+    let encoded_name = source
+        .file_name()
+        .map(|name| URL_SAFE_NO_PAD.encode(name.as_bytes()));
+    let displayed_name = source
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned());
+    let optional_text_is_valid = [
+        legacy.started_at.as_deref(),
+        legacy.completed_at.as_deref(),
+        legacy.source_sha256.as_deref(),
+        legacy.work.as_deref(),
+        legacy.model_run_token.as_deref(),
+        legacy.result_status.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .all(|value| !value.trim().is_empty());
+    let error_is_valid = legacy
+        .last_error
+        .as_ref()
+        .is_none_or(|error| !error.code.trim().is_empty() && !error.message.trim().is_empty());
+    let state_is_valid = match legacy.state.as_str() {
+        "processing" => {
+            legacy.completed_at.is_none()
+                && legacy.result_status.is_none()
+                && legacy.result_revision.is_none()
+        }
+        "done" => {
+            legacy.completed_at.is_some()
+                && legacy.last_error.is_none()
+                && (matches!(
+                    (legacy.result_status.as_deref(), legacy.result_revision),
+                    (Some("applied"), Some(revision)) if revision > 0
+                ) || matches!(
+                    (legacy.result_status.as_deref(), legacy.result_revision),
+                    (Some("recorded"), None)
+                ))
+        }
+        "failed" => {
+            legacy.completed_at.is_some()
+                && legacy.result_status.is_none()
+                && legacy.result_revision.is_none()
+                && legacy.last_error.is_some()
+        }
+        _ => false,
+    };
+    let progress_is_safe = state_is_valid
+        && optional_text_is_valid
+        && error_is_valid
+        && (legacy.source_sha256.is_some() == legacy.work.is_some())
+        && (legacy.reconciliation_id.is_none() || legacy.work.is_some())
+        && (legacy.model_run_token.is_none() || legacy.work.is_some())
+        && legacy.reconciliation_id.is_none_or(|id| id > 0)
+        && (legacy.state != "done" || legacy.reconciliation_id.is_some())
+        && (legacy.attempts == 0) == legacy.started_at.is_none()
+        && (legacy.last_error.is_none() || legacy.attempts > 0)
+        && (legacy.state == "processing" || legacy.attempts > 0);
+    if legacy.version != 1
+        || legacy.id != id
+        || encoded_name.as_deref() != Some(&legacy.original_name_base64)
+        || displayed_name.as_deref() != Some(&legacy.original_name)
+        || legacy.created_at.trim().is_empty()
+        || !progress_is_safe
+    {
+        return Err(AppError::unexpected(
+            "invalid_job_receipt",
+            format!(
+                "legacy job receipt {} does not match its envelope",
+                source
+                    .parent()
+                    .and_then(Path::parent)
+                    .unwrap_or(source)
+                    .display()
+            ),
+        ));
+    }
+    let metadata = metadata_for_recovered_source(source, &legacy.created_at)?;
+    let last_error = (legacy.state == "processing")
+        .then_some(legacy.last_error)
+        .flatten();
+    Ok(JobReceipt {
+        version: RECEIPT_VERSION,
+        id: legacy.id,
+        original_name: legacy.original_name,
+        original_name_base64: legacy.original_name_base64,
+        state: "processing".to_owned(),
+        attempts: legacy.attempts,
+        delivery_key: format!("inbox:{id}:{}", legacy.created_at),
+        ingestion_id: None,
+        source_size_bytes: metadata.source_size_bytes,
+        source_created_at: metadata.source_created_at,
+        source_modified_at: metadata.source_modified_at,
+        first_seen_at: legacy.created_at.clone(),
+        claimed_at: legacy.created_at,
+        started_at: legacy.started_at,
+        completed_at: None,
+        source_sha256: legacy.source_sha256,
+        work: legacy.work,
+        reconciliation_id: legacy.reconciliation_id,
+        model_run_token: legacy.model_run_token,
+        result_status: None,
+        result_revision: None,
+        last_error,
+    })
 }
 
 fn ensure_ingestion(library: &Path, envelope: &mut Envelope) -> Result<i64, AppError> {
@@ -1083,23 +1295,90 @@ fn settled(metadata: &fs::Metadata, seconds: u64) -> bool {
         .is_some_and(|age| age >= Duration::from_secs(seconds))
 }
 
-fn read_index(path: &Path) -> Result<QueueIndex, AppError> {
+fn read_index(spool: &Spool) -> Result<QueueIndex, AppError> {
+    let path = &spool.index;
     if !path.exists() {
         return Ok(QueueIndex::default());
     }
-    let index: QueueIndex = serde_json::from_slice(&fs::read(path)?).map_err(|error| {
-        AppError::unexpected(
-            "invalid_inbox_index",
-            format!("invalid inbox index {}: {error}", path.display()),
-        )
-    })?;
-    if index.version != QUEUE_VERSION || index.next_sequence == 0 {
-        return Err(AppError::unexpected(
-            "invalid_inbox_index",
-            format!("unsupported inbox index {}", path.display()),
-        ));
+    let bytes = fs::read(path)?;
+    let version = serde_json::from_slice::<StoredFormatVersion>(&bytes)
+        .map_err(|error| invalid_index(path, &error))?
+        .version;
+    match version {
+        QUEUE_VERSION => {
+            let index: QueueIndex =
+                serde_json::from_slice(&bytes).map_err(|error| invalid_index(path, &error))?;
+            if index.next_sequence == 0 {
+                return Err(unsupported_index(path));
+            }
+            Ok(index)
+        }
+        1 => {
+            let legacy: LegacyQueueIndex =
+                serde_json::from_slice(&bytes).map_err(|error| invalid_index(path, &error))?;
+            upgrade_legacy_index(spool, legacy)
+        }
+        _ => Err(unsupported_index(path)),
     }
-    Ok(index)
+}
+
+fn upgrade_legacy_index(spool: &Spool, legacy: LegacyQueueIndex) -> Result<QueueIndex, AppError> {
+    if legacy.version != 1 || legacy.next_sequence == 0 {
+        return Err(unsupported_index(&spool.index));
+    }
+    let first_seen_at = now()?;
+    let mut sequences = BTreeSet::new();
+    let mut entries = BTreeMap::new();
+    for (key, sequence) in legacy.entries {
+        if sequence == 0 || sequence >= legacy.next_sequence || !sequences.insert(sequence) {
+            return Err(unsupported_index(&spool.index));
+        }
+        let decoded = URL_SAFE_NO_PAD
+            .decode(key.as_bytes())
+            .map_err(|_| unsupported_index(&spool.index))?;
+        if URL_SAFE_NO_PAD.encode(&decoded) != key {
+            return Err(unsupported_index(&spool.index));
+        }
+        let name = OsStr::from_bytes(&decoded);
+        if name.is_empty() || Path::new(name).file_name() != Some(name) || hidden_or_temporary(name)
+        {
+            return Err(unsupported_index(&spool.index));
+        }
+        let source = spool.incoming.join(name);
+        let metadata = match fs::symlink_metadata(&source) {
+            Ok(metadata) if metadata.file_type().is_file() => metadata,
+            Ok(_) => continue,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        entries.insert(
+            key,
+            QueueEntry {
+                sequence,
+                first_seen_at: first_seen_at.clone(),
+                identity: FileIdentity::from(&metadata),
+            },
+        );
+    }
+    Ok(QueueIndex {
+        version: QUEUE_VERSION,
+        next_sequence: legacy.next_sequence,
+        entries,
+    })
+}
+
+fn invalid_index(path: &Path, error: &serde_json::Error) -> AppError {
+    AppError::unexpected(
+        "invalid_inbox_index",
+        format!("invalid inbox index {}: {error}", path.display()),
+    )
+}
+
+fn unsupported_index(path: &Path) -> AppError {
+    AppError::unexpected(
+        "invalid_inbox_index",
+        format!("unsupported inbox index {}", path.display()),
+    )
 }
 
 fn write_index(path: &Path, index: &QueueIndex) -> Result<(), AppError> {
@@ -1166,6 +1445,7 @@ fn inspect(spool: &Spool, settle_seconds: u64) -> Result<InboxStatus, AppError> 
         done: count_directories(&spool.done)?,
         failed: count_directories(&spool.failed)?,
         locked: inbox_locked(&spool.lock),
+        maintenance: spool.maintenance_requested()?,
     })
 }
 
@@ -1196,8 +1476,87 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     use super::{
-        FileIdentity, QueueIndex, Spool, path_has_identity, read_index, scan_incoming, write_index,
+        FileIdentity, QUEUE_VERSION, QueueIndex, Spool, path_has_identity, read_index,
+        register_settled, scan_incoming, write_index,
     };
+
+    #[test]
+    fn empty_version_one_queue_index_is_upgraded_and_persisted()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let spool = Spool::new(directory.path());
+        spool.create()?;
+        fs::write(
+            &spool.index,
+            r#"{"version":1,"next_sequence":42,"entries":{}}"#,
+        )?;
+
+        let mut index = read_index(&spool)?;
+        assert_eq!(index.version, QUEUE_VERSION);
+        assert_eq!(index.next_sequence, 42);
+
+        register_settled(&spool, &mut index, 0)?;
+        let persisted: QueueIndex = serde_json::from_slice(&fs::read(&spool.index)?)?;
+        assert_eq!(persisted.version, QUEUE_VERSION);
+        assert_eq!(persisted.next_sequence, 42);
+        assert!(persisted.entries.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn settling_version_one_queue_entry_keeps_its_sequence_when_upgraded()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let spool = Spool::new(directory.path());
+        spool.create()?;
+        fs::write(spool.incoming.join("settling.txt"), "settling")?;
+        let legacy = r#"{
+  "version": 1,
+  "next_sequence": 42,
+  "entries": {
+    "c2V0dGxpbmcudHh0": 41
+  }
+}"#;
+        fs::write(&spool.index, legacy)?;
+
+        let mut index = read_index(&spool)?;
+        let entry = index
+            .entries
+            .get("c2V0dGxpbmcudHh0")
+            .ok_or("settling legacy entry was lost")?;
+        assert_eq!(entry.sequence, 41);
+        assert!(!entry.first_seen_at.is_empty());
+        assert!(register_settled(&spool, &mut index, 3_600)?.is_empty());
+
+        let persisted: QueueIndex = serde_json::from_slice(&fs::read(&spool.index)?)?;
+        assert_eq!(persisted.version, QUEUE_VERSION);
+        assert_eq!(persisted.next_sequence, 42);
+        assert_eq!(persisted.entries["c2V0dGxpbmcudHh0"].sequence, 41);
+
+        let claimed = register_settled(&spool, &mut index, 0)?;
+        assert_eq!(claimed.len(), 1);
+        assert_eq!(claimed[0].id, "j00000000000000000041");
+        Ok(())
+    }
+
+    #[test]
+    fn malformed_version_one_queue_sequence_is_rejected() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let directory = tempfile::tempdir()?;
+        let spool = Spool::new(directory.path());
+        spool.create()?;
+        fs::write(spool.incoming.join("settling.txt"), "settling")?;
+        fs::write(
+            &spool.index,
+            r#"{"version":1,"next_sequence":41,"entries":{"c2V0dGxpbmcudHh0":41}}"#,
+        )?;
+
+        let Err(error) = read_index(&spool) else {
+            return Err("malformed legacy index was accepted".into());
+        };
+        assert_eq!(error.code(), "invalid_inbox_index");
+        Ok(())
+    }
 
     #[test]
     fn queue_index_preserves_first_seen_order() -> Result<(), Box<dyn std::error::Error>> {
@@ -1209,7 +1568,7 @@ mod tests {
         let (first, _) = scan_incoming(&spool, &mut index, 0)?;
         write_index(&spool.index, &index)?;
         fs::write(spool.incoming.join("a.txt"), "a")?;
-        let mut index = read_index(&spool.index)?;
+        let mut index = read_index(&spool)?;
         let (mut second, _) = scan_incoming(&spool, &mut index, 0)?;
         second.sort_by_key(|entry| entry.sequence);
         assert_eq!(first[0].sequence, second[0].sequence);

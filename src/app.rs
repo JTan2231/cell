@@ -68,6 +68,7 @@ fn resolve_library_path(
 pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> {
     match &cli.command {
         Command::Init => initialize(path),
+        Command::Migrate => migrate_library(path),
         Command::Stats => stats(path),
         Command::Overview(args) => overview(path, args.at),
         Command::Roots(args) => roots(path, args),
@@ -116,6 +117,34 @@ fn initialize(path: &Path) -> Result<CommandOutput, AppError> {
             "Initialized Annals library {} at revision 0",
             path.display()
         ),
+    )
+    .mutation())
+}
+
+fn migrate_library(path: &Path) -> Result<CommandOutput, AppError> {
+    let result = db::migrate(path)?;
+    let human = if result.migrated {
+        format!(
+            "Migrated {} from schema version {} to {}",
+            path.display(),
+            result.from_version,
+            result.to_version
+        )
+    } else {
+        format!(
+            "Library {} is already at schema version {}",
+            path.display(),
+            result.to_version
+        )
+    };
+    Ok(CommandOutput::new(
+        json!({
+            "library": path.display().to_string(),
+            "from_version": result.from_version,
+            "to_version": result.to_version,
+            "migrated": result.migrated,
+        }),
+        human,
     )
     .mutation())
 }

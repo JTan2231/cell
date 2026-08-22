@@ -347,3 +347,5 @@ CREATE TRIGGER revision_evidence_immutable_delete
 BEFORE DELETE ON revision_evidence BEGIN
     SELECT RAISE(ABORT, 'revision evidence is immutable');
 END;
+
+PRAGMA user_version = 1;
