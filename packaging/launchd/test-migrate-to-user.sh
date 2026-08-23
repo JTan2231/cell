@@ -27,6 +27,13 @@ case " $* " in
     *) exit 0 ;;
 esac
 EOF
+    cat >"$tools_dir/annals-usage" <<'EOF'
+#!/bin/sh
+case " $* " in
+    *' --version '*) printf '%s\n' 'annals-usage test' ;;
+    *) exit 0 ;;
+esac
+EOF
     cat >"$tools_dir/codex" <<'EOF'
 #!/bin/sh
 exit 0
@@ -83,19 +90,24 @@ make_deployer() {
 set -eu
 home=
 launchctl=
+usage_binary=
 while [ "\$#" -gt 0 ]; do
     case "\$1" in
         --home) home=\$2; shift 2 ;;
         --launchctl) launchctl=\$2; shift 2 ;;
+        --usage-binary) usage_binary=\$2; shift 2 ;;
         --binary|--codex) shift 2 ;;
         *) exit 93 ;;
     esac
 done
+[ -x "\$usage_binary" ]
 mkdir -p "\$home/Library/Application Support/Annals/install" \
     "\$home/Library/LaunchAgents" "\$home/.local/bin"
 : >"\$home/Library/LaunchAgents/org.annals.inbox.plist"
 ln -s "\$home/Library/Application Support/Annals/install/current" \
     "\$home/.local/bin/annals"
+ln -s "\$home/Library/Application Support/Annals/install/current" \
+    "\$home/.local/bin/annals-usage"
 "\$launchctl" bootstrap "gui/\$(id -u)" \
     "\$home/Library/LaunchAgents/org.annals.inbox.plist"
 [ '$fail_deploy' -eq 0 ] || exit 94
@@ -156,6 +168,7 @@ run_migration() {
     ANNALS_MIGRATION_TEST_CRASH_AFTER_MOVE=${ANNALS_MIGRATION_TEST_CRASH_AFTER_MOVE:-0} \
         "$MIGRATOR" \
         --binary "$fixture/tools/annals" \
+        --usage-binary "$fixture/tools/annals-usage" \
         --codex "$fixture/tools/codex" \
         --legacy-prefix "$fixture/legacy" \
         --launchctl "$fixture/tools/launchctl" \
@@ -186,6 +199,7 @@ grep -Fx wal "$new_state/annals.db-wal" >/dev/null
 grep -Fx shm "$new_state/annals.db-shm" >/dev/null
 grep -Fx auth "$new_state/codex-home/auth.json" >/dev/null
 [ -f "$success/user-loaded" ]
+[ -L "$success/home/.local/bin/annals-usage" ]
 [ ! -e "$new_state/spool/.maintenance" ]
 
 failure="$temporary/failure"
@@ -210,6 +224,7 @@ grep -Fx repeated \
 [ ! -e "$failure/user-loaded" ]
 [ ! -e "$failure/home/Library/LaunchAgents/org.annals.inbox.plist" ]
 [ ! -e "$failure/home/.local/bin/annals" ]
+[ ! -e "$failure/home/.local/bin/annals-usage" ]
 [ ! -e "$old_state.migrate-to-user" ]
 
 recovery="$temporary/recovery"
@@ -233,6 +248,7 @@ run_migration "$recovery" >/dev/null
 [ -d "$recovery/home/Library/Application Support/Annals" ]
 [ ! -e "$recovery/legacy/Library/Application Support/Annals" ]
 [ ! -e "$recovery/legacy/Library/Application Support/Annals.migrate-to-user" ]
+[ -L "$recovery/home/.local/bin/annals-usage" ]
 grep -Fx repeated \
     "$recovery/home/Library/Application Support/Annals/spool/duplicates/repeated/material/repeated.txt" \
     >/dev/null

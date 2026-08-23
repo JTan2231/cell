@@ -5,10 +5,14 @@ Each service activation registers settled inbox files, drains the
 durable queue in sequence, and exits when no runnable work remains. It is not
 a resident daemon and does not require a separate database server.
 
+The default installation also runs liaison traffic through the separate
+`annals-usage` CLI. Its companion SQLite ledger records token consumption and
+account-limit snapshots without becoming part of the Annals library or corpus.
+
 ## Operational model
 
-The database is the corpus source of truth. The spool is a visible delivery
-queue with a small Annals-owned ordering index:
+The Annals library is the corpus source of truth. The spool is a visible
+delivery queue with a small Annals-owned ordering index:
 
 ```text
 .queue.json
@@ -95,9 +99,25 @@ settle_seconds = 60
 
 [liaison]
 quality = "high"
-codex = "/usr/local/bin/codex"
+codex = "/usr/local/bin/annals-usage"
 # model = "gpt-5.6-sol"
 ```
+
+The proxy has its own companion configuration. The packaged Linux example is
+[`packaging/systemd/usage.toml`](../packaging/systemd/usage.toml), installed as
+`/etc/annals/usage.toml`; macOS keeps `usage.toml` beside the Annals config:
+
+```toml
+codex = "/usr/local/bin/codex"
+database = "/var/lib/annals/usage.db"
+library = "/var/lib/annals/annals.db"
+spool = "/var/spool/annals"
+codex_home = "/var/lib/annals/codex-home"
+```
+
+Here `codex` means the real Codex executable, while `[liaison].codex` in the
+Annals config means the proxy. The two paths must not point to the same
+executable.
 
 The core executable selects a configuration only from `--config`, then a
 nonempty `ANNALS_CONFIG`. The library resolves from `--library`, then a
@@ -107,18 +127,27 @@ directory or fall back to `./annals.db`.
 
 The macOS frontend described below supplies its per-user config path when no
 explicit config or library selection is present. The Linux units continue to
-pass `/etc/annals/config.toml` explicitly. Inbox-run options override their
+pass `/etc/annals/config.toml` explicitly and select the proxy config with
+`ANNALS_USAGE_CONFIG=/etc/annals/usage.toml`. Inbox-run options override their
 corresponding config values. A relative `library` or `inbox.root` value is
 resolved from the config file's directory. A manual Linux run can therefore
 disable settling without editing the installed config:
 
 ```sh
-annals --config /etc/annals/config.toml inbox run \
-  --settle-seconds 0
+ANNALS_USAGE_CONFIG=/etc/annals/usage.toml \
+  annals --config /etc/annals/config.toml inbox run --settle-seconds 0
 ```
 
 `settle_seconds = 0` makes every accepted regular file immediately eligible.
 Unknown config keys are rejected.
+
+The usage config resolves from an explicit `annals-usage --config`, then
+`ANNALS_USAGE_CONFIG`, then `usage.toml` beside `ANNALS_CONFIG`, then the macOS
+user-state default. Its relative paths are resolved from its own directory and
+unknown keys are rejected. The Annals library and `usage.db` are ordinary
+state for the same installation and service user; no separate telemetry
+service or database account is involved. See [Consumption
+telemetry](telemetry.md) for the reporting and accounting contract.
 
 Use `model` only when an exact model override is wanted. Otherwise `quality`
 selects Annals' model and reasoning preset. Annals defaults to `high` when
@@ -136,9 +165,12 @@ The packaged units use this layout:
 
 ```text
 /usr/local/bin/annals
+/usr/local/bin/annals-usage
 /etc/annals/config.toml
+/etc/annals/usage.toml
 /var/lib/annals/
 |-- annals.db
+|-- usage.db
 `-- codex-home/
 /var/spool/annals/
 |-- .queue.json
@@ -150,8 +182,8 @@ The packaged units use this layout:
 `-- failed/
 ```
 
-The database directory must be writable by the service account because SQLite
-may create WAL and shared-memory sidecars next to the database.
+The state directory must be writable by the service account because SQLite may
+create WAL and shared-memory sidecars next to both databases.
 
 Build Annals, create a non-login service account, and install the files:
 
@@ -162,6 +194,8 @@ sudo groupadd --system annals
 sudo useradd --system --gid annals --home-dir /var/lib/annals \
   --shell /usr/sbin/nologin annals
 sudo install -m 0755 target/release/annals /usr/local/bin/annals
+sudo install -m 0755 target/release/annals-usage \
+  /usr/local/bin/annals-usage
 
 sudo install -d -o root -g annals -m 0750 /etc/annals
 sudo install -d -o annals -g annals -m 0700 \
@@ -177,6 +211,8 @@ sudo install -d -o annals -g annals -m 0700 \
 
 sudo install -o root -g annals -m 0640 \
   packaging/systemd/annals.toml /etc/annals/config.toml
+sudo install -o root -g annals -m 0640 \
+  packaging/systemd/usage.toml /etc/annals/usage.toml
 sudo install -o root -g root -m 0644 \
   packaging/systemd/annals-inbox.service \
   /etc/systemd/system/annals-inbox.service
@@ -185,9 +221,9 @@ sudo install -o root -g root -m 0644 \
   /etc/systemd/system/annals-inbox.timer
 ```
 
-Adjust the executable paths in the config and service if Codex or Annals is
-installed elsewhere. Authenticate Codex into the service-owned `CODEX_HOME`,
-then verify the login as that same account:
+Adjust the executable paths in the configs and service if Codex, Annals, or the
+proxy is installed elsewhere. Authenticate real Codex into the service-owned
+`CODEX_HOME`, then verify the login as that same account:
 
 ```sh
 sudo -u annals env HOME=/var/lib/annals \
@@ -213,6 +249,11 @@ sudo -u annals env HOME=/var/lib/annals \
   CODEX_HOME=/var/lib/annals/codex-home \
   /usr/local/bin/annals --config /etc/annals/config.toml init
 
+sudo -u annals env HOME=/var/lib/annals \
+  CODEX_HOME=/var/lib/annals/codex-home \
+  /usr/local/bin/annals-usage doctor \
+  --config /etc/annals/usage.toml
+
 sudo systemctl daemon-reload
 sudo systemctl enable --now annals-inbox.timer
 ```
@@ -223,6 +264,10 @@ starting a second copy of the service, and the Annals inbox lock also protects
 against a concurrent manual invocation. The unit deliberately has no systemd
 start timeout because one liaison can run for up to 60 minutes and an
 activation continues draining for as long as runnable work remains.
+
+The packaged service sets
+`ANNALS_USAGE_CONFIG=/etc/annals/usage.toml`, so the Annals process and every
+proxy child use the same companion ledger without command-line intervention.
 
 Inspect or trigger it with:
 
@@ -274,19 +319,22 @@ Annals records that job as failed rather than silently changing the label.
 ## macOS user LaunchAgent
 
 The macOS installation belongs entirely to the logged-in user. This is the
-important maintenance boundary: Annals, Codex, its scheduler definition, and
-all release files have exactly that user's authority. Updating the complete
-application therefore needs no stored administrator credential, privileged
-helper, or passwordless `sudo` rule.
+important maintenance boundary: Annals, the telemetry proxy and ledger, Codex,
+its scheduler definition, and all release files have exactly that user's
+authority. Updating the complete application therefore needs no stored
+administrator credential, privileged helper, or passwordless `sudo` rule.
 
 The layout is:
 
 ```text
 $HOME/.local/bin/annals                 # frontend -> current release
+$HOME/.local/bin/annals-usage           # CLI/proxy -> current release
 $HOME/Library/LaunchAgents/org.annals.inbox.plist
 $HOME/Library/Application Support/Annals/
 |-- config.toml
+|-- usage.toml
 |-- annals.db
+|-- usage.db
 |-- codex-home/
 |-- log/
 |-- backups/
@@ -304,11 +352,13 @@ $HOME/Library/Application Support/Annals/
     `-- failed/
 ```
 
-The frontend supplies the state-local config only when no explicit config or
-library was selected. The LaunchAgent runs `annals --quiet inbox run` with the
-user's real `HOME` and a private, state-local `CODEX_HOME`. Add
-`$HOME/.local/bin` to `PATH` for interactive use; launchd uses the absolute
-frontend path.
+The Annals frontend supplies the state-local config only when no explicit
+config or library was selected. That config points `[liaison].codex` at the
+current release's `annals-usage` proxy, and `usage.toml` points the proxy at the
+real Codex executable and the companion state paths. The LaunchAgent runs
+`annals --quiet inbox run` with the user's real `HOME` and a private,
+state-local `CODEX_HOME`. Add `$HOME/.local/bin` to `PATH` for interactive use;
+launchd uses the absolute Annals frontend path.
 
 This LaunchAgent is available only while the user is logged in. It resumes at
 the next login after a logout or restart. A service that must run at the login
@@ -335,31 +385,41 @@ the former system installation retains its existing state-local credentials.
 
 ### Deploy or update
 
-The deployer does not compile Annals or install Codex. `ci.sh` checks the tree
-and builds the release executable:
+The deployer does not compile the workspace or install Codex. `ci.sh` checks the
+tree and builds both release executables:
 
 ```sh
 ./ci.sh
 ./packaging/launchd/deploy-user.sh \
   --binary "$PWD/target/release/annals" \
+  --usage-binary "$PWD/target/release/annals-usage" \
   --codex "$(command -v codex)"
 ```
 
 That same command is the normal unattended update operation. It preflights the
-candidate, configuration, library, and Codex login before cutover. Complete
-program releases contain the payload, frontend, updater, rendered LaunchAgent,
-and a hash manifest. During an update the deployer disables new activations,
-requests maintenance, waits for the running worker to stop between jobs, makes
-a consistent SQLite backup, applies any required schema migration, and switches
-the `current` selector. It validates through the candidate and installed
-frontends before reloading launchd. A failure restores the old selectors,
-plist, and service. Configuration, authentication, the database, spool, logs,
-and archives are retained.
+candidate binaries, configuration, library, and Codex login before cutover.
+Complete program releases contain Annals, the telemetry proxy, frontend,
+updater, rendered LaunchAgent, and a hash manifest. During an update the
+deployer disables new activations and writes the maintenance marker. An active
+worker is allowed to finish its current delivery, then stops before claiming
+another; an idle worker stops immediately. The deployer then makes a consistent
+Annals library backup, applies any required schema migration, and atomically
+switches the `current` selector. It updates both command links and both configs
+inside the same rollback-protected deployment transaction, then validates
+through the candidate and installed frontends before reloading launchd and
+waking the worker to resume queued deliveries. A failure restores the old
+selectors, configs, plist, and service. Authentication, the Annals library,
+telemetry ledger, spool, logs, and archives are retained.
 
-The default drain deadline is 3,900 seconds, long enough for one liaison's
-60-minute limit plus headroom. Set `ANNALS_UPDATE_WAIT_SECONDS` to another
-nonnegative number when a caller needs a shorter deadline. `--no-start`
-installs and validates without reading or changing launchd state.
+No operator timing or manual service stop is required. It is safe to run the
+same deployment command while a delivery is in progress; by default the
+deployer waits up to 3,900 seconds for the current liaison's 60-minute limit
+plus headroom. The cutover itself occurs only after the inbox lock becomes
+idle, so one delivery cannot straddle the old and new proxy binaries.
+
+Set `ANNALS_UPDATE_WAIT_SECONDS` to another nonnegative number when a caller
+needs a shorter deadline. `--no-start` installs and validates without reading
+or changing launchd state.
 
 ### Migrate the former system installation
 
@@ -371,6 +431,7 @@ operator's graphical session:
 ./ci.sh
 sudo ./packaging/launchd/migrate-to-user.sh \
   --binary "$PWD/target/release/annals" \
+  --usage-binary "$PWD/target/release/annals-usage" \
   --codex "$(command -v codex)"
 ```
 
@@ -390,6 +451,9 @@ Direct access and scheduler inspection need no elevation:
 annals stats
 annals validate
 annals inbox status
+annals-usage report
+annals-usage budget
+annals-usage doctor
 launchctl print "gui/$(id -u)/org.annals.inbox"
 tail -f "$HOME/Library/Application Support/Annals/log/inbox.stdout.log"
 ```
@@ -401,19 +465,21 @@ install -m 0600 README.md \
   "$HOME/Library/Application Support/Annals/spool/incoming/annals-readme.md"
 ```
 
-To retire the user installation while retaining its corpus and operational
-state, boot out the LaunchAgent and remove only the scheduler, command link,
-and versioned program directory:
+To retire the user installation while retaining its library, telemetry, and
+operational state, boot out the LaunchAgent and remove only the scheduler,
+command links, and versioned program directory:
 
 ```sh
 launchctl bootout "gui/$(id -u)/org.annals.inbox" 2>/dev/null || true
 rm -f "$HOME/Library/LaunchAgents/org.annals.inbox.plist"
 rm -f "$HOME/.local/bin/annals"
+rm -f "$HOME/.local/bin/annals-usage"
 rm -rf "$HOME/Library/Application Support/Annals/install"
 ```
 
-Back up and explicitly remove the remaining state only when the corpus,
-credentials, queued material, logs, and archives are no longer needed.
+Back up and explicitly remove the remaining state only when the library,
+telemetry ledger, credentials, queued material, logs, and archives are no
+longer needed.
 
 ## Failure recovery and maintenance
 

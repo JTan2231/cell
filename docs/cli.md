@@ -114,7 +114,10 @@ then `[liaison].quality` in the selected config, then `high`:
 `--model` resolves from the command line, then `[liaison].model`, then the
 model selected by the quality preset. It changes only the model; the selected
 quality continues to choose reasoning effort. `[liaison].codex` selects the
-Codex executable and defaults to `codex`.
+Codex executable and defaults to `annals-usage`. The companion executable
+proxies the isolated Codex app-server while recording token consumption; its
+own configuration selects the real `codex` executable. Selecting another
+`[liaison].codex` path bypasses this observation layer.
 
 The liaison submits a provisional, best-current interpretation. It does not
 filter source material by estimated novelty or salience and does not claim an
@@ -125,6 +128,32 @@ its base remains pending. `--apply` immediately commits that pending
 transition. A projected corpus state mechanically equal to the base is stored
 with status `recorded`; it creates no commit and does not advance the revision.
 Optional annotations are inert and never block application.
+
+## Consumption telemetry
+
+The separate companion CLI has three reporting commands:
+
+```text
+annals-usage report [--json] [--limit N] [--config PATH]
+annals-usage budget [--json] [--config PATH]
+annals-usage doctor [--config PATH]
+```
+
+`report` attributes observed model runs and retry attempts to recent source
+deliveries. Its coverage field distinguishes exact per-response totals,
+cumulative fallbacks, known zero-use deliveries, pending work, reused
+examinations, and unobserved history. `budget` records and displays a live,
+account-global Codex allowance snapshot and labels the account's lifetime and
+daily token activity as contextual rather than allowance units. The backend
+exposes neither a token denominator for that allowance nor a per-delivery
+subscription share. `doctor` checks the companion configuration and ledger,
+the Annals paths, the real Codex executable, and authenticated account-telemetry
+access.
+
+The token categories overlap: cached and cache-write tokens are subsets of
+input, reasoning tokens are a subset of output, and total is input plus output.
+The complete accounting and configuration contract is documented in
+[Consumption telemetry](telemetry.md).
 
 ## Scheduled inbox
 

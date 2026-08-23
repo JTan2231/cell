@@ -103,7 +103,7 @@ pub(crate) fn integrate_with_runner_token(
     }
     let prompt = pointer_prompt(&work.label, base_revision);
     let mut backend = LiaisonBackend::open(path, &token)?;
-    let result = runner.run_liaison(settings, &prompt, &mut backend, forward_progress);
+    let result = runner.run_liaison(settings, &prompt, &token, &mut backend, forward_progress);
     match result {
         Ok(final_response) => {
             finish_run(

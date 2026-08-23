@@ -10,6 +10,7 @@ SERVICE_LABEL=org.annals.inbox
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 
 binary_path=
+usage_binary_path=
 codex_path=
 legacy_prefix=${ANNALS_MIGRATION_LEGACY_PREFIX:-}
 legacy_state_override=${ANNALS_MIGRATION_LEGACY_STATE:-}
@@ -20,7 +21,8 @@ deploy_path=${ANNALS_MIGRATION_DEPLOY:-$SCRIPT_DIR/deploy-user.sh}
 
 usage() {
     cat <<'EOF'
-Usage: migrate-to-user.sh --binary ABSOLUTE_PATH --codex ABSOLUTE_PATH [OPTIONS]
+Usage: migrate-to-user.sh --binary ABSOLUTE_PATH --usage-binary ABSOLUTE_PATH \
+  --codex ABSOLUTE_PATH [OPTIONS]
 
 Move the legacy system Annals installation into the selected operator's home
 and deploy the complete user-owned installation. Run this command as root.
@@ -43,6 +45,7 @@ fail() {
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --binary) binary_path=${2:?}; shift 2 ;;
+        --usage-binary) usage_binary_path=${2:?}; shift 2 ;;
         --codex) codex_path=${2:?}; shift 2 ;;
         --legacy-prefix) legacy_prefix=${2:?}; shift 2 ;;
         --legacy-state) legacy_state_override=${2:?}; shift 2 ;;
@@ -64,12 +67,15 @@ if [ "$(id -u)" -ne 0 ] && [ -z "$legacy_prefix" ]; then
     fail 'run this migration with sudo'
 fi
 
-for value_name in binary_path codex_path launchctl_path dscl_path operator_runner deploy_path; do
+[ -n "$usage_binary_path" ] || fail '--usage-binary is required'
+for value_name in \
+    binary_path usage_binary_path codex_path launchctl_path dscl_path operator_runner deploy_path
+do
     eval "value=\${$value_name}"
     [ -n "$value" ] || fail "$value_name is required"
     case "$value" in /*) ;; *) fail "$value_name must be absolute" ;; esac
 done
-for executable in "$binary_path" "$launchctl_path" \
+for executable in "$binary_path" "$usage_binary_path" "$launchctl_path" \
     "$dscl_path" "$operator_runner" "$deploy_path"
 do
     [ -f "$executable" ] && [ -x "$executable" ] && [ ! -L "$executable" ] \
@@ -126,6 +132,7 @@ case "$operator_home" in /*) ;; *) fail "invalid operator home: $operator_home" 
 TARGET_STATE="$operator_home/Library/Application Support/Annals"
 USER_PLIST="$operator_home/Library/LaunchAgents/$SERVICE_LABEL.plist"
 USER_CLI="$operator_home/.local/bin/annals"
+USER_USAGE_CLI="$operator_home/.local/bin/annals-usage"
 USER_TARGET="gui/$operator_uid/$SERVICE_LABEL"
 MAINTENANCE_MARKER="$TARGET_STATE/spool/.maintenance"
 
@@ -143,7 +150,7 @@ write_phase() {
 
 restore_legacy() {
     "$launchctl_path" bootout "$USER_TARGET" >/dev/null 2>&1 || true
-    rm -f "$USER_PLIST" "$USER_CLI"
+    rm -f "$USER_PLIST" "$USER_CLI" "$USER_USAGE_CLI"
     if [ ! -d "$LEGACY_STATE" ] && [ -d "$TARGET_STATE" ]; then
         mv "$TARGET_STATE" "$LEGACY_STATE"
     fi
@@ -220,6 +227,8 @@ done
     || fail "user LaunchAgent already exists: $USER_PLIST"
 [ ! -e "$USER_CLI" ] && [ ! -L "$USER_CLI" ] \
     || fail "user command already exists: $USER_CLI"
+[ ! -e "$USER_USAGE_CLI" ] && [ ! -L "$USER_USAGE_CLI" ] \
+    || fail "user usage command already exists: $USER_USAGE_CLI"
 grep -Fx 'library = "/Library/Application Support/Annals/annals.db"' \
     "$LEGACY_STATE/config.toml" >/dev/null \
     || fail 'legacy config has a nonstandard library path'
@@ -228,6 +237,7 @@ grep -Fx 'root = "/Library/Application Support/Annals/spool"' \
     || fail 'legacy config has a nonstandard inbox path'
 
 run_as_operator "$binary_path" --version >/dev/null
+run_as_operator "$usage_binary_path" --version >/dev/null
 run_as_operator "$LEGACY_FRONTEND" validate >/dev/null \
     || fail 'the legacy library is not valid'
 
@@ -311,6 +321,7 @@ fi
 
 run_as_operator "$deploy_path" \
     --binary "$binary_path" \
+    --usage-binary "$usage_binary_path" \
     --codex "$codex_path" \
     --home "$operator_home" \
     --launchctl "$launchctl_path"
@@ -326,4 +337,5 @@ printf '%s\n' 'Annals was migrated to the user-owned installation.'
 printf 'Operator: %s\n' "$operator"
 printf 'State:    %s\n' "$TARGET_STATE"
 printf 'Command:  %s\n' "$USER_CLI"
+printf 'Usage:    %s\n' "$USER_USAGE_CLI"
 printf 'Service:  %s\n' "$USER_TARGET"

@@ -1,7 +1,7 @@
 # Data model
 
-`schema.sql` is the authoritative SQLite schema. The database contains five
-kinds of state:
+[`crates/annals/schema.sql`](../crates/annals/schema.sql) is the authoritative
+SQLite schema. The database contains five kinds of state:
 
 1. immutable source works;
 2. source-delivery receipts and captured source metadata;
@@ -12,6 +12,10 @@ kinds of state:
 Public commands and liaison tools address works by label, concepts by durable
 IDs such as `c42`, evidence by quotation, and history by revision. Exact source
 ranges and non-concept row identifiers remain private mechanics.
+
+The separate `annals-usage` companion database is not part of the Annals
+library or corpus schema. Its runs, token events, and account-limit snapshots
+are described in [Consumption telemetry](telemetry.md).
 
 ## Revision state
 

@@ -127,11 +127,15 @@ effort. `--reexamine` bypasses that reuse. A later revision or different
 liaison configuration always creates a fresh examination.
 
 For a fresh examination, Annals creates a model-run record bound to the work
-and base revision and starts an isolated Codex app-server process. The
-high-quality default uses `gpt-5.6-sol` with max reasoning. The low and medium
-presets use `gpt-5.6-luna` and `gpt-5.6-terra`, respectively, both with medium
-reasoning. An exact model override changes the model while the selected preset
-continues to control reasoning effort.
+and base revision and starts an isolated Codex app-server process. The selected
+Codex executable defaults to the separate `annals-usage` proxy, which forwards
+the protocol to real Codex and records token events against the model-run token.
+Observation does not alter the liaison prompt, model, reasoning effort, or tool
+set; see [Consumption telemetry](telemetry.md). The high-quality default uses
+`gpt-5.6-sol` with max reasoning. The low and medium presets use
+`gpt-5.6-luna` and `gpt-5.6-terra`, respectively, both with medium reasoning.
+An exact model override changes the model while the selected preset continues
+to control reasoning effort.
 
 The process uses an empty temporary directory, a private temporary Codex home,
 and no execution environment. Shell, web, planning, user-input, multi-agent,

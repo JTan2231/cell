@@ -25,6 +25,11 @@ not content supplied to the liaison or part of the runtime contract.
   `annals inbox run`;
 - no daemon or separate database server.
 
+The repository is a virtual Cargo workspace. The `annals` package lives under
+`crates/annals`, and the separate `annals-usage` package provides the default
+Codex proxy and consumption reports. A workspace release build produces both
+`target/release/annals` and `target/release/annals-usage`.
+
 The liaison defaults to high quality: `gpt-5.6-sol` with max reasoning.
 `--quality low` selects `gpt-5.6-luna` with medium reasoning, and `--quality
 medium` selects `gpt-5.6-terra` with medium reasoning. `--model` provides an
@@ -157,11 +162,28 @@ or config selection is present. Consequently, commands such as `annals stats`,
 the scheduled inbox worker. An explicit option or environment variable still
 selects a different target.
 
+The companion CLI reports the token consumption attributed to source
+deliveries and reads the current account-wide Codex allowance:
+
+```sh
+annals-usage report
+annals-usage budget
+annals-usage doctor
+```
+
+The report distinguishes exact measurements, cumulative fallbacks, deliveries
+that invoked no model, and observations with gaps. Token categories overlap,
+and the Codex subscription percentage has no exposed token denominator, so it
+cannot be divided into an exact per-delivery subscription share. See
+[Consumption telemetry](docs/telemetry.md) for the accounting contract.
+
 ## Release
 
-Application releases use the package version in `Cargo.toml` and annotated Git
-tags named `vMAJOR.MINOR.PATCH`. From a clean `main` branch that exactly matches
-`origin/main`, run one of:
+The two workspace packages are versioned independently in
+`crates/annals/Cargo.toml` and `crates/annals-usage/Cargo.toml`. Annals releases
+use annotated tags named `vMAJOR.MINOR.PATCH`; `annals-usage` releases use
+`annals-usage-vMAJOR.MINOR.PATCH`. From a clean `main` branch that exactly
+matches `origin/main`, release Annals with one of:
 
 ```sh
 ./release.sh --patch
@@ -169,12 +191,21 @@ tags named `vMAJOR.MINOR.PATCH`. From a clean `main` branch that exactly matches
 ./release.sh --major
 ```
 
+The explicit `annals` package name is equivalent. Release the telemetry package
+separately with:
+
+```sh
+./release.sh annals-usage --patch
+./release.sh annals-usage --minor
+./release.sh annals-usage --major
+```
+
 An empty `origin` is also accepted for the first publication. The script bumps
-the package version, refreshes `Cargo.lock`, runs the complete `ci.sh` suite on
-the bumped tree, creates a `Release vMAJOR.MINOR.PATCH` Git commit, tags that
-commit, and atomically pushes `main` and only that tag. Application SemVer is
-independent of library schema versions, corpus revisions, and the exact
-content-addressed release IDs used by the macOS deployer.
+only the selected package version, refreshes the shared `Cargo.lock`, runs the
+complete workspace `ci.sh` suite on the bumped tree, creates a release commit,
+tags that commit, and atomically pushes `main` and only that tag. Both package
+versions are independent of library schema versions, corpus revisions, and the
+exact content-addressed release IDs used by the macOS deployer.
 
 ## Scheduled macOS installation
 
@@ -187,16 +218,22 @@ state-local Codex authentication is prepared as described in the
 ./ci.sh
 ./packaging/launchd/deploy-user.sh \
   --binary "$PWD/target/release/annals" \
+  --usage-binary "$PWD/target/release/annals-usage" \
   --codex "$(command -v codex)"
 ```
 
-The deployer installs `~/.local/bin/annals`, versioned complete releases under
+The deployer installs `~/.local/bin/annals` and
+`~/.local/bin/annals-usage`, versioned complete releases under
 `~/Library/Application Support/Annals/install`, and a user LaunchAgent under
-`~/Library/LaunchAgents`. Running the same command again is the unattended
-update process. It drains the worker between jobs, takes a consistent database
-backup, switches releases atomically, validates the result, and automatically
+`~/Library/LaunchAgents`. It also selects the proxy in Annals' configuration and
+keeps the companion `usage.toml` and `usage.db` beside the Annals library.
+Running the same command again is the unattended update process. It drains the
+worker between jobs, takes a consistent Annals library backup, switches both
+binaries through one release selector, updates both configurations within a
+rollback-protected transaction, validates the result, and automatically
 restores the previous release if launchd cutover fails. Configuration,
-credentials, corpus data, logs, and queued or archived sources are retained.
+credentials, library data, telemetry, logs, and queued or archived sources are
+retained.
 
 After installation, the user—and Codex running as that user—uses the default
 library without `sudo`:
@@ -220,7 +257,7 @@ removal, and Linux systemd instructions, see the [system installation
 guide](docs/system-installation.md).
 
 See the [documentation index](docs/README.md) for the command, protocol,
-architecture, storage, search, and runtime contracts.
+architecture, storage, telemetry, search, and runtime contracts.
 
 The [experiment archive](experiments/README.md) documents the three-chat
 baseline, its higher-grade rerun, the original scaled 20-chat comparison, and

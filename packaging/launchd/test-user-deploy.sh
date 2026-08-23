@@ -13,6 +13,7 @@ trap cleanup EXIT HUP INT TERM
 package="$temporary/package"
 home="$temporary/Operator Home"
 candidate="$temporary/annals-candidate"
+usage_candidate="$temporary/annals-usage-candidate"
 codex="$temporary/codex"
 launchctl="$temporary/launchctl"
 launchctl_log="$temporary/launchctl.log"
@@ -90,6 +91,15 @@ esac
 EOF
 chmod 0755 "$candidate"
 
+cat >"$usage_candidate" <<'EOF'
+#!/bin/sh
+case "${1:-}" in
+    --version) printf '%s\n' 'annals-usage test-candidate' ;;
+    *) exit 1 ;;
+esac
+EOF
+chmod 0755 "$usage_candidate"
+
 cat >"$codex" <<'EOF'
 #!/bin/sh
 case "${1:-}" in
@@ -109,9 +119,11 @@ EOF
 chmod 0755 "$launchctl"
 
 deploy() {
+    selected_codex=${ANNALS_TEST_CODEX:-$codex}
     HOME="$home" "$package/deploy-user.sh" \
         --binary "$candidate" \
-        --codex "$codex" \
+        --usage-binary "$usage_candidate" \
+        --codex "$selected_codex" \
         --home "$home" \
         --launchctl "$launchctl" \
         "$@"
@@ -122,16 +134,32 @@ deploy --no-start >/dev/null
 
 state="$home/Library/Application Support/Annals"
 cli="$home/.local/bin/annals"
+usage_cli="$home/.local/bin/annals-usage"
 plist="$home/Library/LaunchAgents/org.annals.inbox.plist"
 [ -L "$cli" ]
+[ -L "$usage_cli" ]
 [ -L "$state/install/current" ]
 [ -f "$state/install/current/manifest.json" ]
 [ -x "$state/install/current/libexec/annals" ]
+[ -x "$state/install/current/libexec/annals-usage" ]
+[ "$(sed -n 's/^  "format": \([0-9][0-9]*\),$/\1/p' \
+    "$state/install/current/manifest.json")" -eq 2 ]
 [ -f "$state/annals.db" ]
 [ -d "$state/spool/duplicates" ]
 grep -Fx 'library = "annals.db"' "$state/config.toml" >/dev/null
 grep -Fx 'root = "spool"' "$state/config.toml" >/dev/null
-grep -Fx "codex = \"$codex\"" "$state/config.toml" >/dev/null
+proxy="$state/install/current/libexec/annals-usage"
+grep -Fx "codex = \"$proxy\"" "$state/config.toml" >/dev/null
+grep -Fx "codex = \"$codex\"" "$state/usage.toml" >/dev/null
+grep -Fx "codex_home = \"$state/codex-home\"" "$state/usage.toml" >/dev/null
+grep -Fx "library = \"$state/annals.db\"" "$state/usage.toml" >/dev/null
+grep -Fx "spool = \"$state/spool\"" "$state/usage.toml" >/dev/null
+grep -Fx "database = \"$state/usage.db\"" "$state/usage.toml" >/dev/null
+[ "$(readlink "$usage_cli")" = "$state/install/current/libexec/annals-usage" ]
+HOME="$home" "$usage_cli" --version >/dev/null
+usage_candidate_hash=$(shasum -a 256 "$usage_candidate" | awk '{print $1}')
+grep -Fx "  \"usage_binary_sha256\": \"$usage_candidate_hash\"," \
+    "$state/install/current/manifest.json" >/dev/null
 printf '%s\n' preserved >"$state/spool/duplicates/preserved"
 [ "$(plutil -extract ProgramArguments.0 raw -o - "$plist")" = "$cli" ]
 [ "$(plutil -extract ProgramArguments.1 raw -o - "$plist")" = --quiet ]
@@ -152,7 +180,20 @@ HOME="$home" "$cli" validate >/dev/null
 
 first_release=$(readlink "$state/install/current")
 first_candidate_hash=$(shasum -a 256 "$candidate" | awk '{print $1}')
-config_hash=$(shasum -a 256 "$state/config.toml" | awk '{print $1}')
+# Simulate the configuration written by releases before annals-usage became
+# the default Codex proxy. Deployment must migrate only the Codex selector and
+# preserve the rest of the document.
+awk -v codex="$codex" '
+    /^[[:space:]]*codex[[:space:]]*=/ {
+        print "codex = \"" codex "\""
+        next
+    }
+    { print }
+' "$state/config.toml" >"$state/config.legacy.toml"
+printf '%s\n' '# retained operator setting' >>"$state/config.legacy.toml"
+mv "$state/config.legacy.toml" "$state/config.toml"
+legacy_config_hash=$(shasum -a 256 "$state/config.toml" | awk '{print $1}')
+grep -Fx "codex = \"$codex\"" "$state/config.toml" >/dev/null
 printf '%s\n' '# candidate update' >>"$candidate"
 second_candidate_hash=$(shasum -a 256 "$candidate" | awk '{print $1}')
 [ "$first_candidate_hash" != "$second_candidate_hash" ]
@@ -165,7 +206,11 @@ if [ "$first_release" = "$second_release" ]; then
     exit 1
 fi
 [ "$(readlink "$state/install/previous")" = "$first_release" ]
-[ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" = "$config_hash" ]
+[ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" != "$legacy_config_hash" ]
+grep -Fx "codex = \"$proxy\"" "$state/config.toml" >/dev/null
+grep -Fx '# retained operator setting' "$state/config.toml" >/dev/null
+config_hash=$(shasum -a 256 "$state/config.toml" | awk '{print $1}')
+usage_config_hash=$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')
 backup_count=$(find "$state/backups" -type f -maxdepth 1 | wc -l | tr -d ' ')
 [ "$backup_count" -eq 1 ]
 [ -f "$state/migrated" ]
@@ -176,6 +221,8 @@ grep -Fx preserved "$state/spool/duplicates/preserved" >/dev/null
 deploy --no-start >/dev/null
 [ "$(readlink "$state/install/current")" = "$second_release" ]
 [ "$(readlink "$state/install/previous")" = "$first_release" ]
+[ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" = "$config_hash" ]
+[ "$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')" = "$usage_config_hash" ]
 backup_count=$(find "$state/backups" -type f -maxdepth 1 | wc -l | tr -d ' ')
 [ "$backup_count" -eq 1 ]
 
@@ -242,8 +289,15 @@ running_release=$(readlink "$state/install/current")
     'inbox status validate inbox status inbox run backup migrate validate inbox status validate inbox status ' ]
 
 printf '%s\n' '# rejected update' >>"$candidate"
+alternate_codex="$temporary/alternate-codex"
+cp "$codex" "$alternate_codex"
+chmod 0755 "$alternate_codex"
 : >"$fail_bootstrap"
-if deploy >"$temporary/rejected.out" 2>"$temporary/rejected.err"; then
+config_before_rejection=$(shasum -a 256 "$state/config.toml" | awk '{print $1}')
+usage_config_before_rejection=$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')
+if ANNALS_TEST_CODEX="$alternate_codex" \
+    deploy >"$temporary/rejected.out" 2>"$temporary/rejected.err"
+then
     printf '%s\n' 'deployment unexpectedly survived a bootstrap failure' >&2
     exit 1
 fi
@@ -253,6 +307,9 @@ fi
 [ ! -e "$state/spool/.maintenance" ]
 [ ! -e "$state/install/.update-lock" ]
 [ ! -e "$kickstart_order_error" ]
+[ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" = "$config_before_rejection" ]
+[ "$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')" = "$usage_config_before_rejection" ]
+grep -Fx "codex = \"$codex\"" "$state/usage.toml" >/dev/null
 
 : >"$fail_kickstart"
 deploy >"$temporary/kickstart-warning.out" 2>"$temporary/kickstart-warning.err"

@@ -120,7 +120,7 @@ pub(crate) struct Runner {
 impl Default for Runner {
     fn default() -> Self {
         Self {
-            program: PathBuf::from("codex"),
+            program: PathBuf::from("annals-usage"),
             timeout: DEFAULT_TIMEOUT,
             max_stdout_bytes: DEFAULT_MAX_STDOUT_BYTES,
             stderr_tail_bytes: DEFAULT_STDERR_TAIL_BYTES,
@@ -155,6 +155,7 @@ impl Runner {
         &self,
         settings: &ModelSettings,
         prompt: &str,
+        model_run_token: &str,
         backend: &mut impl Backend,
         forward_stderr: bool,
     ) -> AppResult<String> {
@@ -182,6 +183,7 @@ impl Runner {
             .current_dir(&work_dir)
             .env("CODEX_HOME", &codex_home)
             .env("CODEX_EXEC_SERVER_URL", "none")
+            .env("ANNALS_MODEL_RUN_TOKEN", model_run_token)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -1142,6 +1144,7 @@ if [ "$1" = "debug" ]; then
   printf '%s\n' '{{"models":[{{"slug":"{model}"}}]}}'
   exit 0
 fi
+[ "$ANNALS_MODEL_RUN_TOKEN" = "test-run" ] || exit 13
 IFS= read -r ignored
 printf '%s\n' '{{"jsonrpc":"2.0","id":0,"result":{{}}}}'
 IFS= read -r ignored
@@ -1174,7 +1177,8 @@ printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId"
 
         let runner = Runner::new(&program, Duration::from_secs(2));
         let mut backend = StubBackend::default();
-        let diagnostic = runner.run_liaison(&settings, "pointer", &mut backend, false)?;
+        let diagnostic =
+            runner.run_liaison(&settings, "pointer", "test-run", &mut backend, false)?;
         assert_eq!(diagnostic, "diagnostic");
         assert_eq!(backend.calls, [Tool::WorkOverview]);
         Ok(())
@@ -1185,7 +1189,8 @@ printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId"
         let runner = Runner::new("/usr/bin/false", Duration::from_secs(1));
         let settings = ModelSettings::default();
         let mut backend = StubBackend::default();
-        let Err(error) = runner.run_liaison(&settings, "pointer", &mut backend, false) else {
+        let Err(error) = runner.run_liaison(&settings, "pointer", "test-run", &mut backend, false)
+        else {
             panic!("the false runner unexpectedly succeeded");
         };
         assert_eq!(error.code(), "model_runner_catalog");

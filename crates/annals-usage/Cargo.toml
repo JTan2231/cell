@@ -1,0 +1,16 @@
+[package]
+name = "annals-usage"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+clap = { version = "4.5.46", features = ["derive"] }
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.143"
+thiserror = "2.0.16"
+time = { version = "0.3.41", features = ["formatting", "parsing"] }
+toml = "1.1.4"
+
+[dev-dependencies]
+tempfile = "3.21.0"

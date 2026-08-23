@@ -125,6 +125,7 @@ sh -n release.sh
 printf '%s\n' '==> packaging'
 for script in \
     packaging/launchd/annals \
+    packaging/launchd/annals-usage \
     packaging/launchd/annals-user \
     packaging/launchd/deploy-user.sh \
     packaging/launchd/install.sh \
@@ -163,7 +164,7 @@ printf '%s\n' '==> rustfmt'
 cargo fmt --all -- --check
 
 printf '%s\n' '==> clippy'
-cargo clippy --all-targets --locked --keep-going -- \
+cargo clippy --workspace --all-targets --locked --keep-going -- \
     -D warnings \
     -F unsafe_code \
     -D clippy::all \
@@ -175,12 +176,12 @@ cargo clippy --all-targets --locked --keep-going -- \
     -D clippy::expect_used
 
 printf '%s\n' '==> tests'
-cargo test --locked --no-fail-fast
+cargo test --workspace --locked --no-fail-fast
 
 printf '%s\n' '==> rustdoc'
-RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --locked
+RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
 
 printf '%s\n' '==> release build'
-cargo build --release --locked
+cargo build --workspace --release --locked
 
 printf '%s\n' 'ci.sh: green'

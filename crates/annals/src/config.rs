@@ -39,7 +39,7 @@ impl Default for LiaisonConfig {
         Self {
             quality: ModelQuality::default(),
             model: None,
-            codex: PathBuf::from("codex"),
+            codex: PathBuf::from("annals-usage"),
         }
     }
 }

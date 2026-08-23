@@ -12,7 +12,9 @@ SERVICE_TARGET=system/$SERVICE_LABEL
 STATE_DIR='/Library/Application Support/Annals'
 CONFIG_PATH="$STATE_DIR/config.toml"
 INSTALL_FRONTEND=/usr/local/bin/annals
+INSTALL_USAGE_FRONTEND=/usr/local/bin/annals-usage
 INSTALL_PAYLOAD=/usr/local/libexec/annals/annals
+INSTALL_USAGE_PAYLOAD=/usr/local/libexec/annals/annals-usage
 INSTALL_PLIST=/Library/LaunchDaemons/org.annals.inbox.plist
 
 fail() {
@@ -72,12 +74,14 @@ fi
 
 rm -f "$INSTALL_PLIST"
 rm -f "$INSTALL_FRONTEND"
+rm -f "$INSTALL_USAGE_FRONTEND"
 rm -f "$INSTALL_PAYLOAD"
+rm -f "$INSTALL_USAGE_PAYLOAD"
 
-printf '%s\n' 'Annals scheduling and installed program files were removed.'
+printf '%s\n' 'Annals scheduling and installed program files were removed, including annals-usage.'
 if [ -n "$operator" ]; then
     printf 'Operator: %s (%s)\n' "$operator" "$operator_group"
 fi
-printf '%s\n' 'All state was retained:'
+printf '%s\n' 'All library and usage state was retained:'
 printf '  %s\n' "$STATE_DIR"
 printf '%s\n' 'Remove retained state manually only after making any required backup.'

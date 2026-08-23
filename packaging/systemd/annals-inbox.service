@@ -3,6 +3,7 @@ Description=Process the Annals inbox
 After=network-online.target
 Wants=network-online.target
 ConditionPathExists=/etc/annals/config.toml
+ConditionPathExists=/etc/annals/usage.toml
 
 [Service]
 Type=oneshot
@@ -11,6 +12,7 @@ Group=annals
 WorkingDirectory=/var/lib/annals
 Environment=HOME=/var/lib/annals
 Environment=CODEX_HOME=/var/lib/annals/codex-home
+Environment=ANNALS_USAGE_CONFIG=/etc/annals/usage.toml
 ExecStart=/usr/local/bin/annals --config /etc/annals/config.toml inbox run
 TimeoutStartSec=infinity
 UMask=0077

@@ -28,6 +28,8 @@ The implemented contracts are:
   and revision history;
 - [Data model](data-model.md): canonical, examination, history, and derived
   SQLite state;
+- [Consumption telemetry](telemetry.md): per-delivery token accounting,
+  observation coverage, and account-wide Codex budget snapshots;
 - [Search](search.md): revision-scoped label and ancestor-context retrieval;
 - [System installation](system-installation.md): filesystem inbox operation,
   configuration, and systemd or launchd scheduling;

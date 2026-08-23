@@ -7,7 +7,8 @@ this implementation.
 
 `./ci.sh` is the complete checked-in gate and has a hard 60-second wall-clock
 limit. It runs formatting, Clippy, tests, documentation, and a release build
-under Rust 1.97.1. Exceeding 60 seconds is a CI failure.
+for every workspace package under Rust 1.97.1. Exceeding 60 seconds is a CI
+failure.
 
 Focused graph tests also inspect SQLite query plans for parent, child, and
 evidence pages. They require revision-leading indexes and reject temporary

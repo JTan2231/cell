@@ -3,7 +3,9 @@
 set -eu
 
 usage() {
-    printf '%s\n' 'Usage: ./release.sh --patch|--minor|--major'
+    printf '%s\n' \
+        'Usage: ./release.sh --patch|--minor|--major' \
+        '       ./release.sh annals|annals-usage --patch|--minor|--major'
 }
 
 fail() {
@@ -11,10 +13,33 @@ fail() {
     exit 1
 }
 
-if [ "$#" -ne 1 ]; then
+package=annals
+if [ "$#" -eq 2 ]; then
+    package=$1
+    shift
+elif [ "$#" -ne 1 ]; then
     usage >&2
     exit 2
 fi
+
+case "$package" in
+    annals)
+        manifest_path=crates/annals/Cargo.toml
+        binary_name=annals
+        tag_prefix=
+        product_name=Annals
+        ;;
+    annals-usage)
+        manifest_path=crates/annals-usage/Cargo.toml
+        binary_name=annals-usage
+        tag_prefix=annals-usage-
+        product_name='Annals Usage'
+        ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac
 
 case "$1" in
     --patch) bump='patch' ;;
@@ -52,8 +77,9 @@ if ! command -v cargo >/dev/null 2>&1; then
     fail 'required tool not found: cargo'
 fi
 
-[ -f Cargo.toml ] || fail 'Cargo.toml not found'
+[ -f Cargo.toml ] || fail 'workspace Cargo.toml not found'
 [ -f Cargo.lock ] || fail 'Cargo.lock not found'
+[ -f "$manifest_path" ] || fail "package manifest not found: $manifest_path"
 
 if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
     fail 'the worktree must be completely clean'
@@ -86,7 +112,7 @@ current_version=$(awk '
         print version
         exit
     }
-' Cargo.toml)
+' "$manifest_path")
 
 if ! printf '%s\n' "$current_version" \
     | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
@@ -113,7 +139,7 @@ case "$bump" in
 esac
 
 new_version="$major.$minor.$patch"
-tag="v$new_version"
+tag="${tag_prefix}v$new_version"
 local_revision=$(git rev-parse HEAD)
 
 if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
@@ -143,7 +169,7 @@ else
         || fail 'origin has refs but no main branch; refusing initial publication'
 fi
 
-manifest_tmp="Cargo.toml.release.$$"
+manifest_tmp="$manifest_path.release.$$"
 rollback_version_files=false
 
 cleanup() {
@@ -152,8 +178,9 @@ cleanup() {
     set +e
     rm -f "$manifest_tmp"
     if [ "$rollback_version_files" = true ]; then
-        git restore --staged --worktree -- Cargo.toml Cargo.lock
-        printf '%s\n' 'release.sh: restored Cargo.toml and Cargo.lock after failure' >&2
+        git restore --staged --worktree -- "$manifest_path" Cargo.lock
+        printf 'release.sh: restored %s and Cargo.lock after failure\n' \
+            "$manifest_path" >&2
     fi
     exit "$status"
 }
@@ -189,11 +216,11 @@ if ! awk -v old="$current_version" -v new="$new_version" '
             exit 1
         }
     }
-' Cargo.toml >"$manifest_tmp"
+' "$manifest_path" >"$manifest_tmp"
 then
-    fail 'unable to update the package version in Cargo.toml'
+    fail "unable to update the package version in $manifest_path"
 fi
-mv "$manifest_tmp" Cargo.toml
+mv "$manifest_tmp" "$manifest_path"
 
 cargo update --workspace --offline \
     || fail 'unable to refresh Cargo.lock'
@@ -202,9 +229,9 @@ cargo metadata --locked --offline --no-deps --format-version 1 >/dev/null \
 
 ./ci.sh
 
-reported_version=$(target/release/annals --version) \
+reported_version=$("target/release/$binary_name" --version) \
     || fail 'unable to read the release binary version'
-[ "$reported_version" = "annals $new_version" ] \
+[ "$reported_version" = "$binary_name $new_version" ] \
     || fail "release binary reported an unexpected version: $reported_version"
 
 [ -z "$(git diff --cached --name-only)" ] \
@@ -213,12 +240,12 @@ reported_version=$(target/release/annals --version) \
     || fail 'untracked files appeared while running release checks'
 
 changed_files=$(git diff --name-only)
-expected_files=$(printf '%s\n' Cargo.lock Cargo.toml)
+expected_files=$(printf '%s\n' Cargo.lock "$manifest_path")
 [ "$changed_files" = "$expected_files" ] \
-    || fail 'files other than Cargo.toml and Cargo.lock changed during release checks'
+    || fail "files other than $manifest_path and Cargo.lock changed during release checks"
 git diff --check
 
-git add -- Cargo.toml Cargo.lock
+git add -- "$manifest_path" Cargo.lock
 git diff --cached --check
 git commit -m "Release $tag"
 
@@ -228,10 +255,10 @@ trap - 0 1 2 15
 [ -z "$(git status --porcelain --untracked-files=all)" ] \
     || fail 'the worktree changed while creating the release commit'
 
-if ! git tag -a "$tag" -m "Annals $tag"; then
+if ! git tag -a "$tag" -m "$product_name $tag"; then
     printf '%s\n' \
         "release.sh: tagging failed; the local release commit was preserved" \
-        "release.sh: retry with: git tag -a $tag -m 'Annals $tag'" \
+        "release.sh: retry with: git tag -a $tag -m '$product_name $tag'" \
         >&2
     exit 1
 fi
@@ -247,4 +274,4 @@ then
     exit 1
 fi
 
-printf 'Released Annals %s\n' "$new_version"
+printf 'Released %s %s\n' "$product_name" "$new_version"
