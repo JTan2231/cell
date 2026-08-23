@@ -33,13 +33,24 @@ new or already present independently from the processing result (`retained`,
 error code and reporting-safe message, including failures that occur before a
 work exists. Raw runner diagnostics are outside this reporting record.
 
+After successful retention, a fresh inbox delivery follows one of two paths. A
+new work enters the liaison flow and is applied immediately when its projected
+corpus state differs from its base. Bytes that select an already retained work
+complete with `duplicate` retention and result `retained`; the envelope moves
+to `duplicates/` without an examination, reconciliation, commit, or revision
+change. This routing is prospective: historical delivery records and archived
+envelopes keep their recorded results and locations.
+
 Inbox job receipts carry a stable delivery key. Recovery selects the same
 database receipt through that key, so moving or retrying a durable envelope
 cannot create a second source-delivery record. The queue index records the
 first observation timestamp along with FIFO sequence, and the claimed
 envelope preserves the same captured source metadata used for its identity
-check. Manual `integrate --work` creates no delivery because it selects bytes
-already retained in the library.
+check. A recovered job that already links to a reconciliation finishes that
+recorded work rather than being reclassified as a fresh duplicate. Manual
+`integrate --work` creates no delivery because it selects bytes already
+retained in the library. Both manual integration forms continue through the
+explicit integration flow even when the selected bytes were retained earlier.
 
 Source-bearing manual commands share one advisory lock per library. Acquiring
 that lock finalizes any processing receipt left by an interrupted prior manual

@@ -249,6 +249,15 @@ fn archived_material(root: &Path, state: &str) -> TestResult<BTreeMap<String, Ma
     Ok(archived)
 }
 
+fn only_archived_receipt(root: &Path, state: &str) -> TestResult<Value> {
+    let mut envelopes = fs::read_dir(root.join(state))?.collect::<io::Result<Vec<_>>>()?;
+    assert_eq!(envelopes.len(), 1, "expected one {state} inbox job");
+    let envelope = envelopes.pop().ok_or("inbox archive was empty")?;
+    Ok(serde_json::from_slice(&fs::read(
+        envelope.path().join("job.json"),
+    )?)?)
+}
+
 fn assert_unchanged(expected: &Material, actual: &Material) {
     assert_eq!(actual.bytes, expected.bytes);
     assert_eq!(actual.inode, expected.inode);
@@ -785,6 +794,39 @@ fn whitespace_source_name_is_recorded_before_label_failure() -> TestResult {
 }
 
 #[test]
+fn retained_bytes_bypass_an_unusable_inbox_label() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    let bytes = b"Shared inbox claim.\nRetained before the unusable filename arrives.\n";
+    let retained_source = installation.directory.path().join("original.txt");
+    fs::write(&retained_source, bytes)?;
+    installation.json_ok([
+        OsStr::new("work"),
+        OsStr::new("add"),
+        retained_source.as_os_str(),
+    ])?;
+
+    let expected = installation.incoming("   ", bytes, 0o640)?;
+    let run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(run["attempted"], 1);
+    assert_eq!(run["duplicates"], 1);
+    assert_eq!(run["failed"], 0);
+    assert!(!installation.counter.exists());
+
+    let duplicates = archived_material(&installation.inbox, "duplicates")?;
+    assert_unchanged(
+        &expected,
+        duplicates
+            .get("   ")
+            .ok_or("whitespace-named duplicate was not archived")?,
+    );
+    let receipt = only_archived_receipt(&installation.inbox, "duplicates")?;
+    assert_eq!(receipt["work"], "original");
+    assert_eq!(receipt["result_status"], "retained");
+    Ok(())
+}
+
+#[test]
 fn an_exclusive_spool_lock_prevents_overlapping_runs() -> TestResult {
     let installation = Installation::new(0)?;
     installation.init()?;
@@ -866,6 +908,55 @@ fn terminal_processing_receipts_are_archived_without_reprocessing() -> TestResul
             .count(),
         1
     );
+    Ok(())
+}
+
+#[test]
+fn terminal_duplicate_receipt_is_archived_without_another_attempt() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    let bytes = b"Shared inbox claim.\nA retained duplicate source.\n";
+    let retained_source = installation.directory.path().join("retained.txt");
+    fs::write(&retained_source, bytes)?;
+    installation.json_ok([
+        OsStr::new("work"),
+        OsStr::new("add"),
+        retained_source.as_os_str(),
+    ])?;
+
+    installation.incoming("duplicate.txt", bytes, 0o640)?;
+    let first = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(first["attempted"], 1);
+    assert_eq!(first["duplicates"], 1);
+    assert_eq!(first["applied"], 0);
+    assert!(!installation.counter.exists());
+
+    return_archives_to_processing(&installation.inbox, "duplicates")?;
+    assert_eq!(
+        archived_material(&installation.inbox, "processing")?.len(),
+        1
+    );
+    fs::remove_file(&installation.codex)?;
+
+    let recovered = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(recovered["recovered"], 1);
+    assert_eq!(recovered["attempted"], 0);
+    assert_eq!(recovered["duplicates"], 1);
+    assert_eq!(recovered["applied"], 0);
+    assert_eq!(recovered["recorded"], 0);
+    assert_eq!(recovered["failed"], 0);
+    assert_eq!(recovered["remaining"], 0);
+    assert!(archived_material(&installation.inbox, "processing")?.is_empty());
+    assert_eq!(
+        archived_material(&installation.inbox, "duplicates")?.len(),
+        1
+    );
+    assert!(!installation.counter.exists());
+
+    let lately = installation.json_ok(["lately", "--channel", "inbox"])?;
+    assert_eq!(lately["delivery_count"], 1);
+    assert_eq!(lately["duplicate_count"], 1);
+    assert_eq!(lately["deliveries"][0]["result"], "retained");
     Ok(())
 }
 
@@ -1033,74 +1124,162 @@ fn startup_repairs_pre_receipt_claim_crashes() -> TestResult {
 }
 
 #[test]
-fn fresh_jobs_do_not_adopt_unrelated_reconciliations_for_the_same_work() -> TestResult {
+fn pre_retained_duplicate_is_archived_and_reported_without_examination() -> TestResult {
     let installation = Installation::new(0)?;
     installation.init()?;
-    let bytes = b"Shared inbox claim.\nHuman pending proposal.\n";
-    let retained_source = installation.directory.path().join("linked.txt");
+    let bytes = b"Shared inbox claim.\nAlready retained source.\n";
+    let retained_source = installation.directory.path().join("original.txt");
     fs::write(&retained_source, bytes)?;
     let added = installation.json_ok([
         OsStr::new("work"),
         OsStr::new("add"),
         retained_source.as_os_str(),
     ])?;
-    assert_eq!(added["work"], "linked");
+    assert_eq!(added["work"], "original");
+    assert_eq!(added["retention"], "new");
 
-    let request = installation.directory.path().join("human-change.json");
+    let colliding_source = installation.directory.path().join("copy.txt");
     fs::write(
-        &request,
-        r#"{
-  "summary": "Unrelated human proposal",
-  "operations": [{
-    "action": "create_concept",
-    "ref": "human_pending",
-    "label": "Human pending concept",
-    "parents": [],
-    "evidence": [{"quote": "Human pending proposal."}]
-  }]
-}
-"#,
+        &colliding_source,
+        b"Different retained bytes under the incoming basename.\n",
     )?;
-    let submitted = installation.json_ok([
-        OsStr::new("change"),
-        OsStr::new("submit"),
-        request.as_os_str(),
-        OsStr::new("--work"),
-        OsStr::new("linked"),
-        OsStr::new("--base"),
-        OsStr::new("0"),
+    let colliding = installation.json_ok([
+        OsStr::new("work"),
+        OsStr::new("add"),
+        colliding_source.as_os_str(),
     ])?;
-    assert_eq!(submitted["status"], "pending");
+    assert_eq!(colliding["work"], "copy");
+    assert_eq!(colliding["retention"], "new");
 
-    installation.incoming("linked.txt", bytes, 0o640)?;
-    let first = installation.json_ok(["inbox", "run"])?;
-    assert_eq!(first["applied"], 1);
+    let expected = installation.incoming("copy.txt", bytes, 0o640)?;
+    let run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(run["attempted"], 1);
+    assert_eq!(run["duplicates"], 1);
+    assert_eq!(run["applied"], 0);
+    assert_eq!(run["recorded"], 0);
+    assert_eq!(run["failed"], 0);
+    assert!(!installation.counter.exists());
+
+    assert!(archived_material(&installation.inbox, "done")?.is_empty());
+    let duplicates = archived_material(&installation.inbox, "duplicates")?;
+    assert_eq!(duplicates.len(), 1);
+    assert_unchanged(
+        &expected,
+        duplicates
+            .get("copy.txt")
+            .ok_or("duplicate source was not archived")?,
+    );
+    let receipt = only_archived_receipt(&installation.inbox, "duplicates")?;
+    assert_eq!(receipt["state"], "done");
+    assert_eq!(receipt["attempts"], 1);
+    assert_eq!(receipt["work"], "original");
+    assert_eq!(receipt["result_status"], "retained");
+    assert!(receipt["result_revision"].is_null());
+    assert!(receipt["reconciliation_id"].is_null());
+    assert!(receipt["model_run_token"].is_null());
+
+    let inbox_status = installation.json_ok(["inbox", "status"])?;
+    assert_eq!(inbox_status["done"], 0);
+    assert_eq!(inbox_status["duplicates"], 1);
+    assert_eq!(inbox_status["failed"], 0);
+
+    let library_stats = installation.json_ok(["stats"])?;
+    assert_eq!(library_stats["work_count"], 2);
+    assert_eq!(library_stats["model_run_count"], 0);
+    assert_eq!(library_stats["revision"], 0);
+
+    let lately = installation.json_ok(["lately", "--channel", "inbox"])?;
+    assert_eq!(lately["delivery_count"], 1);
+    assert_eq!(lately["completed_count"], 1);
+    assert_eq!(lately["new_work_count"], 0);
+    assert_eq!(lately["duplicate_count"], 1);
+    let delivery = lately["deliveries"]
+        .as_array()
+        .and_then(|deliveries| deliveries.first())
+        .ok_or("duplicate inbox delivery was absent from lately")?;
+    assert_eq!(delivery["source_name"], "copy.txt");
+    assert_eq!(delivery["status"], "completed");
+    assert_eq!(delivery["retention"], "duplicate");
+    assert_eq!(delivery["result"], "retained");
+    assert_eq!(delivery["work"], "original");
+    assert!(delivery["applied_revision"].is_null());
+    assert!(delivery["error"].is_null());
+    Ok(())
+}
+
+#[test]
+fn redropping_an_ingested_source_runs_one_examination() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    let bytes = b"Shared inbox claim.\nThe same source is delivered twice.\n";
+    let first_expected = installation.incoming("source.txt", bytes, 0o640)?;
+
+    let first_run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(first_run["attempted"], 1);
+    assert_eq!(first_run["applied"], 1);
+    assert_eq!(first_run["duplicates"], 0);
     assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
 
-    let changes = installation.json_ok(["change", "list"])?;
-    let changes = changes.as_array().ok_or("change list was not an array")?;
-    let human = changes
-        .iter()
-        .find(|change| change["summary"] == "Unrelated human proposal")
-        .ok_or("human reconciliation was not listed")?;
-    assert_eq!(human["status"], "superseded");
-    let first_model = changes
-        .iter()
-        .find(|change| change["summary"] == "Integrate inbox source 1")
-        .ok_or("first inbox reconciliation was not listed")?;
-    assert_eq!(first_model["status"], "applied");
+    let second_expected = installation.incoming("source.txt", bytes, 0o600)?;
+    let second_run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(second_run["attempted"], 1);
+    assert_eq!(second_run["applied"], 0);
+    assert_eq!(second_run["duplicates"], 1);
+    assert_eq!(second_run["recorded"], 0);
+    assert_eq!(second_run["failed"], 0);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
 
-    installation.incoming("linked.txt", bytes, 0o600)?;
-    let second = installation.json_ok(["inbox", "run"])?;
-    assert_eq!(second["applied"], 1);
-    assert_eq!(fs::read_to_string(&installation.counter)?, "2\n");
+    let done = archived_material(&installation.inbox, "done")?;
+    assert_eq!(done.len(), 1);
+    assert_unchanged(
+        &first_expected,
+        done.get("source.txt")
+            .ok_or("original source was not archived as done")?,
+    );
+    let duplicates = archived_material(&installation.inbox, "duplicates")?;
+    assert_eq!(duplicates.len(), 1);
+    assert_unchanged(
+        &second_expected,
+        duplicates
+            .get("source.txt")
+            .ok_or("repeated source was not archived as a duplicate")?,
+    );
 
-    let status = installation.json_ok(["inbox", "status"])?;
-    assert_eq!(status["done"], 2);
+    let inbox_status = installation.json_ok(["inbox", "status"])?;
+    assert_eq!(inbox_status["done"], 1);
+    assert_eq!(inbox_status["duplicates"], 1);
+    let library_stats = installation.json_ok(["stats"])?;
+    assert_eq!(library_stats["work_count"], 1);
+    assert_eq!(library_stats["model_run_count"], 1);
+    assert_eq!(library_stats["revision"], 1);
+
+    let lately = installation.json_ok(["lately", "--channel", "inbox"])?;
+    assert_eq!(lately["delivery_count"], 2);
+    assert_eq!(lately["new_work_count"], 1);
+    assert_eq!(lately["duplicate_count"], 1);
+    let deliveries = lately["deliveries"]
+        .as_array()
+        .ok_or("lately deliveries were not an array")?;
+    let original = deliveries
+        .iter()
+        .find(|delivery| delivery["retention"] == "new")
+        .ok_or("original inbox delivery was absent from lately")?;
+    assert_eq!(original["source_name"], "source.txt");
+    assert_eq!(original["retention"], "new");
+    assert_eq!(original["result"], "applied");
+    let duplicate = deliveries
+        .iter()
+        .find(|delivery| delivery["retention"] == "duplicate")
+        .ok_or("duplicate inbox delivery was absent from lately")?;
+    assert_eq!(duplicate["source_name"], "source.txt");
+    assert_eq!(duplicate["retention"], "duplicate");
+    assert_eq!(duplicate["result"], "retained");
+    assert_eq!(duplicate["work"], "source");
+
     let log = installation.json_ok(["log"])?;
-    assert_eq!(log["head_revision"], 2);
-    assert_eq!(log["commits"][0]["summary"], "Integrate inbox source 2");
-    assert_eq!(log["commits"][1]["summary"], "Integrate inbox source 1");
+    assert_eq!(log["head_revision"], 1);
+    assert_eq!(log["commits"].as_array().map(Vec::len), Some(1));
+    assert_eq!(log["commits"][0]["summary"], "Integrate inbox source 1");
     Ok(())
 }
 

@@ -177,6 +177,7 @@ for path in \
     "$SPOOL_DIR/incoming" \
     "$SPOOL_DIR/processing" \
     "$SPOOL_DIR/done" \
+    "$SPOOL_DIR/duplicates" \
     "$SPOOL_DIR/failed" \
     /usr/local/bin \
     /usr/local/libexec \
@@ -259,6 +260,7 @@ for path in \
     "$SPOOL_DIR/incoming" \
     "$SPOOL_DIR/processing" \
     "$SPOOL_DIR/done" \
+    "$SPOOL_DIR/duplicates" \
     "$SPOOL_DIR/failed"
 do
     install -d -o "$operator" -g "$operator_group" -m 0700 "$path"

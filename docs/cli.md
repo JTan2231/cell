@@ -90,10 +90,12 @@ annals integrate INPUT [--name LABEL] [--quality QUALITY] [--model MODEL] [--app
 annals integrate --work LABEL [--quality QUALITY] [--model MODEL] [--apply] [--reexamine]
 ```
 
-The first form retains and examines a new work. The second examines an already
-retained work. Annals freezes the current corpus revision, invokes the liaison,
-and expects one `submit_reconciliation` tool call. The model's final response
-is diagnostic and is not parsed as the reconciliation.
+The first form retains or recognizes and examines the selected work. The second
+examines an already retained work. Both are explicit manual integration and
+retain this behavior when the bytes were supplied before. Annals freezes the
+current corpus revision, invokes the liaison, and expects one
+`submit_reconciliation` tool call. The model's final response is diagnostic and
+is not parsed as the reconciliation.
 
 Annals may reuse the newest successful reconciliation for the exact same work,
 base revision, prompt version, model, and reasoning effort. `--reexamine`
@@ -136,12 +138,23 @@ config key `settle_seconds` defaults to 60, and the run flag overrides it. A
 zero settling interval is allowed.
 
 `inbox run` takes an exclusive spool lock, registers every settled file as a
-durable job, and drains registered jobs sequentially with immediate
-application. It moves each claimed file, without changing its basename or
-bytes, into `processing/JOB_ID/material/` beside an operational `job.json`
-receipt. Completed and permanently failed envelopes move whole to `done` and
-`failed`. There is no item or activation-lifetime limit, and newly settled
-arrivals are registered between jobs.
+durable job, and drains registered jobs sequentially. A fresh job that retains
+a new work enters model-assisted integration with immediate application. A
+fresh job whose exact bytes select an existing work completes with `duplicate`
+retention and result `retained`, without an examination, reconciliation, or
+commit. Content identity is resolved before the incoming filename is considered
+as a label, so a duplicate keeps the retained work's canonical label even when
+its basename is unusable or belongs to another work. Explicit manual
+`integrate` remains available for deliberate integration of an already retained
+work.
+
+Each claimed file moves, without changing its basename or bytes, into
+`processing/JOB_ID/material/` beside an operational `job.json` receipt.
+Applied and recorded envelopes move whole to `done`, retained duplicate
+envelopes to `duplicates`, and permanently failed envelopes to `failed`.
+Historical archives are not reclassified. There is no item or
+activation-lifetime limit, and newly settled arrivals are registered between
+jobs.
 
 Only visible top-level regular files not ending in `.part` are candidates.
 Eligible files run in persisted first-seen order. Invalid UTF-8, empty input,
@@ -152,9 +165,10 @@ work. An arrival still settling at the final rescan, or racing the final empty
 check, waits for the next activation.
 
 Human `inbox status` reports incoming, ready, settling, processing, done,
-failed, and lock state. JSON also reports ignored entries. Human `inbox run`
-reports registered, attempted, applied, recorded, failed, remaining, settling,
-and whether the runnable queue was drained. JSON adds the spool root, effective
+duplicates, failed, and lock state. JSON also reports ignored entries. Human
+`inbox run` reports registered, attempted, applied, recorded, duplicates,
+failed, remaining, settling, and whether the runnable queue was drained. JSON
+uses `duplicates` for the duplicate count and adds the spool root, effective
 settling interval, elapsed time, recovery count, and ignored count. See the
 [system installation guide](system-installation.md) for the complete spool,
 recovery, and scheduler contract.
@@ -220,7 +234,7 @@ independent of the terminal result:
 
 | Result | Meaning |
 | --- | --- |
-| `retained` | `work add` completed after retaining or recognizing the work. |
+| `retained` | `work add` or a fresh duplicate inbox delivery completed at the retention boundary. |
 | `pending` | Integration completed with a reconciliation awaiting application. |
 | `applied` | Integration completed and created the reported corpus revision. |
 | `recorded` | Integration completed without a corpus change. |

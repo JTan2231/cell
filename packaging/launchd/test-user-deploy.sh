@@ -128,9 +128,11 @@ plist="$home/Library/LaunchAgents/org.annals.inbox.plist"
 [ -f "$state/install/current/manifest.json" ]
 [ -x "$state/install/current/libexec/annals" ]
 [ -f "$state/annals.db" ]
+[ -d "$state/spool/duplicates" ]
 grep -Fx 'library = "annals.db"' "$state/config.toml" >/dev/null
 grep -Fx 'root = "spool"' "$state/config.toml" >/dev/null
 grep -Fx "codex = \"$codex\"" "$state/config.toml" >/dev/null
+printf '%s\n' preserved >"$state/spool/duplicates/preserved"
 [ "$(plutil -extract ProgramArguments.0 raw -o - "$plist")" = "$cli" ]
 [ "$(plutil -extract ProgramArguments.1 raw -o - "$plist")" = --quiet ]
 [ "$(plutil -extract ProgramArguments.2 raw -o - "$plist")" = inbox ]
@@ -167,6 +169,7 @@ fi
 backup_count=$(find "$state/backups" -type f -maxdepth 1 | wc -l | tr -d ' ')
 [ "$backup_count" -eq 1 ]
 [ -f "$state/migrated" ]
+grep -Fx preserved "$state/spool/duplicates/preserved" >/dev/null
 [ "$(tail -n 6 "$state/candidate-commands.log" | tr '\n' ' ')" = \
     'backup migrate validate inbox status validate inbox status ' ]
 [ ! -e "$launchctl_log" ]

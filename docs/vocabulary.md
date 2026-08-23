@@ -53,6 +53,13 @@ the same content-addressed work. `integrate --work` selects an existing work and
 does not create another delivery. A reconciliation may also be submitted
 without a model run through `change submit`.
 
+A fresh inbox delivery that recognizes already retained bytes stops at the
+retention boundary. Its delivery record is completed with `duplicate`
+retention and result `retained`, and its job envelope is archived in
+`duplicates/`; it produces no examination, reconciliation, or commit. Explicit
+manual integration, including an input whose bytes are already retained and
+`integrate --work`, continues through the model-assisted flow above.
+
 ## Technical vocabulary
 
 ### State and source boundaries
@@ -100,7 +107,9 @@ without a model run through `change submit`.
   The `ingested_at` timestamp marks that successful event, and *ingestion* also
   appears in internal storage names. *Integration* attempts to examine a work
   against a base revision, record a reconciliation, and optionally apply it.
-  There is no public `ingest` command.
+  The delivery result `retained` means processing completed at the retention
+  boundary, as for `work add` or a fresh duplicate inbox delivery. There is no
+  public `ingest` command.
 
 **Work label / source name**
 : A work label is the normalized-unique public selector for a retained work. A
@@ -112,7 +121,9 @@ without a model run through `change submit`.
 : An inbox job is one durable FIFO queue item. Its envelope is the filesystem
   directory containing unchanged source material and `job.json`. Call
   `job.json` the *job receipt*. It is a mutable operational record distinct from
-  the database delivery record; always qualify which record or receipt is meant.
+  the database delivery record; always qualify which record or receipt is
+  meant. Successful integrated jobs are archived in `done/`, fresh duplicate
+  jobs in `duplicates/`, and permanently failed jobs in `failed/`.
 
 **Work and delivery times**
 : `first_retained_at` belongs to a work and records when those content-addressed
@@ -300,7 +311,7 @@ Several independent lifecycles reuse words such as `applied`, `recorded`, and
 | Source delivery | retention | `new`, `duplicate` |
 | Source delivery | result | `retained`, `pending`, `applied`, `recorded` |
 | Inbox job receipt | state | `processing`, `done`, `failed` |
-| Inbox job receipt | `result_status` | `applied`, `recorded` |
+| Inbox job receipt | `result_status` | `retained`, `applied`, `recorded` |
 | Commit | kind | `change`, `shake`, `revert` |
 | Shake invocation | status | `unchanged`, `confirmation_required`, `cancelled`, `applied` |
 | Recent activity | `time_basis` | `created`, `modified`, `first-seen`, `ingested`, `completed` |
@@ -312,6 +323,9 @@ is an application or plan failure caused by changed state, not a stored
 reconciliation status. A completed source delivery has one result; processing
 and failed deliveries do not. Retention remains independent and may be present
 even when later processing fails. A done job receipt has one `result_status`.
+The `duplicates/` directory is an archive category, not another receipt state:
+its receipts have state `done` and result status `retained`. Historical
+envelopes keep their existing archive and result.
 
 ## Plain-language register
 

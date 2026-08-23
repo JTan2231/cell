@@ -22,15 +22,16 @@ processing/
     `-- material/
         `-- report.md
 done/JOB_ID/       # the completed envelope
+duplicates/JOB_ID/ # a fresh duplicate completed at retention
 failed/JOB_ID/     # the permanently failed envelope
 ```
 
 Annals moves the file into a unique job envelope on the same filesystem. It
-does not rewrite its contents or basename. Moving the envelope to `done` or
-`failed` prevents archive collisions without changing `report.md`. The
-`material` subdirectory means even a source named `job.json` cannot collide
-with the receipt. The same-filesystem moves preserve the source's bytes,
-basename, inode, mode, and modification time.
+does not rewrite its contents or basename. Moving the envelope to `done`,
+`duplicates`, or `failed` prevents archive collisions without changing
+`report.md`. The `material` subdirectory means even a source named `job.json`
+cannot collide with the receipt. The same-filesystem moves preserve the
+source's bytes, basename, inode, mode, and modification time.
 
 `job.json` is the authoritative receipt after a job is claimed. `.queue.json`
 assigns a monotonic sequence and UTC first-seen time when `inbox run` first
@@ -47,18 +48,27 @@ One invocation:
 2. recovers the queue description for previously claimed jobs;
 3. stops before processing another job when maintenance is requested;
 4. registers every eligible visible top-level regular file as a durable job;
-5. integrates and applies the oldest registered job;
+5. retains the oldest registered job, then archives a fresh duplicate or
+   integrates and applies a new work;
 6. rescans and registers newly eligible arrivals between jobs; and
 7. continues until the queue is empty or a retryable failure stops the
    activation.
 
 There is no item or activation-lifetime limit. A continuing stream of eligible
 arrivals can therefore keep one worker active indefinitely. Processing is
-deliberately sequential because every work must see the corpus revision
-produced by the work before it. A retryable failure remains at the head of the
-strict FIFO queue and stops that activation; the next scheduled activation
-retries it before later work. Permanently invalid material moves to `failed`,
-and draining continues.
+deliberately sequential so every new work sees the corpus revision produced by
+the work before it; duplicate recognition remains in the same FIFO. A retryable
+failure remains at the head of the strict FIFO queue and stops that activation;
+the next scheduled activation retries it before later work. Permanently invalid
+material moves to `failed`, and draining continues.
+
+A fresh inbox job whose exact bytes select an existing work completes with
+`duplicate` retention and delivery result `retained`. Its job receipt has state
+`done` and `result_status` `retained`, and its envelope moves to `duplicates/`
+without a model examination, reconciliation, commit, or revision change.
+Explicit manual integration continues to examine the selected work. This
+routing is prospective: Annals does not move or relabel historical terminal
+envelopes or delivery records.
 
 `settle_seconds` protects casual direct copies: a file is eligible only after
 its modification time is old enough. Dotfiles, names ending in `.part`,
@@ -136,6 +146,7 @@ The packaged units use this layout:
 |-- incoming/
 |-- processing/
 |-- done/
+|-- duplicates/
 `-- failed/
 ```
 
@@ -161,6 +172,7 @@ sudo install -d -o annals -g annals -m 0770 \
 sudo install -d -o annals -g annals -m 0700 \
   /var/spool/annals/processing \
   /var/spool/annals/done \
+  /var/spool/annals/duplicates \
   /var/spool/annals/failed
 
 sudo install -o root -g annals -m 0640 \
@@ -223,13 +235,14 @@ sudo -u annals /usr/local/bin/annals \
 ```
 
 Human status output reports incoming files split into ready and settling,
-processing envelopes, completed and failed envelopes, whether the run lock is
-held, and whether maintenance is requested. `--json` additionally reports the
-ignored-entry count. A successful run reports registered, attempted, applied,
-recorded, and failed counts; runnable work remaining; settling arrivals;
-whether the runnable queue was drained; and whether it stopped for maintenance.
-The spool root, recovered-job count, effective settling interval, elapsed
-seconds, and ignored count are also available with `--json`.
+processing, done, duplicate, and failed envelopes, whether the run lock is
+held, and whether maintenance is requested. `--json` uses `duplicates` for the
+duplicate-archive count and additionally reports the ignored-entry count. A
+successful run reports registered, attempted, applied, recorded, duplicates,
+and failed counts; runnable work remaining; settling arrivals; whether the
+runnable queue was drained; and whether it stopped for maintenance. The spool
+root, recovered-job count, effective settling interval, elapsed seconds, and
+ignored count are also available with `--json`.
 
 Use `annals lately --channel inbox` for durable, time-windowed delivery
 history. It includes both successful and permanently failed inbox material;
@@ -287,6 +300,7 @@ $HOME/Library/Application Support/Annals/
     |-- incoming/
     |-- processing/
     |-- done/
+    |-- duplicates/
     `-- failed/
 ```
 
@@ -404,16 +418,18 @@ credentials, queued material, logs, and archives are no longer needed.
 ## Failure recovery and maintenance
 
 `annals inbox status` summarizes incoming, ready, settling, processing, done,
-and failed state; `--json` also includes ignored entries. Inspect
+duplicates, and failed state; `--json` also includes ignored entries. Inspect
 `failed/JOB_ID/job.json` alongside the unchanged source in
-`failed/JOB_ID/material/` to diagnose a permanent failure. Invalid UTF-8,
-empty material, unusable labels, and label collisions are permanent failures;
-Annals archives them and continues draining. Other failures leave the
+`failed/JOB_ID/material/` to diagnose a permanent failure. Invalid UTF-8 and
+empty material are permanent failures. For bytes not already retained,
+unusable labels and label collisions are also permanent failures. Annals
+archives them and continues draining. Other failures leave the
 envelope in `processing`, stop the command with a nonzero exit, and are retried
 at the head of the queue before later work on the next activation. On recovery,
 the receipt's exact linked reconciliation lets Annals finish or archive
 completed work without adopting an unrelated proposal for the same retained
-work.
+work. A recovered envelope already linked to a reconciliation finishes that
+historical work rather than being reclassified as a fresh duplicate.
 Startup also removes an empty envelope left before a claim move and
 reconstructs a missing receipt when its envelope already contains exactly one
 moved material file.
@@ -423,9 +439,10 @@ examination of the same work.
 
 Inbox delivery is at-least-once. A SQLite commit and the following receipt and
 directory update cannot be one atomic transaction. If the process is killed in
-that narrow interval, recovery may examine the retained work again. The work's
-content-addressed storage keeps the exact source bytes idempotent, but model
-examination itself is not guaranteed to run exactly once.
+that narrow interval, recovery may repeat retention handling and may examine a
+new work again. The work's content-addressed storage keeps the exact source
+bytes idempotent, but model examination for jobs that require it is not
+guaranteed to run exactly once.
 
 On Linux, stop scheduling before maintenance that changes the executable,
 configuration, or library:
@@ -440,6 +457,6 @@ marker and restores scheduling automatically.
 
 Use `annals backup` for a consistent SQLite backup rather than copying a live
 WAL database, and run `annals validate` periodically. Include the spool when a
-backup must preserve pending work and its first-seen order. Keep the `done`
-and `failed` envelopes according to the installation's retention policy;
-Annals does not silently delete source files from either archive.
+backup must preserve pending work and its first-seen order. Keep the `done`,
+`duplicates`, and `failed` envelopes according to the installation's retention
+policy; Annals does not silently delete source files from these archives.

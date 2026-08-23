@@ -81,6 +81,12 @@ The default is a rolling seven-day window based on ingestion time. Creation
 and modification times are captured from filesystem metadata when available;
 first-seen, ingestion, and completion times describe the Annals lifecycle.
 
+A fresh inbox delivery whose exact bytes already select a retained work is
+recorded with `duplicate` retention and result `retained`, then archived under
+`duplicates/` without another examination, reconciliation, or commit. Explicit
+manual `integrate` commands keep their normal integration behavior for an
+already retained work.
+
 An already retained work can be selected by label. Annals reuses a successful
 examination only when the work, corpus revision, prompt version, model, and
 reasoning effort all match:
@@ -206,10 +212,12 @@ Drop complete UTF-8 files into
 runs at login and then receives another wake-up every five minutes while idle.
 An activation registers settled arrivals and drains the durable FIFO queue
 until it is empty; it has no item-count or lifetime cap. New arrivals are
-rescanned between jobs, and each individual liaison is limited to 60 minutes.
-The LaunchAgent runs only while that macOS user is logged in and resumes at the
-next login. For migration, status, removal, and Linux systemd instructions, see
-the [system installation guide](docs/system-installation.md).
+rescanned between jobs. New works enter the liaison flow, while fresh exact-byte
+duplicates complete at retention and move to `duplicates/`; each individual
+liaison is limited to 60 minutes. The LaunchAgent runs only while that macOS
+user is logged in and resumes at the next login. For migration, status,
+removal, and Linux systemd instructions, see the [system installation
+guide](docs/system-installation.md).
 
 See the [documentation index](docs/README.md) for the command, protocol,
 architecture, storage, search, and runtime contracts.

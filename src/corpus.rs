@@ -175,7 +175,16 @@ pub(crate) fn store_ingested_work(
     label: &str,
     text: &str,
 ) -> Result<StoredWork, AppError> {
-    store_ingested_work_with_result(connection, ingestion_id, label, text, None)
+    store_ingested_work_with_result(connection, ingestion_id, Some(label), text, None, false)
+}
+
+pub(crate) fn store_ingested_work_with_optional_label(
+    connection: &mut Connection,
+    ingestion_id: i64,
+    label: Option<&str>,
+    text: &str,
+) -> Result<StoredWork, AppError> {
+    store_ingested_work_with_result(connection, ingestion_id, label, text, None, true)
 }
 
 pub(crate) fn store_retained_ingested_work(
@@ -184,19 +193,40 @@ pub(crate) fn store_retained_ingested_work(
     label: &str,
     text: &str,
 ) -> Result<StoredWork, AppError> {
-    store_ingested_work_with_result(connection, ingestion_id, label, text, Some("retained"))
+    store_ingested_work_with_result(
+        connection,
+        ingestion_id,
+        Some(label),
+        text,
+        Some("retained"),
+        false,
+    )
 }
 
 fn store_ingested_work_with_result(
     connection: &mut Connection,
     ingestion_id: i64,
-    label: &str,
+    label: Option<&str>,
     text: &str,
     result: Option<&str>,
+    content_first: bool,
 ) -> Result<StoredWork, AppError> {
     let transaction =
         connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-    let stored = store_work_in_transaction(&transaction, label, text)?;
+    let stored = if content_first {
+        store_inbox_work_in_transaction(&transaction, label, text)?
+    } else {
+        store_work_in_transaction(
+            &transaction,
+            label.ok_or_else(|| {
+                AppError::invalid(
+                    "work_name_required",
+                    "a new immutable work requires a work label",
+                )
+            })?,
+            text,
+        )?
+    };
     let existing = transaction
         .query_row(
             "SELECT work_id, new_work, status FROM ingestions WHERE id = ?1",
@@ -323,6 +353,36 @@ fn store_work_in_transaction(
         work,
         new_work: true,
     })
+}
+
+fn store_inbox_work_in_transaction(
+    transaction: &Transaction<'_>,
+    label: Option<&str>,
+    text: &str,
+) -> Result<StoredWork, AppError> {
+    if text.trim().is_empty() {
+        return Err(AppError::invalid(
+            "empty_work",
+            "an immutable work must contain non-whitespace source text",
+        ));
+    }
+    let digest = sha256_hex(text.as_bytes());
+    if let Some(existing) = work_by_digest(transaction, &digest)? {
+        return Ok(StoredWork {
+            work: existing,
+            new_work: false,
+        });
+    }
+    store_work_in_transaction(
+        transaction,
+        label.ok_or_else(|| {
+            AppError::invalid(
+                "work_name_required",
+                "a new immutable work requires a work label",
+            )
+        })?,
+        text,
+    )
 }
 
 pub(crate) fn get_work(connection: &Connection, label: &str) -> Result<Work, AppError> {
@@ -1727,9 +1787,11 @@ mod tests {
     use super::{
         MAX_EVIDENCE_BYTES, Snapshot, SnapshotConcept, SnapshotEdge, SnapshotEvidence, apply_shake,
         diff_snapshot_entries, heading_for_offset, invert_snapshot_change, markdown_headings,
-        materialize_snapshot, plan_shake, sha256_hex, store_work, transitive_reduction,
+        materialize_snapshot, plan_shake, sha256_hex, store_ingested_work,
+        store_ingested_work_with_optional_label, store_work, transitive_reduction,
         validate_snapshot,
     };
+    use crate::ingestion::{self, NewIngestion, SourceMetadata};
     use crate::model::DiffEntry;
 
     #[test]
@@ -1772,6 +1834,142 @@ mod tests {
                 )
                 .is_err(),
             "an immutable work was updated"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn source_delivery_retention_disposition_survives_retry()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut connection = test_connection()?;
+        let first_metadata = SourceMetadata {
+            source_name: "first.txt".to_owned(),
+            source_size_bytes: Some(10),
+            source_created_at: None,
+            source_modified_at: None,
+            first_seen_at: "2026-08-23T00:00:00Z".to_owned(),
+        };
+        let first_id = ingestion::begin(
+            &connection,
+            &NewIngestion {
+                delivery_key: Some("first"),
+                channel: "inbox",
+                metadata: &first_metadata,
+            },
+        )?;
+        let first = store_ingested_work(&mut connection, first_id, "Original", "same bytes")?;
+        assert!(first.new_work);
+
+        let retry = store_ingested_work(&mut connection, first_id, "Original", "same bytes")?;
+        assert!(retry.new_work);
+        assert_eq!(retry.work.id, first.work.id);
+
+        let duplicate_metadata = SourceMetadata {
+            source_name: "duplicate.txt".to_owned(),
+            first_seen_at: "2026-08-23T00:01:00Z".to_owned(),
+            ..first_metadata
+        };
+        let duplicate_id = ingestion::begin(
+            &connection,
+            &NewIngestion {
+                delivery_key: Some("duplicate"),
+                channel: "inbox",
+                metadata: &duplicate_metadata,
+            },
+        )?;
+        let duplicate = store_ingested_work(&mut connection, duplicate_id, "Copy", "same bytes")?;
+        assert!(!duplicate.new_work);
+        assert_eq!(duplicate.work.id, first.work.id);
+        Ok(())
+    }
+
+    #[test]
+    fn source_delivery_content_identity_precedes_derived_label()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut connection = test_connection()?;
+        let retained = store_work(&mut connection, "Original", "same bytes")?;
+        store_work(&mut connection, "Occupied", "different bytes")?;
+        let manual_collision = store_work(&mut connection, "Occupied", "same bytes")
+            .err()
+            .ok_or("manual label collision should still fail")?;
+        assert_eq!(manual_collision.code(), "work_name_exists");
+        let invalid_manual_label = store_work(&mut connection, "   ", "same bytes")
+            .err()
+            .ok_or("manual invalid label should still fail")?;
+        assert_eq!(invalid_manual_label.code(), "invalid_label");
+        let metadata = SourceMetadata {
+            source_name: "occupied.txt".to_owned(),
+            source_size_bytes: Some(10),
+            source_created_at: None,
+            source_modified_at: None,
+            first_seen_at: "2026-08-23T00:00:00Z".to_owned(),
+        };
+
+        let colliding_id = ingestion::begin(
+            &connection,
+            &NewIngestion {
+                delivery_key: Some("colliding-label"),
+                channel: "inbox",
+                metadata: &metadata,
+            },
+        )?;
+        let colliding = store_ingested_work_with_optional_label(
+            &mut connection,
+            colliding_id,
+            Some("Occupied"),
+            "same bytes",
+        )?;
+        assert!(!colliding.new_work);
+        assert_eq!(colliding.work.id, retained.id);
+
+        let unnamed_id = ingestion::begin(
+            &connection,
+            &NewIngestion {
+                delivery_key: Some("missing-label"),
+                channel: "inbox",
+                metadata: &SourceMetadata {
+                    source_name: "unnamed source".to_owned(),
+                    ..metadata.clone()
+                },
+            },
+        )?;
+        let unnamed = store_ingested_work_with_optional_label(
+            &mut connection,
+            unnamed_id,
+            None,
+            "same bytes",
+        )?;
+        assert!(!unnamed.new_work);
+        assert_eq!(unnamed.work.id, retained.id);
+
+        let new_unnamed_id = ingestion::begin(
+            &connection,
+            &NewIngestion {
+                delivery_key: Some("new-missing-label"),
+                channel: "inbox",
+                metadata: &SourceMetadata {
+                    source_name: "unnamed source".to_owned(),
+                    ..metadata
+                },
+            },
+        )?;
+        let error = store_ingested_work_with_optional_label(
+            &mut connection,
+            new_unnamed_id,
+            None,
+            "new bytes",
+        )
+        .err()
+        .ok_or("new bytes without a work label should fail")?;
+        assert_eq!(error.code(), "work_name_required");
+        assert!(connection.query_row(
+            "SELECT work_id IS NULL FROM ingestions WHERE id = ?1",
+            [new_unnamed_id],
+            |row| row.get::<_, bool>(0),
+        )?);
+        assert_eq!(
+            connection.query_row("SELECT COUNT(*) FROM works", [], |row| row.get::<_, i64>(0))?,
+            2
         );
         Ok(())
     }

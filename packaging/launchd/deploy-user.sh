@@ -225,6 +225,7 @@ for path in \
     "$SPOOL_DIR/incoming" \
     "$SPOOL_DIR/processing" \
     "$SPOOL_DIR/done" \
+    "$SPOOL_DIR/duplicates" \
     "$SPOOL_DIR/failed" \
     "$INSTALL_DIR" \
     "$RELEASES_DIR" \

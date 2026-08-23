@@ -15,7 +15,9 @@ use serde::{Deserialize, Serialize};
 use crate::app::{read_utf8, work_label};
 use crate::cli::InboxRunArgs;
 use crate::config::Config;
-use crate::corpus::{ReconciliationRecord, now, reconciliation_query, store_ingested_work};
+use crate::corpus::{
+    ReconciliationRecord, now, reconciliation_query, store_ingested_work_with_optional_label,
+};
 use crate::db;
 use crate::error::AppError;
 use crate::model_runner::{ModelSettings, Runner};
@@ -31,6 +33,7 @@ struct Spool {
     incoming: PathBuf,
     processing: PathBuf,
     done: PathBuf,
+    duplicates: PathBuf,
     failed: PathBuf,
     index: PathBuf,
     lock: PathBuf,
@@ -44,6 +47,7 @@ impl Spool {
             incoming: root.join("incoming"),
             processing: root.join("processing"),
             done: root.join("done"),
+            duplicates: root.join("duplicates"),
             failed: root.join("failed"),
             index: root.join(".queue.json"),
             lock: root.join(".run.lock"),
@@ -57,6 +61,7 @@ impl Spool {
             &self.incoming,
             &self.processing,
             &self.done,
+            &self.duplicates,
             &self.failed,
         ] {
             fs::create_dir_all(path).map_err(|error| {
@@ -133,6 +138,7 @@ struct InboxStatus {
     ignored: usize,
     processing: usize,
     done: usize,
+    duplicates: usize,
     failed: usize,
     locked: bool,
     maintenance: bool,
@@ -146,6 +152,7 @@ struct RunSummary {
     attempted: usize,
     applied: usize,
     recorded: usize,
+    duplicates: usize,
     failed: usize,
     recovered: usize,
     remaining: usize,
@@ -283,6 +290,7 @@ struct ReceiptError {
 enum Completion {
     Applied(i64),
     Recorded,
+    Duplicate,
 }
 
 pub(crate) fn run(
@@ -315,6 +323,7 @@ pub(crate) fn run(
         attempted: 0,
         applied: 0,
         recorded: 0,
+        duplicates: 0,
         failed: 0,
         recovered,
         remaining: 0,
@@ -356,11 +365,12 @@ pub(crate) fn run(
     summary.elapsed_seconds = started.elapsed().as_secs_f64();
     summary.queue_drained = summary.remaining == 0;
     let human = format!(
-        "Inbox run: {} registered, {} attempted, {} applied, {} recorded, {} failed\nRemaining queued: {}; settling: {}\nQueue drained: {}; stopped for maintenance: {}",
+        "Inbox run: {} registered, {} attempted, {} applied, {} recorded, {} duplicates, {} failed\nRemaining queued: {}; settling: {}\nQueue drained: {}; stopped for maintenance: {}",
         summary.registered,
         summary.attempted,
         summary.applied,
         summary.recorded,
+        summary.duplicates,
         summary.failed,
         summary.remaining,
         summary.settling,
@@ -375,13 +385,14 @@ pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
     let spool = Spool::new(&inbox.root);
     let value = inspect(&spool, inbox.settle_seconds)?;
     let human = format!(
-        "Inbox: {}\nIncoming: {} ({} ready, {} settling)\nProcessing: {}\nDone: {}\nFailed: {}\nLocked: {}\nMaintenance: {}",
+        "Inbox: {}\nIncoming: {} ({} ready, {} settling)\nProcessing: {}\nDone: {}\nDuplicates: {}\nFailed: {}\nLocked: {}\nMaintenance: {}",
         value.root,
         value.incoming,
         value.ready,
         value.settling,
         value.processing,
         value.done,
+        value.duplicates,
         value.failed,
         value.locked,
         value.maintenance,
@@ -402,15 +413,21 @@ fn process_one(
     let ingestion_id = ensure_ingestion(library, &mut envelope)?;
     if envelope.receipt.state == "done" {
         let completion = completion_from_receipt(&envelope.receipt)?;
-        match completion {
+        let destination = match completion {
             Completion::Applied(_) => {
                 summary.applied += 1;
+                &spool.done
             }
             Completion::Recorded => {
                 summary.recorded += 1;
+                &spool.done
             }
-        }
-        move_envelope(&envelope, &spool.done)?;
+            Completion::Duplicate => {
+                summary.duplicates += 1;
+                &spool.duplicates
+            }
+        };
+        move_envelope(&envelope, destination)?;
         return Ok(());
     }
     if envelope.receipt.state == "failed" {
@@ -433,14 +450,18 @@ fn process_one(
         forward_progress,
     ) {
         Ok(completion) => {
-            let (status, result_revision) = match completion {
+            let (status, result_revision, destination) = match completion {
                 Completion::Applied(revision) => {
                     summary.applied += 1;
-                    ("applied", Some(revision))
+                    ("applied", Some(revision), &spool.done)
                 }
                 Completion::Recorded => {
                     summary.recorded += 1;
-                    ("recorded", None)
+                    ("recorded", None, &spool.done)
+                }
+                Completion::Duplicate => {
+                    summary.duplicates += 1;
+                    ("retained", None, &spool.duplicates)
                 }
             };
             let connection = db::open_write(library)?;
@@ -450,7 +471,7 @@ fn process_one(
             envelope.receipt.result_status = Some(status.to_owned());
             envelope.receipt.result_revision = result_revision;
             write_receipt(&envelope)?;
-            move_envelope(&envelope, &spool.done)?;
+            move_envelope(&envelope, destination)?;
             Ok(())
         }
         Err(error) if permanent_source_error(&error) => {
@@ -529,9 +550,15 @@ fn process_work(
             ),
         ));
     }
-    let label = work_label(&envelope.source, None)?;
+    let label = work_label(&envelope.source, None).ok();
     let mut connection = db::open_write(library)?;
-    let work = store_ingested_work(&mut connection, ingestion_id, &label, &text)?.work;
+    let stored = store_ingested_work_with_optional_label(
+        &mut connection,
+        ingestion_id,
+        label.as_deref(),
+        &text,
+    )?;
+    let work = stored.work;
     envelope.receipt.source_sha256 = Some(work.sha256.clone());
     envelope.receipt.work = Some(work.label.clone());
     write_receipt(envelope)?;
@@ -571,6 +598,13 @@ fn process_work(
                 ));
             }
         }
+    }
+    if !stored.new_work {
+        drop(connection);
+        if let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
+            liaison::abandon_run(library, previous_token, work.id)?;
+        }
+        return Ok(Completion::Duplicate);
     }
     let run_token = connection.query_row("SELECT lower(hex(randomblob(32)))", [], |row| {
         row.get::<_, String>(0)
@@ -659,6 +693,7 @@ fn completion_from_receipt(receipt: &JobReceipt) -> Result<Completion, AppError>
                 AppError::unexpected("invalid_job_receipt", "applied job receipt has no revision")
             }),
         Some("recorded") => Ok(Completion::Recorded),
+        Some("retained") if receipt.result_revision.is_none() => Ok(Completion::Duplicate),
         _ => Err(AppError::unexpected(
             "invalid_job_receipt",
             "done job receipt has no terminal result",
@@ -801,9 +836,14 @@ fn available_job_id(spool: &Spool, sequence: u64) -> String {
 }
 
 fn job_id_exists(spool: &Spool, id: &str) -> bool {
-    [&spool.processing, &spool.done, &spool.failed]
-        .iter()
-        .any(|parent| parent.join(id).exists())
+    [
+        &spool.processing,
+        &spool.done,
+        &spool.duplicates,
+        &spool.failed,
+    ]
+    .iter()
+    .any(|parent| parent.join(id).exists())
 }
 
 fn move_envelope(envelope: &Envelope, destination: &Path) -> Result<(), AppError> {
@@ -1443,6 +1483,7 @@ fn inspect(spool: &Spool, settle_seconds: u64) -> Result<InboxStatus, AppError> 
         ignored,
         processing: count_directories(&spool.processing)?,
         done: count_directories(&spool.done)?,
+        duplicates: count_directories(&spool.duplicates)?,
         failed: count_directories(&spool.failed)?,
         locked: inbox_locked(&spool.lock),
         maintenance: spool.maintenance_requested()?,

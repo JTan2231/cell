@@ -234,7 +234,7 @@ pub struct IntegrateArgs {
 pub enum InboxCommand {
     /// Register and drain settled inbox files sequentially until the queue is empty.
     Run(InboxRunArgs),
-    /// Report queued, active, completed, and failed inbox state.
+    /// Report queued, active, completed, duplicate, and failed inbox state.
     Status,
 }
 

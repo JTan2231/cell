@@ -58,6 +58,13 @@ recognized an existing digest. The public receipt renders this as `new` or
 are written together in the same immediate transaction. A failure before the
 bytes can be retained or recognized leaves all three fields null.
 
+A fresh inbox delivery with `duplicate` retention completes with result
+`retained`. It creates no model run, reconciliation, or commit. New inbox works
+continue through immediate integration, and explicit manual integration is
+unchanged even when its input selects an existing work. This distinction is
+prospective; existing delivery rows and archived job receipts are not
+reclassified.
+
 Each receipt captures source metadata independently of the work's contents:
 
 - `source_name` is the delivered filename or manual source name;
@@ -95,10 +102,10 @@ Receipt lifecycle `status` is `processing`, `completed`, or `failed`:
   result. A retryable inbox failure may retain its latest error while the
   delivery remains processing.
 - `completed` has a linked work, completion time, and one result: `retained`
-  for `work add`, `pending` for a reconciliation left pending, `applied` for a
-  reconciliation applied to the corpus, or `recorded` for a mechanically equal
-  reconciliation. Only `applied` has `result_revision`, which references its
-  commit.
+  for `work add` or a fresh duplicate inbox delivery, `pending` for a
+  reconciliation left pending, `applied` for a reconciliation applied to the
+  corpus, or `recorded` for a mechanically equal reconciliation. Only
+  `applied` has `result_revision`, which references its commit.
 - `failed` has a completion time, error code, and reporting-safe message, with
   no result or result revision. It may retain work linkage and an ingestion
   time when the failure happened after successful retention.
