@@ -91,8 +91,9 @@ manual integration, including an input whose bytes are already retained and
 
 **Corpus state**
 : The complete set of concepts, explicit parent edges, and evidence links at
-  one revision. Use *projected corpus state* for a complete proposed result and
-  *revision snapshot* for its retained historical representation.
+  one revision. Annals reconstructs it by replaying canonical commit effects.
+  Use *projected corpus state* for a complete proposed result and *historical
+  corpus state* for a selected earlier revision.
 
 **Concept graph**
 : The concepts and explicit parent edges in a corpus state. Evidence belongs to
@@ -313,13 +314,12 @@ manual integration, including an input whose bytes are already retained and
   nonempty shakes, and reverts create commits.
 
 **HEAD**
-: The current materialized corpus revision and state.
+: The current corpus revision and its replayed corpus state.
 
 **Snapshot**
-: A complete representation of corpus state containing concepts, explicit
-  parent edges, and evidence links. A snapshot may represent HEAD, a projected
-  result, or retained history. A *revision snapshot* is the immutable historical
-  form stored for an addressable revision. Neither is a bounded graph view.
+: Avoid this as a current storage term. Use *corpus state*, *projected corpus
+  state*, or *historical corpus state* as appropriate. Annals stores canonical
+  effects and replays them; it does not retain materialized revision snapshots.
 
 **Shake**
 : A confirmed transitive reduction of HEAD. It removes explicit parent edges
