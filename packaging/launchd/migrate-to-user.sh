@@ -135,6 +135,7 @@ USER_CLI="$operator_home/.local/bin/annals"
 USER_USAGE_CLI="$operator_home/.local/bin/annals-usage"
 USER_TARGET="gui/$operator_uid/$SERVICE_LABEL"
 MAINTENANCE_MARKER="$TARGET_STATE/spool/.maintenance"
+LEGACY_PAUSED_MARKER="$LEGACY_STATE/spool/.paused"
 
 run_as_operator() {
     "$operator_runner" -u "$operator" /usr/bin/env -i \
@@ -235,6 +236,11 @@ grep -Fx 'library = "/Library/Application Support/Annals/annals.db"' \
 grep -Fx 'root = "/Library/Application Support/Annals/spool"' \
     "$LEGACY_STATE/config.toml" >/dev/null \
     || fail 'legacy config has a nonstandard inbox path'
+if [ -L "$LEGACY_PAUSED_MARKER" ] \
+    || { [ -e "$LEGACY_PAUSED_MARKER" ] && [ ! -f "$LEGACY_PAUSED_MARKER" ]; }
+then
+    fail "invalid legacy inbox pause marker: $LEGACY_PAUSED_MARKER"
+fi
 
 run_as_operator "$binary_path" --version >/dev/null
 run_as_operator "$usage_binary_path" --version >/dev/null

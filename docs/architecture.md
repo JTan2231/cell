@@ -42,16 +42,35 @@ to `duplicates/` without an examination, reconciliation, commit, or revision
 change. This routing is prospective: historical delivery records and archived
 envelopes keep their recorded results and locations.
 
+The filesystem inbox separates admission from processing. Registration moves
+a settled arrival into a durable envelope under `queued/`, assigns its
+immutable FIFO sequence, and writes a job receipt with state `queued` and zero
+attempts. It deliberately creates no database delivery record. Dispatch is the
+boundary that moves the oldest queued envelope to `processing/`, changes its
+job receipt to `processing`, and creates or recovers the source-delivery
+record. A retryable processing envelope remains ahead of every queued job.
+
 Inbox job receipts carry a stable delivery key. Recovery selects the same
 database receipt through that key, so moving or retrying a durable envelope
 cannot create a second source-delivery record. The queue index records the
-first observation timestamp along with FIFO sequence, and the claimed
-envelope preserves the same captured source metadata used for its identity
-check. A recovered job that already links to a reconciliation finishes that
-recorded work rather than being reclassified as a fresh duplicate. Manual
-`integrate --work` creates no delivery because it selects bytes already
-retained in the library. Both manual integration forms continue through the
-explicit integration flow even when the selected bytes were retained earlier.
+first observation timestamp while an arrival settles, and registration
+preserves that timestamp and the captured source metadata in the envelope.
+The job receipt carries sequence authoritatively after registration. A
+recovered job that already links to a reconciliation finishes that recorded
+work rather than being reclassified as a fresh duplicate. Manual `integrate
+--work` creates no delivery because it selects bytes already retained in the
+library. Both manual integration forms continue through the explicit
+integration flow even when the selected bytes were retained earlier.
+
+Dispatch and operator pause are serialized by a short-lived queue-control
+lock. If dispatch wins, that job is allowed to finish; if pause wins, the job
+remains queued. Registration continues while paused. The activation-long run
+lock still excludes overlapping workers, while the independent deployer-owned
+maintenance marker blocks registration, repair, and dispatch when observed
+between deliveries. An
+operator resume removes only the pause marker. launchd or systemd supplies
+periodic activation; Annals owns neither a resident worker nor a scheduling
+policy.
 
 Source-bearing manual commands share one advisory lock per library. Acquiring
 that lock finalizes any processing receipt left by an interrupted prior manual

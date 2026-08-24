@@ -162,9 +162,9 @@ or `ANNALS_LIBRARY`, or select a TOML config with `--config` or
 The installed macOS `annals` frontend selects
 `$HOME/Library/Application Support/Annals/config.toml` when no explicit library
 or config selection is present. Consequently, commands such as `annals stats`,
-`annals search`, and `annals inbox status` operate on the same user library as
-the scheduled inbox worker. An explicit option or environment variable still
-selects a different target.
+`annals search`, `annals inbox status`, and the inbox control commands operate
+on the same user library and spool as the scheduled inbox worker. An explicit
+option or environment variable still selects a different target.
 
 The companion CLI reports the token consumption attributed to source
 deliveries and reads the current account-wide Codex allowance:
@@ -236,8 +236,8 @@ worker between jobs, takes a consistent Annals library backup, switches both
 binaries through one release selector, updates both configurations within a
 rollback-protected transaction, validates the result, and automatically
 restores the previous release if launchd cutover fails. Configuration,
-credentials, library data, telemetry, logs, and queued or archived sources are
-retained.
+credentials, library data, telemetry, logs, the operator pause state, and
+queued or archived sources are retained.
 
 After installation, the user—and Codex running as that user—uses the default
 library without `sudo`:
@@ -246,18 +246,30 @@ library without `sudo`:
 annals stats
 annals validate
 annals inbox status
+annals inbox pause
+annals inbox register
+annals inbox resume
 ```
 
 Drop complete UTF-8 files into
 `$HOME/Library/Application Support/Annals/spool/incoming`. The one-shot worker
 runs at login and then receives another wake-up every five minutes while idle.
-An activation registers settled arrivals and drains the durable FIFO queue
-until it is empty; it has no item-count or lifetime cap. New arrivals are
-rescanned between jobs. New works enter the liaison flow, while fresh exact-byte
-duplicates complete at retention and move to `duplicates/`; each individual
-liaison is limited to 60 minutes. The LaunchAgent runs only while that macOS
-user is logged in and resumes at the next login. For migration, status,
-removal, and Linux systemd instructions, see the [system installation
+Registration moves each settled arrival into a durable `queued/` job with an
+immutable FIFO sequence; `annals inbox register` exposes that admission step
+without starting a delivery. An activation performs the same registration and
+drains the queue until it is empty; it has no item-count or lifetime cap. New
+arrivals are rescanned between jobs. New works enter the liaison flow, while
+fresh exact-byte duplicates complete at retention and move to `duplicates/`;
+each individual liaison is limited to 60 minutes.
+
+`annals inbox pause` lets the current delivery finish and prevents the next
+queued job from starting. Timer activations continue registering arrivals
+while paused. `annals inbox resume` reopens dispatch but does not itself start a
+worker; use `annals inbox run` for immediate processing or wait for the next
+LaunchAgent wake-up. The operator pause is independent of deployer maintenance
+and survives updates. The LaunchAgent runs only while that macOS user is logged
+in and wakes again at the next login. For migration, status, removal, and Linux
+systemd instructions, see the [system installation
 guide](docs/system-installation.md).
 
 See the [documentation index](docs/README.md) for the command, protocol,

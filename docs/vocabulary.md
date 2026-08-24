@@ -132,12 +132,29 @@ manual integration, including an input whose bytes are already retained and
   `--name` supplies a work label.
 
 **Inbox job / job envelope / job receipt**
-: An inbox job is one durable FIFO queue item. Its envelope is the filesystem
-  directory containing unchanged source material and `job.json`. Call
-  `job.json` the *job receipt*. It is a mutable operational record distinct from
-  the database delivery record; always qualify which record or receipt is
-  meant. Successful integrated jobs are archived in `done/`, fresh duplicate
-  jobs in `duplicates/`, and permanently failed jobs in `failed/`.
+: An inbox job is one registered, durable FIFO queue item. Its envelope is the
+  filesystem directory containing unchanged source material and `job.json`.
+  Call `job.json` the *job receipt*. It is a mutable operational record
+  distinct from the database delivery record; always qualify which record or
+  receipt is meant. A queued job has never started. Dispatch moves the strict
+  FIFO head from `queued/` to `processing/` and starts its source delivery.
+  Successful integrated jobs are archived in `done/`, fresh duplicate jobs in
+  `duplicates/`, and permanently failed jobs in `failed/`.
+
+**Inbox registration / dispatch**
+: Registration moves a settled file from `incoming/` into a queued job
+  envelope and assigns its immutable FIFO sequence. It does not start a source
+  delivery or create a database delivery record. Dispatch claims the oldest
+  queued job for processing. Any retryable job already in `processing/` stays
+  ahead of all queued jobs.
+
+**Inbox pause / maintenance**
+: A pause is an operator-owned control state that prevents dispatch without
+  preventing registration. A job already processing is allowed to finish, and
+  the next job remains queued. Maintenance is a separate, Annals-owned
+  deployment boundary that prevents new spool mutation after the current job
+  finishes. Resuming clears only the operator pause; it never clears
+  maintenance.
 
 **Work and delivery times**
 : `first_retained_at` belongs to a work and records when those content-addressed
@@ -348,16 +365,17 @@ Several independent lifecycles reuse words such as `applied`, `recorded`, and
 | Source delivery | channel | `manual`, `inbox` |
 | Source delivery | retention | `new`, `duplicate` |
 | Source delivery | result | `retained`, `pending`, `applied`, `recorded` |
-| Inbox job receipt | state | `processing`, `done`, `failed` |
+| Inbox job receipt | state | `queued`, `processing`, `done`, `failed` |
 | Inbox job receipt | `result_status` | `retained`, `applied`, `recorded` |
 | Commit | kind | `change`, `shake`, `revert` |
 | Shake invocation | status | `unchanged`, `confirmation_required`, `cancelled`, `applied` |
 | Recent activity | `time_basis` | `created`, `modified`, `first-seen`, `ingested`, `completed` |
 
 Within `incoming/`, *ready* and *settling* classify files; they are not job
-receipt states. Keep the exact filesystem and database words distinct: a *done
-job receipt* and envelope correspond to a *completed delivery record*. *Stale*
-is an application or plan failure caused by changed state, not a stored
+receipt states. A queued job has no database delivery record, so do not call it
+a processing delivery. Keep the exact filesystem and database words distinct:
+a *done job receipt* and envelope correspond to a *completed delivery record*.
+*Stale* is an application or plan failure caused by changed state, not a stored
 reconciliation status. A completed source delivery has one result; processing
 and failed deliveries do not. Retention remains independent and may be present
 even when later processing fails. A done job receipt has one `result_status`.
@@ -427,6 +445,8 @@ and grounded in exact source language.
 - Use *library* for all stored state and *corpus* for revisioned semantic state.
 - Reserve *work* for the immutable retained source object; use *job* or *queue
   item* for operational work waiting to run.
+- Distinguish a *queued inbox job* from a *processing source delivery*;
+  registration creates the former and dispatch starts the latter.
 - Qualify *label* as a work label or concept label when ambiguity is possible.
 - Qualify *root* as a root concept or spool root when ambiguity is possible.
 - Say *reconciliation request*, *reconciliation record*, *operation*, *effect*,

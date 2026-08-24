@@ -122,6 +122,7 @@ make_fixture() {
     mkdir -p "$prefix/usr/local/bin" "$prefix/usr/local/libexec/annals" \
         "$prefix/Library/LaunchDaemons" "$state/codex-home" \
         "$state/log" "$state/spool/incoming" "$state/spool/processing" \
+        "$state/spool/queued/waiting/material" \
         "$state/spool/processing/retry/material" \
         "$state/spool/done/job/material" \
         "$state/spool/duplicates/repeated/material" \
@@ -153,11 +154,13 @@ EOF
     printf '%s\n' shm >"$state/annals.db-shm"
     printf '%s\n' auth >"$state/codex-home/auth.json"
     printf '%s\n' config >"$state/codex-home/config.toml"
+    printf '%s\n' waiting >"$state/spool/queued/waiting/material/waiting.txt"
     printf '%s\n' material >"$state/spool/done/job/material/source.txt"
     printf '%s\n' repeated >"$state/spool/duplicates/repeated/material/repeated.txt"
     printf '%s\n' retry >"$state/spool/processing/retry/material/retry.txt"
     printf '%s\n' rejected >"$state/spool/failed/rejected/material/rejected.txt"
     printf '%s\n' '{"version":1,"next_sequence":4,"entries":{}}' >"$state/spool/.queue.json"
+    : >"$state/spool/.paused"
     : >"$state/log/inbox.stdout.log"
     : >"$state/log/inbox.stderr.log"
     : >"$fixture/system-loaded"
@@ -190,6 +193,7 @@ new_state="$success/home/Library/Application Support/Annals"
 [ ! -e "$success/legacy/usr/local/bin/annals" ]
 grep -Fx 'library = "annals.db"' "$new_state/config.toml" >/dev/null
 grep -Fx 'root = "spool"' "$new_state/config.toml" >/dev/null
+grep -Fx waiting "$new_state/spool/queued/waiting/material/waiting.txt" >/dev/null
 grep -Fx material "$new_state/spool/done/job/material/source.txt" >/dev/null
 grep -Fx repeated \
     "$new_state/spool/duplicates/repeated/material/repeated.txt" >/dev/null
@@ -201,6 +205,7 @@ grep -Fx auth "$new_state/codex-home/auth.json" >/dev/null
 [ -f "$success/user-loaded" ]
 [ -L "$success/home/.local/bin/annals-usage" ]
 [ ! -e "$new_state/spool/.maintenance" ]
+[ -f "$new_state/spool/.paused" ]
 
 failure="$temporary/failure"
 mkdir -p "$failure"
@@ -220,6 +225,7 @@ grep -Fx 'root = "/Library/Application Support/Annals/spool"' \
     "$old_state/config.toml" >/dev/null
 grep -Fx repeated \
     "$old_state/spool/duplicates/repeated/material/repeated.txt" >/dev/null
+[ -f "$old_state/spool/.paused" ]
 [ -f "$failure/system-loaded" ]
 [ ! -e "$failure/user-loaded" ]
 [ ! -e "$failure/home/Library/LaunchAgents/org.annals.inbox.plist" ]
@@ -252,6 +258,7 @@ run_migration "$recovery" >/dev/null
 grep -Fx repeated \
     "$recovery/home/Library/Application Support/Annals/spool/duplicates/repeated/material/repeated.txt" \
     >/dev/null
+[ -f "$recovery/home/Library/Application Support/Annals/spool/.paused" ]
 [ -f "$recovery/user-loaded" ]
 
 printf '%s\n' 'migration fixture tests passed'

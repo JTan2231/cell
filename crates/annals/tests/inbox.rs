@@ -464,8 +464,9 @@ fn run_rescans_for_ready_arrivals_and_leaves_settling_arrivals_for_later() -> Te
     assert!(incoming_names(&installation.inbox)?.is_empty());
     assert_eq!(
         archived_material(&installation.inbox, "processing")?.len(),
-        2
+        1
     );
+    assert_eq!(archived_material(&installation.inbox, "queued")?.len(), 1);
     fs::rename(&staged, installation.inbox.join("incoming/03-arrived.md"))?;
     installation.incoming(
         "04-settling.md",
@@ -545,8 +546,9 @@ fn maintenance_marker_stops_the_worker_between_jobs() -> TestResult {
     assert_eq!(archived_material(&installation.inbox, "done")?.len(), 1);
     assert_eq!(
         archived_material(&installation.inbox, "processing")?.len(),
-        1
+        0
     );
+    assert_eq!(archived_material(&installation.inbox, "queued")?.len(), 1);
 
     let status = installation.json_ok(["inbox", "status"])?;
     assert_eq!(status["maintenance"], true);
@@ -558,6 +560,261 @@ fn maintenance_marker_stops_the_worker_between_jobs() -> TestResult {
     assert_eq!(resumed["stopped_for_maintenance"], false);
     assert_eq!(archived_material(&installation.inbox, "done")?.len(), 2);
     assert!(archived_material(&installation.inbox, "processing")?.is_empty());
+    assert!(archived_material(&installation.inbox, "queued")?.is_empty());
+    Ok(())
+}
+
+#[test]
+fn register_pause_and_resume_control_the_durable_queue() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "01-first.md",
+        b"Shared inbox claim.\nFirst source.\n",
+        0o600,
+    )?;
+    installation.incoming(
+        "02-second.md",
+        b"Shared inbox claim.\nSecond source.\n",
+        0o600,
+    )?;
+
+    let registered = installation.json_ok(["inbox", "register"])?;
+    assert_eq!(registered["registered"], 2);
+    assert_eq!(registered["queued"], 2);
+    assert_eq!(registered["jobs"].as_array().map(Vec::len), Some(2));
+    assert!(!installation.counter.exists());
+    assert!(archived_material(&installation.inbox, "processing")?.is_empty());
+    for envelope in fs::read_dir(installation.inbox.join("queued"))? {
+        let envelope = envelope?;
+        let receipt: Value = serde_json::from_slice(&fs::read(envelope.path().join("job.json"))?)?;
+        assert_eq!(receipt["version"], 3);
+        assert_eq!(receipt["state"], "queued");
+        assert_eq!(receipt["attempts"], 0);
+        assert!(receipt["sequence"].is_number());
+        assert!(receipt["ingestion_id"].is_null());
+    }
+    let lately = installation.json_ok(["lately", "--channel", "inbox", "--by", "first-seen"])?;
+    assert_eq!(lately["delivery_count"], 0);
+
+    let paused = installation.json_ok(["inbox", "pause"])?;
+    assert_eq!(paused["paused"], true);
+    assert_eq!(paused["changed"], true);
+    let already_paused = installation.json_ok(["inbox", "pause"])?;
+    assert_eq!(already_paused["changed"], false);
+    installation.incoming(
+        "03-while-paused.md",
+        b"Shared inbox claim.\nRegistered while paused.\n",
+        0o600,
+    )?;
+
+    let stopped = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(stopped["registered"], 1);
+    assert_eq!(stopped["attempted"], 0);
+    assert_eq!(stopped["stopped_for_pause"], true);
+    assert_eq!(stopped["remaining"], 3);
+    assert!(!installation.counter.exists());
+
+    let resumed = installation.json_ok(["inbox", "resume"])?;
+    assert_eq!(resumed["paused"], false);
+    assert_eq!(resumed["changed"], true);
+    assert!(!installation.counter.exists());
+    let run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(run["attempted"], 3);
+    assert_eq!(run["remaining"], 0);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "3\n");
+    let already_resumed = installation.json_ok(["inbox", "resume"])?;
+    assert_eq!(already_resumed["changed"], false);
+    Ok(())
+}
+
+#[test]
+fn pause_during_processing_leaves_later_and_new_arrivals_queued() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "01-first.md",
+        b"Shared inbox claim.\nFirst source.\n",
+        0o600,
+    )?;
+    installation.incoming(
+        "02-second.md",
+        b"Shared inbox claim.\nSecond source.\n",
+        0o600,
+    )?;
+
+    let ready = installation.directory.path().join("fake-codex-ready");
+    let release = installation.directory.path().join("fake-codex-release");
+    let child = installation
+        .command()
+        .args(["inbox", "run"])
+        .env("ANNALS_FAKE_BLOCK_READY", &ready)
+        .env("ANNALS_FAKE_BLOCK_RELEASE", &release)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    if let Err(error) = wait_for_file(&ready) {
+        fs::write(&release, b"release\n")?;
+        let _ = child.wait_with_output();
+        return Err(error);
+    }
+
+    installation.incoming(
+        "03-third.md",
+        b"Shared inbox claim.\nThird source.\n",
+        0o600,
+    )?;
+    let registered = installation.json_ok(["inbox", "register"])?;
+    assert_eq!(registered["registered"], 1);
+    assert_eq!(registered["queued"], 2);
+    let paused = installation.json_ok(["inbox", "pause"])?;
+    assert_eq!(paused["locked"], true);
+    fs::write(&release, b"release\n")?;
+
+    let stopped = successful_json(&child.wait_with_output()?)?;
+    assert_eq!(stopped["attempted"], 1);
+    assert_eq!(stopped["stopped_for_pause"], true);
+    assert_eq!(stopped["remaining"], 2);
+    let status = installation.json_ok(["inbox", "status"])?;
+    assert_eq!(status["paused"], true);
+    assert_eq!(status["locked"], false);
+    assert_eq!(status["queued"], 2);
+    assert_eq!(status["processing"], 0);
+    assert_eq!(status["next_job"]["sequence"], 2);
+    Ok(())
+}
+
+#[test]
+fn dispatch_crash_recovery_preserves_the_processing_boundary_while_paused() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "dispatched.md",
+        b"Shared inbox claim.\nDispatched source.\n",
+        0o600,
+    )?;
+    installation.json_ok(["inbox", "register"])?;
+    let id = "j00000000000000000001";
+    fs::rename(
+        installation.inbox.join("queued").join(id),
+        installation.inbox.join("processing").join(id),
+    )?;
+
+    installation.json_ok(["inbox", "pause"])?;
+    let run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(run["attempted"], 0);
+    assert_eq!(run["stopped_for_pause"], true);
+    let receipt: Value = serde_json::from_slice(&fs::read(
+        installation
+            .inbox
+            .join("processing")
+            .join(id)
+            .join("job.json"),
+    )?)?;
+    assert_eq!(receipt["state"], "processing");
+    assert_eq!(receipt["attempts"], 0);
+    assert!(!installation.inbox.join("queued").join(id).exists());
+    Ok(())
+}
+
+#[test]
+fn legacy_unstarted_processing_receipt_migrates_to_queued_while_paused() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming("queued.md", b"Shared inbox claim.\nQueued source.\n", 0o600)?;
+    installation.json_ok(["inbox", "register"])?;
+    let id = "j00000000000000000001";
+    let queued = installation.inbox.join("queued").join(id);
+    let mut receipt: Value = serde_json::from_slice(&fs::read(queued.join("job.json"))?)?;
+    receipt["version"] = Value::from(2);
+    receipt["state"] = Value::from("processing");
+    receipt
+        .as_object_mut()
+        .ok_or("receipt is not an object")?
+        .remove("sequence");
+    fs::write(
+        queued.join("job.json"),
+        serde_json::to_vec_pretty(&receipt)?,
+    )?;
+    fs::rename(&queued, installation.inbox.join("processing").join(id))?;
+
+    installation.json_ok(["inbox", "pause"])?;
+    let run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(run["attempted"], 0);
+    assert_eq!(run["stopped_for_pause"], true);
+    assert!(installation.inbox.join("queued").join(id).is_dir());
+    assert!(!installation.inbox.join("processing").join(id).exists());
+    let migrated: Value = serde_json::from_slice(&fs::read(
+        installation.inbox.join("queued").join(id).join("job.json"),
+    )?)?;
+    assert_eq!(migrated["version"], 3);
+    assert_eq!(migrated["state"], "queued");
+    assert_eq!(migrated["sequence"], 1);
+    let lately = installation.json_ok(["lately", "--channel", "inbox"])?;
+    assert_eq!(lately["delivery_count"], 0);
+    Ok(())
+}
+
+#[test]
+fn legacy_processing_receipt_with_a_delivery_record_stays_processing() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "started.md",
+        b"Shared inbox claim.\nStarted source.\n",
+        0o600,
+    )?;
+    installation.json_ok(["inbox", "register"])?;
+    let id = "j00000000000000000001";
+    let queued = installation.inbox.join("queued").join(id);
+    let mut receipt: Value = serde_json::from_slice(&fs::read(queued.join("job.json"))?)?;
+    let delivery_key = receipt["delivery_key"]
+        .as_str()
+        .ok_or("queued receipt omitted its delivery key")?
+        .to_owned();
+    let first_seen_at = receipt["first_seen_at"]
+        .as_str()
+        .ok_or("queued receipt omitted first_seen_at")?
+        .to_owned();
+    receipt["version"] = Value::from(2);
+    receipt["state"] = Value::from("processing");
+    receipt
+        .as_object_mut()
+        .ok_or("receipt is not an object")?
+        .remove("sequence");
+    fs::write(
+        queued.join("job.json"),
+        serde_json::to_vec_pretty(&receipt)?,
+    )?;
+    fs::rename(&queued, installation.inbox.join("processing").join(id))?;
+    let connection = rusqlite::Connection::open(&installation.library)?;
+    connection.execute(
+        "INSERT INTO ingestions(\
+             delivery_key, source_name, channel, first_seen_at, status\
+         ) VALUES(?1, 'started.md', 'inbox', ?2, 'processing')",
+        rusqlite::params![delivery_key, first_seen_at],
+    )?;
+    drop(connection);
+
+    installation.json_ok(["inbox", "pause"])?;
+    let run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(run["attempted"], 0);
+    assert_eq!(run["stopped_for_pause"], true);
+    assert!(installation.inbox.join("processing").join(id).is_dir());
+    assert!(!installation.inbox.join("queued").join(id).exists());
+    let migrated: Value = serde_json::from_slice(&fs::read(
+        installation
+            .inbox
+            .join("processing")
+            .join(id)
+            .join("job.json"),
+    )?)?;
+    assert_eq!(migrated["version"], 3);
+    assert_eq!(migrated["state"], "processing");
+    assert_eq!(migrated["attempts"], 0);
+    let lately = installation.json_ok(["lately", "--channel", "inbox", "--by", "first-seen"])?;
+    assert_eq!(lately["delivery_count"], 1);
+    assert_eq!(lately["processing_count"], 1);
     Ok(())
 }
 
@@ -618,7 +875,7 @@ fn maintenance_smoke_does_not_rewrite_predecessor_spool_state() -> TestResult {
 
     let upgraded_queue: Value =
         serde_json::from_slice(&fs::read(installation.inbox.join(".queue.json"))?)?;
-    assert_eq!(upgraded_queue["version"], 3);
+    assert_eq!(upgraded_queue["version"], 4);
     assert_eq!(
         upgraded_queue["entries"]["c2V0dGxpbmcudHh0"]["sequence"],
         41
@@ -628,7 +885,7 @@ fn maintenance_smoke_does_not_rewrite_predecessor_spool_state() -> TestResult {
             .inbox
             .join("done/j00000000000000000007/job.json"),
     )?)?;
-    assert_eq!(upgraded_receipt["version"], 2);
+    assert_eq!(upgraded_receipt["version"], 3);
     assert_eq!(upgraded_receipt["first_seen_at"], "2026-08-20T19:00:00Z");
     assert_eq!(upgraded_receipt["claimed_at"], "2026-08-20T19:00:00Z");
     assert_eq!(
@@ -641,7 +898,7 @@ fn maintenance_smoke_does_not_rewrite_predecessor_spool_state() -> TestResult {
             .inbox
             .join("done/j00000000000000000008/job.json"),
     )?)?;
-    assert_eq!(repaired_receipt["version"], 2);
+    assert_eq!(repaired_receipt["version"], 3);
 
     let settled = installation.json_ok(["inbox", "run", "--settle-seconds", "0"])?;
     assert_eq!(settled["attempted"], 1);
@@ -1020,7 +1277,7 @@ fn legacy_done_receipt_reuses_its_applied_reconciliation() -> TestResult {
     let upgraded: Value = serde_json::from_slice(&fs::read(
         installation.inbox.join("done").join(id).join("job.json"),
     )?)?;
-    assert_eq!(upgraded["version"], 2);
+    assert_eq!(upgraded["version"], 3);
     assert_eq!(upgraded["state"], "done");
     assert_eq!(upgraded["first_seen_at"], "2026-08-20T20:00:00Z");
     assert_eq!(upgraded["reconciliation_id"], reconciliation_id);

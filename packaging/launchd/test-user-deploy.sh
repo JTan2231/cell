@@ -69,6 +69,7 @@ case "$command" in
                 ;;
             run)
                 [ -f "$state/spool/.maintenance" ]
+                [ -f "$state/spool/.paused" ]
                 printf '%s\n' \
                     '{"ok":true,"data":{"stopped_for_maintenance":true}}'
                 ;;
@@ -145,6 +146,7 @@ plist="$home/Library/LaunchAgents/org.annals.inbox.plist"
 [ "$(sed -n 's/^  "format": \([0-9][0-9]*\),$/\1/p' \
     "$state/install/current/manifest.json")" -eq 2 ]
 [ -f "$state/annals.db" ]
+[ -d "$state/spool/queued" ]
 [ -d "$state/spool/duplicates" ]
 grep -Fx 'library = "annals.db"' "$state/config.toml" >/dev/null
 grep -Fx 'root = "spool"' "$state/config.toml" >/dev/null
@@ -161,6 +163,7 @@ usage_candidate_hash=$(shasum -a 256 "$usage_candidate" | awk '{print $1}')
 grep -Fx "  \"usage_binary_sha256\": \"$usage_candidate_hash\"," \
     "$state/install/current/manifest.json" >/dev/null
 printf '%s\n' preserved >"$state/spool/duplicates/preserved"
+: >"$state/spool/.paused"
 [ "$(plutil -extract ProgramArguments.0 raw -o - "$plist")" = "$cli" ]
 [ "$(plutil -extract ProgramArguments.1 raw -o - "$plist")" = --quiet ]
 [ "$(plutil -extract ProgramArguments.2 raw -o - "$plist")" = inbox ]
@@ -215,6 +218,7 @@ backup_count=$(find "$state/backups" -type f -maxdepth 1 | wc -l | tr -d ' ')
 [ "$backup_count" -eq 1 ]
 [ -f "$state/migrated" ]
 grep -Fx preserved "$state/spool/duplicates/preserved" >/dev/null
+[ -f "$state/spool/.paused" ]
 [ "$(tail -n 6 "$state/candidate-commands.log" | tr '\n' ' ')" = \
     'backup migrate validate inbox status validate inbox status ' ]
 [ ! -e "$launchctl_log" ]
@@ -285,6 +289,7 @@ running_release=$(readlink "$state/install/current")
 [ "$running_release" != "$second_release" ]
 [ -f "$loaded" ]
 [ ! -e "$state/spool/.maintenance" ]
+[ -f "$state/spool/.paused" ]
 [ "$(tail -n 10 "$state/candidate-commands.log" | tr '\n' ' ')" = \
     'inbox status validate inbox status inbox run backup migrate validate inbox status validate inbox status ' ]
 
@@ -305,6 +310,7 @@ fi
 [ "$(readlink "$state/install/previous")" = "$second_release" ]
 [ -f "$loaded" ]
 [ ! -e "$state/spool/.maintenance" ]
+[ -f "$state/spool/.paused" ]
 [ ! -e "$state/install/.update-lock" ]
 [ ! -e "$kickstart_order_error" ]
 [ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" = "$config_before_rejection" ]
@@ -317,6 +323,7 @@ deploy >"$temporary/kickstart-warning.out" 2>"$temporary/kickstart-warning.err"
 [ "$(readlink "$state/install/previous")" = "$running_release" ]
 [ -f "$loaded" ]
 [ ! -e "$state/spool/.maintenance" ]
+[ -f "$state/spool/.paused" ]
 [ ! -e "$state/install/.update-lock" ]
 [ ! -e "$kickstart_order_error" ]
 grep -F 'warning: unable to wake the installed service' \

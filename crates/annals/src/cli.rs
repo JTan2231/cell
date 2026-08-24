@@ -234,6 +234,12 @@ pub struct IntegrateArgs {
 pub enum InboxCommand {
     /// Register and drain settled inbox files sequentially until the queue is empty.
     Run(InboxRunArgs),
+    /// Register settled inbox files as durable queued jobs without processing them.
+    Register(InboxRunArgs),
+    /// Request that inbox processing stop after the current job.
+    Pause,
+    /// Allow future inbox runs to process queued jobs.
+    Resume,
     /// Report queued, active, completed, duplicate, and failed inbox state.
     Status,
 }
@@ -508,6 +514,20 @@ mod tests {
             Cli::try_parse_from(["annals", "--config", "annals.toml", "inbox", "status"])
                 .map(|cli| cli.command),
             Ok(Command::Inbox(InboxCommand::Status))
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "inbox", "register", "--settle-seconds", "0"])
+                .map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Register(args)))
+                if args.settle_seconds == Some(0)
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "inbox", "pause"]).map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Pause))
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "inbox", "resume"]).map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Resume))
         ));
     }
 }

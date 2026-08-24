@@ -2,8 +2,10 @@
 
 Annals can run as a scheduled, one-shot service around one configured library.
 Each service activation registers settled inbox files, drains the
-durable queue in sequence, and exits when no runnable work remains. It is not
-a resident daemon and does not require a separate database server.
+durable queue in sequence when dispatch is enabled, and exits when no runnable
+work remains. A paused activation still registers settled files and leaves
+them queued. Annals is not a resident daemon, contains no internal scheduler,
+and does not require a separate database server.
 
 The default installation also runs liaison traffic through the separate
 `annals-usage` CLI. Its companion SQLite ledger records token consumption and
@@ -17,9 +19,16 @@ delivery queue with a small Annals-owned ordering index:
 ```text
 .queue.json
 .run.lock
-.maintenance
+.control.lock
+.paused             # operator-owned dispatch state
+.maintenance        # deployer-owned maintenance state
 incoming/
 `-- report.md
+queued/
+`-- JOB_ID/
+    |-- job.json
+    `-- material/
+        `-- report.md
 processing/
 `-- JOB_ID/
     |-- job.json
@@ -37,25 +46,36 @@ does not rewrite its contents or basename. Moving the envelope to `done`,
 cannot collide with the receipt. The same-filesystem moves preserve the
 source's bytes, basename, inode, mode, and modification time.
 
-`job.json` is the authoritative receipt after a job is claimed. `.queue.json`
-assigns a monotonic sequence and UTC first-seen time when `inbox run` first
-observes incoming material; pathname bytes break ties. The job receipt carries
-that first-seen time, captured filesystem size and timestamps, and a stable key
-for the corresponding database source-delivery receipt. `.run.lock` prevents
-overlapping workers. The macOS deployer temporarily creates `.maintenance` to
-make a running worker stop cleanly before taking another job. These are
-Annals-owned operational files and are not retained works; do not edit them.
+`job.json` is authoritative after registration. `.queue.json` assigns a UTC
+first-seen time and prospective monotonic sequence when Annals first observes
+incoming material; pathname bytes break observation ties. Registration moves
+the source into `queued/` and preserves the sequence in a receipt with state
+`queued`, attempts zero, and no database source-delivery record. Dispatch moves
+the strict FIFO head to `processing/`, changes its receipt state to
+`processing`, and starts the delivery record. A retryable processing envelope
+remains ahead of every queued envelope.
+
+`.run.lock` prevents overlapping workers. `.control.lock` is held only around
+registration, dispatch, sequence allocation, and pause changes; it is never
+held during liaison work. `.paused` is the operator-owned dispatch gate managed
+by `annals inbox pause` and `resume`. The macOS deployer temporarily creates
+`.maintenance` to make a running worker stop cleanly after its current job and
+to prevent other spool mutation during cutover. These operational files are
+not retained works. Do not create, remove, or edit their contents directly.
 
 One invocation:
 
 1. takes the inbox lock;
-2. recovers the queue description for previously claimed jobs;
-3. stops before processing another job when maintenance is requested;
-4. registers every eligible visible top-level regular file as a durable job;
-5. retains the oldest registered job, then archives a fresh duplicate or
+2. performs no registration, repair, or dispatch when maintenance is requested;
+3. recovers queued and previously dispatched jobs;
+4. registers every eligible visible top-level regular file as a queued job;
+5. stops before attempting or dispatching a job when paused;
+6. retries an existing processing head or dispatches the lowest-sequence
+   queued job, then archives a fresh duplicate or
    integrates and applies a new work;
-6. rescans and registers newly eligible arrivals between jobs; and
-7. continues until the queue is empty or a retryable failure stops the
+7. rescans and registers newly eligible arrivals between jobs; and
+8. continues until the queue is empty, pause or maintenance closes the gate,
+   or a retryable failure stops the
    activation.
 
 There is no item or activation-lifetime limit. A continuing stream of eligible
@@ -65,6 +85,21 @@ the work before it; duplicate recognition remains in the same FIFO. A retryable
 failure remains at the head of the strict FIFO queue and stops that activation;
 the next scheduled activation retries it before later work. Permanently invalid
 material moves to `failed`, and draining continues.
+
+`annals inbox register` exposes the same admission phase without starting a
+delivery. It can register arrivals while a different worker is processing a
+job because the queue-control lock protects the short mutation. The periodic
+`inbox run` activation normally provides registration without needing a second
+schedule.
+
+`annals inbox pause` establishes an ordered dispatch barrier. If dispatch
+already won the control lock, that job is current and may finish; if pause won,
+the job stays queued. Once `pause` returns, no later job can start. Scheduled
+activations continue registering arrivals while paused and exit successfully.
+`annals inbox resume` clears only `.paused`; it does not start a worker and
+never clears `.maintenance`. Use an explicit `inbox run` for immediate work or
+wait for the next launchd or systemd activation. Both commands are idempotent,
+and an operator pause survives deployment.
 
 A fresh inbox job whose exact bytes select an existing work completes with
 `duplicate` retention and delivery result `retained`. Its job receipt has state
@@ -83,7 +118,8 @@ filesystem and atomically move the completed file into `incoming`.
 An arrival that is still settling during the final rescan, or that races the
 final empty check, waits for the next scheduled activation. The periodic
 schedule is therefore a wake-up and recovery mechanism rather than a batch
-boundary.
+boundary. Annals does not assign wall-clock run times or maintain another
+scheduled-job concept internally.
 
 ## Configuration
 
@@ -175,7 +211,11 @@ The packaged units use this layout:
 /var/spool/annals/
 |-- .queue.json
 |-- .run.lock
+|-- .control.lock
+|-- .paused       # present while operator-paused
+|-- .maintenance  # present only during managed maintenance
 |-- incoming/
+|-- queued/
 |-- processing/
 |-- done/
 |-- duplicates/
@@ -204,6 +244,7 @@ sudo install -d -o annals -g annals -m 0710 /var/spool/annals
 sudo install -d -o annals -g annals -m 0770 \
   /var/spool/annals/incoming
 sudo install -d -o annals -g annals -m 0700 \
+  /var/spool/annals/queued \
   /var/spool/annals/processing \
   /var/spool/annals/done \
   /var/spool/annals/duplicates \
@@ -280,19 +321,39 @@ sudo -u annals /usr/local/bin/annals \
 ```
 
 Human status output reports incoming files split into ready and settling,
-processing, done, duplicate, and failed envelopes, whether the run lock is
-held, and whether maintenance is requested. `--json` uses `duplicates` for the
-duplicate-archive count and additionally reports the ignored-entry count. A
-successful run reports registered, attempted, applied, recorded, duplicates,
-and failed counts; runnable work remaining; settling arrivals; whether the
-runnable queue was drained; and whether it stopped for maintenance. The spool
-root, recovered-job count, effective settling interval, elapsed seconds, and
-ignored count are also available with `--json`.
+queued, processing, done, duplicate, and failed envelopes, whether a worker is
+active, and whether pause or maintenance is requested. `--json` uses
+`duplicates` for the duplicate-archive count and additionally reports the
+ignored-entry count. A successful run reports registered, attempted, applied,
+recorded, duplicates, and failed counts; ready, queued, or processing work remaining;
+settling arrivals; whether the runnable queue was drained; and whether pause or
+maintenance stopped dispatch. A paused queue is valid remaining work, so
+`queue_drained` stays false. The spool root, recovered-job count, effective
+settling interval, elapsed seconds, and ignored count are also available with
+`--json`.
+
+Control the worker without changing the external timer:
+
+```sh
+sudo -u annals /usr/local/bin/annals \
+  --config /etc/annals/config.toml inbox pause
+sudo -u annals /usr/local/bin/annals \
+  --config /etc/annals/config.toml inbox register
+sudo -u annals /usr/local/bin/annals \
+  --config /etc/annals/config.toml inbox resume
+```
+
+Pause lets the current delivery finish. The next job stays under `queued/`,
+and later timer activations continue admitting settled arrivals without
+dispatching them. Resume permits the next activation to dispatch; it does not
+trigger the service itself.
 
 Use `annals lately --channel inbox` for durable, time-windowed delivery
 history. It includes both successful and permanently failed inbox material;
 moving a terminal envelope back through recovery selects its original delivery
-receipt rather than adding another history row.
+receipt rather than adding another history row. Registered queued jobs have not
+started a source delivery and therefore appear in `inbox status`, not
+`lately`, until dispatch.
 
 ### Dropping files
 
@@ -345,7 +406,11 @@ $HOME/Library/Application Support/Annals/
 `-- spool/
     |-- .queue.json
     |-- .run.lock
+    |-- .control.lock
+    |-- .paused       # present while operator-paused
+    |-- .maintenance  # present only during managed maintenance
     |-- incoming/
+    |-- queued/
     |-- processing/
     |-- done/
     |-- duplicates/
@@ -407,9 +472,11 @@ Annals library backup, applies any required schema migration, and atomically
 switches the `current` selector. It updates both command links and both configs
 inside the same rollback-protected deployment transaction, then validates
 through the candidate and installed frontends before reloading launchd and
-waking the worker to resume queued deliveries. A failure restores the old
-selectors, configs, plist, and service. Authentication, the Annals library,
-telemetry ledger, spool, logs, and archives are retained.
+waking the worker. The operator-owned pause marker is retained, so that wake-up
+does not dispatch queued jobs when the installation was paused. A failure
+restores the old selectors, configs, plist, and service. Authentication, the
+Annals library, telemetry ledger, spool, logs, pause state, and archives are
+retained.
 
 No operator timing or manual service stop is required. It is safe to run the
 same deployment command while a delivery is in progress; by default the
@@ -451,6 +518,9 @@ Direct access and scheduler inspection need no elevation:
 annals stats
 annals validate
 annals inbox status
+annals inbox pause
+annals inbox register
+annals inbox resume
 annals-usage report
 annals-usage budget
 annals-usage doctor
@@ -464,6 +534,11 @@ Submit a complete file under an unused name with:
 install -m 0600 README.md \
   "$HOME/Library/Application Support/Annals/spool/incoming/annals-readme.md"
 ```
+
+The LaunchAgent may remain loaded while paused. It continues to wake and
+register settled arrivals, but the next job remains queued until `resume` and
+a later activation. Run `annals inbox run` after `resume` when immediate
+dispatch is wanted.
 
 To retire the user installation while retaining its library, telemetry, and
 operational state, boot out the LaunchAgent and remove only the scheduler,
@@ -483,11 +558,12 @@ longer needed.
 
 ## Failure recovery and maintenance
 
-`annals inbox status` summarizes incoming, ready, settling, processing, done,
-duplicates, and failed state; `--json` also includes ignored entries. Inspect
-`failed/JOB_ID/job.json` alongside the unchanged source in
-`failed/JOB_ID/material/` to diagnose a permanent failure. Invalid UTF-8 and
-empty material are permanent failures. For bytes not already retained,
+`annals inbox status` summarizes incoming, ready, settling, queued, processing,
+done, duplicates, and failed state; `--json` also includes ignored entries.
+Inspect queued work under `queued/JOB_ID/` and a retryable head under
+`processing/JOB_ID/`. Inspect `failed/JOB_ID/job.json` alongside the unchanged
+source in `failed/JOB_ID/material/` to diagnose a permanent failure. Invalid
+UTF-8 and empty material are permanent failures. For bytes not already retained,
 unusable labels and label collisions are also permanent failures. Annals
 archives them and continues draining. Other failures leave the
 envelope in `processing`, stop the command with a nonzero exit, and are retried
@@ -502,6 +578,15 @@ moved material file.
 If a worker is killed during examination, the next activation retires only the
 model-run token owned by that receipt and marks its open reconciliation draft
 abandoned; it does not close a separate manual examination of the same work.
+
+Spool recovery also performs the queue-state migration from releases that had
+no `queued/` directory. A legacy `processing/` envelope with zero attempts is
+moved to `queued/` and receives the queued receipt state and immutable sequence;
+an envelope with an attempt or other processing progress remains under
+`processing/`. Recovery raises the sequence allocator above every migrated and
+archived job so later registration cannot overtake existing material. This is
+a filesystem migration only and requires no SQLite schema change. It is
+idempotent if an activation is interrupted and repeated.
 
 Inbox delivery is at-least-once. A SQLite commit and the following receipt and
 directory update cannot be one atomic transaction. If the process is killed in
@@ -520,6 +605,11 @@ sudo systemctl start annals-inbox.timer
 
 On macOS, `deploy-user.sh` coordinates this boundary with the maintenance
 marker and restores scheduling automatically.
+
+Use `inbox pause` for ordinary processing control instead of manipulating the
+external timer or `.maintenance`. Pause continues admission and survives an
+update; maintenance is reserved for a deployment boundary and blocks
+registration as well as dispatch. `inbox resume` never removes maintenance.
 
 Use `annals backup` for a consistent SQLite backup rather than copying a live
 WAL database, and run `annals validate` periodically. Include the spool when a

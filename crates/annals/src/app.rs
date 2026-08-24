@@ -92,6 +92,9 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
         Command::Integrate(args) => integrate(path, config, args, !cli.json),
         Command::Inbox(command) => match command {
             InboxCommand::Run(args) => inbox::run(path, config, args, !cli.json),
+            InboxCommand::Register(args) => inbox::register(config, args),
+            InboxCommand::Pause => inbox::pause(config),
+            InboxCommand::Resume => inbox::resume(config),
             InboxCommand::Status => inbox::status(config),
         },
         Command::Change(command) => match command {

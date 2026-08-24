@@ -13,6 +13,7 @@ STATE_DIR='/Library/Application Support/Annals'
 CODEX_HOME="$STATE_DIR/codex-home"
 SPOOL_DIR="$STATE_DIR/spool"
 MAINTENANCE_MARKER="$SPOOL_DIR/.maintenance"
+PAUSED_MARKER="$SPOOL_DIR/.paused"
 CONFIG_PATH="$STATE_DIR/config.toml"
 USAGE_CONFIG_PATH="$STATE_DIR/usage.toml"
 LIBRARY_PATH="$STATE_DIR/annals.db"
@@ -285,6 +286,7 @@ for path in \
     "$STATE_DIR/log" \
     "$SPOOL_DIR" \
     "$SPOOL_DIR/incoming" \
+    "$SPOOL_DIR/queued" \
     "$SPOOL_DIR/processing" \
     "$SPOOL_DIR/done" \
     "$SPOOL_DIR/duplicates" \
@@ -300,6 +302,7 @@ for path in \
     "$CONFIG_PATH" \
     "$USAGE_CONFIG_PATH" \
     "$MAINTENANCE_MARKER" \
+    "$PAUSED_MARKER" \
     "$LIBRARY_PATH" \
     "$USAGE_LIBRARY_PATH" \
     "$CODEX_HOME/config.toml" \
@@ -419,6 +422,7 @@ for path in \
     "$STATE_DIR/log" \
     "$SPOOL_DIR" \
     "$SPOOL_DIR/incoming" \
+    "$SPOOL_DIR/queued" \
     "$SPOOL_DIR/processing" \
     "$SPOOL_DIR/done" \
     "$SPOOL_DIR/duplicates" \

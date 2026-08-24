@@ -24,19 +24,22 @@ use crate::model_runner::{ModelSettings, Runner};
 use crate::render::CommandOutput;
 use crate::{ingestion, liaison, resolver};
 
-const QUEUE_VERSION: u32 = 3;
-const RECEIPT_VERSION: u32 = 2;
+const QUEUE_VERSION: u32 = 4;
+const RECEIPT_VERSION: u32 = 3;
 
 #[derive(Debug)]
 struct Spool {
     root: PathBuf,
     incoming: PathBuf,
+    queued: PathBuf,
     processing: PathBuf,
     done: PathBuf,
     duplicates: PathBuf,
     failed: PathBuf,
     index: PathBuf,
     lock: PathBuf,
+    control_lock: PathBuf,
+    paused: PathBuf,
     maintenance: PathBuf,
 }
 
@@ -45,12 +48,15 @@ impl Spool {
         Self {
             root: root.to_path_buf(),
             incoming: root.join("incoming"),
+            queued: root.join("queued"),
             processing: root.join("processing"),
             done: root.join("done"),
             duplicates: root.join("duplicates"),
             failed: root.join("failed"),
             index: root.join(".queue.json"),
             lock: root.join(".run.lock"),
+            control_lock: root.join(".control.lock"),
+            paused: root.join(".paused"),
             maintenance: root.join(".maintenance"),
         }
     }
@@ -59,6 +65,7 @@ impl Spool {
         for path in [
             &self.root,
             &self.incoming,
+            &self.queued,
             &self.processing,
             &self.done,
             &self.duplicates,
@@ -107,25 +114,121 @@ impl Spool {
         Ok(file)
     }
 
+    fn acquire_control_lock(&self) -> Result<File, AppError> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(&self.control_lock)
+            .map_err(|error| {
+                AppError::unexpected(
+                    "inbox_control_lock_failed",
+                    format!(
+                        "unable to open inbox control lock {}: {error}",
+                        self.control_lock.display()
+                    ),
+                )
+            })?;
+        fs2::FileExt::lock_exclusive(&file).map_err(|error| {
+            AppError::unexpected(
+                "inbox_control_lock_failed",
+                format!(
+                    "unable to lock inbox control state {}: {error}",
+                    self.control_lock.display()
+                ),
+            )
+        })?;
+        Ok(file)
+    }
+
+    fn pause_requested(&self) -> Result<bool, AppError> {
+        marker_requested(
+            &self.paused,
+            "inbox_pause_invalid",
+            "inbox_pause_failed",
+            "pause",
+        )
+    }
+
     fn maintenance_requested(&self) -> Result<bool, AppError> {
-        match fs::symlink_metadata(&self.maintenance) {
-            Ok(metadata) if metadata.file_type().is_file() => Ok(true),
-            Ok(_) => Err(AppError::unexpected(
-                "inbox_maintenance_invalid",
-                format!(
-                    "inbox maintenance marker is not a regular file: {}",
-                    self.maintenance.display()
-                ),
-            )),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-            Err(error) => Err(AppError::unexpected(
-                "inbox_maintenance_failed",
-                format!(
-                    "unable to inspect inbox maintenance marker {}: {error}",
-                    self.maintenance.display()
-                ),
-            )),
+        marker_requested(
+            &self.maintenance,
+            "inbox_maintenance_invalid",
+            "inbox_maintenance_failed",
+            "maintenance",
+        )
+    }
+}
+
+fn marker_requested(
+    path: &Path,
+    invalid_code: &'static str,
+    failed_code: &'static str,
+    description: &str,
+) -> Result<bool, AppError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_file() => Ok(true),
+        Ok(_) => Err(AppError::unexpected(
+            invalid_code,
+            format!(
+                "inbox {description} marker is not a regular file: {}",
+                path.display()
+            ),
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(AppError::unexpected(
+            failed_code,
+            format!(
+                "unable to inspect inbox {description} marker {}: {error}",
+                path.display()
+            ),
+        )),
+    }
+}
+
+fn create_pause_marker(spool: &Spool) -> Result<bool, AppError> {
+    if spool.pause_requested()? {
+        return Ok(false);
+    }
+    match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&spool.paused)
+    {
+        Ok(file) => {
+            drop(file);
+            Ok(true)
         }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            spool.pause_requested().map(|_| false)
+        }
+        Err(error) => Err(AppError::unexpected(
+            "inbox_pause_failed",
+            format!(
+                "unable to create inbox pause marker {}: {error}",
+                spool.paused.display()
+            ),
+        )),
+    }
+}
+
+fn remove_pause_marker(spool: &Spool) -> Result<bool, AppError> {
+    if !spool.pause_requested()? {
+        return Ok(false);
+    }
+    match fs::remove_file(&spool.paused) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(AppError::unexpected(
+            "inbox_pause_failed",
+            format!(
+                "unable to remove inbox pause marker {}: {error}",
+                spool.paused.display()
+            ),
+        )),
     }
 }
 
@@ -136,11 +239,14 @@ struct InboxStatus {
     ready: usize,
     settling: usize,
     ignored: usize,
+    queued: usize,
+    next_job: Option<RegisteredJob>,
     processing: usize,
     done: usize,
     duplicates: usize,
     failed: usize,
     locked: bool,
+    paused: bool,
     maintenance: bool,
 }
 
@@ -160,7 +266,51 @@ struct RunSummary {
     ignored: usize,
     elapsed_seconds: f64,
     queue_drained: bool,
+    stopped_for_pause: bool,
     stopped_for_maintenance: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct RegistrationSummary {
+    root: String,
+    settle_seconds: u64,
+    registered: usize,
+    jobs: Vec<RegisteredJob>,
+    queued: usize,
+    ready: usize,
+    settling: usize,
+    ignored: usize,
+    paused: bool,
+    maintenance: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct RegisteredJob {
+    id: String,
+    sequence: u64,
+    source_name: String,
+    registered_at: String,
+}
+
+impl From<&Envelope> for RegisteredJob {
+    fn from(envelope: &Envelope) -> Self {
+        Self {
+            id: envelope.id.clone(),
+            sequence: envelope.receipt.sequence,
+            source_name: envelope.receipt.original_name.clone(),
+            registered_at: envelope.receipt.claimed_at.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[allow(clippy::struct_excessive_bools)]
+struct PauseSummary {
+    root: String,
+    paused: bool,
+    changed: bool,
+    locked: bool,
+    maintenance: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -229,6 +379,34 @@ struct Envelope {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct JobReceipt {
+    version: u32,
+    id: String,
+    sequence: u64,
+    original_name: String,
+    original_name_base64: String,
+    state: String,
+    attempts: u32,
+    delivery_key: String,
+    ingestion_id: Option<i64>,
+    source_size_bytes: Option<u64>,
+    source_created_at: Option<String>,
+    source_modified_at: Option<String>,
+    first_seen_at: String,
+    claimed_at: String,
+    started_at: Option<String>,
+    completed_at: Option<String>,
+    source_sha256: Option<String>,
+    work: Option<String>,
+    reconciliation_id: Option<i64>,
+    model_run_token: Option<String>,
+    result_status: Option<String>,
+    result_revision: Option<i64>,
+    last_error: Option<ReceiptError>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VersionTwoJobReceipt {
     version: u32,
     id: String,
     original_name: String,
@@ -305,9 +483,15 @@ pub(crate) fn run(
     spool.create()?;
     let _lock = spool.acquire_lock()?;
     let started = Instant::now();
-    let mut index = read_index(&spool)?;
-    let persist_repairs = !spool.maintenance_requested()?;
-    let recovered_envelopes = scan_envelopes(&spool, &index, persist_repairs)?;
+    let recovered_envelopes = if spool.maintenance_requested()? {
+        let index = read_index(&spool)?;
+        recover_envelopes(library, &spool, &index, false)?
+    } else {
+        let _control = spool.acquire_control_lock()?;
+        let persist_repairs = !spool.maintenance_requested()?;
+        let index = read_index(&spool)?;
+        recover_envelopes(library, &spool, &index, persist_repairs)?
+    };
     let recovered = recovered_envelopes.len();
     let mut queue = BTreeMap::new();
     for envelope in recovered_envelopes {
@@ -331,6 +515,7 @@ pub(crate) fn run(
         ignored: 0,
         elapsed_seconds: 0.0,
         queue_drained: false,
+        stopped_for_pause: false,
         stopped_for_maintenance: false,
     };
 
@@ -339,14 +524,34 @@ pub(crate) fn run(
             summary.stopped_for_maintenance = true;
             break;
         }
-        let registered = register_settled(&spool, &mut index, settle_seconds)?;
+        let control = spool.acquire_control_lock()?;
+        if spool.maintenance_requested()? {
+            summary.stopped_for_maintenance = true;
+            break;
+        }
+        let registered = register_settled_locked(&spool, settle_seconds)?;
         summary.registered = summary.registered.saturating_add(registered.len());
         for envelope in registered {
             insert_queued(&mut queue, envelope)?;
         }
-        let Some((_, envelope)) = queue.pop_first() else {
+        refresh_queued(&spool, &mut queue)?;
+        if spool.maintenance_requested()? {
+            summary.stopped_for_maintenance = true;
+            break;
+        }
+        if spool.pause_requested()? {
+            summary.stopped_for_pause = true;
+            break;
+        }
+        let Some((key, envelope)) = queue.pop_first() else {
             break;
         };
+        let envelope = if envelope.receipt.state == "queued" {
+            dispatch(&spool, envelope)?
+        } else {
+            envelope
+        };
+        drop(control);
         process_one(
             library,
             &spool,
@@ -356,16 +561,18 @@ pub(crate) fn run(
             forward_progress,
             &mut summary,
         )?;
+        debug_assert!(!queue.contains_key(&key));
     }
 
+    let _control = spool.acquire_control_lock()?;
     let final_status = inspect(&spool, settle_seconds)?;
-    summary.remaining = final_status.ready + final_status.processing;
+    summary.remaining = final_status.ready + final_status.queued + final_status.processing;
     summary.settling = final_status.settling;
     summary.ignored = final_status.ignored;
     summary.elapsed_seconds = started.elapsed().as_secs_f64();
     summary.queue_drained = summary.remaining == 0;
     let human = format!(
-        "Inbox run: {} registered, {} attempted, {} applied, {} recorded, {} duplicates, {} failed\nRemaining queued: {}; settling: {}\nQueue drained: {}; stopped for maintenance: {}",
+        "Inbox run: {} registered, {} attempted, {} applied, {} recorded, {} duplicates, {} failed\nRemaining work: {} ready, queued, or processing; settling: {}\nQueue drained: {}; stopped for pause: {}; stopped for maintenance: {}",
         summary.registered,
         summary.attempted,
         summary.applied,
@@ -375,26 +582,137 @@ pub(crate) fn run(
         summary.remaining,
         summary.settling,
         summary.queue_drained,
+        summary.stopped_for_pause,
         summary.stopped_for_maintenance,
     );
+    Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
+}
+
+pub(crate) fn register(config: &Config, args: &InboxRunArgs) -> Result<CommandOutput, AppError> {
+    let inbox = config.inbox()?;
+    let settle_seconds = args.settle_seconds.unwrap_or(inbox.settle_seconds);
+    let spool = Spool::new(&inbox.root);
+    spool.create()?;
+    let registered = register_settled_guarded(&spool, settle_seconds)?;
+    let _control = spool.acquire_control_lock()?;
+    let status = inspect(&spool, settle_seconds)?;
+    let jobs = registered
+        .iter()
+        .map(RegisteredJob::from)
+        .collect::<Vec<_>>();
+    let summary = RegistrationSummary {
+        root: spool.root.display().to_string(),
+        settle_seconds,
+        registered: registered.len(),
+        jobs,
+        queued: status.queued,
+        ready: status.ready,
+        settling: status.settling,
+        ignored: status.ignored,
+        paused: status.paused,
+        maintenance: status.maintenance,
+    };
+    let human = format!(
+        "Registered {} inbox {}; {} queued, {} ready, {} settling{}",
+        summary.registered,
+        if summary.registered == 1 {
+            "job"
+        } else {
+            "jobs"
+        },
+        summary.queued,
+        summary.ready,
+        summary.settling,
+        if summary.maintenance {
+            "; inbox is stopped for maintenance"
+        } else if summary.paused {
+            "; inbox is paused"
+        } else {
+            ""
+        },
+    );
+    Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
+}
+
+pub(crate) fn pause(config: &Config) -> Result<CommandOutput, AppError> {
+    set_pause(config, true)
+}
+
+pub(crate) fn resume(config: &Config) -> Result<CommandOutput, AppError> {
+    set_pause(config, false)
+}
+
+fn set_pause(config: &Config, paused: bool) -> Result<CommandOutput, AppError> {
+    let inbox = config.inbox()?;
+    let spool = Spool::new(&inbox.root);
+    spool.create()?;
+    let _control = spool.acquire_control_lock()?;
+    let changed = if paused {
+        create_pause_marker(&spool)?
+    } else {
+        remove_pause_marker(&spool)?
+    };
+    let summary = PauseSummary {
+        root: spool.root.display().to_string(),
+        paused: spool.pause_requested()?,
+        changed,
+        locked: inbox_locked(&spool.lock),
+        maintenance: spool.maintenance_requested()?,
+    };
+    let human = if paused {
+        if changed {
+            format!(
+                "Inbox pause requested at {}; any active source delivery may finish",
+                summary.root
+            )
+        } else {
+            format!("Inbox at {} is already paused", summary.root)
+        }
+    } else if changed {
+        if summary.maintenance {
+            format!(
+                "Inbox pause cleared at {}; maintenance still prevents processing",
+                summary.root
+            )
+        } else {
+            format!(
+                "Inbox resumed at {}; queued jobs are eligible for the next inbox run",
+                summary.root
+            )
+        }
+    } else {
+        format!("Inbox at {} was not paused", summary.root)
+    };
     Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
 }
 
 pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
     let inbox = config.inbox()?;
     let spool = Spool::new(&inbox.root);
+    let _control = spool
+        .root
+        .exists()
+        .then(|| spool.acquire_control_lock())
+        .transpose()?;
     let value = inspect(&spool, inbox.settle_seconds)?;
+    let next = value.next_job.as_ref().map_or_else(
+        || "none".to_owned(),
+        |job| format!("{} ({})", job.id, job.source_name),
+    );
     let human = format!(
-        "Inbox: {}\nIncoming: {} ({} ready, {} settling)\nProcessing: {}\nDone: {}\nDuplicates: {}\nFailed: {}\nLocked: {}\nMaintenance: {}",
+        "Inbox: {}\nIncoming: {} ({} ready, {} settling)\nQueued: {}\nNext queued: {}\nProcessing: {}\nDone: {}\nDuplicates: {}\nFailed: {}\nLocked: {}\nPaused: {}\nMaintenance: {}",
         value.root,
         value.incoming,
         value.ready,
         value.settling,
+        value.queued,
+        next,
         value.processing,
         value.done,
         value.duplicates,
         value.failed,
         value.locked,
+        value.paused,
         value.maintenance,
     );
     Ok(CommandOutput::new(serde_json::to_value(value)?, human))
@@ -713,13 +1031,19 @@ fn permanent_source_error(error: &AppError) -> bool {
     )
 }
 
-fn register_settled(
-    spool: &Spool,
-    index: &mut QueueIndex,
-    settle_seconds: u64,
-) -> Result<Vec<Envelope>, AppError> {
-    let (mut incoming, _) = scan_incoming(spool, index, settle_seconds)?;
-    write_index(&spool.index, index)?;
+fn register_settled_guarded(spool: &Spool, settle_seconds: u64) -> Result<Vec<Envelope>, AppError> {
+    let _control = spool.acquire_control_lock()?;
+    if spool.maintenance_requested()? {
+        return Ok(Vec::new());
+    }
+    register_settled_locked(spool, settle_seconds)
+}
+
+fn register_settled_locked(spool: &Spool, settle_seconds: u64) -> Result<Vec<Envelope>, AppError> {
+    let mut index = read_index(spool)?;
+    repair_sequence_high_water(spool, &mut index)?;
+    let (mut incoming, _) = scan_incoming(spool, &mut index, settle_seconds)?;
+    write_index(&spool.index, &index)?;
     incoming.sort_by(|left, right| {
         left.sequence
             .cmp(&right.sequence)
@@ -728,22 +1052,23 @@ fn register_settled(
 
     let mut registered = Vec::new();
     for candidate in incoming.iter().filter(|candidate| candidate.ready) {
-        let Some(envelope) = claim(spool, candidate)? else {
+        let Some(envelope) = register_candidate(spool, candidate)? else {
             continue;
         };
         index.entries.remove(&candidate.key);
-        write_index(&spool.index, index)?;
+        write_index(&spool.index, &index)?;
         registered.push(envelope);
     }
     Ok(registered)
 }
 
 fn insert_queued(
-    queue: &mut BTreeMap<String, Envelope>,
+    queue: &mut BTreeMap<(u64, String), Envelope>,
     envelope: Envelope,
 ) -> Result<(), AppError> {
     let id = envelope.id.clone();
-    match queue.entry(id.clone()) {
+    let key = (envelope.receipt.sequence, envelope.id.clone());
+    match queue.entry(key) {
         Entry::Vacant(entry) => {
             entry.insert(envelope);
             Ok(())
@@ -755,12 +1080,15 @@ fn insert_queued(
     }
 }
 
-fn claim(spool: &Spool, candidate: &IncomingFile) -> Result<Option<Envelope>, AppError> {
+fn register_candidate(
+    spool: &Spool,
+    candidate: &IncomingFile,
+) -> Result<Option<Envelope>, AppError> {
     if !path_has_identity(&candidate.path, candidate.identity)? {
         return Ok(None);
     }
     let id = available_job_id(spool, candidate.sequence);
-    let directory = spool.processing.join(&id);
+    let directory = spool.queued.join(&id);
     let material = directory.join("material");
     if let Err(error) = create_private_directory(&directory) {
         return Err(error.into());
@@ -789,7 +1117,12 @@ fn claim(spool: &Spool, candidate: &IncomingFile) -> Result<Option<Envelope>, Ap
         let _ = fs::remove_dir(&directory);
         return Ok(None);
     }
-    let receipt = new_receipt(&id, &candidate.name, &candidate.metadata)?;
+    let receipt = new_receipt(
+        &id,
+        candidate.sequence,
+        &candidate.name,
+        &candidate.metadata,
+    )?;
     let envelope = Envelope {
         id,
         directory,
@@ -837,6 +1170,7 @@ fn available_job_id(spool: &Spool, sequence: u64) -> String {
 
 fn job_id_exists(spool: &Spool, id: &str) -> bool {
     [
+        &spool.queued,
         &spool.processing,
         &spool.done,
         &spool.duplicates,
@@ -866,6 +1200,40 @@ fn move_envelope(envelope: &Envelope, destination: &Path) -> Result<(), AppError
     })
 }
 
+fn dispatch(spool: &Spool, mut envelope: Envelope) -> Result<Envelope, AppError> {
+    let target = spool.processing.join(&envelope.id);
+    if target.exists() {
+        return Err(AppError::conflict(
+            "inbox_processing_exists",
+            format!(
+                "inbox processing envelope already exists: {}",
+                target.display()
+            ),
+        ));
+    }
+    fs::rename(&envelope.directory, &target).map_err(|error| {
+        AppError::unexpected(
+            "inbox_dispatch_failed",
+            format!(
+                "unable to dispatch inbox job {} to {}: {error}",
+                envelope.id,
+                target.display()
+            ),
+        )
+    })?;
+    let source_name = envelope.source.file_name().ok_or_else(|| {
+        AppError::unexpected(
+            "invalid_job_envelope",
+            format!("inbox job {} has no source filename", envelope.id),
+        )
+    })?;
+    envelope.directory = target;
+    envelope.source = envelope.directory.join("material").join(source_name);
+    "processing".clone_into(&mut envelope.receipt.state);
+    write_receipt(&envelope)?;
+    Ok(envelope)
+}
+
 fn write_receipt(envelope: &Envelope) -> Result<(), AppError> {
     write_json_atomic(
         &envelope.directory.join("job.json"),
@@ -874,12 +1242,193 @@ fn write_receipt(envelope: &Envelope) -> Result<(), AppError> {
     )
 }
 
-fn scan_envelopes(
+fn recover_envelopes(
+    library: &Path,
     spool: &Spool,
     index: &QueueIndex,
     persist_repairs: bool,
 ) -> Result<Vec<Envelope>, AppError> {
-    let path = &spool.processing;
+    let queued = scan_envelopes_at(&spool.queued, index, persist_repairs)?;
+    let processing = scan_envelopes_at(&spool.processing, index, persist_repairs)?;
+    if !persist_repairs {
+        return Ok(queued
+            .into_iter()
+            .chain(processing)
+            .map(|scanned| scanned.envelope)
+            .collect());
+    }
+
+    let connection = db::open_read(library)?;
+    let mut recovered = Vec::with_capacity(queued.len() + processing.len());
+    for mut scanned in queued {
+        let legacy_queued = scanned.stored_version < RECEIPT_VERSION
+            && receipt_has_no_processing_progress(&scanned.envelope.receipt)
+            && !delivery_record_exists(&connection, &scanned.envelope.receipt.delivery_key)?;
+        if scanned.envelope.receipt.state == "queued" || legacy_queued {
+            "queued".clone_into(&mut scanned.envelope.receipt.state);
+            if scanned.stored_version != RECEIPT_VERSION || legacy_queued {
+                write_receipt(&scanned.envelope)?;
+            }
+            recovered.push(scanned.envelope);
+            continue;
+        }
+        return Err(AppError::unexpected(
+            "invalid_job_envelope",
+            format!(
+                "queued inbox job {} has state {}",
+                scanned.envelope.id, scanned.envelope.receipt.state
+            ),
+        ));
+    }
+
+    for mut scanned in processing {
+        let legacy_unstarted = scanned.stored_version < RECEIPT_VERSION
+            && receipt_has_no_processing_progress(&scanned.envelope.receipt)
+            && !delivery_record_exists(&connection, &scanned.envelope.receipt.delivery_key)?;
+        if scanned.stored_version == 0 || legacy_unstarted {
+            let mut envelope = relocate_envelope(scanned.envelope, &spool.queued)?;
+            "queued".clone_into(&mut envelope.receipt.state);
+            write_receipt(&envelope)?;
+            recovered.push(envelope);
+            continue;
+        }
+        if scanned.envelope.receipt.state == "queued" {
+            "processing".clone_into(&mut scanned.envelope.receipt.state);
+            write_receipt(&scanned.envelope)?;
+        } else if scanned.stored_version != RECEIPT_VERSION {
+            write_receipt(&scanned.envelope)?;
+        }
+        recovered.push(scanned.envelope);
+    }
+    validate_recovered_order(&recovered)?;
+    Ok(recovered)
+}
+
+fn receipt_has_no_processing_progress(receipt: &JobReceipt) -> bool {
+    receipt.attempts == 0
+        && receipt.ingestion_id.is_none()
+        && receipt.started_at.is_none()
+        && receipt.completed_at.is_none()
+        && receipt.source_sha256.is_none()
+        && receipt.work.is_none()
+        && receipt.reconciliation_id.is_none()
+        && receipt.model_run_token.is_none()
+        && receipt.result_status.is_none()
+        && receipt.result_revision.is_none()
+        && receipt.last_error.is_none()
+}
+
+fn delivery_record_exists(
+    connection: &rusqlite::Connection,
+    delivery_key: &str,
+) -> Result<bool, AppError> {
+    connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM ingestions WHERE delivery_key = ?1)",
+            [delivery_key],
+            |row| row.get(0),
+        )
+        .map_err(AppError::from)
+}
+
+fn relocate_envelope(mut envelope: Envelope, destination: &Path) -> Result<Envelope, AppError> {
+    let target = destination.join(&envelope.id);
+    if target.exists() {
+        return Err(AppError::conflict(
+            "inbox_envelope_exists",
+            format!("inbox envelope already exists: {}", target.display()),
+        ));
+    }
+    let source_name = envelope
+        .source
+        .file_name()
+        .map(OsStr::to_os_string)
+        .ok_or_else(|| {
+            AppError::unexpected(
+                "invalid_job_envelope",
+                format!("inbox job {} has no source filename", envelope.id),
+            )
+        })?;
+    fs::rename(&envelope.directory, &target).map_err(|error| {
+        AppError::unexpected(
+            "inbox_envelope_move_failed",
+            format!(
+                "unable to move inbox job {} to {}: {error}",
+                envelope.id,
+                target.display()
+            ),
+        )
+    })?;
+    envelope.directory = target;
+    envelope.source = envelope.directory.join("material").join(source_name);
+    Ok(envelope)
+}
+
+fn validate_recovered_order(envelopes: &[Envelope]) -> Result<(), AppError> {
+    let mut sequences = BTreeSet::new();
+    let mut processing = Vec::new();
+    let mut queued = Vec::new();
+    for envelope in envelopes {
+        if !sequences.insert(envelope.receipt.sequence) {
+            return Err(AppError::unexpected(
+                "invalid_inbox_order",
+                format!(
+                    "duplicate active inbox sequence {}",
+                    envelope.receipt.sequence
+                ),
+            ));
+        }
+        match envelope.receipt.state.as_str() {
+            "queued" => queued.push(envelope.receipt.sequence),
+            "processing" => processing.push(envelope.receipt.sequence),
+            _ => {}
+        }
+    }
+    if processing.len() > 1 {
+        return Err(AppError::unexpected(
+            "invalid_inbox_order",
+            "more than one inbox job is in processing state",
+        ));
+    }
+    if let (Some(processing), Some(queued)) =
+        (processing.into_iter().next(), queued.into_iter().min())
+        && processing > queued
+    {
+        return Err(AppError::unexpected(
+            "invalid_inbox_order",
+            "an inbox processing job is ordered behind a queued job",
+        ));
+    }
+    Ok(())
+}
+
+fn refresh_queued(
+    spool: &Spool,
+    queue: &mut BTreeMap<(u64, String), Envelope>,
+) -> Result<(), AppError> {
+    let index = read_index(spool)?;
+    for scanned in scan_envelopes_at(&spool.queued, &index, false)? {
+        let key = (
+            scanned.envelope.receipt.sequence,
+            scanned.envelope.id.clone(),
+        );
+        if !queue.contains_key(&key) {
+            insert_queued(queue, scanned.envelope)?;
+        }
+    }
+    Ok(())
+}
+
+struct ScannedEnvelope {
+    envelope: Envelope,
+    stored_version: u32,
+}
+
+fn scan_envelopes_at(
+    path: &Path,
+    index: &QueueIndex,
+    persist_repairs: bool,
+) -> Result<Vec<ScannedEnvelope>, AppError> {
     if !path.exists() {
         return Ok(Vec::new());
     }
@@ -896,10 +1445,12 @@ fn scan_envelopes(
         let source = match sole_material(&material)? {
             Some(source) => source,
             None if !receipt_path.exists() => {
-                if material.exists() {
-                    fs::remove_dir(&material)?;
+                if persist_repairs {
+                    if material.exists() {
+                        fs::remove_dir(&material)?;
+                    }
+                    fs::remove_dir(&directory)?;
                 }
-                fs::remove_dir(&directory)?;
                 continue;
             }
             None => {
@@ -912,7 +1463,7 @@ fn scan_envelopes(
                 ));
             }
         };
-        let (receipt, upgraded) = if receipt_path.exists() {
+        let (receipt, stored_version) = if receipt_path.exists() {
             read_receipt(&receipt_path, &id, &source)?
         } else {
             let name = source.file_name().ok_or_else(|| {
@@ -927,18 +1478,9 @@ fn scan_envelopes(
                 None => now()?,
             };
             let metadata = metadata_for_recovered_source(&source, &first_seen_at)?;
-            let receipt = new_receipt(&id, name, &metadata)?;
-            let envelope = Envelope {
-                id: id.clone(),
-                directory: directory.clone(),
-                source: source.clone(),
-                expected_identity: None,
-                receipt: receipt.clone(),
-            };
-            if persist_repairs {
-                write_receipt(&envelope)?;
-            }
-            (receipt, false)
+            let sequence = sequence_from_job_id(&id)?;
+            let receipt = new_receipt(&id, sequence, name, &metadata)?;
+            (receipt, 0)
         };
         validate_receipt(&receipt, &id, &source)?;
         let envelope = Envelope {
@@ -948,33 +1490,101 @@ fn scan_envelopes(
             expected_identity: None,
             receipt,
         };
-        if upgraded && persist_repairs {
-            write_receipt(&envelope)?;
-        }
-        envelopes.push(envelope);
+        envelopes.push(ScannedEnvelope {
+            envelope,
+            stored_version,
+        });
     }
     Ok(envelopes)
 }
 
-fn read_receipt(path: &Path, id: &str, source: &Path) -> Result<(JobReceipt, bool), AppError> {
+fn read_receipt(path: &Path, id: &str, source: &Path) -> Result<(JobReceipt, u32), AppError> {
     let bytes = fs::read(path)?;
     let version = serde_json::from_slice::<StoredFormatVersion>(&bytes)
         .map_err(|error| invalid_receipt(path, &error))?
         .version;
     match version {
         RECEIPT_VERSION => serde_json::from_slice(&bytes)
-            .map(|receipt| (receipt, false))
+            .map(|receipt| (receipt, RECEIPT_VERSION))
             .map_err(|error| invalid_receipt(path, &error)),
+        2 => {
+            let receipt: VersionTwoJobReceipt =
+                serde_json::from_slice(&bytes).map_err(|error| invalid_receipt(path, &error))?;
+            upgrade_version_two_receipt(receipt, id).map(|receipt| (receipt, 2))
+        }
         1 => {
             let legacy: LegacyJobReceipt =
                 serde_json::from_slice(&bytes).map_err(|error| invalid_receipt(path, &error))?;
-            upgrade_legacy_receipt(legacy, id, source).map(|receipt| (receipt, true))
+            upgrade_legacy_receipt(legacy, id, source).map(|receipt| (receipt, 1))
         }
         _ => Err(AppError::unexpected(
             "invalid_job_receipt",
             format!("unsupported job receipt {}", path.display()),
         )),
     }
+}
+
+fn upgrade_version_two_receipt(
+    receipt: VersionTwoJobReceipt,
+    id: &str,
+) -> Result<JobReceipt, AppError> {
+    if receipt.version != 2 || receipt.id != id {
+        return Err(AppError::unexpected(
+            "invalid_job_receipt",
+            format!("version 2 job receipt does not match envelope {id}"),
+        ));
+    }
+    Ok(JobReceipt {
+        version: RECEIPT_VERSION,
+        id: receipt.id,
+        sequence: sequence_from_job_id(id)?,
+        original_name: receipt.original_name,
+        original_name_base64: receipt.original_name_base64,
+        state: receipt.state,
+        attempts: receipt.attempts,
+        delivery_key: receipt.delivery_key,
+        ingestion_id: receipt.ingestion_id,
+        source_size_bytes: receipt.source_size_bytes,
+        source_created_at: receipt.source_created_at,
+        source_modified_at: receipt.source_modified_at,
+        first_seen_at: receipt.first_seen_at,
+        claimed_at: receipt.claimed_at,
+        started_at: receipt.started_at,
+        completed_at: receipt.completed_at,
+        source_sha256: receipt.source_sha256,
+        work: receipt.work,
+        reconciliation_id: receipt.reconciliation_id,
+        model_run_token: receipt.model_run_token,
+        result_status: receipt.result_status,
+        result_revision: receipt.result_revision,
+        last_error: receipt.last_error,
+    })
+}
+
+fn sequence_from_job_id(id: &str) -> Result<u64, AppError> {
+    let digits = id
+        .strip_prefix('j')
+        .and_then(|rest| rest.split('-').next())
+        .filter(|digits| digits.len() == 20 && digits.bytes().all(|byte| byte.is_ascii_digit()))
+        .ok_or_else(|| {
+            AppError::unexpected(
+                "invalid_job_envelope",
+                format!("inbox job identifier is invalid: {id}"),
+            )
+        })?;
+    let sequence = digits.parse::<u64>().map_err(|_| {
+        AppError::unexpected(
+            "invalid_job_envelope",
+            format!("inbox job sequence is invalid: {id}"),
+        )
+    })?;
+    if sequence == 0 {
+        return Err(AppError::unexpected(
+            "invalid_job_envelope",
+            format!("inbox job sequence is invalid: {id}"),
+        ));
+    }
+    Ok(sequence)
 }
 
 fn invalid_receipt(path: &Path, error: &serde_json::Error) -> AppError {
@@ -1072,6 +1682,7 @@ fn upgrade_legacy_receipt(
     Ok(JobReceipt {
         version: RECEIPT_VERSION,
         id: legacy.id,
+        sequence: sequence_from_job_id(id)?,
         original_name: legacy.original_name,
         original_name_base64: legacy.original_name_base64,
         state: "processing".to_owned(),
@@ -1171,15 +1782,17 @@ fn metadata_from_filesystem(
 
 fn new_receipt(
     id: &str,
+    sequence: u64,
     name: &OsStr,
     metadata: &ingestion::SourceMetadata,
 ) -> Result<JobReceipt, AppError> {
     Ok(JobReceipt {
         version: RECEIPT_VERSION,
         id: id.to_owned(),
+        sequence,
         original_name: name.to_string_lossy().into_owned(),
         original_name_base64: URL_SAFE_NO_PAD.encode(name.as_bytes()),
-        state: "processing".to_owned(),
+        state: "queued".to_owned(),
         attempts: 0,
         delivery_key: format!("inbox:{id}:{}", metadata.first_seen_at),
         ingestion_id: None,
@@ -1204,13 +1817,23 @@ fn validate_receipt(receipt: &JobReceipt, id: &str, source: &Path) -> Result<(),
     let encoded_name = source
         .file_name()
         .map(|name| URL_SAFE_NO_PAD.encode(name.as_bytes()));
+    let expected_sequence = sequence_from_job_id(id)?;
+    let state_is_valid = match receipt.state.as_str() {
+        "queued" => receipt_has_no_processing_progress(receipt),
+        "processing" => receipt.completed_at.is_none() && receipt.result_status.is_none(),
+        "done" => receipt.completed_at.is_some() && receipt.result_status.is_some(),
+        "failed" => receipt.completed_at.is_some() && receipt.last_error.is_some(),
+        _ => false,
+    };
     if receipt.version != RECEIPT_VERSION
         || receipt.id != id
+        || receipt.sequence != expected_sequence
         || encoded_name.as_deref() != Some(&receipt.original_name_base64)
         || receipt.delivery_key.trim().is_empty()
+        || receipt.sequence == 0
         || receipt.first_seen_at.trim().is_empty()
         || receipt.claimed_at.trim().is_empty()
-        || !matches!(receipt.state.as_str(), "processing" | "done" | "failed")
+        || !state_is_valid
     {
         return Err(AppError::unexpected(
             "invalid_job_receipt",
@@ -1353,6 +1976,15 @@ fn read_index(spool: &Spool) -> Result<QueueIndex, AppError> {
             }
             Ok(index)
         }
+        3 => {
+            let mut index: QueueIndex =
+                serde_json::from_slice(&bytes).map_err(|error| invalid_index(path, &error))?;
+            if index.next_sequence == 0 {
+                return Err(unsupported_index(path));
+            }
+            index.version = QUEUE_VERSION;
+            Ok(index)
+        }
         1 => {
             let legacy: LegacyQueueIndex =
                 serde_json::from_slice(&bytes).map_err(|error| invalid_index(path, &error))?;
@@ -1360,6 +1992,40 @@ fn read_index(spool: &Spool) -> Result<QueueIndex, AppError> {
         }
         _ => Err(unsupported_index(path)),
     }
+}
+
+fn repair_sequence_high_water(spool: &Spool, index: &mut QueueIndex) -> Result<(), AppError> {
+    let mut maximum = index
+        .entries
+        .values()
+        .map(|entry| entry.sequence)
+        .max()
+        .unwrap_or(0);
+    for directory in [
+        &spool.queued,
+        &spool.processing,
+        &spool.done,
+        &spool.duplicates,
+        &spool.failed,
+    ] {
+        if !directory.exists() {
+            continue;
+        }
+        for entry in fs::read_dir(directory)? {
+            let entry = entry?;
+            if !entry.file_type()?.is_dir() {
+                continue;
+            }
+            let id = entry.file_name().to_string_lossy().into_owned();
+            maximum = maximum.max(sequence_from_job_id(&id)?);
+        }
+    }
+    let required = maximum.checked_add(1).ok_or_else(|| {
+        AppError::unexpected("inbox_sequence_overflow", "inbox sequence is exhausted")
+    })?;
+    index.next_sequence = index.next_sequence.max(required);
+    index.version = QUEUE_VERSION;
+    Ok(())
 }
 
 fn upgrade_legacy_index(spool: &Spool, legacy: LegacyQueueIndex) -> Result<QueueIndex, AppError> {
@@ -1481,13 +2147,57 @@ fn inspect(spool: &Spool, settle_seconds: u64) -> Result<InboxStatus, AppError> 
         ready,
         settling,
         ignored,
+        queued: count_directories(&spool.queued)?,
+        next_job: next_queued_job(spool)?,
         processing: count_directories(&spool.processing)?,
         done: count_directories(&spool.done)?,
         duplicates: count_directories(&spool.duplicates)?,
         failed: count_directories(&spool.failed)?,
         locked: inbox_locked(&spool.lock),
+        paused: spool.pause_requested()?,
         maintenance: spool.maintenance_requested()?,
     })
+}
+
+fn next_queued_job(spool: &Spool) -> Result<Option<RegisteredJob>, AppError> {
+    if !spool.queued.exists() {
+        return Ok(None);
+    }
+    let mut next: Option<(u64, String, PathBuf)> = None;
+    for entry in fs::read_dir(&spool.queued)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let id = entry.file_name().to_string_lossy().into_owned();
+        let sequence = sequence_from_job_id(&id)?;
+        let candidate = (sequence, id, entry.path());
+        if next
+            .as_ref()
+            .is_none_or(|current| (&candidate.0, &candidate.1) < (&current.0, &current.1))
+        {
+            next = Some(candidate);
+        }
+    }
+    let Some((_, id, directory)) = next else {
+        return Ok(None);
+    };
+    let source = sole_material(&directory.join("material"))?.ok_or_else(|| {
+        AppError::unexpected(
+            "invalid_job_envelope",
+            format!("queued inbox job {id} has no source material"),
+        )
+    })?;
+    let (receipt, _) = read_receipt(&directory.join("job.json"), &id, &source)?;
+    validate_receipt(&receipt, &id, &source)?;
+    let envelope = Envelope {
+        id,
+        directory,
+        source,
+        expected_identity: None,
+        receipt,
+    };
+    Ok(Some(RegisteredJob::from(&envelope)))
 }
 
 fn count_directories(path: &Path) -> Result<usize, AppError> {
@@ -1518,7 +2228,7 @@ mod tests {
 
     use super::{
         FileIdentity, QUEUE_VERSION, QueueIndex, Spool, path_has_identity, read_index,
-        register_settled, scan_incoming, write_index,
+        register_settled_locked, scan_incoming, write_index,
     };
 
     #[test]
@@ -1532,15 +2242,53 @@ mod tests {
             r#"{"version":1,"next_sequence":42,"entries":{}}"#,
         )?;
 
-        let mut index = read_index(&spool)?;
+        let index = read_index(&spool)?;
         assert_eq!(index.version, QUEUE_VERSION);
         assert_eq!(index.next_sequence, 42);
 
-        register_settled(&spool, &mut index, 0)?;
+        register_settled_locked(&spool, 0)?;
         let persisted: QueueIndex = serde_json::from_slice(&fs::read(&spool.index)?)?;
         assert_eq!(persisted.version, QUEUE_VERSION);
         assert_eq!(persisted.next_sequence, 42);
         assert!(persisted.entries.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn version_three_queue_index_upgrades_before_registration()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let spool = Spool::new(directory.path());
+        spool.create()?;
+        fs::write(
+            &spool.index,
+            r#"{"version":3,"next_sequence":7,"entries":{}}"#,
+        )?;
+
+        let index = read_index(&spool)?;
+        assert_eq!(index.version, QUEUE_VERSION);
+        assert_eq!(index.next_sequence, 7);
+        register_settled_locked(&spool, 0)?;
+        let persisted: QueueIndex = serde_json::from_slice(&fs::read(&spool.index)?)?;
+        assert_eq!(persisted.version, QUEUE_VERSION);
+        assert_eq!(persisted.next_sequence, 7);
+        Ok(())
+    }
+
+    #[test]
+    fn registration_repairs_sequence_above_existing_envelopes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let spool = Spool::new(directory.path());
+        spool.create()?;
+        fs::create_dir_all(spool.done.join("j00000000000000000042"))?;
+        fs::write(spool.incoming.join("next.txt"), "next")?;
+
+        let registered = register_settled_locked(&spool, 0)?;
+        assert_eq!(registered.len(), 1);
+        assert_eq!(registered[0].id, "j00000000000000000043");
+        let persisted: QueueIndex = serde_json::from_slice(&fs::read(&spool.index)?)?;
+        assert_eq!(persisted.next_sequence, 44);
         Ok(())
     }
 
@@ -1560,23 +2308,23 @@ mod tests {
 }"#;
         fs::write(&spool.index, legacy)?;
 
-        let mut index = read_index(&spool)?;
+        let index = read_index(&spool)?;
         let entry = index
             .entries
             .get("c2V0dGxpbmcudHh0")
             .ok_or("settling legacy entry was lost")?;
         assert_eq!(entry.sequence, 41);
         assert!(!entry.first_seen_at.is_empty());
-        assert!(register_settled(&spool, &mut index, 3_600)?.is_empty());
+        assert!(register_settled_locked(&spool, 3_600)?.is_empty());
 
         let persisted: QueueIndex = serde_json::from_slice(&fs::read(&spool.index)?)?;
         assert_eq!(persisted.version, QUEUE_VERSION);
         assert_eq!(persisted.next_sequence, 42);
         assert_eq!(persisted.entries["c2V0dGxpbmcudHh0"].sequence, 41);
 
-        let claimed = register_settled(&spool, &mut index, 0)?;
-        assert_eq!(claimed.len(), 1);
-        assert_eq!(claimed[0].id, "j00000000000000000041");
+        let queued = register_settled_locked(&spool, 0)?;
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].id, "j00000000000000000041");
         Ok(())
     }
 
@@ -1596,6 +2344,22 @@ mod tests {
             return Err("malformed legacy index was accepted".into());
         };
         assert_eq!(error.code(), "invalid_inbox_index");
+        Ok(())
+    }
+
+    #[test]
+    fn pause_marker_rejects_symlinks() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let spool = Spool::new(directory.path());
+        spool.create()?;
+        let target = directory.path().join("target");
+        fs::write(&target, "paused")?;
+        symlink(&target, &spool.paused)?;
+
+        let Err(error) = spool.pause_requested() else {
+            return Err("symlink pause marker was accepted".into());
+        };
+        assert_eq!(error.code(), "inbox_pause_invalid");
         Ok(())
     }
 

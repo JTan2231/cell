@@ -49,11 +49,22 @@ a concept therefore cannot delete its source work.
 
 ## Source deliveries
 
-`ingestions` contains one durable receipt for each source delivered through a
-manual command or the filesystem inbox. A manual `work add` or `integrate`
-with a new input creates a receipt; selecting an already retained work with
-`integrate --work` does not constitute another delivery. Receipt IDs are
-private storage mechanics.
+`ingestions` contains one durable receipt for each source delivery that has
+started through a manual command or the filesystem inbox. A manual `work add`
+or `integrate` with a new input creates a receipt; dispatching a queued inbox
+job creates or recovers one. Merely registering an inbox job does not: the
+queued envelope and its job receipt are durable operational state outside
+SQLite. Selecting an already retained work with `integrate --work` does not
+constitute another delivery. Receipt IDs are private storage mechanics.
+
+The filesystem job receipt carries an immutable FIFO sequence, stable delivery
+key, captured source metadata, attempt count, and job state. Registration sets
+state `queued` and attempts zero. Dispatch changes the state to `processing`,
+moves the envelope from `queued/` to `processing/`, and uses the stable key to
+create or recover the database receipt. Terminal job states are `done` and
+`failed`; `duplicates/` is an archive location whose receipts are `done`, not a
+separate state. This queue model requires no SQLite schema row or corpus
+revision for waiting work.
 
 A delivery and a work have different identities. Works are content-addressed,
 so several deliveries of identical UTF-8 bytes may refer to the same immutable
@@ -87,14 +98,16 @@ the original path afterward. Creation time remains null when the operating
 system does not provide it and is never replaced with modification time. These
 fields describe source-file metadata, not document authorship or dates parsed
 from the source text. For inbox files, `first_seen_at` is recorded in the queue
-index on the first settling scan and survives later claim and recovery; size,
-creation, and modification metadata come from the scan that claims the settled
-file. A manual delivery records first-seen and filesystem metadata when the
-command begins handling its source, before reading its bytes.
+index on the first settling scan and survives registration, dispatch, and
+recovery; size, creation, and modification metadata are captured when the
+settled file is registered. A manual delivery records first-seen and
+filesystem metadata when the command begins handling its source, before
+reading its bytes.
 
 `channel` is `manual` or `inbox`. Manual receipts have no `delivery_key`.
-Inbox receipts use a unique stable delivery key so retry and terminal-envelope
-recovery select the original row instead of creating another receipt.
+Inbox receipts use the unique stable delivery key allocated in the queued job
+receipt so retry and terminal-envelope recovery select the original row
+instead of creating another receipt.
 Source-bearing manual commands are serialized by a per-library advisory lock.
 On lock acquisition, a processing receipt abandoned by an interrupted manual
 command becomes failed with `manual_ingestion_interrupted`. Work retention and

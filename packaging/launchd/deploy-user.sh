@@ -136,6 +136,7 @@ CURRENT_LINK="$INSTALL_DIR/current"
 PREVIOUS_LINK="$INSTALL_DIR/previous"
 UPDATE_LOCK="$INSTALL_DIR/.update-lock"
 MAINTENANCE_MARKER="$SPOOL_DIR/.maintenance"
+PAUSED_MARKER="$SPOOL_DIR/.paused"
 CLI_DIR="$install_home/.local/bin"
 CLI_PATH="$CLI_DIR/annals"
 USAGE_CLI_PATH="$CLI_DIR/annals-usage"
@@ -266,6 +267,7 @@ for path in \
     "$STATE_DIR/log" \
     "$SPOOL_DIR" \
     "$SPOOL_DIR/incoming" \
+    "$SPOOL_DIR/queued" \
     "$SPOOL_DIR/processing" \
     "$SPOOL_DIR/done" \
     "$SPOOL_DIR/duplicates" \
@@ -279,6 +281,12 @@ do
     fi
     install -d -m 0700 "$path"
 done
+
+if [ -L "$PAUSED_MARKER" ] \
+    || { [ -e "$PAUSED_MARKER" ] && [ ! -f "$PAUSED_MARKER" ]; }
+then
+    fail "invalid inbox pause marker: $PAUSED_MARKER"
+fi
 for path in "$CLI_DIR" "$AGENT_DIR"; do
     if [ -L "$path" ]; then
         fail "refusing symlink at directory path: $path"

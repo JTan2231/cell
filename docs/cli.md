@@ -165,49 +165,83 @@ The complete accounting and configuration contract is documented in
 ## Scheduled inbox
 
 ```text
+annals inbox register [--settle-seconds SECONDS]
 annals inbox run [--settle-seconds SECONDS]
+annals inbox pause
+annals inbox resume
 annals inbox status
 ```
 
-Both commands require an `[inbox]` config section with `root`. The optional
-config key `settle_seconds` defaults to 60, and the run flag overrides it. A
-zero settling interval is allowed.
+All five commands require an `[inbox]` config section with `root`. The optional
+config key `settle_seconds` defaults to 60; the `register` and `run` flags
+override it. A zero settling interval is allowed. `status` is read-only.
 
-`inbox run` takes an exclusive spool lock, registers every settled file as a
-durable job, and drains registered jobs sequentially. A fresh job that retains
-a new work enters model-assisted integration with immediate application. A
-fresh job whose exact bytes select an existing work completes with `duplicate`
-retention and result `retained`, without an examination, reconciliation, or
-commit. Content identity is resolved before the incoming filename is considered
-as a label, so a duplicate keeps the retained work's canonical label even when
-its basename is unusable or belongs to another work. Explicit manual
-`integrate` remains available for deliberate integration of an already retained
-work.
+`inbox register` moves every settled file into a durable queued job without
+processing it. Each file moves, without changing its basename or bytes, into
+`queued/JOB_ID/material/` beside an operational `job.json` receipt. The
+receipt has state `queued`, attempts zero, and an immutable monotonic sequence.
+Registration creates no database source-delivery record. Human output reports
+the registered jobs; JSON includes each assigned job ID and sequence.
 
-Each claimed file moves, without changing its basename or bytes, into
-`processing/JOB_ID/material/` beside an operational `job.json` receipt.
-Applied and recorded envelopes move whole to `done`, retained duplicate
-envelopes to `duplicates`, and permanently failed envelopes to `failed`.
-Historical archives are not reclassified. There is no item or
-activation-lifetime limit, and newly settled arrivals are registered between
-jobs.
+`inbox run` takes the activation-long spool lock, performs the same
+registration phase, and drains jobs sequentially while processing is allowed.
+Dispatch atomically moves the oldest queued envelope to `processing/`, changes
+its receipt to `processing`, and starts its database source delivery. A
+retryable envelope already in `processing/` remains the FIFO head and is
+retried before any queued job. A fresh job that retains a new work enters
+model-assisted integration with immediate application. A fresh job whose
+exact bytes select an existing work completes with `duplicate` retention and
+result `retained`, without an examination, reconciliation, or commit. Content
+identity is resolved before the incoming filename is considered as a label, so
+a duplicate keeps the retained work's canonical label even when its basename
+is unusable or belongs to another work. Explicit manual `integrate` remains
+available for deliberate integration of an already retained work.
+
+Applied and recorded envelopes move whole from `processing/` to `done/`,
+retained duplicate envelopes to `duplicates/`, and permanently failed
+envelopes to `failed/`. Historical archives are not reclassified. There is no
+item or activation-lifetime limit, and newly settled arrivals are registered
+between jobs.
+
+`inbox pause` is an idempotent dispatch barrier. If a delivery is active, it is
+allowed to finish, but no later queued job starts. A short-lived queue-control
+lock orders pause against dispatch: if dispatch wins, that job is the current
+job allowed to finish; once `pause` returns, no additional job can be claimed.
+Registration remains available while paused, including the registration phase
+of scheduled `inbox run` activations. Such an activation exits successfully
+after registering arrivals, leaving the next envelope in `queued/`.
+
+`inbox resume` idempotently removes only the operator pause. It does not start
+a worker; dispatch resumes on the next external scheduler activation or an
+explicit `inbox run`. The operator-owned `.paused` state is independent of the
+Annals-owned `.maintenance` deployment boundary, and `resume` never removes
+maintenance.
 
 Only visible top-level regular files not ending in `.part` are candidates.
-Eligible files run in persisted first-seen order. Invalid UTF-8, empty input,
-unusable filename-derived labels, and label conflicts are archived as failed;
-other job errors remain retryable at the head of `processing` and stop the
-activation. A scheduled activation retries that strict FIFO head before later
-work. An arrival still settling at the final rescan, or racing the final empty
-check, waits for the next activation.
+Eligible files are registered in persisted first-seen order and dispatched by
+their immutable sequence. Invalid UTF-8, empty input, unusable
+filename-derived labels, and label conflicts are archived as failed; other job
+errors remain retryable at the head of `processing/` and stop the activation.
+An arrival still settling at the final rescan, or racing the final empty check,
+waits for the next activation.
 
-Human `inbox status` reports incoming, ready, settling, processing, done,
-duplicates, failed, and lock state. JSON also reports ignored entries. Human
-`inbox run` reports registered, attempted, applied, recorded, duplicates,
-failed, remaining, settling, and whether the runnable queue was drained. JSON
-uses `duplicates` for the duplicate count and adds the spool root, effective
-settling interval, elapsed time, recovery count, and ignored count. See the
-[system installation guide](system-installation.md) for the complete spool,
-recovery, and scheduler contract.
+Human `inbox status` reports incoming files split into ready and settling,
+queued and processing envelopes, terminal archives, whether a worker is
+active, and the independent paused and maintenance states. JSON also reports
+ignored entries. Human `inbox run` reports registered, attempted, applied,
+recorded, duplicates, failed, remaining, settling, whether the runnable queue
+was drained, and whether pause or maintenance stopped dispatch. `queue_drained`
+is false whenever `queued/` or `processing/` is nonempty, including a healthy
+paused queue. JSON uses `duplicates` for the duplicate count and adds the spool
+root, effective settling interval, elapsed time, recovery count, and ignored
+count. The external launchd or systemd schedule remains the wake-up and
+recovery mechanism; Annals has no resident daemon or internal scheduler. See
+the [system installation guide](system-installation.md) for the complete
+spool, recovery, control, and scheduler contract.
+
+Because registration has not started a source delivery, queued jobs appear in
+`inbox status` but not in `lately`. They enter source-delivery history when
+dispatched.
 
 ## Recent source activity
 
