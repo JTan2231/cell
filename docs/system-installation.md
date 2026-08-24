@@ -500,8 +500,8 @@ Startup also removes an empty envelope left before a claim move and
 reconstructs a missing receipt when its envelope already contains exactly one
 moved material file.
 If a worker is killed during examination, the next activation retires only the
-model-run token owned by that receipt; it does not close a separate manual
-examination of the same work.
+model-run token owned by that receipt and marks its open reconciliation draft
+abandoned; it does not close a separate manual examination of the same work.
 
 Inbox delivery is at-least-once. A SQLite commit and the following receipt and
 directory update cannot be one atomic transaction. If the process is killed in

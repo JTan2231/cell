@@ -8,9 +8,10 @@ use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 use crate::error::AppError;
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
-const CURRENT_SCHEMA_VERSION: i64 = 1;
+const CURRENT_SCHEMA_VERSION: i64 = 2;
 const SCHEMA: &str = include_str!("../schema.sql");
 const MIGRATION_0_TO_1: &str = include_str!("../migrations/0001_ingestions.sql");
+const MIGRATION_1_TO_2: &str = include_str!("../migrations/0002_reconciliation_drafts.sql");
 type SchemaObject = (String, String, String, Option<String>);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,13 +82,20 @@ pub fn migrate(path: &Path) -> Result<MigrationResult, AppError> {
                 format!("unable to begin library schema migration: {error}"),
             )
         })?;
-    migrate_zero_to_one(&transaction)?;
+    if from_version == 0 {
+        migrate_zero_to_one(&transaction)?;
+    }
+    if from_version <= 1 {
+        migrate_one_to_two(&transaction)?;
+    }
     transaction
         .pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)
         .map_err(|error| {
             AppError::database(
                 "schema_migration_failed",
-                format!("unable to record library schema version 1: {error}"),
+                format!(
+                    "unable to record library schema version {CURRENT_SCHEMA_VERSION}: {error}"
+                ),
             )
         })?;
     transaction.commit().map_err(|error| {
@@ -199,6 +207,27 @@ fn migrate_zero_to_one(connection: &Connection) -> Result<(), AppError> {
     }
 
     Ok(())
+}
+
+fn migrate_one_to_two(connection: &Connection) -> Result<(), AppError> {
+    let already_present = connection.query_row(
+        "SELECT \
+             EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' \
+                    AND name = 'reconciliation_drafts') \
+             AND EXISTS(SELECT 1 FROM pragma_table_info('reconciliations') \
+                        WHERE name = 'reconciliation_draft_id')",
+        [],
+        |row| row.get::<_, bool>(0),
+    )?;
+    if already_present {
+        return Ok(());
+    }
+    connection.execute_batch(MIGRATION_1_TO_2).map_err(|error| {
+        AppError::database(
+            "schema_migration_failed",
+            format!("unable to migrate library schema from version 1 to 2: {error}"),
+        )
+    })
 }
 
 fn ingestion_schema_objects(connection: &Connection) -> Result<Vec<SchemaObject>, AppError> {
@@ -341,7 +370,7 @@ mod tests {
             result,
             MigrationResult {
                 from_version: 0,
-                to_version: 1,
+                to_version: CURRENT_SCHEMA_VERSION,
                 migrated: true,
             }
         );
@@ -391,7 +420,7 @@ mod tests {
             migrate(&path)?,
             MigrationResult {
                 from_version: 0,
-                to_version: 1,
+                to_version: CURRENT_SCHEMA_VERSION,
                 migrated: true,
             }
         );
@@ -483,7 +512,7 @@ mod tests {
     }
 
     #[test]
-    fn migration_is_idempotent_at_version_one() -> TestResult {
+    fn migration_is_idempotent_at_the_current_version() -> TestResult {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("annals.db");
         drop(version_zero_library(&path)?);
@@ -492,11 +521,90 @@ mod tests {
         assert_eq!(
             migrate(&path)?,
             MigrationResult {
-                from_version: 1,
-                to_version: 1,
+                from_version: CURRENT_SCHEMA_VERSION,
+                to_version: CURRENT_SCHEMA_VERSION,
                 migrated: false,
             }
         );
+        Ok(())
+    }
+
+    #[test]
+    fn migrates_version_one_model_provenance_into_a_finalized_draft() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("annals.db");
+        let connection = version_one_library(&path)?;
+        let request = r#"{
+            "summary":"Legacy model request",
+            "operations":[{
+                "action":"create_concept",
+                "ref":"legacy",
+                "label":"Legacy",
+                "parents":[],
+                "evidence":[{"quote":"Legacy source."}]
+            }],
+            "annotations":["Retained annotation"]
+        }"#;
+        connection.execute(
+            "INSERT INTO works(id, label, normalized_label, text, sha256, created_at) \
+             VALUES(1, 'Legacy', 'legacy', 'Legacy source.', ?1, '2026-08-17T00:00:00Z')",
+            ["0".repeat(64)],
+        )?;
+        connection.execute(
+            "INSERT INTO model_runs(\
+                 id, token, work_id, base_revision, status, model, reasoning_effort, \
+                 prompt_version, created_at, completed_at\
+             ) VALUES(1, 'legacy-run', 1, 0, 'submitted', 'legacy-model', 'high', \
+                      'liaison-v3', '2026-08-17T00:00:00Z', '2026-08-17T00:01:00Z')",
+            [],
+        )?;
+        connection.execute(
+            "INSERT INTO tool_calls(\
+                 model_run_id, sequence, tool_name, arguments, result, succeeded, created_at\
+             ) VALUES(1, 0, 'submit_reconciliation', ?1, '{\"recorded\":true}', 1, \
+                      '2026-08-17T00:00:30Z')",
+            [request],
+        )?;
+        connection.execute(
+            "INSERT INTO reconciliations(\
+                 id, work_id, base_revision, model_run_id, status, summary, submitted_request, \
+                 resolved_reconciliation, actor, created_at\
+             ) VALUES(1, 1, 0, 1, 'recorded', 'Legacy model request', ?1, '{}', 'model', \
+                      '2026-08-17T00:00:30Z')",
+            [request],
+        )?;
+        drop(connection);
+
+        let result = migrate(&path)?;
+        assert_eq!(
+            result,
+            MigrationResult {
+                from_version: 1,
+                to_version: CURRENT_SCHEMA_VERSION,
+                migrated: true,
+            }
+        );
+        let connection = open_read(&path)?;
+        assert_eq!(
+            connection.query_row("SELECT status FROM reconciliation_drafts", [], |row| row
+                .get::<_, String>(
+                0
+            ))?,
+            "finalized"
+        );
+        assert_eq!(
+            connection.query_row(
+                "SELECT operation ->> '$.ref' FROM reconciliation_draft_operations",
+                [],
+                |row| row.get::<_, String>(0)
+            )?,
+            "legacy"
+        );
+        assert!(connection.query_row(
+            "SELECT reconciliation_draft_id IS NOT NULL FROM reconciliations",
+            [],
+            |row| row.get::<_, bool>(0)
+        )?);
         Ok(())
     }
 
@@ -637,6 +745,21 @@ mod tests {
              DROP INDEX ingestions_by_created;
              DROP TABLE ingestions;
              PRAGMA user_version = 0;",
+        )?;
+        Ok(connection)
+    }
+
+    fn version_one_library(path: &Path) -> Result<Connection, AppError> {
+        let connection = init(path)?;
+        connection.execute_batch(
+            "DROP INDEX reconciliations_one_per_draft;
+             ALTER TABLE reconciliations DROP COLUMN reconciliation_draft_id;
+             DROP TABLE reconciliation_draft_operations;
+             DROP TABLE reconciliation_drafts;
+             CREATE UNIQUE INDEX tool_calls_one_successful_submission
+                 ON tool_calls(model_run_id)
+                 WHERE tool_name = 'submit_reconciliation' AND succeeded = 1;
+             PRAGMA user_version = 1;",
         )?;
         Ok(connection)
     }

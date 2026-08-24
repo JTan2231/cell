@@ -6,7 +6,8 @@ Annals is one Rust executable and one SQLite database per library. A work is an
 immutable source object. The corpus owns concepts and the explicit
 broader-to-narrower edges between them. Evidence is many-to-many: a work may
 support many concepts and a concept may be supported by many works. Model runs
-own examinations and reconciliations, never concepts.
+own examinations, reconciliation drafts, and reconciliation provenance, never
+concepts.
 
 An applied reconciliation whose projected corpus state differs mechanically
 from its base, a confirmed nonempty shake, or a revert advances the corpus.
@@ -150,7 +151,7 @@ speculative, redundant, obvious, or unlikely to be useful. It chooses coherent
 granularity relative to the work and frozen corpus without claiming a unique
 or final semantic decomposition.
 
-At thread start Annals supplies exactly six direct, session-scoped tools:
+At thread start Annals supplies exactly nine direct, session-scoped tools:
 
 - `work_overview()` returns byte size and a bounded Markdown-heading outline;
 - `work_read(regions[])` performs bounded reads by heading path, unique quote,
@@ -161,35 +162,72 @@ At thread start Annals supplies exactly six direct, session-scoped tools:
   context, with independent cursors and optional descendant scopes;
 - `corpus_inspect(requests[])` batches overview, root, concept, direct
   relationship, evidence, and bounded local-graph reads addressed by public
-  concept ID; and
-- `submit_reconciliation(reconciliation)` records the session's sole semantic
-  write request.
+  concept ID;
+- `submit_reconciliation(reconciliation)` starts one complete reconciliation
+  draft and immediately records it when every operation is valid;
+- `revise_reconciliation(revision)` replaces or removes named draft operations,
+  appends operations, or explicitly updates summary and annotations;
+- `reconciliation_status(operation_ids[])` returns a compact draft roster and,
+  when requested, exact stored operations; and
+- `discard_reconciliation(expected_version)` abandons the complete open draft
+  without creating a reconciliation record.
 
 Read and search calls accept batches. Responses are bounded, and the liaison
-follows opaque cursors or graph frontiers when it needs more context. One
-successful `submit_reconciliation` closes the session's write boundary. Failed
-submissions are recoverable tool errors and may be corrected. Tool arguments
-and results are retained in the model-run transcript.
+follows opaque cursors or graph frontiers when it needs more context. Draft
+mutations use a returned, run-monotonic version to reject stale corrections,
+including corrections for a draft discarded before a fresh start. A successful
+partial submission or revision leaves the session open; only a submission or
+revision reporting `recorded: true` closes its write boundary. Tool arguments
+and results, including failed attempts, are retained in the model-run
+transcript.
 
 App-server sends each dynamic tool call back to the host, which dispatches it
 to the in-process liaison backend.
 
 The model's final response is diagnostic only. `integrate` succeeds from the
-recorded `submit_reconciliation` side effect. If the process fails after a
-valid submission, that reconciliation remains the result; if it exits without
-one, Annals returns `model_did_not_submit_reconciliation`.
+recorded reconciliation side effect of either submission or revision. If the
+process fails after finalization, that reconciliation remains the result. If it
+exits without one, Annals abandons any open draft and returns
+`model_did_not_submit_reconciliation`.
 
 No SQLite write transaction is held while the model examines the work. For an
 ordinary unstructured work, sequential reads can continue from exact returned
 text. Highly repetitive text may require another natural anchor; exhaustive
 sequential traversal is not guaranteed when no unique continuation exists.
 
+### Draft staging
+
+The initial request receives stable operation IDs such as `op-3`. Annals
+checks all operations rather than stopping at the first problem. Independently
+valid operations remain staged; an operation whose local-handle dependency is
+not yet usable waits; and operations capable of participating in a detected
+whole-request semantic conflict are implicated while other staged operations
+remain untouched. Source-matching problems receive bounded plain-language
+hints showing useful heading and neighboring text rather than a public
+diagnostic grammar.
+
+The liaison revises only named IDs. Omission never deletes staged content,
+removal is explicit, and appended operations receive new stable IDs. It may
+read a compact roster or request exact stored JSON from
+`reconciliation_status`. Discarding terminates the complete draft and permits a
+fresh initial submission in the same examination. A draft left open when its
+run ends is retained as abandoned audit state.
+
+Every draft mutation uses one short immediate transaction. When all active
+operations work together, Annals assembles them in their retained order with
+the draft summary and annotations, resolves the complete request against the
+frozen base, creates one reconciliation record, and finalizes the draft in that
+same transaction. No partial operation enters corpus state, and the canonical
+stored request is the server-assembled whole rather than the arguments of the
+last corrective call.
+
 ## Language-level reconciliation
 
-The host supplies the immutable evidence work and frozen base revision. The
-submitted object contains a summary, one or more semantic operations, and
+The host supplies the immutable evidence work and frozen base revision. A
+complete request contains a summary, one or more semantic operations, and
 optional inert annotations. It contains neither the work selector nor base
-revision.
+revision. Direct human submission supplies this object once; model staging
+assembles the same object from its finalized draft.
 
 An existing concept selector uses its public ID:
 
@@ -232,9 +270,11 @@ paths remain part of evidence location. Public input never uses byte offsets.
 
 ## Resolution and validation
 
-Submission parses the strict JSON contract, resolves all base-revision IDs and
-request-local handles, and projects the complete final graph in memory. Annals
-validates, among other things:
+A complete direct request or assembled draft parses the strict JSON contract,
+resolves all base-revision IDs and request-local handles, and projects the
+complete final graph in memory. Draft preflight performs the checks it can per
+operation first; finalization still repeats whole-request resolution and
+validation. Annals validates, among other things:
 
 - every public ID and local handle resolves;
 - quotations resolve uniquely in the immutable work;
@@ -250,12 +290,12 @@ invent a path, reorder concepts, repair a reconciliation, assign confidence,
 or judge whether a conceptual claim is true. It validates the deterministic
 boundary around that judgment.
 
-A stored reconciliation includes its original request, resolved semantic
-operations, and complete projected corpus state. If that state differs
-mechanically from the base, the current result is `pending`. A result based on
-the same or a later revision supersedes the same work's pending
-reconciliation. An older-base result remains an examination record without
-displacing a newer pending result.
+A stored reconciliation includes its complete direct or server-assembled
+request, resolved semantic operations, and complete projected corpus state. If
+that state differs mechanically from the base, the current result is
+`pending`. A result based on the same or a later revision supersedes the same
+work's pending reconciliation. An older-base result remains an examination
+record without displacing a newer pending result.
 
 If the projected corpus state is mechanically equal to the base, Annals stores
 the result with status `recorded`. This says only that this interpretation

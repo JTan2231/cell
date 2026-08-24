@@ -103,15 +103,68 @@ CREATE TABLE tool_calls (
     PRIMARY KEY(model_run_id, sequence)
 ) WITHOUT ROWID;
 
-CREATE UNIQUE INDEX tool_calls_one_successful_submission
-    ON tool_calls(model_run_id)
-    WHERE tool_name = 'submit_reconciliation' AND succeeded = 1;
+CREATE TABLE reconciliation_drafts (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_run_id       INTEGER NOT NULL REFERENCES model_runs(id) ON DELETE CASCADE,
+    work_id            INTEGER NOT NULL REFERENCES works(id) ON DELETE RESTRICT,
+    base_revision      INTEGER NOT NULL CHECK (base_revision >= 0),
+    status             TEXT NOT NULL
+                           CHECK (status IN ('open', 'finalized', 'discarded', 'abandoned')),
+    version            INTEGER NOT NULL CHECK (version >= 1),
+    summary            TEXT NOT NULL CHECK (length(trim(summary)) > 0),
+    annotations        TEXT NOT NULL
+                           CHECK (json_valid(annotations) AND json_type(annotations) = 'array'),
+    created_sequence   INTEGER NOT NULL CHECK (created_sequence >= 0),
+    terminal_sequence  INTEGER CHECK (terminal_sequence >= created_sequence),
+    created_at         TEXT NOT NULL,
+    updated_at         TEXT NOT NULL,
+    completed_at       TEXT,
+    FOREIGN KEY(model_run_id, created_sequence)
+        REFERENCES tool_calls(model_run_id, sequence) DEFERRABLE INITIALLY DEFERRED,
+    FOREIGN KEY(model_run_id, terminal_sequence)
+        REFERENCES tool_calls(model_run_id, sequence) DEFERRABLE INITIALLY DEFERRED,
+    CHECK (
+        (status = 'open' AND terminal_sequence IS NULL AND completed_at IS NULL)
+        OR (
+            status IN ('finalized', 'discarded')
+            AND terminal_sequence IS NOT NULL
+            AND completed_at IS NOT NULL
+        )
+        OR (status = 'abandoned' AND terminal_sequence IS NULL AND completed_at IS NOT NULL)
+    )
+);
+
+CREATE UNIQUE INDEX reconciliation_drafts_one_open_per_model_run
+    ON reconciliation_drafts(model_run_id)
+    WHERE status = 'open';
+
+CREATE UNIQUE INDEX reconciliation_drafts_one_finalized_per_model_run
+    ON reconciliation_drafts(model_run_id)
+    WHERE status = 'finalized';
+
+CREATE TABLE reconciliation_draft_operations (
+    draft_id             INTEGER NOT NULL
+                             REFERENCES reconciliation_drafts(id) ON DELETE CASCADE,
+    slot                 INTEGER NOT NULL CHECK (slot > 0),
+    ordinal              INTEGER NOT NULL CHECK (ordinal >= 0),
+    operation            TEXT NOT NULL CHECK (json_valid(operation)),
+    status               TEXT NOT NULL
+                             CHECK (status IN (
+                                 'staged', 'needs_revision', 'blocked', 'implicated', 'dropped'
+                             )),
+    hint                 TEXT,
+    created_version      INTEGER NOT NULL CHECK (created_version >= 1),
+    last_changed_version INTEGER NOT NULL CHECK (last_changed_version >= created_version),
+    PRIMARY KEY(draft_id, slot),
+    UNIQUE(draft_id, ordinal)
+) WITHOUT ROWID;
 
 CREATE TABLE reconciliations (
     id                       INTEGER PRIMARY KEY AUTOINCREMENT,
     work_id                  INTEGER NOT NULL REFERENCES works(id) ON DELETE RESTRICT,
     base_revision            INTEGER NOT NULL CHECK (base_revision >= 0),
     model_run_id             INTEGER REFERENCES model_runs(id) ON DELETE RESTRICT,
+    reconciliation_draft_id  INTEGER REFERENCES reconciliation_drafts(id) ON DELETE RESTRICT,
     status                   TEXT NOT NULL
                                  CHECK (status IN ('pending', 'applied', 'superseded', 'recorded')),
     summary                  TEXT NOT NULL CHECK (length(trim(summary)) > 0),
@@ -136,6 +189,10 @@ CREATE UNIQUE INDEX reconciliations_one_pending_per_work
 CREATE UNIQUE INDEX reconciliations_one_per_model_run
     ON reconciliations(model_run_id)
     WHERE model_run_id IS NOT NULL;
+
+CREATE UNIQUE INDEX reconciliations_one_per_draft
+    ON reconciliations(reconciliation_draft_id)
+    WHERE reconciliation_draft_id IS NOT NULL;
 
 CREATE TABLE commits (
     revision             INTEGER PRIMARY KEY CHECK (revision > 0),
@@ -348,4 +405,4 @@ BEFORE DELETE ON revision_evidence BEGIN
     SELECT RAISE(ABORT, 'revision evidence is immutable');
 END;
 
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;

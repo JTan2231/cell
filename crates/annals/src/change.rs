@@ -139,6 +139,31 @@ pub(crate) fn parse_reconciliation_value(
     Ok(reconciliation)
 }
 
+/// Parse and validate one operation without requiring the rest of its request-local namespace.
+///
+/// Reconciliation drafts use this boundary so one invalid operation does not prevent valid
+/// siblings from being retained. Declaration membership and request-wide conflicts are checked
+/// after every operation has been inspected.
+pub(crate) fn parse_operation_value(
+    value: Value,
+) -> Result<ChangeOperation, ReconciliationContractError> {
+    let operation: ChangeOperation =
+        serde_json::from_value(value).map_err(ReconciliationContractError::InvalidJson)?;
+    validate_operation_content(&operation)?;
+    Ok(operation)
+}
+
+pub(crate) fn validate_reconciliation_metadata(
+    summary: &str,
+    annotations: &[String],
+) -> Result<(), ReconciliationContractError> {
+    validate_narrative("summary", summary)?;
+    for annotation in annotations {
+        validate_narrative("annotation", annotation)?;
+    }
+    Ok(())
+}
+
 fn validate_operations(operations: &[ChangeOperation]) -> Result<(), ReconciliationContractError> {
     if operations.is_empty() {
         return invalid("a reconciliation must contain at least one operation");
@@ -167,53 +192,91 @@ fn validate_operation(
     operation: &ChangeOperation,
     handles: &BTreeSet<String>,
 ) -> Result<(), ReconciliationContractError> {
+    validate_operation_content(operation)?;
+    for selector in operation_selectors(operation) {
+        validate_selector_declaration(selector, handles)?;
+    }
+    Ok(())
+}
+
+fn validate_operation_content(
+    operation: &ChangeOperation,
+) -> Result<(), ReconciliationContractError> {
     match operation {
         ChangeOperation::CreateConcept {
-            parents, evidence, ..
+            handle,
+            label,
+            parents,
+            evidence,
         } => {
+            validate_handle(handle)?;
+            validate_label("created concept label", label)?;
             for parent in parents {
-                validate_selector(parent, handles)?;
+                validate_selector_content(parent)?;
             }
             validate_evidence_list("create_concept", evidence)
         }
         ChangeOperation::AddParent { concept, parent }
         | ChangeOperation::RemoveParent { concept, parent } => {
-            validate_selector(concept, handles)?;
-            validate_selector(parent, handles)
+            validate_selector_content(concept)?;
+            validate_selector_content(parent)
         }
         ChangeOperation::AddEvidence { concept, evidence } => {
-            validate_selector(concept, handles)?;
+            validate_selector_content(concept)?;
             validate_evidence_list("add_evidence", evidence)
         }
         ChangeOperation::RemoveEvidence { concept, evidence } => {
-            validate_selector(concept, handles)?;
+            validate_selector_content(concept)?;
             validate_evidence_list("remove_evidence", evidence)
         }
         ChangeOperation::RewordConcept { concept, label, .. } => {
-            validate_selector(concept, handles)?;
+            validate_selector_content(concept)?;
             validate_label("reworded concept label", label)
         }
         ChangeOperation::RetireConcept {
             concept,
             replacement,
         } => {
-            validate_selector(concept, handles)?;
+            validate_selector_content(concept)?;
             if let Some(replacement) = replacement {
-                validate_selector(replacement, handles)?;
+                validate_selector_content(replacement)?;
             }
             Ok(())
         }
     }
 }
 
-fn validate_selector(
+fn operation_selectors(operation: &ChangeOperation) -> Vec<&ConceptSelector> {
+    match operation {
+        ChangeOperation::CreateConcept { parents, .. } => parents.iter().collect(),
+        ChangeOperation::AddParent { concept, parent }
+        | ChangeOperation::RemoveParent { concept, parent } => vec![concept, parent],
+        ChangeOperation::AddEvidence { concept, .. }
+        | ChangeOperation::RemoveEvidence { concept, .. }
+        | ChangeOperation::RewordConcept { concept, .. } => vec![concept],
+        ChangeOperation::RetireConcept {
+            concept,
+            replacement,
+        } => std::iter::once(concept).chain(replacement.iter()).collect(),
+    }
+}
+
+fn validate_selector_content(
+    selector: &ConceptSelector,
+) -> Result<(), ReconciliationContractError> {
+    match selector {
+        ConceptSelector::Existing { .. } => Ok(()),
+        ConceptSelector::New { handle } => validate_handle(handle),
+    }
+}
+
+fn validate_selector_declaration(
     selector: &ConceptSelector,
     handles: &BTreeSet<String>,
 ) -> Result<(), ReconciliationContractError> {
     match selector {
         ConceptSelector::Existing { .. } => Ok(()),
         ConceptSelector::New { handle } => {
-            validate_handle(handle)?;
             if handles.contains(handle) {
                 Ok(())
             } else {

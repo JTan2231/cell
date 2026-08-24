@@ -29,6 +29,14 @@ source delivery ---------------------------> delivery record
                  v
         reconciliation request
                  |
+                 v
+        reconciliation draft
+            |          ^
+ needs correction      | revise named operations
+            +----------+
+                 |
+       all operations valid
+                 |
           resolve and validate
                  |
                  v
@@ -52,6 +60,12 @@ A delivery may fail before it produces a work. Several deliveries may select
 the same content-addressed work. `integrate --work` selects an existing work and
 does not create another delivery. A reconciliation may also be submitted
 without a model run through `change submit`.
+
+The draft step is model-run staging rather than another corpus state. When the
+initial request is already valid, Annals passes through it and records the
+reconciliation immediately. Otherwise independently valid operations remain
+staged while the liaison revises only the named problems. Explicit discard or
+host abandonment ends the draft without a reconciliation record.
 
 A fresh inbox delivery that recognizes already retained bytes stops at the
 retention boundary. Its delivery record is completed with `duplicate`
@@ -206,6 +220,28 @@ manual integration, including an input whose bytes are already retained and
   base revision. It is a provisional, best-current interpretation rather than
   a claim of unique or final semantic decomposition.
 
+**Reconciliation draft**
+: A durable, versioned, model-run-scoped staging area for one reconciliation
+  request. Annals preserves independently valid operations while returning
+  plain-language hints for operations that need attention. A draft is not a
+  reconciliation record, pending reconciliation, projected corpus state,
+  commit, or corpus state. A run has at most one open draft.
+
+**Staged operation / operation ID**
+: A staged operation is one operation preserved in a reconciliation draft.
+  Annals assigns stable draft-local IDs such as `op-3`; replacing another
+  operation never renumbers it, omission from a revision never removes it, and
+  removal must be explicit. An operation ID is neither a concept ID nor a
+  request-local concept handle and has no meaning outside its draft.
+
+**Finalize / discard / abandon a draft**
+: Annals finalizes a draft automatically when its assembled request resolves
+  and validates as a whole, creating exactly one reconciliation record. The
+  liaison may explicitly discard an open draft and start over. Annals abandons
+  an open draft when its model run ends without recording a reconciliation.
+  Discarded and abandoned drafts remain audit records but create no
+  reconciliation or corpus change.
+
 **Resolved reconciliation**
 : The validated semantic operations, with selectors and quotations resolved,
   together with the complete projected corpus state. Annals compares that state
@@ -305,6 +341,8 @@ Several independent lifecycles reuse words such as `applied`, `recorded`, and
 | Scope | Field | Machine values |
 | --- | --- | --- |
 | Model run | status | `running`, `submitted`, `no_submission`, `failed` |
+| Reconciliation draft | status | `open`, `finalized`, `discarded`, `abandoned` |
+| Draft operation | status | `staged`, `needs_revision`, `blocked`, `implicated`, `dropped` |
 | Reconciliation record | status | `pending`, `applied`, `superseded`, `recorded` |
 | Source delivery | status | `processing`, `completed`, `failed` |
 | Source delivery | channel | `manual`, `inbox` |
@@ -325,7 +363,10 @@ and failed deliveries do not. Retention remains independent and may be present
 even when later processing fails. A done job receipt has one `result_status`.
 The `duplicates/` directory is an archive category, not another receipt state:
 its receipts have state `done` and result status `retained`. Historical
-envelopes keep their existing archive and result.
+envelopes keep their existing archive and result. A draft operation reported
+as *waiting*, *semantic conflict*, or *removed* has the stored status
+`blocked`, `implicated`, or `dropped`, respectively. These operation states do
+not imply that a reconciliation record exists.
 
 ## Plain-language register
 
@@ -350,6 +391,8 @@ details. These expressions simplify the language without changing the model.
 | liaison | AI reader |
 | examination or model run | reading pass or examination pass |
 | reconciliation request | proposed interpretation or proposed update |
+| reconciliation draft | saved in-progress proposal |
+| staged operation | preserved part of the proposal |
 | projected corpus state | preview of the updated idea map |
 | pending reconciliation | proposed update waiting to be accepted |
 | recorded reconciliation | examined source whose interpretation produced no map change |
@@ -388,6 +431,9 @@ and grounded in exact source language.
 - Qualify *root* as a root concept or spool root when ambiguity is possible.
 - Say *reconciliation request*, *reconciliation record*, *operation*, *effect*,
   or *commit* instead of using *change* for all of them.
+- Distinguish an open *reconciliation draft* from a *pending reconciliation*:
+  the former is incomplete model-run staging, while the latter is a complete
+  reconciliation record waiting to be applied.
 - Qualify *receipt* or avoid it: use *delivery record* for database history and
   *job receipt* for `job.json`.
 - Call the current concept structure a directed acyclic graph, not a tree.

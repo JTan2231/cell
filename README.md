@@ -34,11 +34,12 @@ The liaison defaults to high quality: `gpt-5.6-sol` with max reasoning.
 `--quality low` selects `gpt-5.6-luna` with medium reasoning, and `--quality
 medium` selects `gpt-5.6-terra` with medium reasoning. `--model` provides an
 exact model override. Annals gives the liaison a short pointer prompt and
-exactly six session-scoped tools through an isolated Codex app-server; no
+exactly nine session-scoped tools through an isolated Codex app-server; no
 shell, web, planning, user-input, or multi-agent tools are available. The
-complete work is not placed in the prompt. Its recorded
-`submit_reconciliation` tool call, rather than its final response, is the
-deliverable.
+complete work is not placed in the prompt. The liaison starts a reconciliation
+draft, corrects only operations Annals identifies when needed, and may inspect
+or discard that draft. A recorded reconciliation side effect, rather than the
+model's final response, is the deliverable.
 
 ## Build and use
 
@@ -63,10 +64,13 @@ annals --library ./annals.db lately
 
 `integrate` content-addresses the immutable work by its exact SHA-256 digest
 before model examination. It records a provisional, best-current
-reconciliation. With `--apply`, a projected state transition is committed; if
-the projected corpus state is mechanically equal to the base, the
-reconciliation is stored with status `recorded` and the revision stays where it
-is.
+reconciliation. Independently valid operations remain staged across correction
+calls, while plain-language source hints identify only the operations needing
+attention. Annals records the complete server-assembled request automatically
+when every operation works together. With `--apply`, a projected state
+transition is committed; if the projected corpus state is mechanically equal
+to the base, the reconciliation is stored with status `recorded` and the
+revision stays where it is.
 Optional free-form annotations are retained with the reconciliation. Their
 shape and text are contract-validated, but they have no corpus-validation or
 application semantics.

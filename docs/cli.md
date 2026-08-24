@@ -56,7 +56,8 @@ model-run, and database-size information.
 
 `validate` checks SQLite, foreign keys, retained-work digests, current graph
 invariants, linear history and its full snapshots, agreement between
-materialized HEAD and history, and commit provenance. It does not repair state.
+materialized HEAD and history, reconciliation-draft lifecycle and assembled
+request provenance, and commit provenance. It does not repair state.
 
 `backup` makes a consistent SQLite copy and refuses to replace its destination.
 
@@ -93,9 +94,15 @@ annals integrate --work LABEL [--quality QUALITY] [--model MODEL] [--apply] [--r
 The first form retains or recognizes and examines the selected work. The second
 examines an already retained work. Both are explicit manual integration and
 retain this behavior when the bytes were supplied before. Annals freezes the
-current corpus revision, invokes the liaison, and expects one
-`submit_reconciliation` tool call. The model's final response is diagnostic and
-is not parsed as the reconciliation.
+current corpus revision, invokes the liaison, and expects one recorded
+reconciliation. The liaison starts a complete draft with
+`submit_reconciliation`. If Annals reports `needs_changes`, independently valid
+operations remain staged while `revise_reconciliation` changes only named
+operation IDs. `reconciliation_status` recalls the compact roster or exact
+stored operations, and `discard_reconciliation` abandons the complete draft so
+a fresh submission can start. Submission or revision records automatically
+when every active operation works together. The model's final response is
+diagnostic and is not parsed as the reconciliation.
 
 Annals may reuse the newest successful reconciliation for the exact same work,
 base revision, prompt version, model, and reasoning effort. `--reexamine`

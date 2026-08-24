@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
@@ -30,6 +30,7 @@ struct StoredReconciliation {
     work_id: i64,
     base_revision: i64,
     model_run_id: Option<i64>,
+    reconciliation_draft_id: Option<i64>,
     status: String,
     summary: String,
     submitted_request: String,
@@ -50,6 +51,20 @@ struct StoredModelRun {
 struct SuccessfulSubmission {
     model_run_id: i64,
     arguments: String,
+}
+
+#[derive(Debug)]
+struct StoredDraft {
+    id: i64,
+    model_run_id: i64,
+    work_id: i64,
+    base_revision: i64,
+    status: String,
+    version: i64,
+    summary: String,
+    annotations: String,
+    created_sequence: i64,
+    terminal_sequence: Option<i64>,
 }
 
 /// Validate the authoritative corpus and its append-only history.
@@ -414,8 +429,8 @@ fn load_commits(connection: &Connection) -> Result<Vec<StoredCommit>, AppError> 
 
 fn load_reconciliations(connection: &Connection) -> Result<Vec<StoredReconciliation>, AppError> {
     let mut statement = connection.prepare(
-        "SELECT id, work_id, base_revision, model_run_id, status, summary, submitted_request, \
-                resolved_reconciliation, actor, applied_revision \
+        "SELECT id, work_id, base_revision, model_run_id, reconciliation_draft_id, status, \
+                summary, submitted_request, resolved_reconciliation, actor, applied_revision \
          FROM reconciliations ORDER BY id",
     )?;
     let rows = statement.query_map([], |row| {
@@ -424,12 +439,36 @@ fn load_reconciliations(connection: &Connection) -> Result<Vec<StoredReconciliat
             work_id: row.get(1)?,
             base_revision: row.get(2)?,
             model_run_id: row.get(3)?,
+            reconciliation_draft_id: row.get(4)?,
+            status: row.get(5)?,
+            summary: row.get(6)?,
+            submitted_request: row.get(7)?,
+            resolved_reconciliation: row.get(8)?,
+            actor: row.get(9)?,
+            applied_revision: row.get(10)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
+fn load_reconciliation_drafts(connection: &Connection) -> Result<Vec<StoredDraft>, AppError> {
+    let mut statement = connection.prepare(
+        "SELECT id, model_run_id, work_id, base_revision, status, version, summary, annotations, \
+                created_sequence, terminal_sequence \
+         FROM reconciliation_drafts ORDER BY id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(StoredDraft {
+            id: row.get(0)?,
+            model_run_id: row.get(1)?,
+            work_id: row.get(2)?,
+            base_revision: row.get(3)?,
             status: row.get(4)?,
-            summary: row.get(5)?,
-            submitted_request: row.get(6)?,
-            resolved_reconciliation: row.get(7)?,
-            actor: row.get(8)?,
-            applied_revision: row.get(9)?,
+            version: row.get(5)?,
+            summary: row.get(6)?,
+            annotations: row.get(7)?,
+            created_sequence: row.get(8)?,
+            terminal_sequence: row.get(9)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -474,6 +513,7 @@ fn check_provenance(
 ) -> Result<(), AppError> {
     let reconciliations = load_reconciliations(connection)?;
     let model_runs = load_model_runs(connection)?;
+    let drafts = load_reconciliation_drafts(connection)?;
     let submissions = load_successful_submissions(connection)?;
     let reconciliations_by_id = reconciliations
         .iter()
@@ -519,10 +559,13 @@ fn check_provenance(
     for commit in commits {
         check_commit_provenance(connection, commit, &reconciliations_by_id, commits, issues);
     }
+    check_reconciliation_drafts(connection, &model_runs, &reconciliations, &drafts, issues);
     check_model_run_provenance(
+        connection,
         head_revision,
         &model_runs,
         &reconciliations,
+        &drafts,
         &submissions,
         issues,
     );
@@ -940,10 +983,214 @@ fn revert_operations_match(connection: &Connection, commit: &StoredCommit) -> bo
         .is_ok_and(|expected| expected == stored)
 }
 
+#[allow(clippy::too_many_lines)]
+fn check_reconciliation_drafts(
+    connection: &Connection,
+    model_runs: &[StoredModelRun],
+    reconciliations: &[StoredReconciliation],
+    drafts: &[StoredDraft],
+    issues: &mut Vec<ValidationIssue>,
+) {
+    let mut last_version_by_run = BTreeMap::<i64, i64>::new();
+    for draft in drafts {
+        let last_version = last_version_by_run.entry(draft.model_run_id).or_default();
+        if draft.version <= *last_version {
+            issues.push(error_issue(
+                "reconciliation_draft_lifecycle_mismatch",
+                format!(
+                    "reconciliation draft {} does not advance its model run's draft version",
+                    draft.id
+                ),
+            ));
+        }
+        *last_version = (*last_version).max(draft.version);
+        let run = model_runs.iter().find(|run| run.id == draft.model_run_id);
+        if run.is_none_or(|run| {
+            run.work_id != draft.work_id || run.base_revision != draft.base_revision
+        }) {
+            issues.push(error_issue(
+                "reconciliation_draft_scope_mismatch",
+                format!(
+                    "reconciliation draft {} does not match its model run's work and base revision",
+                    draft.id
+                ),
+            ));
+        }
+        if !tool_call_matches(
+            connection,
+            draft.model_run_id,
+            draft.created_sequence,
+            &["submit_reconciliation"],
+        ) {
+            issues.push(error_issue(
+                "reconciliation_draft_tool_mismatch",
+                format!(
+                    "reconciliation draft {} was not created by its recorded successful submission call",
+                    draft.id
+                ),
+            ));
+        }
+        let linked = reconciliations
+            .iter()
+            .filter(|reconciliation| reconciliation.reconciliation_draft_id == Some(draft.id))
+            .collect::<Vec<_>>();
+        match draft.status.as_str() {
+            "open" => {
+                if run.is_none_or(|run| run.status != "running") || !linked.is_empty() {
+                    issues.push(error_issue(
+                        "reconciliation_draft_lifecycle_mismatch",
+                        format!(
+                            "open reconciliation draft {} is not owned by one running model run",
+                            draft.id
+                        ),
+                    ));
+                }
+            }
+            "abandoned" => {
+                if run.is_none_or(|run| !matches!(run.status.as_str(), "failed" | "no_submission"))
+                    || !linked.is_empty()
+                {
+                    issues.push(error_issue(
+                        "reconciliation_draft_lifecycle_mismatch",
+                        format!(
+                            "abandoned reconciliation draft {} has invalid terminal ownership",
+                            draft.id
+                        ),
+                    ));
+                }
+            }
+            "discarded" => {
+                if draft.terminal_sequence.is_none_or(|sequence| {
+                    !tool_call_matches(
+                        connection,
+                        draft.model_run_id,
+                        sequence,
+                        &["discard_reconciliation"],
+                    )
+                }) || !linked.is_empty()
+                {
+                    issues.push(error_issue(
+                        "reconciliation_draft_lifecycle_mismatch",
+                        format!(
+                            "discarded reconciliation draft {} does not match its discard call",
+                            draft.id
+                        ),
+                    ));
+                }
+            }
+            "finalized" => {
+                if draft.terminal_sequence.is_none_or(|sequence| {
+                    !tool_call_matches(
+                        connection,
+                        draft.model_run_id,
+                        sequence,
+                        &["submit_reconciliation", "revise_reconciliation"],
+                    )
+                }) || linked.len() != 1
+                {
+                    issues.push(error_issue(
+                        "reconciliation_draft_lifecycle_mismatch",
+                        format!(
+                            "finalized reconciliation draft {} does not match exactly one finalizing call and reconciliation",
+                            draft.id
+                        ),
+                    ));
+                    continue;
+                }
+                let Some((request, states)) = assembled_draft_request(connection, draft) else {
+                    issues.push(error_issue(
+                        "reconciliation_draft_payload_mismatch",
+                        format!(
+                            "finalized reconciliation draft {} cannot be assembled as a request",
+                            draft.id
+                        ),
+                    ));
+                    continue;
+                };
+                if states.is_empty()
+                    || states.iter().any(|state| state != "staged")
+                    || !reconciliations_equal(&linked[0].submitted_request, &request)
+                {
+                    issues.push(error_issue(
+                        "reconciliation_draft_payload_mismatch",
+                        format!(
+                            "finalized reconciliation draft {} does not reproduce its reconciliation request",
+                            draft.id
+                        ),
+                    ));
+                }
+            }
+            _ => issues.push(error_issue(
+                "reconciliation_draft_lifecycle_mismatch",
+                format!(
+                    "reconciliation draft {} has unknown status {:?}",
+                    draft.id, draft.status
+                ),
+            )),
+        }
+    }
+}
+
+fn tool_call_matches(
+    connection: &Connection,
+    model_run_id: i64,
+    sequence: i64,
+    names: &[&str],
+) -> bool {
+    connection
+        .query_row(
+            "SELECT tool_name, succeeded FROM tool_calls \
+             WHERE model_run_id = ?1 AND sequence = ?2",
+            rusqlite::params![model_run_id, sequence],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?)),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .is_some_and(|(name, succeeded)| succeeded && names.contains(&name.as_str()))
+}
+
+fn assembled_draft_request(
+    connection: &Connection,
+    draft: &StoredDraft,
+) -> Option<(String, Vec<String>)> {
+    let annotations = serde_json::from_str::<serde_json::Value>(&draft.annotations).ok()?;
+    if !annotations.is_array() {
+        return None;
+    }
+    let mut statement = connection
+        .prepare(
+            "SELECT operation, status FROM reconciliation_draft_operations \
+             WHERE draft_id = ?1 AND status <> 'dropped' ORDER BY ordinal",
+        )
+        .ok()?;
+    let rows = statement
+        .query_map([draft.id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .ok()?;
+    let entries = rows.collect::<rusqlite::Result<Vec<_>>>().ok()?;
+    let operations = entries
+        .iter()
+        .map(|(operation, _)| serde_json::from_str::<serde_json::Value>(operation))
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    let states = entries.into_iter().map(|(_, state)| state).collect();
+    let request = serde_json::to_string(&serde_json::json!({
+        "summary": draft.summary,
+        "operations": operations,
+        "annotations": annotations
+    }))
+    .ok()?;
+    Some((request, states))
+}
+
 fn check_model_run_provenance(
+    connection: &Connection,
     head_revision: Option<i64>,
     model_runs: &[StoredModelRun],
     reconciliations: &[StoredReconciliation],
+    drafts: &[StoredDraft],
     submissions: &[SuccessfulSubmission],
     issues: &mut Vec<ValidationIssue>,
 ) {
@@ -965,10 +1212,23 @@ fn check_model_run_provenance(
             .iter()
             .filter(|submission| submission.model_run_id == run.id)
             .collect::<Vec<_>>();
+        let run_drafts = drafts
+            .iter()
+            .filter(|draft| draft.model_run_id == run.id)
+            .collect::<Vec<_>>();
+        let finalized = run_drafts
+            .iter()
+            .filter(|draft| draft.status == "finalized")
+            .collect::<Vec<_>>();
         let should_have_submission = run.status == "submitted";
-        if (should_have_submission && (linked.len() != 1 || successful.len() != 1))
-            || (!should_have_submission && (!linked.is_empty() || !successful.is_empty()))
-        {
+        let lifecycle_mismatch = if run_drafts.is_empty() {
+            (should_have_submission && (linked.len() != 1 || successful.len() != 1))
+                || (!should_have_submission && (!linked.is_empty() || !successful.is_empty()))
+        } else {
+            (should_have_submission && (linked.len() != 1 || finalized.len() != 1))
+                || (!should_have_submission && (!linked.is_empty() || !finalized.is_empty()))
+        };
+        if lifecycle_mismatch {
             issues.push(error_issue(
                 "model_run_submission_mismatch",
                 format!(
@@ -978,11 +1238,31 @@ fn check_model_run_provenance(
             ));
             continue;
         }
-        if let ([reconciliation], [submission]) = (linked.as_slice(), successful.as_slice())
-            && (reconciliation.work_id != run.work_id
-                || reconciliation.base_revision != run.base_revision
-                || !reconciliations_equal(&reconciliation.submitted_request, &submission.arguments))
-        {
+        let payload_mismatch = if let [reconciliation] = linked.as_slice() {
+            if let Some(draft_id) = reconciliation.reconciliation_draft_id {
+                let draft = drafts.iter().find(|draft| draft.id == draft_id);
+                draft.is_none_or(|draft| {
+                    draft.model_run_id != run.id
+                        || draft.work_id != run.work_id
+                        || draft.base_revision != run.base_revision
+                        || assembled_draft_request(connection, draft).is_none_or(|(request, _)| {
+                            !reconciliations_equal(&reconciliation.submitted_request, &request)
+                        })
+                })
+            } else {
+                successful.as_slice().first().is_none_or(|submission| {
+                    reconciliation.work_id != run.work_id
+                        || reconciliation.base_revision != run.base_revision
+                        || !reconciliations_equal(
+                            &reconciliation.submitted_request,
+                            &submission.arguments,
+                        )
+                })
+            }
+        } else {
+            false
+        };
+        if payload_mismatch {
             issues.push(error_issue(
                 "model_run_reconciliation_mismatch",
                 format!(

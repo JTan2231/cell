@@ -12,6 +12,7 @@ mod ingestion;
 mod liaison;
 mod model;
 mod model_runner;
+mod reconciliation_draft;
 mod render;
 mod resolver;
 mod revision_store;

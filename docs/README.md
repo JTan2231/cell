@@ -11,10 +11,14 @@ immutable work + corpus revision
               v
     best-current reconciliation
               |
-     resolve / validate / apply
+       stage / correct
               |
-              v
- recorded interpretation or revision
+      resolve / validate
+       /              \
+ no corpus effect   transition
+       |              |
+       v              v
+   recorded        pending -- apply --> revision
 ```
 
 Use the [project vocabulary](vocabulary.md) for shared contributor and

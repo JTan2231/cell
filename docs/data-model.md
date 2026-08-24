@@ -7,7 +7,8 @@ SQLite schema. The database contains five kinds of state:
 2. source-delivery receipts and captured source metadata;
 3. the current materialized concept graph and its evidence;
 4. immutable relational graph snapshots for addressable revisions; and
-5. model examinations, reconciliations, and append-only commits.
+5. model examinations, reconciliation drafts and records, and append-only
+   commits.
 
 Public commands and liaison tools address works by label, concepts by durable
 IDs such as `c42`, evidence by quotation, and history by revision. Exact source
@@ -193,12 +194,53 @@ effort. `--reexamine` bypasses reuse.
 Every recognized liaison tool call records its sequence, tool name, strict JSON
 arguments and result, success flag, and timestamp. These transcripts preserve
 bounded inspection, pagination, and retry history without entering the corpus
-commit log.
+commit log. Successful draft mutations are recorded in the same immediate
+transaction as the draft state they produce.
+
+### `reconciliation_drafts` and `reconciliation_draft_operations`
+
+A reconciliation draft is durable model-run staging for one potentially
+multi-call request. Its row repeats the work and frozen base revision for
+provenance, stores the summary and annotations, and carries a positive version
+used to reject stale revisions. Versions increase across discarded drafts in
+the same model run, so an old correction cannot target a fresh draft. Draft
+status is `open`, `finalized`,
+`discarded`, or `abandoned`. At most one draft per model run is open and at most
+one is finalized.
+
+Each operation occupies a stable positive slot exposed to the liaison as an
+ID such as `op-3`. Slots retain their original order independently from their
+IDs. Replacement does not renumber other slots; explicit removal marks a slot
+`dropped` instead of deleting it, and appended operations receive new IDs.
+The other stored operation states are `staged`, `needs_revision`, `blocked`,
+and `implicated`. Model-facing status renders the latter three as needing
+attention, waiting, or semantic conflict and includes bounded plain-language
+hints.
+
+An open draft may intentionally contain operations that do not yet satisfy the
+reconciliation contract. A `staged` operation has passed the checks available
+for it, but whole-request semantics may still implicate it once all operations
+are assembled. Draft rows are therefore library audit state, not corpus state
+or partially recorded reconciliations.
+
+`submit_reconciliation` creates a draft. `revise_reconciliation` can replace or
+remove named slots, append operations, or explicitly update summary and
+annotations; omitted slots remain unchanged. Both mutation tools automatically
+finalize the draft when every active operation resolves and the assembled
+request validates as a whole. `discard_reconciliation` terminates an open draft
+without a reconciliation, while a host-terminated incomplete model run marks
+its open draft `abandoned`. `reconciliation_status` reads a compact roster and
+can return exact stored operations by ID.
+
+Creation and terminal tool-call sequences link each draft to its transcript.
+A finalized draft is linked from exactly one reconciliation. Its canonical
+submitted request is assembled server-side from the draft metadata and active
+slots; it is not the K-only argument object from the final revision call.
 
 ### `reconciliations`
 
 A reconciliation belongs to a work and base revision and optionally to a model
-run. It stores:
+run and its finalized draft. It stores:
 
 - status: `pending`, `applied`, `superseded`, or `recorded`;
 - the human summary;
@@ -218,9 +260,27 @@ older-base result does not displace it. A projected corpus state mechanically
 equal to its base has status `recorded` and neither an applied revision nor a
 commit.
 
-Submission validates and records a projected corpus state. Application later
-re-resolves the request and commits it only if HEAD still equals the base
-revision.
+Direct human submission validates and records a projected corpus state in one
+call. Model submission first uses the draft workflow above. Application later
+re-resolves the complete stored request and commits it only if HEAD still
+equals the base revision.
+
+### Atomic draft staging and finalization
+
+No SQLite transaction remains open while the liaison thinks. Each initial
+submission, revision, or discard uses one short immediate transaction that
+checks the model run and expected draft version, updates the affected slots,
+records the tool call, and commits. A partial success leaves the model run
+`running`; independently valid operations remain stored for the next call.
+
+When no issue remains, that same transaction assembles the complete request in
+stable slot order, resolves it against the model run's frozen base revision,
+validates the projected corpus state, inserts one reconciliation, marks the
+draft `finalized` and model run `submitted`, records the finalizing tool call,
+and commits. A repairable whole-request conflict instead leaves the revised
+draft open and marks the potentially involved slots. A nonrepairable
+transaction failure rolls back the call to the previous committed draft
+version. Draft staging allocates no concept IDs.
 
 ## Append-only history
 
@@ -300,8 +360,9 @@ fails atomically; an empty or cancelled plan creates no commit.
 retained-work digests, the singleton HEAD record, contiguous linear history,
 parseable full snapshots, equality of materialized HEAD with the latest
 historical state, equality of every relational graph projection with its
-committed after-state, replayable reconciliation, shake, and revert provenance,
-and current corpus invariants.
+committed after-state, reconciliation-draft lifecycle, scope, tool-call and
+assembled-request provenance, replayable reconciliation, shake, and revert
+provenance, and current corpus invariants.
 
 For every corpus snapshot it also checks concept IDs and labels, edge endpoints,
 duplicate and self edges, acyclicity, evidence ranges, and leaf grounding. It

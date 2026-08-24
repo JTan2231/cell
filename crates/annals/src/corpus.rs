@@ -1312,6 +1312,7 @@ pub(crate) fn insert_reconciliation(
     work_id: i64,
     base_revision: i64,
     model_run_id: Option<i64>,
+    reconciliation_draft_id: Option<i64>,
     changes_corpus: bool,
     summary: &str,
     request_json: &str,
@@ -1342,13 +1343,14 @@ pub(crate) fn insert_reconciliation(
     let created_at = now()?;
     transaction.execute(
         "INSERT INTO reconciliations(\
-             work_id, base_revision, model_run_id, status, summary, submitted_request, \
-             resolved_reconciliation, actor, created_at\
-         ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             work_id, base_revision, model_run_id, reconciliation_draft_id, status, summary, \
+             submitted_request, resolved_reconciliation, actor, created_at\
+         ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             work_id,
             base_revision,
             model_run_id,
+            reconciliation_draft_id,
             status,
             summary,
             request_json,

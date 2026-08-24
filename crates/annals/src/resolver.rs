@@ -84,6 +84,7 @@ pub(crate) fn submit_document(
         &reconciliation,
         actor,
         model_run_id,
+        None,
     )
 }
 
@@ -108,6 +109,7 @@ pub(crate) fn submit_value(
         &reconciliation,
         actor,
         model_run_id,
+        None,
     )?;
     transaction.commit()?;
     Ok(record)
@@ -121,6 +123,7 @@ pub(crate) fn submit_value_in_transaction(
     value: Value,
     actor: &str,
     model_run_id: Option<i64>,
+    reconciliation_draft_id: Option<i64>,
 ) -> Result<ReconciliationRecord, AppError> {
     let reconciliation =
         parse_reconciliation_value(value.clone()).map_err(|error| contract_error(&error))?;
@@ -132,9 +135,11 @@ pub(crate) fn submit_value_in_transaction(
         &reconciliation,
         actor,
         model_run_id,
+        reconciliation_draft_id,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn submit(
     connection: &mut Connection,
     work: &Work,
@@ -143,6 +148,7 @@ fn submit(
     reconciliation: &Reconciliation,
     actor: &str,
     model_run_id: Option<i64>,
+    reconciliation_draft_id: Option<i64>,
 ) -> Result<ReconciliationRecord, AppError> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let record = submit_parsed(
@@ -153,11 +159,13 @@ fn submit(
         reconciliation,
         actor,
         model_run_id,
+        reconciliation_draft_id,
     )?;
     transaction.commit()?;
     Ok(record)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn submit_parsed(
     connection: &Transaction<'_>,
     work: &Work,
@@ -166,6 +174,7 @@ fn submit_parsed(
     reconciliation: &Reconciliation,
     actor: &str,
     model_run_id: Option<i64>,
+    reconciliation_draft_id: Option<i64>,
 ) -> Result<ReconciliationRecord, AppError> {
     let base = snapshot_at(connection, base_revision)?;
     let resolved = resolve(connection, work, base_revision, &base, reconciliation, None)?;
@@ -175,6 +184,7 @@ fn submit_parsed(
         work.id,
         base_revision,
         model_run_id,
+        reconciliation_draft_id,
         changes_corpus,
         reconciliation.summary(),
         &serde_json::to_string(request)?,

@@ -12,7 +12,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::error::{AppError, AppResult};
-use crate::tool_server::{self, Backend, Tool, ToolFailure};
+use crate::tool_server::{self, Backend, Tool, ToolFailure, ToolSuccess};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_hours(1);
 const DEFAULT_MAX_STDOUT_BYTES: usize = 64 * 1024 * 1024;
@@ -147,7 +147,7 @@ impl Runner {
         }
     }
 
-    /// Run one isolated Codex liaison whose only model-visible tools are Annals' six tools.
+    /// Run one isolated Codex liaison whose only model-visible tools are Annals' nine tools.
     ///
     /// The returned final response is diagnostic only. Application success is determined by the
     /// reconciliation side effect recorded through `submit_reconciliation`.
@@ -285,7 +285,7 @@ impl Runner {
             output: output_receiver,
             deadline,
             backend,
-            submitted: false,
+            reconciliation_recorded: false,
             final_response: String::new(),
         }
         .run(work_dir, settings, prompt, dynamic_tools);
@@ -317,7 +317,7 @@ struct ProtocolClient<'a, B> {
     output: Receiver<io::Result<String>>,
     deadline: Instant,
     backend: &'a mut B,
-    submitted: bool,
+    reconciliation_recorded: bool,
     final_response: String,
 }
 
@@ -352,7 +352,7 @@ impl<B: Backend> ProtocolClient<'_, B> {
                 "approvalPolicy": "never",
                 "sandbox": "read-only",
                 "baseInstructions": tool_server::instructions(),
-                "developerInstructions": "Use only the six supplied Annals tools. Complete the session with exactly one successful submit_reconciliation call.",
+                "developerInstructions": "Use only the nine supplied Annals tools. Complete the session by recording exactly one reconciliation. A successful partial submit or revision is not terminal; correct only the named operations until a tool reports recorded true.",
                 "ephemeral": true,
                 "environments": [],
                 "dynamicTools": dynamic_tools
@@ -570,7 +570,12 @@ impl<B: Backend> ProtocolClient<'_, B> {
         let arguments = params.get("arguments").cloned();
         let result = match (namespace, name, arguments) {
             (None | Some(Value::Null), Some(name), Some(arguments)) if arguments.is_object() => {
-                dispatch_tool_call(self.backend, &mut self.submitted, name, arguments)
+                dispatch_tool_call(
+                    self.backend,
+                    &mut self.reconciliation_recorded,
+                    name,
+                    arguments,
+                )
             }
             _ => Err(ToolFailure::new(
                 "invalid_tool_call",
@@ -609,25 +614,28 @@ impl<B: Backend> ProtocolClient<'_, B> {
 
 fn dispatch_tool_call(
     backend: &mut impl Backend,
-    submitted: &mut bool,
+    reconciliation_recorded: &mut bool,
     name: &str,
     arguments: Value,
-) -> Result<Value, ToolFailure> {
+) -> Result<ToolSuccess, ToolFailure> {
     let Some(tool) = Tool::from_name(name) else {
         return Err(ToolFailure::new(
             "unknown_tool",
             format!("unknown Annals tool {name:?}"),
         ));
     };
-    if tool == Tool::SubmitReconciliation && *submitted {
+    if tool.mutates_reconciliation_draft() && *reconciliation_recorded {
         return Err(ToolFailure::new(
             "reconciliation_already_submitted",
             "this liaison session has already recorded its reconciliation",
         ));
     }
     let result = backend.call(tool, arguments);
-    if tool == Tool::SubmitReconciliation && result.is_ok() {
-        *submitted = true;
+    if result
+        .as_ref()
+        .is_ok_and(ToolSuccess::reconciliation_recorded)
+    {
+        *reconciliation_recorded = true;
     }
     result
 }
@@ -660,10 +668,10 @@ fn required_string(value: &Value, pointer: &str, context: &str) -> Result<String
         })
 }
 
-fn model_tool_result(result: Result<Value, ToolFailure>) -> (String, bool) {
+fn model_tool_result(result: Result<ToolSuccess, ToolFailure>) -> (String, bool) {
     match result {
         Ok(value) => (
-            serde_json::to_string(&value).unwrap_or_else(|_| "null".to_owned()),
+            serde_json::to_string(value.output()).unwrap_or_else(|_| "null".to_owned()),
             true,
         ),
         Err(error) => {
@@ -941,7 +949,7 @@ mod tests {
 
     use serde_json::{Value, json};
 
-    use crate::tool_server::{Backend, Tool, ToolFailure};
+    use crate::tool_server::{Backend, Tool, ToolFailure, ToolSuccess};
 
     use super::{
         CONFIG_OVERRIDES, ModelQuality, ModelSettings, Runner, dispatch_tool_call,
@@ -1025,7 +1033,7 @@ mod tests {
     }
 
     #[test]
-    fn dynamic_inventory_is_exactly_the_six_annals_tools() -> Result<(), Box<dyn std::error::Error>>
+    fn dynamic_inventory_is_exactly_the_nine_annals_tools() -> Result<(), Box<dyn std::error::Error>>
     {
         let tools = dynamic_tool_specs()?;
         let names = tools
@@ -1040,7 +1048,10 @@ mod tests {
                 "work_search",
                 "corpus_search",
                 "corpus_inspect",
-                "submit_reconciliation"
+                "submit_reconciliation",
+                "revise_reconciliation",
+                "reconciliation_status",
+                "discard_reconciliation"
             ]
         );
         assert!(tools.iter().all(|tool| tool["type"] == "function"));
@@ -1052,10 +1063,11 @@ mod tests {
     struct StubBackend {
         calls: Vec<Tool>,
         reject_next_submission: bool,
+        stage_next_submission: bool,
     }
 
     impl Backend for StubBackend {
-        fn call(&mut self, tool: Tool, _arguments: Value) -> Result<Value, ToolFailure> {
+        fn call(&mut self, tool: Tool, _arguments: Value) -> Result<ToolSuccess, ToolFailure> {
             self.calls.push(tool);
             if tool == Tool::SubmitReconciliation && self.reject_next_submission {
                 self.reject_next_submission = false;
@@ -1064,7 +1076,23 @@ mod tests {
                     "the reconciliation is incomplete",
                 ));
             }
-            Ok(json!({ "ok": true }))
+            if tool == Tool::SubmitReconciliation && self.stage_next_submission {
+                self.stage_next_submission = false;
+                return Ok(ToolSuccess::new(json!({
+                    "recorded": false,
+                    "state": "needs_changes"
+                })));
+            }
+            Ok(
+                if matches!(
+                    tool,
+                    Tool::SubmitReconciliation | Tool::ReviseReconciliation
+                ) {
+                    ToolSuccess::recorded(json!({ "recorded": true }))
+                } else {
+                    ToolSuccess::new(json!({ "ok": true }))
+                },
+            )
         }
     }
 
@@ -1073,6 +1101,7 @@ mod tests {
         let mut backend = StubBackend {
             calls: Vec::new(),
             reject_next_submission: true,
+            stage_next_submission: false,
         };
         let mut submitted = false;
 
@@ -1112,6 +1141,49 @@ mod tests {
         assert_eq!(
             backend.calls,
             [Tool::SubmitReconciliation, Tool::SubmitReconciliation]
+        );
+    }
+
+    #[test]
+    fn partial_staging_is_successful_but_only_finalization_is_terminal() {
+        let mut backend = StubBackend {
+            calls: Vec::new(),
+            reject_next_submission: false,
+            stage_next_submission: true,
+        };
+        let mut recorded = false;
+
+        let partial = dispatch_tool_call(
+            &mut backend,
+            &mut recorded,
+            "submit_reconciliation",
+            json!({}),
+        );
+        assert!(partial.is_ok());
+        assert!(!recorded);
+
+        let finalized = dispatch_tool_call(
+            &mut backend,
+            &mut recorded,
+            "revise_reconciliation",
+            json!({}),
+        );
+        assert!(finalized.is_ok());
+        assert!(recorded);
+
+        let rejected = dispatch_tool_call(
+            &mut backend,
+            &mut recorded,
+            "discard_reconciliation",
+            json!({}),
+        );
+        assert_eq!(
+            rejected.as_ref().err().map(ToolFailure::code),
+            Some("reconciliation_already_submitted")
+        );
+        assert_eq!(
+            backend.calls,
+            [Tool::SubmitReconciliation, Tool::ReviseReconciliation]
         );
     }
 
