@@ -5,8 +5,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::corpus::{
-    ReconciliationRecord, Work, get_work_by_id, heading_for_offset, now, reconciliation_from_row,
-    revision,
+    ReconciliationRecord, Work, get_work_by_id, heading_for_offset, now, reconciliation_by_id,
+    revision, sha256_hex,
 };
 use crate::db;
 use crate::error::AppError;
@@ -348,8 +348,11 @@ fn reconciliation_for_context(
 ) -> Result<Option<ReconciliationRecord>, AppError> {
     let id = connection
         .query_row(
-            "SELECT c.id FROM reconciliations AS c JOIN model_runs AS r ON r.id = c.model_run_id \
-             WHERE c.work_id = ?1 AND r.work_id = ?1 AND c.base_revision = ?2 \
+            "SELECT c.id \
+             FROM reconciliations AS c \
+             JOIN reconciliation_requests AS q ON q.id = c.request_id \
+             JOIN model_runs AS r ON r.id = c.model_run_id \
+             WHERE q.work_id = ?1 AND r.work_id = ?1 AND q.base_revision = ?2 \
                    AND r.base_revision = ?2 AND r.status = 'submitted' AND r.model = ?3 \
                    AND r.reasoning_effort = ?4 AND r.prompt_version = ?5 \
              ORDER BY c.id DESC LIMIT 1",
@@ -365,22 +368,6 @@ fn reconciliation_for_context(
         .optional()?;
     id.map(|id| reconciliation_by_id(connection, id))
         .transpose()
-}
-
-fn reconciliation_by_id(
-    connection: &Connection,
-    id: i64,
-) -> Result<ReconciliationRecord, AppError> {
-    connection
-        .query_row(
-            "SELECT c.id, c.work_id, w.label, c.base_revision, c.status, c.summary, \
-                    c.submitted_request, c.resolved_reconciliation, c.actor, c.created_at, \
-                    c.applied_revision \
-             FROM reconciliations AS c JOIN works AS w ON w.id = c.work_id WHERE c.id = ?1",
-            [id],
-            reconciliation_from_row,
-        )
-        .map_err(AppError::from)
 }
 
 struct LiaisonBackend {
@@ -896,16 +883,21 @@ impl LiaisonBackend {
         result: &Value,
         succeeded: bool,
     ) -> Result<(), AppError> {
+        let arguments = serde_json::to_string(arguments)?;
+        let result = serde_json::to_string(result)?;
         transaction.execute(
             "INSERT INTO tool_calls(\
-                 model_run_id, sequence, tool_name, arguments, result, succeeded, created_at\
-             ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                 model_run_id, sequence, tool_name, arguments, arguments_sha256, \
+                 result, result_sha256, succeeded, created_at\
+             ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 run_id,
                 sequence,
                 tool.name(),
-                serde_json::to_string(arguments)?,
-                serde_json::to_string(result)?,
+                arguments,
+                sha256_hex(arguments.as_bytes()),
+                result,
+                sha256_hex(result.as_bytes()),
                 i64::from(succeeded),
                 now()?
             ],
@@ -1739,11 +1731,13 @@ mod tests {
             })?,
             1
         );
-        let submitted_request =
-            connection.query_row("SELECT submitted_request FROM reconciliations", [], |row| {
-                row.get::<_, String>(0)
+        let reconciliation_id =
+            connection.query_row("SELECT id FROM reconciliations", [], |row| {
+                row.get::<_, i64>(0)
             })?;
-        let request: Value = serde_json::from_str(&submitted_request)?;
+        let record = crate::corpus::reconciliation_by_id(&connection, reconciliation_id)?;
+        let request =
+            serde_json::to_value(crate::change::load_request(&connection, record.request_id)?)?;
         assert_eq!(request["operations"].as_array().map(Vec::len), Some(2));
         assert_eq!(request["operations"][0]["ref"], "good");
         assert_eq!(request["operations"][1]["ref"], "repair");
@@ -1900,7 +1894,7 @@ mod tests {
         let connection = db::open_read(&path)?;
         assert_eq!(
             connection.query_row(
-                "SELECT last_changed_version FROM reconciliation_draft_operations \
+                "SELECT last_changed_version FROM request_operations \
                  WHERE slot = 2",
                 [],
                 |row| row.get::<_, i64>(0)
@@ -2008,19 +2002,24 @@ mod tests {
         drop(backend);
 
         let connection = db::open_read(&path)?;
-        let submitted_request = connection.query_row(
-            "SELECT submitted_request FROM reconciliations WHERE model_run_id IS NOT NULL",
+        let reconciliation_id = connection.query_row(
+            "SELECT id FROM reconciliations WHERE model_run_id IS NOT NULL",
             [],
-            |row| row.get::<_, String>(0),
+            |row| row.get::<_, i64>(0),
         )?;
-        let request: Value = serde_json::from_str(&submitted_request)?;
+        let record = crate::corpus::reconciliation_by_id(&connection, reconciliation_id)?;
+        let request =
+            serde_json::to_value(crate::change::load_request(&connection, record.request_id)?)?;
         assert_eq!(request["operations"].as_array().map(Vec::len), Some(2));
         assert_eq!(request["operations"][0]["action"], "reword_concept");
         assert_eq!(request["operations"][1]["ref"], "unrelated");
         assert_eq!(
             connection.query_row(
                 "SELECT GROUP_CONCAT(last_changed_version, ',') \
-                 FROM reconciliation_draft_operations ORDER BY ordinal",
+                 FROM request_operations AS operation \
+                 JOIN reconciliation_drafts AS draft \
+                   ON draft.request_id = operation.request_id \
+                 ORDER BY operation.ordinal",
                 [],
                 |row| row.get::<_, String>(0)
             )?,
@@ -2254,7 +2253,7 @@ mod tests {
         let original =
             reconciliation_for_context(&connection, work.id, 0, &settings, PROMPT_VERSION)?
                 .ok_or("exact reconciliation context was not found")?;
-        let original_request = original.submitted_request.clone();
+        let original_request = crate::change::load_request(&connection, original.request_id)?;
         assert!(
             reconciliation_for_context(&connection, work.id, 1, &settings, PROMPT_VERSION)?
                 .is_none()
@@ -2283,8 +2282,11 @@ mod tests {
         let runner = Runner::new("/usr/bin/false", Duration::from_secs(1));
         let reused = integrate_with_runner(&path, &work, &settings, false, false, &runner)?;
         assert_eq!(reused.id, original.id);
-        assert_eq!(reused.submitted_request, original_request);
         let connection = db::open_read(&path)?;
+        assert_eq!(
+            crate::change::load_request(&connection, reused.request_id)?,
+            original_request
+        );
         assert_eq!(
             connection.query_row("SELECT COUNT(*) FROM model_runs", [], |row| {
                 row.get::<_, i64>(0)

@@ -2,12 +2,11 @@
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-use crate::change::Reconciliation;
 use crate::error::AppError;
 use crate::index;
 use crate::model::{
@@ -32,15 +31,34 @@ pub(crate) struct StoredWork {
     pub new_work: bool,
 }
 
+/// Complete immutable corpus state at one revision.
+///
+/// This value is never persisted wholesale.  Every consumer obtains it by
+/// reducing the typed effect log from revision zero.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Snapshot {
+pub(crate) struct CorpusState {
     pub concepts: Vec<SnapshotConcept>,
     pub edges: Vec<SnapshotEdge>,
     pub evidence: Vec<SnapshotEvidence>,
 }
 
-impl Snapshot {
+/// Transitional internal spelling retained while callers move to
+/// `CorpusState`; it is a type alias, not a second state representation.
+pub(crate) type Snapshot = CorpusState;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CorpusEffect {
+    CreateConcept { concept_id: i64, label: String },
+    RewordConcept { concept_id: i64, label: String },
+    RetireConcept { concept_id: i64 },
+    AddParent { parent_id: i64, child_id: i64 },
+    RemoveParent { parent_id: i64, child_id: i64 },
+    AddEvidence(SnapshotEvidence),
+    RemoveEvidence(SnapshotEvidence),
+}
+
+impl CorpusState {
     #[must_use]
     pub fn empty() -> Self {
         Self {
@@ -63,6 +81,136 @@ impl Snapshot {
             )
         });
     }
+
+    /// Apply one commit's canonical effects and return a new state.
+    ///
+    /// Effects are interpreted in semantic phases so table layout and row
+    /// insertion order can never change their meaning.  Preconditions make a
+    /// redundant or contradictory persisted effect invalid history.
+    pub(crate) fn reduced(&self, effects: &[CorpusEffect]) -> Result<Self, AppError> {
+        let mut concepts = self
+            .concepts
+            .iter()
+            .cloned()
+            .map(|concept| (concept.id, concept))
+            .collect::<BTreeMap<_, _>>();
+        let mut edges = self.edges.iter().cloned().collect::<BTreeSet<_>>();
+        let mut evidence = self.evidence.iter().cloned().collect::<BTreeSet<_>>();
+
+        for effect in effects {
+            match effect {
+                CorpusEffect::RemoveEvidence(item) => {
+                    require_effect(evidence.remove(item), "remove missing evidence link")?;
+                }
+                CorpusEffect::RemoveParent {
+                    parent_id,
+                    child_id,
+                } => {
+                    require_effect(
+                        edges.remove(&SnapshotEdge {
+                            parent_id: *parent_id,
+                            child_id: *child_id,
+                        }),
+                        "remove missing parent edge",
+                    )?;
+                }
+                _ => {}
+            }
+        }
+
+        for effect in effects {
+            match effect {
+                CorpusEffect::CreateConcept { concept_id, label } => {
+                    require_effect(
+                        concepts
+                            .insert(
+                                *concept_id,
+                                SnapshotConcept {
+                                    id: *concept_id,
+                                    label: label.clone(),
+                                },
+                            )
+                            .is_none(),
+                        "create existing concept identity",
+                    )?;
+                }
+                CorpusEffect::RewordConcept { concept_id, label } => {
+                    let concept = concepts
+                        .get_mut(concept_id)
+                        .ok_or_else(|| invalid_effect("reword missing concept identity"))?;
+                    require_effect(concept.label != *label, "reword concept to identical label")?;
+                    concept.label.clone_from(label);
+                }
+                _ => {}
+            }
+        }
+
+        for effect in effects {
+            if let CorpusEffect::RetireConcept { concept_id } = effect {
+                require_effect(
+                    !edges
+                        .iter()
+                        .any(|edge| edge.parent_id == *concept_id || edge.child_id == *concept_id),
+                    "retire concept with a remaining parent edge",
+                )?;
+                require_effect(
+                    !evidence.iter().any(|item| item.concept_id == *concept_id),
+                    "retire concept with remaining evidence",
+                )?;
+                require_effect(
+                    concepts.remove(concept_id).is_some(),
+                    "retire missing concept identity",
+                )?;
+            }
+        }
+
+        for effect in effects {
+            match effect {
+                CorpusEffect::AddParent {
+                    parent_id,
+                    child_id,
+                } => {
+                    require_effect(
+                        concepts.contains_key(parent_id) && concepts.contains_key(child_id),
+                        "add parent edge with a missing endpoint",
+                    )?;
+                    require_effect(
+                        edges.insert(SnapshotEdge {
+                            parent_id: *parent_id,
+                            child_id: *child_id,
+                        }),
+                        "add existing parent edge",
+                    )?;
+                }
+                CorpusEffect::AddEvidence(item) => {
+                    require_effect(
+                        concepts.contains_key(&item.concept_id),
+                        "add evidence to a missing concept",
+                    )?;
+                    require_effect(evidence.insert(item.clone()), "add existing evidence link")?;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Self {
+            concepts: concepts.into_values().collect(),
+            edges: edges.into_iter().collect(),
+            evidence: evidence.into_iter().collect(),
+        })
+    }
+}
+
+fn require_effect(condition: bool, message: &'static str) -> Result<(), AppError> {
+    if condition {
+        Ok(())
+    } else {
+        Err(invalid_effect(message))
+    }
+}
+
+fn invalid_effect(message: &'static str) -> AppError {
+    AppError::database("invalid_commit_effect", message)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -91,13 +239,12 @@ pub(crate) struct SnapshotEvidence {
 #[derive(Debug, Clone)]
 pub(crate) struct ReconciliationRecord {
     pub id: i64,
+    pub request_id: i64,
     pub work_id: i64,
     pub work_label: String,
     pub base_revision: i64,
     pub status: String,
     pub summary: String,
-    pub submitted_request: String,
-    pub resolved_reconciliation: String,
     pub actor: String,
     pub created_at: String,
     pub applied_revision: Option<i64>,
@@ -471,7 +618,7 @@ fn work_query<P: rusqlite::Params>(
 }
 
 pub(crate) fn head_snapshot(connection: &Connection) -> Result<Snapshot, AppError> {
-    load_materialized_snapshot(connection)
+    snapshot_at(connection, revision(connection)?)
 }
 
 pub(crate) fn plan_shake(connection: &Connection) -> Result<ShakePlan, AppError> {
@@ -538,17 +685,12 @@ pub(crate) fn apply_shake(connection: &mut Connection, plan: &ShakePlan) -> Resu
     let new_revision = head_revision.checked_add(1).ok_or_else(|| {
         AppError::database("revision_overflow", "the corpus revision is too large")
     })?;
-    let resolved = diff_snapshot_entries(&transaction, &head, &after)?;
-    materialize_snapshot(&transaction, &after)?;
     insert_commit(
         &transaction,
         new_revision,
         None,
-        None,
         "shake",
-        &shake_summary(removed.len()),
-        &json!({ "operation": "transitive_reduction" }),
-        &serde_json::to_value(&resolved)?,
+        None,
         &after,
         "human",
     )?;
@@ -604,23 +746,8 @@ pub(crate) fn snapshot_at(connection: &Connection, requested: i64) -> Result<Sna
     if requested < 0 {
         return Err(revision_not_found(requested));
     }
-    if requested == 0 {
-        return Ok(Snapshot::empty());
-    }
-    let json = connection
-        .query_row(
-            "SELECT after_snapshot FROM commits WHERE revision = ?1",
-            [requested],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()?
-        .ok_or_else(|| revision_not_found(requested))?;
-    serde_json::from_str(&json).map_err(|error| {
-        AppError::database(
-            "invalid_history_snapshot",
-            format!("revision {requested} contains an invalid snapshot: {error}"),
-        )
-    })
+    crate::revision_store::load_revision_snapshot(connection, requested)?
+        .ok_or_else(|| revision_not_found(requested))
 }
 
 fn revision_not_found(requested: i64) -> AppError {
@@ -631,81 +758,7 @@ fn revision_not_found(requested: i64) -> AppError {
 }
 
 fn load_materialized_snapshot(connection: &Connection) -> Result<Snapshot, AppError> {
-    let mut concepts_statement =
-        connection.prepare("SELECT id, label FROM concepts ORDER BY id")?;
-    let concepts = concepts_statement
-        .query_map([], |row| {
-            Ok(SnapshotConcept {
-                id: row.get(0)?,
-                label: row.get(1)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut edges_statement = connection
-        .prepare("SELECT parent_id, child_id FROM concept_edges ORDER BY parent_id, child_id")?;
-    let edges = edges_statement
-        .query_map([], |row| {
-            Ok(SnapshotEdge {
-                parent_id: row.get(0)?,
-                child_id: row.get(1)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut evidence_statement = connection.prepare(
-        "SELECT concept_id, work_id, start_byte, end_byte FROM evidence \
-         ORDER BY concept_id, work_id, start_byte, end_byte",
-    )?;
-    let evidence = evidence_statement
-        .query_map([], |row| {
-            Ok(SnapshotEvidence {
-                concept_id: row.get(0)?,
-                work_id: row.get(1)?,
-                start_byte: usize_from_i64(row.get(2)?, "evidence start byte")?,
-                end_byte: usize_from_i64(row.get(3)?, "evidence end byte")?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(Snapshot {
-        concepts,
-        edges,
-        evidence,
-    })
-}
-
-pub(crate) fn materialize_snapshot(
-    transaction: &Transaction<'_>,
-    snapshot: &Snapshot,
-) -> Result<(), AppError> {
-    validate_snapshot(transaction, snapshot)?;
-    transaction.execute("DELETE FROM evidence", [])?;
-    transaction.execute("DELETE FROM concept_edges", [])?;
-    transaction.execute("DELETE FROM concepts", [])?;
-
-    for concept in &snapshot.concepts {
-        transaction.execute(
-            "INSERT INTO concepts(id, label) VALUES(?1, ?2)",
-            params![concept.id, concept.label],
-        )?;
-    }
-    for edge in &snapshot.edges {
-        transaction.execute(
-            "INSERT INTO concept_edges(parent_id, child_id) VALUES(?1, ?2)",
-            params![edge.parent_id, edge.child_id],
-        )?;
-    }
-    for evidence in &snapshot.evidence {
-        transaction.execute(
-            "INSERT INTO evidence(concept_id, work_id, start_byte, end_byte) \
-             VALUES(?1, ?2, ?3, ?4)",
-            params![
-                evidence.concept_id,
-                evidence.work_id,
-                i64_from_usize(evidence.start_byte, "evidence start byte")?,
-                i64_from_usize(evidence.end_byte, "evidence end byte")?
-            ],
-        )?;
-    }
-    Ok(())
+    head_snapshot(connection)
 }
 
 pub(crate) fn validate_snapshot(
@@ -964,21 +1017,39 @@ pub(crate) fn list_commits(
     let sql_limit = i64::try_from(limit)
         .map_err(|_| AppError::invalid("invalid_limit", "commit limit is too large"))?;
     let mut statement = connection.prepare(
-        "SELECT c.revision, c.kind, c.summary, w.label, c.actor, c.created_at \
-         FROM commits AS c LEFT JOIN works AS w ON w.id = c.work_id \
-         ORDER BY c.revision DESC LIMIT ?1",
+        "SELECT revision, kind, reconciliation_id, reverted_revision, actor, created_at \
+         FROM commits ORDER BY revision DESC LIMIT ?1",
     )?;
     let rows = statement.query_map([sql_limit], |row| {
-        Ok(CommitView {
-            revision: row.get(0)?,
-            kind: row.get(1)?,
-            summary: row.get(2)?,
-            work: row.get(3)?,
-            actor: row.get(4)?,
-            created_at: row.get(5)?,
-        })
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Option<i64>>(2)?,
+            row.get::<_, Option<i64>>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, String>(5)?,
+        ))
     })?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    let mut commits = Vec::new();
+    for row in rows {
+        let (revision, kind, reconciliation_id, reverted_revision, actor, created_at) = row?;
+        let (summary, work) = commit_description(
+            connection,
+            revision,
+            &kind,
+            reconciliation_id,
+            reverted_revision,
+        )?;
+        commits.push(CommitView {
+            revision,
+            kind,
+            summary,
+            work,
+            actor,
+            created_at,
+        });
+    }
+    Ok(commits)
 }
 
 pub(crate) fn recorded_change_at(
@@ -987,35 +1058,22 @@ pub(crate) fn recorded_change_at(
 ) -> Result<RecordedChangeView, AppError> {
     let row = connection
         .query_row(
-            "SELECT c.revision, c.kind, c.summary, w.label, c.submitted_request, \
-                    c.resolved_operations, c.actor, c.created_at \
-             FROM commits AS c LEFT JOIN works AS w ON w.id = c.work_id \
-             WHERE c.revision = ?1",
+            "SELECT revision, kind, reconciliation_id, reverted_revision, actor, created_at \
+             FROM commits WHERE revision = ?1",
             [requested_revision],
             |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
                     row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
                     row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?,
-                    row.get::<_, String>(6)?,
-                    row.get::<_, String>(7)?,
                 ))
             },
         )
         .optional()?;
-    let Some((
-        revision,
-        kind,
-        summary,
-        work,
-        reconciliation,
-        resolved_operations,
-        actor,
-        created_at,
-    )) = row
+    let Some((revision, kind, reconciliation_id, reverted_revision, actor, created_at)) = row
     else {
         if requested_revision < 0
             || (requested_revision != 0
@@ -1033,27 +1091,133 @@ pub(crate) fn recorded_change_at(
         ));
     };
     let effects = diff(connection, revision - 1, revision)?.entries;
+    let (summary, work) = commit_description(
+        connection,
+        revision,
+        &kind,
+        reconciliation_id,
+        reverted_revision,
+    )?;
+    let (submitted_request, resolved_operations) = match kind.as_str() {
+        "change" => {
+            let id = reconciliation_id.ok_or_else(|| {
+                AppError::database(
+                    "invalid_commit_provenance",
+                    format!("change revision {revision} has no reconciliation"),
+                )
+            })?;
+            let record = reconciliation_by_id(connection, id)?;
+            let request = crate::change::load_request(connection, record.request_id)?;
+            let resolved = crate::resolver::replay_record(connection, &record)?;
+            (
+                serde_json::to_value(request)?,
+                serde_json::to_value(resolved.operations)?,
+            )
+        }
+        "shake" => (
+            json!({ "operation": "transitive_reduction" }),
+            serde_json::to_value(&effects)?,
+        ),
+        "revert" => (
+            json!({ "revert_revision": reverted_revision }),
+            serde_json::to_value(&effects)?,
+        ),
+        _ => {
+            return Err(AppError::database(
+                "invalid_commit_kind",
+                format!("revision {revision} has unknown kind {kind:?}"),
+            ));
+        }
+    };
     Ok(RecordedChangeView {
         revision,
         kind,
         summary,
         work,
-        submitted_request: serde_json::from_str(&reconciliation).map_err(|error| {
-            AppError::database(
-                "invalid_commit_request",
-                format!("revision {requested_revision} has an invalid submitted request: {error}"),
-            )
-        })?,
-        resolved_operations: serde_json::from_str(&resolved_operations).map_err(|error| {
-            AppError::database(
-                "invalid_commit_operations",
-                format!("revision {requested_revision} has invalid resolved operations: {error}"),
-            )
-        })?,
+        submitted_request,
+        resolved_operations,
         effects,
         actor,
         created_at,
     })
+}
+
+fn commit_description(
+    connection: &Connection,
+    revision: i64,
+    kind: &str,
+    reconciliation_id: Option<i64>,
+    reverted_revision: Option<i64>,
+) -> Result<(String, Option<String>), AppError> {
+    match kind {
+        "change" => {
+            let record = reconciliation_by_id(
+                connection,
+                reconciliation_id.ok_or_else(|| {
+                    AppError::database(
+                        "invalid_commit_provenance",
+                        format!("change revision {revision} has no reconciliation"),
+                    )
+                })?,
+            )?;
+            Ok((record.summary, Some(record.work_label)))
+        }
+        "shake" => {
+            let removed = connection.query_row(
+                "SELECT COUNT(*) FROM parent_edge_effects \
+                 WHERE revision = ?1 AND effect = 'remove'",
+                [revision],
+                |row| row.get::<_, i64>(0),
+            )?;
+            Ok((
+                shake_summary(usize::try_from(removed).map_err(|_| {
+                    AppError::database("numeric_overflow", "shake effect count is too large")
+                })?),
+                None,
+            ))
+        }
+        "revert" => {
+            let target = reverted_revision.ok_or_else(|| {
+                AppError::database(
+                    "invalid_commit_provenance",
+                    format!("revert revision {revision} has no target"),
+                )
+            })?;
+            Ok((
+                format!("Revert revision {target}"),
+                commit_work(connection, target)?,
+            ))
+        }
+        _ => Err(AppError::database(
+            "invalid_commit_kind",
+            format!("revision {revision} has unknown kind {kind:?}"),
+        )),
+    }
+}
+
+fn commit_work(connection: &Connection, revision: i64) -> Result<Option<String>, AppError> {
+    let provenance = connection
+        .query_row(
+            "SELECT kind, reconciliation_id, reverted_revision \
+             FROM commits WHERE revision = ?1",
+            [revision],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<i64>>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                ))
+            },
+        )
+        .optional()?
+        .ok_or_else(|| revision_not_found(revision))?;
+    match provenance {
+        (kind, Some(id), _) if kind == "change" => {
+            Ok(Some(reconciliation_by_id(connection, id)?.work_label))
+        }
+        (kind, _, Some(target)) if kind == "revert" => commit_work(connection, target),
+        _ => Ok(None),
+    }
 }
 
 pub(crate) fn diff(
@@ -1170,15 +1334,16 @@ fn snapshot_reference(snapshot: &Snapshot, id: i64) -> Result<ConceptReference, 
 }
 
 pub(crate) fn reconciliation_view(
+    connection: &Connection,
     record: &ReconciliationRecord,
 ) -> Result<ReconciliationView, AppError> {
-    let request: Reconciliation = serde_json::from_str(&record.submitted_request)?;
+    let request = crate::change::load_request(connection, record.request_id)?;
     Ok(ReconciliationView {
         work: record.work_label.clone(),
         base_revision: record.base_revision,
         status: record.status.clone(),
         summary: record.summary.clone(),
-        request: serde_json::from_str(&record.submitted_request)?,
+        request: serde_json::to_value(&request)?,
         annotations: request.annotations().to_vec(),
         created_at: record.created_at.clone(),
         applied_revision: record.applied_revision,
@@ -1203,11 +1368,8 @@ pub(crate) fn select_reconciliation(
             "CASE WHEN r.status = 'pending' THEN 0 ELSE 1 END, r.id DESC"
         };
         let sql = format!(
-            "SELECT r.id, r.work_id, w.label, r.base_revision, r.status, r.summary, \
-                    r.submitted_request, r.resolved_reconciliation, r.actor, r.created_at, \
-                    r.applied_revision \
-             FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id \
-             WHERE r.work_id = ?1 {status_clause} ORDER BY {order_clause} LIMIT 1"
+            "{RECONCILIATION_SELECT} \
+             WHERE q.work_id = ?1 {status_clause} ORDER BY {order_clause} LIMIT 1"
         );
         return reconciliation_query(connection, &sql, [work.id])?.ok_or_else(|| {
             AppError::not_found(
@@ -1219,21 +1381,21 @@ pub(crate) fn select_reconciliation(
             )
         });
     }
-    let pending_sql = "SELECT r.id, r.work_id, w.label, r.base_revision, r.status, r.summary, \
-                r.submitted_request, r.resolved_reconciliation, r.actor, r.created_at, \
-                r.applied_revision \
-         FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id \
-         WHERE r.status = 'pending' ORDER BY r.id DESC";
-    let mut records = reconciliation_rows(connection, pending_sql, [])?;
+    let pending_sql =
+        format!("{RECONCILIATION_SELECT} WHERE r.status = 'pending' ORDER BY r.id DESC");
+    let mut records = reconciliation_rows(connection, &pending_sql, [])?;
     if records.is_empty() && !pending_only {
-        let latest_per_work_sql = "SELECT r.id, r.work_id, w.label, r.base_revision, r.status, \
-                    r.summary, r.submitted_request, r.resolved_reconciliation, r.actor, \
-                    r.created_at, r.applied_revision \
-             FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id \
-             WHERE r.id = (SELECT MAX(latest.id) FROM reconciliations AS latest \
-                           WHERE latest.work_id = r.work_id) \
-             ORDER BY r.id DESC";
-        records = reconciliation_rows(connection, latest_per_work_sql, [])?;
+        let latest_per_work_sql = format!(
+            "{RECONCILIATION_SELECT} \
+             WHERE r.id = (\
+                 SELECT MAX(latest.id) \
+                 FROM reconciliations AS latest \
+                 JOIN reconciliation_requests AS latest_q \
+                   ON latest_q.id = latest.request_id \
+                 WHERE latest_q.work_id = q.work_id\
+             ) ORDER BY r.id DESC"
+        );
+        records = reconciliation_rows(connection, &latest_per_work_sql, [])?;
     }
     match records.as_slice() {
         [record] => Ok(record.clone()),
@@ -1255,18 +1417,39 @@ pub(crate) fn select_reconciliation(
     }
 }
 
+pub(crate) fn reconciliation_by_id(
+    connection: &Connection,
+    id: i64,
+) -> Result<ReconciliationRecord, AppError> {
+    reconciliation_query(
+        connection,
+        &format!("{RECONCILIATION_SELECT} WHERE r.id = ?1"),
+        [id],
+    )?
+    .ok_or_else(|| {
+        AppError::database(
+            "reconciliation_reference_missing",
+            format!("reconciliation {id} was not found"),
+        )
+    })
+}
+
 pub(crate) fn list_reconciliations(
     connection: &Connection,
 ) -> Result<Vec<ReconciliationView>, AppError> {
-    let sql = "SELECT r.id, r.work_id, w.label, r.base_revision, r.status, r.summary, \
-                      r.submitted_request, r.resolved_reconciliation, r.actor, r.created_at, \
-                      r.applied_revision \
-               FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id ORDER BY r.id DESC";
-    reconciliation_rows(connection, sql, [])?
+    let sql = format!("{RECONCILIATION_SELECT} ORDER BY r.id DESC");
+    reconciliation_rows(connection, &sql, [])?
         .iter()
-        .map(reconciliation_view)
+        .map(|record| reconciliation_view(connection, record))
         .collect()
 }
+
+const RECONCILIATION_SELECT: &str = "SELECT \
+    r.id, r.request_id, q.work_id, w.label, q.base_revision, r.status, q.summary, \
+    r.actor, r.created_at, r.applied_revision \
+    FROM reconciliations AS r \
+    JOIN reconciliation_requests AS q ON q.id = r.request_id \
+    JOIN works AS w ON w.id = q.work_id";
 
 pub(crate) fn reconciliation_query<P: rusqlite::Params>(
     connection: &Connection,
@@ -1293,36 +1476,35 @@ pub(crate) fn reconciliation_from_row(
 ) -> rusqlite::Result<ReconciliationRecord> {
     Ok(ReconciliationRecord {
         id: row.get(0)?,
-        work_id: row.get(1)?,
-        work_label: row.get(2)?,
-        base_revision: row.get(3)?,
-        status: row.get(4)?,
-        summary: row.get(5)?,
-        submitted_request: row.get(6)?,
-        resolved_reconciliation: row.get(7)?,
-        actor: row.get(8)?,
-        created_at: row.get(9)?,
-        applied_revision: row.get(10)?,
+        request_id: row.get(1)?,
+        work_id: row.get(2)?,
+        work_label: row.get(3)?,
+        base_revision: row.get(4)?,
+        status: row.get(5)?,
+        summary: row.get(6)?,
+        actor: row.get(7)?,
+        created_at: row.get(8)?,
+        applied_revision: row.get(9)?,
     })
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn insert_reconciliation(
     transaction: &Transaction<'_>,
+    request_id: i64,
     work_id: i64,
     base_revision: i64,
     model_run_id: Option<i64>,
-    reconciliation_draft_id: Option<i64>,
+    draft_id: Option<i64>,
     changes_corpus: bool,
-    summary: &str,
-    request_json: &str,
-    resolved_json: &str,
     actor: &str,
 ) -> Result<ReconciliationRecord, AppError> {
     let pending_base = transaction
         .query_row(
-            "SELECT base_revision FROM reconciliations \
-             WHERE work_id = ?1 AND status = 'pending'",
+            "SELECT q.base_revision \
+             FROM reconciliations AS r \
+             JOIN reconciliation_requests AS q ON q.id = r.request_id \
+             WHERE q.work_id = ?1 AND r.status = 'pending'",
             [work_id],
             |row| row.get::<_, i64>(0),
         )
@@ -1331,7 +1513,9 @@ pub(crate) fn insert_reconciliation(
     if replaces_pending {
         transaction.execute(
             "UPDATE reconciliations SET status = 'superseded' \
-             WHERE work_id = ?1 AND status = 'pending'",
+             WHERE status = 'pending' AND request_id IN (\
+                 SELECT id FROM reconciliation_requests WHERE work_id = ?1\
+             )",
             [work_id],
         )?;
     }
@@ -1343,18 +1527,13 @@ pub(crate) fn insert_reconciliation(
     let created_at = now()?;
     transaction.execute(
         "INSERT INTO reconciliations(\
-             work_id, base_revision, model_run_id, reconciliation_draft_id, status, summary, \
-             submitted_request, resolved_reconciliation, actor, created_at\
-         ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             request_id, model_run_id, draft_id, status, actor, created_at\
+         ) VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
         params![
-            work_id,
-            base_revision,
+            request_id,
             model_run_id,
-            reconciliation_draft_id,
+            draft_id,
             status,
-            summary,
-            request_json,
-            resolved_json,
             actor,
             created_at
         ],
@@ -1362,10 +1541,7 @@ pub(crate) fn insert_reconciliation(
     let id = transaction.last_insert_rowid();
     reconciliation_query(
         transaction,
-        "SELECT r.id, r.work_id, w.label, r.base_revision, r.status, r.summary, \
-                r.submitted_request, r.resolved_reconciliation, r.actor, r.created_at, \
-                r.applied_revision \
-         FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id WHERE r.id = ?1",
+        &format!("{RECONCILIATION_SELECT} WHERE r.id = ?1"),
         [id],
     )?
     .ok_or_else(|| {
@@ -1376,33 +1552,12 @@ pub(crate) fn insert_reconciliation(
     })
 }
 
-pub(crate) fn sequence_next(connection: &Connection, table: &str) -> Result<i64, AppError> {
-    let last = connection
-        .query_row(
-            "SELECT seq FROM sqlite_sequence WHERE name = ?1",
-            [table],
-            |row| row.get::<_, i64>(0),
-        )
-        .optional()?
-        .unwrap_or(0);
-    last.checked_add(1).ok_or_else(|| {
-        AppError::database(
-            "identity_overflow",
-            format!("{table} identity space is exhausted"),
-        )
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn insert_commit(
     transaction: &Transaction<'_>,
     revision: i64,
-    work_id: Option<i64>,
     reconciliation_id: Option<i64>,
     kind: &str,
-    summary: &str,
-    request: &Value,
-    resolved: &Value,
+    reverted_revision: Option<i64>,
     after: &Snapshot,
     actor: &str,
 ) -> Result<(), AppError> {
@@ -1431,32 +1586,17 @@ pub(crate) fn insert_commit(
     }
     transaction.execute(
         "INSERT INTO commits(\
-             revision, work_id, reconciliation_id, kind, summary, submitted_request, \
-             resolved_operations, after_snapshot, actor, created_at\
-         ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             revision, kind, reconciliation_id, reverted_revision, actor, created_at\
+         ) VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
         params![
             revision,
-            work_id,
-            reconciliation_id,
             kind,
-            summary,
-            serde_json::to_string(request)?,
-            serde_json::to_string(resolved)?,
-            serde_json::to_string(after)?,
+            reconciliation_id,
+            reverted_revision,
             actor,
             now()?
         ],
     )?;
-    let advanced = transaction.execute(
-        "UPDATE library_state SET revision = ?1 WHERE singleton = 1 AND revision = ?2",
-        params![revision, parent],
-    )?;
-    if advanced != 1 {
-        return Err(AppError::conflict(
-            "commit_parent_mismatch",
-            "canonical HEAD changed while the commit was being appended",
-        ));
-    }
     crate::revision_store::insert_canonical_revision(transaction, revision, after)?;
     Ok(())
 }
@@ -1465,14 +1605,6 @@ pub(crate) fn revert(transaction: &Transaction<'_>, target_revision: i64) -> Res
     if target_revision <= 0 {
         return Err(revision_not_found(target_revision));
     }
-    let target_work = transaction
-        .query_row(
-            "SELECT work_id FROM commits WHERE revision = ?1",
-            [target_revision],
-            |row| row.get::<_, Option<i64>>(0),
-        )
-        .optional()?
-        .ok_or_else(|| revision_not_found(target_revision))?;
     let target_before = snapshot_at(transaction, target_revision - 1)?;
     let target_after = snapshot_at(transaction, target_revision)?;
     let head = load_materialized_snapshot(transaction)?;
@@ -1500,18 +1632,12 @@ pub(crate) fn revert(transaction: &Transaction<'_>, target_revision: i64) -> Res
             format!("the inverse would violate corpus invariants: {error}"),
         )
     })?;
-    materialize_snapshot(transaction, &inverse)?;
-    let request = json!({ "revert_revision": target_revision });
-    let resolved = serde_json::to_value(diff_snapshot_entries(transaction, &head, &inverse)?)?;
     insert_commit(
         transaction,
         new_revision,
-        target_work,
         None,
         "revert",
-        &format!("Revert revision {target_revision}"),
-        &request,
-        &resolved,
+        Some(target_revision),
         &inverse,
         "human",
     )?;
@@ -1759,15 +1885,6 @@ fn invalid_change(message: impl Into<String>) -> AppError {
     AppError::invalid("invalid_change", message)
 }
 
-fn i64_from_usize(value: usize, description: &str) -> Result<i64, AppError> {
-    i64::try_from(value).map_err(|_| {
-        AppError::database(
-            "numeric_overflow",
-            format!("{description} is too large for SQLite"),
-        )
-    })
-}
-
 fn usize_from_i64(value: i64, description: &str) -> rusqlite::Result<usize> {
     usize::try_from(value).map_err(|error| {
         rusqlite::Error::FromSqlConversionFailure(
@@ -1788,8 +1905,8 @@ mod tests {
 
     use super::{
         MAX_EVIDENCE_BYTES, Snapshot, SnapshotConcept, SnapshotEdge, SnapshotEvidence, apply_shake,
-        diff_snapshot_entries, heading_for_offset, invert_snapshot_change, markdown_headings,
-        materialize_snapshot, plan_shake, sha256_hex, store_ingested_work,
+        diff_snapshot_entries, heading_for_offset, insert_commit, invert_snapshot_change,
+        markdown_headings, plan_shake, sha256_hex, store_ingested_work,
         store_ingested_work_with_optional_label, store_work, transitive_reduction,
         validate_snapshot,
     };
@@ -2071,7 +2188,7 @@ mod tests {
     }
 
     #[test]
-    fn confirmed_shake_rejects_a_changed_library_or_materialized_graph()
+    fn confirmed_shake_rejects_a_changed_library_or_replayed_head()
     -> Result<(), Box<dyn std::error::Error>> {
         let mut connection = test_connection()?;
         let work = store_work(&mut connection, "Source", "grounded")?;
@@ -2085,8 +2202,9 @@ mod tests {
                 end_byte: 8,
             }],
         };
+        connection.execute("INSERT INTO concept_identities(id) VALUES(1), (2), (3)", [])?;
         let transaction = connection.transaction()?;
-        materialize_snapshot(&transaction, &snapshot)?;
+        insert_commit(&transaction, 1, None, "shake", None, &snapshot, "test")?;
         transaction.commit()?;
         let plan = plan_shake(&connection)?;
         let mut other_library_id = plan.library_id.clone();
@@ -2097,7 +2215,7 @@ mod tests {
         };
         other_library_id.replace_range(..1, replacement);
         connection.execute(
-            "UPDATE library_state SET library_id = ?1",
+            "UPDATE library_identity SET library_id = ?1",
             [&other_library_id],
         )?;
 
@@ -2106,13 +2224,10 @@ mod tests {
         };
         assert_eq!(error.code(), "shake_stale");
         connection.execute(
-            "UPDATE library_state SET library_id = ?1",
+            "UPDATE library_identity SET library_id = ?1",
             [&plan.library_id],
         )?;
-        connection.execute(
-            "DELETE FROM concept_edges WHERE parent_id = 1 AND child_id = 3",
-            [],
-        )?;
+        assert_eq!(apply_shake(&mut connection, &plan)?, 2);
 
         let Err(error) = apply_shake(&mut connection, &plan) else {
             panic!("stale shake was applied");
@@ -2121,7 +2236,7 @@ mod tests {
         assert_eq!(
             connection.query_row("SELECT COUNT(*) FROM commits", [], |row| row
                 .get::<_, i64>(0))?,
-            0
+            2
         );
         Ok(())
     }

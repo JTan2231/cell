@@ -11,8 +11,8 @@ for every workspace package under Rust 1.97.1. Exceeding 60 seconds is a CI
 failure.
 
 Focused graph tests also inspect SQLite query plans for parent, child, and
-evidence pages. They require revision-leading indexes and reject temporary
-sorts on those local selectors.
+evidence pages. They require the connection-local replay projection's indexes
+and reject temporary sorts on those local selectors.
 
 ## Explicit liaison bounds
 
@@ -49,31 +49,26 @@ snapshots.
 
 ## Cost shape
 
-Works and selected corpus snapshots are held in memory while resolving and
-validating a reconciliation. A corpus snapshot contains concepts, explicit
-edges, and evidence, so basic materialization grows with all three. Cycle
-checks and derived root/leaf classification also traverse the edge set.
+The selected revision's `CorpusState` is held in memory while resolving,
+validating, browsing, diffing, reverting, or planning a shake. It contains
+concepts, explicit edges, and evidence, so state size and whole-state invariant
+checks grow with all three. Reaching revision N also reduces the typed effects
+from revisions 1 through N; there is intentionally no trusted snapshot cache.
 
-Applying a pending transition or confirmed shake validates and materializes the
-complete projected corpus state and retains complete corpus snapshots in
-history. Mutation time and history storage therefore grow with corpus size. A
-projected corpus state mechanically equal to its base is stored as a `recorded`
-reconciliation without rebuilding materialized state or creating a commit or
-revision; an empty shake likewise creates no commit.
+Applying a pending transition or confirmed shake validates the complete
+projected state, then stores only canonical typed differences. Mutation work
+includes replay plus state comparison, while history storage grows with actual
+effects rather than total corpus size per revision. A mechanically equal result
+is stored as `recorded` without a commit; an empty shake likewise creates no
+revision.
 
-Ordinary graph reads use a revision-scoped database facade and allocate only a
-bounded view between SQLite and presentation. Root, relationship,
-evidence, and search pages apply `LIMIT` before response hydration. Evidence
-loads only returned byte ranges, each capped at 8 KiB, and graph edges carry IDs
-throughout so labels are owned once per selected concept. Local expansion stops
-at its depth, node, or internal edge bound. Its exact frontier is derived from
-stored revision degrees and the bounded returned edge set rather than
-additional edge scans.
-
-Whole snapshots are still intentionally loaded by reconciliation resolution,
-validation, diff, reversion, and shake planning. Immutable relational revision
-rows retain the existing full-snapshot history storage asymptotics while making
-interactive historical reads subset-addressable.
+Graph reads replay the requested state and load it into connection-local
+temporary query tables. Root, relationship, evidence, and search pages apply
+`LIMIT` before response hydration. Evidence loads only returned byte ranges,
+each capped at 8 KiB, and graph edges carry IDs so labels are owned once per
+selected concept. Local expansion stops at its depth, node, or internal edge
+bound. The returned response is bounded, although the replay and temporary
+query projection are whole-state work.
 
 Exact-context examination reuse can avoid external model latency when work,
 base revision, prompt version, model, and reasoning effort match a prior

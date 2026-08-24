@@ -261,13 +261,15 @@ manual integration, including an input whose bytes are already retained and
 
 **Resolved reconciliation**
 : The validated semantic operations, with selectors and quotations resolved,
-  together with the complete projected corpus state. Annals compares that state
-  mechanically with the base.
+  together with the complete projected corpus state. Annals derives this view
+  from normalized request rows and the base corpus state whenever it is needed,
+  then compares the result mechanically with the base.
 
 **Reconciliation record**
-: The durable library record containing the request, resolved reconciliation,
-  provenance, status, and any applied revision. A reconciliation request can be
-  discussed without implying that it became a commit.
+: The durable library record linking normalized request intent with provenance,
+  status, and any applied revision. Its resolved reconciliation is reconstructed
+  rather than stored. A reconciliation request can be discussed without
+  implying that it became a commit.
 
 **Projected corpus state**
 : The complete corpus state that would result from a resolved reconciliation.

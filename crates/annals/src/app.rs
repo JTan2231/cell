@@ -18,9 +18,10 @@ use crate::cli::{
 };
 use crate::config::Config;
 use crate::corpus::{
-    ReconciliationRecord, ShakePlan, StoredWork, apply_shake, diff, get_work, list_commits,
-    list_reconciliations, list_works, plan_shake, reconciliation_view, recorded_change_at,
-    revision, select_reconciliation, store_ingested_work, store_retained_ingested_work, work_view,
+    ReconciliationRecord, ShakePlan, StoredWork, apply_shake, diff, get_work, head_snapshot,
+    list_commits, list_reconciliations, list_works, plan_shake, reconciliation_view,
+    recorded_change_at, revision, select_reconciliation, store_ingested_work,
+    store_retained_ingested_work, work_view,
 };
 use crate::db;
 use crate::error::{AppError, AppResult};
@@ -93,6 +94,7 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
         Command::Inbox(command) => match command {
             InboxCommand::Run(args) => inbox::run(path, config, args, !cli.json),
             InboxCommand::Register(args) => inbox::register(config, args),
+            InboxCommand::ImportBacklog(args) => inbox::import_backlog(config, &args.from),
             InboxCommand::Pause => inbox::pause(config),
             InboxCommand::Resume => inbox::resume(config),
             InboxCommand::Status => inbox::status(config),
@@ -154,13 +156,14 @@ fn migrate_library(path: &Path) -> Result<CommandOutput, AppError> {
 
 fn stats(path: &Path) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
+    let state = head_snapshot(&connection)?;
     let value = LibraryStats {
         revision: revision(&connection)?,
-        concept_count: count(&connection, "concepts")?,
-        edge_count: count(&connection, "concept_edges")?,
+        concept_count: u64::try_from(state.concepts.len()).map_err(|_| stats_overflow())?,
+        edge_count: u64::try_from(state.edges.len()).map_err(|_| stats_overflow())?,
         work_count: count(&connection, "works")?,
         ingestion_count: count(&connection, "ingestions")?,
-        evidence_count: count(&connection, "evidence")?,
+        evidence_count: u64::try_from(state.evidence.len()).map_err(|_| stats_overflow())?,
         pending_reconciliation_count: count_where(
             &connection,
             "reconciliations",
@@ -355,7 +358,7 @@ fn integrate(
                         return Err(error);
                     }
                 };
-                return applied_output(&record, applied);
+                return applied_output(path, &record, applied);
             }
             "recorded" => {
                 if let Some(ingestion_id) = ingestion_id {
@@ -390,7 +393,7 @@ fn integrate(
             }
         }
     }
-    reconciliation_output(&record)
+    reconciliation_output(path, &record)
 }
 
 fn ingest_manual_work(
@@ -487,7 +490,7 @@ fn submit_change(
     let mut connection = db::open_write(path)?;
     let work = get_work(&connection, work_label)?;
     let record = resolver::submit_document(&mut connection, &work, base, &document, "human", None)?;
-    reconciliation_output(&record)
+    reconciliation_output(path, &record)
 }
 
 fn show_change(path: &Path, args: &ChangeShowArgs) -> Result<CommandOutput, AppError> {
@@ -498,7 +501,7 @@ fn show_change(path: &Path, args: &ChangeShowArgs) -> Result<CommandOutput, AppE
         return Ok(CommandOutput::new(to_value(&change)?, human));
     }
     let record = select_reconciliation(&connection, args.work.as_deref(), false)?;
-    let mut output = reconciliation_output(&record)?;
+    let mut output = reconciliation_output(path, &record)?;
     output.quietable = false;
     Ok(output)
 }
@@ -597,7 +600,7 @@ fn validate_change(path: &Path, args: &ChangeSelectArgs) -> Result<CommandOutput
     let connection = db::open_read(path)?;
     let record = select_reconciliation(&connection, args.work.as_deref(), true)?;
     let resolved = resolver::validate_record(&connection, &record)?;
-    let reconciliation: Reconciliation = serde_json::from_str(&record.submitted_request)?;
+    let reconciliation = crate::change::load_request(&connection, record.request_id)?;
     let human = format!(
         "Valid pending reconciliation for {}\nBase revision: {}\nSummary: {}\nResolved operations ({}):\n{}\n{}\nApplication: ready",
         render_quoted(&record.work_label),
@@ -623,7 +626,7 @@ fn apply_change(path: &Path, args: &ChangeSelectArgs) -> Result<CommandOutput, A
     let mut connection = db::open_write(path)?;
     let record = select_reconciliation(&connection, args.work.as_deref(), true)?;
     let applied = resolver::apply_record(&mut connection, &record)?;
-    applied_output(&record, applied)
+    applied_output(path, &record, applied)
 }
 
 fn change_list(path: &Path) -> Result<CommandOutput, AppError> {
@@ -649,8 +652,12 @@ fn change_list(path: &Path) -> Result<CommandOutput, AppError> {
     Ok(CommandOutput::new(to_value(&reconciliations)?, human))
 }
 
-fn reconciliation_output(record: &ReconciliationRecord) -> Result<CommandOutput, AppError> {
-    let view = reconciliation_view(record)?;
+fn reconciliation_output(
+    path: &Path,
+    record: &ReconciliationRecord,
+) -> Result<CommandOutput, AppError> {
+    let connection = db::open_read(path)?;
+    let view = reconciliation_view(&connection, record)?;
     let reconciliation: Reconciliation = serde_json::from_value(view.request.clone())?;
     let operation_count = view.request["operations"].as_array().map_or(0, Vec::len);
     let data = json!({
@@ -976,9 +983,14 @@ fn render_annotations(annotations: &[String]) -> String {
     }
 }
 
-fn applied_output(record: &ReconciliationRecord, applied: i64) -> Result<CommandOutput, AppError> {
-    let request: Reconciliation = serde_json::from_str(&record.submitted_request)?;
-    let reconciliation: Value = serde_json::from_str(&record.submitted_request)?;
+fn applied_output(
+    path: &Path,
+    record: &ReconciliationRecord,
+    applied: i64,
+) -> Result<CommandOutput, AppError> {
+    let connection = db::open_read(path)?;
+    let request = crate::change::load_request(&connection, record.request_id)?;
+    let reconciliation = serde_json::to_value(&request)?;
     Ok(CommandOutput::new(
         json!({
             "work": record.work_label,
@@ -1741,6 +1753,10 @@ fn count_where(connection: &Connection, table: &str, condition: &str) -> Result<
     )?;
     u64::try_from(count)
         .map_err(|_| AppError::database("invalid_count", "database returned a negative count"))
+}
+
+fn stats_overflow() -> AppError {
+    AppError::database("invalid_count", "corpus state is too large to report")
 }
 
 fn to_value<T: Serialize>(value: &T) -> Result<Value, AppError> {

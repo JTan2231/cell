@@ -96,6 +96,7 @@ while [ "\$#" -gt 0 ]; do
         --home) home=\$2; shift 2 ;;
         --launchctl) launchctl=\$2; shift 2 ;;
         --usage-binary) usage_binary=\$2; shift 2 ;;
+        --fresh-state) shift ;;
         --binary|--codex) shift 2 ;;
         *) exit 93 ;;
     esac

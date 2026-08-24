@@ -4,7 +4,9 @@ use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions};
 use std::os::unix::ffi::OsStrExt as _;
-use std::os::unix::fs::{DirBuilderExt as _, MetadataExt as _, OpenOptionsExt as _};
+use std::os::unix::fs::{
+    DirBuilderExt as _, MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _,
+};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -16,7 +18,7 @@ use crate::app::{read_utf8, work_label};
 use crate::cli::InboxRunArgs;
 use crate::config::Config;
 use crate::corpus::{
-    ReconciliationRecord, now, reconciliation_query, store_ingested_work_with_optional_label,
+    ReconciliationRecord, now, reconciliation_by_id, store_ingested_work_with_optional_label,
 };
 use crate::db;
 use crate::error::AppError;
@@ -290,6 +292,20 @@ struct RegisteredJob {
     sequence: u64,
     source_name: String,
     registered_at: String,
+}
+
+#[derive(Debug, Serialize)]
+struct BacklogImportSummary {
+    source: String,
+    destination: String,
+    imported: usize,
+    queued: usize,
+}
+
+struct BacklogSource {
+    path: PathBuf,
+    name: OsString,
+    metadata: ingestion::SourceMetadata,
 }
 
 impl From<&Envelope> for RegisteredJob {
@@ -634,6 +650,196 @@ pub(crate) fn register(config: &Config, args: &InboxRunArgs) -> Result<CommandOu
     Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
 }
 
+/// Copy the uncompleted FIFO from an archived spool into a fresh spool.
+///
+/// This is deliberately stricter than ordinary registration.  Deployment
+/// must hold both dispatch barriers, and the destination cannot already own
+/// queue history.  Old receipts refer to the retired library, so every source
+/// becomes a new unstarted envelope with a new delivery key.
+pub(crate) fn import_backlog(
+    config: &Config,
+    source_root: &Path,
+) -> Result<CommandOutput, AppError> {
+    let inbox = config.inbox()?;
+    let destination = Spool::new(&inbox.root);
+    destination.create()?;
+    let _run = destination.acquire_lock()?;
+    let _control = destination.acquire_control_lock()?;
+    if !destination.pause_requested()? || !destination.maintenance_requested()? {
+        return Err(AppError::conflict(
+            "backlog_import_not_quiesced",
+            "backlog import requires both inbox pause and maintenance",
+        ));
+    }
+
+    let source = Spool::new(source_root);
+    let source_canonical = fs::canonicalize(&source.root).map_err(|error| {
+        AppError::not_found(
+            "backlog_source_not_found",
+            format!(
+                "unable to open archived inbox {}: {error}",
+                source.root.display()
+            ),
+        )
+    })?;
+    let destination_canonical = fs::canonicalize(&destination.root)?;
+    if source_canonical == destination_canonical {
+        return Err(AppError::invalid(
+            "backlog_source_is_destination",
+            "the archived and destination inboxes must differ",
+        ));
+    }
+
+    let status = inspect(&destination, inbox.settle_seconds)?;
+    if status.queued != 0
+        || status.processing != 0
+        || status.done != 0
+        || status.duplicates != 0
+        || status.failed != 0
+    {
+        return Err(AppError::conflict(
+            "backlog_destination_not_fresh",
+            "backlog import requires a destination with no envelope history",
+        ));
+    }
+    let mut destination_index = read_index(&destination)?;
+    if destination_index.next_sequence != 1 || !destination_index.entries.is_empty() {
+        return Err(AppError::conflict(
+            "backlog_destination_not_fresh",
+            "backlog import requires a fresh queue index",
+        ));
+    }
+
+    let backlog = backlog_sources(&source)?;
+    for item in &backlog {
+        let sequence = destination_index.next_sequence;
+        destination_index.next_sequence = sequence.checked_add(1).ok_or_else(|| {
+            AppError::unexpected("inbox_sequence_overflow", "inbox sequence is exhausted")
+        })?;
+        import_backlog_source(&destination, item, sequence)?;
+        write_index(&destination.index, &destination_index)?;
+    }
+
+    let final_status = inspect(&destination, inbox.settle_seconds)?;
+    let summary = BacklogImportSummary {
+        source: source.root.display().to_string(),
+        destination: destination.root.display().to_string(),
+        imported: backlog.len(),
+        queued: final_status.queued,
+    };
+    let human = format!(
+        "Imported {} backlog {} into the fresh inbox; {} queued",
+        summary.imported,
+        if summary.imported == 1 { "job" } else { "jobs" },
+        summary.queued,
+    );
+    Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
+}
+
+fn backlog_sources(spool: &Spool) -> Result<Vec<BacklogSource>, AppError> {
+    let mut source_index = read_index(spool)?;
+    repair_sequence_high_water(spool, &mut source_index)?;
+    let mut ordered = BTreeMap::<(u64, String), BacklogSource>::new();
+    for directory in [&spool.processing, &spool.queued] {
+        for scanned in scan_envelopes_at(directory, &source_index, false)? {
+            let receipt = &scanned.envelope.receipt;
+            let name = scanned
+                .envelope
+                .source
+                .file_name()
+                .ok_or_else(|| {
+                    AppError::unexpected(
+                        "invalid_job_envelope",
+                        format!(
+                            "source {} has no basename",
+                            scanned.envelope.source.display()
+                        ),
+                    )
+                })?
+                .to_os_string();
+            let metadata =
+                metadata_for_recovered_source(&scanned.envelope.source, &receipt.first_seen_at)?;
+            let key = (receipt.sequence, scanned.envelope.id.clone());
+            if ordered
+                .insert(
+                    key,
+                    BacklogSource {
+                        path: scanned.envelope.source,
+                        name,
+                        metadata,
+                    },
+                )
+                .is_some()
+            {
+                return Err(AppError::unexpected(
+                    "invalid_job_envelope",
+                    "archived inbox contains a duplicate job identity",
+                ));
+            }
+        }
+    }
+
+    let (incoming, _) = scan_incoming(spool, &mut source_index, 0)?;
+    for candidate in incoming {
+        ordered.insert(
+            (candidate.sequence, candidate.key),
+            BacklogSource {
+                path: candidate.path,
+                name: candidate.name,
+                metadata: candidate.metadata,
+            },
+        );
+    }
+    Ok(ordered.into_values().collect())
+}
+
+fn import_backlog_source(
+    spool: &Spool,
+    source: &BacklogSource,
+    sequence: u64,
+) -> Result<(), AppError> {
+    let source_metadata = fs::symlink_metadata(&source.path)?;
+    if !source_metadata.file_type().is_file() {
+        return Err(AppError::unexpected(
+            "invalid_job_envelope",
+            format!(
+                "backlog source is not a regular file: {}",
+                source.path.display()
+            ),
+        ));
+    }
+    let id = available_job_id(spool, sequence);
+    let directory = spool.queued.join(&id);
+    let material = directory.join("material");
+    create_private_directory(&directory)?;
+    if let Err(error) = create_private_directory(&material) {
+        let _ = fs::remove_dir(&directory);
+        return Err(error.into());
+    }
+    let destination = material.join(&source.name);
+    if let Err(error) = fs::copy(&source.path, &destination) {
+        let _ = fs::remove_dir(&material);
+        let _ = fs::remove_dir(&directory);
+        return Err(AppError::unexpected(
+            "backlog_import_failed",
+            format!(
+                "unable to copy {} into the fresh inbox: {error}",
+                source.path.display()
+            ),
+        ));
+    }
+    fs::set_permissions(&destination, fs::Permissions::from_mode(0o600))?;
+    let receipt = new_receipt(&id, sequence, &source.name, &source.metadata)?;
+    let envelope = Envelope {
+        id,
+        directory,
+        expected_identity: Some(FileIdentity::from(&fs::symlink_metadata(&destination)?)),
+        source: destination,
+        receipt,
+    };
+    write_receipt(&envelope)
+}
+
 pub(crate) fn pause(config: &Config) -> Result<CommandOutput, AppError> {
     set_pause(config, true)
 }
@@ -956,24 +1162,14 @@ fn receipt_reconciliation(
     let Some(reconciliation_id) = reconciliation_id else {
         return Ok(None);
     };
-    let record = reconciliation_query(
-        connection,
-        "SELECT r.id, r.work_id, w.label, r.base_revision, r.status, r.summary, \
-                r.submitted_request, r.resolved_reconciliation, r.actor, r.created_at, \
-                r.applied_revision \
-         FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id \
-         WHERE r.id = ?1 AND r.work_id = ?2",
-        rusqlite::params![reconciliation_id, work_id],
-    )?;
-    record.map_or_else(
-        || {
-            Err(AppError::unexpected(
-                "invalid_job_receipt",
-                format!("receipt reconciliation {reconciliation_id} does not belong to its work"),
-            ))
-        },
-        |record| Ok(Some(record)),
-    )
+    let record = reconciliation_by_id(connection, reconciliation_id)?;
+    if record.work_id != work_id {
+        return Err(AppError::unexpected(
+            "invalid_job_receipt",
+            format!("receipt reconciliation {reconciliation_id} does not belong to its work"),
+        ));
+    }
+    Ok(Some(record))
 }
 
 fn finish_reconciliation(
@@ -2227,8 +2423,9 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     use super::{
-        FileIdentity, QUEUE_VERSION, QueueIndex, Spool, path_has_identity, read_index,
-        register_settled_locked, scan_incoming, write_index,
+        FileIdentity, QUEUE_VERSION, QueueIndex, Spool, backlog_sources, import_backlog_source,
+        path_has_identity, read_index, register_settled_locked, scan_envelopes_at, scan_incoming,
+        write_index,
     };
 
     #[test]
@@ -2289,6 +2486,53 @@ mod tests {
         assert_eq!(registered[0].id, "j00000000000000000043");
         let persisted: QueueIndex = serde_json::from_slice(&fs::read(&spool.index)?)?;
         assert_eq!(persisted.next_sequence, 44);
+        Ok(())
+    }
+
+    #[test]
+    fn backlog_import_resets_envelopes_in_original_fifo_order()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let source_directory = tempfile::tempdir()?;
+        let source = Spool::new(source_directory.path());
+        source.create()?;
+        fs::write(source.incoming.join("later-name.txt"), "first")?;
+        let first = register_settled_locked(&source, 0)?;
+        fs::rename(&first[0].directory, source.processing.join(&first[0].id))?;
+        fs::write(source.incoming.join("earlier-name.txt"), "second")?;
+        register_settled_locked(&source, 0)?;
+        fs::write(source.incoming.join("late-arrival.txt"), "third")?;
+
+        let destination_directory = tempfile::tempdir()?;
+        let destination = Spool::new(destination_directory.path());
+        destination.create()?;
+        let backlog = backlog_sources(&source)?;
+        assert_eq!(backlog.len(), 3);
+        for (offset, item) in backlog.iter().enumerate() {
+            import_backlog_source(&destination, item, u64::try_from(offset)? + 1)?;
+        }
+
+        let imported = scan_envelopes_at(&destination.queued, &QueueIndex::default(), false)?;
+        let by_sequence = imported
+            .into_iter()
+            .map(|item| {
+                Ok((
+                    item.envelope.receipt.sequence,
+                    fs::read_to_string(item.envelope.source)?,
+                    item.envelope.receipt.attempts,
+                ))
+            })
+            .collect::<Result<Vec<_>, std::io::Error>>()?;
+        let mut by_sequence = by_sequence;
+        by_sequence.sort_by_key(|item| item.0);
+        assert_eq!(
+            by_sequence,
+            vec![
+                (1, "first".to_owned(), 0),
+                (2, "second".to_owned(), 0),
+                (3, "third".to_owned(), 0),
+            ]
+        );
+        assert_eq!(fs::read_to_string(&backlog[0].path)?, "first");
         Ok(())
     }
 

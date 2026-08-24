@@ -330,7 +330,8 @@ run_as_operator "$deploy_path" \
     --usage-binary "$usage_binary_path" \
     --codex "$codex_path" \
     --home "$operator_home" \
-    --launchctl "$launchctl_path"
+    --launchctl "$launchctl_path" \
+    --fresh-state
 
 write_phase committed
 committed=1

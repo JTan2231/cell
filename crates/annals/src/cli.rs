@@ -236,12 +236,22 @@ pub enum InboxCommand {
     Run(InboxRunArgs),
     /// Register settled inbox files as durable queued jobs without processing them.
     Register(InboxRunArgs),
+    /// Import uncompleted envelopes into a fresh, quiesced inbox.
+    #[command(hide = true)]
+    ImportBacklog(InboxImportArgs),
     /// Request that inbox processing stop after the current job.
     Pause,
     /// Allow future inbox runs to process queued jobs.
     Resume,
     /// Report queued, active, completed, duplicate, and failed inbox state.
     Status,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct InboxImportArgs {
+    /// Archived spool containing queued or retryable processing envelopes.
+    #[arg(long, value_name = "SPOOL")]
+    pub from: PathBuf,
 }
 
 #[derive(Debug, Clone, Args)]

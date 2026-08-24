@@ -19,6 +19,7 @@ codex_path=
 install_home=${HOME:-}
 launchctl_path=/bin/launchctl
 no_start=0
+fresh_state=0
 
 usage() {
     cat <<'EOF'
@@ -31,6 +32,8 @@ Options:
   --home ABSOLUTE_PATH       Override the operator home (primarily for tests)
   --launchctl ABSOLUTE_PATH  Override launchctl (primarily for tests)
   --no-start                 Do not inspect or change launchd state
+  --fresh-state              Replace the library and spool as one rollback generation,
+                             import its uncompleted FIFO, and resume processing
 EOF
 }
 
@@ -70,6 +73,10 @@ while [ "$#" -gt 0 ]; do
             no_start=1
             shift
             ;;
+        --fresh-state)
+            fresh_state=1
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -79,6 +86,9 @@ while [ "$#" -gt 0 ]; do
             ;;
     esac
 done
+
+[ "$fresh_state" -eq 0 ] || [ "$no_start" -eq 0 ] \
+    || fail '--fresh-state requires launchd control; do not combine it with --no-start'
 
 operator_uid=$(id -u)
 [ "$operator_uid" -ne 0 ] || fail 'run this deployer as the Annals operator, not root'
@@ -112,7 +122,7 @@ for source in "$SOURCE_FRONTEND" "$SOURCE_PLIST" "$SOURCE_UPDATER"; do
     [ -f "$source" ] && [ ! -L "$source" ] \
         || fail "missing packaged file: $source"
 done
-for command in install mv plutil readlink shasum stat; do
+for command in awk date grep install mv plutil readlink sed shasum stat; do
     command -v "$command" >/dev/null 2>&1 || fail "required command not found: $command"
 done
 
@@ -150,6 +160,8 @@ temporary_plist=
 temporary_config=
 temporary_usage_config=
 transaction_dir=
+fresh_stage=
+generation_dir=
 old_current=
 old_previous=
 old_cli=0
@@ -166,6 +178,9 @@ config_changed=0
 usage_config_changed=0
 committed=0
 lock_created=0
+fresh_state_switched=0
+pause_created=0
+imported_backlog=0
 
 atomic_symlink() {
     target=$1
@@ -176,6 +191,29 @@ atomic_symlink() {
     # -h replaces a selector that points at a directory instead of moving the
     # temporary link into that directory.
     mv -fh "$temporary" "$path"
+}
+
+move_if_present() {
+    source_path=$1
+    destination_path=$2
+    if [ -e "$source_path" ] || [ -L "$source_path" ]; then
+        mv "$source_path" "$destination_path"
+    fi
+}
+
+restore_fresh_generation() {
+    [ "$fresh_state_switched" -eq 1 ] || return 0
+    failed_state="$transaction_dir/failed-fresh-state"
+    install -d -m 0700 "$failed_state"
+    move_if_present "$SPOOL_DIR" "$failed_state/spool"
+    for name in annals.db annals.db-wal annals.db-shm \
+        usage.db usage.db-wal usage.db-shm
+    do
+        move_if_present "$STATE_DIR/$name" "$failed_state/$name"
+        move_if_present "$generation_dir/$name" "$STATE_DIR/$name"
+    done
+    move_if_present "$generation_dir/spool" "$SPOOL_DIR"
+    fresh_state_switched=0
 }
 
 restore_service() {
@@ -235,6 +273,7 @@ cleanup() {
                 rm -f "$USAGE_CONFIG_PATH"
             fi
         fi
+        restore_fresh_generation
         if [ "$launchd_changed" -eq 1 ] || [ "$service_stopped" -eq 1 ] || [ "$switched" -eq 1 ]; then
             restore_service
         fi
@@ -242,10 +281,21 @@ cleanup() {
     if [ "$marker_created" -eq 1 ]; then
         rm -f "$MAINTENANCE_MARKER"
     fi
+    if [ "$pause_created" -eq 1 ]; then
+        rm -f "$PAUSED_MARKER"
+    fi
     [ -z "$temporary_release" ] || rm -rf "$temporary_release"
     [ -z "$temporary_plist" ] || rm -f "$temporary_plist"
     [ -z "$temporary_config" ] || rm -f "$temporary_config"
     [ -z "$temporary_usage_config" ] || rm -f "$temporary_usage_config"
+    if [ "$status" -ne 0 ] && [ -n "$generation_dir" ]; then
+        rm -f \
+            "$generation_dir/config.toml" \
+            "$generation_dir/usage.toml" \
+            "$generation_dir/agent.plist" \
+            "$generation_dir/generation.json"
+        rmdir "$generation_dir" >/dev/null 2>&1 || true
+    fi
     [ -z "$transaction_dir" ] || rm -rf "$transaction_dir"
     if [ "$lock_created" -eq 1 ]; then
         rmdir "$UPDATE_LOCK" >/dev/null 2>&1 || true
@@ -378,14 +428,25 @@ run_with_installation_environment() {
     )
 }
 
+run_active_annals() {
+    if [ -n "$old_current" ]; then
+        run_with_installation_environment "$CLI_PATH" "$@"
+    else
+        run_with_installation_environment "$binary_path" \
+            --config "$temporary_config" "$@"
+    fi
+}
+
 run_with_installation_environment "$codex_path" login status >/dev/null \
     || fail 'state-local Codex login is not valid'
 
 library_existed=1
 if [ ! -e "$LIBRARY_PATH" ]; then
     library_existed=0
-    run_with_installation_environment "$binary_path" --config "$temporary_config" init >/dev/null
-    run_with_installation_environment "$binary_path" --config "$temporary_config" validate >/dev/null
+    if [ "$fresh_state" -eq 0 ]; then
+        run_with_installation_environment "$binary_path" --config "$temporary_config" init >/dev/null
+        run_with_installation_environment "$binary_path" --config "$temporary_config" validate >/dev/null
+    fi
 fi
 run_with_installation_environment "$binary_path" --config "$temporary_config" inbox status >/dev/null
 
@@ -519,6 +580,61 @@ if [ -f "$USAGE_CONFIG_PATH" ]; then
     install -m 0600 "$USAGE_CONFIG_PATH" "$transaction_dir/usage.toml"
 fi
 
+if [ "$fresh_state" -eq 1 ]; then
+    fresh_stage="$transaction_dir/fresh-state"
+    install -d -m 0700 \
+        "$fresh_stage" \
+        "$fresh_stage/spool" \
+        "$fresh_stage/spool/incoming" \
+        "$fresh_stage/spool/queued" \
+        "$fresh_stage/spool/processing" \
+        "$fresh_stage/spool/done" \
+        "$fresh_stage/spool/duplicates" \
+        "$fresh_stage/spool/failed"
+    fresh_config="$fresh_stage/config.toml"
+    if ! awk '
+        BEGIN {
+            section = ""
+            library = 0
+            inbox_root = 0
+        }
+        /^\[[^]]+\][[:space:]]*$/ {
+            section = $0
+        }
+        section == "" && /^[[:space:]]*library[[:space:]]*=/ {
+            print "library = \"annals.db\""
+            library++
+            next
+        }
+        section == "[inbox]" && /^[[:space:]]*root[[:space:]]*=/ {
+            print "root = \"spool\""
+            inbox_root++
+            next
+        }
+        { print }
+        END {
+            if (library != 1 || inbox_root != 1) {
+                exit 1
+            }
+        }
+    ' "$temporary_config" >"$fresh_config"
+    then
+        fail 'unable to render the fresh-state candidate configuration'
+    fi
+    chmod 0600 "$fresh_config"
+    run_with_installation_environment "$binary_path" \
+        --config "$fresh_config" init >/dev/null
+    run_with_installation_environment "$binary_path" \
+        --config "$fresh_config" validate >/dev/null
+    run_with_installation_environment "$binary_path" \
+        --config "$fresh_config" --quiet inbox pause
+    [ -f "$fresh_stage/spool/.paused" ] && [ ! -L "$fresh_stage/spool/.paused" ] \
+        || fail 'fresh inbox did not enter the paused state'
+    : >"$fresh_stage/spool/.maintenance"
+    run_with_installation_environment "$binary_path" \
+        --config "$fresh_config" inbox status >/dev/null
+fi
+
 if [ -n "$old_current" ]; then
     run_with_installation_environment "$CLI_PATH" validate >/dev/null
     run_with_installation_environment "$CLI_PATH" inbox status >/dev/null
@@ -530,21 +646,20 @@ if [ "$no_start" -eq 0 ]; then
     fi
     "$launchctl_path" disable "$SERVICE_TARGET" >/dev/null 2>&1 || true
     launchd_changed=1
-    if [ ! -e "$MAINTENANCE_MARKER" ]; then
-        : >"$MAINTENANCE_MARKER"
-        marker_created=1
-    elif [ ! -f "$MAINTENANCE_MARKER" ] || [ -L "$MAINTENANCE_MARKER" ]; then
-        fail "invalid inbox maintenance marker: $MAINTENANCE_MARKER"
+
+    if [ "$fresh_state" -eq 1 ] && [ ! -e "$PAUSED_MARKER" ]; then
+        run_active_annals --quiet inbox pause
+        pause_created=1
     fi
 
-    if [ "$was_loaded" -eq 1 ]; then
+    if [ "$fresh_state" -eq 1 ] || [ "$was_loaded" -eq 1 ]; then
         wait_seconds=${ANNALS_UPDATE_WAIT_SECONDS:-3900}
         case "$wait_seconds" in
             ''|*[!0-9]*) fail 'ANNALS_UPDATE_WAIT_SECONDS must be a nonnegative integer' ;;
         esac
         waited=0
         while :; do
-            status_json=$(run_with_installation_environment "$CLI_PATH" --json inbox status) \
+            status_json=$(run_active_annals --json inbox status) \
                 || fail 'unable to inspect the running inbox'
             if printf '%s\n' "$status_json" | grep -q '"locked":false'; then
                 break
@@ -554,6 +669,20 @@ if [ "$no_start" -eq 0 ]; then
             sleep 1
             waited=$((waited + 1))
         done
+    fi
+
+    if [ "$fresh_state" -eq 1 ]; then
+        run_active_annals --quiet inbox register --settle-seconds 0
+    fi
+
+    if [ ! -e "$MAINTENANCE_MARKER" ]; then
+        : >"$MAINTENANCE_MARKER"
+        marker_created=1
+    elif [ ! -f "$MAINTENANCE_MARKER" ] || [ -L "$MAINTENANCE_MARKER" ]; then
+        fail "invalid inbox maintenance marker: $MAINTENANCE_MARKER"
+    fi
+
+    if [ "$was_loaded" -eq 1 ]; then
         "$launchctl_path" bootout --wait "$SERVICE_TARGET" >/dev/null
         service_stopped=1
     fi
@@ -568,7 +697,46 @@ if [ "$no_start" -eq 0 ]; then
 fi
 
 new_current="releases/$release_id"
-if [ "$library_existed" -eq 1 ]; then
+if [ "$fresh_state" -eq 1 ]; then
+    generation_name="pre-fresh-$release_id-$(date -u '+%Y%m%dT%H%M%SZ')-$$"
+    generation_dir="$STATE_DIR/backups/generations/$generation_name"
+    [ ! -e "$generation_dir" ] \
+        || fail "rollback generation already exists: $generation_dir"
+    install -d -m 0700 "$STATE_DIR/backups/generations" "$generation_dir"
+    for name in annals.db annals.db-wal annals.db-shm \
+        usage.db usage.db-wal usage.db-shm
+    do
+        [ ! -L "$STATE_DIR/$name" ] \
+            || fail "refusing symlink at state file: $STATE_DIR/$name"
+    done
+
+    fresh_state_switched=1
+    for name in annals.db annals.db-wal annals.db-shm \
+        usage.db usage.db-wal usage.db-shm
+    do
+        move_if_present "$STATE_DIR/$name" "$generation_dir/$name"
+    done
+    mv "$SPOOL_DIR" "$generation_dir/spool"
+    mv "$fresh_stage/spool" "$SPOOL_DIR"
+    for name in annals.db annals.db-wal annals.db-shm
+    do
+        move_if_present "$fresh_stage/$name" "$STATE_DIR/$name"
+    done
+    [ -f "$LIBRARY_PATH" ] \
+        || fail 'fresh library disappeared during the state switch'
+    if [ "$marker_created" -eq 1 ]; then
+        rm -f "$generation_dir/spool/.maintenance"
+        marker_created=0
+    fi
+    if [ "$pause_created" -eq 1 ]; then
+        rm -f "$generation_dir/spool/.paused"
+        pause_created=0
+    fi
+    run_with_installation_environment "$binary_path" \
+        --config "$temporary_config" validate >/dev/null
+    run_with_installation_environment "$binary_path" \
+        --config "$temporary_config" inbox status >/dev/null
+elif [ "$library_existed" -eq 1 ]; then
     if [ "$old_current" != "$new_current" ]; then
         backup_path="$STATE_DIR/backups/pre-update-$release_id-$$.db"
         run_with_installation_environment "$binary_path" \
@@ -605,6 +773,35 @@ run_with_installation_environment "$USAGE_CLI_PATH" --version >/dev/null
 run_with_installation_environment "$CLI_PATH" validate >/dev/null
 run_with_installation_environment "$CLI_PATH" inbox status >/dev/null
 
+if [ "$fresh_state" -eq 1 ]; then
+    import_json=$(run_with_installation_environment "$CLI_PATH" \
+        --json inbox import-backlog --from "$generation_dir/spool") \
+        || fail 'unable to import the archived inbox backlog'
+    imported_backlog=$(printf '%s\n' "$import_json" \
+        | sed -n 's/.*"imported":\([0-9][0-9]*\).*/\1/p')
+    case "$imported_backlog" in
+        ''|*[!0-9]*) fail 'candidate returned an invalid backlog import receipt' ;;
+    esac
+    run_with_installation_environment "$CLI_PATH" validate >/dev/null
+    status_json=$(run_with_installation_environment "$CLI_PATH" --json inbox status) \
+        || fail 'unable to validate the imported inbox backlog'
+    printf '%s\n' "$status_json" | grep -q "\"queued\":$imported_backlog" \
+        || fail 'fresh inbox queued count does not match the imported backlog'
+    printf '%s\n' "$status_json" | grep -q '"processing":0' \
+        || fail 'fresh inbox started work before the cutover committed'
+    printf '%s\n' "$status_json" | grep -q '"paused":true' \
+        || fail 'fresh inbox lost its pause during backlog import'
+    printf '%s\n' "$status_json" | grep -q '"maintenance":true' \
+        || fail 'fresh inbox lost maintenance during backlog import'
+    run_with_installation_environment "$CLI_PATH" --quiet inbox resume
+    status_json=$(run_with_installation_environment "$CLI_PATH" --json inbox status) \
+        || fail 'unable to validate the resumed inbox'
+    printf '%s\n' "$status_json" | grep -q '"paused":false' \
+        || fail 'fresh inbox did not resume'
+    printf '%s\n' "$status_json" | grep -q '"maintenance":true' \
+        || fail 'maintenance ended before the cutover committed'
+fi
+
 if [ "$no_start" -eq 0 ]; then
     "$launchctl_path" enable "$SERVICE_TARGET"
     "$launchctl_path" bootstrap "gui/$operator_uid" "$AGENT_PLIST"
@@ -617,18 +814,49 @@ receipt="$INSTALL_DIR/last-update.json.tmp.$$"
     printf '{\n'
     printf '  "release_id": "%s",\n' "$release_id"
     printf '  "previous": "%s",\n' "$old_current"
+    if [ "$fresh_state" -eq 1 ]; then
+        printf '  "fresh_state": true,\n'
+        printf '  "rollback_generation": "%s",\n' "$generation_name"
+        printf '  "imported_backlog": %s,\n' "$imported_backlog"
+    else
+        printf '  "fresh_state": false,\n'
+    fi
     printf '  "completed_at": "%s"\n' "$completed_at"
     printf '}\n'
 } >"$receipt"
 chmod 0600 "$receipt"
 mv -f "$receipt" "$INSTALL_DIR/last-update.json"
 
+if [ "$fresh_state" -eq 1 ]; then
+    if [ "$old_config" -eq 1 ]; then
+        install -m 0600 "$transaction_dir/config.toml" "$generation_dir/config.toml"
+    fi
+    if [ "$old_usage_config" -eq 1 ]; then
+        install -m 0600 "$transaction_dir/usage.toml" "$generation_dir/usage.toml"
+    fi
+    if [ "$old_plist" -eq 1 ]; then
+        install -m 0600 "$transaction_dir/agent.plist" "$generation_dir/agent.plist"
+    fi
+    {
+        printf '{\n'
+        printf '  "format": 1,\n'
+        printf '  "release": "%s",\n' "$old_current"
+        printf '  "replacement_release": "%s",\n' "$new_current"
+        printf '  "imported_backlog": %s,\n' "$imported_backlog"
+        printf '  "archived_at": "%s"\n' "$completed_at"
+        printf '}\n'
+    } >"$generation_dir/generation.json"
+    chmod 0600 "$generation_dir/generation.json"
+fi
+
 committed=1
 rm -rf "$transaction_dir"
 transaction_dir=
 
 if [ "$no_start" -eq 0 ]; then
-    if [ "$marker_created" -eq 1 ]; then
+    if [ "$fresh_state" -eq 1 ]; then
+        rm -f "$MAINTENANCE_MARKER"
+    elif [ "$marker_created" -eq 1 ]; then
         rm -f "$MAINTENANCE_MARKER"
         marker_created=0
     fi
@@ -644,3 +872,7 @@ printf 'Command: %s\n' "$CLI_PATH"
 printf 'Usage:   %s\n' "$USAGE_CLI_PATH"
 printf 'Service: %s\n' "$SERVICE_TARGET"
 printf 'State:   %s\n' "$STATE_DIR"
+if [ "$fresh_state" -eq 1 ]; then
+    printf 'Imported backlog: %s\n' "$imported_backlog"
+    printf 'Rollback generation: %s\n' "$generation_dir"
+fi

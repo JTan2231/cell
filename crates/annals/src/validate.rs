@@ -1,160 +1,47 @@
-use std::collections::BTreeMap;
+use rusqlite::Connection;
 
-use rusqlite::{Connection, OptionalExtension};
-use time::OffsetDateTime;
-use time::format_description::well_known::Rfc3339;
-
-use crate::change::{ChangeOperation, Reconciliation, parse_reconciliation};
-use crate::corpus::{self, Snapshot};
+use crate::change;
+use crate::corpus::{self, CorpusState};
 use crate::error::AppError;
-use crate::model::{DiffEntry, ValidationIssue, ValidationReport};
-use crate::resolver::{ResolvedOperation, ResolvedReconciliation, snapshots_corpus_equal};
+use crate::model::{ValidationIssue, ValidationReport};
+use crate::resolver;
 use crate::revision_store;
 
 #[derive(Debug)]
 struct StoredCommit {
     revision: i64,
-    work_id: Option<i64>,
-    reconciliation_id: Option<i64>,
     kind: String,
-    summary: String,
-    submitted_request: String,
-    resolved_operations: String,
-    after_snapshot: String,
+    reconciliation_id: Option<i64>,
+    reverted_revision: Option<i64>,
     actor: String,
 }
 
-#[derive(Debug)]
-struct StoredReconciliation {
-    id: i64,
-    work_id: i64,
-    base_revision: i64,
-    model_run_id: Option<i64>,
-    reconciliation_draft_id: Option<i64>,
-    status: String,
-    summary: String,
-    submitted_request: String,
-    resolved_reconciliation: String,
-    actor: String,
-    applied_revision: Option<i64>,
-}
-
-#[derive(Debug)]
-struct StoredModelRun {
-    id: i64,
-    work_id: i64,
-    base_revision: i64,
-    status: String,
-}
-
-#[derive(Debug)]
-struct SuccessfulSubmission {
-    model_run_id: i64,
-    arguments: String,
-}
-
-#[derive(Debug)]
-struct StoredDraft {
-    id: i64,
-    model_run_id: i64,
-    work_id: i64,
-    base_revision: i64,
-    status: String,
-    version: i64,
-    summary: String,
-    annotations: String,
-    created_sequence: i64,
-    terminal_sequence: Option<i64>,
-}
-
-/// Validate the authoritative corpus and its append-only history.
+/// Read-only, full replay validation of the library.
 ///
-/// Validation is deliberately read-only. Every detected invariant violation is returned in
-/// the report; no state is repaired here.
+/// No materialized corpus is compared because none exists.  The validator
+/// rebuilds every revision through the same `CorpusState` reducer used by
+/// reads, pending application, diff, shake, and revert.
 pub fn validate(connection: &Connection) -> Result<ValidationReport, AppError> {
     let mut issues = Vec::new();
-
     check_sqlite_integrity(connection, &mut issues)?;
     check_foreign_keys(connection, &mut issues)?;
+    check_schema_boundary(connection, &mut issues)?;
+    check_library_identity(connection, &mut issues)?;
     check_work_hashes(connection, &mut issues)?;
+    check_tool_artifacts(connection, &mut issues)?;
+    check_effect_identity_rules(connection, &mut issues)?;
+
+    let commits = load_commits(connection)?;
+    let states = replay_commits(connection, &commits, &mut issues);
+    check_commit_provenance(connection, &commits, &states, &mut issues);
+    check_reconciliations(connection, &commits, &mut issues)?;
+    check_drafts_and_runs(connection, &mut issues)?;
     check_ingestions(connection, &mut issues)?;
 
-    let head_revision = load_head_revision(connection, &mut issues)?;
-    let commits = load_commits(connection)?;
-    let history_head = check_history(connection, head_revision, &commits, &mut issues);
-    check_revision_projections(connection, &commits, &mut issues);
-    check_provenance(connection, head_revision, &commits, &mut issues)?;
-
-    let current_snapshot = match corpus::head_snapshot(connection) {
-        Ok(snapshot) => Some(snapshot),
-        Err(error) => {
-            issues.push(error_issue(
-                "invalid_materialized_snapshot",
-                format!("the materialized corpus could not be read: {error}"),
-            ));
-            None
-        }
-    };
-
-    if let Some(snapshot) = current_snapshot.as_ref() {
-        if let Err(error) = corpus::validate_snapshot(connection, snapshot) {
-            issues.push(error_issue(
-                "invalid_corpus_snapshot",
-                format!("the materialized corpus violates corpus invariants: {error}"),
-            ));
-        }
-        check_materialized_head(head_revision, snapshot, history_head.as_ref(), &mut issues);
-    }
-
-    Ok(report(issues))
-}
-
-fn check_revision_projections(
-    connection: &Connection,
-    commits: &[StoredCommit],
-    issues: &mut Vec<ValidationIssue>,
-) {
-    for commit in commits {
-        let Ok(expected) = serde_json::from_str::<Snapshot>(&commit.after_snapshot) else {
-            continue;
-        };
-        match revision_store::load_revision_snapshot(connection, commit.revision) {
-            Ok(Some(actual)) => {
-                if actual != expected {
-                    issues.push(error_issue(
-                        "revision_projection_mismatch",
-                        format!(
-                            "relational graph revision {} does not match its committed after-state",
-                            commit.revision
-                        ),
-                    ));
-                }
-                if let Err(error) = corpus::validate_snapshot(connection, &actual) {
-                    issues.push(error_issue(
-                        "invalid_revision_projection",
-                        format!(
-                            "relational graph revision {} violates corpus invariants: {error}",
-                            commit.revision
-                        ),
-                    ));
-                }
-            }
-            Ok(None) => issues.push(error_issue(
-                "revision_projection_missing",
-                format!(
-                    "committed revision {} has no relational graph projection",
-                    commit.revision
-                ),
-            )),
-            Err(error) => issues.push(error_issue(
-                "invalid_revision_projection",
-                format!(
-                    "relational graph revision {} could not be read: {error}",
-                    commit.revision
-                ),
-            )),
-        }
-    }
+    Ok(ValidationReport {
+        valid: issues.is_empty(),
+        issues,
+    })
 }
 
 fn check_sqlite_integrity(
@@ -162,14 +49,14 @@ fn check_sqlite_integrity(
     issues: &mut Vec<ValidationIssue>,
 ) -> Result<(), AppError> {
     let mut statement = connection.prepare("PRAGMA integrity_check")?;
-    let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
-    for row in rows {
+    for row in statement.query_map([], |row| row.get::<_, String>(0))? {
         let result = row?;
         if result != "ok" {
-            issues.push(error_issue(
+            issue(
+                issues,
                 "sqlite_integrity",
                 format!("SQLite integrity check reported: {result}"),
-            ));
+            );
         }
     }
     Ok(())
@@ -189,13 +76,103 @@ fn check_foreign_keys(
         ))
     })?;
     for row in rows {
-        let (table, row_id, parent, constraint) = row?;
-        issues.push(error_issue(
+        let (table, rowid, parent, constraint) = row?;
+        issue(
+            issues,
             "foreign_key_violation",
+            format!("table {table} row {rowid:?} violates foreign key {constraint} to {parent}"),
+        );
+    }
+    Ok(())
+}
+
+fn check_schema_boundary(
+    connection: &Connection,
+    issues: &mut Vec<ValidationIssue>,
+) -> Result<(), AppError> {
+    let version =
+        connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))?;
+    if version != crate::db::CURRENT_SCHEMA_VERSION {
+        issue(
+            issues,
+            "schema_version_mismatch",
             format!(
-                "{table} row {row_id:?} violates foreign key {constraint} referencing {parent}"
+                "library schema version {version} is not {}",
+                crate::db::CURRENT_SCHEMA_VERSION
             ),
-        ));
+        );
+    }
+    let forbidden_tables = [
+        "concepts",
+        "concept_edges",
+        "evidence",
+        "revision_snapshots",
+        "revision_concepts",
+        "revision_edges",
+        "revision_evidence",
+    ];
+    for name in forbidden_tables {
+        if connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?1)",
+            [name],
+            |row| row.get::<_, bool>(0),
+        )? {
+            issue(
+                issues,
+                "forbidden_materialized_corpus",
+                format!("forbidden materialized corpus table {name:?} exists"),
+            );
+        }
+    }
+    for (table, column) in [
+        ("commits", "after_snapshot"),
+        ("commits", "submitted_request"),
+        ("commits", "resolved_operations"),
+        ("reconciliations", "submitted_request"),
+        ("reconciliations", "resolved_reconciliation"),
+        ("request_operations", "operation"),
+    ] {
+        let found = connection.query_row(
+            &format!("SELECT EXISTS(SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1)"),
+            [column],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if found {
+            issue(
+                issues,
+                "forbidden_operational_json",
+                format!("forbidden operational column {table}.{column} exists"),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn check_library_identity(
+    connection: &Connection,
+    issues: &mut Vec<ValidationIssue>,
+) -> Result<(), AppError> {
+    let rows = connection.query_row(
+        "SELECT COUNT(*), COALESCE(MIN(singleton), 0), COALESCE(MAX(singleton), 0),
+                COALESCE(MIN(length(library_id)), 0), COALESCE(MAX(length(library_id)), 0)
+         FROM library_identity",
+        [],
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+            ))
+        },
+    )?;
+    if rows != (1, 1, 1, 32, 32) {
+        issue(
+            issues,
+            "invalid_library_identity",
+            "the library must contain exactly one valid identity row",
+        );
     }
     Ok(())
 }
@@ -204,30 +181,575 @@ fn check_work_hashes(
     connection: &Connection,
     issues: &mut Vec<ValidationIssue>,
 ) -> Result<(), AppError> {
-    let mut statement =
-        connection.prepare("SELECT id, label, text, sha256 FROM works ORDER BY id")?;
+    let mut statement = connection
+        .prepare("SELECT id, label, normalized_label, text, sha256 FROM works ORDER BY id")?;
     let rows = statement.query_map([], |row| {
         Ok((
             row.get::<_, i64>(0)?,
             row.get::<_, String>(1)?,
             row.get::<_, String>(2)?,
             row.get::<_, String>(3)?,
+            row.get::<_, String>(4)?,
         ))
     })?;
     for row in rows {
-        let (id, label, text, stored_hash) = row?;
-        if text.trim().is_empty() {
-            issues.push(error_issue(
-                "empty_work",
-                format!("immutable work {label:?} ({id}) contains no source text"),
-            ));
+        let (id, label, normalized, text, digest) = row?;
+        if crate::index::normalize(&label) != normalized {
+            issue(
+                issues,
+                "work_label_normalization_mismatch",
+                format!("work {id} has a noncanonical normalized label"),
+            );
         }
-        let actual_hash = corpus::sha256_hex(text.as_bytes());
-        if actual_hash != stored_hash {
-            issues.push(error_issue(
-                "work_checksum_mismatch",
-                format!("immutable work {label:?} ({id}) does not match its SHA-256 digest"),
-            ));
+        if corpus::sha256_hex(text.as_bytes()) != digest {
+            issue(
+                issues,
+                "work_hash_mismatch",
+                format!("immutable work {id} does not match its SHA-256 digest"),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn check_tool_artifacts(
+    connection: &Connection,
+    issues: &mut Vec<ValidationIssue>,
+) -> Result<(), AppError> {
+    let mut statement = connection.prepare(
+        "SELECT model_run_id, sequence, arguments, arguments_sha256, result, result_sha256
+         FROM tool_calls ORDER BY model_run_id, sequence",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, String>(5)?,
+        ))
+    })?;
+    for row in rows {
+        let (run, sequence, arguments, arguments_hash, result, result_hash) = row?;
+        if corpus::sha256_hex(arguments.as_bytes()) != arguments_hash
+            || corpus::sha256_hex(result.as_bytes()) != result_hash
+        {
+            issue(
+                issues,
+                "tool_artifact_hash_mismatch",
+                format!("model run {run} tool call {sequence} has a changed audit artifact"),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn check_effect_identity_rules(
+    connection: &Connection,
+    issues: &mut Vec<ValidationIssue>,
+) -> Result<(), AppError> {
+    let mut duplicates = connection.prepare(
+        "SELECT concept_id, COUNT(*) FROM concept_effects
+         WHERE effect = 'create' GROUP BY concept_id HAVING COUNT(*) <> 1",
+    )?;
+    for row in duplicates.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))? {
+        let (id, count) = row?;
+        issue(
+            issues,
+            "concept_identity_reused",
+            format!("concept c{id} has {count} create effects"),
+        );
+    }
+    for (table, label) in [
+        ("concept_effects", "concept"),
+        ("parent_edge_effects", "parent edge"),
+        ("evidence_link_effects", "evidence link"),
+    ] {
+        let sql = format!(
+            "SELECT revision FROM {table} GROUP BY revision
+             HAVING MIN(ordinal) <> 0 OR MAX(ordinal) + 1 <> COUNT(*)"
+        );
+        let mut statement = connection.prepare(&sql)?;
+        for row in statement.query_map([], |row| row.get::<_, i64>(0))? {
+            issue(
+                issues,
+                "effect_ordinal_gap",
+                format!("revision {} has a noncanonical {label} effect order", row?),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn load_commits(connection: &Connection) -> Result<Vec<StoredCommit>, AppError> {
+    let mut statement = connection.prepare(
+        "SELECT revision, kind, reconciliation_id, reverted_revision, actor
+         FROM commits ORDER BY revision",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(StoredCommit {
+            revision: row.get(0)?,
+            kind: row.get(1)?,
+            reconciliation_id: row.get(2)?,
+            reverted_revision: row.get(3)?,
+            actor: row.get(4)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
+fn replay_commits(
+    connection: &Connection,
+    commits: &[StoredCommit],
+    issues: &mut Vec<ValidationIssue>,
+) -> Vec<Option<CorpusState>> {
+    let mut states = vec![Some(CorpusState::empty())];
+    for (index, commit) in commits.iter().enumerate() {
+        let expected_revision = i64::try_from(index + 1).unwrap_or(i64::MAX);
+        if commit.revision != expected_revision {
+            issue(
+                issues,
+                "commit_sequence_mismatch",
+                format!(
+                    "commit position {expected_revision} contains revision {}",
+                    commit.revision
+                ),
+            );
+        }
+        let Some(before) = states.last().and_then(Option::as_ref) else {
+            states.push(None);
+            continue;
+        };
+        let effects = match revision_store::load_revision_effects(connection, commit.revision) {
+            Ok(effects) => effects,
+            Err(error) => {
+                issue(
+                    issues,
+                    "invalid_commit_effect",
+                    format!(
+                        "revision {} effects cannot be read: {error}",
+                        commit.revision
+                    ),
+                );
+                states.push(None);
+                continue;
+            }
+        };
+        if effects.is_empty() {
+            issue(
+                issues,
+                "empty_commit",
+                format!("revision {} has no corpus effects", commit.revision),
+            );
+        }
+        match before.reduced(&effects) {
+            Ok(after) => {
+                if revision_store::derive_effects(before, &after) != effects {
+                    issue(
+                        issues,
+                        "noncanonical_commit_effects",
+                        format!("revision {} effects are not canonical", commit.revision),
+                    );
+                }
+                if let Err(error) = corpus::validate_snapshot(connection, &after) {
+                    issue(
+                        issues,
+                        "invalid_replayed_corpus",
+                        format!(
+                            "revision {} violates corpus invariants: {error}",
+                            commit.revision
+                        ),
+                    );
+                }
+                states.push(Some(after));
+            }
+            Err(error) => {
+                issue(
+                    issues,
+                    "invalid_commit_effect",
+                    format!("revision {} cannot be reduced: {error}", commit.revision),
+                );
+                states.push(None);
+            }
+        }
+    }
+    states
+}
+
+fn check_commit_provenance(
+    connection: &Connection,
+    commits: &[StoredCommit],
+    states: &[Option<CorpusState>],
+    issues: &mut Vec<ValidationIssue>,
+) {
+    for (index, commit) in commits.iter().enumerate() {
+        let (Some(before), Some(after)) = (
+            states.get(index).and_then(Option::as_ref),
+            states.get(index + 1).and_then(Option::as_ref),
+        ) else {
+            continue;
+        };
+        match commit.kind.as_str() {
+            "change" => check_change_commit(connection, commit, after, issues),
+            "shake" => match corpus::transitive_reduction(before) {
+                Ok((expected, removed)) if !removed.is_empty() && expected == *after => {}
+                Ok(_) => issue(
+                    issues,
+                    "invalid_shake_commit",
+                    format!(
+                        "revision {} is not the transitive reduction of its parent",
+                        commit.revision
+                    ),
+                ),
+                Err(error) => issue(
+                    issues,
+                    "invalid_shake_commit",
+                    format!(
+                        "revision {} shake cannot be recomputed: {error}",
+                        commit.revision
+                    ),
+                ),
+            },
+            "revert" => check_revert_commit(commit, commits, states, before, after, issues),
+            other => issue(
+                issues,
+                "invalid_commit_kind",
+                format!("revision {} has unknown kind {other:?}", commit.revision),
+            ),
+        }
+    }
+}
+
+fn check_change_commit(
+    connection: &Connection,
+    commit: &StoredCommit,
+    after: &CorpusState,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    let Some(id) = commit.reconciliation_id else {
+        issue(
+            issues,
+            "invalid_change_commit",
+            format!("revision {} has no reconciliation", commit.revision),
+        );
+        return;
+    };
+    let record = match corpus::reconciliation_by_id(connection, id) {
+        Ok(record) => record,
+        Err(error) => {
+            issue(
+                issues,
+                "invalid_change_commit",
+                format!(
+                    "revision {} reconciliation cannot be read: {error}",
+                    commit.revision
+                ),
+            );
+            return;
+        }
+    };
+    if record.status != "applied"
+        || record.applied_revision != Some(commit.revision)
+        || record.base_revision != commit.revision - 1
+        || record.actor != commit.actor
+    {
+        issue(
+            issues,
+            "invalid_change_commit",
+            format!(
+                "revision {} reconciliation provenance is inconsistent",
+                commit.revision
+            ),
+        );
+    }
+    match resolver::replay_record(connection, &record) {
+        Ok(resolved) if resolved.resulting_snapshot == *after => {}
+        Ok(_) => issue(
+            issues,
+            "reconciliation_replay_mismatch",
+            format!(
+                "revision {} does not match its typed reconciliation",
+                commit.revision
+            ),
+        ),
+        Err(error) => issue(
+            issues,
+            "invalid_reconciliation",
+            format!(
+                "revision {} reconciliation cannot be replayed: {error}",
+                commit.revision
+            ),
+        ),
+    }
+}
+
+fn check_revert_commit(
+    commit: &StoredCommit,
+    commits: &[StoredCommit],
+    states: &[Option<CorpusState>],
+    before: &CorpusState,
+    after: &CorpusState,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    let Some(target) = commit.reverted_revision else {
+        issue(
+            issues,
+            "invalid_revert_commit",
+            format!("revision {} has no revert target", commit.revision),
+        );
+        return;
+    };
+    let target_index = match usize::try_from(target) {
+        Ok(value) if target > 0 && value <= commits.len() && target < commit.revision => value,
+        _ => {
+            issue(
+                issues,
+                "invalid_revert_commit",
+                format!(
+                    "revision {} has invalid revert target {target}",
+                    commit.revision
+                ),
+            );
+            return;
+        }
+    };
+    let (Some(target_before), Some(target_after)) = (
+        states.get(target_index - 1).and_then(Option::as_ref),
+        states.get(target_index).and_then(Option::as_ref),
+    ) else {
+        return;
+    };
+    match corpus::invert_snapshot_change(target, target_before, target_after, before) {
+        Ok(expected) if expected == *after => {}
+        Ok(_) => issue(
+            issues,
+            "invalid_revert_commit",
+            format!(
+                "revision {} is not the inverse of revision {target}",
+                commit.revision
+            ),
+        ),
+        Err(error) => issue(
+            issues,
+            "invalid_revert_commit",
+            format!(
+                "revision {} revert cannot be recomputed: {error}",
+                commit.revision
+            ),
+        ),
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+fn check_reconciliations(
+    connection: &Connection,
+    commits: &[StoredCommit],
+    issues: &mut Vec<ValidationIssue>,
+) -> Result<(), AppError> {
+    let mut statement = connection.prepare("SELECT id FROM reconciliations ORDER BY id")?;
+    let ids = statement
+        .query_map([], |row| row.get::<_, i64>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    let head = commits.last().map_or(0, |commit| commit.revision);
+    for id in ids {
+        let record = match corpus::reconciliation_by_id(connection, id) {
+            Ok(record) => record,
+            Err(error) => {
+                issue(
+                    issues,
+                    "invalid_reconciliation",
+                    format!("reconciliation {id} cannot be read: {error}"),
+                );
+                continue;
+            }
+        };
+        if record.base_revision < 0 || record.base_revision > head {
+            issue(
+                issues,
+                "invalid_reconciliation_base",
+                format!(
+                    "reconciliation {id} names missing revision {}",
+                    record.base_revision
+                ),
+            );
+            continue;
+        }
+        let request = match change::load_request(connection, record.request_id) {
+            Ok(request) => request,
+            Err(error) => {
+                issue(
+                    issues,
+                    "invalid_reconciliation_request",
+                    format!("reconciliation {id} request is invalid: {error}"),
+                );
+                continue;
+            }
+        };
+        if request.summary() != record.summary {
+            issue(
+                issues,
+                "reconciliation_metadata_mismatch",
+                format!("reconciliation {id} summary is not derived consistently"),
+            );
+        }
+        let base = match corpus::snapshot_at(connection, record.base_revision) {
+            Ok(base) => base,
+            Err(error) => {
+                issue(
+                    issues,
+                    "invalid_reconciliation_base",
+                    format!("reconciliation {id} base cannot be replayed: {error}"),
+                );
+                continue;
+            }
+        };
+        let resolved = match resolver::replay_record(connection, &record) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                issue(
+                    issues,
+                    "invalid_reconciliation",
+                    format!("reconciliation {id} cannot be replayed: {error}"),
+                );
+                continue;
+            }
+        };
+        let changed = !resolver::snapshots_corpus_equal(&base, &resolved.resulting_snapshot);
+        match record.status.as_str() {
+            "recorded" if changed || record.applied_revision.is_some() => issue(
+                issues,
+                "invalid_recorded_reconciliation",
+                format!("recorded reconciliation {id} has corpus effects"),
+            ),
+            "pending" | "superseded" if !changed || record.applied_revision.is_some() => issue(
+                issues,
+                "invalid_unapplied_reconciliation",
+                format!("reconciliation {id} has inconsistent unapplied status"),
+            ),
+            "applied" => {
+                let linked = commits.iter().any(|commit| {
+                    commit.reconciliation_id == Some(id)
+                        && Some(commit.revision) == record.applied_revision
+                });
+                if !changed || !linked {
+                    issue(
+                        issues,
+                        "invalid_applied_reconciliation",
+                        format!("applied reconciliation {id} has no matching change commit"),
+                    );
+                }
+            }
+            "recorded" | "pending" | "superseded" => {}
+            other => issue(
+                issues,
+                "invalid_reconciliation_status",
+                format!("reconciliation {id} has unknown status {other:?}"),
+            ),
+        }
+    }
+    Ok(())
+}
+
+fn check_drafts_and_runs(
+    connection: &Connection,
+    issues: &mut Vec<ValidationIssue>,
+) -> Result<(), AppError> {
+    let mut statement = connection.prepare(
+        "SELECT d.id, d.model_run_id, d.request_id, d.status, d.version,
+                q.work_id, q.base_revision, r.work_id, r.base_revision, r.status
+         FROM reconciliation_drafts AS d
+         JOIN reconciliation_requests AS q ON q.id = d.request_id
+         JOIN model_runs AS r ON r.id = d.model_run_id
+         ORDER BY d.id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, i64>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, i64>(4)?,
+            row.get::<_, i64>(5)?,
+            row.get::<_, i64>(6)?,
+            row.get::<_, i64>(7)?,
+            row.get::<_, i64>(8)?,
+            row.get::<_, String>(9)?,
+        ))
+    })?;
+    for row in rows {
+        let (draft, run, request, status, version, work, base, run_work, run_base, run_status) =
+            row?;
+        if version < 1 || work != run_work || base != run_base {
+            issue(
+                issues,
+                "invalid_reconciliation_draft",
+                format!("draft {draft} does not match model run {run}"),
+            );
+        }
+        let operations = match change::load_operations(connection, request, true) {
+            Ok(operations) => operations,
+            Err(error) => {
+                issue(
+                    issues,
+                    "invalid_reconciliation_draft",
+                    format!("draft {draft} operations cannot be read: {error}"),
+                );
+                continue;
+            }
+        };
+        if status == "finalized" {
+            if operations.iter().any(|operation| {
+                operation.status != "dropped"
+                    && (operation.status != "staged" || operation.operation.is_none())
+            }) {
+                issue(
+                    issues,
+                    "invalid_finalized_draft",
+                    format!("finalized draft {draft} contains an incomplete active operation"),
+                );
+            }
+            let linked = connection.query_row(
+                "SELECT COUNT(*) FROM reconciliations
+                 WHERE draft_id = ?1 AND request_id = ?2 AND model_run_id = ?3",
+                rusqlite::params![draft, request, run],
+                |row| row.get::<_, i64>(0),
+            )?;
+            if linked != 1 || run_status != "submitted" {
+                issue(
+                    issues,
+                    "invalid_finalized_draft",
+                    format!("finalized draft {draft} is not linked to one submitted run"),
+                );
+            }
+        }
+        if status == "open" && run_status != "running" {
+            issue(
+                issues,
+                "invalid_open_draft",
+                format!("open draft {draft} belongs to non-running model run {run}"),
+            );
+        }
+    }
+
+    let mut runs = connection.prepare("SELECT id, status FROM model_runs ORDER BY id")?;
+    for row in runs.query_map([], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+    })? {
+        let (id, status) = row?;
+        let reconciliations = connection.query_row(
+            "SELECT COUNT(*) FROM reconciliations WHERE model_run_id = ?1",
+            [id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        if (status == "submitted" && reconciliations != 1)
+            || (status != "submitted" && reconciliations != 0)
+        {
+            issue(
+                issues,
+                "invalid_model_run_provenance",
+                format!("model run {id} status {status:?} has {reconciliations} reconciliations"),
+            );
         }
     }
     Ok(())
@@ -237,1791 +759,108 @@ fn check_ingestions(
     connection: &Connection,
     issues: &mut Vec<ValidationIssue>,
 ) -> Result<(), AppError> {
-    let mut statement = connection.prepare(
-        "SELECT id, source_created_at, source_modified_at, first_seen_at, ingested_at, \
-                completed_at, work_id, new_work, error_code, error_message \
-         FROM ingestions ORDER BY id",
+    let invalid = connection.query_row(
+        "SELECT COUNT(*) FROM ingestions
+         WHERE (status = 'completed' AND (completed_at IS NULL OR result IS NULL OR work_id IS NULL))
+            OR (status = 'processing' AND (completed_at IS NOT NULL OR result IS NOT NULL))
+            OR (status = 'failed' AND (completed_at IS NULL OR error_code IS NULL OR error_message IS NULL))
+            OR (result = 'applied' AND result_revision IS NULL)
+            OR (result_revision IS NOT NULL AND result <> 'applied')",
+        [],
+        |row| row.get::<_, i64>(0),
     )?;
-    let rows = statement.query_map([], |row| {
-        Ok((
-            row.get::<_, i64>(0)?,
-            row.get::<_, Option<String>>(1)?,
-            row.get::<_, Option<String>>(2)?,
-            row.get::<_, String>(3)?,
-            row.get::<_, Option<String>>(4)?,
-            row.get::<_, Option<String>>(5)?,
-            row.get::<_, Option<i64>>(6)?,
-            row.get::<_, Option<bool>>(7)?,
-            row.get::<_, Option<String>>(8)?,
-            row.get::<_, Option<String>>(9)?,
-        ))
-    })?;
-    let mut first_new_delivery = BTreeMap::new();
-    for row in rows {
-        let (
-            id,
-            source_created_at,
-            source_modified_at,
-            first_seen_at,
-            ingested_at,
-            completed_at,
-            work_id,
-            new_work,
-            error_code,
-            error_message,
-        ) = row?;
-        let _source_created_at = parse_ingestion_timestamp(
-            id,
-            "source_created_at",
-            source_created_at.as_deref(),
+    if invalid != 0 {
+        issue(
             issues,
+            "invalid_source_delivery",
+            format!("{invalid} source delivery rows violate lifecycle invariants"),
         );
-        let _source_modified_at = parse_ingestion_timestamp(
-            id,
-            "source_modified_at",
-            source_modified_at.as_deref(),
-            issues,
-        );
-        let first_seen_at =
-            parse_ingestion_timestamp(id, "first_seen_at", Some(&first_seen_at), issues);
-        let ingested_at =
-            parse_ingestion_timestamp(id, "ingested_at", ingested_at.as_deref(), issues);
-        let completed_at =
-            parse_ingestion_timestamp(id, "completed_at", completed_at.as_deref(), issues);
-
-        if let (Some(first_seen_at), Some(ingested_at)) = (first_seen_at, ingested_at)
-            && ingested_at < first_seen_at
-        {
-            issues.push(error_issue(
-                "invalid_ingestion_time_order",
-                format!("source delivery {id} was ingested before it was first seen"),
-            ));
-        }
-        if let (Some(first_seen_at), Some(completed_at)) = (first_seen_at, completed_at)
-            && completed_at < first_seen_at
-        {
-            issues.push(error_issue(
-                "invalid_ingestion_time_order",
-                format!("source delivery {id} completed before it was first seen"),
-            ));
-        }
-        if let (Some(ingested_at), Some(completed_at)) = (ingested_at, completed_at)
-            && completed_at < ingested_at
-        {
-            issues.push(error_issue(
-                "invalid_ingestion_time_order",
-                format!("source delivery {id} completed before it was ingested"),
-            ));
-        }
-        if error_code.is_some() != error_message.is_some() {
-            issues.push(error_issue(
-                "invalid_ingestion_error",
-                format!("source delivery {id} must store its error code and message together"),
-            ));
-        }
-        if new_work == Some(true)
-            && let Some(work_id) = work_id
-            && let Some(previous) = first_new_delivery.insert(work_id, id)
-        {
-            issues.push(error_issue(
-                "duplicate_new_work_ingestion",
-                format!(
-                    "source deliveries {previous} and {id} both claim to have created work {work_id}"
-                ),
-            ));
-        }
     }
     Ok(())
 }
 
-fn parse_ingestion_timestamp(
-    ingestion_id: i64,
-    field: &str,
-    value: Option<&str>,
-    issues: &mut Vec<ValidationIssue>,
-) -> Option<OffsetDateTime> {
-    let value = value?;
-    match OffsetDateTime::parse(value, &Rfc3339) {
-        Ok(timestamp) => Some(timestamp),
-        Err(error) => {
-            issues.push(error_issue(
-                "invalid_ingestion_timestamp",
-                format!(
-                    "source delivery {ingestion_id} has invalid {field} timestamp {value:?}: {error}"
-                ),
-            ));
-            None
-        }
-    }
-}
-
-fn load_head_revision(
-    connection: &Connection,
-    issues: &mut Vec<ValidationIssue>,
-) -> Result<Option<i64>, AppError> {
-    let mut statement = connection
-        .prepare("SELECT singleton, revision, library_id FROM library_state ORDER BY singleton")?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-    match rows.as_slice() {
-        [(1, revision, library_id)] if valid_library_id(library_id) => Ok(Some(*revision)),
-        [] => {
-            issues.push(error_issue(
-                "library_state_missing",
-                "the library has no HEAD revision record",
-            ));
-            Ok(None)
-        }
-        [(1, revision, _)] => {
-            issues.push(error_issue(
-                "invalid_library_id",
-                "the library identity must be 32 lowercase hexadecimal characters",
-            ));
-            Ok(Some(*revision))
-        }
-        _ => {
-            issues.push(error_issue(
-                "invalid_library_state",
-                "the library must contain exactly one singleton HEAD revision record",
-            ));
-            Ok(rows
-                .iter()
-                .find_map(|(singleton, revision, _)| (*singleton == 1).then_some(*revision)))
-        }
-    }
-}
-
-fn valid_library_id(value: &str) -> bool {
-    value.len() == 32
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-fn load_commits(connection: &Connection) -> Result<Vec<StoredCommit>, AppError> {
-    let mut statement = connection.prepare(
-        "SELECT revision, work_id, reconciliation_id, kind, summary, submitted_request, \
-                resolved_operations, after_snapshot, actor \
-         FROM commits ORDER BY revision",
-    )?;
-    let rows = statement.query_map([], |row| {
-        Ok(StoredCommit {
-            revision: row.get(0)?,
-            work_id: row.get(1)?,
-            reconciliation_id: row.get(2)?,
-            kind: row.get(3)?,
-            summary: row.get(4)?,
-            submitted_request: row.get(5)?,
-            resolved_operations: row.get(6)?,
-            after_snapshot: row.get(7)?,
-            actor: row.get(8)?,
-        })
-    })?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
-}
-
-fn load_reconciliations(connection: &Connection) -> Result<Vec<StoredReconciliation>, AppError> {
-    let mut statement = connection.prepare(
-        "SELECT id, work_id, base_revision, model_run_id, reconciliation_draft_id, status, \
-                summary, submitted_request, resolved_reconciliation, actor, applied_revision \
-         FROM reconciliations ORDER BY id",
-    )?;
-    let rows = statement.query_map([], |row| {
-        Ok(StoredReconciliation {
-            id: row.get(0)?,
-            work_id: row.get(1)?,
-            base_revision: row.get(2)?,
-            model_run_id: row.get(3)?,
-            reconciliation_draft_id: row.get(4)?,
-            status: row.get(5)?,
-            summary: row.get(6)?,
-            submitted_request: row.get(7)?,
-            resolved_reconciliation: row.get(8)?,
-            actor: row.get(9)?,
-            applied_revision: row.get(10)?,
-        })
-    })?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
-}
-
-fn load_reconciliation_drafts(connection: &Connection) -> Result<Vec<StoredDraft>, AppError> {
-    let mut statement = connection.prepare(
-        "SELECT id, model_run_id, work_id, base_revision, status, version, summary, annotations, \
-                created_sequence, terminal_sequence \
-         FROM reconciliation_drafts ORDER BY id",
-    )?;
-    let rows = statement.query_map([], |row| {
-        Ok(StoredDraft {
-            id: row.get(0)?,
-            model_run_id: row.get(1)?,
-            work_id: row.get(2)?,
-            base_revision: row.get(3)?,
-            status: row.get(4)?,
-            version: row.get(5)?,
-            summary: row.get(6)?,
-            annotations: row.get(7)?,
-            created_sequence: row.get(8)?,
-            terminal_sequence: row.get(9)?,
-        })
-    })?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
-}
-
-fn load_model_runs(connection: &Connection) -> Result<Vec<StoredModelRun>, AppError> {
-    let mut statement = connection
-        .prepare("SELECT id, work_id, base_revision, status FROM model_runs ORDER BY id")?;
-    let rows = statement.query_map([], |row| {
-        Ok(StoredModelRun {
-            id: row.get(0)?,
-            work_id: row.get(1)?,
-            base_revision: row.get(2)?,
-            status: row.get(3)?,
-        })
-    })?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
-}
-
-fn load_successful_submissions(
-    connection: &Connection,
-) -> Result<Vec<SuccessfulSubmission>, AppError> {
-    let mut statement = connection.prepare(
-        "SELECT model_run_id, arguments FROM tool_calls \
-         WHERE tool_name = 'submit_reconciliation' AND succeeded = 1 \
-         ORDER BY model_run_id, sequence",
-    )?;
-    let rows = statement.query_map([], |row| {
-        Ok(SuccessfulSubmission {
-            model_run_id: row.get(0)?,
-            arguments: row.get(1)?,
-        })
-    })?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
-}
-
-fn check_provenance(
-    connection: &Connection,
-    head_revision: Option<i64>,
-    commits: &[StoredCommit],
-    issues: &mut Vec<ValidationIssue>,
-) -> Result<(), AppError> {
-    let reconciliations = load_reconciliations(connection)?;
-    let model_runs = load_model_runs(connection)?;
-    let drafts = load_reconciliation_drafts(connection)?;
-    let submissions = load_successful_submissions(connection)?;
-    let reconciliations_by_id = reconciliations
-        .iter()
-        .map(|reconciliation| (reconciliation.id, reconciliation))
-        .collect::<BTreeMap<_, _>>();
-    let commits_by_reconciliation = commits.iter().fold(
-        BTreeMap::<i64, Vec<&StoredCommit>>::new(),
-        |mut grouped, commit| {
-            if let Some(reconciliation_id) = commit.reconciliation_id {
-                grouped.entry(reconciliation_id).or_default().push(commit);
-            }
-            grouped
-        },
-    );
-
-    for reconciliation in &reconciliations {
-        check_reconciliation_payload(connection, head_revision, reconciliation, issues);
-        let linked = commits_by_reconciliation
-            .get(&reconciliation.id)
-            .map_or(&[][..], Vec::as_slice);
-        if reconciliation.status == "applied" {
-            if linked.len() != 1 {
-                issues.push(error_issue(
-                    "reconciliation_commit_mismatch",
-                    format!(
-                        "applied reconciliation {} is linked to {} commits instead of exactly one",
-                        reconciliation.id,
-                        linked.len()
-                    ),
-                ));
-            }
-        } else if !linked.is_empty() {
-            issues.push(error_issue(
-                "reconciliation_commit_mismatch",
-                format!(
-                    "non-applied reconciliation {} is linked to a corpus commit",
-                    reconciliation.id
-                ),
-            ));
-        }
-    }
-
-    for commit in commits {
-        check_commit_provenance(connection, commit, &reconciliations_by_id, commits, issues);
-    }
-    check_reconciliation_drafts(connection, &model_runs, &reconciliations, &drafts, issues);
-    check_model_run_provenance(
-        connection,
-        head_revision,
-        &model_runs,
-        &reconciliations,
-        &drafts,
-        &submissions,
-        issues,
-    );
-    Ok(())
-}
-
-fn check_reconciliation_payload(
-    connection: &Connection,
-    head_revision: Option<i64>,
-    reconciliation: &StoredReconciliation,
-    issues: &mut Vec<ValidationIssue>,
-) {
-    if head_revision.is_some_and(|head| reconciliation.base_revision > head) {
-        issues.push(error_issue(
-            "reconciliation_base_missing",
-            format!(
-                "reconciliation {} targets revision {}, which is later than corpus HEAD",
-                reconciliation.id, reconciliation.base_revision
-            ),
-        ));
-    }
-    let request = check_reconciliation_request(reconciliation, issues);
-    check_reconciliation_resolution(connection, reconciliation, request.as_ref(), issues);
-    if corpus::snapshot_at(connection, reconciliation.base_revision).is_ok() {
-        check_reconciliation_replay(connection, reconciliation, issues);
-    }
-}
-
-fn check_reconciliation_replay(
-    connection: &Connection,
-    reconciliation: &StoredReconciliation,
-    issues: &mut Vec<ValidationIssue>,
-) {
-    let record = match corpus::reconciliation_query(
-        connection,
-        "SELECT r.id, r.work_id, w.label, r.base_revision, r.status, r.summary, \
-                r.submitted_request, r.resolved_reconciliation, r.actor, r.created_at, \
-                r.applied_revision \
-         FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id WHERE r.id = ?1",
-        [reconciliation.id],
-    ) {
-        Ok(Some(record)) => record,
-        Ok(None) => return,
-        Err(error) => {
-            issues.push(error_issue(
-                "invalid_reconciliation_resolution",
-                format!(
-                    "reconciliation {} could not be loaded: {error}",
-                    reconciliation.id
-                ),
-            ));
-            return;
-        }
-    };
-    let expected =
-        serde_json::from_str::<ResolvedReconciliation>(&reconciliation.resolved_reconciliation);
-    match (
-        expected,
-        crate::resolver::replay_record(connection, &record),
-    ) {
-        (Ok(expected), Ok(actual)) if expected == actual => {}
-        (Ok(_), Ok(_)) => issues.push(error_issue(
-            "reconciliation_resolution_mismatch",
-            format!(
-                "reconciliation {} does not resolve to its stored projection",
-                reconciliation.id
-            ),
-        )),
-        (_, Err(error)) => issues.push(error_issue(
-            "reconciliation_resolution_mismatch",
-            format!(
-                "reconciliation {} cannot be replayed: {error}",
-                reconciliation.id
-            ),
-        )),
-        (Err(_), Ok(_)) => {}
-    }
-}
-
-fn check_reconciliation_request(
-    reconciliation: &StoredReconciliation,
-    issues: &mut Vec<ValidationIssue>,
-) -> Option<Reconciliation> {
-    let request = match parse_reconciliation(&reconciliation.submitted_request) {
-        Ok(request) => Some(request),
-        Err(error) => {
-            issues.push(error_issue(
-                "invalid_reconciliation_request",
-                format!(
-                    "reconciliation {} has an invalid request: {error}",
-                    reconciliation.id
-                ),
-            ));
-            None
-        }
-    };
-    if request
-        .as_ref()
-        .is_some_and(|request| reconciliation.summary != request.summary())
-    {
-        issues.push(error_issue(
-            "reconciliation_request_mismatch",
-            format!(
-                "reconciliation {} does not match its request's summary",
-                reconciliation.id
-            ),
-        ));
-    }
-    request
-}
-
-fn check_reconciliation_resolution(
-    connection: &Connection,
-    reconciliation: &StoredReconciliation,
-    request: Option<&Reconciliation>,
-    issues: &mut Vec<ValidationIssue>,
-) {
-    let resolved = match serde_json::from_str::<ResolvedReconciliation>(
-        &reconciliation.resolved_reconciliation,
-    ) {
-        Ok(resolved) => Some(resolved),
-        Err(error) => {
-            issues.push(error_issue(
-                "invalid_reconciliation_resolution",
-                format!(
-                    "reconciliation {} has an invalid resolved reconciliation: {error}",
-                    reconciliation.id
-                ),
-            ));
-            None
-        }
-    };
-    let Some(resolved) = resolved.as_ref() else {
-        return;
-    };
-    if resolved.base_revision != reconciliation.base_revision {
-        issues.push(error_issue(
-            "reconciliation_resolution_mismatch",
-            format!(
-                "reconciliation {} and its resolved reconciliation name different base revisions",
-                reconciliation.id
-            ),
-        ));
-    }
-    let base = match corpus::snapshot_at(connection, reconciliation.base_revision) {
-        Ok(base) => Some(base),
-        Err(error) => {
-            issues.push(error_issue(
-                "reconciliation_base_missing",
-                format!(
-                    "reconciliation {} has no readable base revision: {error}",
-                    reconciliation.id
-                ),
-            ));
-            None
-        }
-    };
-
-    let recorded = reconciliation.status == "recorded";
-    let expected_revision = if recorded {
-        reconciliation.base_revision
-    } else {
-        reconciliation.base_revision.saturating_add(1)
-    };
-    validate_historical_snapshot(
-        connection,
-        &resolved.resulting_snapshot,
-        expected_revision,
-        "reconciliation result",
-        issues,
-    );
-
-    if request
-        .is_some_and(|request| !operation_kinds_match(request.operations(), &resolved.operations))
-    {
-        issues.push(error_issue(
-            "reconciliation_resolution_mismatch",
-            format!(
-                "reconciliation {} has resolved operations inconsistent with its request",
-                reconciliation.id
-            ),
-        ));
-    }
-    if let Some(base) = base.as_ref() {
-        let unchanged = snapshots_corpus_equal(base, &resolved.resulting_snapshot);
-        if recorded != unchanged {
-            issues.push(error_issue(
-                "reconciliation_resolution_mismatch",
-                format!(
-                    "reconciliation {} status {:?} does not match whether its projection changes the corpus",
-                    reconciliation.id, reconciliation.status
-                ),
-            ));
-        }
-    }
-}
-
-fn operation_kinds_match(requested: &[ChangeOperation], resolved: &[ResolvedOperation]) -> bool {
-    requested.len() == resolved.len()
-        && requested.iter().zip(resolved).all(|(request, resolution)| {
-            matches!(
-                (request, resolution),
-                (
-                    ChangeOperation::CreateConcept { .. },
-                    ResolvedOperation::CreateConcept { .. }
-                ) | (
-                    ChangeOperation::AddParent { .. },
-                    ResolvedOperation::AddParent { .. }
-                ) | (
-                    ChangeOperation::RemoveParent { .. },
-                    ResolvedOperation::RemoveParent { .. }
-                ) | (
-                    ChangeOperation::AddEvidence { .. },
-                    ResolvedOperation::AddEvidence { .. }
-                ) | (
-                    ChangeOperation::RemoveEvidence { .. },
-                    ResolvedOperation::RemoveEvidence { .. }
-                ) | (
-                    ChangeOperation::RewordConcept { .. },
-                    ResolvedOperation::RewordConcept { .. }
-                ) | (
-                    ChangeOperation::RetireConcept { .. },
-                    ResolvedOperation::RetireConcept { .. }
-                )
-            )
-        })
-}
-
-fn check_commit_provenance(
-    connection: &Connection,
-    commit: &StoredCommit,
-    reconciliations: &BTreeMap<i64, &StoredReconciliation>,
-    commits: &[StoredCommit],
-    issues: &mut Vec<ValidationIssue>,
-) {
-    if let (Ok(before), Ok(after)) = (
-        corpus::snapshot_at(connection, commit.revision - 1),
-        serde_json::from_str::<Snapshot>(&commit.after_snapshot),
-    ) && snapshots_corpus_equal(&before, &after)
-    {
-        issues.push(error_issue(
-            "empty_commit",
-            format!("revision {} does not change the corpus", commit.revision),
-        ));
-    }
-    match commit.kind.as_str() {
-        "change" => check_reconciliation_commit(commit, reconciliations, issues),
-        "revert" => check_revert_commit(connection, commit, commits, issues),
-        "shake" => check_shake_commit(connection, commit, issues),
-        _ => {}
-    }
-}
-
-fn check_reconciliation_commit(
-    commit: &StoredCommit,
-    reconciliations: &BTreeMap<i64, &StoredReconciliation>,
-    issues: &mut Vec<ValidationIssue>,
-) {
-    let Some(reconciliation_id) = commit.reconciliation_id else {
-        issues.push(error_issue(
-            "commit_reconciliation_mismatch",
-            format!("change revision {} has no reconciliation", commit.revision),
-        ));
-        return;
-    };
-    let Some(reconciliation) = reconciliations.get(&reconciliation_id) else {
-        issues.push(error_issue(
-            "commit_reconciliation_mismatch",
-            format!(
-                "change revision {} refers to a missing reconciliation",
-                commit.revision
-            ),
-        ));
-        return;
-    };
-    let request_matches =
-        reconciliations_equal(&commit.submitted_request, &reconciliation.submitted_request);
-    let resolved_matches =
-        serde_json::from_str::<ResolvedReconciliation>(&reconciliation.resolved_reconciliation)
-            .ok()
-            .and_then(|resolved| serde_json::to_string(&resolved.operations).ok())
-            .is_some_and(|operations| json_equal(&commit.resolved_operations, &operations));
-    let snapshot_matches =
-        serde_json::from_str::<ResolvedReconciliation>(&reconciliation.resolved_reconciliation)
-            .is_ok_and(|resolved| {
-                serde_json::from_str::<Snapshot>(&commit.after_snapshot)
-                    .is_ok_and(|after| after == resolved.resulting_snapshot)
-            });
-    if reconciliation.status != "applied"
-        || reconciliation.applied_revision != Some(commit.revision)
-        || commit.work_id != Some(reconciliation.work_id)
-        || commit.revision - 1 != reconciliation.base_revision
-        || commit.summary != reconciliation.summary
-        || commit.actor != reconciliation.actor
-        || !request_matches
-        || !resolved_matches
-        || !snapshot_matches
-    {
-        issues.push(error_issue(
-            "commit_reconciliation_mismatch",
-            format!(
-                "change revision {} does not exactly preserve its applied reconciliation",
-                commit.revision
-            ),
-        ));
-    }
-}
-
-fn check_revert_commit(
-    connection: &Connection,
-    commit: &StoredCommit,
-    commits: &[StoredCommit],
-    issues: &mut Vec<ValidationIssue>,
-) {
-    let target = json_integer(&commit.submitted_request, "revert_revision");
-    let target_commit = target.and_then(|target| {
-        commits
-            .iter()
-            .find(|candidate| candidate.revision == target && target < commit.revision)
-    });
-    let resolved_matches = revert_operations_match(connection, commit);
-    let projection_matches =
-        target.is_some_and(|target| revert_projection_matches(connection, commit, target));
-    if commit.reconciliation_id.is_some()
-        || target_commit.is_none()
-        || target_commit.is_some_and(|target| target.work_id != commit.work_id)
-        || target.is_some_and(|target| commit.summary != format!("Revert revision {target}"))
-        || !resolved_matches
-        || !projection_matches
-    {
-        issues.push(error_issue(
-            "invalid_revert_provenance",
-            format!(
-                "revert revision {} does not consistently identify its target change",
-                commit.revision
-            ),
-        ));
-    }
-}
-
-fn check_shake_commit(
-    connection: &Connection,
-    commit: &StoredCommit,
-    issues: &mut Vec<ValidationIssue>,
-) {
-    let before = corpus::snapshot_at(connection, commit.revision - 1);
-    let actual = serde_json::from_str::<Snapshot>(&commit.after_snapshot);
-    let reduction = before.as_ref().ok().and_then(|snapshot| {
-        corpus::transitive_reduction(snapshot)
-            .ok()
-            .map(|(after, removed)| (after, removed.len()))
-    });
-    let expected_operations = match (before.as_ref(), reduction.as_ref()) {
-        (Ok(before), Some((after, _))) => {
-            corpus::diff_snapshot_entries(connection, before, after).ok()
-        }
-        _ => None,
-    };
-    let stored_operations =
-        serde_json::from_str::<Vec<DiffEntry>>(&commit.resolved_operations).ok();
-    let request = serde_json::from_str::<serde_json::Value>(&commit.submitted_request).ok();
-    let removed_count = reduction.as_ref().map(|(_, removed)| *removed);
-    let valid = commit.work_id.is_none()
-        && commit.reconciliation_id.is_none()
-        && commit.actor == "human"
-        && request == Some(serde_json::json!({ "operation": "transitive_reduction" }))
-        && removed_count.is_some_and(|count| count > 0)
-        && removed_count.is_some_and(|count| commit.summary == corpus::shake_summary(count))
-        && reduction
-            .as_ref()
-            .zip(actual.as_ref().ok())
-            .is_some_and(|((expected, _), actual)| expected == actual)
-        && expected_operations.is_some()
-        && expected_operations == stored_operations;
-    if !valid {
-        issues.push(error_issue(
-            "invalid_shake_provenance",
-            format!(
-                "shake revision {} does not exactly preserve its transitive-reduction plan",
-                commit.revision
-            ),
-        ));
-    }
-}
-
-fn revert_projection_matches(
-    connection: &Connection,
-    commit: &StoredCommit,
-    target_revision: i64,
-) -> bool {
-    let snapshots = (
-        corpus::snapshot_at(connection, target_revision.saturating_sub(1)),
-        corpus::snapshot_at(connection, target_revision),
-        corpus::snapshot_at(connection, commit.revision - 1),
-        serde_json::from_str::<Snapshot>(&commit.after_snapshot),
-    );
-    let (Ok(target_before), Ok(target_after), Ok(head_before), Ok(actual)) = snapshots else {
-        return false;
-    };
-    corpus::invert_snapshot_change(target_revision, &target_before, &target_after, &head_before)
-        .is_ok_and(|expected| expected == actual)
-}
-
-fn revert_operations_match(connection: &Connection, commit: &StoredCommit) -> bool {
-    let Ok(before) = corpus::snapshot_at(connection, commit.revision - 1) else {
-        return false;
-    };
-    let Ok(after) = serde_json::from_str::<Snapshot>(&commit.after_snapshot) else {
-        return false;
-    };
-    let Ok(stored) = serde_json::from_str::<Vec<DiffEntry>>(&commit.resolved_operations) else {
-        return false;
-    };
-    corpus::diff_snapshot_entries(connection, &before, &after)
-        .is_ok_and(|expected| expected == stored)
-}
-
-#[allow(clippy::too_many_lines)]
-fn check_reconciliation_drafts(
-    connection: &Connection,
-    model_runs: &[StoredModelRun],
-    reconciliations: &[StoredReconciliation],
-    drafts: &[StoredDraft],
-    issues: &mut Vec<ValidationIssue>,
-) {
-    let mut last_version_by_run = BTreeMap::<i64, i64>::new();
-    for draft in drafts {
-        let last_version = last_version_by_run.entry(draft.model_run_id).or_default();
-        if draft.version <= *last_version {
-            issues.push(error_issue(
-                "reconciliation_draft_lifecycle_mismatch",
-                format!(
-                    "reconciliation draft {} does not advance its model run's draft version",
-                    draft.id
-                ),
-            ));
-        }
-        *last_version = (*last_version).max(draft.version);
-        let run = model_runs.iter().find(|run| run.id == draft.model_run_id);
-        if run.is_none_or(|run| {
-            run.work_id != draft.work_id || run.base_revision != draft.base_revision
-        }) {
-            issues.push(error_issue(
-                "reconciliation_draft_scope_mismatch",
-                format!(
-                    "reconciliation draft {} does not match its model run's work and base revision",
-                    draft.id
-                ),
-            ));
-        }
-        if !tool_call_matches(
-            connection,
-            draft.model_run_id,
-            draft.created_sequence,
-            &["submit_reconciliation"],
-        ) {
-            issues.push(error_issue(
-                "reconciliation_draft_tool_mismatch",
-                format!(
-                    "reconciliation draft {} was not created by its recorded successful submission call",
-                    draft.id
-                ),
-            ));
-        }
-        let linked = reconciliations
-            .iter()
-            .filter(|reconciliation| reconciliation.reconciliation_draft_id == Some(draft.id))
-            .collect::<Vec<_>>();
-        match draft.status.as_str() {
-            "open" => {
-                if run.is_none_or(|run| run.status != "running") || !linked.is_empty() {
-                    issues.push(error_issue(
-                        "reconciliation_draft_lifecycle_mismatch",
-                        format!(
-                            "open reconciliation draft {} is not owned by one running model run",
-                            draft.id
-                        ),
-                    ));
-                }
-            }
-            "abandoned" => {
-                if run.is_none_or(|run| !matches!(run.status.as_str(), "failed" | "no_submission"))
-                    || !linked.is_empty()
-                {
-                    issues.push(error_issue(
-                        "reconciliation_draft_lifecycle_mismatch",
-                        format!(
-                            "abandoned reconciliation draft {} has invalid terminal ownership",
-                            draft.id
-                        ),
-                    ));
-                }
-            }
-            "discarded" => {
-                if draft.terminal_sequence.is_none_or(|sequence| {
-                    !tool_call_matches(
-                        connection,
-                        draft.model_run_id,
-                        sequence,
-                        &["discard_reconciliation"],
-                    )
-                }) || !linked.is_empty()
-                {
-                    issues.push(error_issue(
-                        "reconciliation_draft_lifecycle_mismatch",
-                        format!(
-                            "discarded reconciliation draft {} does not match its discard call",
-                            draft.id
-                        ),
-                    ));
-                }
-            }
-            "finalized" => {
-                if draft.terminal_sequence.is_none_or(|sequence| {
-                    !tool_call_matches(
-                        connection,
-                        draft.model_run_id,
-                        sequence,
-                        &["submit_reconciliation", "revise_reconciliation"],
-                    )
-                }) || linked.len() != 1
-                {
-                    issues.push(error_issue(
-                        "reconciliation_draft_lifecycle_mismatch",
-                        format!(
-                            "finalized reconciliation draft {} does not match exactly one finalizing call and reconciliation",
-                            draft.id
-                        ),
-                    ));
-                    continue;
-                }
-                let Some((request, states)) = assembled_draft_request(connection, draft) else {
-                    issues.push(error_issue(
-                        "reconciliation_draft_payload_mismatch",
-                        format!(
-                            "finalized reconciliation draft {} cannot be assembled as a request",
-                            draft.id
-                        ),
-                    ));
-                    continue;
-                };
-                if states.is_empty()
-                    || states.iter().any(|state| state != "staged")
-                    || !reconciliations_equal(&linked[0].submitted_request, &request)
-                {
-                    issues.push(error_issue(
-                        "reconciliation_draft_payload_mismatch",
-                        format!(
-                            "finalized reconciliation draft {} does not reproduce its reconciliation request",
-                            draft.id
-                        ),
-                    ));
-                }
-            }
-            _ => issues.push(error_issue(
-                "reconciliation_draft_lifecycle_mismatch",
-                format!(
-                    "reconciliation draft {} has unknown status {:?}",
-                    draft.id, draft.status
-                ),
-            )),
-        }
-    }
-}
-
-fn tool_call_matches(
-    connection: &Connection,
-    model_run_id: i64,
-    sequence: i64,
-    names: &[&str],
-) -> bool {
-    connection
-        .query_row(
-            "SELECT tool_name, succeeded FROM tool_calls \
-             WHERE model_run_id = ?1 AND sequence = ?2",
-            rusqlite::params![model_run_id, sequence],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?)),
-        )
-        .optional()
-        .ok()
-        .flatten()
-        .is_some_and(|(name, succeeded)| succeeded && names.contains(&name.as_str()))
-}
-
-fn assembled_draft_request(
-    connection: &Connection,
-    draft: &StoredDraft,
-) -> Option<(String, Vec<String>)> {
-    let annotations = serde_json::from_str::<serde_json::Value>(&draft.annotations).ok()?;
-    if !annotations.is_array() {
-        return None;
-    }
-    let mut statement = connection
-        .prepare(
-            "SELECT operation, status FROM reconciliation_draft_operations \
-             WHERE draft_id = ?1 AND status <> 'dropped' ORDER BY ordinal",
-        )
-        .ok()?;
-    let rows = statement
-        .query_map([draft.id], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .ok()?;
-    let entries = rows.collect::<rusqlite::Result<Vec<_>>>().ok()?;
-    let operations = entries
-        .iter()
-        .map(|(operation, _)| serde_json::from_str::<serde_json::Value>(operation))
-        .collect::<Result<Vec<_>, _>>()
-        .ok()?;
-    let states = entries.into_iter().map(|(_, state)| state).collect();
-    let request = serde_json::to_string(&serde_json::json!({
-        "summary": draft.summary,
-        "operations": operations,
-        "annotations": annotations
-    }))
-    .ok()?;
-    Some((request, states))
-}
-
-fn check_model_run_provenance(
-    connection: &Connection,
-    head_revision: Option<i64>,
-    model_runs: &[StoredModelRun],
-    reconciliations: &[StoredReconciliation],
-    drafts: &[StoredDraft],
-    submissions: &[SuccessfulSubmission],
-    issues: &mut Vec<ValidationIssue>,
-) {
-    for run in model_runs {
-        if head_revision.is_some_and(|head| run.base_revision > head) {
-            issues.push(error_issue(
-                "model_run_base_missing",
-                format!(
-                    "model run {} examined revision {}, which is later than corpus HEAD",
-                    run.id, run.base_revision
-                ),
-            ));
-        }
-        let linked = reconciliations
-            .iter()
-            .filter(|reconciliation| reconciliation.model_run_id == Some(run.id))
-            .collect::<Vec<_>>();
-        let successful = submissions
-            .iter()
-            .filter(|submission| submission.model_run_id == run.id)
-            .collect::<Vec<_>>();
-        let run_drafts = drafts
-            .iter()
-            .filter(|draft| draft.model_run_id == run.id)
-            .collect::<Vec<_>>();
-        let finalized = run_drafts
-            .iter()
-            .filter(|draft| draft.status == "finalized")
-            .collect::<Vec<_>>();
-        let should_have_submission = run.status == "submitted";
-        let lifecycle_mismatch = if run_drafts.is_empty() {
-            (should_have_submission && (linked.len() != 1 || successful.len() != 1))
-                || (!should_have_submission && (!linked.is_empty() || !successful.is_empty()))
-        } else {
-            (should_have_submission && (linked.len() != 1 || finalized.len() != 1))
-                || (!should_have_submission && (!linked.is_empty() || !finalized.is_empty()))
-        };
-        if lifecycle_mismatch {
-            issues.push(error_issue(
-                "model_run_submission_mismatch",
-                format!(
-                    "model run {} status {:?} does not match its recorded reconciliation and submit call",
-                    run.id, run.status
-                ),
-            ));
-            continue;
-        }
-        let payload_mismatch = if let [reconciliation] = linked.as_slice() {
-            if let Some(draft_id) = reconciliation.reconciliation_draft_id {
-                let draft = drafts.iter().find(|draft| draft.id == draft_id);
-                draft.is_none_or(|draft| {
-                    draft.model_run_id != run.id
-                        || draft.work_id != run.work_id
-                        || draft.base_revision != run.base_revision
-                        || assembled_draft_request(connection, draft).is_none_or(|(request, _)| {
-                            !reconciliations_equal(&reconciliation.submitted_request, &request)
-                        })
-                })
-            } else {
-                successful.as_slice().first().is_none_or(|submission| {
-                    reconciliation.work_id != run.work_id
-                        || reconciliation.base_revision != run.base_revision
-                        || !reconciliations_equal(
-                            &reconciliation.submitted_request,
-                            &submission.arguments,
-                        )
-                })
-            }
-        } else {
-            false
-        };
-        if payload_mismatch {
-            issues.push(error_issue(
-                "model_run_reconciliation_mismatch",
-                format!(
-                    "model run {} and its submitted reconciliation have different scope or payload",
-                    run.id
-                ),
-            ));
-        }
-    }
-}
-
-fn reconciliations_equal(left: &str, right: &str) -> bool {
-    parse_reconciliation(left)
-        .ok()
-        .zip(parse_reconciliation(right).ok())
-        .is_some_and(|(left, right)| left == right)
-}
-
-fn json_equal(left: &str, right: &str) -> bool {
-    serde_json::from_str::<serde_json::Value>(left)
-        .ok()
-        .zip(serde_json::from_str::<serde_json::Value>(right).ok())
-        .is_some_and(|(left, right)| left == right)
-}
-
-fn json_integer(source: &str, field: &str) -> Option<i64> {
-    serde_json::from_str::<serde_json::Value>(source)
-        .ok()?
-        .get(field)?
-        .as_i64()
-}
-
-/// Check the linear after-state log and return the parsed snapshot at HEAD, when available.
-#[allow(clippy::too_many_lines)]
-fn check_history(
-    connection: &Connection,
-    head_revision: Option<i64>,
-    commits: &[StoredCommit],
-    issues: &mut Vec<ValidationIssue>,
-) -> Option<Snapshot> {
-    let max_revision = commits.last().map_or(0, |commit| commit.revision);
-    let commit_count = i64::try_from(commits.len()).unwrap_or(i64::MAX);
-    if let Some(head) = head_revision {
-        if head != max_revision {
-            issues.push(error_issue(
-                "library_revision_mismatch",
-                format!(
-                    "library HEAD is revision {head}, but the highest commit is revision {max_revision}"
-                ),
-            ));
-        }
-        if head != commit_count {
-            issues.push(error_issue(
-                "commit_count_mismatch",
-                format!(
-                    "library HEAD is revision {head}, but the commit log contains {commit_count} entries"
-                ),
-            ));
-        }
-    }
-
-    let mut head_after = None;
-    for (offset, commit) in commits.iter().enumerate() {
-        let expected_revision = i64::try_from(offset)
-            .ok()
-            .and_then(|offset| offset.checked_add(1))
-            .unwrap_or(i64::MAX);
-        if commit.revision != expected_revision {
-            issues.push(error_issue(
-                "commit_sequence_mismatch",
-                format!(
-                    "commit position {expected_revision} contains revision {}",
-                    commit.revision
-                ),
-            ));
-        }
-        let after = parse_snapshot(&commit.after_snapshot, commit.revision, "after", issues);
-        if let Some(snapshot) = &after {
-            validate_historical_snapshot(connection, snapshot, commit.revision, "after", issues);
-        }
-        if head_revision == Some(commit.revision) {
-            head_after.clone_from(&after);
-        }
-    }
-
-    if head_revision == Some(0) {
-        Some(Snapshot::empty())
-    } else {
-        head_after
-    }
-}
-
-fn validate_historical_snapshot(
-    connection: &Connection,
-    snapshot: &Snapshot,
-    commit_revision: i64,
-    side: &str,
-    issues: &mut Vec<ValidationIssue>,
-) {
-    if let Err(error) = corpus::validate_snapshot(connection, snapshot) {
-        issues.push(error_issue(
-            "invalid_historical_snapshot",
-            format!("revision {commit_revision} has an invalid {side}-snapshot: {error}"),
-        ));
-    }
-}
-
-fn parse_snapshot(
-    source: &str,
-    revision: i64,
-    side: &str,
-    issues: &mut Vec<ValidationIssue>,
-) -> Option<Snapshot> {
-    match serde_json::from_str(source) {
-        Ok(snapshot) => Some(snapshot),
-        Err(error) => {
-            issues.push(error_issue(
-                "invalid_commit_snapshot",
-                format!("revision {revision} has an invalid {side}-snapshot: {error}"),
-            ));
-            None
-        }
-    }
-}
-
-fn check_materialized_head(
-    head_revision: Option<i64>,
-    current: &Snapshot,
-    history_head: Option<&Snapshot>,
-    issues: &mut Vec<ValidationIssue>,
-) {
-    let Some(head) = head_revision else {
-        return;
-    };
-    if let Some(expected) = history_head {
-        if current != expected {
-            issues.push(error_issue(
-                "materialized_head_mismatch",
-                if head == 0 {
-                    "the materialized corpus is not empty at revision 0".to_owned()
-                } else {
-                    format!("the materialized corpus does not match revision {head}'s after-state")
-                },
-            ));
-        }
-    } else if head > 0 {
-        issues.push(error_issue(
-            "materialized_head_unverifiable",
-            format!("revision {head} has no parseable commit after-state"),
-        ));
-    }
-}
-
-fn report(issues: Vec<ValidationIssue>) -> ValidationReport {
-    ValidationReport {
-        valid: issues.is_empty(),
-        issues,
-    }
-}
-
-fn error_issue(code: &str, message: impl Into<String>) -> ValidationIssue {
-    ValidationIssue {
+fn issue(issues: &mut Vec<ValidationIssue>, code: &str, message: impl Into<String>) {
+    issues.push(ValidationIssue {
         code: code.to_owned(),
         message: message.into(),
-    }
+    });
 }
 
 #[cfg(test)]
 mod tests {
-    use rusqlite::Connection;
     use serde_json::json;
 
-    use super::validate;
-    use crate::corpus::{self, ReconciliationRecord};
-    use crate::resolver;
+    use super::*;
+    use crate::corpus::store_work;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-    fn initialized_connection() -> Result<Connection, Box<dyn std::error::Error>> {
-        let connection = Connection::open_in_memory()?;
-        connection.pragma_update(None, "foreign_keys", true)?;
-        connection.execute_batch(include_str!("../schema.sql"))?;
-        Ok(connection)
-    }
-
-    fn applied_library() -> Result<Connection, Box<dyn std::error::Error>> {
-        let mut connection = initialized_connection()?;
-        let work = corpus::store_work(
-            &mut connection,
-            "Transactions",
-            "Predicate locks prevent phantom rows.",
-        )?;
-        let reconciliation = resolver::submit_value(
-            &mut connection,
-            &work,
-            0,
-            json!({
-                "summary": "Add predicate locking",
-                "operations": [{
-                    "action": "create_concept",
-                    "ref": "predicate_locking",
-                    "label": "Predicate locking",
-                    "parents": [],
-                    "evidence": [{
-                        "quote": "Predicate locks prevent phantom rows."
-                    }]
-                }]
-            }),
-            "human",
-            None,
-        )?;
-        assert_eq!(resolver::apply_record(&mut connection, &reconciliation)?, 1);
-        Ok(connection)
-    }
-
-    fn shaken_library() -> Result<Connection, Box<dyn std::error::Error>> {
-        let mut connection = initialized_connection()?;
-        let work = corpus::store_work(
-            &mut connection,
-            "Hierarchy",
-            "Broad scope. Middle scope. Narrow claim.",
-        )?;
-        let reconciliation = resolver::submit_value(
-            &mut connection,
-            &work,
-            0,
-            json!({
-                "summary": "Add a complete three-concept order",
-                "operations": [
-                    {
-                        "action": "create_concept",
-                        "ref": "broad",
-                        "label": "Broad",
-                        "parents": [],
-                        "evidence": [{"quote": "Broad scope."}]
-                    },
-                    {
-                        "action": "create_concept",
-                        "ref": "middle",
-                        "label": "Middle",
-                        "parents": [{"new": "broad"}],
-                        "evidence": [{"quote": "Middle scope."}]
-                    },
-                    {
-                        "action": "create_concept",
-                        "ref": "narrow",
-                        "label": "Narrow",
-                        "parents": [{"new": "broad"}, {"new": "middle"}],
-                        "evidence": [{"quote": "Narrow claim."}]
-                    }
-                ]
-            }),
-            "human",
-            None,
-        )?;
-        assert_eq!(resolver::apply_record(&mut connection, &reconciliation)?, 1);
-        let plan = corpus::plan_shake(&connection)?;
-        assert_eq!(corpus::apply_shake(&mut connection, &plan)?, 2);
-        Ok(connection)
-    }
-
-    fn record_model_reconciliation(
-        connection: &mut Connection,
-        run_work_id: i64,
-        reconciliation_work: &crate::corpus::Work,
-    ) -> Result<ReconciliationRecord, Box<dyn std::error::Error>> {
-        connection.execute(
-            "INSERT INTO model_runs(\
-                 token, work_id, base_revision, status, model, reasoning_effort, prompt_version, \
-                 created_at\
-             ) VALUES('run-token', ?1, 0, 'submitted', 'test-model', 'medium', 'test', ?2)",
-            rusqlite::params![run_work_id, corpus::now()?],
-        )?;
-        let run_id = connection.last_insert_rowid();
-        let request = json!({
-            "summary": "Represent the source claim",
-            "operations": [{
-                "action": "create_concept",
-                "ref": "source_claim",
-                "label": "Source claim",
-                "parents": [],
-                "evidence": [{"quote": reconciliation_work.text}]
-            }]
-        });
-        let reconciliation = resolver::submit_value(
-            connection,
-            reconciliation_work,
-            0,
-            request.clone(),
-            "model",
-            Some(run_id),
-        )?;
-        let mut submitted_arguments = request;
-        submitted_arguments["annotations"] = json!([]);
-        connection.execute(
-            "INSERT INTO tool_calls(\
-                 model_run_id, sequence, tool_name, arguments, result, succeeded, created_at\
-             ) VALUES(?1, 0, 'submit_reconciliation', ?2, '{}', 1, ?3)",
-            rusqlite::params![
-                run_id,
-                serde_json::to_string(&submitted_arguments)?,
-                corpus::now()?
-            ],
-        )?;
-        Ok(reconciliation)
-    }
-
-    fn has_issue(report: &crate::model::ValidationReport, code: &str) -> bool {
-        report.issues.iter().any(|issue| issue.code == code)
-    }
-
     #[test]
-    fn a_new_empty_library_is_valid() -> TestResult {
-        let connection = initialized_connection()?;
-
-        let changes_before = connection.total_changes();
-        let report = validate(&connection)?;
-        assert!(report.valid, "{:?}", report.issues);
-        assert_eq!(connection.total_changes(), changes_before);
-        Ok(())
-    }
-
-    #[test]
-    fn validation_checks_ingestion_timestamps_and_lifecycle_order() -> TestResult {
-        let mut connection = initialized_connection()?;
-        let work = corpus::store_work(&mut connection, "Delivered", "Source text.")?;
-        connection.execute(
-            "INSERT INTO ingestions(\
-                 source_name, channel, source_created_at, source_modified_at, first_seen_at, \
-                 ingested_at, completed_at, status, work_id, new_work, result\
-             ) VALUES(\
-                 'source.txt', 'manual', 'not-a-timestamp', '2026-08-20T12:00:00Z', \
-                 '2026-08-20T12:00:03Z', '2026-08-20T12:00:02Z', \
-                 '2026-08-20T12:00:01Z', 'completed', ?1, 1, 'retained'\
-             )",
-            [work.id],
-        )?;
-
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "invalid_ingestion_timestamp"));
-        assert!(has_issue(&report, "invalid_ingestion_time_order"));
-        Ok(())
-    }
-
-    #[test]
-    fn validation_checks_ingestion_errors_and_new_work_uniqueness() -> TestResult {
-        let mut connection = initialized_connection()?;
-        let work = corpus::store_work(&mut connection, "Delivered", "Source text.")?;
-        connection.execute("DROP INDEX ingestions_one_new_work_per_work", [])?;
-        connection.pragma_update(None, "ignore_check_constraints", true)?;
-        connection.execute(
-            "INSERT INTO ingestions(\
-                 source_name, channel, first_seen_at, ingested_at, status, work_id, new_work, \
-                 error_code\
-             ) VALUES(\
-                 'first.txt', 'manual', '2026-08-20T12:00:00Z', \
-                 '2026-08-20T12:00:01Z', 'processing', ?1, 1, 'retryable'\
-             )",
-            [work.id],
-        )?;
-        connection.execute(
-            "INSERT INTO ingestions(\
-                 source_name, channel, first_seen_at, ingested_at, status, work_id, new_work\
-             ) VALUES(\
-                 'second.txt', 'manual', '2026-08-20T12:00:00Z', \
-                 '2026-08-20T12:00:01Z', 'processing', ?1, 1\
-             )",
-            [work.id],
-        )?;
-        connection.pragma_update(None, "ignore_check_constraints", false)?;
-
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "invalid_ingestion_error"));
-        assert!(has_issue(&report, "duplicate_new_work_ingestion"));
-        Ok(())
-    }
-
-    #[test]
-    fn an_applied_reconciliation_has_consistent_commit_provenance() -> TestResult {
-        let connection = applied_library()?;
-        let report = validate(&connection)?;
-        assert!(report.valid, "{:?}", report.issues);
-        Ok(())
-    }
-
-    #[test]
-    fn validation_detects_a_tampered_relational_revision() -> TestResult {
-        let connection = applied_library()?;
-        connection.execute("DROP TRIGGER revision_concepts_immutable_update", [])?;
-        connection.execute(
-            "UPDATE revision_concepts SET label = 'Tampered', normalized_label = 'tampered' \
-             WHERE revision = 1 AND concept_id = (\
-                 SELECT MIN(concept_id) FROM revision_concepts WHERE revision = 1\
-             )",
-            [],
-        )?;
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "revision_projection_mismatch"));
-        Ok(())
-    }
-
-    #[test]
-    fn validation_replays_shakes_and_detects_tampered_provenance() -> TestResult {
-        let connection = shaken_library()?;
-        let report = validate(&connection)?;
-        assert!(report.valid, "{:?}", report.issues);
-
-        connection.execute(
-            "UPDATE commits SET summary = 'Tampered summary' WHERE revision = 2",
-            [],
-        )?;
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "invalid_shake_provenance"));
-        Ok(())
-    }
-
-    #[test]
-    fn validation_accepts_shared_dag_ancestry() -> TestResult {
-        let mut connection = initialized_connection()?;
-        let work = corpus::store_work(
-            &mut connection,
-            "Graph paper",
-            "Alpha scope. Beta scope. Shared claim.",
-        )?;
-        let reconciliation = resolver::submit_value(
-            &mut connection,
-            &work,
-            0,
-            json!({
-                "summary": "Create a shared concept",
-                "operations": [
-                    {
-                        "action": "create_concept",
-                        "ref": "alpha",
-                        "label": "Alpha",
-                        "parents": [],
-                        "evidence": [{"quote": "Alpha scope."}]
-                    },
-                    {
-                        "action": "create_concept",
-                        "ref": "beta",
-                        "label": "Beta",
-                        "parents": [],
-                        "evidence": [{"quote": "Beta scope."}]
-                    },
-                    {
-                        "action": "create_concept",
-                        "ref": "shared",
-                        "label": "Shared",
-                        "parents": [{"new": "alpha"}, {"new": "beta"}],
-                        "evidence": [{"quote": "Shared claim."}]
-                    }
-                ]
-            }),
-            "human",
-            None,
-        )?;
-        resolver::apply_record(&mut connection, &reconciliation)?;
-
-        let report = validate(&connection)?;
-        assert!(report.valid, "{:?}", report.issues);
-        Ok(())
-    }
-
-    #[test]
-    fn validation_reports_a_cycle_in_a_historical_after_snapshot() -> TestResult {
-        let connection = applied_library()?;
-        let snapshot = json!({
-            "concepts": [
-                {"id": 1, "label": "Predicate locking"},
-                {"id": 2, "label": "Cycle peer"}
-            ],
-            "edges": [
-                {"parent_id": 1, "child_id": 2},
-                {"parent_id": 2, "child_id": 1}
-            ],
-            "evidence": [
-                {"concept_id": 1, "work_id": 1, "start_byte": 0, "end_byte": 37}
-            ]
-        });
-        connection.execute(
-            "UPDATE commits SET after_snapshot = ?1 WHERE revision = 1",
-            [serde_json::to_string(&snapshot)?],
-        )?;
-
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "invalid_historical_snapshot"));
-        Ok(())
-    }
-
-    #[test]
-    fn validation_detects_a_commit_that_no_longer_matches_its_reconciliation() -> TestResult {
-        let connection = applied_library()?;
-        connection.execute(
-            "UPDATE commits SET summary = 'Tampered summary' WHERE revision = 1",
-            [],
-        )?;
-
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "commit_reconciliation_mismatch"));
-        Ok(())
-    }
-
-    #[test]
-    fn validation_detects_tampered_revert_operations() -> TestResult {
-        let mut connection = applied_library()?;
-        let transaction = connection.transaction()?;
-        assert_eq!(corpus::revert(&transaction, 1)?, 2);
-        transaction.commit()?;
-        let report = validate(&connection)?;
-        assert!(report.valid, "{:?}", report.issues);
-
-        connection.execute(
-            "UPDATE commits SET resolved_operations = '[]' WHERE revision = 2",
-            [],
-        )?;
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "invalid_revert_provenance"));
-        Ok(())
-    }
-
-    #[test]
-    fn validation_detects_a_revert_that_does_not_apply_the_inverse() -> TestResult {
-        let mut connection = applied_library()?;
-        let transaction = connection.transaction()?;
-        assert_eq!(corpus::revert(&transaction, 1)?, 2);
-        transaction.commit()?;
-
-        let non_inverse = corpus::snapshot_at(&connection, 1)?;
-        connection.execute(
-            "UPDATE commits SET after_snapshot = ?1, resolved_operations = '[]' \
-             WHERE revision = 2",
-            [serde_json::to_string(&non_inverse)?],
-        )?;
-
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "invalid_revert_provenance"));
-        Ok(())
-    }
-
-    #[test]
-    fn validation_detects_a_reconciliation_payload_mismatch() -> TestResult {
-        let connection = applied_library()?;
-        connection.execute(
-            "UPDATE reconciliations SET summary = 'Tampered summary' WHERE status = 'applied'",
-            [],
-        )?;
-
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "reconciliation_request_mismatch"));
-        Ok(())
-    }
-
-    #[test]
-    fn a_recorded_reconciliation_preserves_its_base_without_a_commit() -> TestResult {
-        let mut connection = applied_library()?;
-        let work = corpus::get_work(&connection, "Transactions")?;
-        let reconciliation = resolver::submit_value(
-            &mut connection,
-            &work,
-            1,
-            json!({
-                "summary": "Reconcile evidence already attached",
-                "operations": [{
-                    "action": "add_evidence",
-                    "concept": {"id": "c1"},
-                    "evidence": [{"quote": "Predicate locks prevent phantom rows."}]
-                }],
-                "annotations": ["This note has no application semantics."]
-            }),
-            "human",
-            None,
-        )?;
-
-        assert_eq!(reconciliation.status, "recorded");
+    fn empty_fresh_library_is_valid() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let connection = crate::db::init(&directory.path().join("annals.db"))?;
         assert_eq!(
-            connection.query_row("SELECT COUNT(*) FROM commits", [], |row| row
-                .get::<_, i64>(0))?,
-            1
+            validate(&connection)?,
+            ValidationReport {
+                valid: true,
+                issues: vec![]
+            }
         );
-        let report = validate(&connection)?;
-        assert!(report.valid, "{:?}", report.issues);
         Ok(())
     }
 
     #[test]
-    fn validation_replays_a_recorded_reconciliation_request() -> TestResult {
-        let mut connection = applied_library()?;
-        let work = corpus::get_work(&connection, "Transactions")?;
-        resolver::submit_value(
-            &mut connection,
-            &work,
-            1,
-            json!({
-                "summary": "Reconcile evidence already attached",
-                "operations": [{
-                    "action": "add_evidence",
-                    "concept": {"id": "c1"},
-                    "evidence": [{"quote": "Predicate locks prevent phantom rows."}]
-                }]
-            }),
-            "human",
-            None,
-        )?;
-        connection.execute(
-            "UPDATE reconciliations SET submitted_request = json_set(\
-                 submitted_request, '$.operations[0].concept.id', 'c999') \
-             WHERE status = 'recorded'",
-            [],
-        )?;
+    fn applied_typed_reconciliation_replays_as_valid() -> TestResult {
+        let (mut connection, record) = applied_fixture()?;
+        assert!(validate(&connection)?.valid);
+        assert_eq!(record.applied_revision, None);
+        let pending = corpus::select_reconciliation(&connection, Some("Source"), true)?;
+        resolver::apply_record(&mut connection, &pending)?;
+        assert!(validate(&connection)?.valid);
+        Ok(())
+    }
 
+    #[test]
+    fn tampered_effect_is_reported_by_replay() -> TestResult {
+        let (mut connection, _) = applied_fixture()?;
+        let pending = corpus::select_reconciliation(&connection, Some("Source"), true)?;
+        resolver::apply_record(&mut connection, &pending)?;
+        connection.execute("DROP TRIGGER concept_effects_immutable_update", [])?;
+        connection.execute("UPDATE concept_effects SET label = 'Tampered'", [])?;
         let report = validate(&connection)?;
         assert!(!report.valid);
-        assert!(has_issue(&report, "reconciliation_resolution_mismatch"));
+        assert!(report.issues.iter().any(|issue| {
+            matches!(
+                issue.code.as_str(),
+                "reconciliation_replay_mismatch" | "noncanonical_commit_effects"
+            )
+        }));
         Ok(())
     }
 
-    #[test]
-    fn validation_replays_an_applied_reconciliation_request() -> TestResult {
-        let connection = applied_library()?;
-        connection.execute(
-            "UPDATE reconciliations SET resolved_reconciliation = json_set(\
-                 resolved_reconciliation, '$.operations[0].concept.label', 'Tampered') \
-             WHERE status = 'applied'",
-            [],
-        )?;
-
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "reconciliation_resolution_mismatch"));
-        Ok(())
-    }
-
-    #[test]
-    fn validation_replays_pending_and_superseded_reconciliations() -> TestResult {
-        let mut connection = applied_library()?;
-        let work = corpus::get_work(&connection, "Transactions")?;
-        resolver::submit_value(
+    fn applied_fixture() -> Result<(Connection, corpus::ReconciliationRecord), AppError> {
+        let directory = tempfile::tempdir()
+            .map_err(|error| AppError::unexpected("tempdir_failed", error.to_string()))?;
+        let path = directory.keep().join("annals.db");
+        let mut connection = crate::db::init(&path)?;
+        let work = store_work(&mut connection, "Source", "Exact source.")?;
+        let record = resolver::submit_value(
             &mut connection,
             &work,
-            1,
+            0,
             json!({
-                "summary": "Add another grounded concept",
+                "summary": "Create a grounded concept",
                 "operations": [{
                     "action": "create_concept",
-                    "ref": "another_claim",
-                    "label": "Another claim",
+                    "ref": "source",
+                    "label": "Source concept",
                     "parents": [],
-                    "evidence": [{"quote": "Predicate locks prevent phantom rows."}]
+                    "evidence": [{"quote": "Exact source."}]
                 }]
             }),
-            "human",
+            "test",
             None,
         )?;
-        connection.execute(
-            "UPDATE reconciliations SET resolved_reconciliation = json_set(\
-                 resolved_reconciliation, '$.operations[0].concept.label', 'Tampered') \
-             WHERE status = 'pending'",
-            [],
-        )?;
-
-        let pending_report = validate(&connection)?;
-        assert!(!pending_report.valid);
-        assert!(has_issue(
-            &pending_report,
-            "reconciliation_resolution_mismatch"
-        ));
-
-        connection.execute(
-            "UPDATE reconciliations SET status = 'superseded' WHERE status = 'pending'",
-            [],
-        )?;
-        let superseded_report = validate(&connection)?;
-        assert!(!superseded_report.valid);
-        assert!(has_issue(
-            &superseded_report,
-            "reconciliation_resolution_mismatch"
-        ));
-        Ok(())
-    }
-
-    #[test]
-    fn validation_detects_a_recorded_projection_with_a_nonrecorded_status() -> TestResult {
-        let mut connection = applied_library()?;
-        let work = corpus::get_work(&connection, "Transactions")?;
-        resolver::submit_value(
-            &mut connection,
-            &work,
-            1,
-            json!({
-                "summary": "Reconcile evidence already attached",
-                "operations": [{
-                    "action": "add_evidence",
-                    "concept": {"id": "c1"},
-                    "evidence": [{"quote": "Predicate locks prevent phantom rows."}]
-                }]
-            }),
-            "human",
-            None,
-        )?;
-        connection.execute(
-            "UPDATE reconciliations SET status = 'pending' WHERE status = 'recorded'",
-            [],
-        )?;
-
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "reconciliation_resolution_mismatch"));
-        Ok(())
-    }
-
-    #[test]
-    fn validation_detects_a_submitted_run_without_a_submission() -> TestResult {
-        let mut connection = initialized_connection()?;
-        let work = corpus::store_work(&mut connection, "Paper", "Some source text.")?;
-        connection.execute(
-            "INSERT INTO model_runs(\
-                 token, work_id, base_revision, status, model, reasoning_effort, prompt_version, \
-                 created_at\
-             ) VALUES('orphan-run', ?1, 0, 'submitted', 'test-model', 'medium', 'test', ?2)",
-            rusqlite::params![work.id, corpus::now()?],
-        )?;
-
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "model_run_submission_mismatch"));
-        Ok(())
-    }
-
-    #[test]
-    fn validation_detects_a_model_reconciliation_for_the_wrong_work() -> TestResult {
-        let mut connection = initialized_connection()?;
-        let examined = corpus::store_work(&mut connection, "Examined", "Examined source.")?;
-        let submitted = corpus::store_work(&mut connection, "Submitted", "Submitted source.")?;
-        record_model_reconciliation(&mut connection, examined.id, &submitted)?;
-
-        let report = validate(&connection)?;
-        assert!(!report.valid);
-        assert!(has_issue(&report, "model_run_reconciliation_mismatch"));
-        Ok(())
-    }
-
-    #[test]
-    fn a_matching_model_submission_is_valid() -> TestResult {
-        let mut connection = initialized_connection()?;
-        let work = corpus::store_work(&mut connection, "Paper", "Some source text.")?;
-        record_model_reconciliation(&mut connection, work.id, &work)?;
-
-        let report = validate(&connection)?;
-        assert!(report.valid, "{:?}", report.issues);
-        Ok(())
+        Ok((connection, record))
     }
 }

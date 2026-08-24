@@ -4,16 +4,19 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
 use serde_json::Value;
 
+#[cfg(test)]
+use crate::change::parse_reconciliation_value;
 use crate::change::{
     ChangeOperation, ConceptSelector, EvidenceDisposition, EvidenceSelector, Reconciliation,
-    ReconciliationContractError, parse_reconciliation, parse_reconciliation_value,
+    ReconciliationContractError, created_id_bindings, insert_request, load_request,
+    parse_reconciliation, reserve_create_ids,
 };
 use crate::corpus::{
     ReconciliationRecord, Snapshot, SnapshotConcept, SnapshotEdge, SnapshotEvidence, Work,
-    head_snapshot, insert_commit, insert_reconciliation, materialize_snapshot, revision,
-    sequence_next, snapshot_at, validate_snapshot,
+    insert_commit, insert_reconciliation, revision, snapshot_at, validate_snapshot,
 };
 use crate::error::AppError;
 use crate::index;
@@ -75,12 +78,10 @@ pub(crate) fn submit_document(
     model_run_id: Option<i64>,
 ) -> Result<ReconciliationRecord, AppError> {
     let reconciliation = parse_reconciliation(document).map_err(|error| contract_error(&error))?;
-    let request: Value = serde_json::from_str(document)?;
     submit(
         connection,
         work,
         base_revision,
-        &request,
         &reconciliation,
         actor,
         model_run_id,
@@ -99,13 +100,12 @@ pub(crate) fn submit_value(
     model_run_id: Option<i64>,
 ) -> Result<ReconciliationRecord, AppError> {
     let reconciliation =
-        parse_reconciliation_value(value.clone()).map_err(|error| contract_error(&error))?;
+        parse_reconciliation_value(value).map_err(|error| contract_error(&error))?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let record = submit_parsed(
         &transaction,
         work,
         base_revision,
-        &value,
         &reconciliation,
         actor,
         model_run_id,
@@ -115,36 +115,11 @@ pub(crate) fn submit_value(
     Ok(record)
 }
 
-#[allow(clippy::needless_pass_by_value)]
-pub(crate) fn submit_value_in_transaction(
-    transaction: &Transaction<'_>,
-    work: &Work,
-    base_revision: i64,
-    value: Value,
-    actor: &str,
-    model_run_id: Option<i64>,
-    reconciliation_draft_id: Option<i64>,
-) -> Result<ReconciliationRecord, AppError> {
-    let reconciliation =
-        parse_reconciliation_value(value.clone()).map_err(|error| contract_error(&error))?;
-    submit_parsed(
-        transaction,
-        work,
-        base_revision,
-        &value,
-        &reconciliation,
-        actor,
-        model_run_id,
-        reconciliation_draft_id,
-    )
-}
-
 #[allow(clippy::too_many_arguments)]
 fn submit(
     connection: &mut Connection,
     work: &Work,
     base_revision: i64,
-    request: &Value,
     reconciliation: &Reconciliation,
     actor: &str,
     model_run_id: Option<i64>,
@@ -155,7 +130,6 @@ fn submit(
         &transaction,
         work,
         base_revision,
-        request,
         reconciliation,
         actor,
         model_run_id,
@@ -170,25 +144,73 @@ fn submit_parsed(
     connection: &Transaction<'_>,
     work: &Work,
     base_revision: i64,
-    request: &Value,
     reconciliation: &Reconciliation,
     actor: &str,
     model_run_id: Option<i64>,
     reconciliation_draft_id: Option<i64>,
 ) -> Result<ReconciliationRecord, AppError> {
     let base = snapshot_at(connection, base_revision)?;
-    let resolved = resolve(connection, work, base_revision, &base, reconciliation, None)?;
+    let created_ids = reserve_create_ids(connection, reconciliation)?;
+    let resolved = resolve(
+        connection,
+        work,
+        base_revision,
+        &base,
+        reconciliation,
+        Some(&created_ids),
+    )?;
     let changes_corpus = !snapshots_corpus_equal(&base, &resolved.resulting_snapshot);
+    let request_id = insert_request(
+        connection,
+        work.id,
+        base_revision,
+        reconciliation,
+        &created_ids,
+        &crate::corpus::now()?,
+    )?;
     insert_reconciliation(
         connection,
+        request_id,
         work.id,
         base_revision,
         model_run_id,
         reconciliation_draft_id,
         changes_corpus,
-        reconciliation.summary(),
-        &serde_json::to_string(request)?,
-        &serde_json::to_string(&resolved)?,
+        actor,
+    )
+}
+
+/// Finalize a model-run draft by linking the reconciliation directly to its
+/// normalized request rows.  No request or resolved JSON is copied.
+pub(crate) fn submit_stored_request_in_transaction(
+    transaction: &Transaction<'_>,
+    work: &Work,
+    base_revision: i64,
+    request_id: i64,
+    actor: &str,
+    model_run_id: Option<i64>,
+    draft_id: Option<i64>,
+) -> Result<ReconciliationRecord, AppError> {
+    let reconciliation = load_request(transaction, request_id)?;
+    let created_ids = created_id_bindings(transaction, request_id)?;
+    let base = snapshot_at(transaction, base_revision)?;
+    let resolved = resolve(
+        transaction,
+        work,
+        base_revision,
+        &base,
+        &reconciliation,
+        Some(&created_ids),
+    )?;
+    let changes_corpus = !snapshots_corpus_equal(&base, &resolved.resulting_snapshot);
+    insert_reconciliation(
+        transaction,
+        request_id,
+        work.id,
+        base_revision,
+        model_run_id,
+        draft_id,
+        changes_corpus,
         actor,
     )
 }
@@ -207,58 +229,31 @@ pub(crate) fn validate_record(
     if head_revision != record.base_revision {
         return Err(stale_change(record.base_revision, head_revision));
     }
-    let expected: ResolvedReconciliation = serde_json::from_str(&record.resolved_reconciliation)
-        .map_err(|error| {
-            AppError::database(
-                "invalid_resolved_reconciliation",
-                format!("the stored resolved reconciliation is invalid: {error}"),
-            )
-        })?;
     let base = snapshot_at(connection, record.base_revision)?;
-    if snapshots_corpus_equal(&base, &expected.resulting_snapshot) {
+    let replayed = replay_record(connection, record)?;
+    if snapshots_corpus_equal(&base, &replayed.resulting_snapshot) {
         return Err(AppError::database(
-            "invalid_resolved_reconciliation",
+            "invalid_pending_reconciliation",
             "a pending reconciliation must project a corpus transition",
         ));
     }
-    validate_snapshot(connection, &expected.resulting_snapshot).map_err(|error| {
+    validate_snapshot(connection, &replayed.resulting_snapshot).map_err(|error| {
         AppError::database(
-            "invalid_resolved_reconciliation",
-            format!("the stored resulting corpus is invalid: {error}"),
+            "invalid_pending_reconciliation",
+            format!("the replayed resulting corpus is invalid: {error}"),
         )
     })?;
-    let actual = replay_record(connection, record)?;
-    if actual != expected {
-        return Err(AppError::database(
-            "invalid_resolved_reconciliation",
-            "the stored resolved reconciliation does not match its submitted request",
-        ));
-    }
-    Ok(expected)
+    Ok(replayed)
 }
 
 pub(crate) fn replay_record(
     connection: &Connection,
     record: &ReconciliationRecord,
 ) -> Result<ResolvedReconciliation, AppError> {
-    let expected: ResolvedReconciliation = serde_json::from_str(&record.resolved_reconciliation)
-        .map_err(|error| {
-            AppError::database(
-                "invalid_resolved_reconciliation",
-                format!("the stored resolved reconciliation is invalid: {error}"),
-            )
-        })?;
-    if expected.base_revision != record.base_revision {
-        return Err(AppError::database(
-            "invalid_resolved_reconciliation",
-            "the stored resolved reconciliation names a different base revision",
-        ));
-    }
-    let reconciliation =
-        parse_reconciliation(&record.submitted_request).map_err(|error| contract_error(&error))?;
+    let reconciliation = load_request(connection, record.request_id)?;
     let work = crate::corpus::get_work_by_id(connection, record.work_id)?;
     let base = snapshot_at(connection, record.base_revision)?;
-    let created_ids = recorded_create_ids(&reconciliation, &expected)?;
+    let created_ids = created_id_bindings(connection, record.request_id)?;
     resolve(
         connection,
         &work,
@@ -314,19 +309,7 @@ fn apply_record_with_ingestion(
     if head_revision != record.base_revision {
         return Err(stale_change(record.base_revision, head_revision));
     }
-    let before = head_snapshot(&transaction)?;
-    let reconciliation =
-        parse_reconciliation(&record.submitted_request).map_err(|error| contract_error(&error))?;
-    let work = crate::corpus::get_work_by_id(&transaction, record.work_id)?;
-    let created_ids = recorded_create_ids(&reconciliation, &resolved)?;
-    let revalidated = resolve(
-        &transaction,
-        &work,
-        record.base_revision,
-        &before,
-        &reconciliation,
-        Some(&created_ids),
-    )?;
+    let revalidated = replay_record(&transaction, record)?;
     if revalidated != resolved {
         return Err(AppError::conflict(
             "reconciliation_resolution_changed",
@@ -336,16 +319,12 @@ fn apply_record_with_ingestion(
     let new_revision = head_revision.checked_add(1).ok_or_else(|| {
         AppError::database("revision_overflow", "the corpus revision is too large")
     })?;
-    materialize_snapshot(&transaction, &resolved.resulting_snapshot)?;
     insert_commit(
         &transaction,
         new_revision,
-        Some(record.work_id),
         Some(record.id),
         "change",
-        &record.summary,
-        &serde_json::from_str(&record.submitted_request)?,
-        &serde_json::to_value(&resolved.operations)?,
+        None,
         &resolved.resulting_snapshot,
         &record.actor,
     )?;
@@ -374,42 +353,6 @@ fn stale_change(base_revision: i64, head_revision: i64) -> AppError {
             "the reconciliation examined revision {base_revision}, but HEAD is revision {head_revision}"
         ),
     )
-}
-
-fn recorded_create_ids(
-    reconciliation: &Reconciliation,
-    expected: &ResolvedReconciliation,
-) -> Result<HashMap<String, i64>, AppError> {
-    if reconciliation.operations().len() != expected.operations.len() {
-        return Err(AppError::database(
-            "invalid_resolved_reconciliation",
-            "the stored operation receipts do not match the submitted operations",
-        ));
-    }
-    let mut ids = HashMap::new();
-    for (operation, receipt) in reconciliation.operations().iter().zip(&expected.operations) {
-        match (operation, receipt) {
-            (
-                ChangeOperation::CreateConcept { handle, .. },
-                ResolvedOperation::CreateConcept { concept, .. },
-            ) => {
-                ids.insert(handle.clone(), concept.id.storage_id());
-            }
-            (ChangeOperation::AddParent { .. }, ResolvedOperation::AddParent { .. })
-            | (ChangeOperation::RemoveParent { .. }, ResolvedOperation::RemoveParent { .. })
-            | (ChangeOperation::AddEvidence { .. }, ResolvedOperation::AddEvidence { .. })
-            | (ChangeOperation::RemoveEvidence { .. }, ResolvedOperation::RemoveEvidence { .. })
-            | (ChangeOperation::RewordConcept { .. }, ResolvedOperation::RewordConcept { .. })
-            | (ChangeOperation::RetireConcept { .. }, ResolvedOperation::RetireConcept { .. }) => {}
-            _ => {
-                return Err(AppError::database(
-                    "invalid_resolved_reconciliation",
-                    "the stored operation receipts do not match the submitted operations",
-                ));
-            }
-        }
-    }
-    Ok(ids)
 }
 
 #[derive(Clone, Copy)]
@@ -451,29 +394,17 @@ fn resolve(
         .map(|concept| concept.id)
         .collect::<BTreeSet<_>>();
     let mut local_ids = HashMap::new();
-    let mut next_concept_id = recorded_create_ids
-        .is_none()
-        .then(|| sequence_next(connection, "concepts"))
-        .transpose()?;
     let mut allocated_ids = BTreeSet::new();
     for operation in operations {
         if let ChangeOperation::CreateConcept { handle, .. } = operation {
-            let id = if let Some(recorded) = recorded_create_ids {
-                recorded.get(handle).copied().ok_or_else(|| {
+            let id = recorded_create_ids
+                .and_then(|recorded| recorded.get(handle).copied())
+                .ok_or_else(|| {
                     AppError::database(
-                        "invalid_resolved_reconciliation",
-                        format!("created concept ref {handle:?} has no recorded public ID"),
+                        "concept_binding_missing",
+                        format!("created concept ref {handle:?} has no reserved public ID"),
                     )
-                })?
-            } else {
-                let id = next_concept_id.ok_or_else(|| {
-                    AppError::database("identity_overflow", "concept identity space is exhausted")
                 })?;
-                next_concept_id = Some(id.checked_add(1).ok_or_else(|| {
-                    AppError::database("identity_overflow", "concept identity space is exhausted")
-                })?);
-                id
-            };
             if id <= 0 || base_ids.contains(&id) || !allocated_ids.insert(id) {
                 return Err(AppError::database(
                     "invalid_resolved_reconciliation",
@@ -1203,11 +1134,9 @@ mod tests {
             "human",
             None,
         )?;
-        let expected: super::ResolvedReconciliation =
-            serde_json::from_str(&record.resolved_reconciliation)?;
+        let expected = replay_record(&connection, &record)?;
 
-        connection.execute("INSERT INTO concepts(label) VALUES('Temporary')", [])?;
-        connection.execute("DELETE FROM concepts WHERE label = 'Temporary'", [])?;
+        connection.execute("INSERT INTO concept_identities DEFAULT VALUES", [])?;
 
         assert_eq!(replay_record(&connection, &record)?, expected);
         assert_eq!(apply_record(&mut connection, &record)?, 1);

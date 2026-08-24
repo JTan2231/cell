@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::change::{
-    ChangeOperation, ConceptSelector, EvidenceSelector, parse_operation_value,
+    self, ChangeOperation, ConceptSelector, EvidenceSelector, parse_operation_value,
     validate_reconciliation_metadata,
 };
 use crate::corpus::{ReconciliationRecord, Snapshot, Work, heading_for_offset, now, snapshot_at};
@@ -73,6 +73,7 @@ struct DiscardArgs {
 #[derive(Clone)]
 struct Draft {
     id: i64,
+    request_id: i64,
     version: i64,
     summary: String,
     annotations: Vec<String>,
@@ -81,7 +82,7 @@ struct Draft {
 #[derive(Clone)]
 struct Slot {
     id: i64,
-    operation: Value,
+    operation: Option<ChangeOperation>,
     status: String,
     hint: Option<String>,
 }
@@ -125,20 +126,17 @@ pub(crate) fn start(
     }
     let timestamp = now()?;
     transaction.execute(
+        "INSERT INTO reconciliation_requests(work_id, base_revision, summary, created_at)
+         VALUES(?1, ?2, ?3, ?4)",
+        params![work.id, base_revision, args.summary, timestamp],
+    )?;
+    let request_id = transaction.last_insert_rowid();
+    change::replace_request_metadata(transaction, request_id, &args.summary, &args.annotations)?;
+    transaction.execute(
         "INSERT INTO reconciliation_drafts(\
-             model_run_id, work_id, base_revision, status, version, summary, annotations, \
-             created_sequence, created_at, updated_at\
-         ) VALUES(?1, ?2, ?3, 'open', ?4, ?5, ?6, ?7, ?8, ?8)",
-        params![
-            run_id,
-            work.id,
-            base_revision,
-            version,
-            args.summary,
-            serde_json::to_string(&args.annotations)?,
-            sequence,
-            timestamp
-        ],
+             model_run_id, request_id, status, version, created_sequence, created_at, updated_at\
+         ) VALUES(?1, ?2, 'open', ?3, ?4, ?5, ?5)",
+        params![run_id, request_id, version, sequence, timestamp],
     )?;
     let draft_id = transaction.last_insert_rowid();
     for (index, operation) in args.operations.iter().enumerate() {
@@ -146,18 +144,18 @@ pub(crate) fn start(
             .ok()
             .and_then(|value| value.checked_add(1))
             .ok_or_else(identity_overflow)?;
-        transaction.execute(
-            "INSERT INTO reconciliation_draft_operations(\
-                 draft_id, slot, ordinal, operation, status, hint, created_version, \
-                 last_changed_version\
-             ) VALUES(?1, ?2, ?3, ?4, 'needs_revision', NULL, ?5, ?5)",
-            params![
-                draft_id,
-                slot,
-                i64::try_from(index).map_err(|_| identity_overflow())?,
-                serde_json::to_string(operation)?,
-                version
-            ],
+        let parsed = parse_operation_value(operation.clone()).ok();
+        change::insert_operation(
+            transaction,
+            request_id,
+            slot,
+            i64::try_from(index).map_err(|_| identity_overflow())?,
+            parsed.as_ref(),
+            None,
+            "needs_revision",
+            None,
+            version,
+            version,
         )?;
     }
     evaluate(
@@ -242,49 +240,46 @@ pub(crate) fn revise(
 
     let version = draft.version.checked_add(1).ok_or_else(identity_overflow)?;
     for (replacement, slot) in args.replace.iter().zip(replacement_slots) {
-        transaction.execute(
-            "UPDATE reconciliation_draft_operations \
-             SET operation = ?1, status = 'needs_revision', hint = NULL, last_changed_version = ?2 \
-             WHERE draft_id = ?3 AND slot = ?4 AND status <> 'dropped'",
-            params![
-                serde_json::to_string(&replacement.operation)?,
-                version,
-                draft.id,
-                slot
-            ],
+        let parsed = parse_operation_value(replacement.operation.clone()).ok();
+        change::replace_operation(
+            transaction,
+            draft.request_id,
+            slot,
+            parsed.as_ref(),
+            version,
         )?;
     }
     for slot in removed_slots {
         transaction.execute(
-            "UPDATE reconciliation_draft_operations \
+            "UPDATE request_operations \
              SET status = 'dropped', hint = NULL, last_changed_version = ?1 \
-             WHERE draft_id = ?2 AND slot = ?3 AND status <> 'dropped'",
-            params![version, draft.id, slot],
+             WHERE request_id = ?2 AND slot = ?3 AND status <> 'dropped'",
+            params![version, draft.request_id, slot],
         )?;
     }
     let mut next_slot = transaction.query_row(
-        "SELECT COALESCE(MAX(slot), 0) + 1 FROM reconciliation_draft_operations WHERE draft_id = ?1",
-        [draft.id],
+        "SELECT COALESCE(MAX(slot), 0) + 1 FROM request_operations WHERE request_id = ?1",
+        [draft.request_id],
         |row| row.get::<_, i64>(0),
     )?;
     let mut next_ordinal = transaction.query_row(
-        "SELECT COALESCE(MAX(ordinal), -1) + 1 FROM reconciliation_draft_operations WHERE draft_id = ?1",
-        [draft.id],
+        "SELECT COALESCE(MAX(ordinal), -1) + 1 FROM request_operations WHERE request_id = ?1",
+        [draft.request_id],
         |row| row.get::<_, i64>(0),
     )?;
     for operation in &args.append {
-        transaction.execute(
-            "INSERT INTO reconciliation_draft_operations(\
-                 draft_id, slot, ordinal, operation, status, hint, created_version, \
-                 last_changed_version\
-             ) VALUES(?1, ?2, ?3, ?4, 'needs_revision', NULL, ?5, ?5)",
-            params![
-                draft.id,
-                next_slot,
-                next_ordinal,
-                serde_json::to_string(operation)?,
-                version
-            ],
+        let parsed = parse_operation_value(operation.clone()).ok();
+        change::insert_operation(
+            transaction,
+            draft.request_id,
+            next_slot,
+            next_ordinal,
+            parsed.as_ref(),
+            None,
+            "needs_revision",
+            None,
+            version,
+            version,
         )?;
         next_slot = next_slot.checked_add(1).ok_or_else(identity_overflow)?;
         next_ordinal = next_ordinal.checked_add(1).ok_or_else(identity_overflow)?;
@@ -294,18 +289,11 @@ pub(crate) fn revise(
     let annotations = args.annotations.as_ref().unwrap_or(&draft.annotations);
     validate_reconciliation_metadata(summary, annotations)
         .map_err(|error| invalid(error.to_string()))?;
+    change::replace_request_metadata(transaction, draft.request_id, summary, annotations)?;
     transaction.execute(
-        "UPDATE reconciliation_drafts \
-         SET version = ?1, summary = ?2, annotations = ?3, updated_at = ?4 \
-         WHERE id = ?5 AND status = 'open' AND version = ?6",
-        params![
-            version,
-            summary,
-            serde_json::to_string(annotations)?,
-            now()?,
-            draft.id,
-            draft.version
-        ],
+        "UPDATE reconciliation_drafts SET version = ?1, updated_at = ?2 \
+         WHERE id = ?3 AND status = 'open' AND version = ?4",
+        params![version, now()?, draft.id, draft.version],
     )?;
     evaluate(
         transaction,
@@ -433,9 +421,9 @@ fn evaluate(
     let assessments = assess_slots(work, &base, &slots);
     for (slot, assessment) in slots.iter().zip(&assessments) {
         transaction.execute(
-            "UPDATE reconciliation_draft_operations SET status = ?1, hint = ?2 \
-             WHERE draft_id = ?3 AND slot = ?4",
-            params![assessment.state, assessment.hint, draft_id, slot.id],
+            "UPDATE request_operations SET status = ?1, hint = ?2 \
+             WHERE request_id = ?3 AND slot = ?4",
+            params![assessment.state, assessment.hint, draft.request_id, slot.id],
         )?;
     }
     if assessments
@@ -449,12 +437,11 @@ fn evaluate(
         });
     }
 
-    let request = assembled_request(&draft, &slots);
-    match resolver::submit_value_in_transaction(
+    match resolver::submit_stored_request_in_transaction(
         transaction,
         work,
         base_revision,
-        request,
+        draft.request_id,
         actor,
         Some(run_id),
         Some(draft_id),
@@ -499,9 +486,10 @@ fn evaluate(
             );
             for slot in &implicated {
                 transaction.execute(
-                    "UPDATE reconciliation_draft_operations \
-                     SET status = 'implicated', hint = ?1 WHERE draft_id = ?2 AND slot = ?3",
-                    params![hint, draft_id, slot],
+                    "UPDATE request_operations \
+                     SET status = 'implicated', hint = ?1 \
+                     WHERE request_id = ?2 AND slot = ?3",
+                    params![hint, draft.request_id, slot],
                 )?;
             }
             let refreshed = draft_by_id(transaction, draft_id)?;
@@ -517,19 +505,18 @@ fn evaluate(
 fn assess_slots(work: &Work, base: &Snapshot, slots: &[Slot]) -> Vec<Assessment> {
     let mut assessments = slots
         .iter()
-        .map(|slot| match parse_operation_value(slot.operation.clone()) {
-            Ok(operation) => Assessment {
+        .map(|slot| match slot.operation.clone() {
+            Some(operation) => Assessment {
                 state: "staged",
                 hint: None,
                 parsed: Some(operation),
             },
-            Err(error) => Assessment {
+            None => Assessment {
                 state: "needs_revision",
                 hint: Some(bounded(
                     &format!(
-                        "{} could not be understood as one complete reconciliation operation: {}. Replace only {}; the other operations remain preserved.",
+                        "{} could not be understood as one complete reconciliation operation. Replace only {}; the other operations remain preserved.",
                         operation_id(slot.id),
-                        error,
                         operation_id(slot.id)
                     ),
                     MAX_HINT_CHARACTERS,
@@ -541,11 +528,8 @@ fn assess_slots(work: &Work, base: &Snapshot, slots: &[Slot]) -> Vec<Assessment>
 
     let mut declarations = BTreeMap::<String, Vec<usize>>::new();
     for (index, slot) in slots.iter().enumerate() {
-        if let Some(handle) = raw_creation_handle(&slot.operation) {
-            declarations
-                .entry(handle.to_owned())
-                .or_default()
-                .push(index);
+        if let Some(ChangeOperation::CreateConcept { handle, .. }) = &slot.operation {
+            declarations.entry(handle.clone()).or_default().push(index);
         }
     }
     for (handle, owners) in &declarations {
@@ -1221,23 +1205,28 @@ fn status_value(
     let mut counts = BTreeMap::<&str, usize>::new();
     let operations = slots
         .iter()
-        .map(|slot| {
+        .map(|slot| -> Result<Value, AppError> {
             let public_status = public_status(&slot.status);
             *counts.entry(public_status).or_default() += 1;
             let mut item = json!({
                 "operation_id": operation_id(slot.id),
                 "status": public_status,
-                "summary": operation_summary(&slot.operation)
+                "summary": operation_summary(slot.operation.as_ref())
             });
             if exact.contains(&slot.id) {
-                item["operation"] = slot.operation.clone();
+                item["operation"] = slot
+                    .operation
+                    .as_ref()
+                    .map(serde_json::to_value)
+                    .transpose()?
+                    .unwrap_or(Value::Null);
                 if let Some(hint) = &slot.hint {
                     item["hint"] = json!(hint);
                 }
             }
-            item
+            Ok(item)
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, _>>()?;
     let mut shown_hint_characters = 0_usize;
     let mut hints_not_shown = 0_usize;
     let attention = slots
@@ -1299,60 +1288,45 @@ fn status_value(
     }))
 }
 
-fn assembled_request(draft: &Draft, slots: &[Slot]) -> Value {
-    json!({
-        "summary": draft.summary,
-        "operations": slots
-            .iter()
-            .filter(|slot| slot.status != "dropped")
-            .map(|slot| slot.operation.clone())
-            .collect::<Vec<_>>(),
-        "annotations": draft.annotations
-    })
-}
-
 fn load_slots(
     connection: &Connection,
     draft_id: i64,
     include_dropped: bool,
 ) -> Result<Vec<Slot>, AppError> {
-    let sql = if include_dropped {
-        "SELECT slot, operation, status, hint \
-         FROM reconciliation_draft_operations WHERE draft_id = ?1 ORDER BY ordinal"
-    } else {
-        "SELECT slot, operation, status, hint \
-         FROM reconciliation_draft_operations \
-         WHERE draft_id = ?1 AND status <> 'dropped' ORDER BY ordinal"
-    };
-    let mut statement = connection.prepare(sql)?;
-    let rows = statement.query_map([draft_id], |row| {
-        let operation = row.get::<_, String>(1)?;
-        Ok(Slot {
-            id: row.get(0)?,
-            operation: serde_json::from_str(&operation).map_err(|error| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    1,
-                    rusqlite::types::Type::Text,
-                    Box::new(error),
-                )
-            })?,
-            status: row.get(2)?,
-            hint: row.get(3)?,
-        })
-    })?;
-    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    let request_id = connection.query_row(
+        "SELECT request_id FROM reconciliation_drafts WHERE id = ?1",
+        [draft_id],
+        |row| row.get::<_, i64>(0),
+    )?;
+    Ok(
+        change::load_operations(connection, request_id, include_dropped)?
+            .into_iter()
+            .map(|stored| Slot {
+                id: stored.slot,
+                operation: stored.operation,
+                status: stored.status,
+                hint: stored.hint,
+            })
+            .collect(),
+    )
 }
 
 fn open_draft(connection: &Connection, run_id: i64) -> Result<Option<Draft>, AppError> {
-    connection
+    let mut draft = connection
         .query_row(
-            "SELECT id, version, summary, annotations FROM reconciliation_drafts \
-             WHERE model_run_id = ?1 AND status = 'open'",
+            "SELECT d.id, d.request_id, d.version, q.summary \
+             FROM reconciliation_drafts AS d \
+             JOIN reconciliation_requests AS q ON q.id = d.request_id \
+             WHERE d.model_run_id = ?1 AND d.status = 'open'",
             [run_id],
             draft_from_row,
         )
         .optional()
-        .map_err(AppError::from)
+        .map_err(AppError::from)?;
+    if let Some(value) = &mut draft {
+        value.annotations = change::load_annotations(connection, value.request_id)?;
+    }
+    Ok(draft)
 }
 
 fn require_open_draft(connection: &Connection, run_id: i64) -> Result<Draft, AppError> {
@@ -1365,35 +1339,36 @@ fn require_open_draft(connection: &Connection, run_id: i64) -> Result<Draft, App
 }
 
 fn draft_by_id(connection: &Connection, draft_id: i64) -> Result<Draft, AppError> {
-    connection
+    let mut draft = connection
         .query_row(
-            "SELECT id, version, summary, annotations FROM reconciliation_drafts WHERE id = ?1",
+            "SELECT d.id, d.request_id, d.version, q.summary \
+             FROM reconciliation_drafts AS d \
+             JOIN reconciliation_requests AS q ON q.id = d.request_id WHERE d.id = ?1",
             [draft_id],
             draft_from_row,
         )
-        .map_err(AppError::from)
+        .map_err(AppError::from)?;
+    draft.annotations = change::load_annotations(connection, draft.request_id)?;
+    Ok(draft)
 }
 
 fn draft_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Draft> {
-    let annotations = row.get::<_, String>(3)?;
     Ok(Draft {
         id: row.get(0)?,
-        version: row.get(1)?,
-        summary: row.get(2)?,
-        annotations: serde_json::from_str(&annotations).map_err(|error| {
-            rusqlite::Error::FromSqlConversionFailure(
-                3,
-                rusqlite::types::Type::Text,
-                Box::new(error),
-            )
-        })?,
+        request_id: row.get(1)?,
+        version: row.get(2)?,
+        summary: row.get(3)?,
+        annotations: Vec::new(),
     })
 }
 
 fn require_active_slot(connection: &Connection, draft_id: i64, slot: i64) -> Result<(), AppError> {
     let exists = connection.query_row(
-        "SELECT EXISTS(SELECT 1 FROM reconciliation_draft_operations \
-         WHERE draft_id = ?1 AND slot = ?2 AND status <> 'dropped')",
+        "SELECT EXISTS(\
+             SELECT 1 FROM request_operations AS operation \
+             JOIN reconciliation_drafts AS draft ON draft.request_id = operation.request_id \
+             WHERE draft.id = ?1 AND operation.slot = ?2 AND operation.status <> 'dropped'\
+         )",
         params![draft_id, slot],
         |row| row.get::<_, bool>(0),
     )?;
@@ -1412,8 +1387,11 @@ fn require_active_slot(connection: &Connection, draft_id: i64, slot: i64) -> Res
 
 fn require_slot(connection: &Connection, draft_id: i64, slot: i64) -> Result<(), AppError> {
     let exists = connection.query_row(
-        "SELECT EXISTS(SELECT 1 FROM reconciliation_draft_operations \
-         WHERE draft_id = ?1 AND slot = ?2)",
+        "SELECT EXISTS(\
+             SELECT 1 FROM request_operations AS operation \
+             JOIN reconciliation_drafts AS draft ON draft.request_id = operation.request_id \
+             WHERE draft.id = ?1 AND operation.slot = ?2\
+         )",
         params![draft_id, slot],
         |row| row.get::<_, bool>(0),
     )?;
@@ -1429,8 +1407,9 @@ fn require_slot(connection: &Connection, draft_id: i64, slot: i64) -> Result<(),
 
 fn active_slot_count(connection: &Connection, draft_id: i64) -> Result<i64, AppError> {
     Ok(connection.query_row(
-        "SELECT COUNT(*) FROM reconciliation_draft_operations \
-         WHERE draft_id = ?1 AND status <> 'dropped'",
+        "SELECT COUNT(*) FROM request_operations AS operation \
+         JOIN reconciliation_drafts AS draft ON draft.request_id = operation.request_id \
+         WHERE draft.id = ?1 AND operation.status <> 'dropped'",
         [draft_id],
         |row| row.get(0),
     )?)
@@ -1486,12 +1465,6 @@ fn evidence(operation: &ChangeOperation) -> &[EvidenceSelector] {
     }
 }
 
-fn raw_creation_handle(operation: &Value) -> Option<&str> {
-    (operation.get("action").and_then(Value::as_str) == Some("create_concept"))
-        .then(|| operation.get("ref").and_then(Value::as_str))
-        .flatten()
-}
-
 fn add_issue(assessment: &mut Assessment, state: &'static str, message: impl Into<String>) {
     if assessment.state != "needs_revision" || state == "needs_revision" {
         assessment.state = state;
@@ -1529,8 +1502,8 @@ fn implicated_slots(code: &str, slots: &[Slot]) -> BTreeSet<i64> {
             actions.is_empty()
                 || slot
                     .operation
-                    .get("action")
-                    .and_then(Value::as_str)
+                    .as_ref()
+                    .map(operation_action)
                     .is_some_and(|action| actions.contains(&action))
         })
         .map(|slot| slot.id)
@@ -1559,34 +1532,34 @@ fn public_status(status: &str) -> &'static str {
     }
 }
 
-fn operation_summary(operation: &Value) -> String {
-    let action = operation
-        .get("action")
-        .and_then(Value::as_str)
-        .unwrap_or("unrecognized operation");
-    let summary = match action {
-        "create_concept" => format!(
-            "Create concept {:?}",
-            operation
-                .get("label")
-                .and_then(Value::as_str)
-                .unwrap_or("without a readable label")
-        ),
-        "add_parent" => "Add one broader/narrower link".to_owned(),
-        "remove_parent" => "Remove one broader/narrower link".to_owned(),
-        "add_evidence" => "Attach exact evidence".to_owned(),
-        "remove_evidence" => "Remove exact evidence".to_owned(),
-        "reword_concept" => format!(
-            "Reword a concept to {:?}",
-            operation
-                .get("label")
-                .and_then(Value::as_str)
-                .unwrap_or("an unreadable label")
-        ),
-        "retire_concept" => "Retire one concept".to_owned(),
-        other => format!("Unrecognized operation action {other:?}"),
+fn operation_summary(operation: Option<&ChangeOperation>) -> String {
+    let summary = match operation {
+        Some(ChangeOperation::CreateConcept { label, .. }) => {
+            format!("Create concept {label:?}")
+        }
+        Some(ChangeOperation::AddParent { .. }) => "Add one broader/narrower link".to_owned(),
+        Some(ChangeOperation::RemoveParent { .. }) => "Remove one broader/narrower link".to_owned(),
+        Some(ChangeOperation::AddEvidence { .. }) => "Attach exact evidence".to_owned(),
+        Some(ChangeOperation::RemoveEvidence { .. }) => "Remove exact evidence".to_owned(),
+        Some(ChangeOperation::RewordConcept { label, .. }) => {
+            format!("Reword a concept to {label:?}")
+        }
+        Some(ChangeOperation::RetireConcept { .. }) => "Retire one concept".to_owned(),
+        None => "Unrecognized operation".to_owned(),
     };
     bounded(&summary, 200)
+}
+
+fn operation_action(operation: &ChangeOperation) -> &'static str {
+    match operation {
+        ChangeOperation::CreateConcept { .. } => "create_concept",
+        ChangeOperation::AddParent { .. } => "add_parent",
+        ChangeOperation::RemoveParent { .. } => "remove_parent",
+        ChangeOperation::AddEvidence { .. } => "add_evidence",
+        ChangeOperation::RemoveEvidence { .. } => "remove_evidence",
+        ChangeOperation::RewordConcept { .. } => "reword_concept",
+        ChangeOperation::RetireConcept { .. } => "retire_concept",
+    }
 }
 
 fn display_heading(path: Option<&Vec<String>>) -> String {
@@ -1764,33 +1737,36 @@ mod tests {
         let slots = vec![
             Slot {
                 id: 1,
-                operation: json!({
+                operation: parse_operation_value(json!({
                     "action": "create_concept",
                     "ref": "new_one",
                     "label": "New one",
                     "parents": [],
                     "evidence": [{"quote": "Exact source."}]
-                }),
+                }))
+                .ok(),
                 status: "needs_revision".to_owned(),
                 hint: None,
             },
             Slot {
                 id: 2,
-                operation: json!({
+                operation: parse_operation_value(json!({
                     "action": "remove_evidence",
                     "concept": {"new": "new_one"},
                     "evidence": [{"quote": "Exact source."}]
-                }),
+                }))
+                .ok(),
                 status: "needs_revision".to_owned(),
                 hint: None,
             },
             Slot {
                 id: 3,
-                operation: json!({
+                operation: parse_operation_value(json!({
                     "action": "remove_parent",
                     "concept": {"new": "new_one"},
                     "parent": {"new": "new_one"}
-                }),
+                }))
+                .ok(),
                 status: "needs_revision".to_owned(),
                 hint: None,
             },

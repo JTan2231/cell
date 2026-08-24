@@ -468,15 +468,14 @@ updater, rendered LaunchAgent, and a hash manifest. During an update the
 deployer disables new activations and writes the maintenance marker. An active
 worker is allowed to finish its current delivery, then stops before claiming
 another; an idle worker stops immediately. The deployer then makes a consistent
-Annals library backup, applies any required schema migration, and atomically
-switches the `current` selector. It updates both command links and both configs
-inside the same rollback-protected deployment transaction, then validates
-through the candidate and installed frontends before reloading launchd and
-waking the worker. The operator-owned pause marker is retained, so that wake-up
-does not dispatch queued jobs when the installation was paused. A failure
-restores the old selectors, configs, plist, and service. Authentication, the
-Annals library, telemetry ledger, spool, logs, pause state, and archives are
-retained.
+Annals library backup, verifies the current schema, and atomically switches the
+`current` selector. It updates both command links and both configs inside the
+same rollback-protected deployment transaction, then validates through the
+candidate and installed frontends before reloading launchd and waking the
+worker. The operator-owned pause marker is retained, so that wake-up does not
+dispatch queued jobs when the installation was paused. A failure restores the
+old selectors, configs, plist, and service. Authentication, the Annals library,
+telemetry ledger, spool, logs, pause state, and archives are retained.
 
 No operator timing or manual service stop is required. It is safe to run the
 same deployment command while a delivery is in progress; by default the
@@ -487,6 +486,36 @@ idle, so one delivery cannot straddle the old and new proxy binaries.
 Set `ANNALS_UPDATE_WAIT_SECONDS` to another nonnegative number when a caller
 needs a shorter deadline. `--no-start` installs and validates without reading
 or changing launchd state.
+
+Schema version 3 intentionally cannot open an older library. For this specific
+breaking boundary, use the guarded fresh-state operation after `ci.sh` is
+green:
+
+```sh
+./packaging/launchd/deploy-user.sh \
+  --binary "$PWD/target/release/annals" \
+  --usage-binary "$PWD/target/release/annals-usage" \
+  --codex "$(command -v codex)" \
+  --fresh-state
+```
+
+`--fresh-state` cannot be combined with `--no-start`. It stages and validates
+an empty library and paused spool, disables launchd, requests a graceful pause,
+waits for the current delivery, and registers all remaining arrivals. Under
+maintenance it moves the old library, WAL sidecars, usage ledger, and whole
+spool into one directory under `backups/generations/` and switches in the fresh
+state.
+
+Only after candidate and installed validation does the deployer import queued,
+retryable processing, and last-moment incoming sources from that generation.
+The importer preserves their source bytes and old FIFO order while assigning
+new unstarted delivery identities. It verifies the queued count, clears the
+operator pause while maintenance still blocks dispatch, commits the deployment
+receipt, removes maintenance, and wakes the worker. A pre-commit failure puts
+the old generation and service back. A successful receipt records
+`rollback_generation` and `imported_backlog` in
+`install/last-update.json`; the archived generation remains available for
+explicit recovery.
 
 ### Migrate the former system installation
 
@@ -504,9 +533,11 @@ sudo ./packaging/launchd/migrate-to-user.sh \
 
 The migration disables and drains `system/org.annals.inbox`, moves the whole
 state directory on one filesystem so the database and its WAL sidecars stay
-together, rewrites the two legacy absolute state paths, deploys the user
-release, and removes the validated old program files. If deployment fails, it
-puts the state and system service back. Do not run the old and new jobs
+together, rewrites the two legacy absolute state paths, and performs the same
+version-3 fresh-state cutover described above. The old database and spool are
+kept as a rollback generation, while uncompleted sources enter the fresh inbox.
+It then removes the validated old program files. If deployment fails, it puts
+the original state and system service back. Do not run the old and new jobs
 together: launchd domains allow identical labels, while the inbox lock only
 prevents simultaneous workers.
 

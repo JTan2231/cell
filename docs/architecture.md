@@ -1,367 +1,197 @@
 # Annals architecture
 
-## Boundary and ownership
+## Boundaries
 
-Annals is one Rust executable and one SQLite database per library. A work is an
-immutable source object. The corpus owns concepts and the explicit
-broader-to-narrower edges between them. Evidence is many-to-many: a work may
-support many concepts and a concept may be supported by many works. Model runs
-own examinations, reconciliation drafts, and reconciliation provenance, never
-concepts.
+Annals is one Rust executable and one SQLite library. A work owns immutable
+source bytes. The corpus owns durable concepts, explicit broader-to-narrower
+edges, and concept evidence. Model runs own examinations and draft provenance,
+never corpus facts.
 
-An applied reconciliation whose projected corpus state differs mechanically
-from its base, a confirmed nonempty shake, or a revert advances the corpus.
-Retaining a work, reading state, running a model, recording a reconciliation,
-canceling or finding no removable edges in a shake, validating, and backing up
-do not advance the revision. A projected corpus state mechanically equal to its
-base is retained as an interpretive record with status `recorded` and has no
-commit or revision of its own.
+The SQLite boundary is intentionally asymmetric:
+
+- normalized requests and append-only typed effects are durable;
+- `CorpusState` is reduced in memory; and
+- JSON exists only at external command/tool boundaries and in immutable hashed
+  audit artifacts.
+
+There is no materialized current graph, stored HEAD snapshot, or alternative
+replay path. Schema version 3 rejects every earlier library rather than
+attempting to translate competing historical representations.
+
+## One corpus reducer
+
+Revision zero reduces to an empty `CorpusState`. For each contiguous commit,
+the reducer loads its ordered concept, parent-edge, and evidence-link effects
+and returns a new state. It enforces transition preconditions while applying
+each effect and then enforces whole-state invariants, including acyclicity,
+valid evidence ranges, and evidence-grounded leaves.
+
+Every behavior that needs corpus facts goes through this reducer:
+
+- HEAD and historical browsing;
+- search and graph expansion;
+- reconciliation resolution and validation;
+- commit display and diff;
+- shake planning;
+- revert planning; and
+- full-library validation.
+
+This keeps historical and current behavior identical by construction. There
+is no cache whose agreement must be trusted.
+
+### Query boundary
+
+Bounded graph and search operations benefit from SQL joins and indexes. After
+replaying the selected revision, Annals projects that in-memory state into
+connection-local temporary concept, edge, and evidence tables. Those tables
+exist only for the connection and revision being queried. They are disposable
+query acceleration, not library state, and validation never treats them as
+authority.
 
 ## Source-delivery boundary
 
-A work is the content-addressed identity of immutable bytes. A source delivery
-is one occasion on which material is supplied through a manual command or the
-filesystem inbox. Several deliveries may select the same work, so Annals
-records each delivery separately instead of attaching arrival metadata to the
-deduplicated work.
+A source delivery is distinct from its content-addressed work. Manual commands
+and dispatched inbox jobs create ingestion receipts with captured source
+metadata and lifecycle status. Several deliveries can select the same work.
 
-The delivery receipt captures the source name and byte size, optional
-filesystem creation and modification times, and the Annals-controlled
-first-seen, ingestion, and completion times. It progresses from `processing`
-to `completed` or `failed`. Successful retention records whether the work was
-new or already present independently from the processing result (`retained`,
-`pending`, `applied`, or `recorded`). A failed delivery retains its stable
-error code and reporting-safe message, including failures that occur before a
-work exists. Raw runner diagnostics are outside this reporting record.
+The filesystem inbox separates admission from dispatch. Registration moves a
+settled source into `queued/JOB_ID/material`, assigns an immutable monotonic
+sequence, and writes an unstarted job receipt. Dispatch moves only the FIFO
+head to `processing`, creates or recovers its database receipt, and starts the
+delivery. A retryable processing envelope remains ahead of later queued jobs.
 
-After successful retention, a fresh inbox delivery follows one of two paths. A
-new work enters the liaison flow and is applied immediately when its projected
-corpus state differs from its base. Bytes that select an already retained work
-complete with `duplicate` retention and result `retained`; the envelope moves
-to `duplicates/` without an examination, reconciliation, commit, or revision
-change. This routing is prospective: historical delivery records and archived
-envelopes keep their recorded results and locations.
+The activation-long run lock excludes workers. A shorter control lock orders
+dispatch against pause and registration. Operator pause allows the current
+delivery to finish and blocks the next claim. Deployment maintenance blocks
+registration, repair, and dispatch. The two barriers are independent;
+`resume` never removes maintenance.
 
-The filesystem inbox separates admission from processing. Registration moves
-a settled arrival into a durable envelope under `queued/`, assigns its
-immutable FIFO sequence, and writes a job receipt with state `queued` and zero
-attempts. It deliberately creates no database delivery record. Dispatch is the
-boundary that moves the oldest queued envelope to `processing/`, changes its
-job receipt to `processing`, and creates or recovers the source-delivery
-record. A retryable processing envelope remains ahead of every queued job.
+## Liaison boundary
 
-Inbox job receipts carry a stable delivery key. Recovery selects the same
-database receipt through that key, so moving or retrying a durable envelope
-cannot create a second source-delivery record. The queue index records the
-first observation timestamp while an arrival settles, and registration
-preserves that timestamp and the captured source metadata in the envelope.
-The job receipt carries sequence authoritatively after registration. A
-recovered job that already links to a reconciliation finishes that recorded
-work rather than being reclassified as a fresh duplicate. Manual `integrate
---work` creates no delivery because it selects bytes already retained in the
-library. Both manual integration forms continue through the explicit
-integration flow even when the selected bytes were retained earlier.
+The liaison runs in an isolated Codex app-server session. Its pointer prompt
+contains the work label and frozen base revision, not the complete work or
+repository instructions. Session-scoped tools provide bounded work reading,
+corpus browsing, and reconciliation-draft operations. No shell, web, planning,
+user-input, or multi-agent tools are exposed.
 
-Dispatch and operator pause are serialized by a short-lived queue-control
-lock. If dispatch wins, that job is allowed to finish; if pause wins, the job
-remains queued. Registration continues while paused. The activation-long run
-lock still excludes overlapping workers, while the independent deployer-owned
-maintenance marker blocks registration, repair, and dispatch when observed
-between deliveries. An
-operator resume removes only the pause marker. launchd or systemd supplies
-periodic activation; Annals owns neither a resident worker nor a scheduling
-policy.
-
-Source-bearing manual commands share one advisory lock per library. Acquiring
-that lock finalizes any processing receipt left by an interrupted prior manual
-command as failed. `work add` commits retention and its completed receipt in
-one transaction; input-form integration commits an applied result in the same
-transaction as its corpus revision.
-
-`annals lately` is a read-only projection of these receipts. Its selected time
-basis supplies interval membership and reverse-chronological ordering; source
-contents, headings, evidence, and conceptual state are outside this read path.
-
-## Corpus graph
-
-Each concept has a durable public ID such as `c42` and a descriptive label.
-Labels may repeat; the ID, not the label, carries identity. Rewording and edge
-changes preserve that identity.
-
-Concept edges point from broader scopes to narrower scopes. They form an
-unordered directed acyclic graph. A concept may have any number of parents,
-and no parent is primary. Roots are concepts with no parents; leaves are
-concepts with no children. These classifications are derived from the edge set
-and may change when one edge is added or removed.
-
-There are no concept paths, placement slots, sibling positions, or subtree
-moves. Presentation code uses deterministic ordering only to make output and
-pagination repeatable; that order has no corpus meaning. Each edge is an
-explicit semantic assertion. Reconciliation accepts an edge even when longer
-paths imply the same ancestry and does not remove it merely for that reason;
-an explicit shake can remove such shortcuts mechanically.
-
-Evidence is attached to a concept as a whole, not to a parent edge or one view
-of the graph. Every projected leaf must have at least one evidence link.
-
-### Read boundary
-
-Ordinary graph reads do not deserialize a complete corpus snapshot. A
-`GraphReader` is a lightweight database facade that selects one immutable
-revision. It produces bounded owned views containing only the selected
-concepts, ID-only edges, and evidence coordinates required by the caller.
-Presentation code receives those views and never queries SQLite or reconstructs
-corpus-wide ancestry.
-
-Roots, direct relationships, evidence, search, and local graph expansion apply
-their limits in SQLite before constructing response objects. Local expansion
-has independent depth, node, and internal edge bounds. Work bodies are outside
-the graph projection; evidence quotations are sliced from only the selected
-page of immutable works.
-
-Complete in-memory snapshots remain explicit exceptional values for
-reconciliation resolution, validation, diff, reversion, and shake planning.
-They are not part of the interactive read path.
-
-### Transitive reduction
-
-`annals shake` proposes HEAD's transitive reduction: it removes edge `A -> C`
-exactly when another directed path still leads from `A` to `C`. The reduced
-DAG is a compact representation of the same ancestor-descendant relation; it
-does not preserve every original path or direct-neighbor count.
-
-Interactive human mode reports the exact plan and asks once for confirmation.
-Application binds to the persistent library identity and the reported revision
-and materialized graph. It removes every reported edge, appends a `shake` commit
-and full snapshot, and advances the revision in one immediate transaction. A stale,
-cancelled, or empty plan writes nothing. `--yes` supplies noninteractive
-confirmation. JSON without `--yes` returns an exit-zero informational preview;
-a later invocation with `--yes` computes a fresh plan for its current HEAD.
-
-## Liaison flow
-
-`annals integrate` content-addresses or selects one work and reads HEAD. Before
-starting a model, Annals may reuse the newest successful reconciliation for
-the exact same work, base revision, prompt version, model, and reasoning
-effort. `--reexamine` bypasses that reuse. A later revision or different
-liaison configuration always creates a fresh examination.
-
-For a fresh examination, Annals creates a model-run record bound to the work
-and base revision and starts an isolated Codex app-server process. The selected
-Codex executable defaults to the separate `annals-usage` proxy, which forwards
-the protocol to real Codex and records token events against the model-run token.
-Observation does not alter the liaison prompt, model, reasoning effort, or tool
-set; see [Consumption telemetry](telemetry.md). The high-quality default uses
-`gpt-5.6-sol` with max reasoning. The low and medium presets use
-`gpt-5.6-luna` and `gpt-5.6-terra`, respectively, both with medium reasoning.
-An exact model override changes the model while the selected preset continues
-to control reasoning effort.
-
-The process uses an empty temporary directory, a private temporary Codex home,
-and no execution environment. Shell, web, planning, user-input, multi-agent,
-plugin, skill, and other built-in tool sources are disabled. The prompt is a
-short pointer containing the work label, base revision, and operating
-instructions, not the complete work. Work text is presented through read
-tools as source content, never as operating instructions.
-
-The liaison constructs a provisional, best-current reconciliation. It does not
-exclude source-grounded material because it appears familiar, minor,
-speculative, redundant, obvious, or unlikely to be useful. It chooses coherent
-granularity relative to the work and frozen corpus without claiming a unique
-or final semantic decomposition.
-
-At thread start Annals supplies exactly nine direct, session-scoped tools:
-
-- `work_overview()` returns byte size and a bounded Markdown-heading outline;
-- `work_read(regions[])` performs bounded reads by heading path, unique quote,
-  beginning/end anchor, or exact continuation quotation;
-- `work_search(queries[])` returns compact paragraph excerpts and heading
-  paths;
-- `corpus_search(queries[])` searches the frozen graph by label and ancestor
-  context, with independent cursors and optional descendant scopes;
-- `corpus_inspect(requests[])` batches overview, root, concept, direct
-  relationship, evidence, and bounded local-graph reads addressed by public
-  concept ID;
-- `submit_reconciliation(reconciliation)` starts one complete reconciliation
-  draft and immediately records it when every operation is valid;
-- `revise_reconciliation(revision)` replaces or removes named draft operations,
-  appends operations, or explicitly updates summary and annotations;
-- `reconciliation_status(operation_ids[])` returns a compact draft roster and,
-  when requested, exact stored operations; and
-- `discard_reconciliation(expected_version)` abandons the complete open draft
-  without creating a reconciliation record.
-
-Read and search calls accept batches. Responses are bounded, and the liaison
-follows opaque cursors or graph frontiers when it needs more context. Draft
-mutations use a returned, run-monotonic version to reject stale corrections,
-including corrections for a draft discarded before a fresh start. A successful
-partial submission or revision leaves the session open; only a submission or
-revision reporting `recorded: true` closes its write boundary. Tool arguments
-and results, including failed attempts, are retained in the model-run
-transcript.
-
-App-server sends each dynamic tool call back to the host, which dispatches it
-to the in-process liaison backend.
-
-The model's final response is diagnostic only. `integrate` succeeds from the
-recorded reconciliation side effect of either submission or revision. If the
-process fails after finalization, that reconciliation remains the result. If it
-exits without one, Annals abandons any open draft and returns
-`model_did_not_submit_reconciliation`.
-
-No SQLite write transaction is held while the model examines the work. For an
-ordinary unstructured work, sequential reads can continue from exact returned
-text. Highly repetitive text may require another natural anchor; exhaustive
-sequential traversal is not guaranteed when no unique continuation exists.
+Every tool request crosses a strict JSON ingress boundary. Annals parses it to
+language-level types, applies size and shape limits, and stores recognized
+reconciliation intent in normalized rows. The raw tool arguments and result
+are retained and hashed for audit, but no behavior decodes those artifacts
+later.
 
 ### Draft staging
 
-The initial request receives stable operation IDs such as `op-3`. Annals
-checks all operations rather than stopping at the first problem. Independently
-valid operations remain staged; an operation whose local-handle dependency is
-not yet usable waits; and operations capable of participating in a detected
-whole-request semantic conflict are implicated while other staged operations
-remain untouched. Source-matching problems receive bounded plain-language
-hints showing useful heading and neighboring text rather than a public
-diagnostic grammar.
+The first submission creates a request and an open draft. Each operation has a
+stable slot and typed child rows for selectors and evidence. A malformed slot
+is represented by a null action plus a repair hint; raw malformed JSON does not
+become draft state.
 
-The liaison revises only named IDs. Omission never deletes staged content,
-removal is explicit, and appended operations receive new stable IDs. It may
-read a compact roster or request exact stored JSON from
-`reconciliation_status`. Discarding terminates the complete draft and permits a
-fresh initial submission in the same examination. A draft left open when its
-run ends is retained as abandoned audit state.
+Revision calls replace named slots, mark removals dropped, append new slots,
+or change request metadata. Unmentioned slots remain unchanged. Annals assesses
+operations individually and then resolves the active set together. When the
+whole request succeeds, the draft becomes finalized and its existing request
+rows are linked directly to one reconciliation. Discarded and abandoned drafts
+remain audit records.
 
-Every draft mutation uses one short immediate transaction. When all active
-operations work together, Annals assembles them in their retained order with
-the draft summary and annotations, resolves the complete request against the
-frozen base, creates one reconciliation record, and finalizes the draft in that
-same transaction. No partial operation enters corpus state, and the canonical
-stored request is the server-assembled whole rather than the arguments of the
-last corrective call.
+## Resolution
 
-## Language-level reconciliation
+A reconciliation operation is one of:
 
-The host supplies the immutable evidence work and frozen base revision. A
-complete request contains a summary, one or more semantic operations, and
-optional inert annotations. It contains neither the work selector nor base
-revision. Direct human submission supplies this object once; model staging
-assembles the same object from its finalized draft.
+- create concept;
+- add or remove parent edges;
+- add or remove evidence;
+- reword a concept; or
+- retire a concept, optionally with a replacement.
 
-An existing concept selector uses its public ID:
+Existing concepts are selected by durable `cN` IDs. Create operations declare
+request-local references whose durable IDs are reserved at ingress. Evidence
+selectors use exact quotations plus optional heading and adjacent-text context;
+resolution must identify a unique UTF-8 byte range in the immutable work.
 
-```json
-{"id":"c42"}
-```
+Resolution is a pure state transition over the original base `CorpusState`.
+It validates local-reference scope, selector cardinality, operation ordering,
+reword evidence disposition, retirement replacement semantics, graph
+acyclicity, and leaf evidence. It yields a projected state but does not write
+one.
 
-A created concept declares a request-unique local handle in `ref`. Any
-operation in that request may select it with `new`, including a forward
-reference:
-
-```json
-{"new":"predicate_locking"}
-```
-
-Handles identify creations only within one request. They are not labels and
-are replaced by durable `cN` IDs when the request resolves. Duplicate concept
-labels are valid.
-
-The graph-native operations are:
-
-- `create_concept`, with `ref`, `label`, an unordered `parents` array, and
-  evidence from the scoped work;
-- `add_parent`, which idempotently ensures one explicit edge, and
-  `remove_parent`, which strictly removes one explicit edge;
-- `add_evidence` and `remove_evidence`;
-- `reword_concept`, preserving the concept ID and explicitly retaining or
-  removing its evidence; and
-- `retire_concept`, optionally recording a replacement concept.
-
-There is no move operation. Reclassification is expressed as the exact parent
-edges to remove and add; unrelated parents and descendants are unchanged.
-Retirement is nonrecursive: other concepts survive, and a child that loses its
-last parent becomes a root.
-
-Evidence uses an exact quotation from the scoped work. When text repeats,
-`within_heading` (a source-document heading path), `preceded_by`, or
-`followed_by` disambiguates it. Concept paths do not exist; source heading
-paths remain part of evidence location. Public input never uses byte offsets.
-
-## Resolution and validation
-
-A complete direct request or assembled draft parses the strict JSON contract,
-resolves all base-revision IDs and request-local handles, and projects the
-complete final graph in memory. Draft preflight performs the checks it can per
-operation first; finalization still repeats whole-request resolution and
-validation. Annals validates, among other things:
-
-- every public ID and local handle resolves;
-- quotations resolve uniquely in the immutable work;
-- every edge has two existing, distinct endpoints and occurs at most once;
-- the edge set is acyclic;
-- roots and leaves agree with the edge set;
-- every leaf has evidence;
-- evidence ranges are unique valid UTF-8 ranges no larger than 8 KiB; and
-- rewording explicitly retains or removes existing evidence.
-
-Labels are not required to be unique. Annals does not choose a primary parent,
-invent a path, reorder concepts, repair a reconciliation, assign confidence,
-or judge whether a conceptual claim is true. It validates the deterministic
-boundary around that judgment.
-
-A stored reconciliation includes its complete direct or server-assembled
-request, resolved semantic operations, and complete projected corpus state. If
-that state differs mechanically from the base, the current result is
-`pending`. A result based on the same or a later revision supersedes the same
-work's pending reconciliation. An older-base result remains an examination
-record without displacing a newer pending result.
-
-If the projected corpus state is mechanically equal to the base, Annals stores
-the result with status `recorded`. This says only that this interpretation
-makes no material corpus change. Annotations are excluded from the comparison.
-
-Resolved operations record what the request addressed; they are not a diff.
-They retain idempotent ensure operations even when the selected edge or
-evidence already exists; reconciliation status, recorded-change effects, and
-revision diffs describe the actual state effect.
+Submission stores only normalized intent and reconciliation provenance.
+Pending validation, display, and application reload that intent and resolve it
+again at the recorded base. A mechanically equal projection is recorded as an
+interpretive result without a commit.
 
 ## Atomic application
 
-Application requires `HEAD == base_revision`, re-resolves the stored request,
-and verifies that it produces the recorded projected corpus state. One
-immediate SQLite transaction then materializes concepts, edges, and evidence;
-appends the commit with its request, resolved operations, and complete corpus
-snapshot; stores the same revision in immutable relational graph rows; marks
-the reconciliation applied; advances the revision once; and commits all state
-together.
+Applying a pending reconciliation opens an immediate transaction and:
 
-Any error rolls back the entire transition. A stale reconciliation fails with
-`stale_change`; Annals does not automatically rebase it. Annotations never
-block application.
+1. replays the original base and current HEAD;
+2. requires HEAD to equal the stored base revision;
+3. reconstructs and resolves the normalized request;
+4. derives the canonical effect set by diffing HEAD and the projection;
+5. inserts one commit and its ordered typed effects;
+6. marks the reconciliation applied; and
+7. completes a linked ingestion result when applicable.
 
-## History and reversion
+The transaction commits once. A failure changes neither corpus history nor
+workflow state. There is no snapshot/materialization step and no serialized
+resolved object to keep synchronized.
 
-HEAD remains materialized for writes. Every committed revision also has
-immutable relational concept, edge, and evidence rows, so ordinary current and
-historical reads select only the required subset with the same graph API.
-Commits additionally retain complete JSON snapshots for validation, semantic
-diff, inversion, and provenance replay.
+## History, diff, shake, and revert
 
-`change show --at REVISION` derives that commit's exact effects by comparing
-its parent snapshot with its resulting snapshot.
+Applied changes, confirmed nonempty shakes, and reverts form a contiguous
+append-only revision sequence. Work retention, examinations, pending or
+recorded reconciliations, previews, and failed attempts do not.
 
-Diffs describe semantic facts: concept creation, retirement, and rewording;
-one parent edge added or removed; and evidence added or removed. They do not
-report moves or order changes. A concept with two parents remains one identity
-in a diff and in every graph view. A shake appears as one commit whose resolved
-transition contains its removed parent edges.
+`diff` replays both requested revisions and compares their `CorpusState`
+values. `change show --at` combines the stored effects with typed intent and
+replayed context to derive its public narrative.
 
-`revert REVISION` applies that revision's inverse to current HEAD and appends a
-new `revert` commit. It never removes the original commit. Inversion checks the
-affected concepts, edges, and evidence against the target transition; a later
-conflicting change fails atomically with `revert_conflict`. An unrelated edge
-on the same shared concept is not silently discarded.
+`shake` computes a transitive reduction plan from replayed HEAD. Confirmation
+replays HEAD again, rejects a stale plan, and appends only parent-edge removal
+effects. It preserves every ancestor-descendant relation while removing
+redundant direct assertions.
 
-Retired concepts disappear from HEAD but remain in historical snapshots.
-Works are retained independently and are never deleted by concept retirement
-or reversion.
+`revert` loads the target transition, derives its inverse, and applies that
+inverse to current HEAD. If a targeted fact has changed incompatibly since the
+original commit, the revert fails atomically. Successful reversion is a new
+commit and never removes the original.
+
+## Validation and tamper detection
+
+Validation begins with SQLite integrity, foreign keys, schema version, and the
+absence of forbidden materialized or JSON-authority storage. It verifies work
+digests and tool-artifact hashes, then replays every commit in order through
+the production reducer.
+
+For each transition it independently derives the canonical effect set from
+the before and after states and compares that set with storage. It reconstructs
+typed requests, resolves reconciliations at their recorded bases, and checks
+draft, reconciliation, ingestion, change, shake, and revert provenance. Any
+effect tampering, skipped revision, invalid transition, or disagreement in
+derived semantics fails validation.
+
+## Fresh-state deployment boundary
+
+Normal user deployments quiesce the inbox, back up the current library, check
+the current schema, switch the complete release, validate, and restore the
+prior operator pause state.
+
+The version-3 boundary uses `deploy-user.sh --fresh-state`. The deployer stages
+and validates a new empty library and paused spool before touching live state.
+It disables activation, pauses dispatch, lets the active delivery finish,
+registers all remaining arrivals, and applies maintenance. It then moves the
+old library, telemetry ledger, sidecars, and whole spool into one rollback
+generation and switches in the staged state.
+
+After candidate and installed validation, a dedicated import operation reads
+the archived queued and retryable envelopes in their original FIFO order,
+copies their unchanged source bytes into new unstarted envelopes, and verifies
+the destination count. The importer requires an otherwise fresh destination
+with both pause and maintenance active. The deployer clears the operator pause
+while maintenance still prevents dispatch, commits its cutover receipt, then
+removes maintenance and wakes launchd.
+
+Any failure before that commit restores the previous release selector,
+configuration, library and sidecars, spool, pause state, and service. On
+success the old generation remains under `backups/generations/` for explicit
+recovery.

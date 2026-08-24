@@ -239,6 +239,14 @@ restores the previous release if launchd cutover fails. Configuration,
 credentials, library data, telemetry, logs, the operator pause state, and
 queued or archived sources are retained.
 
+Schema version 3 is an intentional fresh-state boundary. Its one-time installed
+cutover adds `--fresh-state` to the command above. That mode archives the old
+library, telemetry ledger, sidecars, and spool as one rollback generation,
+validates the empty replacement, imports the uncompleted backlog in stable
+FIFO order, explicitly resumes it, and only then wakes launchd. See the
+[system installation guide](docs/system-installation.md) for the guarded
+sequence and recovery receipt.
+
 After installation, the user—and Codex running as that user—uses the default
 library without `sudo`:
 

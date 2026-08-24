@@ -65,13 +65,47 @@ case "$command" in
     inbox)
         case "${1:-}" in
             status)
-                printf '%s\n' '{"ok":true,"data":{"locked":false}}'
+                queued=$(find "$state/spool/queued" -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+                    | wc -l | tr -d ' ')
+                processing=$(find "$state/spool/processing" -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+                    | wc -l | tr -d ' ')
+                paused=false
+                maintenance=false
+                [ ! -f "$state/spool/.paused" ] || paused=true
+                [ ! -f "$state/spool/.maintenance" ] || maintenance=true
+                printf '{"ok":true,"data":{"locked":false,"queued":%s,"processing":%s,"paused":%s,"maintenance":%s}}\n' \
+                    "$queued" "$processing" "$paused" "$maintenance"
                 ;;
             run)
                 [ -f "$state/spool/.maintenance" ]
                 [ -f "$state/spool/.paused" ]
                 printf '%s\n' \
                     '{"ok":true,"data":{"stopped_for_maintenance":true}}'
+                ;;
+            pause)
+                : >"$state/spool/.paused"
+                ;;
+            resume)
+                rm -f "$state/spool/.paused"
+                ;;
+            register)
+                ;;
+            import-backlog)
+                shift
+                [ "${1:-}" = --from ]
+                from=${2:?}
+                [ ! -f "$from/fail-import" ] || exit 1
+                imported=$(find "$from/queued" "$from/processing" \
+                    -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+                    | wc -l | tr -d ' ')
+                sequence=1
+                while [ "$sequence" -le "$imported" ]; do
+                    id=$(printf 'j%020d' "$sequence")
+                    mkdir -p "$state/spool/queued/$id/material"
+                    printf '%s\n' imported >"$state/spool/queued/$id/material/source-$sequence.txt"
+                    sequence=$((sequence + 1))
+                done
+                printf '{"ok":true,"data":{"imported":%s}}\n' "$imported"
                 ;;
             *)
                 exit 1
@@ -328,5 +362,43 @@ deploy >"$temporary/kickstart-warning.out" 2>"$temporary/kickstart-warning.err"
 [ ! -e "$kickstart_order_error" ]
 grep -F 'warning: unable to wake the installed service' \
     "$temporary/kickstart-warning.err" >/dev/null
+
+printf '%s\n' old-library >"$state/annals.db"
+mkdir -p \
+    "$state/spool/processing/j00000000000000000090/material" \
+    "$state/spool/queued/j00000000000000000091/material"
+printf '%s\n' first >"$state/spool/processing/j00000000000000000090/material/first.txt"
+printf '%s\n' second >"$state/spool/queued/j00000000000000000091/material/second.txt"
+current_before_fresh=$(readlink "$state/install/current")
+: >"$state/spool/fail-import"
+if deploy --fresh-state >"$temporary/fresh-failure.out" 2>"$temporary/fresh-failure.err"; then
+    printf '%s\n' 'fresh deployment unexpectedly survived backlog import failure' >&2
+    exit 1
+fi
+[ "$(cat "$state/annals.db")" = old-library ]
+[ "$(readlink "$state/install/current")" = "$current_before_fresh" ]
+[ -f "$state/spool/processing/j00000000000000000090/material/first.txt" ]
+[ -f "$state/spool/queued/j00000000000000000091/material/second.txt" ]
+[ -f "$state/spool/.paused" ]
+[ ! -e "$state/spool/.maintenance" ]
+[ -f "$loaded" ]
+rm -f "$state/spool/fail-import"
+fresh_output=$(deploy --fresh-state)
+[ ! -s "$state/annals.db" ]
+[ "$(find "$state/spool/queued" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" -eq 2 ]
+[ "$(find "$state/spool/processing" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" -eq 0 ]
+[ ! -e "$state/spool/.paused" ]
+[ ! -e "$state/spool/.maintenance" ]
+[ -f "$loaded" ]
+grep -F '"fresh_state": true' "$state/install/last-update.json" >/dev/null
+grep -F '"imported_backlog": 2' "$state/install/last-update.json" >/dev/null
+generation=$(sed -n 's/^  "rollback_generation": "\([^"]*\)",$/\1/p' \
+    "$state/install/last-update.json")
+[ -n "$generation" ]
+[ "$(cat "$state/backups/generations/$generation/annals.db")" = old-library ]
+[ -f "$state/backups/generations/$generation/spool/duplicates/preserved" ]
+[ -f "$state/backups/generations/$generation/spool/processing/j00000000000000000090/material/first.txt" ]
+[ -f "$state/backups/generations/$generation/spool/queued/j00000000000000000091/material/second.txt" ]
+printf '%s\n' "$fresh_output" | grep -F 'Imported backlog: 2' >/dev/null
 
 printf '%s\n' 'user deploy test passed'

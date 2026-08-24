@@ -1,10 +1,11 @@
-//! Bounded, database-backed graph projections.
+//! Bounded graph projections over replayed corpus state.
 //!
-//! This module deliberately keeps the graph in `SQLite`. [`GraphReader`] selects a
-//! revision and returns a cheap [`GraphView`]; each view operation materializes
-//! only the bounded [`GraphProjection`] needed by its caller.
+//! [`GraphReader`] reduces typed commit effects into one immutable in-memory
+//! corpus state, then exposes that revision through connection-local TEMP rows
+//! so the bounded paging and recursive SQL below remains compact.  Those rows
+//! are an ephemeral query implementation, never persisted library state.
 //!
-//! The queries assume revision-addressable relational tables with this shape:
+//! The TEMP projection has this shape:
 //!
 //! - `revision_concepts(revision, concept_id, label, normalized_label, ...counts)`
 //! - `revision_edges(revision, parent_id, child_id)`
@@ -136,6 +137,7 @@ impl<'db> GraphReader<'db> {
         if !revision_store::revision_exists(self.db, revision)? {
             return Err(revision_not_found(revision));
         }
+        revision_store::prepare_graph_revision(self.db, revision)?;
         Ok(GraphView {
             db: self.db,
             library_id,
@@ -148,6 +150,7 @@ impl<'db> GraphReader<'db> {
         if !revision_store::revision_exists(self.db, revision)? {
             return Err(revision_not_found(revision));
         }
+        revision_store::prepare_graph_revision(self.db, revision)?;
         let library_id = self.db.query_row(
             "SELECT library_id FROM library_state WHERE singleton = 1",
             [],
@@ -200,6 +203,7 @@ impl<'db> GraphReader<'db> {
         if !revision_store::revision_exists(self.db, revision)? {
             return Err(revision_not_found(revision));
         }
+        revision_store::prepare_graph_revision(self.db, revision)?;
         Ok(GraphView {
             db: self.db,
             library_id,
@@ -1627,60 +1631,40 @@ mod tests {
 
     fn fixture() -> Result<Connection, rusqlite::Error> {
         let connection = Connection::open_in_memory()?;
+        connection.execute_batch(include_str!("../schema.sql"))?;
         connection.execute_batch(
-            "CREATE TABLE library_state(\
-                 singleton INTEGER PRIMARY KEY, revision INTEGER NOT NULL, library_id TEXT NOT NULL\
-             ); \
-             INSERT INTO library_state VALUES(1, 2, '0123456789abcdef0123456789abcdef'); \
-             CREATE TABLE commits(revision INTEGER PRIMARY KEY); \
-             INSERT INTO commits VALUES(1), (2); \
-             CREATE TABLE revision_snapshots(\
-                 revision INTEGER PRIMARY KEY, concept_count INTEGER NOT NULL, \
-                 edge_count INTEGER NOT NULL, evidence_count INTEGER NOT NULL\
-             ); \
-             INSERT INTO revision_snapshots VALUES(1, 3, 1, 1), (2, 4, 3, 1); \
-             CREATE TABLE revision_concepts(\
-                 revision INTEGER NOT NULL, concept_id INTEGER NOT NULL, \
-                 label TEXT NOT NULL, normalized_label TEXT NOT NULL, \
-                 parent_count INTEGER NOT NULL, child_count INTEGER NOT NULL, \
-                 evidence_count INTEGER NOT NULL, \
-                 PRIMARY KEY(revision, concept_id)\
-             ); \
-             CREATE INDEX revision_concepts_by_label \
-                 ON revision_concepts(revision, normalized_label, concept_id); \
-             CREATE TABLE revision_edges(\
-                 revision INTEGER NOT NULL, parent_id INTEGER NOT NULL, child_id INTEGER NOT NULL, \
-                 PRIMARY KEY(revision, parent_id, child_id)\
-             ); \
-             CREATE INDEX revision_edges_by_child \
-                 ON revision_edges(revision, child_id, parent_id); \
-             CREATE TABLE revision_evidence(\
-                 revision INTEGER NOT NULL, concept_id INTEGER NOT NULL, work_id INTEGER NOT NULL, \
-                 start_byte INTEGER NOT NULL, end_byte INTEGER NOT NULL, \
-                 PRIMARY KEY(revision, concept_id, work_id, start_byte, end_byte)\
-             ); \
-             CREATE TABLE works(\
-                 id INTEGER PRIMARY KEY, label TEXT NOT NULL, normalized_label TEXT NOT NULL, \
-                 text TEXT NOT NULL\
-             ); \
-             INSERT INTO works VALUES(7, 'Work', 'work', '0123456789'); \
-             INSERT INTO revision_concepts VALUES \
-                 (1, 1, 'Root', 'root', 0, 1, 0), \
-                 (1, 2, 'Child', 'child', 1, 0, 1), \
-                 (1, 3, 'Other', 'other', 0, 0, 0), \
-                 (2, 1, 'Root', 'root', 0, 1, 0), \
-                 (2, 2, 'Child', 'child', 1, 1, 0), \
-                 (2, 3, 'Other', 'other', 0, 1, 0), \
-                 (2, 4, 'Leaf', 'leaf', 2, 0, 1); \
-             INSERT INTO revision_edges VALUES \
-                 (1, 1, 2), \
-                 (2, 1, 2), \
-                 (2, 2, 4), \
-                 (2, 3, 4); \
-             INSERT INTO revision_evidence VALUES \
-                 (1, 2, 7, 0, 3), \
-                 (2, 4, 7, 4, 9);",
+            "INSERT INTO works(
+                 id, label, normalized_label, text, sha256, created_at
+             ) VALUES(
+                 7, 'Work', 'work', '0123456789',
+                 '0000000000000000000000000000000000000000000000000000000000000000',
+                 'now'
+             );
+             INSERT INTO concept_identities(id) VALUES(1), (2), (3), (4);
+             INSERT INTO commits(revision, kind, actor, created_at)
+                 VALUES(1, 'shake', 'test', 'now'), (2, 'shake', 'test', 'now');
+             INSERT INTO concept_effects(revision, ordinal, concept_id, effect, label) VALUES
+                 (1, 0, 1, 'create', 'Root'),
+                 (1, 1, 2, 'create', 'Child'),
+                 (1, 2, 3, 'create', 'Other'),
+                 (2, 0, 4, 'create', 'Leaf');
+             INSERT INTO parent_edge_effects(
+                 revision, ordinal, parent_id, child_id, effect
+             ) VALUES
+                 (1, 0, 1, 2, 'add'),
+                 (2, 0, 2, 4, 'add'),
+                 (2, 1, 3, 4, 'add');
+             INSERT INTO evidence_link_effects(
+                 revision, ordinal, concept_id, work_id, start_byte, end_byte, effect
+             ) VALUES
+                 (1, 0, 2, 7, 0, 3, 'add'),
+                 (2, 0, 2, 7, 0, 3, 'remove'),
+                 (2, 1, 4, 7, 4, 9, 'add');",
         )?;
+        crate::revision_store::prepare_graph_revision(&connection, 1)
+            .map_err(|error| rusqlite::Error::InvalidParameterName(error.to_string()))?;
+        crate::revision_store::prepare_graph_revision(&connection, 2)
+            .map_err(|error| rusqlite::Error::InvalidParameterName(error.to_string()))?;
         Ok(connection)
     }
 }

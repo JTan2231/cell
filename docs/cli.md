@@ -47,17 +47,18 @@ annals backup OUTPUT
 ```
 
 `init` creates revision zero and refuses to replace an existing library.
-`migrate` transactionally upgrades an existing library to the schema supported
-by the executable. It is idempotent at the current version and refuses a
-library created by a newer schema version. The macOS deployer runs it after a
-consistent backup and before switching releases.
+`migrate` is an idempotent current-format check. Schema version 3 is a
+deliberate fresh-state boundary: the command rejects older libraries without
+mutating them and refuses libraries created by a newer executable. Use the
+macOS deployer's guarded `--fresh-state` cutover when replacing an older
+installed library.
 `stats` reports revision and corpus, graph, work, reconciliation, history,
 model-run, and database-size information.
 
-`validate` checks SQLite, foreign keys, retained-work digests, current graph
-invariants, linear history and its full snapshots, agreement between
-materialized HEAD and history, reconciliation-draft lifecycle and assembled
-request provenance, and commit provenance. It does not repair state.
+`validate` checks SQLite, foreign keys, the storage boundary, retained-work and
+audit-artifact hashes, normalized request and draft lifecycle, contiguous
+typed effects, every replayed corpus state, and change, shake, revert, and
+reconciliation provenance. It does not repair state.
 
 `backup` makes a consistent SQLite copy and refuses to replace its destination.
 
@@ -597,7 +598,7 @@ model runs, and failed attempts are absent because they are not corpus
 transitions. Applied reconciliations, confirmed shakes, and reverts are
 commits.
 
-`diff` compares two retained full snapshots and reports concept creation,
+`diff` replays two revisions and reports concept creation,
 retirement, and rewording; individual parent edges added or removed; and
 evidence added or removed. It never synthesizes a move or reorder event.
 
