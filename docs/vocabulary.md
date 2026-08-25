@@ -215,9 +215,16 @@ manual integration, including an input whose bytes are already retained and
   concept has more than one parent. All three are derived from the explicit
   edge set rather than stored as placements. Every leaf must have evidence.
 
+**Evidence selector**
+: Public reconciliation input containing an exact quotation and optional
+  heading and immediately adjacent-text filters. It selects every occurrence
+  remaining after those filters, subject to a bounded fan-out, and every
+  selected occurrence becomes a separate evidence link. At least one
+  occurrence must remain. Evidence selectors never contain source byte offsets.
+
 **Evidence link**
-: An association between one concept and an exact quotation from one retained
-  work. Annals resolves and stores the quotation's byte range internally.
+: An association between one concept, one retained work, and one exact
+  quotation occurrence. Annals stores that occurrence's byte range internally.
   Evidence supports the concept across all its parent relationships; it is not
   attached to an edge. Non-leaf concepts may also have evidence.
 
@@ -420,6 +427,7 @@ details. These expressions simplify the language without changing the model.
 | root concept | idea with no broader parent |
 | leaf concept | idea with no narrower child |
 | shared concept | idea linked under several broader ideas |
+| evidence selector | exact quotation with optional source-context filters |
 | evidence link | exact supporting quotation |
 | liaison | AI reader |
 | examination or model run | reading pass or examination pass |
@@ -474,6 +482,8 @@ and grounded in exact source language.
 - Call the current concept structure a directed acyclic graph, not a tree.
 - Use *concept* as the domain noun. *Node* is appropriate only for a graph-view
   representation such as the public `nodes` array.
+- Distinguish an evidence selector in a reconciliation request from the one or
+  more evidence links it selects in corpus state.
 - A source document may have a heading path. A concept has no canonical path,
   placement, primary parent, sibling position, or move operation.
 - Describe search as lexical or word-based. Do not imply semantic similarity.

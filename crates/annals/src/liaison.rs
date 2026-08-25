@@ -310,7 +310,11 @@ fn pointer_prompt(work: &str, base_revision: i64) -> String {
          Follow returned cursors or graph frontiers rather than guessing what a truncated result \
          omitted. When an \
          existing concept can represent part of the work, associate exact evidence from this work \
-         with it. Otherwise create or revise the corpus graph needed by your present interpretation. \
+         with it. Each evidence selector selects every occurrence of its exact quotation remaining \
+         after optional heading and exact neighboring-text filters. Each selected occurrence becomes \
+         a separate evidence link, subject to bounded fan-out; use filters when only a subset is \
+         intended, and never provide source offsets. Work-read heading and quote anchors still must \
+         resolve uniquely. Otherwise create or revise the corpus graph needed by your present interpretation. \
          Treat the organization as provisional and revisable by later evidence.\n\nSubmit one reconciliation for this present interpretation with \
          submit_reconciliation. Optional annotations are free-form observations with no confidence, \
          review, validation, or application semantics; source information must still be expressed \
@@ -1457,6 +1461,10 @@ mod tests {
         assert!(prompt.contains("durable public IDs"));
         assert!(prompt.contains("several parents are symmetric"));
         assert!(prompt.contains("submit_reconciliation"));
+        assert!(prompt.contains("selects every occurrence"));
+        assert!(prompt.contains("bounded fan-out"));
+        assert!(prompt.contains("never provide source offsets"));
+        assert!(prompt.contains("anchors still must resolve uniquely"));
         assert!(prompt.contains("Annals determines that mechanically"));
         assert!(!prompt.contains("smallest distinct conceptual delta"));
         assert!(!prompt.contains("no-change"));

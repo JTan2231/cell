@@ -68,10 +68,13 @@ directed acyclic graph, with no primary parent, sibling order, stored path, or
 move operation. Roots, leaves, shared concepts, reachability, and search
 normalization are derived.
 
-Evidence belongs to a concept as a whole. A link stores a work and UTF-8 byte
-range of at most 8 KiB. Every derived leaf must retain evidence. Public input
-uses exact quotations and optional context; resolution converts these to byte
-ranges before commit.
+Evidence belongs to a concept as a whole. A link stores a work and one UTF-8
+byte range of at most 8 KiB. Every derived leaf must retain evidence. A public
+evidence selector contains an exact quotation and optional heading and adjacent
+text filters. It selects every occurrence remaining after those filters,
+subject to a bounded fan-out; each selected occurrence becomes a separate
+range evidence link before commit. Public input never contains source byte
+offsets.
 
 ## Typed reconciliation intent
 
@@ -85,7 +88,8 @@ request relationally:
   its scalar fields;
 - `operation_selectors` stores existing concept IDs or request-local creation
   references by semantic role;
-- `operation_evidence` stores quotations and source context; and
+- `operation_evidence` stores evidence-selector quotations and source context;
+  and
 - `operation_evidence_headings` stores ordered heading components.
 
 Create operations reserve their durable concept ID in

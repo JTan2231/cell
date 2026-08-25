@@ -447,6 +447,7 @@ fn evaluate(
         Some(draft_id),
     ) {
         Ok(record) => {
+            let repeated_evidence = repeated_evidence_metadata(work, &slots);
             let timestamp = now()?;
             transaction.execute(
                 "UPDATE reconciliation_drafts \
@@ -466,6 +467,7 @@ fn evaluate(
                     "accepted_operations": slots.len(),
                     "summary": record.summary,
                     "reconciliation_status": record.status,
+                    "repeated_evidence": repeated_evidence,
                     "message": "All staged operations were accepted and one complete reconciliation was recorded."
                 }),
                 reconciliation: Some(record),
@@ -624,7 +626,7 @@ fn assess_slots(work: &Work, base: &Snapshot, slots: &[Slot]) -> Vec<Assessment>
             slots[index].id,
         );
     }
-    assess_cross_operation_conflicts(slots, &mut assessments);
+    assess_cross_operation_conflicts(work, slots, &mut assessments);
     assessments
 }
 
@@ -697,20 +699,23 @@ fn assess_local_semantics(
             evidence,
         } => {
             for selector in evidence {
-                let matches = filtered_matches(work, selector);
-                if let [(start, end)] = matches.as_slice()
-                    && !base.evidence.iter().any(|item| {
+                let matches = resolver::matching_quote_ranges(work, selector);
+                if matches.is_empty() || matches.len() > resolver::MAX_EVIDENCE_MATCHES {
+                    continue;
+                }
+                if matches.iter().any(|(start, end)| {
+                    !base.evidence.iter().any(|item| {
                         item.concept_id == id.storage_id()
                             && item.work_id == work.id
                             && item.start_byte == *start
                             && item.end_byte == *end
                     })
-                {
+                }) {
                     add_issue(
                         assessment,
                         "needs_revision",
                         format!(
-                            "{} asks to remove a quotation that is not attached to {} in the frozen base revision.",
+                            "{} asks to remove a quotation whose selected occurrences are not all attached to {} in the frozen base revision.",
                             operation_id(operation_slot),
                             id
                         ),
@@ -771,13 +776,13 @@ fn assess_local_semantics(
 }
 
 #[allow(clippy::type_complexity)]
-fn assess_cross_operation_conflicts(slots: &[Slot], assessments: &mut [Assessment]) {
+fn assess_cross_operation_conflicts(work: &Work, slots: &[Slot], assessments: &mut [Assessment]) {
     let mut retirements = BTreeMap::<ConceptSelector, Vec<usize>>::new();
     let mut rewordings = BTreeMap::<ConceptSelector, Vec<usize>>::new();
     let mut edge_adds = BTreeMap::<(ConceptSelector, ConceptSelector), Vec<usize>>::new();
     let mut edge_removes = BTreeMap::<(ConceptSelector, ConceptSelector), Vec<usize>>::new();
-    let mut evidence_adds = BTreeMap::<(ConceptSelector, EvidenceSelector), Vec<usize>>::new();
-    let mut evidence_removes = BTreeMap::<(ConceptSelector, EvidenceSelector), Vec<usize>>::new();
+    let mut evidence_adds = BTreeMap::<(ConceptSelector, usize, usize), Vec<usize>>::new();
+    let mut evidence_removes = BTreeMap::<(ConceptSelector, usize, usize), Vec<usize>>::new();
 
     for (index, assessment) in assessments.iter().enumerate() {
         let Some(operation) = &assessment.parsed else {
@@ -799,11 +804,8 @@ fn assess_cross_operation_conflicts(slots: &[Slot], assessments: &mut [Assessmen
                         .or_default()
                         .push(index);
                 }
-                for selector in evidence {
-                    evidence_adds
-                        .entry((concept.clone(), selector.clone()))
-                        .or_default()
-                        .push(index);
+                if assessment.state == "staged" {
+                    record_evidence_ranges(&mut evidence_adds, work, &concept, evidence, index);
                 }
             }
             ChangeOperation::AddParent { concept, parent } => {
@@ -819,19 +821,13 @@ fn assess_cross_operation_conflicts(slots: &[Slot], assessments: &mut [Assessmen
                     .push(index);
             }
             ChangeOperation::AddEvidence { concept, evidence } => {
-                for selector in evidence {
-                    evidence_adds
-                        .entry((concept.clone(), selector.clone()))
-                        .or_default()
-                        .push(index);
+                if assessment.state == "staged" {
+                    record_evidence_ranges(&mut evidence_adds, work, concept, evidence, index);
                 }
             }
             ChangeOperation::RemoveEvidence { concept, evidence } => {
-                for selector in evidence {
-                    evidence_removes
-                        .entry((concept.clone(), selector.clone()))
-                        .or_default()
-                        .push(index);
+                if assessment.state == "staged" {
+                    record_evidence_ranges(&mut evidence_removes, work, concept, evidence, index);
                 }
             }
             ChangeOperation::RewordConcept { concept, .. } => {
@@ -927,6 +923,22 @@ fn assess_cross_operation_conflicts(slots: &[Slot], assessments: &mut [Assessmen
     );
 }
 
+fn record_evidence_ranges(
+    uses: &mut BTreeMap<(ConceptSelector, usize, usize), Vec<usize>>,
+    work: &Work,
+    concept: &ConceptSelector,
+    evidence: &[EvidenceSelector],
+    operation_index: usize,
+) {
+    for selector in evidence {
+        for (start, end) in resolver::matching_quote_ranges(work, selector) {
+            uses.entry((concept.clone(), start, end))
+                .or_default()
+                .push(operation_index);
+        }
+    }
+}
+
 fn mark_map_duplicates<K: Ord>(
     slots: &[Slot],
     assessments: &mut [Assessment],
@@ -985,16 +997,20 @@ fn quote_problem(work: &Work, selector: &EvidenceSelector) -> Option<String> {
             selector.quote.len()
         ));
     }
-    let raw = work
-        .text
-        .match_indices(&selector.quote)
-        .map(|(start, _)| (start, start + selector.quote.len()))
-        .collect::<Vec<_>>();
-    let mut candidates = raw.clone();
+    let raw = resolver::matching_quote_ranges(
+        work,
+        &EvidenceSelector {
+            quote: selector.quote.clone(),
+            within_heading: None,
+            preceded_by: None,
+            followed_by: None,
+        },
+    );
+    let mut narrowed = raw.clone();
     let mut eliminated_by = None;
     if let Some(heading) = &selector.within_heading {
-        retain_heading(work, &mut candidates, heading);
-        if candidates.is_empty() && !raw.is_empty() {
+        retain_heading(work, &mut narrowed, heading);
+        if narrowed.is_empty() && !raw.is_empty() {
             eliminated_by = Some(format!(
                 "The quote exists, but none of its occurrences is under the submitted heading {}.",
                 display_heading(Some(heading))
@@ -1002,9 +1018,9 @@ fn quote_problem(work: &Work, selector: &EvidenceSelector) -> Option<String> {
         }
     }
     if let Some(prefix) = &selector.preceded_by {
-        let before = candidates.len();
-        candidates.retain(|(start, _)| work.text[..*start].ends_with(prefix));
-        if candidates.is_empty() && before > 0 {
+        let before = narrowed.len();
+        narrowed.retain(|(start, _)| work.text[..*start].ends_with(prefix));
+        if narrowed.is_empty() && before > 0 {
             eliminated_by = Some(format!(
                 "The quote exists in the selected region, but {:?} is not immediately before it.",
                 bounded(prefix, 120)
@@ -1012,17 +1028,17 @@ fn quote_problem(work: &Work, selector: &EvidenceSelector) -> Option<String> {
         }
     }
     if let Some(suffix) = &selector.followed_by {
-        let before = candidates.len();
-        candidates.retain(|(_, end)| work.text[*end..].starts_with(suffix));
-        if candidates.is_empty() && before > 0 {
+        let before = narrowed.len();
+        narrowed.retain(|(_, end)| work.text[*end..].starts_with(suffix));
+        if narrowed.is_empty() && before > 0 {
             eliminated_by = Some(format!(
                 "The quote exists in the selected region, but {:?} is not immediately after it.",
                 bounded(suffix, 120)
             ));
         }
     }
+    let candidates = resolver::matching_quote_ranges(work, selector);
     match candidates.len() {
-        1 => None,
         0 if raw.is_empty() => Some(quote_absent_hint(work, selector)),
         0 => {
             let examples = candidate_hints(work, selector, &raw);
@@ -1034,8 +1050,10 @@ fn quote_problem(work: &Work, selector: &EvidenceSelector) -> Option<String> {
                 examples
             ))
         }
+        count if count <= resolver::MAX_EVIDENCE_MATCHES => None,
         count => Some(format!(
-            "The exact quotation still matches {count} locations after applying its context. Add the heading or exact immediately adjacent words to select one:\n{}",
+            "The exact quotation matches {count} locations after applying its context, but one evidence selector may match at most {}. Narrow it with a longer quotation, a heading, or exact immediately adjacent words:\n{}",
+            resolver::MAX_EVIDENCE_MATCHES,
             candidate_hints(work, selector, &candidates)
         )),
     }
@@ -1103,7 +1121,7 @@ fn suggested_selector(
             preceded_by: None,
             followed_by: None,
         };
-        if filtered_matches(work, &candidate).len() == 1 {
+        if resolver::matching_quote_ranges(work, &candidate).len() == 1 {
             return serde_json::to_value(candidate).ok();
         }
     }
@@ -1121,30 +1139,12 @@ fn suggested_selector(
                 preceded_by,
                 followed_by,
             };
-            if filtered_matches(work, &candidate).len() == 1 {
+            if resolver::matching_quote_ranges(work, &candidate).len() == 1 {
                 return serde_json::to_value(candidate).ok();
             }
         }
     }
     None
-}
-
-fn filtered_matches(work: &Work, selector: &EvidenceSelector) -> Vec<(usize, usize)> {
-    let mut candidates = work
-        .text
-        .match_indices(&selector.quote)
-        .map(|(start, _)| (start, start + selector.quote.len()))
-        .collect::<Vec<_>>();
-    if let Some(heading) = &selector.within_heading {
-        retain_heading(work, &mut candidates, heading);
-    }
-    if let Some(prefix) = &selector.preceded_by {
-        candidates.retain(|(start, _)| work.text[..*start].ends_with(prefix));
-    }
-    if let Some(suffix) = &selector.followed_by {
-        candidates.retain(|(_, end)| work.text[*end..].starts_with(suffix));
-    }
-    candidates
 }
 
 fn retain_heading(work: &Work, candidates: &mut Vec<(usize, usize)>, heading: &[String]) {
@@ -1465,6 +1465,26 @@ fn evidence(operation: &ChangeOperation) -> &[EvidenceSelector] {
     }
 }
 
+fn repeated_evidence_metadata(work: &Work, slots: &[Slot]) -> Vec<Value> {
+    let mut repeated = Vec::new();
+    for slot in slots {
+        let Some(operation) = &slot.operation else {
+            continue;
+        };
+        for (index, selector) in evidence(operation).iter().enumerate() {
+            let occurrence_count = resolver::matching_quote_ranges(work, selector).len();
+            if occurrence_count > 1 {
+                repeated.push(json!({
+                    "operation_id": operation_id(slot.id),
+                    "evidence_number": index + 1,
+                    "occurrence_count": occurrence_count
+                }));
+            }
+        }
+    }
+    repeated
+}
+
 fn add_issue(assessment: &mut Assessment, state: &'static str, message: impl Into<String>) {
     if assessment.state != "needs_revision" || state == "needs_revision" {
         assessment.state = state;
@@ -1700,7 +1720,7 @@ mod tests {
     }
 
     #[test]
-    fn ambiguous_quotation_suggestions_are_verified_before_they_are_shown() -> TestResult {
+    fn selector_suggestions_are_verified_before_they_are_shown() -> TestResult {
         let mut connection = Connection::open_in_memory()?;
         connection.execute_batch(include_str!("../schema.sql"))?;
         let work = store_work(
@@ -1714,17 +1734,225 @@ mod tests {
             preceded_by: None,
             followed_by: None,
         };
-        let matches = filtered_matches(&work, &selector);
+        let matches = resolver::matching_quote_ranges(&work, &selector);
         assert_eq!(matches.len(), 2);
         for (start, end) in matches {
             let suggestion = suggested_selector(&work, &selector, start, end)
                 .ok_or("expected a unique suggested selector")?;
             let suggestion: EvidenceSelector = serde_json::from_value(suggestion)?;
-            assert_eq!(filtered_matches(&work, &suggestion).len(), 1);
+            assert_eq!(resolver::matching_quote_ranges(&work, &suggestion).len(), 1);
         }
-        let hint = quote_problem(&work, &selector).ok_or("expected ambiguity hint")?;
-        assert!(hint.contains("matches 2 locations"));
-        assert!(hint.contains("selector verified for this location"));
+        assert!(quote_problem(&work, &selector).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn repeated_quotations_within_the_limit_are_accepted() -> TestResult {
+        let mut connection = Connection::open_in_memory()?;
+        connection.execute_batch(include_str!("../schema.sql"))?;
+        for count in [2_usize, 6] {
+            let text = vec!["Repeated source language."; count].join("\n");
+            let work = store_work(&mut connection, &format!("Repeated {count}"), &text)?;
+            let selector = EvidenceSelector {
+                quote: "Repeated source language.".to_owned(),
+                within_heading: None,
+                preceded_by: None,
+                followed_by: None,
+            };
+            assert_eq!(
+                resolver::matching_quote_ranges(&work, &selector).len(),
+                count
+            );
+            assert!(quote_problem(&work, &selector).is_none());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn repeated_evidence_metadata_reports_accepted_fan_out() -> TestResult {
+        let mut connection = Connection::open_in_memory()?;
+        connection.execute_batch(include_str!("../schema.sql"))?;
+        let work = store_work(
+            &mut connection,
+            "Repeated metadata",
+            "Repeated source. Repeated source. Unique source.",
+        )?;
+        let slots = vec![Slot {
+            id: 3,
+            operation: parse_operation_value(json!({
+                "action": "create_concept",
+                "ref": "repeated",
+                "label": "Repeated",
+                "parents": [],
+                "evidence": [
+                    {"quote": "Repeated source."},
+                    {"quote": "Unique source."}
+                ]
+            }))
+            .ok(),
+            status: "staged".to_owned(),
+            hint: None,
+        }];
+        assert_eq!(
+            repeated_evidence_metadata(&work, &slots),
+            vec![json!({
+                "operation_id": "op-3",
+                "evidence_number": 1,
+                "occurrence_count": 2
+            })]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn quotations_over_the_match_limit_need_narrowing() -> TestResult {
+        let mut connection = Connection::open_in_memory()?;
+        connection.execute_batch(include_str!("../schema.sql"))?;
+        let count = resolver::MAX_EVIDENCE_MATCHES + 1;
+        let text = (0..count)
+            .map(|index| format!("# Location {index}\n\nRepeated source language."))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let work = store_work(&mut connection, "Too many matches", &text)?;
+        let selector = EvidenceSelector {
+            quote: "Repeated source language.".to_owned(),
+            within_heading: None,
+            preceded_by: None,
+            followed_by: None,
+        };
+        let hint = quote_problem(&work, &selector).ok_or("expected match-limit hint")?;
+        assert!(hint.contains(&format!("matches {count} locations")));
+        assert!(hint.contains(&format!(
+            "may match at most {}",
+            resolver::MAX_EVIDENCE_MATCHES
+        )));
+        assert!(hint.contains("Narrow it"));
+        assert!(hint.chars().count() <= MAX_HINT_CHARACTERS);
+        Ok(())
+    }
+
+    #[test]
+    fn removing_repeated_evidence_requires_every_selected_range_to_be_attached() -> TestResult {
+        let mut connection = Connection::open_in_memory()?;
+        connection.execute_batch(include_str!("../schema.sql"))?;
+        let work = store_work(
+            &mut connection,
+            "Strict removal",
+            "Alpha repeated source. Beta repeated source.",
+        )?;
+        let selector = EvidenceSelector {
+            quote: "repeated source.".to_owned(),
+            within_heading: None,
+            preceded_by: None,
+            followed_by: None,
+        };
+        let ranges = resolver::matching_quote_ranges(&work, &selector);
+        let base = Snapshot {
+            concepts: vec![crate::corpus::SnapshotConcept {
+                id: 1,
+                label: "Existing".to_owned(),
+            }],
+            edges: Vec::new(),
+            evidence: vec![crate::corpus::SnapshotEvidence {
+                concept_id: 1,
+                work_id: work.id,
+                start_byte: ranges[0].0,
+                end_byte: ranges[0].1,
+            }],
+        };
+        let slots = vec![Slot {
+            id: 1,
+            operation: parse_operation_value(json!({
+                "action": "remove_evidence",
+                "concept": {"id": "c1"},
+                "evidence": [{"quote": "repeated source."}]
+            }))
+            .ok(),
+            status: "needs_revision".to_owned(),
+            hint: None,
+        }];
+        let assessments = assess_slots(&work, &base, &slots);
+        assert_eq!(assessments[0].state, "needs_revision");
+        assert!(
+            assessments[0]
+                .hint
+                .as_deref()
+                .is_some_and(|hint| hint.contains("not all attached"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn overlapping_evidence_selectors_conflict_by_resolved_range() -> TestResult {
+        let mut connection = Connection::open_in_memory()?;
+        connection.execute_batch(include_str!("../schema.sql"))?;
+        let work = store_work(
+            &mut connection,
+            "Overlapping selectors",
+            "Alpha repeated source. Beta repeated source.",
+        )?;
+        let targeted = EvidenceSelector {
+            quote: "repeated source.".to_owned(),
+            within_heading: None,
+            preceded_by: Some("Alpha ".to_owned()),
+            followed_by: None,
+        };
+        let targeted_ranges = resolver::matching_quote_ranges(&work, &targeted);
+        let [(start, end)] = targeted_ranges.as_slice() else {
+            return Err("expected one targeted range".into());
+        };
+        let base = Snapshot {
+            concepts: vec![crate::corpus::SnapshotConcept {
+                id: 1,
+                label: "Existing".to_owned(),
+            }],
+            edges: Vec::new(),
+            evidence: vec![crate::corpus::SnapshotEvidence {
+                concept_id: 1,
+                work_id: work.id,
+                start_byte: *start,
+                end_byte: *end,
+            }],
+        };
+        let slots = vec![
+            Slot {
+                id: 1,
+                operation: parse_operation_value(json!({
+                    "action": "add_evidence",
+                    "concept": {"id": "c1"},
+                    "evidence": [{"quote": "repeated source."}]
+                }))
+                .ok(),
+                status: "needs_revision".to_owned(),
+                hint: None,
+            },
+            Slot {
+                id: 2,
+                operation: parse_operation_value(json!({
+                    "action": "remove_evidence",
+                    "concept": {"id": "c1"},
+                    "evidence": [{
+                        "quote": "repeated source.",
+                        "preceded_by": "Alpha "
+                    }]
+                }))
+                .ok(),
+                status: "needs_revision".to_owned(),
+                hint: None,
+            },
+        ];
+        let assessments = assess_slots(&work, &base, &slots);
+        assert!(
+            assessments
+                .iter()
+                .all(|assessment| assessment.state == "implicated")
+        );
+        assert!(assessments.iter().all(|assessment| {
+            assessment
+                .hint
+                .as_deref()
+                .is_some_and(|hint| hint.contains("add and remove the same evidence"))
+        }));
         Ok(())
     }
 

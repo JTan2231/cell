@@ -22,6 +22,8 @@ use crate::error::AppError;
 use crate::index;
 use crate::model::{ConceptId, ConceptReference};
 
+pub(crate) const MAX_EVIDENCE_MATCHES: usize = 64;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ResolvedReconciliation {
@@ -31,12 +33,19 @@ pub(crate) struct ResolvedReconciliation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ResolvedEvidence {
+    pub quote: String,
+    pub occurrence_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum ResolvedOperation {
     CreateConcept {
         concept: ConceptReference,
         parents: Vec<ConceptReference>,
-        evidence_quotes: Vec<String>,
+        evidence: Vec<ResolvedEvidence>,
     },
     AddParent {
         concept: ConceptReference,
@@ -48,11 +57,11 @@ pub(crate) enum ResolvedOperation {
     },
     AddEvidence {
         concept: ConceptReference,
-        quotes: Vec<String>,
+        evidence: Vec<ResolvedEvidence>,
     },
     RemoveEvidence {
         concept: ConceptReference,
-        quotes: Vec<String>,
+        evidence: Vec<ResolvedEvidence>,
     },
     RewordConcept {
         id: ConceptId,
@@ -612,7 +621,7 @@ fn resolve(
             ) => {
                 reject_retired(&retired, *concept)?;
                 for evidence_selector in evidence {
-                    evidence_adds.insert(resolve_evidence(work, *concept, evidence_selector)?);
+                    evidence_adds.extend(resolve_evidence(work, *concept, evidence_selector)?);
                 }
             }
             (
@@ -621,21 +630,22 @@ fn resolve(
             ) => {
                 reject_retired(&retired, *concept)?;
                 for evidence_selector in evidence {
-                    let key = resolve_evidence(work, *concept, evidence_selector)?;
-                    if !base_evidence.contains(&key) {
+                    let keys = resolve_evidence(work, *concept, evidence_selector)?;
+                    if keys.iter().any(|key| !base_evidence.contains(key)) {
                         return Err(AppError::conflict(
                             "evidence_not_attached",
                             format!(
-                                "the selected quotation is not attached to {}",
+                                "one or more occurrences of the selected quotation are not attached to {}",
                                 cid(*concept)?
                             ),
                         ));
                     }
-                    if !evidence_removes.insert(key) {
+                    if keys.iter().any(|key| evidence_removes.contains(key)) {
                         return Err(invalid_change(
                             "the same evidence cannot be removed more than once",
                         ));
                     }
+                    evidence_removes.extend(keys);
                 }
             }
             (
@@ -771,7 +781,7 @@ fn resolved_receipt(
             Ok(ResolvedOperation::CreateConcept {
                 concept: concept_reference(before_retirement, concept)?,
                 parents: parent_references,
-                evidence_quotes: evidence.iter().map(|item| item.quote.clone()).collect(),
+                evidence: resolved_evidence(work, evidence)?,
             })
         }
         (ChangeOperation::AddParent { .. }, ResolvedSelectors::Edge { concept, parent }) => {
@@ -789,13 +799,13 @@ fn resolved_receipt(
         (ChangeOperation::AddEvidence { evidence, .. }, ResolvedSelectors::One { concept }) => {
             Ok(ResolvedOperation::AddEvidence {
                 concept: concept_reference(result, concept)?,
-                quotes: evidence.iter().map(|item| item.quote.clone()).collect(),
+                evidence: resolved_evidence(work, evidence)?,
             })
         }
         (ChangeOperation::RemoveEvidence { evidence, .. }, ResolvedSelectors::One { concept }) => {
             Ok(ResolvedOperation::RemoveEvidence {
                 concept: concept_reference(result, concept)?,
-                quotes: evidence.iter().map(|item| item.quote.clone()).collect(),
+                evidence: resolved_evidence(work, evidence)?,
             })
         }
         (
@@ -851,24 +861,62 @@ fn resolved_receipt(
     }
 }
 
+fn resolved_evidence(
+    work: &Work,
+    selectors: &[EvidenceSelector],
+) -> Result<Vec<ResolvedEvidence>, AppError> {
+    selectors
+        .iter()
+        .map(|selector| {
+            Ok(ResolvedEvidence {
+                quote: selector.quote.clone(),
+                occurrence_count: resolve_quote(work, selector)?.len(),
+            })
+        })
+        .collect()
+}
+
 fn resolve_evidence(
     work: &Work,
     concept_id: i64,
     selector: &EvidenceSelector,
-) -> Result<(i64, i64, usize, usize), AppError> {
-    let (start_byte, end_byte) = resolve_quote(work, selector)?;
-    Ok((concept_id, work.id, start_byte, end_byte))
+) -> Result<Vec<(i64, i64, usize, usize)>, AppError> {
+    Ok(resolve_quote(work, selector)?
+        .into_iter()
+        .map(|(start_byte, end_byte)| (concept_id, work.id, start_byte, end_byte))
+        .collect())
 }
 
 pub(crate) fn resolve_quote(
     work: &Work,
     selector: &EvidenceSelector,
-) -> Result<(usize, usize), AppError> {
-    let mut candidates = work
-        .text
-        .match_indices(&selector.quote)
-        .map(|(start, _)| (start, start + selector.quote.len()))
-        .collect::<Vec<_>>();
+) -> Result<Vec<(usize, usize)>, AppError> {
+    let candidates = matching_quote_ranges(work, selector);
+    match candidates.len() {
+        0 => Err(AppError::not_found(
+            "quote_not_found",
+            format!(
+                "quotation {:?} was not found in work {:?}",
+                selector.quote, work.label
+            ),
+        )),
+        count if count > MAX_EVIDENCE_MATCHES => Err(AppError::conflict(
+            "quote_too_many_matches",
+            format!(
+                "quotation {:?} occurs {count} times in work {:?}; at most {MAX_EVIDENCE_MATCHES} occurrences can be used as evidence; add heading or neighboring context",
+                selector.quote, work.label
+            ),
+        )),
+        _ => Ok(candidates),
+    }
+}
+
+#[must_use]
+pub(crate) fn matching_quote_ranges(
+    work: &Work,
+    selector: &EvidenceSelector,
+) -> Vec<(usize, usize)> {
+    let mut candidates = exact_quote_ranges(&work.text, &selector.quote);
     if let Some(heading) = &selector.within_heading {
         let normalized = heading
             .iter()
@@ -888,25 +936,18 @@ pub(crate) fn resolve_quote(
     if let Some(suffix) = &selector.followed_by {
         candidates.retain(|(_, end)| work.text[*end..].starts_with(suffix));
     }
-    match candidates.as_slice() {
-        [(start, end)] => Ok((*start, *end)),
-        [] => Err(AppError::not_found(
-            "quote_not_found",
-            format!(
-                "quotation {:?} was not found in work {:?}",
-                selector.quote, work.label
-            ),
-        )),
-        _ => Err(AppError::conflict(
-            "quote_ambiguous",
-            format!(
-                "quotation {:?} occurs {} times in work {:?}; add heading or neighboring context",
-                selector.quote,
-                candidates.len(),
-                work.label
-            ),
-        )),
+    candidates
+}
+
+fn exact_quote_ranges(text: &str, quote: &str) -> Vec<(usize, usize)> {
+    if quote.is_empty() {
+        return Vec::new();
     }
+    text.char_indices()
+        .map(|(start, _)| start)
+        .filter(|start| text[*start..].starts_with(quote))
+        .map(|start| (start, start + quote.len()))
+        .collect()
 }
 
 pub(crate) fn snapshots_corpus_equal(left: &Snapshot, right: &Snapshot) -> bool {
@@ -1013,8 +1054,8 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        ResolvedOperation, apply_record, replay_record, resolve_quote, submit_value,
-        validate_record,
+        MAX_EVIDENCE_MATCHES, ResolvedOperation, apply_record, matching_quote_ranges,
+        replay_record, resolve_quote, submit_value, validate_record,
     };
     use crate::change::EvidenceSelector;
     use crate::corpus::{head_snapshot, store_work};
@@ -1022,7 +1063,7 @@ mod tests {
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
     #[test]
-    fn quote_context_disambiguates_naturally() {
+    fn quote_context_filters_matches_in_source_order() {
         let work = crate::corpus::Work {
             id: 1,
             label: "Paper".to_owned(),
@@ -1036,13 +1077,221 @@ mod tests {
             preceded_by: None,
             followed_by: None,
         };
-        assert!(resolve_quote(&work, &ambiguous).is_err());
+        let ranges = matching_quote_ranges(&work, &ambiguous);
+        assert_eq!(ranges.len(), 2);
+        assert!(ranges[0].0 < ranges[1].0);
+        assert_eq!(resolve_quote(&work, &ambiguous).unwrap_or_default(), ranges);
         let selected = EvidenceSelector {
             within_heading: Some(vec!["Two".to_owned()]),
             ..ambiguous
         };
-        let (start, end) = resolve_quote(&work, &selected).unwrap_or_default();
-        assert_eq!(&work.text[start..end], "Locks work.");
+        let selected_ranges = resolve_quote(&work, &selected).unwrap_or_default();
+        let [(start, end)] = selected_ranges.as_slice() else {
+            panic!("heading context did not select one occurrence");
+        };
+        assert_eq!(&work.text[*start..*end], "Locks work.");
+    }
+
+    #[test]
+    fn quote_resolution_includes_overlapping_occurrences() {
+        let work = crate::corpus::Work {
+            id: 1,
+            label: "Overlapping".to_owned(),
+            text: "the the the".to_owned(),
+            sha256: String::new(),
+            created_at: String::new(),
+        };
+        let selector = EvidenceSelector {
+            quote: "the the".to_owned(),
+            within_heading: None,
+            preceded_by: None,
+            followed_by: None,
+        };
+        assert_eq!(
+            resolve_quote(&work, &selector).unwrap_or_default(),
+            vec![(0, 7), (4, 11)]
+        );
+    }
+
+    #[test]
+    fn quote_resolution_rejects_more_than_the_match_limit() {
+        let selector = EvidenceSelector {
+            quote: "same".to_owned(),
+            within_heading: None,
+            preceded_by: None,
+            followed_by: None,
+        };
+        let at_limit = crate::corpus::Work {
+            id: 1,
+            label: "At limit".to_owned(),
+            text: std::iter::repeat_n("same", MAX_EVIDENCE_MATCHES)
+                .collect::<Vec<_>>()
+                .join(" "),
+            sha256: String::new(),
+            created_at: String::new(),
+        };
+        assert_eq!(
+            resolve_quote(&at_limit, &selector)
+                .unwrap_or_default()
+                .len(),
+            MAX_EVIDENCE_MATCHES
+        );
+
+        let over_limit = crate::corpus::Work {
+            id: 1,
+            label: "Over limit".to_owned(),
+            text: std::iter::repeat_n("same", MAX_EVIDENCE_MATCHES + 1)
+                .collect::<Vec<_>>()
+                .join(" "),
+            sha256: String::new(),
+            created_at: String::new(),
+        };
+        let Err(error) = resolve_quote(&over_limit, &selector) else {
+            panic!("match limit was ignored");
+        };
+        assert_eq!(error.code(), "quote_too_many_matches");
+
+        let absent = EvidenceSelector {
+            quote: "absent".to_owned(),
+            ..selector
+        };
+        let Err(error) = resolve_quote(&at_limit, &absent) else {
+            panic!("missing quote was accepted");
+        };
+        assert_eq!(error.code(), "quote_not_found");
+    }
+
+    #[test]
+    fn repeated_quote_expands_to_range_links_and_one_resolved_evidence_item() -> TestResult {
+        let mut connection = test_connection()?;
+        let work = store_work(&mut connection, "Paper", "Repeated. Repeated.")?;
+        let record = submit_value(
+            &mut connection,
+            &work,
+            0,
+            json!({
+                "summary": "Ground one concept with repeated source text",
+                "operations": [{
+                    "action":"create_concept",
+                    "ref":"repeated",
+                    "label":"Repeated",
+                    "parents":[],
+                    "evidence":[{"quote":"Repeated."}]
+                }]
+            }),
+            "human",
+            None,
+        )?;
+        let resolved = replay_record(&connection, &record)?;
+        assert_eq!(resolved.resulting_snapshot.evidence.len(), 2);
+        let [ResolvedOperation::CreateConcept { evidence, .. }] = resolved.operations.as_slice()
+        else {
+            return Err("create receipt missing".into());
+        };
+        assert_eq!(evidence.len(), 1);
+        assert_eq!(evidence[0].quote, "Repeated.");
+        assert_eq!(evidence[0].occurrence_count, 2);
+
+        apply_record(&mut connection, &record)?;
+        assert_eq!(head_snapshot(&connection)?.evidence.len(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn removing_a_repeated_quote_requires_every_matched_range() -> TestResult {
+        let mut connection = test_connection()?;
+        let work = store_work(
+            &mut connection,
+            "Paper",
+            "First: Repeated. Second: Repeated. Grounding.",
+        )?;
+        let setup = submit_value(
+            &mut connection,
+            &work,
+            0,
+            json!({
+                "summary": "Attach one repeated occurrence",
+                "operations": [{
+                    "action":"create_concept",
+                    "ref":"repeated",
+                    "label":"Repeated",
+                    "parents":[],
+                    "evidence":[
+                        {"quote":"Repeated.","preceded_by":"First: "},
+                        {"quote":"Grounding."}
+                    ]
+                }]
+            }),
+            "human",
+            None,
+        )?;
+        apply_record(&mut connection, &setup)?;
+        let before = head_snapshot(&connection)?;
+        assert_eq!(before.evidence.len(), 2);
+
+        let removal = submit_value(
+            &mut connection,
+            &work,
+            1,
+            json!({
+                "summary": "Remove every repeated occurrence",
+                "operations": [{
+                    "action":"remove_evidence",
+                    "concept":{"id":"c1"},
+                    "evidence":[{"quote":"Repeated."}]
+                }]
+            }),
+            "human",
+            None,
+        );
+        let Err(error) = removal else {
+            return Err("partially attached match set was removed".into());
+        };
+        assert_eq!(error.code(), "evidence_not_attached");
+        assert_eq!(head_snapshot(&connection)?, before);
+
+        let attach_all = submit_value(
+            &mut connection,
+            &work,
+            1,
+            json!({
+                "summary": "Attach every repeated occurrence",
+                "operations": [{
+                    "action":"add_evidence",
+                    "concept":{"id":"c1"},
+                    "evidence":[{"quote":"Repeated."}]
+                }]
+            }),
+            "human",
+            None,
+        )?;
+        apply_record(&mut connection, &attach_all)?;
+        assert_eq!(head_snapshot(&connection)?.evidence.len(), 3);
+
+        let remove_all = submit_value(
+            &mut connection,
+            &work,
+            2,
+            json!({
+                "summary": "Remove every attached repeated occurrence",
+                "operations": [{
+                    "action":"remove_evidence",
+                    "concept":{"id":"c1"},
+                    "evidence":[{"quote":"Repeated."}]
+                }]
+            }),
+            "human",
+            None,
+        )?;
+        let resolved = validate_record(&connection, &remove_all)?;
+        let [ResolvedOperation::RemoveEvidence { evidence, .. }] = resolved.operations.as_slice()
+        else {
+            return Err("remove-evidence receipt missing".into());
+        };
+        assert_eq!(evidence[0].occurrence_count, 2);
+        apply_record(&mut connection, &remove_all)?;
+        assert_eq!(head_snapshot(&connection)?.evidence.len(), 1);
+        Ok(())
     }
 
     #[test]

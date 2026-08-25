@@ -770,6 +770,68 @@ fn init_work_add_and_show_retain_exact_source_without_changing_corpus() -> TestR
 }
 
 #[test]
+fn repeated_evidence_quote_expands_to_exact_ranges_and_reverts() -> TestResult {
+    let library = Library::initialized()?;
+    let essay = "# Repeated essay\n\nA repeated passage supports one concept.\n\nA repeated passage supports one concept.\n\n";
+    library.add_work("Repeated source", "repeated.md", &essay.repeat(3))?;
+
+    let submitted = library.submit(
+        "Repeated source",
+        0,
+        "repeated.json",
+        &json!({
+            "summary": "Represent one claim repeated throughout the source",
+            "operations": [{
+                "action": "create_concept",
+                "ref": "repeated_claim",
+                "label": "Repeated source claim",
+                "parents": [],
+                "evidence": [{
+                    "quote": "A repeated passage supports one concept."
+                }]
+            }]
+        }),
+    )?;
+    assert_eq!(submitted["status"], "pending");
+
+    let validated = library.json_ok(["change", "validate"])?;
+    assert_eq!(validated["status"], "valid");
+    assert_eq!(
+        validated["operations"][0]["evidence"][0]["occurrence_count"],
+        6
+    );
+    let validated_human = library.human_ok(["change", "validate"])?;
+    assert!(validated_human.contains("6 occurrences"));
+
+    let applied = library.json_ok(["change", "apply"])?;
+    assert_eq!(applied["revision"], 1);
+    let concept = search_concept_id(&library, 1, "Repeated source claim")?;
+    let evidence = library.json_ok([
+        "concept", "evidence", &concept, "--at", "1", "--limit", "10",
+    ])?;
+    assert_eq!(evidence["evidence"]["page"]["total"], 6);
+    assert_eq!(
+        evidence["evidence"]["items"].as_array().map(Vec::len),
+        Some(6)
+    );
+
+    let diff = library.json_ok(["diff", "0", "1"])?;
+    let evidence_additions = diff["entries"]
+        .as_array()
+        .ok_or("diff entries were not an array")?
+        .iter()
+        .filter(|entry| entry["kind"] == "evidence_added")
+        .count();
+    assert_eq!(evidence_additions, 6);
+
+    let reverted = library.json_ok(["revert", "1"])?;
+    assert_eq!(reverted["revision"], 2);
+    assert_eq!(library.json_ok(["overview"])?["concept_count"], 0);
+    assert_eq!(library.json_ok(["validate"])?["valid"], true);
+    Ok(())
+}
+
+#[test]
 #[allow(clippy::too_many_lines)]
 fn diamond_reconciliation_supports_local_browsing_edge_history_and_revert() -> TestResult {
     let library = Library::initialized()?;

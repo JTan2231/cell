@@ -86,6 +86,10 @@ repository instructions. Session-scoped tools provide bounded work reading,
 corpus browsing, and reconciliation-draft operations. No shell, web, planning,
 user-input, or multi-agent tools are exposed.
 
+Bounded work reads use natural heading, quotation, continuation, or document
+edge anchors rather than offsets. A heading or quotation anchor must resolve
+uniquely; evidence-selector fan-out does not apply to source reading.
+
 Every tool request crosses a strict JSON ingress boundary. Annals parses it to
 language-level types, applies size and shape limits, and stores recognized
 reconciliation intent in normalized rows. The raw tool arguments and result
@@ -119,7 +123,10 @@ A reconciliation operation is one of:
 Existing concepts are selected by durable `cN` IDs. Create operations declare
 request-local references whose durable IDs are reserved at ingress. Evidence
 selectors use exact quotations plus optional heading and adjacent-text context;
-resolution must identify a unique UTF-8 byte range in the immutable work.
+each selector selects every occurrence remaining after those filters, subject
+to a bounded fan-out. At least one occurrence must remain, and each becomes a
+separate exact-range evidence link. Public input never uses source byte
+offsets.
 
 Resolution is a pure state transition over the original base `CorpusState`.
 It validates local-reference scope, selector cardinality, operation ordering,

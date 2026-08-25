@@ -32,7 +32,7 @@ use crate::model::{
 };
 use crate::model_runner::{ModelSettings, Runner};
 use crate::render::{CommandOutput, render_terminal_text};
-use crate::resolver::ResolvedOperation;
+use crate::resolver::{ResolvedEvidence, ResolvedOperation};
 use crate::{inbox, ingestion, liaison, resolver, validate};
 
 pub fn library_path(explicit: Option<&PathBuf>, config: &Config) -> Result<PathBuf, AppError> {
@@ -811,14 +811,14 @@ fn render_resolved_operation(
         ResolvedOperation::CreateConcept {
             concept,
             parents,
-            evidence_quotes,
+            evidence,
         } => {
             let mut lines = vec![format!(
                 "  {number}. Create concept {}",
                 render_reference(concept)
             )];
             lines.push(format!("     Parents: {}", render_references(parents)));
-            append_resolved_quotes(&mut lines, evidence_quotes);
+            append_resolved_evidence(&mut lines, evidence);
             lines
         }
         ResolvedOperation::AddParent { concept, parent } => vec![format!(
@@ -831,20 +831,20 @@ fn render_resolved_operation(
             render_reference(parent),
             render_reference(concept)
         )],
-        ResolvedOperation::AddEvidence { concept, quotes } => {
+        ResolvedOperation::AddEvidence { concept, evidence } => {
             let mut lines = vec![format!(
                 "  {number}. Add evidence to {}",
                 render_reference(concept)
             )];
-            append_resolved_quotes(&mut lines, quotes);
+            append_resolved_evidence(&mut lines, evidence);
             lines
         }
-        ResolvedOperation::RemoveEvidence { concept, quotes } => {
+        ResolvedOperation::RemoveEvidence { concept, evidence } => {
             let mut lines = vec![format!(
                 "  {number}. Remove evidence from {}",
                 render_reference(concept)
             )];
-            append_resolved_quotes(&mut lines, quotes);
+            append_resolved_evidence(&mut lines, evidence);
             lines
         }
         ResolvedOperation::RewordConcept {
@@ -916,9 +916,17 @@ fn append_evidence_selectors(lines: &mut Vec<String>, evidence: &[EvidenceSelect
     }
 }
 
-fn append_resolved_quotes(lines: &mut Vec<String>, quotes: &[String]) {
-    for quote in quotes {
-        lines.push(format!("     Evidence: {}", render_quoted(quote)));
+fn append_resolved_evidence(lines: &mut Vec<String>, evidence: &[ResolvedEvidence]) {
+    for item in evidence {
+        let occurrences = if item.occurrence_count == 1 {
+            String::new()
+        } else {
+            format!(" ({} occurrences)", item.occurrence_count)
+        };
+        lines.push(format!(
+            "     Evidence: {}{occurrences}",
+            render_quoted(&item.quote)
+        ));
     }
 }
 

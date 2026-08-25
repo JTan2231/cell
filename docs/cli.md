@@ -410,9 +410,11 @@ Human reconciliation output renders public `cN` IDs alongside labels, local
 creation handles, parent-edge changes, exact evidence quotations and source
 context, evidence dispositions, replacements, and annotations. `change
 validate` re-resolves and renders the same semantic facts without writing.
-Resolved operations record what the request addressed, while `effects` report
-what actually changed. An idempotent ensure may therefore appear in
-`resolved_operations` without a matching effect.
+Resolved evidence reports one item per submitted selector together with its
+`occurrence_count`; it never exposes the resolved ranges. Resolved operations
+record what the request addressed, while `effects` report what actually
+changed. An idempotent ensure may therefore appear in `resolved_operations`
+without a matching effect.
 
 `change apply` additionally requires HEAD to equal the base revision. Success
 updates concepts, edges, evidence, reconciliation status,
@@ -505,10 +507,15 @@ Evidence always belongs to the work supplied by the host:
 }
 ```
 
-`quote` is required; the other fields disambiguate repeated source text.
-Public input never contains source offsets. Once resolved, evidence supports
-the concept across all of its parent relationships. Every leaf in the final
-projected corpus state must have at least one evidence link.
+`quote` is required. The other fields filter its occurrences by heading and
+exact immediately adjacent text. One evidence selector selects every
+occurrence remaining after those filters, subject to a bounded fan-out. At
+least one occurrence must remain, and each selected occurrence becomes a
+separate exact-range evidence link. Use the filters when only a subset of
+repeated source text is intended. Public input never contains source offsets.
+Once resolved, evidence supports the concept across all of its parent
+relationships. Every leaf in the final projected corpus state must have at
+least one evidence link.
 
 ### Operations
 
@@ -519,9 +526,9 @@ projected corpus state must have at least one evidence link.
   changing any other parent. An already-present edge is idempotent.
 - `remove_parent` removes one parent edge without relocating the concept or its
   descendants. If it removes the final parent, the concept becomes a root.
-- `add_evidence` ensures one or more quotations from the scoped work are
-  attached to the selected concept. An already-satisfied mapping is
-  idempotent.
+- `add_evidence` ensures the evidence links selected by one or more quotations
+  from the scoped work are attached to the selected concept. An
+  already-satisfied mapping is idempotent.
 - `remove_evidence` removes quotations from the scoped work that are attached
   to the selected concept.
 - `reword_concept` preserves the public ID and requires
