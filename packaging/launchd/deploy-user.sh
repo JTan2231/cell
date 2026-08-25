@@ -322,6 +322,7 @@ for path in \
     "$SPOOL_DIR/done" \
     "$SPOOL_DIR/duplicates" \
     "$SPOOL_DIR/failed" \
+    "$SPOOL_DIR/skipped" \
     "$INSTALL_DIR" \
     "$RELEASES_DIR" \
     "$STATE_DIR/backups"
@@ -590,7 +591,8 @@ if [ "$fresh_state" -eq 1 ]; then
         "$fresh_stage/spool/processing" \
         "$fresh_stage/spool/done" \
         "$fresh_stage/spool/duplicates" \
-        "$fresh_stage/spool/failed"
+        "$fresh_stage/spool/failed" \
+        "$fresh_stage/spool/skipped"
     fresh_config="$fresh_stage/config.toml"
     if ! awk '
         BEGIN {

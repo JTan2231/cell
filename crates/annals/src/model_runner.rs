@@ -15,6 +15,7 @@ use crate::error::{AppError, AppResult};
 use crate::tool_server::{self, Backend, Tool, ToolFailure, ToolSuccess};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_hours(1);
+const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const DEFAULT_MAX_STDOUT_BYTES: usize = 64 * 1024 * 1024;
 const DEFAULT_STDERR_TAIL_BYTES: usize = 64 * 1024;
 const MAX_MODEL_CATALOG_BYTES: usize = 4 * 1024 * 1024;
@@ -159,12 +160,40 @@ impl Runner {
         backend: &mut impl Backend,
         forward_stderr: bool,
     ) -> AppResult<String> {
+        self.run_liaison_cancellable(
+            settings,
+            prompt,
+            model_run_token,
+            backend,
+            forward_stderr,
+            &|| false,
+        )
+    }
+
+    pub(crate) fn run_liaison_cancellable(
+        &self,
+        settings: &ModelSettings,
+        prompt: &str,
+        model_run_token: &str,
+        backend: &mut impl Backend,
+        forward_stderr: bool,
+        cancellation_requested: &dyn Fn() -> bool,
+    ) -> AppResult<String> {
+        let deadline = Instant::now() + self.timeout;
+        if cancellation_requested() {
+            return Err(interrupted_error());
+        }
         let temporary = TemporaryDirectory::create()?;
         let work_dir = temporary.create_subdirectory("work")?;
         let codex_home = temporary.create_subdirectory("codex-home")?;
         copy_codex_auth(&codex_home)?;
-        let catalog_path =
-            self.write_restricted_catalog(temporary.path(), &codex_home, settings.model())?;
+        let catalog_path = self.write_restricted_catalog(
+            temporary.path(),
+            &codex_home,
+            settings.model(),
+            deadline,
+            cancellation_requested,
+        )?;
         let dynamic_tools = dynamic_tool_specs()?;
 
         let mut command = Command::new(&self.program);
@@ -197,6 +226,8 @@ impl Runner {
             &dynamic_tools,
             backend,
             forward_stderr,
+            deadline,
+            cancellation_requested,
         )
     }
 
@@ -205,39 +236,100 @@ impl Runner {
         directory: &Path,
         codex_home: &Path,
         model: &str,
+        deadline: Instant,
+        cancellation_requested: &dyn Fn() -> bool,
     ) -> AppResult<PathBuf> {
-        let output = Command::new(&self.program)
+        if cancellation_requested() {
+            return Err(interrupted_error());
+        }
+        if Instant::now() >= deadline {
+            return Err(timeout_error());
+        }
+
+        let mut command = Command::new(&self.program);
+        command
             .args(["debug", "models", "--bundled"])
             .env("CODEX_HOME", codex_home)
             .env("CODEX_EXEC_SERVER_URL", "none")
             .stdin(Stdio::null())
-            .output()
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .process_group(0);
+        if cancellation_requested() {
+            return Err(interrupted_error());
+        }
+        if Instant::now() >= deadline {
+            return Err(timeout_error());
+        }
+        let mut child = command.spawn().map_err(|error| {
+            AppError::unexpected(
+                "model_runner_catalog",
+                format!(
+                    "could not read the bundled model catalog from {}: {error}",
+                    self.program.display()
+                ),
+            )
+        })?;
+        let group = child.id();
+        let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
+            terminate(&mut child, group);
+            let _ = child.wait();
+            return Err(AppError::unexpected(
+                "model_runner_catalog",
+                "the bundled model catalog command did not provide its configured pipes",
+            ));
+        };
+
+        let output = thread::spawn(move || read_limited_output(stdout, MAX_MODEL_CATALOG_BYTES));
+        let stderr_limit = self.stderr_tail_bytes;
+        let diagnostics = thread::spawn(move || read_stderr(stderr, stderr_limit, false));
+        let status = wait_for_catalog(&mut child, deadline, cancellation_requested);
+
+        terminate(&mut child, group);
+        let _ = child.wait();
+        let output = output.join();
+        let diagnostics = diagnostics.join();
+        let status = status?;
+        let output = output
+            .map_err(|_| {
+                AppError::unexpected(
+                    "model_runner_thread",
+                    "model catalog output worker panicked",
+                )
+            })?
             .map_err(|error| {
                 AppError::unexpected(
                     "model_runner_catalog",
-                    format!(
-                        "could not read the bundled model catalog from {}: {error}",
-                        self.program.display()
-                    ),
+                    format!("could not read the bundled model catalog: {error}"),
                 )
             })?;
-        if !output.status.success() {
+        let diagnostics = diagnostics
+            .map_err(|_| {
+                AppError::unexpected(
+                    "model_runner_thread",
+                    "model catalog diagnostics worker panicked",
+                )
+            })?
+            .map_err(|error| {
+                AppError::unexpected(
+                    "model_runner_catalog",
+                    format!("could not read bundled model catalog diagnostics: {error}"),
+                )
+            })?;
+        if !status.success() {
             return Err(runtime_error(
                 "model_runner_catalog",
-                &format!(
-                    "could not read the bundled model catalog: {}",
-                    output.status
-                ),
-                &output.stderr,
+                &format!("could not read the bundled model catalog: {status}"),
+                &diagnostics,
             ));
         }
-        if output.stdout.len() > MAX_MODEL_CATALOG_BYTES {
+        if output.exceeded_limit {
             return Err(AppError::unexpected(
                 "model_runner_catalog",
                 "the bundled model catalog was unexpectedly large",
             ));
         }
-        let catalog = restricted_model_catalog(&output.stdout, model)?;
+        let catalog = restricted_model_catalog(&output.bytes, model)?;
         let path = directory.join("models.json");
         fs::write(&path, serde_json::to_vec(&catalog)?)?;
         Ok(path)
@@ -253,7 +345,15 @@ impl Runner {
         dynamic_tools: &[Value],
         backend: &mut impl Backend,
         forward_stderr: bool,
+        deadline: Instant,
+        cancellation_requested: &dyn Fn() -> bool,
     ) -> AppResult<String> {
+        if cancellation_requested() {
+            return Err(interrupted_error());
+        }
+        if Instant::now() >= deadline {
+            return Err(timeout_error());
+        }
         let program = command.get_program().display().to_string();
         let mut child = command.spawn().map_err(|error| {
             AppError::unexpected(
@@ -279,7 +379,6 @@ impl Runner {
         let stderr_limit = self.stderr_tail_bytes;
         let diagnostics = thread::spawn(move || read_stderr(stderr, stderr_limit, forward_stderr));
 
-        let deadline = Instant::now() + self.timeout;
         let result = ProtocolClient {
             stdin,
             output: output_receiver,
@@ -287,6 +386,7 @@ impl Runner {
             backend,
             reconciliation_recorded: false,
             final_response: String::new(),
+            cancellation_requested,
         }
         .run(work_dir, settings, prompt, dynamic_tools);
 
@@ -319,6 +419,7 @@ struct ProtocolClient<'a, B> {
     backend: &'a mut B,
     reconciliation_recorded: bool,
     final_response: String,
+    cancellation_requested: &'a dyn Fn() -> bool,
 }
 
 impl<B: Backend> ProtocolClient<'_, B> {
@@ -329,6 +430,7 @@ impl<B: Backend> ProtocolClient<'_, B> {
         prompt: &str,
         dynamic_tools: &[Value],
     ) -> Result<String, RuntimeFailure> {
+        self.ensure_not_interrupted()?;
         self.request(
             0,
             "initialize",
@@ -486,34 +588,31 @@ impl<B: Backend> ProtocolClient<'_, B> {
     }
 
     fn receive(&self) -> Result<Value, RuntimeFailure> {
-        let remaining = self
-            .deadline
-            .checked_duration_since(Instant::now())
-            .ok_or_else(|| {
-                RuntimeFailure::new(
-                    "model_runner_timeout",
-                    "model liaison exceeded its time limit",
-                )
-            })?;
-        let line = match self.output.recv_timeout(remaining) {
-            Ok(Ok(line)) => line,
-            Ok(Err(error)) => {
-                return Err(RuntimeFailure::new(
-                    "model_runner_protocol",
-                    format!("could not read model runner output: {error}"),
-                ));
-            }
-            Err(RecvTimeoutError::Timeout) => {
-                return Err(RuntimeFailure::new(
-                    "model_runner_timeout",
-                    "model liaison exceeded its time limit",
-                ));
-            }
-            Err(RecvTimeoutError::Disconnected) => {
-                return Err(RuntimeFailure::new(
-                    "model_runner_failed",
-                    "model runner exited before completing the liaison turn",
-                ));
+        let line = loop {
+            self.ensure_not_interrupted()?;
+            let remaining = self
+                .deadline
+                .checked_duration_since(Instant::now())
+                .ok_or_else(timeout_failure)?;
+            let wait = remaining.min(CANCELLATION_POLL_INTERVAL);
+            let received = self.output.recv_timeout(wait);
+            self.ensure_not_interrupted()?;
+            match received {
+                Ok(Ok(line)) => break line,
+                Ok(Err(error)) => {
+                    return Err(RuntimeFailure::new(
+                        "model_runner_protocol",
+                        format!("could not read model runner output: {error}"),
+                    ));
+                }
+                Err(RecvTimeoutError::Timeout) if wait < remaining => {}
+                Err(RecvTimeoutError::Timeout) => return Err(timeout_failure()),
+                Err(RecvTimeoutError::Disconnected) => {
+                    return Err(RuntimeFailure::new(
+                        "model_runner_failed",
+                        "model runner exited before completing the liaison turn",
+                    ));
+                }
             }
         };
         serde_json::from_str(&line).map_err(|error| {
@@ -546,6 +645,7 @@ impl<B: Backend> ProtocolClient<'_, B> {
     }
 
     fn handle_server_request(&mut self, message: &Value) -> Result<bool, RuntimeFailure> {
+        self.ensure_not_interrupted()?;
         let Some(method) = message.get("method").and_then(Value::as_str) else {
             return Ok(false);
         };
@@ -568,6 +668,7 @@ impl<B: Backend> ProtocolClient<'_, B> {
         let namespace = params.get("namespace");
         let name = params.get("tool").and_then(Value::as_str);
         let arguments = params.get("arguments").cloned();
+        self.ensure_not_interrupted()?;
         let result = match (namespace, name, arguments) {
             (None | Some(Value::Null), Some(name), Some(arguments)) if arguments.is_object() => {
                 dispatch_tool_call(
@@ -592,6 +693,14 @@ impl<B: Backend> ProtocolClient<'_, B> {
             }
         }))?;
         Ok(true)
+    }
+
+    fn ensure_not_interrupted(&self) -> Result<(), RuntimeFailure> {
+        if (self.cancellation_requested)() {
+            Err(interrupted_failure())
+        } else {
+            Ok(())
+        }
     }
 
     fn record_agent_message(&mut self, message: &Value) {
@@ -640,6 +749,35 @@ fn dispatch_tool_call(
     result
 }
 
+fn wait_for_catalog(
+    child: &mut std::process::Child,
+    deadline: Instant,
+    cancellation_requested: &dyn Fn() -> bool,
+) -> AppResult<std::process::ExitStatus> {
+    loop {
+        if cancellation_requested() {
+            return Err(interrupted_error());
+        }
+        if Instant::now() >= deadline {
+            return Err(timeout_error());
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => return Ok(status),
+            Ok(None) => {}
+            Err(error) => {
+                return Err(AppError::unexpected(
+                    "model_runner_catalog",
+                    format!("could not wait for the bundled model catalog: {error}"),
+                ));
+            }
+        }
+        let wait = deadline
+            .saturating_duration_since(Instant::now())
+            .min(CANCELLATION_POLL_INTERVAL);
+        thread::sleep(wait);
+    }
+}
+
 #[derive(Debug)]
 struct RuntimeFailure {
     code: &'static str,
@@ -653,6 +791,28 @@ impl RuntimeFailure {
             message: message.into(),
         }
     }
+}
+
+fn interrupted_failure() -> RuntimeFailure {
+    RuntimeFailure::new("model_runner_interrupted", "model liaison was interrupted")
+}
+
+fn interrupted_error() -> AppError {
+    AppError::unexpected("model_runner_interrupted", "model liaison was interrupted")
+}
+
+fn timeout_failure() -> RuntimeFailure {
+    RuntimeFailure::new(
+        "model_runner_timeout",
+        "model liaison exceeded its time limit",
+    )
+}
+
+fn timeout_error() -> AppError {
+    AppError::unexpected(
+        "model_runner_timeout",
+        "model liaison exceeded its time limit",
+    )
 }
 
 fn required_string(value: &Value, pointer: &str, context: &str) -> Result<String, RuntimeFailure> {
@@ -834,6 +994,29 @@ fn read_protocol_lines(
     }
 }
 
+struct LimitedOutput {
+    bytes: Vec<u8>,
+    exceeded_limit: bool,
+}
+
+fn read_limited_output(mut reader: impl Read, limit: usize) -> io::Result<LimitedOutput> {
+    let mut bytes = Vec::new();
+    let mut exceeded_limit = false;
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let count = reader.read(&mut buffer)?;
+        if count == 0 {
+            return Ok(LimitedOutput {
+                bytes,
+                exceeded_limit,
+            });
+        }
+        let retained = count.min(limit.saturating_sub(bytes.len()));
+        bytes.extend_from_slice(&buffer[..retained]);
+        exceeded_limit |= retained < count;
+    }
+}
+
 fn read_stderr(mut reader: impl Read, limit: usize, forward: bool) -> io::Result<Vec<u8>> {
     let mut tail = Vec::new();
     let mut buffer = [0_u8; 4096];
@@ -944,8 +1127,12 @@ impl Drop for TemporaryDirectory {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::io::Cursor;
     use std::os::unix::fs::PermissionsExt as _;
-    use std::time::Duration;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::thread;
+    use std::time::{Duration, Instant};
 
     use serde_json::{Value, json};
 
@@ -953,7 +1140,7 @@ mod tests {
 
     use super::{
         CONFIG_OVERRIDES, ModelQuality, ModelSettings, Runner, dispatch_tool_call,
-        dynamic_tool_specs, model_tool_result, restricted_model_catalog,
+        dynamic_tool_specs, model_tool_result, read_limited_output, restricted_model_catalog,
     };
 
     #[test]
@@ -984,6 +1171,36 @@ mod tests {
     fn runner_accepts_an_explicit_program_for_isolated_tests() {
         let runner = Runner::new("/usr/bin/false", Duration::from_secs(1));
         assert_eq!(runner.program.to_string_lossy(), "/usr/bin/false");
+    }
+
+    #[test]
+    fn cancellation_before_setup_has_a_stable_error_code() {
+        let runner = Runner::new("/program/that/does/not/exist", Duration::from_secs(1));
+        let settings = ModelSettings::default();
+        let mut backend = StubBackend::default();
+        let Err(error) = runner.run_liaison_cancellable(
+            &settings,
+            "pointer",
+            "test-run",
+            &mut backend,
+            false,
+            &|| true,
+        ) else {
+            panic!("the cancelled liaison unexpectedly started");
+        };
+        assert_eq!(error.code(), "model_runner_interrupted");
+        assert!(backend.calls.is_empty());
+    }
+
+    #[test]
+    fn limited_output_is_bounded_but_drained() -> Result<(), Box<dyn std::error::Error>> {
+        let mut input = Cursor::new(b"catalog-output");
+        let output = read_limited_output(&mut input, 7)?;
+
+        assert_eq!(output.bytes, b"catalog");
+        assert!(output.exceeded_limit);
+        assert_eq!(input.position(), b"catalog-output".len() as u64);
+        Ok(())
     }
 
     #[test]
@@ -1253,6 +1470,163 @@ printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId"
             runner.run_liaison(&settings, "pointer", "test-run", &mut backend, false)?;
         assert_eq!(diagnostic, "diagnostic");
         assert_eq!(backend.calls, [Tool::WorkOverview]);
+        Ok(())
+    }
+
+    #[test]
+    fn cancellation_interrupts_a_waiting_app_server() -> Result<(), Box<dyn std::error::Error>> {
+        let settings = ModelSettings::new(ModelQuality::Low, Some("custom-model"));
+        let directory = tempfile::tempdir()?;
+        let program = directory.path().join("waiting-codex");
+        fs::write(
+            &program,
+            format!(
+                r#"#!/bin/sh
+if [ "$1" = "debug" ]; then
+  printf '%s\n' '{{"models":[{{"slug":"{model}"}}]}}'
+  exit 0
+fi
+: > "$0.ready"
+sleep 30
+"#,
+                model = settings.model()
+            ),
+        )?;
+        let mut permissions = fs::metadata(&program)?.permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(&program, permissions)?;
+
+        let ready = program.with_extension("ready");
+        let interrupted = Arc::new(AtomicBool::new(false));
+        let signal = Arc::clone(&interrupted);
+        let notifier = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while !ready.exists() {
+                assert!(Instant::now() < deadline, "app server did not start");
+                thread::sleep(Duration::from_millis(10));
+            }
+            signal.store(true, Ordering::Release);
+        });
+        let cancellation_requested = || interrupted.load(Ordering::Acquire);
+
+        let runner = Runner::new(&program, Duration::from_secs(5));
+        let mut backend = StubBackend::default();
+        let started = Instant::now();
+        let Err(error) = runner.run_liaison_cancellable(
+            &settings,
+            "pointer",
+            "test-run",
+            &mut backend,
+            false,
+            &cancellation_requested,
+        ) else {
+            return Err("the cancelled liaison unexpectedly completed".into());
+        };
+        notifier
+            .join()
+            .map_err(|_| "cancellation notifier panicked")?;
+
+        assert_eq!(error.code(), "model_runner_interrupted");
+        assert!(started.elapsed() < Duration::from_secs(3));
+        assert!(backend.calls.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn cancellation_interrupts_a_waiting_catalog_process_group()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let settings = ModelSettings::new(ModelQuality::Low, Some("custom-model"));
+        let directory = tempfile::tempdir()?;
+        let program = directory.path().join("waiting-catalog");
+        fs::write(
+            &program,
+            r#"#!/bin/sh
+if [ "$1" = "debug" ]; then
+  (sleep 1; : > "$0.catalog-grandchild-survived") &
+  : > "$0.catalog-ready"
+  wait
+fi
+exit 99
+"#,
+        )?;
+        let mut permissions = fs::metadata(&program)?.permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(&program, permissions)?;
+
+        let ready = program.with_extension("catalog-ready");
+        let survived = program.with_extension("catalog-grandchild-survived");
+        let interrupted = Arc::new(AtomicBool::new(false));
+        let signal = Arc::clone(&interrupted);
+        let notifier = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while !ready.exists() {
+                assert!(Instant::now() < deadline, "catalog command did not start");
+                thread::sleep(Duration::from_millis(10));
+            }
+            signal.store(true, Ordering::Release);
+        });
+        let cancellation_requested = || interrupted.load(Ordering::Acquire);
+
+        let runner = Runner::new(&program, Duration::from_secs(5));
+        let mut backend = StubBackend::default();
+        let started = Instant::now();
+        let Err(error) = runner.run_liaison_cancellable(
+            &settings,
+            "pointer",
+            "test-run",
+            &mut backend,
+            false,
+            &cancellation_requested,
+        ) else {
+            return Err("the cancelled liaison unexpectedly completed".into());
+        };
+        notifier
+            .join()
+            .map_err(|_| "cancellation notifier panicked")?;
+
+        assert_eq!(error.code(), "model_runner_interrupted");
+        assert!(started.elapsed() < Duration::from_secs(3));
+        assert!(backend.calls.is_empty());
+        thread::sleep(Duration::from_millis(1100));
+        assert!(!survived.exists(), "catalog grandchild escaped termination");
+        Ok(())
+    }
+
+    #[test]
+    fn catalog_acquisition_uses_the_runner_deadline() -> Result<(), Box<dyn std::error::Error>> {
+        let settings = ModelSettings::new(ModelQuality::Low, Some("custom-model"));
+        let directory = tempfile::tempdir()?;
+        let program = directory.path().join("timed-out-catalog");
+        fs::write(
+            &program,
+            r#"#!/bin/sh
+if [ "$1" = "debug" ]; then
+  : > "$0.catalog-ready"
+  sleep 30
+fi
+exit 99
+"#,
+        )?;
+        let mut permissions = fs::metadata(&program)?.permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(&program, permissions)?;
+
+        let runner = Runner::new(&program, Duration::from_millis(300));
+        let codex_home = directory.path().join("codex-home");
+        fs::create_dir(&codex_home)?;
+        let started = Instant::now();
+        let Err(error) = runner.write_restricted_catalog(
+            directory.path(),
+            &codex_home,
+            settings.model(),
+            started + runner.timeout,
+            &|| false,
+        ) else {
+            return Err("the timed-out catalog command unexpectedly completed".into());
+        };
+
+        assert_eq!(error.code(), "model_runner_timeout");
+        assert!(started.elapsed() < Duration::from_secs(2));
         Ok(())
     }
 

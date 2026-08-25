@@ -182,6 +182,7 @@ plist="$home/Library/LaunchAgents/org.annals.inbox.plist"
 [ -f "$state/annals.db" ]
 [ -d "$state/spool/queued" ]
 [ -d "$state/spool/duplicates" ]
+[ -d "$state/spool/skipped" ]
 grep -Fx 'library = "annals.db"' "$state/config.toml" >/dev/null
 grep -Fx 'root = "spool"' "$state/config.toml" >/dev/null
 proxy="$state/install/current/libexec/annals-usage"
@@ -197,6 +198,7 @@ usage_candidate_hash=$(shasum -a 256 "$usage_candidate" | awk '{print $1}')
 grep -Fx "  \"usage_binary_sha256\": \"$usage_candidate_hash\"," \
     "$state/install/current/manifest.json" >/dev/null
 printf '%s\n' preserved >"$state/spool/duplicates/preserved"
+printf '%s\n' skipped >"$state/spool/skipped/preserved"
 : >"$state/spool/.paused"
 [ "$(plutil -extract ProgramArguments.0 raw -o - "$plist")" = "$cli" ]
 [ "$(plutil -extract ProgramArguments.1 raw -o - "$plist")" = --quiet ]
@@ -252,6 +254,7 @@ backup_count=$(find "$state/backups" -type f -maxdepth 1 | wc -l | tr -d ' ')
 [ "$backup_count" -eq 1 ]
 [ -f "$state/migrated" ]
 grep -Fx preserved "$state/spool/duplicates/preserved" >/dev/null
+grep -Fx skipped "$state/spool/skipped/preserved" >/dev/null
 [ -f "$state/spool/.paused" ]
 [ "$(tail -n 6 "$state/candidate-commands.log" | tr '\n' ' ')" = \
     'backup migrate validate inbox status validate inbox status ' ]
@@ -387,6 +390,7 @@ fresh_output=$(deploy --fresh-state)
 [ ! -s "$state/annals.db" ]
 [ "$(find "$state/spool/queued" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" -eq 2 ]
 [ "$(find "$state/spool/processing" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" -eq 0 ]
+[ -d "$state/spool/skipped" ]
 [ ! -e "$state/spool/.paused" ]
 [ ! -e "$state/spool/.maintenance" ]
 [ -f "$loaded" ]
@@ -397,6 +401,7 @@ generation=$(sed -n 's/^  "rollback_generation": "\([^"]*\)",$/\1/p' \
 [ -n "$generation" ]
 [ "$(cat "$state/backups/generations/$generation/annals.db")" = old-library ]
 [ -f "$state/backups/generations/$generation/spool/duplicates/preserved" ]
+[ -f "$state/backups/generations/$generation/spool/skipped/preserved" ]
 [ -f "$state/backups/generations/$generation/spool/processing/j00000000000000000090/material/first.txt" ]
 [ -f "$state/backups/generations/$generation/spool/queued/j00000000000000000091/material/second.txt" ]
 printf '%s\n' "$fresh_output" | grep -F 'Imported backlog: 2' >/dev/null

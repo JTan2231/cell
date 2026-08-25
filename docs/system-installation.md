@@ -32,19 +32,22 @@ queued/
 processing/
 `-- JOB_ID/
     |-- job.json
+    |-- interrupt.json # present only after an operator request
     `-- material/
         `-- report.md
 done/JOB_ID/       # the completed envelope
 duplicates/JOB_ID/ # a fresh duplicate completed at retention
 failed/JOB_ID/     # the permanently failed envelope
+skipped/JOB_ID/    # the operator-skipped envelope
 ```
 
 Annals moves the file into a unique job envelope on the same filesystem. It
 does not rewrite its contents or basename. Moving the envelope to `done`,
-`duplicates`, or `failed` prevents archive collisions without changing
-`report.md`. The `material` subdirectory means even a source named `job.json`
-cannot collide with the receipt. The same-filesystem moves preserve the
-source's bytes, basename, inode, mode, and modification time.
+`duplicates`, `failed`, or `skipped` prevents archive collisions without
+changing `report.md`. The `material` subdirectory means even a source named
+`job.json` or `interrupt.json` cannot collide with operational state. The
+same-filesystem moves preserve the source's bytes, basename, inode, mode, and
+modification time.
 
 `job.json` is authoritative after registration. `.queue.json` assigns a UTC
 first-seen time and prospective monotonic sequence when Annals first observes
@@ -52,16 +55,18 @@ incoming material; pathname bytes break observation ties. Registration moves
 the source into `queued/` and preserves the sequence in a receipt with state
 `queued`, attempts zero, and no database source-delivery record. Dispatch moves
 the strict FIFO head to `processing/`, changes its receipt state to
-`processing`, and starts the delivery record. A retryable processing envelope
-remains ahead of every queued envelope.
+`processing`, increments its attempts to one, and starts the delivery record. A
+job receives no second processing attempt.
 
 `.run.lock` prevents overlapping workers. `.control.lock` is held only around
-registration, dispatch, sequence allocation, and pause changes; it is never
-held during liaison work. `.paused` is the operator-owned dispatch gate managed
-by `annals inbox pause` and `resume`. The macOS deployer temporarily creates
-`.maintenance` to make a running worker stop cleanly after its current job and
-to prevent other spool mutation during cutover. These operational files are
-not retained works. Do not create, remove, or edit their contents directly.
+registration, dispatch, sequence allocation, pause changes, interruption, and
+terminal disposition; it is never held during liaison work. `.paused` is the
+operator-owned dispatch gate managed by `annals inbox pause` and `resume`. A
+validated `interrupt.json` is a durable request bound to its named processing
+job. The macOS deployer temporarily creates `.maintenance` to make a running
+worker stop cleanly after its current job and to prevent other spool mutation
+during cutover. These operational files are not retained works. Do not create,
+remove, or edit their contents directly.
 
 One invocation:
 
@@ -70,21 +75,22 @@ One invocation:
 3. recovers queued and previously dispatched jobs;
 4. registers every eligible visible top-level regular file as a queued job;
 5. stops before attempting or dispatching a job when paused;
-6. retries an existing processing head or dispatches the lowest-sequence
-   queued job, then archives a fresh duplicate or
-   integrates and applies a new work;
+6. dispatches the lowest-sequence queued job for its only attempt, then
+   archives a fresh duplicate or integrates and applies a new work;
 7. rescans and registers newly eligible arrivals between jobs; and
 8. continues until the queue is empty, pause or maintenance closes the gate,
-   or a retryable failure stops the
-   activation.
+   or an unexpected processing failure is terminalized and ends the activation
+   nonzero.
 
 There is no item or activation-lifetime limit. A continuing stream of eligible
 arrivals can therefore keep one worker active indefinitely. Processing is
 deliberately sequential so every new work sees the corpus revision produced by
-the work before it; duplicate recognition remains in the same FIFO. A retryable
-failure remains at the head of the strict FIFO queue and stops that activation;
-the next scheduled activation retries it before later work. Permanently invalid
-material moves to `failed`, and draining continues.
+the work before it; duplicate recognition remains in the same FIFO. Every
+job-processing error fails the source delivery and moves the envelope to
+`failed/` on its first attempt. Known item-local source errors let draining
+continue. An unexpected model, runner, or runtime processing failure instead
+ends the activation nonzero after archival; successors remain queued for the
+next activation. The failed job is not retried.
 
 `annals inbox register` exposes the same admission phase without starting a
 delivery. It can register arrivals while a different worker is processing a
@@ -100,6 +106,19 @@ activations continue registering arrivals while paused and exit successfully.
 never clears `.maintenance`. Use an explicit `inbox run` for immediate work or
 wait for the next launchd or systemd activation. Both commands are idempotent,
 and an operator pause survives deployment.
+
+`annals inbox interrupt JOB_ID --as failed|skipped [--reason TEXT]` durably
+requests that one specifically named processing job stop. The required job ID
+prevents the request from selecting a successor if the observed job finishes
+first. A failed disposition archives the envelope in `failed/`; a skipped
+disposition gives its job receipt state `skipped` and archives it in `skipped/`.
+Because its source delivery already started, a skipped job maps to delivery
+status `failed` with error code `inbox_job_skipped`. Interruption does not set
+`.paused`; pause first and then interrupt when later queued jobs must remain
+queued. The command reports a conflict as too late if the named job already has
+a durable terminal delivery outcome or an applied or recorded reconciliation.
+A pending reconciliation may still be skipped before inbox automatic
+application begins.
 
 A fresh inbox job whose exact bytes select an existing work completes with
 `duplicate` retention and delivery result `retained`. Its job receipt has state
@@ -193,7 +212,10 @@ averaged about 99 seconds per work at medium and 471 seconds at high over the
 same 20 works. Those historical measurements are sizing guidance, not a
 throughput promise. A single liaison has a 60-minute timeout to bound a hung
 item, independently of the queue-draining activation's otherwise unbounded
-lifetime.
+lifetime. For an inbox job, a timeout without durable success is its terminal
+processing failure. The activation exits nonzero after archiving it, its
+successors wait for the next activation, and the timed-out job is not attempted
+again.
 
 ## Linux with systemd
 
@@ -219,7 +241,8 @@ The packaged units use this layout:
 |-- processing/
 |-- done/
 |-- duplicates/
-`-- failed/
+|-- failed/
+`-- skipped/
 ```
 
 The state directory must be writable by the service account because SQLite may
@@ -304,7 +327,9 @@ service activation becomes inactive. `Type=oneshot` prevents systemd from
 starting a second copy of the service, and the Annals inbox lock also protects
 against a concurrent manual invocation. The unit deliberately has no systemd
 start timeout because one liaison can run for up to 60 minutes and an
-activation continues draining for as long as runnable work remains.
+activation may continue draining for as long as runnable work remains. An
+unexpected processing failure still ends that activation nonzero after the
+failed job is archived.
 
 The packaged service sets
 `ANNALS_USAGE_CONFIG=/etc/annals/usage.toml`, so the Annals process and every
@@ -321,16 +346,19 @@ sudo -u annals /usr/local/bin/annals \
 ```
 
 Human status output reports incoming files split into ready and settling,
-queued, processing, done, duplicate, and failed envelopes, whether a worker is
-active, and whether pause or maintenance is requested. `--json` uses
-`duplicates` for the duplicate-archive count and additionally reports the
-ignored-entry count. A successful run reports registered, attempted, applied,
-recorded, duplicates, and failed counts; ready, queued, or processing work remaining;
-settling arrivals; whether the runnable queue was drained; and whether pause or
-maintenance stopped dispatch. A paused queue is valid remaining work, so
-`queue_drained` stays false. The spool root, recovered-job count, effective
-settling interval, elapsed seconds, and ignored count are also available with
-`--json`.
+queued, processing, done, duplicate, failed, and skipped envelopes; identifies
+the active job; and reports whether a worker is active and whether pause or
+maintenance is requested.
+`--json` exposes `attempts`, `started_at`, and `interrupt_requested` under
+`active_job`, uses `duplicates` and `skipped` for their archive counts, and
+additionally reports the ignored-entry count. A successful run reports
+registered, attempted, applied, recorded, duplicates, failed, and skipped
+counts; ready, queued, or processing work remaining; settling arrivals;
+whether the runnable queue was drained; and whether pause or maintenance
+stopped dispatch. A paused queue is valid remaining work, so `queue_drained`
+stays false. The spool root,
+recovered-job count, effective settling interval, elapsed seconds, and ignored
+count are also available with `--json`.
 
 Control the worker without changing the external timer:
 
@@ -341,12 +369,16 @@ sudo -u annals /usr/local/bin/annals \
   --config /etc/annals/config.toml inbox register
 sudo -u annals /usr/local/bin/annals \
   --config /etc/annals/config.toml inbox resume
+sudo -u annals /usr/local/bin/annals \
+  --config /etc/annals/config.toml inbox interrupt JOB_ID --as skipped \
+  --reason "operator stopped the active job"
 ```
 
 Pause lets the current delivery finish. The next job stays under `queued/`,
 and later timer activations continue admitting settled arrivals without
 dispatching them. Resume permits the next activation to dispatch; it does not
-trigger the service itself.
+trigger the service itself. Interrupt targets only the named processing job
+and does not pause later dispatch.
 
 Use `annals lately --channel inbox` for durable, time-windowed delivery
 history. It includes both successful and permanently failed inbox material;
@@ -414,7 +446,8 @@ $HOME/Library/Application Support/Annals/
     |-- processing/
     |-- done/
     |-- duplicates/
-    `-- failed/
+    |-- failed/
+    `-- skipped/
 ```
 
 The Annals frontend supplies the state-local config only when no explicit
@@ -506,13 +539,14 @@ maintenance it moves the old library, WAL sidecars, usage ledger, and whole
 spool into one directory under `backups/generations/` and switches in the fresh
 state.
 
-Only after candidate and installed validation does the deployer import queued,
-retryable processing, and last-moment incoming sources from that generation.
-The importer preserves their source bytes and old FIFO order while assigning
-new unstarted delivery identities. It verifies the queued count, clears the
-operator pause while maintenance still blocks dispatch, commits the deployment
-receipt, removes maintenance, and wakes the worker. A pre-commit failure puts
-the old generation and service back. A successful receipt records
+Only after candidate and installed validation does the deployer import queued
+and last-moment incoming sources from that generation. An attempted processing
+job is terminalized rather than imported for another liaison run. The importer
+preserves source bytes and old FIFO order while assigning new unstarted
+delivery identities. It verifies the queued count, clears the operator pause
+while maintenance still blocks dispatch, commits the deployment receipt,
+removes maintenance, and wakes the worker. A pre-commit failure puts the old
+generation and service back. A successful receipt records
 `rollback_generation` and `imported_backlog` in
 `install/last-update.json`; the archived generation remains available for
 explicit recovery.
@@ -552,6 +586,7 @@ annals inbox status
 annals inbox pause
 annals inbox register
 annals inbox resume
+annals inbox interrupt JOB_ID --as skipped --reason "operator request"
 annals-usage report
 annals-usage budget
 annals-usage doctor
@@ -590,41 +625,49 @@ longer needed.
 ## Failure recovery and maintenance
 
 `annals inbox status` summarizes incoming, ready, settling, queued, processing,
-done, duplicates, and failed state; `--json` also includes ignored entries.
-Inspect queued work under `queued/JOB_ID/` and a retryable head under
-`processing/JOB_ID/`. Inspect `failed/JOB_ID/job.json` alongside the unchanged
-source in `failed/JOB_ID/material/` to diagnose a permanent failure. Invalid
-UTF-8 and empty material are permanent failures. For bytes not already retained,
-unusable labels and label collisions are also permanent failures. Annals
-archives them and continues draining. Other failures leave the
-envelope in `processing`, stop the command with a nonzero exit, and are retried
-at the head of the queue before later work on the next activation. On recovery,
-the receipt's exact linked reconciliation lets Annals finish or archive
-completed work without adopting an unrelated proposal for the same retained
-work. A recovered envelope already linked to a reconciliation finishes that
-historical work rather than being reclassified as a fresh duplicate.
-Startup also removes an empty envelope left before a claim move and
-reconstructs a missing receipt when its envelope already contains exactly one
-moved material file.
-If a worker is killed during examination, the next activation retires only the
-model-run token owned by that receipt and marks its open reconciliation draft
-abandoned; it does not close a separate manual examination of the same work.
+done, duplicates, failed, and skipped state and identifies the active job;
+`--json` also includes ignored entries and `active_job`. Inspect queued work
+under `queued/JOB_ID/` and the active envelope under `processing/JOB_ID/`.
+Inspect `failed/JOB_ID/job.json` or `skipped/JOB_ID/job.json` alongside the
+unchanged source in that envelope's `material/` directory. Known item-local
+source errors such as invalid UTF-8, empty material, unusable labels, and label
+collisions fail the source delivery and move the job to `failed/` on its first
+attempt; Annals then continues draining. Unexpected model, runner, and runtime
+processing failures are also terminalized in `failed/` on the first attempt,
+but the current activation exits nonzero and leaves successors queued for the
+next activation.
+
+Recovery never invokes a second liaison for a receipt whose attempts value is
+already positive. It first finishes durable success from that attempt when
+possible: for example, it can archive a conclusively retained duplicate or
+finish the exact reconciliation linked through the job receipt and model-run
+token. It does not adopt an unrelated reconciliation for the same work. If no
+durable success exists, recovery fails the interrupted delivery and archives
+the job. A durable interrupt request selects the requested failed or skipped
+archive; a skipped job's source delivery is failed with
+`inbox_job_skipped`. Startup also removes an empty envelope left before a claim
+move and reconstructs a missing receipt when its envelope already contains
+exactly one moved material file. If a worker is killed during examination,
+recovery retires only the model-run token owned by that receipt and marks its
+open reconciliation draft abandoned; it does not close a separate manual
+examination of the same work.
 
 Spool recovery also performs the queue-state migration from releases that had
 no `queued/` directory. A legacy `processing/` envelope with zero attempts is
 moved to `queued/` and receives the queued receipt state and immutable sequence;
-an envelope with an attempt or other processing progress remains under
-`processing/`. Recovery raises the sequence allocator above every migrated and
-archived job so later registration cannot overtake existing material. This is
-a filesystem migration only and requires no SQLite schema change. It is
-idempotent if an activation is interrupted and repeated.
+an envelope with an attempt or other processing progress is recovered without
+another liaison and then completed or failed according to its durable state.
+Recovery raises the sequence allocator above every migrated and archived job
+so later registration cannot overtake existing material. This is a filesystem
+migration only and requires no SQLite schema change. It is idempotent if an
+activation is interrupted and repeated.
 
-Inbox delivery is at-least-once. A SQLite commit and the following receipt and
-directory update cannot be one atomic transaction. If the process is killed in
-that narrow interval, recovery may repeat retention handling and may examine a
-new work again. The work's content-addressed storage keeps the exact source
-bytes idempotent, but model examination for jobs that require it is not
-guaranteed to run exactly once.
+A SQLite commit and the following receipt and directory update cannot be one
+atomic transaction. Recovery may therefore repeat idempotent retention or
+terminal archival work in that narrow crash interval. The work's
+content-addressed storage keeps the exact source bytes stable, and durable job
+progress lets recovery finish success without starting another liaison. Once
+an attempt is recorded, an interrupted job is never examined again.
 
 On Linux, stop scheduling before maintenance that changes the executable,
 configuration, or library:
@@ -641,9 +684,12 @@ Use `inbox pause` for ordinary processing control instead of manipulating the
 external timer or `.maintenance`. Pause continues admission and survives an
 update; maintenance is reserved for a deployment boundary and blocks
 registration as well as dispatch. `inbox resume` never removes maintenance.
+Use `inbox interrupt` for one active job; it remains independent of pause and
+maintenance.
 
 Use `annals backup` for a consistent SQLite backup rather than copying a live
 WAL database, and run `annals validate` periodically. Include the spool when a
 backup must preserve pending work and its first-seen order. Keep the `done`,
-`duplicates`, and `failed` envelopes according to the installation's retention
-policy; Annals does not silently delete source files from these archives.
+`duplicates`, `failed`, and `skipped` envelopes according to the installation's
+retention policy; Annals does not silently delete source files from these
+archives.

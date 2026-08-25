@@ -44,7 +44,9 @@ annals-usage doctor [--config PATH]
 runs and inbox job receipts. It defaults to the newest 20 deliveries. It shows
 each delivery's attempts, coverage, token categories, and any calculable known
 credit-equivalent. JSON additionally exposes the complete attempt records,
-unattributed runs, and latest recorded budget snapshot.
+unattributed runs, and latest recorded budget snapshot. Job-receipt discovery
+includes processing, done, duplicates, failed, and skipped envelopes; a
+skipped job remains a failed source delivery for reporting purposes.
 
 `budget` makes live `account/rateLimits/read` and `account/usage/read` requests
 through the configured real Codex. It stores the allowance snapshot and prints
@@ -94,9 +96,9 @@ observed during that run. The ledger also retains every
 totals. A final consistent cumulative total is a fallback when exact response
 events are unavailable.
 
-Retries consume tokens too. A delivery report adds every observed examination
-attempt associated with that delivery; it does not report only the attempt that
-eventually completed.
+Every examination attempt consumes tokens. A delivery report adds every
+observed attempt associated with that delivery, including any historical
+multi-attempt records, instead of reporting only a terminal attempt.
 
 ### Coverage
 

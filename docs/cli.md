@@ -147,7 +147,7 @@ annals-usage budget [--json] [--config PATH]
 annals-usage doctor [--config PATH]
 ```
 
-`report` attributes observed model runs and retry attempts to recent source
+`report` attributes observed model-run attempts to recent source
 deliveries. Its coverage field distinguishes exact per-response totals,
 cumulative fallbacks, known zero-use deliveries, pending work, reused
 examinations, and unobserved history. `budget` records and displays a live,
@@ -170,10 +170,11 @@ annals inbox register [--settle-seconds SECONDS]
 annals inbox run [--settle-seconds SECONDS]
 annals inbox pause
 annals inbox resume
+annals inbox interrupt JOB_ID --as failed|skipped [--reason TEXT]
 annals inbox status
 ```
 
-All five commands require an `[inbox]` config section with `root`. The optional
+All six commands require an `[inbox]` config section with `root`. The optional
 config key `settle_seconds` defaults to 60; the `register` and `run` flags
 override it. A zero settling interval is allowed. `status` is read-only.
 
@@ -187,22 +188,26 @@ the registered jobs; JSON includes each assigned job ID and sequence.
 `inbox run` takes the activation-long spool lock, performs the same
 registration phase, and drains jobs sequentially while processing is allowed.
 Dispatch atomically moves the oldest queued envelope to `processing/`, changes
-its receipt to `processing`, and starts its database source delivery. A
-retryable envelope already in `processing/` remains the FIFO head and is
-retried before any queued job. A fresh job that retains a new work enters
-model-assisted integration with immediate application. A fresh job whose
-exact bytes select an existing work completes with `duplicate` retention and
-result `retained`, without an examination, reconciliation, or commit. Content
-identity is resolved before the incoming filename is considered as a label, so
-a duplicate keeps the retained work's canonical label even when its basename
-is unusable or belongs to another work. Explicit manual `integrate` remains
-available for deliberate integration of an already retained work.
+its receipt to `processing`, increments its attempts from zero to one, and
+starts its database source delivery. A job receives no second processing
+attempt. A fresh job that retains a new work enters model-assisted integration
+with immediate application. A fresh job whose exact bytes select an existing
+work completes with `duplicate` retention and result `retained`, without an
+examination, reconciliation, or commit. Content identity is resolved before
+the incoming filename is considered as a label, so a duplicate keeps the
+retained work's canonical label even when its basename is unusable or belongs
+to another work. Explicit manual `integrate` remains available for deliberate
+integration of an already retained work.
 
 Applied and recorded envelopes move whole from `processing/` to `done/`,
-retained duplicate envelopes to `duplicates/`, and permanently failed
-envelopes to `failed/`. Historical archives are not reclassified. There is no
-item or activation-lifetime limit, and newly settled arrivals are registered
-between jobs.
+retained duplicate envelopes to `duplicates/`, failed envelopes to `failed/`,
+and operator-skipped envelopes to `skipped/`. Every job-processing error fails
+the source delivery and archives the job on its first attempt. A known
+item-local source error lets the activation continue. An unexpected model,
+runner, or runtime processing failure ends the activation nonzero after
+archival; successors remain queued for the next activation. Historical
+archives are not reclassified. There is no item or activation-lifetime limit,
+and newly settled arrivals are registered between jobs.
 
 `inbox pause` is an idempotent dispatch barrier. If a delivery is active, it is
 allowed to finish, but no later queued job starts. A short-lived queue-control
@@ -218,26 +223,50 @@ explicit `inbox run`. The operator-owned `.paused` state is independent of the
 Annals-owned `.maintenance` deployment boundary, and `resume` never removes
 maintenance.
 
+`inbox interrupt` durably requests that the named processing job stop and
+requires an explicit `failed` or `skipped` disposition. `--reason` records
+optional operator context. The job ID prevents a request from selecting a
+later job if the observed job finishes first. An accepted request stops the
+active liaison and archives the envelope in the selected directory. It does
+not establish a pause, so the worker may continue with the next queued job;
+run `inbox pause` first to keep later jobs queued. A skipped job receipt has
+state `skipped`, but its already-started source delivery has status `failed`,
+no result, and error code `inbox_job_skipped`. Interruption returns a conflict
+as too late when the job already has a durable terminal delivery outcome or an
+applied or recorded reconciliation. A pending reconciliation remains
+interruptible until inbox automatic application begins.
+
 Only visible top-level regular files not ending in `.part` are candidates.
 Eligible files are registered in persisted first-seen order and dispatched by
 their immutable sequence. Invalid UTF-8, empty input, unusable
-filename-derived labels, and label conflicts are archived as failed; other job
-errors remain retryable at the head of `processing/` and stop the activation.
-An arrival still settling at the final rescan, or racing the final empty check,
-waits for the next activation.
+filename-derived labels, label conflicts, and other known item-local source
+errors are archived as failed on the first attempt, and draining continues.
+Unexpected model, runner, and runtime processing failures are also archived as
+failed on the first attempt, but `inbox run` then exits nonzero and leaves
+successors for the next activation. An arrival still settling at the final
+rescan, or racing the final empty check, waits for the next activation.
+
+Recovery never starts a second liaison when a processing receipt already has
+an attempt. It may finish durable success left by that attempt, such as a
+conclusively retained duplicate or the job's exact linked reconciliation. If
+there is no durable success to finish, it fails and archives the interrupted
+job. A durable interrupt request preserves its selected failed or skipped
+disposition through recovery.
 
 Human `inbox status` reports incoming files split into ready and settling,
-queued and processing envelopes, terminal archives, whether a worker is
-active, and the independent paused and maintenance states. JSON also reports
-ignored entries. Human `inbox run` reports registered, attempted, applied,
-recorded, duplicates, failed, remaining, settling, whether the runnable queue
-was drained, and whether pause or maintenance stopped dispatch. `queue_drained`
-is false whenever `queued/` or `processing/` is nonempty, including a healthy
-paused queue. JSON uses `duplicates` for the duplicate count and adds the spool
-root, effective settling interval, elapsed time, recovery count, and ignored
-count. The external launchd or systemd schedule remains the wake-up and
-recovery mechanism; Annals has no resident daemon or internal scheduler. See
-the [system installation guide](system-installation.md) for the complete
+queued and processing envelopes, the active job's identity, terminal archives
+including skipped jobs, whether a worker is active, and the independent paused
+and maintenance states. JSON exposes `attempts`, `started_at`, and
+`interrupt_requested` under `active_job` and also reports ignored entries.
+Human `inbox run` reports registered, attempted, applied, recorded, duplicates,
+failed, skipped, remaining, settling, whether the runnable queue was drained,
+and whether pause or maintenance stopped dispatch. `queue_drained` is false
+whenever `queued/` or `processing/` is nonempty, including a healthy paused
+queue. JSON uses `duplicates` and `skipped` for their archive counts and adds
+the spool root, effective settling interval, elapsed time, recovery count, and
+ignored count. The external launchd or systemd schedule remains the wake-up
+and recovery mechanism; Annals has no resident daemon or internal scheduler.
+See the [system installation guide](system-installation.md) for the complete
 spool, recovery, control, and scheduler contract.
 
 Because registration has not started a source delivery, queued jobs appear in
@@ -310,14 +339,16 @@ independent of the terminal result:
 | `applied` | Integration completed and created the reported corpus revision. |
 | `recorded` | Integration completed without a corpus change. |
 
-A processing delivery has not reached a terminal outcome and has no result. A
-retryable inbox error remains processing. Source-bearing manual commands are
-serialized per library; the next such command finalizes any receipt abandoned
-by an interrupted predecessor with error `manual_ingestion_interrupted`. A
-failed delivery has status `failed`, no result, and a structured error. It can
-still identify a work and retention disposition when failure occurred after
-ingestion. Work retention and a `work add` completion are atomic, as are an
-input integration's applied result and its corpus revision.
+A processing delivery has not reached a terminal outcome and has no result.
+An inbox job-processing error fails the delivery on its first attempt.
+Source-bearing manual commands are serialized per library; the next such
+command finalizes any receipt abandoned by an interrupted predecessor with
+error `manual_ingestion_interrupted`. A failed delivery has status `failed`,
+no result, and a structured error. It can still identify a work and retention
+disposition when failure occurred after ingestion. An operator-skipped inbox
+job is reported here as a failed delivery with error `inbox_job_skipped`. Work
+retention and a `work add` completion are atomic, as are an input integration's
+applied result and its corpus revision.
 
 When the selected basis is unavailable, the delivery cannot be placed in the
 window and is omitted. `missing_time_count` counts all such receipts matching

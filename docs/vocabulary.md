@@ -140,14 +140,18 @@ manual integration, including an input whose bytes are already retained and
   receipt is meant. A queued job has never started. Dispatch moves the strict
   FIFO head from `queued/` to `processing/` and starts its source delivery.
   Successful integrated jobs are archived in `done/`, fresh duplicate jobs in
-  `duplicates/`, and permanently failed jobs in `failed/`.
+  `duplicates/`, failed jobs in `failed/`, and operator-skipped jobs in
+  `skipped/`. Each job has at most one processing attempt.
 
 **Inbox registration / dispatch**
 : Registration moves a settled file from `incoming/` into a queued job
   envelope and assigns its immutable FIFO sequence. It does not start a source
   delivery or create a database delivery record. Dispatch claims the oldest
-  queued job for processing. Any retryable job already in `processing/` stays
-  ahead of all queued jobs.
+  queued job for its one processing attempt. Every job-processing error is
+  terminal. A known item-local source error fails and archives that job while
+  draining continues. An unexpected model, runner, or runtime processing
+  failure also fails and archives the job, then ends the activation nonzero;
+  later queued jobs wait for the next activation.
 
 **Inbox pause / maintenance**
 : A pause is an operator-owned control state that prevents dispatch without
@@ -156,6 +160,14 @@ manual integration, including an input whose bytes are already retained and
   deployment boundary that prevents new spool mutation after the current job
   finishes. Resuming clears only the operator pause; it never clears
   maintenance.
+
+**Inbox interrupt**
+: An operator request to stop one specifically named processing job and
+  archive it as failed or skipped. The request is durable and never selects a
+  later job. Interruption does not itself pause dispatch; use pause first when
+  the next queued job must remain queued. A skipped job has job receipt state
+  `skipped`, while its already-started source delivery has status `failed` and
+  error code `inbox_job_skipped`.
 
 **Work and delivery times**
 : `first_retained_at` belongs to a work and records when those content-addressed
@@ -367,7 +379,7 @@ Several independent lifecycles reuse words such as `applied`, `recorded`, and
 | Source delivery | channel | `manual`, `inbox` |
 | Source delivery | retention | `new`, `duplicate` |
 | Source delivery | result | `retained`, `pending`, `applied`, `recorded` |
-| Inbox job receipt | state | `queued`, `processing`, `done`, `failed` |
+| Inbox job receipt | state | `queued`, `processing`, `done`, `failed`, `skipped` |
 | Inbox job receipt | `result_status` | `retained`, `applied`, `recorded` |
 | Commit | kind | `change`, `shake`, `revert` |
 | Shake invocation | status | `unchanged`, `confirmation_required`, `cancelled`, `applied` |
@@ -382,9 +394,10 @@ reconciliation status. A completed source delivery has one result; processing
 and failed deliveries do not. Retention remains independent and may be present
 even when later processing fails. A done job receipt has one `result_status`.
 The `duplicates/` directory is an archive category, not another receipt state:
-its receipts have state `done` and result status `retained`. Historical
-envelopes keep their existing archive and result. A draft operation reported
-as *waiting*, *semantic conflict*, or *removed* has the stored status
+its receipts have state `done` and result status `retained`. A skipped inbox job
+is distinct from its failed source delivery; always qualify the lifecycle.
+Historical envelopes keep their existing archive and result. A draft operation
+reported as *waiting*, *semantic conflict*, or *removed* has the stored status
 `blocked`, `implicated`, or `dropped`, respectively. These operation states do
 not imply that a reconciliation record exists.
 

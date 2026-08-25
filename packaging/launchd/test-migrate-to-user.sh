@@ -128,6 +128,7 @@ make_fixture() {
         "$state/spool/done/job/material" \
         "$state/spool/duplicates/repeated/material" \
         "$state/spool/failed/rejected/material" \
+        "$state/spool/skipped/operator-skipped/material" \
         "$fixture/home"
     cp "$fixture/tools/annals" "$prefix/usr/local/bin/annals"
     cp "$fixture/tools/annals" "$prefix/usr/local/libexec/annals/annals"
@@ -160,6 +161,7 @@ EOF
     printf '%s\n' repeated >"$state/spool/duplicates/repeated/material/repeated.txt"
     printf '%s\n' retry >"$state/spool/processing/retry/material/retry.txt"
     printf '%s\n' rejected >"$state/spool/failed/rejected/material/rejected.txt"
+    printf '%s\n' skipped >"$state/spool/skipped/operator-skipped/material/skipped.txt"
     printf '%s\n' '{"version":1,"next_sequence":4,"entries":{}}' >"$state/spool/.queue.json"
     : >"$state/spool/.paused"
     : >"$state/log/inbox.stdout.log"
@@ -200,6 +202,8 @@ grep -Fx repeated \
     "$new_state/spool/duplicates/repeated/material/repeated.txt" >/dev/null
 grep -Fx retry "$new_state/spool/processing/retry/material/retry.txt" >/dev/null
 grep -Fx rejected "$new_state/spool/failed/rejected/material/rejected.txt" >/dev/null
+grep -Fx skipped \
+    "$new_state/spool/skipped/operator-skipped/material/skipped.txt" >/dev/null
 grep -Fx wal "$new_state/annals.db-wal" >/dev/null
 grep -Fx shm "$new_state/annals.db-shm" >/dev/null
 grep -Fx auth "$new_state/codex-home/auth.json" >/dev/null
@@ -226,6 +230,8 @@ grep -Fx 'root = "/Library/Application Support/Annals/spool"' \
     "$old_state/config.toml" >/dev/null
 grep -Fx repeated \
     "$old_state/spool/duplicates/repeated/material/repeated.txt" >/dev/null
+grep -Fx skipped \
+    "$old_state/spool/skipped/operator-skipped/material/skipped.txt" >/dev/null
 [ -f "$old_state/spool/.paused" ]
 [ -f "$failure/system-loaded" ]
 [ ! -e "$failure/user-loaded" ]
@@ -258,6 +264,9 @@ run_migration "$recovery" >/dev/null
 [ -L "$recovery/home/.local/bin/annals-usage" ]
 grep -Fx repeated \
     "$recovery/home/Library/Application Support/Annals/spool/duplicates/repeated/material/repeated.txt" \
+    >/dev/null
+grep -Fx skipped \
+    "$recovery/home/Library/Application Support/Annals/spool/skipped/operator-skipped/material/skipped.txt" \
     >/dev/null
 [ -f "$recovery/home/Library/Application Support/Annals/spool/.paused" ]
 [ -f "$recovery/user-loaded" ]

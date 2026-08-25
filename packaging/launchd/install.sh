@@ -291,6 +291,7 @@ for path in \
     "$SPOOL_DIR/done" \
     "$SPOOL_DIR/duplicates" \
     "$SPOOL_DIR/failed" \
+    "$SPOOL_DIR/skipped" \
     /usr/local/bin \
     /usr/local/libexec \
     "$PAYLOAD_DIR"
@@ -426,7 +427,8 @@ for path in \
     "$SPOOL_DIR/processing" \
     "$SPOOL_DIR/done" \
     "$SPOOL_DIR/duplicates" \
-    "$SPOOL_DIR/failed"
+    "$SPOOL_DIR/failed" \
+    "$SPOOL_DIR/skipped"
 do
     install -d -o "$operator" -g "$operator_group" -m 0700 "$path"
 done

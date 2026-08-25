@@ -243,13 +243,34 @@ pub enum InboxCommand {
     Pause,
     /// Allow future inbox runs to process queued jobs.
     Resume,
+    /// Stop one processing job and archive it with the requested disposition.
+    Interrupt(InboxInterruptArgs),
     /// Report queued, active, completed, duplicate, and failed inbox state.
     Status,
 }
 
 #[derive(Debug, Clone, Args)]
+pub struct InboxInterruptArgs {
+    /// Exact identifier of the processing inbox job.
+    #[arg(value_name = "JOB_ID")]
+    pub job_id: String,
+    /// Terminal archive for the interrupted job.
+    #[arg(long = "as", value_enum, value_name = "DISPOSITION")]
+    pub disposition: InboxInterruptDisposition,
+    /// Optional operator explanation retained with the interruption request.
+    #[arg(long, value_name = "TEXT")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
+pub enum InboxInterruptDisposition {
+    Failed,
+    Skipped,
+}
+
+#[derive(Debug, Clone, Args)]
 pub struct InboxImportArgs {
-    /// Archived spool containing queued or retryable processing envelopes.
+    /// Archived spool containing queued or unattempted processing envelopes.
     #[arg(long, value_name = "SPOOL")]
     pub from: PathBuf,
 }
@@ -394,8 +415,8 @@ mod tests {
     use clap::Parser;
 
     use super::{
-        ChangeCommand, Cli, Command, ConceptCommand, InboxCommand, IngestionChannel,
-        IngestionStatus, LatelyTime, WorkCommand,
+        ChangeCommand, Cli, Command, ConceptCommand, InboxCommand, InboxInterruptDisposition,
+        IngestionChannel, IngestionStatus, LatelyTime, WorkCommand,
     };
 
     #[test]
@@ -539,5 +560,26 @@ mod tests {
             Cli::try_parse_from(["annals", "inbox", "resume"]).map(|cli| cli.command),
             Ok(Command::Inbox(InboxCommand::Resume))
         ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "annals",
+                "inbox",
+                "interrupt",
+                "j00000000000000000042",
+                "--as",
+                "skipped",
+                "--reason",
+                "not suitable for automatic integration"
+            ])
+            .map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Interrupt(args)))
+                if args.job_id == "j00000000000000000042"
+                    && args.disposition == InboxInterruptDisposition::Skipped
+                    && args.reason.as_deref()
+                        == Some("not suitable for automatic integration")
+        ));
+        assert!(
+            Cli::try_parse_from(["annals", "inbox", "interrupt", "j00000000000000000042"]).is_err()
+        );
     }
 }

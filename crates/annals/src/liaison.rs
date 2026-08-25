@@ -53,6 +53,52 @@ pub(crate) fn integrate_with_runner_token(
     runner: &Runner,
     run_token: Option<&str>,
 ) -> Result<ReconciliationRecord, AppError> {
+    integrate_with_runner_token_inner(
+        path,
+        work,
+        settings,
+        forward_progress,
+        reexamine,
+        runner,
+        run_token,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn integrate_with_runner_token_cancellable(
+    path: &Path,
+    work: &Work,
+    settings: &ModelSettings,
+    forward_progress: bool,
+    reexamine: bool,
+    runner: &Runner,
+    run_token: Option<&str>,
+    cancellation_requested: &dyn Fn() -> bool,
+) -> Result<ReconciliationRecord, AppError> {
+    integrate_with_runner_token_inner(
+        path,
+        work,
+        settings,
+        forward_progress,
+        reexamine,
+        runner,
+        run_token,
+        Some(cancellation_requested),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn integrate_with_runner_token_inner(
+    path: &Path,
+    work: &Work,
+    settings: &ModelSettings,
+    forward_progress: bool,
+    reexamine: bool,
+    runner: &Runner,
+    run_token: Option<&str>,
+    cancellation_requested: Option<&dyn Fn() -> bool>,
+) -> Result<ReconciliationRecord, AppError> {
     let mut connection = db::open_write(path)?;
     let base_revision = revision(&connection)?;
     if reexamine {
@@ -105,7 +151,18 @@ pub(crate) fn integrate_with_runner_token(
     }
     let prompt = pointer_prompt(&work.label, base_revision);
     let mut backend = LiaisonBackend::open(path, &token)?;
-    let result = runner.run_liaison(settings, &prompt, &token, &mut backend, forward_progress);
+    let result = if let Some(cancellation_requested) = cancellation_requested {
+        runner.run_liaison_cancellable(
+            settings,
+            &prompt,
+            &token,
+            &mut backend,
+            forward_progress,
+            cancellation_requested,
+        )
+    } else {
+        runner.run_liaison(settings, &prompt, &token, &mut backend, forward_progress)
+    };
     match result {
         Ok(final_response) => {
             finish_run(
@@ -161,6 +218,35 @@ pub(crate) fn abandon_run(path: &Path, token: &str, work_id: i64) -> Result<(), 
     }
     transaction.commit()?;
     Ok(())
+}
+
+pub(crate) fn interrupt_run(path: &Path, token: &str, reason: &str) -> Result<bool, AppError> {
+    let mut connection = db::open_write(path)?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let run_id = transaction
+        .query_row(
+            "SELECT id FROM model_runs WHERE token = ?1",
+            [token],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()?;
+    let timestamp = now()?;
+    let interrupted = transaction.execute(
+        "UPDATE model_runs SET status = 'failed', failure = ?1, completed_at = ?2 \
+         WHERE token = ?3 AND status = 'running' AND completed_at IS NULL",
+        params![reason, timestamp, token],
+    )? == 1;
+    if interrupted {
+        let run_id = run_id.ok_or_else(|| {
+            AppError::database(
+                "model_run_interrupt_failed",
+                "interrupted liaison run was not found",
+            )
+        })?;
+        reconciliation_draft::abandon_open_for_run(&transaction, run_id, &timestamp)?;
+    }
+    transaction.commit()?;
+    Ok(interrupted)
 }
 
 fn close_incomplete_context(
@@ -313,7 +399,7 @@ fn finish_run(
         "UPDATE model_runs SET \
              status = CASE WHEN status = 'submitted' THEN status ELSE ?1 END, \
              final_response = ?2, failure = ?3, completed_at = ?4 \
-         WHERE token = ?5",
+         WHERE token = ?5 AND status IN ('running', 'submitted') AND completed_at IS NULL",
         params![fallback_status, final_response, failure, timestamp, token],
     )?;
     if let Some(run_id) = run_id {
@@ -337,6 +423,14 @@ fn reconciliation_for_run(
         .optional()?;
     id.map(|id| reconciliation_by_id(connection, id))
         .transpose()
+}
+
+pub(crate) fn reconciliation_for_run_token(
+    path: &Path,
+    token: &str,
+) -> Result<Option<ReconciliationRecord>, AppError> {
+    let connection = db::open_read(path)?;
+    reconciliation_for_run(&connection, token)
 }
 
 fn reconciliation_for_context(
@@ -2190,6 +2284,141 @@ mod tests {
             0
         );
         assert!(crate::validate::validate(&connection)?.valid);
+        Ok(())
+    }
+
+    #[test]
+    fn interrupting_a_running_run_is_terminal_and_abandons_its_draft() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("annals.db");
+        let mut connection = db::init(&path)?;
+        let work = store_work(&mut connection, "Interrupted run", "Exact source.")?;
+        let settings = ModelSettings::default();
+        let token = create_run(&mut connection, work.id, 0, &settings, None)?;
+        drop(connection);
+
+        let mut backend = LiaisonBackend::open(&path, &token)?;
+        let staged = Backend::call(
+            &mut backend,
+            Tool::SubmitReconciliation,
+            json!({
+                "summary": "Leave an open draft",
+                "operations": [{
+                    "action": "create_concept",
+                    "ref": "interrupted",
+                    "label": "Interrupted",
+                    "parents": [],
+                    "evidence": [{"quote": "Missing source."}]
+                }]
+            }),
+        )
+        .map_err(|error| format!("{}: {}", error.code(), error.message()))?;
+        assert!(!staged.reconciliation_recorded());
+        drop(backend);
+
+        assert!(interrupt_run(
+            &path,
+            &token,
+            "operator skipped the inbox job"
+        )?);
+        let mut connection = db::open_write(&path)?;
+        let interrupted = connection.query_row(
+            "SELECT status, final_response, failure, completed_at FROM model_runs WHERE token = ?1",
+            [&token],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            },
+        )?;
+        assert_eq!(interrupted.0, "failed");
+        assert!(interrupted.1.is_none());
+        assert_eq!(
+            interrupted.2.as_deref(),
+            Some("operator skipped the inbox job")
+        );
+        assert!(interrupted.3.is_some());
+        let draft_status =
+            connection.query_row("SELECT status FROM reconciliation_drafts", [], |row| {
+                row.get::<_, String>(0)
+            })?;
+        assert_eq!(draft_status, "abandoned");
+
+        assert!(!interrupt_run(&path, &token, "later reason")?);
+        finish_run(
+            &mut connection,
+            &token,
+            "no_submission",
+            Some("late response"),
+            None,
+        )?;
+        let after_finish = connection.query_row(
+            "SELECT status, final_response, failure, completed_at FROM model_runs WHERE token = ?1",
+            [&token],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            },
+        )?;
+        assert_eq!(after_finish, interrupted);
+        assert!(reconciliation_for_run_token(&path, &token)?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn interrupt_loses_after_submission_and_token_lookup_finds_the_reconciliation() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("annals.db");
+        let mut connection = db::init(&path)?;
+        let work = store_work(&mut connection, "Submitted run", "Exact source.")?;
+        let settings = ModelSettings::default();
+        let token = create_run(&mut connection, work.id, 0, &settings, None)?;
+        drop(connection);
+
+        let mut backend = LiaisonBackend::open(&path, &token)?;
+        let submitted = Backend::call(
+            &mut backend,
+            Tool::SubmitReconciliation,
+            json!({
+                "summary": "Record before interruption",
+                "operations": [{
+                    "action": "create_concept",
+                    "ref": "submitted",
+                    "label": "Submitted",
+                    "parents": [],
+                    "evidence": [{"quote": "Exact source."}]
+                }]
+            }),
+        )
+        .map_err(|error| format!("{}: {}", error.code(), error.message()))?;
+        assert!(submitted.reconciliation_recorded());
+        drop(backend);
+
+        let record = reconciliation_for_run_token(&path, &token)?
+            .ok_or("submitted reconciliation was not found by token")?;
+        assert!(!interrupt_run(&path, &token, "too late")?);
+        let connection = db::open_read(&path)?;
+        assert_eq!(
+            connection.query_row(
+                "SELECT status FROM model_runs WHERE token = ?1",
+                [&token],
+                |row| row.get::<_, String>(0)
+            )?,
+            "submitted"
+        );
+        assert_eq!(
+            connection.query_row("SELECT id FROM reconciliations", [], |row| {
+                row.get::<_, i64>(0)
+            })?,
+            record.id
+        );
         Ok(())
     }
 

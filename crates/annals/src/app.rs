@@ -97,6 +97,7 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
             InboxCommand::ImportBacklog(args) => inbox::import_backlog(config, &args.from),
             InboxCommand::Pause => inbox::pause(config),
             InboxCommand::Resume => inbox::resume(config),
+            InboxCommand::Interrupt(args) => inbox::interrupt(path, config, args),
             InboxCommand::Status => inbox::status(config),
         },
         Command::Change(command) => match command {

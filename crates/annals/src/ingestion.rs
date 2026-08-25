@@ -179,38 +179,6 @@ pub(crate) fn fail(
     Ok(())
 }
 
-pub(crate) fn record_retryable_error(
-    connection: &Connection,
-    ingestion_id: i64,
-    error: &AppError,
-) -> Result<(), AppError> {
-    let updated = connection.execute(
-        "UPDATE ingestions SET error_code = ?1, error_message = ?2 \
-         WHERE id = ?3 AND status = 'processing'",
-        params![
-            error.code(),
-            "source delivery processing encountered a retryable error",
-            ingestion_id
-        ],
-    )?;
-    if updated == 0 {
-        let terminal = connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM ingestions \
-             WHERE id = ?1 AND status IN ('completed', 'failed'))",
-            [ingestion_id],
-            |row| row.get::<_, bool>(0),
-        )?;
-        if terminal {
-            return Ok(());
-        }
-        return Err(AppError::database(
-            "ingestion_error_record_failed",
-            "unable to update the source delivery receipt",
-        ));
-    }
-    Ok(())
-}
-
 pub(crate) fn fail_interrupted_manual(connection: &Connection) -> Result<usize, AppError> {
     Ok(connection.execute(
         "UPDATE ingestions SET status = 'failed', completed_at = ?1, result = NULL, \

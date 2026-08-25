@@ -237,7 +237,7 @@ fn read_deliveries(
 
 fn read_receipts(spool: &Path) -> Result<HashMap<i64, ReceiptSummary>, ReportError> {
     let mut receipts = HashMap::new();
-    for state in ["processing", "done", "duplicates", "failed"] {
+    for state in ["processing", "done", "duplicates", "failed", "skipped"] {
         let directory = spool.join(state);
         let entries = match fs::read_dir(&directory) {
             Ok(entries) => entries,
@@ -459,7 +459,9 @@ pub(crate) enum ReportError {
 
 #[cfg(test)]
 mod tests {
-    use super::grouped;
+    use std::fs;
+
+    use super::{grouped, read_receipts};
 
     #[test]
     fn groups_integer_digits() {
@@ -467,5 +469,23 @@ mod tests {
         assert_eq!(grouped(999), "999");
         assert_eq!(grouped(1_234_567), "1,234,567");
         assert_eq!(grouped(-12_345), "-12,345");
+    }
+
+    #[test]
+    fn reads_receipts_from_the_skipped_archive() -> Result<(), Box<dyn std::error::Error>> {
+        let spool = tempfile::tempdir()?;
+        let envelope = spool.path().join("skipped/job-1");
+        fs::create_dir_all(&envelope)?;
+        fs::write(
+            envelope.join("job.json"),
+            r#"{"ingestion_id":42,"model_run_token":"run-token"}"#,
+        )?;
+
+        let receipts = read_receipts(spool.path())?;
+        let receipt = receipts
+            .get(&42)
+            .ok_or("skipped receipt was not discovered")?;
+        assert_eq!(receipt.model_run_token.as_deref(), Some("run-token"));
+        Ok(())
     }
 }

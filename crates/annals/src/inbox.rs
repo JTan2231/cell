@@ -15,10 +15,11 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Serialize};
 
 use crate::app::{read_utf8, work_label};
-use crate::cli::InboxRunArgs;
+use crate::cli::{InboxInterruptArgs, InboxInterruptDisposition, InboxRunArgs};
 use crate::config::Config;
 use crate::corpus::{
-    ReconciliationRecord, now, reconciliation_by_id, store_ingested_work_with_optional_label,
+    ReconciliationRecord, now, reconciliation_by_id, sha256_hex,
+    store_ingested_work_with_optional_label,
 };
 use crate::db;
 use crate::error::AppError;
@@ -27,7 +28,9 @@ use crate::render::CommandOutput;
 use crate::{ingestion, liaison, resolver};
 
 const QUEUE_VERSION: u32 = 4;
-const RECEIPT_VERSION: u32 = 3;
+const RECEIPT_VERSION: u32 = 4;
+const INTERRUPT_VERSION: u32 = 1;
+const MAX_INTERRUPT_REASON_CHARACTERS: usize = 1_000;
 
 #[derive(Debug)]
 struct Spool {
@@ -38,6 +41,7 @@ struct Spool {
     done: PathBuf,
     duplicates: PathBuf,
     failed: PathBuf,
+    skipped: PathBuf,
     index: PathBuf,
     lock: PathBuf,
     control_lock: PathBuf,
@@ -55,6 +59,7 @@ impl Spool {
             done: root.join("done"),
             duplicates: root.join("duplicates"),
             failed: root.join("failed"),
+            skipped: root.join("skipped"),
             index: root.join(".queue.json"),
             lock: root.join(".run.lock"),
             control_lock: root.join(".control.lock"),
@@ -72,6 +77,7 @@ impl Spool {
             &self.done,
             &self.duplicates,
             &self.failed,
+            &self.skipped,
         ] {
             fs::create_dir_all(path).map_err(|error| {
                 AppError::unexpected(
@@ -243,10 +249,12 @@ struct InboxStatus {
     ignored: usize,
     queued: usize,
     next_job: Option<RegisteredJob>,
+    active_job: Option<ActiveJob>,
     processing: usize,
     done: usize,
     duplicates: usize,
     failed: usize,
+    skipped: usize,
     locked: bool,
     paused: bool,
     maintenance: bool,
@@ -262,6 +270,7 @@ struct RunSummary {
     recorded: usize,
     duplicates: usize,
     failed: usize,
+    skipped: usize,
     recovered: usize,
     remaining: usize,
     settling: usize,
@@ -292,6 +301,25 @@ struct RegisteredJob {
     sequence: u64,
     source_name: String,
     registered_at: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ActiveJob {
+    id: String,
+    sequence: u64,
+    source_name: String,
+    attempts: u32,
+    started_at: Option<String>,
+    interrupt_requested: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct InterruptSummary {
+    root: String,
+    job_id: String,
+    disposition: String,
+    requested: bool,
+    reason: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -390,11 +418,40 @@ struct Envelope {
     source: PathBuf,
     expected_identity: Option<FileIdentity>,
     receipt: JobReceipt,
+    recovered: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct JobReceipt {
+    version: u32,
+    id: String,
+    sequence: u64,
+    original_name: String,
+    original_name_base64: String,
+    state: String,
+    attempts: u32,
+    delivery_key: String,
+    ingestion_id: Option<i64>,
+    source_size_bytes: Option<u64>,
+    source_created_at: Option<String>,
+    source_modified_at: Option<String>,
+    first_seen_at: String,
+    claimed_at: String,
+    started_at: Option<String>,
+    completed_at: Option<String>,
+    source_sha256: Option<String>,
+    work: Option<String>,
+    reconciliation_id: Option<i64>,
+    model_run_token: Option<String>,
+    result_status: Option<String>,
+    result_revision: Option<i64>,
+    last_error: Option<ReceiptError>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VersionThreeJobReceipt {
     version: u32,
     id: String,
     sequence: u64,
@@ -480,10 +537,26 @@ struct ReceiptError {
     message: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InterruptRequest {
+    version: u32,
+    job_id: String,
+    disposition: String,
+    requested_at: String,
+    reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
 enum Completion {
     Applied(i64),
     Recorded,
+    Duplicate,
+}
+
+#[derive(Debug)]
+enum WorkProcessing {
+    Reconciliation(ReconciliationRecord),
     Duplicate,
 }
 
@@ -525,6 +598,7 @@ pub(crate) fn run(
         recorded: 0,
         duplicates: 0,
         failed: 0,
+        skipped: 0,
         recovered,
         remaining: 0,
         settling: 0,
@@ -555,7 +629,12 @@ pub(crate) fn run(
             summary.stopped_for_maintenance = true;
             break;
         }
-        if spool.pause_requested()? {
+        let finish_processing = queue
+            .first_key_value()
+            .map(|(_, envelope)| finish_processing_while_paused(envelope))
+            .transpose()?
+            .unwrap_or(false);
+        if spool.pause_requested()? && !finish_processing {
             summary.stopped_for_pause = true;
             break;
         }
@@ -588,13 +667,14 @@ pub(crate) fn run(
     summary.elapsed_seconds = started.elapsed().as_secs_f64();
     summary.queue_drained = summary.remaining == 0;
     let human = format!(
-        "Inbox run: {} registered, {} attempted, {} applied, {} recorded, {} duplicates, {} failed\nRemaining work: {} ready, queued, or processing; settling: {}\nQueue drained: {}; stopped for pause: {}; stopped for maintenance: {}",
+        "Inbox run: {} registered, {} attempted, {} applied, {} recorded, {} duplicates, {} failed, {} skipped\nRemaining work: {} ready, queued, or processing; settling: {}\nQueue drained: {}; stopped for pause: {}; stopped for maintenance: {}",
         summary.registered,
         summary.attempted,
         summary.applied,
         summary.recorded,
         summary.duplicates,
         summary.failed,
+        summary.skipped,
         summary.remaining,
         summary.settling,
         summary.queue_drained,
@@ -696,6 +776,7 @@ pub(crate) fn import_backlog(
         || status.done != 0
         || status.duplicates != 0
         || status.failed != 0
+        || status.skipped != 0
     {
         return Err(AppError::conflict(
             "backlog_destination_not_fresh",
@@ -743,6 +824,9 @@ fn backlog_sources(spool: &Spool) -> Result<Vec<BacklogSource>, AppError> {
     for directory in [&spool.processing, &spool.queued] {
         for scanned in scan_envelopes_at(directory, &source_index, false)? {
             let receipt = &scanned.envelope.receipt;
+            if directory == &spool.processing && receipt.attempts > 0 {
+                continue;
+            }
             let name = scanned
                 .envelope
                 .source
@@ -836,6 +920,7 @@ fn import_backlog_source(
         expected_identity: Some(FileIdentity::from(&fs::symlink_metadata(&destination)?)),
         source: destination,
         receipt,
+        recovered: false,
     };
     write_receipt(&envelope)
 }
@@ -892,6 +977,118 @@ fn set_pause(config: &Config, paused: bool) -> Result<CommandOutput, AppError> {
     Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
 }
 
+pub(crate) fn interrupt(
+    library: &Path,
+    config: &Config,
+    args: &InboxInterruptArgs,
+) -> Result<CommandOutput, AppError> {
+    validate_requested_job_id(&args.job_id)?;
+    let reason = args
+        .reason
+        .as_deref()
+        .map(str::trim)
+        .map(str::to_owned)
+        .filter(|reason| !reason.is_empty());
+    if args.reason.is_some() && reason.is_none() {
+        return Err(AppError::invalid(
+            "invalid_interrupt_reason",
+            "an inbox interruption reason must not be blank",
+        ));
+    }
+    if reason
+        .as_deref()
+        .is_some_and(|reason| reason.chars().count() > MAX_INTERRUPT_REASON_CHARACTERS)
+    {
+        return Err(AppError::invalid(
+            "invalid_interrupt_reason",
+            format!(
+                "an inbox interruption reason may contain at most {MAX_INTERRUPT_REASON_CHARACTERS} characters"
+            ),
+        ));
+    }
+
+    let inbox = config.inbox()?;
+    let spool = Spool::new(&inbox.root);
+    spool.create()?;
+    let _control = spool.acquire_control_lock()?;
+    let envelope = processing_envelope(&spool, &args.job_id)?;
+    if envelope.receipt.state != "processing" {
+        return Err(AppError::conflict(
+            "inbox_job_not_processing",
+            format!("inbox job {} is not processing", args.job_id),
+        ));
+    }
+    if interruption_is_too_late(library, &envelope)? {
+        return Err(interruption_too_late(&args.job_id));
+    }
+    let disposition = interrupt_disposition(args.disposition);
+    let request = InterruptRequest {
+        version: INTERRUPT_VERSION,
+        job_id: args.job_id.clone(),
+        disposition: disposition.to_owned(),
+        requested_at: now()?,
+        reason: reason.clone(),
+    };
+    let path = interrupt_path(&envelope);
+    let requested = match read_interrupt_request(&envelope)? {
+        Some(existing)
+            if existing.disposition == request.disposition && existing.reason == request.reason =>
+        {
+            false
+        }
+        Some(existing) => {
+            return Err(AppError::conflict(
+                "inbox_interrupt_conflict",
+                format!(
+                    "inbox job {} already has an interruption request to archive it as {}",
+                    args.job_id, existing.disposition
+                ),
+            ));
+        }
+        None => {
+            write_json_atomic(&path, &request, "inbox interruption request")?;
+            true
+        }
+    };
+    if let Some(token) = envelope.receipt.model_run_token.as_deref() {
+        let explanation = request.reason.as_deref().map_or_else(
+            || format!("operator interrupted inbox job {disposition}"),
+            |reason| format!("operator interrupted inbox job {disposition}: {reason}"),
+        );
+        // The marker is already the durable request. The worker repeats this
+        // database close while terminalizing, so a transient failure here
+        // must not report that the accepted request itself failed.
+        let _ = liaison::interrupt_run(library, token, &explanation);
+    }
+    // The postcheck resolves a submission race when the database is readable.
+    // Otherwise the durable marker remains authoritative and recovery retries.
+    if interruption_is_too_late(library, &envelope).unwrap_or(false) {
+        if requested {
+            let _ = fs::remove_file(&path);
+        }
+        return Err(interruption_too_late(&args.job_id));
+    }
+    let summary = InterruptSummary {
+        root: spool.root.display().to_string(),
+        job_id: args.job_id.clone(),
+        disposition: disposition.to_owned(),
+        requested,
+        reason,
+    };
+    let human = if requested {
+        format!(
+            "Interruption requested for inbox job {}; it will be archived as {}",
+            summary.job_id, summary.disposition
+        )
+    } else {
+        format!(
+            "Interruption was already requested for inbox job {} as {}",
+            summary.job_id, summary.disposition
+        )
+    };
+    Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
+}
+
 pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
     let inbox = config.inbox()?;
     let spool = Spool::new(&inbox.root);
@@ -905,8 +1102,12 @@ pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
         || "none".to_owned(),
         |job| format!("{} ({})", job.id, job.source_name),
     );
+    let active = value.active_job.as_ref().map_or_else(
+        || "none".to_owned(),
+        |job| format!("{} ({})", job.id, job.source_name),
+    );
     let human = format!(
-        "Inbox: {}\nIncoming: {} ({} ready, {} settling)\nQueued: {}\nNext queued: {}\nProcessing: {}\nDone: {}\nDuplicates: {}\nFailed: {}\nLocked: {}\nPaused: {}\nMaintenance: {}",
+        "Inbox: {}\nIncoming: {} ({} ready, {} settling)\nQueued: {}\nNext queued: {}\nProcessing: {}\nActive: {}\nDone: {}\nDuplicates: {}\nFailed: {}\nSkipped: {}\nLocked: {}\nPaused: {}\nMaintenance: {}",
         value.root,
         value.incoming,
         value.ready,
@@ -914,9 +1115,11 @@ pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
         value.queued,
         next,
         value.processing,
+        active,
         value.done,
         value.duplicates,
         value.failed,
+        value.skipped,
         value.locked,
         value.paused,
         value.maintenance,
@@ -959,75 +1162,100 @@ fn process_one(
         summary.failed += 1;
         return Ok(());
     }
+    if envelope.receipt.state == "skipped" {
+        move_envelope(&envelope, &spool.skipped)?;
+        summary.skipped += 1;
+        return Ok(());
+    }
+    if envelope.recovered && envelope.receipt.attempts > 0 {
+        let _control = spool.acquire_control_lock()?;
+        return recover_attempt(library, spool, &mut envelope, ingestion_id, summary);
+    }
     summary.attempted += 1;
     envelope.receipt.attempts = envelope.receipt.attempts.saturating_add(1);
     "processing".clone_into(&mut envelope.receipt.state);
     envelope.receipt.started_at = Some(now()?);
     envelope.receipt.last_error = None;
     write_receipt(&envelope)?;
-    match process_work(
+    {
+        let _control = spool.acquire_control_lock()?;
+        if let Some(request) = read_interrupt_request(&envelope)? {
+            return terminalize_interruption(
+                library,
+                spool,
+                &mut envelope,
+                ingestion_id,
+                &request,
+                summary,
+            );
+        }
+    }
+    let result = process_work(
         library,
         &mut envelope,
         ingestion_id,
         settings,
         runner,
         forward_progress,
-    ) {
-        Ok(completion) => {
-            let (status, result_revision, destination) = match completion {
-                Completion::Applied(revision) => {
-                    summary.applied += 1;
-                    ("applied", Some(revision), &spool.done)
-                }
-                Completion::Recorded => {
-                    summary.recorded += 1;
-                    ("recorded", None, &spool.done)
-                }
-                Completion::Duplicate => {
-                    summary.duplicates += 1;
-                    ("retained", None, &spool.duplicates)
+    );
+    let _control = spool.acquire_control_lock()?;
+    let reconciliation_is_terminal = matches!(
+        &result,
+        Ok(WorkProcessing::Reconciliation(record))
+            if matches!(record.status.as_str(), "applied" | "recorded")
+    );
+    if !reconciliation_is_terminal && let Some(request) = read_interrupt_request(&envelope)? {
+        return terminalize_interruption(
+            library,
+            spool,
+            &mut envelope,
+            ingestion_id,
+            &request,
+            summary,
+        );
+    }
+    match result {
+        Ok(WorkProcessing::Reconciliation(record)) => {
+            envelope.receipt.reconciliation_id = Some(record.id);
+            write_receipt(&envelope)?;
+            let completion = match finish_reconciliation(library, &record) {
+                Ok(completion) => completion,
+                Err(error) => {
+                    terminalize_failed_job(
+                        library,
+                        spool,
+                        &mut envelope,
+                        ingestion_id,
+                        &error,
+                        summary,
+                    )?;
+                    return Err(archived_job_error(&envelope, &error));
                 }
             };
-            let connection = db::open_write(library)?;
-            ingestion::complete(&connection, ingestion_id, status, result_revision)?;
-            "done".clone_into(&mut envelope.receipt.state);
-            envelope.receipt.completed_at = Some(now()?);
-            envelope.receipt.result_status = Some(status.to_owned());
-            envelope.receipt.result_revision = result_revision;
-            write_receipt(&envelope)?;
-            move_envelope(&envelope, destination)?;
-            Ok(())
+            complete_job(
+                library,
+                spool,
+                &mut envelope,
+                ingestion_id,
+                completion,
+                summary,
+            )
         }
-        Err(error) if permanent_source_error(&error) => {
-            let code = error.code().to_owned();
-            let connection = db::open_write(library)?;
-            ingestion::fail(&connection, ingestion_id, &error)?;
-            "failed".clone_into(&mut envelope.receipt.state);
-            envelope.receipt.completed_at = Some(now()?);
-            envelope.receipt.last_error = Some(ReceiptError {
-                code: code.clone(),
-                message: error.to_string(),
-            });
-            write_receipt(&envelope)?;
-            move_envelope(&envelope, &spool.failed)?;
-            summary.failed += 1;
-            Ok(())
-        }
+        Ok(WorkProcessing::Duplicate) => complete_job(
+            library,
+            spool,
+            &mut envelope,
+            ingestion_id,
+            Completion::Duplicate,
+            summary,
+        ),
         Err(error) => {
-            let connection = db::open_write(library)?;
-            ingestion::record_retryable_error(&connection, ingestion_id, &error)?;
-            envelope.receipt.last_error = Some(ReceiptError {
-                code: error.code().to_owned(),
-                message: error.to_string(),
-            });
-            write_receipt(&envelope)?;
-            Err(AppError::unexpected(
-                "inbox_job_failed",
-                format!(
-                    "inbox job {} failed and remains retryable: {error}",
-                    envelope.id
-                ),
-            ))
+            let stop_activation = !permanent_source_error(&error);
+            terminalize_failed_job(library, spool, &mut envelope, ingestion_id, &error, summary)?;
+            if stop_activation {
+                return Err(archived_job_error(&envelope, &error));
+            }
+            Ok(())
         }
     }
 }
@@ -1039,7 +1267,70 @@ fn process_work(
     settings: &ModelSettings,
     runner: &Runner,
     forward_progress: bool,
-) -> Result<Completion, AppError> {
+) -> Result<WorkProcessing, AppError> {
+    let text = read_envelope_text(envelope)?;
+    let label = work_label(&envelope.source, None).ok();
+    let mut connection = db::open_write(library)?;
+    let stored = store_ingested_work_with_optional_label(
+        &mut connection,
+        ingestion_id,
+        label.as_deref(),
+        &text,
+    )?;
+    let work = stored.work;
+    envelope.receipt.source_sha256 = Some(work.sha256.clone());
+    envelope.receipt.work = Some(work.label.clone());
+    write_receipt(envelope)?;
+
+    if let Some(record) =
+        receipt_reconciliation(&connection, work.id, envelope.receipt.reconciliation_id)?
+    {
+        match record.status.as_str() {
+            "applied" | "recorded" | "pending" => {
+                return Ok(WorkProcessing::Reconciliation(record));
+            }
+            "superseded" => {}
+            _ => {
+                return Err(AppError::database(
+                    "invalid_reconciliation",
+                    format!("unknown reconciliation status {:?}", record.status),
+                ));
+            }
+        }
+    }
+    if !stored.new_work {
+        drop(connection);
+        if let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
+            liaison::abandon_run(library, previous_token, work.id)?;
+        }
+        return Ok(WorkProcessing::Duplicate);
+    }
+    let run_token = connection.query_row("SELECT lower(hex(randomblob(32)))", [], |row| {
+        row.get::<_, String>(0)
+    })?;
+    drop(connection);
+    if let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
+        liaison::abandon_run(library, previous_token, work.id)?;
+    }
+    envelope.receipt.model_run_token = Some(run_token.clone());
+    write_receipt(envelope)?;
+
+    let request_path = interrupt_path(envelope);
+    let cancellation_requested = || request_path.is_file();
+    let record = liaison::integrate_with_runner_token_cancellable(
+        library,
+        &work,
+        settings,
+        forward_progress,
+        false,
+        runner,
+        Some(&run_token),
+        &cancellation_requested,
+    )?;
+    Ok(WorkProcessing::Reconciliation(record))
+}
+
+fn read_envelope_text(envelope: &Envelope) -> Result<String, AppError> {
     let before = fs::symlink_metadata(&envelope.source)?;
     if !before.file_type().is_file() {
         return Err(AppError::invalid(
@@ -1074,84 +1365,369 @@ fn process_work(
             ),
         ));
     }
-    let label = work_label(&envelope.source, None).ok();
+    Ok(text)
+}
+
+fn recover_attempt(
+    library: &Path,
+    spool: &Spool,
+    envelope: &mut Envelope,
+    ingestion_id: i64,
+    summary: &mut RunSummary,
+) -> Result<(), AppError> {
+    if let Some(terminal) = recovered_delivery(library, ingestion_id)? {
+        return match terminal {
+            RecoveredDelivery::Completed(completion) => {
+                complete_job(library, spool, envelope, ingestion_id, completion, summary)
+            }
+            RecoveredDelivery::Failed(error) => {
+                archive_failed_delivery(spool, envelope, error, summary)
+            }
+        };
+    }
+
+    let record = recovered_reconciliation(library, envelope, ingestion_id)?;
+    if let Some(record) = record.as_ref()
+        && matches!(record.status.as_str(), "applied" | "recorded")
+    {
+        envelope.receipt.reconciliation_id = Some(record.id);
+        write_receipt(envelope)?;
+        let completion = finish_reconciliation(library, record)?;
+        return complete_job(library, spool, envelope, ingestion_id, completion, summary);
+    }
+
+    if let Some(request) = read_interrupt_request(envelope)? {
+        return terminalize_interruption(library, spool, envelope, ingestion_id, &request, summary);
+    }
+
+    if let Some(record) = record {
+        envelope.receipt.reconciliation_id = Some(record.id);
+        write_receipt(envelope)?;
+        return match finish_reconciliation(library, &record) {
+            Ok(completion) => {
+                complete_job(library, spool, envelope, ingestion_id, completion, summary)
+            }
+            Err(error) => {
+                terminalize_failed_job(library, spool, envelope, ingestion_id, &error, summary)?;
+                Err(archived_job_error(envelope, &error))
+            }
+        };
+    }
+
+    if delivery_retention_is_duplicate(library, ingestion_id)? {
+        return complete_job(
+            library,
+            spool,
+            envelope,
+            ingestion_id,
+            Completion::Duplicate,
+            summary,
+        );
+    }
+
+    let error = AppError::unexpected(
+        "inbox_processing_interrupted",
+        format!(
+            "inbox job {} was interrupted after its only processing attempt",
+            envelope.id
+        ),
+    );
+    terminalize_failed_job(library, spool, envelope, ingestion_id, &error, summary)
+}
+
+#[derive(Debug)]
+enum RecoveredDelivery {
+    Completed(Completion),
+    Failed(ReceiptError),
+}
+
+fn recovered_delivery(
+    library: &Path,
+    ingestion_id: i64,
+) -> Result<Option<RecoveredDelivery>, AppError> {
+    let connection = db::open_read(library)?;
+    let (status, result, result_revision, error_code, error_message) = connection.query_row(
+        "SELECT status, result, result_revision, error_code, error_message \
+         FROM ingestions WHERE id = ?1",
+        [ingestion_id],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<i64>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+            ))
+        },
+    )?;
+    match status.as_str() {
+        "processing" => Ok(None),
+        "completed" => match result.as_deref() {
+            Some("applied") => result_revision
+                .map(Completion::Applied)
+                .map(RecoveredDelivery::Completed)
+                .map(Some)
+                .ok_or_else(|| {
+                    AppError::database(
+                        "invalid_ingestion",
+                        "an applied source delivery has no result revision",
+                    )
+                }),
+            Some("recorded") => Ok(Some(RecoveredDelivery::Completed(Completion::Recorded))),
+            Some("retained") => Ok(Some(RecoveredDelivery::Completed(Completion::Duplicate))),
+            _ => Err(AppError::database(
+                "invalid_ingestion",
+                "a completed inbox source delivery has an invalid result",
+            )),
+        },
+        "failed" => Ok(Some(RecoveredDelivery::Failed(ReceiptError {
+            code: error_code.ok_or_else(|| {
+                AppError::database(
+                    "invalid_ingestion",
+                    "a failed source delivery has no error code",
+                )
+            })?,
+            message: error_message.ok_or_else(|| {
+                AppError::database(
+                    "invalid_ingestion",
+                    "a failed source delivery has no error message",
+                )
+            })?,
+        }))),
+        _ => Err(AppError::database(
+            "invalid_ingestion",
+            format!("source delivery has invalid status {status:?}"),
+        )),
+    }
+}
+
+fn recovered_reconciliation(
+    library: &Path,
+    envelope: &mut Envelope,
+    ingestion_id: i64,
+) -> Result<Option<ReconciliationRecord>, AppError> {
+    let record = if let Some(id) = envelope.receipt.reconciliation_id {
+        Some(reconciliation_by_id(&db::open_read(library)?, id)?)
+    } else if let Some(token) = envelope.receipt.model_run_token.as_deref() {
+        liaison::reconciliation_for_run_token(library, token)?
+    } else {
+        None
+    };
+    let Some(record) = record else {
+        return Ok(None);
+    };
+    let work_id = db::open_read(library)?.query_row(
+        "SELECT work_id FROM ingestions WHERE id = ?1",
+        [ingestion_id],
+        |row| row.get::<_, Option<i64>>(0),
+    )?;
+    let work_id = if work_id.is_none() {
+        Some(restore_reconciliation_work(
+            library,
+            envelope,
+            ingestion_id,
+            &record,
+        )?)
+    } else {
+        work_id
+    };
+    if work_id != Some(record.work_id) {
+        return Err(AppError::database(
+            "invalid_job_receipt",
+            format!(
+                "reconciliation {} does not belong to inbox job {}",
+                record.id, envelope.id
+            ),
+        ));
+    }
+    Ok(Some(record))
+}
+
+fn restore_reconciliation_work(
+    library: &Path,
+    envelope: &mut Envelope,
+    ingestion_id: i64,
+    record: &ReconciliationRecord,
+) -> Result<i64, AppError> {
+    let connection = db::open_read(library)?;
+    let (label, sha256) = connection.query_row(
+        "SELECT label, sha256 FROM works WHERE id = ?1",
+        [record.work_id],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+    )?;
+    if envelope.receipt.work.as_deref() != Some(&label)
+        || envelope.receipt.source_sha256.as_deref() != Some(&sha256)
+    {
+        return Err(AppError::database(
+            "invalid_job_receipt",
+            format!(
+                "reconciliation {} does not match retained work metadata for inbox job {}",
+                record.id, envelope.id
+            ),
+        ));
+    }
+
+    let text = read_envelope_text(envelope)?;
+    if sha256_hex(text.as_bytes()) != sha256 {
+        return Err(AppError::unexpected(
+            "inbox_source_changed",
+            format!(
+                "inbox source {} no longer matches its completed reconciliation",
+                envelope.source.display()
+            ),
+        ));
+    }
     let mut connection = db::open_write(library)?;
     let stored = store_ingested_work_with_optional_label(
         &mut connection,
         ingestion_id,
-        label.as_deref(),
+        Some(&label),
         &text,
     )?;
-    let work = stored.work;
-    envelope.receipt.source_sha256 = Some(work.sha256.clone());
-    envelope.receipt.work = Some(work.label.clone());
-    write_receipt(envelope)?;
+    if stored.work.id != record.work_id {
+        return Err(AppError::database(
+            "invalid_job_receipt",
+            format!(
+                "reconciliation {} does not belong to inbox job {}",
+                record.id, envelope.id
+            ),
+        ));
+    }
+    Ok(stored.work.id)
+}
 
-    if let Some(record) =
-        receipt_reconciliation(&connection, work.id, envelope.receipt.reconciliation_id)?
-    {
-        match record.status.as_str() {
-            "applied" => {
-                envelope.receipt.reconciliation_id = Some(record.id);
-                return Ok(Completion::Applied(record.applied_revision.ok_or_else(
-                    || {
-                        AppError::database(
-                            "invalid_reconciliation",
-                            "an applied reconciliation has no applied revision",
-                        )
-                    },
-                )?));
-            }
-            "recorded" => {
-                envelope.receipt.reconciliation_id = Some(record.id);
-                return Ok(Completion::Recorded);
-            }
-            "pending" => match resolver::apply_record(&mut connection, &record) {
-                Ok(applied) => {
-                    envelope.receipt.reconciliation_id = Some(record.id);
-                    return Ok(Completion::Applied(applied));
-                }
-                Err(error) if error.code() == "stale_change" => {}
-                Err(error) => return Err(error),
-            },
-            "superseded" => {}
-            _ => {
-                return Err(AppError::database(
-                    "invalid_reconciliation",
-                    format!("unknown reconciliation status {:?}", record.status),
-                ));
-            }
-        }
-    }
-    if !stored.new_work {
-        drop(connection);
-        if let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
-            liaison::abandon_run(library, previous_token, work.id)?;
-        }
-        return Ok(Completion::Duplicate);
-    }
-    let run_token = connection.query_row("SELECT lower(hex(randomblob(32)))", [], |row| {
-        row.get::<_, String>(0)
-    })?;
-    drop(connection);
-    if let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
-        liaison::abandon_run(library, previous_token, work.id)?;
-    }
-    envelope.receipt.model_run_token = Some(run_token.clone());
-    write_receipt(envelope)?;
+fn delivery_retention_is_duplicate(library: &Path, ingestion_id: i64) -> Result<bool, AppError> {
+    db::open_read(library)?
+        .query_row(
+            "SELECT new_work FROM ingestions WHERE id = ?1",
+            [ingestion_id],
+            |row| row.get::<_, Option<bool>>(0),
+        )
+        .map(|new_work| new_work == Some(false))
+        .map_err(Into::into)
+}
 
-    let record = liaison::integrate_with_runner_token(
-        library,
-        &work,
-        settings,
-        forward_progress,
-        false,
-        runner,
-        Some(&run_token),
-    )?;
-    envelope.receipt.reconciliation_id = Some(record.id);
+fn complete_job(
+    library: &Path,
+    spool: &Spool,
+    envelope: &mut Envelope,
+    ingestion_id: i64,
+    completion: Completion,
+    summary: &mut RunSummary,
+) -> Result<(), AppError> {
+    let (status, result_revision, destination) = match completion {
+        Completion::Applied(revision) => ("applied", Some(revision), &spool.done),
+        Completion::Recorded => ("recorded", None, &spool.done),
+        Completion::Duplicate => ("retained", None, &spool.duplicates),
+    };
+    let connection = db::open_write(library)?;
+    ingestion::complete(&connection, ingestion_id, status, result_revision)?;
+    "done".clone_into(&mut envelope.receipt.state);
+    envelope.receipt.completed_at = Some(now()?);
+    envelope.receipt.result_status = Some(status.to_owned());
+    envelope.receipt.result_revision = result_revision;
+    envelope.receipt.last_error = None;
     write_receipt(envelope)?;
-    finish_reconciliation(library, &record)
+    move_envelope(envelope, destination)?;
+    match status {
+        "applied" => summary.applied += 1,
+        "recorded" => summary.recorded += 1,
+        "retained" => summary.duplicates += 1,
+        _ => unreachable!(),
+    }
+    Ok(())
+}
+
+fn terminalize_failed_job(
+    library: &Path,
+    spool: &Spool,
+    envelope: &mut Envelope,
+    ingestion_id: i64,
+    error: &AppError,
+    summary: &mut RunSummary,
+) -> Result<(), AppError> {
+    if let Some(token) = envelope.receipt.model_run_token.as_deref() {
+        let _ = liaison::interrupt_run(library, token, &error.to_string())?;
+    }
+    let connection = db::open_write(library)?;
+    ingestion::fail(&connection, ingestion_id, error)?;
+    archive_failed_delivery(
+        spool,
+        envelope,
+        ReceiptError {
+            code: error.code().to_owned(),
+            message: error.to_string(),
+        },
+        summary,
+    )
+}
+
+fn archived_job_error(envelope: &Envelope, error: &AppError) -> AppError {
+    AppError::unexpected(
+        "inbox_job_failed",
+        format!("inbox job {} failed and was archived: {error}", envelope.id),
+    )
+}
+
+fn terminalize_interruption(
+    library: &Path,
+    spool: &Spool,
+    envelope: &mut Envelope,
+    ingestion_id: i64,
+    request: &InterruptRequest,
+    summary: &mut RunSummary,
+) -> Result<(), AppError> {
+    let (code, description) = if request.disposition == "skipped" {
+        ("inbox_job_skipped", "skipped by the operator")
+    } else {
+        ("inbox_job_interrupted", "failed by the operator")
+    };
+    let message = request.reason.as_deref().map_or_else(
+        || format!("inbox job {} was {description}", envelope.id),
+        |reason| format!("inbox job {} was {description}: {reason}", envelope.id),
+    );
+    let error = AppError::unexpected(code, &message);
+    if let Some(token) = envelope.receipt.model_run_token.as_deref() {
+        let _ = liaison::interrupt_run(library, token, &message)?;
+    }
+    let connection = db::open_write(library)?;
+    ingestion::fail(&connection, ingestion_id, &error)?;
+    archive_failed_delivery(
+        spool,
+        envelope,
+        ReceiptError {
+            code: code.to_owned(),
+            message,
+        },
+        summary,
+    )
+}
+
+fn archive_failed_delivery(
+    spool: &Spool,
+    envelope: &mut Envelope,
+    error: ReceiptError,
+    summary: &mut RunSummary,
+) -> Result<(), AppError> {
+    let skipped = error.code == "inbox_job_skipped";
+    if skipped {
+        "skipped".clone_into(&mut envelope.receipt.state);
+    } else {
+        "failed".clone_into(&mut envelope.receipt.state);
+    }
+    envelope.receipt.completed_at = Some(now()?);
+    envelope.receipt.result_status = None;
+    envelope.receipt.result_revision = None;
+    envelope.receipt.last_error = Some(error);
+    write_receipt(envelope)?;
+    if skipped {
+        move_envelope(envelope, &spool.skipped)?;
+        summary.skipped += 1;
+    } else {
+        move_envelope(envelope, &spool.failed)?;
+        summary.failed += 1;
+    }
+    Ok(())
 }
 
 fn receipt_reconciliation(
@@ -1325,6 +1901,7 @@ fn register_candidate(
         source: destination,
         expected_identity: Some(candidate.identity),
         receipt,
+        recovered: false,
     };
     write_receipt(&envelope)?;
     Ok(Some(envelope))
@@ -1371,6 +1948,7 @@ fn job_id_exists(spool: &Spool, id: &str) -> bool {
         &spool.done,
         &spool.duplicates,
         &spool.failed,
+        &spool.skipped,
     ]
     .iter()
     .any(|parent| parent.join(id).exists())
@@ -1438,6 +2016,158 @@ fn write_receipt(envelope: &Envelope) -> Result<(), AppError> {
     )
 }
 
+fn interrupt_disposition(disposition: InboxInterruptDisposition) -> &'static str {
+    match disposition {
+        InboxInterruptDisposition::Failed => "failed",
+        InboxInterruptDisposition::Skipped => "skipped",
+    }
+}
+
+fn validate_requested_job_id(id: &str) -> Result<(), AppError> {
+    let base = id.get(..21).filter(|base| {
+        base.starts_with('j') && base[1..].bytes().all(|byte| byte.is_ascii_digit())
+    });
+    let suffix_is_valid = id.get(21..).is_some_and(|suffix| {
+        suffix.is_empty()
+            || suffix.strip_prefix('-').is_some_and(|digits| {
+                !digits.is_empty()
+                    && digits.bytes().all(|byte| byte.is_ascii_digit())
+                    && digits.parse::<u64>().is_ok_and(|value| value > 0)
+            })
+    });
+    if base.is_none() || !suffix_is_valid || sequence_from_job_id(id).is_err() {
+        return Err(AppError::invalid(
+            "invalid_inbox_job_id",
+            format!("inbox job identifier is invalid: {id}"),
+        ));
+    }
+    Ok(())
+}
+
+fn processing_envelope(spool: &Spool, id: &str) -> Result<Envelope, AppError> {
+    let directory = spool.processing.join(id);
+    match fs::symlink_metadata(&directory) {
+        Ok(metadata) if metadata.file_type().is_dir() => {}
+        Ok(_) => {
+            return Err(AppError::conflict(
+                "inbox_job_not_processing",
+                format!("inbox job {id} is not a processing envelope"),
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(AppError::conflict(
+                "inbox_job_not_processing",
+                format!("inbox job {id} is not processing"),
+            ));
+        }
+        Err(error) => return Err(error.into()),
+    }
+    let source = sole_material(&directory.join("material"))?.ok_or_else(|| {
+        AppError::unexpected(
+            "invalid_job_envelope",
+            format!("processing inbox job {id} has no source material"),
+        )
+    })?;
+    let (receipt, _) = read_receipt(&directory.join("job.json"), id, &source)?;
+    validate_receipt(&receipt, id, &source)?;
+    Ok(Envelope {
+        id: id.to_owned(),
+        directory,
+        source,
+        expected_identity: None,
+        receipt,
+        recovered: false,
+    })
+}
+
+fn interrupt_path(envelope: &Envelope) -> PathBuf {
+    envelope.directory.join("interrupt.json")
+}
+
+fn finish_processing_while_paused(envelope: &Envelope) -> Result<bool, AppError> {
+    match envelope.receipt.state.as_str() {
+        "processing" if envelope.receipt.attempts > 0 => Ok(true),
+        "processing" => read_interrupt_request(envelope).map(|request| request.is_some()),
+        "done" | "failed" | "skipped" => Ok(true),
+        _ => Ok(false),
+    }
+}
+
+fn interruption_is_too_late(library: &Path, envelope: &Envelope) -> Result<bool, AppError> {
+    if let Some(ingestion_id) = envelope.receipt.ingestion_id {
+        let status = db::open_read(library)?.query_row(
+            "SELECT status FROM ingestions WHERE id = ?1",
+            [ingestion_id],
+            |row| row.get::<_, String>(0),
+        )?;
+        if status != "processing" {
+            return Ok(true);
+        }
+    }
+    let record = if let Some(id) = envelope.receipt.reconciliation_id {
+        Some(reconciliation_by_id(&db::open_read(library)?, id)?)
+    } else if let Some(token) = envelope.receipt.model_run_token.as_deref() {
+        liaison::reconciliation_for_run_token(library, token)?
+    } else {
+        None
+    };
+    Ok(record.is_some_and(|record| matches!(record.status.as_str(), "applied" | "recorded")))
+}
+
+fn interruption_too_late(id: &str) -> AppError {
+    AppError::conflict(
+        "inbox_interrupt_too_late",
+        format!("inbox job {id} already has a durable terminal outcome"),
+    )
+}
+
+fn read_interrupt_request(envelope: &Envelope) -> Result<Option<InterruptRequest>, AppError> {
+    let path = interrupt_path(envelope);
+    let metadata = match fs::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    if !metadata.file_type().is_file() {
+        return Err(AppError::unexpected(
+            "invalid_inbox_interrupt",
+            format!(
+                "inbox interruption request is not a regular file: {}",
+                path.display()
+            ),
+        ));
+    }
+    let request: InterruptRequest = serde_json::from_slice(&fs::read(&path)?).map_err(|error| {
+        AppError::unexpected(
+            "invalid_inbox_interrupt",
+            format!(
+                "invalid inbox interruption request {}: {error}",
+                path.display()
+            ),
+        )
+    })?;
+    let reason_is_valid = request.reason.as_deref().is_none_or(|reason| {
+        !reason.trim().is_empty()
+            && reason == reason.trim()
+            && reason.chars().count() <= MAX_INTERRUPT_REASON_CHARACTERS
+    });
+    if request.version != INTERRUPT_VERSION
+        || request.job_id != envelope.id
+        || !matches!(request.disposition.as_str(), "failed" | "skipped")
+        || request.requested_at.trim().is_empty()
+        || !reason_is_valid
+    {
+        return Err(AppError::unexpected(
+            "invalid_inbox_interrupt",
+            format!(
+                "inbox interruption request does not match job {}",
+                envelope.id
+            ),
+        ));
+    }
+    Ok(Some(request))
+}
+
 fn recover_envelopes(
     library: &Path,
     spool: &Spool,
@@ -1447,11 +2177,15 @@ fn recover_envelopes(
     let queued = scan_envelopes_at(&spool.queued, index, persist_repairs)?;
     let processing = scan_envelopes_at(&spool.processing, index, persist_repairs)?;
     if !persist_repairs {
-        return Ok(queued
+        let mut envelopes = queued
             .into_iter()
-            .chain(processing)
             .map(|scanned| scanned.envelope)
-            .collect());
+            .collect::<Vec<_>>();
+        envelopes.extend(processing.into_iter().map(|mut scanned| {
+            scanned.envelope.recovered = true;
+            scanned.envelope
+        }));
+        return Ok(envelopes);
     }
 
     let connection = db::open_read(library)?;
@@ -1462,6 +2196,7 @@ fn recover_envelopes(
             && !delivery_record_exists(&connection, &scanned.envelope.receipt.delivery_key)?;
         if scanned.envelope.receipt.state == "queued" || legacy_queued {
             "queued".clone_into(&mut scanned.envelope.receipt.state);
+            scanned.envelope.recovered = false;
             if scanned.stored_version != RECEIPT_VERSION || legacy_queued {
                 write_receipt(&scanned.envelope)?;
             }
@@ -1484,6 +2219,7 @@ fn recover_envelopes(
         if scanned.stored_version == 0 || legacy_unstarted {
             let mut envelope = relocate_envelope(scanned.envelope, &spool.queued)?;
             "queued".clone_into(&mut envelope.receipt.state);
+            envelope.recovered = false;
             write_receipt(&envelope)?;
             recovered.push(envelope);
             continue;
@@ -1494,6 +2230,7 @@ fn recover_envelopes(
         } else if scanned.stored_version != RECEIPT_VERSION {
             write_receipt(&scanned.envelope)?;
         }
+        scanned.envelope.recovered = true;
         recovered.push(scanned.envelope);
     }
     validate_recovered_order(&recovered)?;
@@ -1685,6 +2422,7 @@ fn scan_envelopes_at(
             source,
             expected_identity: None,
             receipt,
+            recovered: false,
         };
         envelopes.push(ScannedEnvelope {
             envelope,
@@ -1703,6 +2441,11 @@ fn read_receipt(path: &Path, id: &str, source: &Path) -> Result<(JobReceipt, u32
         RECEIPT_VERSION => serde_json::from_slice(&bytes)
             .map(|receipt| (receipt, RECEIPT_VERSION))
             .map_err(|error| invalid_receipt(path, &error)),
+        3 => {
+            let receipt: VersionThreeJobReceipt =
+                serde_json::from_slice(&bytes).map_err(|error| invalid_receipt(path, &error))?;
+            upgrade_version_three_receipt(receipt, id).map(|receipt| (receipt, 3))
+        }
         2 => {
             let receipt: VersionTwoJobReceipt =
                 serde_json::from_slice(&bytes).map_err(|error| invalid_receipt(path, &error))?;
@@ -1718,6 +2461,43 @@ fn read_receipt(path: &Path, id: &str, source: &Path) -> Result<(JobReceipt, u32
             format!("unsupported job receipt {}", path.display()),
         )),
     }
+}
+
+fn upgrade_version_three_receipt(
+    receipt: VersionThreeJobReceipt,
+    id: &str,
+) -> Result<JobReceipt, AppError> {
+    if receipt.version != 3 || receipt.id != id {
+        return Err(AppError::unexpected(
+            "invalid_job_receipt",
+            format!("version 3 job receipt does not match envelope {id}"),
+        ));
+    }
+    Ok(JobReceipt {
+        version: RECEIPT_VERSION,
+        id: receipt.id,
+        sequence: receipt.sequence,
+        original_name: receipt.original_name,
+        original_name_base64: receipt.original_name_base64,
+        state: receipt.state,
+        attempts: receipt.attempts,
+        delivery_key: receipt.delivery_key,
+        ingestion_id: receipt.ingestion_id,
+        source_size_bytes: receipt.source_size_bytes,
+        source_created_at: receipt.source_created_at,
+        source_modified_at: receipt.source_modified_at,
+        first_seen_at: receipt.first_seen_at,
+        claimed_at: receipt.claimed_at,
+        started_at: receipt.started_at,
+        completed_at: receipt.completed_at,
+        source_sha256: receipt.source_sha256,
+        work: receipt.work,
+        reconciliation_id: receipt.reconciliation_id,
+        model_run_token: receipt.model_run_token,
+        result_status: receipt.result_status,
+        result_revision: receipt.result_revision,
+        last_error: receipt.last_error,
+    })
 }
 
 fn upgrade_version_two_receipt(
@@ -2014,11 +2794,62 @@ fn validate_receipt(receipt: &JobReceipt, id: &str, source: &Path) -> Result<(),
         .file_name()
         .map(|name| URL_SAFE_NO_PAD.encode(name.as_bytes()));
     let expected_sequence = sequence_from_job_id(id)?;
+    let attempt_is_valid = (receipt.attempts == 0) == receipt.started_at.is_none();
+    let retained_work_is_valid = receipt.source_sha256.is_some() == receipt.work.is_some();
+    let identifiers_are_valid = receipt.ingestion_id.is_none_or(|value| value > 0)
+        && receipt.reconciliation_id.is_none_or(|value| value > 0)
+        && receipt.result_revision.is_none_or(|value| value > 0);
+    let optional_text_is_valid = [
+        receipt.started_at.as_deref(),
+        receipt.completed_at.as_deref(),
+        receipt.source_sha256.as_deref(),
+        receipt.work.as_deref(),
+        receipt.model_run_token.as_deref(),
+        receipt.result_status.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .all(|value| !value.trim().is_empty());
+    let error_is_valid = receipt
+        .last_error
+        .as_ref()
+        .is_none_or(|error| !error.code.trim().is_empty() && !error.message.trim().is_empty());
     let state_is_valid = match receipt.state.as_str() {
         "queued" => receipt_has_no_processing_progress(receipt),
-        "processing" => receipt.completed_at.is_none() && receipt.result_status.is_none(),
-        "done" => receipt.completed_at.is_some() && receipt.result_status.is_some(),
-        "failed" => receipt.completed_at.is_some() && receipt.last_error.is_some(),
+        "processing" => {
+            receipt.completed_at.is_none()
+                && receipt.result_status.is_none()
+                && receipt.result_revision.is_none()
+                && (receipt.attempts > 0
+                    || (receipt.source_sha256.is_none()
+                        && receipt.work.is_none()
+                        && receipt.reconciliation_id.is_none()
+                        && receipt.model_run_token.is_none()
+                        && receipt.last_error.is_none()))
+        }
+        "done" => {
+            receipt.attempts > 0
+                && receipt.completed_at.is_some()
+                && receipt.result_status.is_some()
+                && receipt.last_error.is_none()
+        }
+        "failed" => {
+            receipt.attempts > 0
+                && receipt.completed_at.is_some()
+                && receipt.result_status.is_none()
+                && receipt.result_revision.is_none()
+                && receipt.last_error.is_some()
+        }
+        "skipped" => {
+            receipt.attempts > 0
+                && receipt.completed_at.is_some()
+                && receipt.result_status.is_none()
+                && receipt.result_revision.is_none()
+                && receipt
+                    .last_error
+                    .as_ref()
+                    .is_some_and(|error| error.code == "inbox_job_skipped")
+        }
         _ => false,
     };
     if receipt.version != RECEIPT_VERSION
@@ -2029,6 +2860,11 @@ fn validate_receipt(receipt: &JobReceipt, id: &str, source: &Path) -> Result<(),
         || receipt.sequence == 0
         || receipt.first_seen_at.trim().is_empty()
         || receipt.claimed_at.trim().is_empty()
+        || !attempt_is_valid
+        || !retained_work_is_valid
+        || !identifiers_are_valid
+        || !optional_text_is_valid
+        || !error_is_valid
         || !state_is_valid
     {
         return Err(AppError::unexpected(
@@ -2203,6 +3039,7 @@ fn repair_sequence_high_water(spool: &Spool, index: &mut QueueIndex) -> Result<(
         &spool.done,
         &spool.duplicates,
         &spool.failed,
+        &spool.skipped,
     ] {
         if !directory.exists() {
             continue;
@@ -2345,14 +3182,43 @@ fn inspect(spool: &Spool, settle_seconds: u64) -> Result<InboxStatus, AppError> 
         ignored,
         queued: count_directories(&spool.queued)?,
         next_job: next_queued_job(spool)?,
+        active_job: active_job(spool)?,
         processing: count_directories(&spool.processing)?,
         done: count_directories(&spool.done)?,
         duplicates: count_directories(&spool.duplicates)?,
         failed: count_directories(&spool.failed)?,
+        skipped: count_directories(&spool.skipped)?,
         locked: inbox_locked(&spool.lock),
         paused: spool.pause_requested()?,
         maintenance: spool.maintenance_requested()?,
     })
+}
+
+fn active_job(spool: &Spool) -> Result<Option<ActiveJob>, AppError> {
+    let index = read_index(spool)?;
+    let mut active = scan_envelopes_at(&spool.processing, &index, false)?
+        .into_iter()
+        .filter(|scanned| scanned.envelope.receipt.state == "processing")
+        .collect::<Vec<_>>();
+    if active.len() > 1 {
+        return Err(AppError::unexpected(
+            "invalid_inbox_order",
+            "more than one inbox job is in processing state",
+        ));
+    }
+    let Some(scanned) = active.pop() else {
+        return Ok(None);
+    };
+    let envelope = scanned.envelope;
+    let interrupt_requested = read_interrupt_request(&envelope)?.map(|request| request.disposition);
+    Ok(Some(ActiveJob {
+        id: envelope.id,
+        sequence: envelope.receipt.sequence,
+        source_name: envelope.receipt.original_name,
+        attempts: envelope.receipt.attempts,
+        started_at: envelope.receipt.started_at,
+        interrupt_requested,
+    }))
 }
 
 fn next_queued_job(spool: &Spool) -> Result<Option<RegisteredJob>, AppError> {
@@ -2392,6 +3258,7 @@ fn next_queued_job(spool: &Spool) -> Result<Option<RegisteredJob>, AppError> {
         source,
         expected_identity: None,
         receipt,
+        recovered: false,
     };
     Ok(Some(RegisteredJob::from(&envelope)))
 }

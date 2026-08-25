@@ -38,6 +38,11 @@ and reject temporary sorts on those local selectors.
 - model-facing evidence excerpts contain at most 2,000 characters and report
   when the exact quotation is truncated.
 
+For a scheduled inbox job, reaching the unchanged 60-minute timeout without
+durable success is the job's terminal processing failure. Annals archives the
+job, exits the current activation nonzero, leaves successors for the next
+activation, and does not start a second liaison for the timed-out job.
+
 CLI root, relationship, evidence, and search lists are cursor-paged. CLI graph
 views are bounded by explicit depth and node-count arguments. Limits must be
 valid positive values where the command represents a page size.
