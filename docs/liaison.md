@@ -151,9 +151,11 @@ It cannot add working notes during creation. Malformed calls receive a useful
 validation error and may be corrected; more than one successful creation is
 not allowed.
 
-The runtime removes any inherited `CODEX_EXEC_SERVER_URL`, starts Codex with an
-isolated home containing only file-backed authentication, and does not select a
-remote Code Mode host. Thread and turn requests omit environment overrides so
-Codex uses that process's default local environment. This keeps local research
-available while preventing a caller's remote executor or saved environment
-configuration from replacing the read-only boundary.
+Todo delegates the turn to Nucleus and passes the caller's environment through
+a single-use, memory-only launch context. Nucleus removes inherited
+`CODEX_EXEC_SERVER_URL`, supplies isolated file-backed authentication from its
+own credential home, and does not select a remote Code Mode host. The launch
+environment is not retained; the durable job keeps only the opaque, single-use
+context identifier. This keeps the caller's local research environment
+available while placing agent authentication and process ownership entirely
+under Nucleus.

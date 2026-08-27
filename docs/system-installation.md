@@ -1,18 +1,18 @@
 # User-owned macOS installation
 
-Todo is synchronous and needs no LaunchAgent, daemon, root-owned files, log
-service, or scheduled task. The installation is owned entirely by the user who
-runs Todo and Codex.
+Todo is synchronous and owns no LaunchAgent, daemon, root-owned files, log
+service, or scheduled task. `todo new` uses the same user's separately
+installed Nucleus service, which owns Codex execution and authentication.
 
 ## Deploy
 
-Build and test, then pass absolute executable paths to the deployer:
+Install and authenticate Nucleus first, then build and test Todo and pass its
+absolute executable path to the deployer:
 
 ```sh
 ./ci.sh
 ./packaging/macos/deploy-user.sh \
-  --binary "$PWD/target/release/todo" \
-  --codex "$(command -v codex)"
+  --binary "$PWD/target/release/todo"
 ```
 
 The layout is:
@@ -34,10 +34,12 @@ The layout is:
 ```
 
 `~/.local/bin/todo` selects `config.toml` when no explicit database or config
-selector is present. The config points at `todo.db`, the supplied Codex
-executable, and high liaison quality.
+selector is present. The config points at `todo.db` and selects high liaison
+quality. Nucleus is resolved through `NUCLEUS_SOCKET` when set, or its standard
+per-user socket otherwise.
 
-Deployment stages a complete content-addressed release, writes configuration,
+Deployment first verifies the installed Nucleus service is healthy, stages a
+complete content-addressed release, writes configuration,
 switches `current`, initializes the database on a fresh install, and runs an
 installed JSON list smoke test. An update retains the prior release through
 `previous`. If initialization or smoke testing fails, the deployer restores

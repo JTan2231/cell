@@ -12,7 +12,6 @@ trap cleanup EXIT HUP INT TERM
 package="$temporary/package"
 home="$temporary/Operator Home"
 candidate="$temporary/todo-candidate"
-codex="$temporary/codex"
 mkdir -p "$package" "$home"
 cp "$SCRIPT_DIR/deploy-user.sh" "$package/deploy-user.sh"
 cp "$SCRIPT_DIR/todo" "$package/todo"
@@ -68,19 +67,18 @@ esac
 EOF
 chmod 0755 "$candidate"
 
-cat >"$codex" <<'EOF'
+mkdir -p "$home/.local/bin"
+cat >"$home/.local/bin/nucleus" <<'EOF'
 #!/bin/sh
-case "${1:-}" in
-    --version) printf '%s\n' 'codex test' ;;
-    *) exit 1 ;;
-esac
+[ "${1:-}" = --compact ] || exit 1
+[ "${2:-}" = health ] || exit 1
+printf '%s\n' '{"version":1,"status":"ok","daemonVersion":"test","acceptingJobs":true,"checkedAt":"2026-08-27T00:00:00Z","supportedProtocolVersions":[1],"harness":{"harness":"codex","harnessVersion":"0.146.0","adapterVersion":"test"},"capabilities":["exact-model","reasoning-effort","workspace-read-only","builtin-local-execution","builtin-web-search","dynamic-client-tools","developer-instructions","experimental-raw-events","persistent-file-authentication"],"authentication":{"codexHome":"/tmp/codex-home","configured":true,"authenticated":true}}'
 EOF
-chmod 0755 "$codex"
+chmod 0755 "$home/.local/bin/nucleus"
 
 deploy() {
     HOME="$home" "$package/deploy-user.sh" \
         --binary "$1" \
-        --codex "$codex" \
         --home "$home"
 }
 
@@ -98,7 +96,7 @@ cli="$home/.local/bin/todo"
 [ -f "$state/todo.db" ]
 grep -Fx 'database = "todo.db"' "$state/config.toml" >/dev/null
 grep -Fx '[liaison]' "$state/config.toml" >/dev/null
-grep -Fx "codex = \"$codex\"" "$state/config.toml" >/dev/null
+! grep -F 'codex =' "$state/config.toml" >/dev/null
 grep -Fx 'quality = "high"' "$state/config.toml" >/dev/null
 [ "$(tail -n 2 "$state/commands.log" | tr '\n' ' ')" = 'init list ' ]
 HOME="$home" "$cli" --json list --limit 1 >/dev/null
@@ -106,7 +104,6 @@ HOME="$home" "$cli" --json list --limit 1 >/dev/null
 first_release=$(readlink "$state/install/current")
 HOME="$home" "$state/install/current/package/deploy-user.sh" \
     --binary "$state/install/current/libexec/todo" \
-    --codex "$codex" \
     --home "$home" >/dev/null
 [ "$(readlink "$state/install/current")" = "$first_release" ]
 [ ! -e "$state/install/previous" ]
@@ -118,6 +115,21 @@ second_release=$(readlink "$state/install/current")
 [ "$second_release" != "$first_release" ]
 [ "$(readlink "$state/install/previous")" = "$first_release" ]
 [ "$(grep -c '^init$' "$state/commands.log")" -eq 1 ]
+
+nucleus_cli="$home/.local/bin/nucleus"
+cp "$nucleus_cli" "$temporary/nucleus-healthy"
+cat >"$nucleus_cli" <<'EOF'
+#!/bin/sh
+printf '%s\n' '{"version":1,"status":"degraded","acceptingJobs":false,"supportedProtocolVersions":[1],"authentication":{"authenticated":false}}'
+EOF
+chmod 0755 "$nucleus_cli"
+if deploy "$candidate" >"$temporary/degraded.out" 2>"$temporary/degraded.err"; then
+    printf '%s\n' 'deployment unexpectedly accepted a degraded Nucleus service' >&2
+    exit 1
+fi
+[ "$(readlink "$state/install/current")" = "$second_release" ]
+[ "$(readlink "$state/install/previous")" = "$first_release" ]
+install -m 0755 "$temporary/nucleus-healthy" "$nucleus_cli"
 
 printf '%s\n' '# tampered payload' >>"$state/install/current/libexec/todo"
 if deploy "$candidate" >"$temporary/tampered.out" 2>"$temporary/tampered.err"; then

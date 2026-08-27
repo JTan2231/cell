@@ -23,7 +23,7 @@ pub(crate) fn create(
     let quality = args.quality.unwrap_or(config.liaison.quality);
     let model = args.model.as_deref().or(config.liaison.model.as_deref());
     let settings = ModelSettings::new(quality, model);
-    let runner = Runner::for_program(&config.liaison.codex);
+    let runner = Runner::for_current_user();
     let working_directory = std::env::current_dir().map_err(|error| {
         AppError::unexpected(
             "working_directory_unavailable",

@@ -1,20 +1,23 @@
 # Architecture
 
-Todo has one synchronous executable and one local SQLite database. There is no
-daemon, scheduler, network service, usage sidecar, or background queue.
+Todo has one synchronous executable and one local SQLite database. It owns no
+daemon, scheduler, network service, usage sidecar, or background queue. Model
+execution is delegated to the separately installed, per-user Nucleus service.
 
 Deterministic commands (`list`, `search`, `show`, `note add`, `done`, and
-`reopen`) access SQLite directly. `new` additionally starts a Codex app-server
-session and exposes a session-scoped `create_todo` tool. A successful,
-validated tool call is the creation result; the liaison's final prose is only
-diagnostic.
+`reopen`) access SQLite directly. `new` additionally submits a Nucleus job and
+services its session-scoped `create_todo` tool. A successful, validated tool
+call is the creation result; the liaison's final prose is only diagnostic.
 
 ## Creation flow
 
 1. Resolve the source to an absolute path and validate that it names a readable
-   UTF-8 file. The bytes are not retained or copied into the initial prompt;
-   the liaison reads the path during its research.
-2. Start Codex from the caller's working directory with broad read access.
+   UTF-8 file. Todo does not retain the bytes or copy them into the initial
+   prompt; the liaison reads the path during its research. Nucleus retains the
+   resulting raw agent protocol, which may include content Codex reads or
+   emits, under Nucleus's own local retention boundary.
+2. Submit a Nucleus job rooted at the caller's working directory with broad
+   read access.
 3. Supply the source path, caller working directory, direction, and the stable
    research prompt.
 4. Allow the liaison to inspect the source and pursue relevant local or web
@@ -34,13 +37,12 @@ state-changing application tool exposed by Todo is `create_todo`. The liaison
 does not receive shell-based write authority or general-purpose external
 mutation tools.
 
-Both Codex child commands remove any inherited `CODEX_EXEC_SERVER_URL` and run
-with an isolated home containing only file-backed authentication. Todo does not
-select a remote Code Mode host. Thread and turn requests omit environment
-overrides so the isolated process uses its default local environment; an empty
-environment list would disable the local read surface as well. This preserves
-local research without allowing a caller's remote executor or saved
-environment configuration to replace the read-only sandbox.
+Todo sends the caller's environment to Nucleus as a single-use, memory-only
+launch context so local research observes the same shell environment as the
+invoking command. Nucleus removes inherited `CODEX_EXEC_SERVER_URL`, supplies
+its own isolated file-backed authentication, and does not persist the launch
+environment with the job. Todo never reads or copies Codex credentials and
+does not select a remote Code Mode host.
 
 The host, not the liaison, supplies `pointer`, `source_path`, `status`, and
 timestamps. A second creation call is rejected. If Codex stops without a

@@ -15,22 +15,13 @@ pub(crate) struct Config {
     pub(crate) liaison: LiaisonConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct LiaisonConfig {
     pub(crate) quality: ModelQuality,
     pub(crate) model: Option<String>,
-    pub(crate) codex: PathBuf,
-}
-
-impl Default for LiaisonConfig {
-    fn default() -> Self {
-        Self {
-            quality: ModelQuality::default(),
-            model: None,
-            codex: PathBuf::from("codex"),
-        }
-    }
+    /// Accepted during the deployment rollback window, but never invoked.
+    pub(crate) codex: Option<PathBuf>,
 }
 
 impl Config {
@@ -79,7 +70,12 @@ impl Config {
                 "database must not be empty",
             ));
         }
-        if self.liaison.codex.as_os_str().is_empty() {
+        if self
+            .liaison
+            .codex
+            .as_ref()
+            .is_some_and(|codex| codex.as_os_str().is_empty())
+        {
             return Err(AppError::invalid(
                 "invalid_config",
                 "liaison.codex must not be empty",
@@ -132,6 +128,17 @@ mod tests {
             Some(directory.path().join("state/todo.db").as_path())
         );
         assert_eq!(config.liaison.quality, ModelQuality::Medium);
+        assert!(config.liaison.codex.is_none());
+
+        fs::write(
+            &path,
+            "database = \"state/todo.db\"\n[liaison]\ncodex = \"/legacy/codex\"\n",
+        )?;
+        let config = Config::read(&path)?;
+        assert_eq!(
+            config.liaison.codex.as_deref(),
+            Some(Path::new("/legacy/codex"))
+        );
 
         fs::write(&path, "unknown = true\n")?;
         assert!(Config::read(&path).is_err());

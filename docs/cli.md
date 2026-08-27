@@ -64,12 +64,14 @@ A minimal strict configuration is:
 database = "todo.db"
 
 [liaison]
-codex = "/absolute/path/to/codex"
 quality = "high"
 # model = "an-exact-model-override"
 ```
 
-Unknown fields and invalid quality values are errors.
+Unknown fields and invalid quality values are errors. The deprecated
+`liaison.codex` key remains parseable during the deployment rollback window but
+is ignored; there is no direct-Codex fallback. Nucleus uses `NUCLEUS_SOCKET`
+when set and its standard per-user socket otherwise.
 
 ## Output and errors
 

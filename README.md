@@ -8,7 +8,9 @@ Codex and people with terminal access.
 source, follows relevant local or external leads, and creates exactly one todo
 through a managed tool. The model's prose response is not the result; the
 validated tool call is. The source path is retained as provenance, but source
-contents are not stored in the database.
+contents are not stored in Todo's database. Nucleus separately retains the raw
+agent protocol, which can include content Codex reads during research; its
+state therefore belongs inside the same local security and retention boundary.
 
 Todo is deliberately small: SQLite has one table for immutable todo content
 and current status, and one append-only table for working notes. There are no
@@ -18,8 +20,11 @@ status vocabulary beyond `open` and `done`.
 ## Requirements
 
 - macOS or Linux and Rust/Cargo 1.97.1 to build;
-- an installed and authenticated `codex` executable for `todo new`;
-- no daemon or separate database server.
+- a healthy, authenticated per-user Nucleus service for `todo new`;
+- no separate Todo daemon or database server.
+
+Todo's Nucleus client and contract dependencies are pinned to the matching
+versioned Nucleus release, so a sibling Nucleus source checkout is not required.
 
 ## Build and use
 
@@ -71,8 +76,7 @@ After a release build, deploy without administrator privileges:
 
 ```sh
 ./packaging/macos/deploy-user.sh \
-  --binary "$PWD/target/release/todo" \
-  --codex "$(command -v codex)"
+  --binary "$PWD/target/release/todo"
 ```
 
 This installs `~/.local/bin/todo`, initializes
@@ -81,4 +85,5 @@ content-addressed releases under
 `~/Library/Application Support/Todo/install/releases`. Updates switch
 `current` and `previous` atomically and restore the prior selector and config
 if the installed smoke test fails. There is no LaunchAgent or background
-process.
+process owned by Todo; model execution and authentication belong to the
+separately installed Nucleus service.

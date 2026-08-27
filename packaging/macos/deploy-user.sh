@@ -11,14 +11,14 @@ SOURCE_FRONTEND="$SCRIPT_DIR/todo"
 SOURCE_DEPLOYER="$SCRIPT_DIR/deploy-user.sh"
 
 binary_path=
-codex_path=
 install_home=${HOME:-}
 
 usage() {
     cat <<'EOF'
-Usage: deploy-user.sh --binary ABSOLUTE_PATH --codex ABSOLUTE_PATH [OPTIONS]
+Usage: deploy-user.sh --binary ABSOLUTE_PATH [OPTIONS]
 
-Install or update the user-owned macOS Todo CLI.
+Install or update the user-owned macOS Todo CLI. A healthy user-owned Nucleus
+service must already be installed.
 
 Options:
   --home ABSOLUTE_PATH  Override the operator home (primarily for tests)
@@ -37,11 +37,6 @@ while [ "$#" -gt 0 ]; do
             binary_path=$2
             shift 2
             ;;
-        --codex)
-            [ "$#" -ge 2 ] || fail '--codex requires a path'
-            codex_path=$2
-            shift 2
-            ;;
         --home)
             [ "$#" -ge 2 ] || fail '--home requires a path'
             install_home=$2
@@ -56,15 +51,10 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$binary_path" ] || fail '--binary is required'
-[ -n "$codex_path" ] || fail '--codex is required'
 [ -n "$install_home" ] || fail '--home is required'
 case "$binary_path" in
     /*) ;;
     *) fail 'binary_path must be an absolute path' ;;
-esac
-case "$codex_path" in
-    /*) ;;
-    *) fail 'codex_path must be an absolute path' ;;
 esac
 case "$install_home" in
     /*) ;;
@@ -75,8 +65,9 @@ esac
     || fail "operator home is not a regular directory: $install_home"
 [ -f "$binary_path" ] && [ ! -L "$binary_path" ] && [ -x "$binary_path" ] \
     || fail "Todo candidate is not an executable regular file: $binary_path"
-[ -f "$codex_path" ] && [ -x "$codex_path" ] \
-    || fail "Codex executable is unavailable: $codex_path"
+nucleus_cli="$install_home/.local/bin/nucleus"
+[ -f "$nucleus_cli" ] && [ ! -L "$nucleus_cli" ] && [ -x "$nucleus_cli" ] \
+    || fail "Nucleus CLI is unavailable: $nucleus_cli"
 for source in "$SOURCE_FRONTEND" "$SOURCE_DEPLOYER"; do
     [ -f "$source" ] && [ ! -L "$source" ] \
         || fail "missing packaged file: $source"
@@ -85,12 +76,6 @@ for command in awk grep install mktemp mv readlink shasum; do
     command -v "$command" >/dev/null 2>&1 \
         || fail "required command not found: $command"
 done
-
-case "$codex_path" in
-    *\"*|*\\*) fail 'the Codex path cannot contain a quote or backslash' ;;
-esac
-[ "$(printf '%s\n' "$codex_path" | wc -l | tr -d ' ')" -eq 1 ] \
-    || fail 'the Codex path cannot contain a newline'
 
 STATE_DIR="$install_home/Library/Application Support/Todo"
 CONFIG_PATH="$STATE_DIR/config.toml"
@@ -168,7 +153,30 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
 "$binary_path" --version >/dev/null
-"$codex_path" --version >/dev/null
+nucleus_health=$(HOME="$install_home" "$nucleus_cli" --compact health) \
+    || fail 'could not read the user-owned Nucleus service health'
+case "$nucleus_health" in
+    *'"supportedProtocolVersions":[1]'*|*'"supportedProtocolVersions":[1,'*) ;;
+    *) fail 'Nucleus is not ready for Todo (protocol v1 is not supported)' ;;
+esac
+for required_health_field in \
+    '"status":"ok"' \
+    '"acceptingJobs":true' \
+    '"harness":{"harness":"codex"' \
+    '"exact-model"' \
+    '"reasoning-effort"' \
+    '"workspace-read-only"' \
+    '"builtin-local-execution"' \
+    '"builtin-web-search"' \
+    '"dynamic-client-tools"' \
+    '"developer-instructions"' \
+    '"experimental-raw-events"' \
+    '"persistent-file-authentication"' \
+    '"authenticated":true'
+do
+    printf '%s\n' "$nucleus_health" | grep -F "$required_health_field" >/dev/null \
+        || fail "Nucleus is not ready for Todo (missing $required_health_field)"
+done
 sh -n "$SOURCE_FRONTEND"
 sh -n "$SOURCE_DEPLOYER"
 
@@ -280,7 +288,6 @@ temporary_config=$(mktemp "$STATE_DIR/.config.XXXXXX")
 {
     printf '%s\n' 'database = "todo.db"'
     printf '\n%s\n' '[liaison]'
-    printf 'codex = "%s"\n' "$codex_path"
     printf '%s\n' 'quality = "high"'
 } >"$temporary_config"
 chmod 0600 "$temporary_config"
