@@ -184,6 +184,9 @@ lock_created=0
 fresh_state_switched=0
 pause_created=0
 imported_backlog=0
+backup_path=
+library_backup_ready=0
+library_migration_may_need_rollback=0
 
 atomic_symlink() {
     target=$1
@@ -285,6 +288,13 @@ cleanup() {
             fi
         fi
         restore_fresh_generation
+        if [ "$library_migration_may_need_rollback" -eq 1 ] \
+            && [ "$library_backup_ready" -eq 1 ]
+        then
+            rm -f "$LIBRARY_PATH-wal" "$LIBRARY_PATH-shm"
+            install -m 0600 "$backup_path" "$LIBRARY_PATH"
+            library_migration_may_need_rollback=0
+        fi
         if [ "$launchd_changed" -eq 1 ] || [ "$service_stopped" -eq 1 ] || [ "$switched" -eq 1 ]; then
             restore_service
         fi
@@ -775,6 +785,8 @@ elif [ "$library_existed" -eq 1 ]; then
         backup_path="$STATE_DIR/backups/pre-update-$release_id-$$.db"
         run_with_installation_environment "$binary_path" \
             --config "$temporary_config" --quiet backup "$backup_path"
+        library_backup_ready=1
+        library_migration_may_need_rollback=1
     fi
     run_with_installation_environment "$binary_path" \
         --config "$temporary_config" --quiet migrate

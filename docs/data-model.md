@@ -1,16 +1,18 @@
 # Data model
 
 [`crates/annals/schema.sql`](../crates/annals/schema.sql) is the authoritative
-SQLite schema. Schema version 3 is a deliberate fresh-state boundary: older
-libraries are rejected, and `migrate` never translates them.
+SQLite schema. The current schema is version 4. Schema version 3 remains the
+deliberate fresh-state boundary: older libraries are rejected, while `migrate`
+upgrades version 3 to version 4 by adding only inbox retry-event provenance.
 
-The library stores five kinds of facts:
+The library stores six kinds of facts:
 
 1. immutable works and source-delivery receipts;
-2. durable concept identities;
-3. normalized reconciliation intent and examination audit records;
-4. immutable commit provenance; and
-5. append-only typed corpus effects.
+2. bounded inbox retry-event membership and parent-child delivery provenance;
+3. durable concept identities;
+4. normalized reconciliation intent and examination audit records;
+5. immutable commit provenance; and
+6. append-only typed corpus effects.
 
 It does not store a current concept graph, a materialized HEAD, revision
 snapshots, or JSON used as operational truth. `CorpusState` is an immutable
@@ -53,6 +55,58 @@ before normal jobs and follows sequence order within each lane. It creates or
 recovers the database delivery record using the envelope's stable delivery key.
 A fresh exact-byte duplicate completes as retained without an examination,
 reconciliation, or commit.
+
+## Inbox retry provenance
+
+`inbox_retry_events` stores one operator-created bounded recovery action. It
+retains the inclusive `from_job_id` and `through_job_id` failed-job anchors,
+optional reason, event state, and lifecycle times. The anchors are resolved
+against failed inbox deliveries ordered by `(completed_at, ingestion ID)`. No
+row represents an open-ended or retry-all selection, and a partial unique index
+permits at most one event whose state is not `completed`.
+
+`inbox_retry_items` stores the event's complete frozen ordered membership. Each
+item references one original failed delivery and stores an immutable snapshot
+of its job ID, sequence, completion time, error, and retained work. Selection
+rejects pre-retention failures because they have no durable material digest.
+The item also carries the nullable fresh child job and child delivery created
+for the retry. Its ordinal is the contiguous zero-based position in resolved
+delivery-failure order, not the original job sequence; priority dispatch may
+have made those orders differ. The original delivery and envelope remain
+terminal and are never updated to describe the retry. An original delivery is
+unique across all retry items, enforcing one direct child; if that child fails,
+a later event selects the failed child and forms a linear retry chain.
+
+Event identity and every original-item field are immutable, and event or item
+rows cannot be deleted. Child job and delivery links are nullable during
+publication but become immutable when assigned. Only event lifecycle and halt
+fields advance as execution proceeds.
+
+An event is inserted with all of its selected items before child processing.
+The event may remain `preparing` while child envelopes are published to the
+filesystem spool. Stable event/item provenance makes publication idempotent
+across a crash: recovery links or recognizes one child for the item instead of
+expanding membership or creating a second attempt. A child delivery is an
+ordinary new inbox delivery with additional retry origin. It may recognize the
+original retained work, but its retry intent bypasses the fresh-duplicate
+completion path and continues into integration.
+
+The child job receipt carries the same provenance at the spool boundary:
+`retry_event_id`, `retry_ordinal`, `retry_of_job_id`, and
+`retry_of_ingestion_id` are all present together. `retry_reconciliation_id` is
+optional and names only the exact reconciliation owned by the original attempt
+that the child may validate and reuse. Ordinary receipts have null retry
+provenance. Version-5 receipts are read with those fields null and serialize as
+version 6 on a later ordinary rewrite; retry selection does not rewrite the
+original terminal receipt.
+
+Item outcomes are not stored counters. They are derived from the linked child
+delivery and job state as `not_attempted`, `processing`, `applied`, `recorded`,
+`failed`, or `skipped`. Event reports aggregate those derived outcomes while
+joining the original failure details. A missing child and a queued zero-attempt
+child both derive as `not_attempted`. Event state is `preparing`, `running`,
+`halted`, or `completed`; continuing a halted event considers only items whose
+derived outcome is `not_attempted`.
 
 ## Corpus state
 
@@ -184,5 +238,13 @@ requires them to match storage exactly.
 It also reconstructs every reconciliation and terminal draft from normalized
 rows, resolves requests at their original bases, verifies pending/applied/
 recorded/superseded semantics, and checks change, shake, and revert provenance.
+Retry validation checks event bounds and frozen order, requires every original
+to be a failed, non-skipped inbox delivery, requires contiguous ordinals and
+coherent event state, and verifies that each linked child delivery belongs to
+the stored child job and differs from its original. A retry child cannot
+validate as an ordinary retained duplicate, and a completed event cannot retain
+a not-attempted or processing item. Job-receipt provenance is checked when its
+spool envelope is read; the SQLite-only `validate` command does not require
+terminal envelopes to remain under an operator's archive-retention policy.
 Forbidden materialized corpus tables and JSON authority columns are validation
 failures. Validation is read-only and does not repair state.

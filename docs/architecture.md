@@ -16,7 +16,9 @@ The SQLite boundary is intentionally asymmetric:
 
 There is no materialized current graph, stored HEAD snapshot, or alternative
 replay path. Schema version 3 rejects every earlier library rather than
-attempting to translate competing historical representations.
+attempting to translate competing historical representations. Schema version
+4 is an additive migration from version 3 that introduces bounded inbox retry
+provenance without changing existing semantic or delivery history.
 
 ## One corpus reducer
 
@@ -91,6 +93,56 @@ attempt. It may finish durable success already established by that attempt,
 such as a conclusively retained duplicate or the job's exact linked
 reconciliation. Without such success, it fails the interrupted delivery and
 archives the job.
+
+### Bounded retry boundary
+
+Recovery of terminal failures is an explicit retry event, not another pass of
+ordinary queue draining. The operator supplies two failed inbox job anchors.
+Annals resolves their failed deliveries in ascending `(completed_at, delivery
+ID)` order, includes both endpoints, and stores the complete ordered membership
+before any retry child runs. Both bounds are mandatory. Because membership is
+frozen, a later failure cannot enter an existing event and no command means
+"retry every failed job."
+
+Each retry item relates one immutable original failed job and delivery to at
+most one fresh child job and delivery. The original envelope stays under
+`failed/`, its receipt keeps its one attempt, and its database delivery remains
+failed. The child has its own identity and one attempt. Retry provenance is an
+explicit integration intent: content-addressed retention may recognize the
+same work, but the ordinary fresh-duplicate early return is not taken. The
+child can complete the exact reconciliation owned by the original attempt when
+that durable record still validates, or it can begin a new examination. It
+cannot adopt merely similar history. Its version-6 job receipt carries the
+event, event ordinal, original job, and original delivery together, plus the
+exact original reconciliation when one is eligible for validation and reuse.
+
+Retry execution uses the normal run and control locks but requires the
+operator pause to be set, closing the dispatch gate, the spool to have no
+processing job, and deployment maintenance to be absent. It processes children
+sequentially in the frozen failure order while ordinary dispatch remains
+paused. `resume` refuses an unfinished retry event, which keeps ordinary queued
+arrivals from interleaving with its corpus transitions. Start and continue
+perform one authenticated account preflight before their first zero-attempt
+child claim. A failed preflight halts the event without incrementing a child
+attempt or starting a child delivery or model run.
+
+SQLite owns event identity and frozen membership while the spool owns child
+envelopes, so their publication cannot be one atomic transaction. A
+`preparing` event is the durable recovery marker for that interval. Publication
+is idempotent: recovery recognizes an already published child or publishes its
+one missing child, but never changes membership or creates a second attempt.
+The event becomes `running` during child processing and `completed` after all
+items are terminal. A known item-local failure remains one item outcome and
+processing advances. An unexpected model, runner, or runtime failure instead
+changes the event to `halted`; continuing it considers only not-attempted
+members. Interrupting the active child with either operator disposition also
+halts the event after recording that child's failed or skipped outcome.
+
+Event reporting joins the frozen original provenance to the current linked
+child delivery's lifecycle, result, and error. Item outcomes and aggregates are
+derived from that authoritative state rather than duplicated as mutable
+counters. The result therefore preserves both sides of the audit trail: why
+each original failed and what its bounded recovery attempt did.
 
 ## Liaison boundary
 
@@ -219,9 +271,10 @@ derived semantics fails validation.
 
 ## Fresh-state deployment boundary
 
-Normal user deployments quiesce the inbox, back up the current library, check
-the current schema, switch the complete release, validate, and restore the
-prior operator pause state.
+Normal user deployments quiesce the inbox, back up the supported library,
+apply the candidate's additive version-3-to-4 migration when needed, switch the
+complete release, validate, and restore the prior operator pause state. A
+failed cutover restores the pre-migration backup with the prior release.
 
 The version-3 boundary uses `deploy-user.sh --fresh-state`. The deployer stages
 and validates a new empty library and paused spool before touching live state.

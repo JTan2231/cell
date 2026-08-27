@@ -3,13 +3,15 @@ use std::path::Path;
 use std::time::Duration;
 
 use rusqlite::backup::Backup;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 
 use crate::error::AppError;
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 3;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 4;
+const FRESH_STATE_SCHEMA_VERSION: i64 = 3;
 const SCHEMA: &str = include_str!("../schema.sql");
+const MIGRATION_3_TO_4: &str = include_str!("../migrations/3-to-4.sql");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MigrationResult {
@@ -40,6 +42,21 @@ pub fn open_read(path: &Path) -> Result<Connection, AppError> {
     Ok(connection)
 }
 
+/// Open a library at the fresh-state boundary or current version solely as a
+/// consistent pre-migration backup source.
+pub fn open_backup_source(path: &Path) -> Result<Connection, AppError> {
+    let connection = open_existing(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    configure_connection(&connection)?;
+    let version = schema_version(&connection)?;
+    if version < FRESH_STATE_SCHEMA_VERSION {
+        return Err(schema_incompatible(version));
+    }
+    if version > CURRENT_SCHEMA_VERSION {
+        return Err(schema_too_new(version));
+    }
+    Ok(connection)
+}
+
 /// Open a current-format library for writes.
 pub fn open_write(path: &Path) -> Result<Connection, AppError> {
     let connection = open_existing(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
@@ -49,21 +66,56 @@ pub fn open_write(path: &Path) -> Result<Connection, AppError> {
     Ok(connection)
 }
 
-/// Report whether a library is current-format.
+/// Migrate a version 3 library to the current additive format.
 ///
-/// Version 3 is a deliberate fresh-state boundary.  `migrate` must never
-/// reinterpret or mutate an earlier library: deployment replaces that library
-/// as one rollback generation instead.
+/// Version 3 remains the deliberate fresh-state boundary. `migrate` never
+/// reinterprets a library older than that boundary.
 pub fn migrate(path: &Path) -> Result<MigrationResult, AppError> {
-    let connection = open_existing(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+    let mut connection = open_existing(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
     configure_connection(&connection)?;
     let from_version = schema_version(&connection)?;
-    require_supported_version(from_version)?;
+    let migrated = match from_version.cmp(&CURRENT_SCHEMA_VERSION) {
+        std::cmp::Ordering::Equal => false,
+        std::cmp::Ordering::Greater => return Err(schema_too_new(from_version)),
+        std::cmp::Ordering::Less if from_version < FRESH_STATE_SCHEMA_VERSION => {
+            return Err(schema_incompatible(from_version));
+        }
+        std::cmp::Ordering::Less => {
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let locked_version = schema_version(&transaction)?;
+            if locked_version == CURRENT_SCHEMA_VERSION {
+                transaction.commit()?;
+                false
+            } else if locked_version == FRESH_STATE_SCHEMA_VERSION {
+                transaction.execute_batch(MIGRATION_3_TO_4).map_err(|error| {
+                    AppError::database(
+                        "schema_migration_failed",
+                        format!(
+                            "unable to migrate library schema from version {locked_version} to version {CURRENT_SCHEMA_VERSION}: {error}"
+                        ),
+                    )
+                })?;
+                transaction.commit().map_err(|error| {
+                    AppError::database(
+                        "schema_migration_failed",
+                        format!("unable to commit library schema migration: {error}"),
+                    )
+                })?;
+                true
+            } else if locked_version > CURRENT_SCHEMA_VERSION {
+                return Err(schema_too_new(locked_version));
+            } else {
+                return Err(schema_incompatible(locked_version));
+            }
+        }
+    };
+    require_current_schema(&connection)?;
     enable_wal(&connection)?;
     Ok(MigrationResult {
         from_version,
         to_version: CURRENT_SCHEMA_VERSION,
-        migrated: false,
+        migrated,
     })
 }
 
@@ -131,25 +183,38 @@ fn schema_version(connection: &Connection) -> Result<i64, AppError> {
 }
 
 fn require_current_schema(connection: &Connection) -> Result<(), AppError> {
-    require_supported_version(schema_version(connection)?)
-}
-
-fn require_supported_version(version: i64) -> Result<(), AppError> {
+    let version = schema_version(connection)?;
     match version.cmp(&CURRENT_SCHEMA_VERSION) {
         std::cmp::Ordering::Equal => Ok(()),
-        std::cmp::Ordering::Greater => Err(AppError::database(
-            "library_schema_too_new",
-            format!(
-                "library schema version {version} is newer than supported version {CURRENT_SCHEMA_VERSION}"
-            ),
-        )),
+        std::cmp::Ordering::Greater => Err(schema_too_new(version)),
+        std::cmp::Ordering::Less if version < FRESH_STATE_SCHEMA_VERSION => {
+            Err(schema_incompatible(version))
+        }
         std::cmp::Ordering::Less => Err(AppError::database(
-            "library_schema_incompatible",
+            "library_schema_migration_required",
             format!(
-                "library schema version {version} predates the fresh-state format {CURRENT_SCHEMA_VERSION}; create a fresh library instead of migrating this file"
+                "library schema version {version} must be migrated to version {CURRENT_SCHEMA_VERSION}; run `annals migrate`"
             ),
         )),
     }
+}
+
+fn schema_too_new(version: i64) -> AppError {
+    AppError::database(
+        "library_schema_too_new",
+        format!(
+            "library schema version {version} is newer than supported version {CURRENT_SCHEMA_VERSION}"
+        ),
+    )
+}
+
+fn schema_incompatible(version: i64) -> AppError {
+    AppError::database(
+        "library_schema_incompatible",
+        format!(
+            "library schema version {version} predates the fresh-state format {FRESH_STATE_SCHEMA_VERSION}; create a fresh library instead of migrating this file"
+        ),
+    )
 }
 
 fn enable_wal(connection: &Connection) -> Result<(), AppError> {
@@ -244,10 +309,13 @@ mod tests {
         let Err(write_error) = open_write(&path) else {
             return Err("legacy library unexpectedly opened for writes".into());
         };
+        let Err(backup_error) = open_backup_source(&path) else {
+            return Err("legacy library unexpectedly opened for backup".into());
+        };
         let Err(migrate_error) = migrate(&path) else {
             return Err("legacy library unexpectedly migrated".into());
         };
-        for error in [read_error, write_error, migrate_error] {
+        for error in [read_error, write_error, backup_error, migrate_error] {
             assert_eq!(error.code(), "library_schema_incompatible");
         }
         let connection = Connection::open(&path)?;
@@ -261,7 +329,114 @@ mod tests {
     }
 
     #[test]
-    fn migrate_is_an_idempotent_current_format_check() -> TestResult {
+    fn migrates_version_three_additively_and_preserves_deliveries() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("annals.db");
+        let connection = init(&path)?;
+        connection.execute(
+            "INSERT INTO works(label, normalized_label, text, sha256, created_at)
+             VALUES('work', 'work', 'source', ?1, 'now')",
+            ["0".repeat(64)],
+        )?;
+        connection.execute(
+            "INSERT INTO ingestions(
+                 delivery_key, source_name, channel, first_seen_at, ingested_at,
+                 completed_at, status, work_id, new_work, error_code, error_message
+             ) VALUES(
+                 'inbox:j00000000000000000001:seen', 'source.txt', 'inbox', 'seen',
+                 'ingested', 'completed', 'failed', 1, 1, 'model_runner_failed',
+                 'source delivery failed'
+             )",
+            [],
+        )?;
+        connection.execute_batch(
+            "DROP TABLE inbox_retry_items;
+             DROP TABLE inbox_retry_events;
+             PRAGMA user_version = 3;",
+        )?;
+        drop(connection);
+
+        let Err(error) = open_read(&path) else {
+            return Err("version 3 library unexpectedly opened before migration".into());
+        };
+        assert_eq!(error.code(), "library_schema_migration_required");
+        assert_eq!(
+            open_backup_source(&path)?
+                .query_row("SELECT COUNT(*) FROM ingestions", [], |row| row
+                    .get::<_, i64>(0))?,
+            1
+        );
+        assert_eq!(
+            Connection::open(&path)?
+                .pragma_query_value(None, "user_version", |row| { row.get::<_, i64>(0) })?,
+            3
+        );
+
+        assert_eq!(
+            migrate(&path)?,
+            MigrationResult {
+                from_version: 3,
+                to_version: CURRENT_SCHEMA_VERSION,
+                migrated: true,
+            }
+        );
+        let connection = open_read(&path)?;
+        assert_eq!(schema_version(&connection)?, CURRENT_SCHEMA_VERSION);
+        assert_eq!(
+            connection.query_row(
+                "SELECT error_code FROM ingestions WHERE id = 1",
+                [],
+                |row| { row.get::<_, String>(0) }
+            )?,
+            "model_runner_failed"
+        );
+        for table in ["inbox_retry_events", "inbox_retry_items"] {
+            assert!(connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?1)",
+                [table],
+                |row| row.get::<_, bool>(0)
+            )?);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn failed_version_three_migration_is_atomic() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("annals.db");
+        let connection = init(&path)?;
+        connection.execute_batch(
+            "DROP TABLE inbox_retry_items;
+             DROP TABLE inbox_retry_events;
+             CREATE TABLE inbox_retry_events(blocker TEXT);
+             PRAGMA user_version = 3;",
+        )?;
+        drop(connection);
+
+        let Err(error) = migrate(&path) else {
+            return Err("conflicting migration unexpectedly succeeded".into());
+        };
+        assert_eq!(error.code(), "schema_migration_failed");
+        let connection = Connection::open(&path)?;
+        assert_eq!(schema_version(&connection)?, 3);
+        assert_eq!(
+            connection.query_row(
+                "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'inbox_retry_events'",
+                [],
+                |row| row.get::<_, String>(0)
+            )?,
+            "CREATE TABLE inbox_retry_events(blocker TEXT)"
+        );
+        assert!(!connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name = 'inbox_retry_items')",
+            [],
+            |row| row.get::<_, bool>(0)
+        )?);
+        Ok(())
+    }
+
+    #[test]
+    fn migrate_is_idempotent_for_current_format() -> TestResult {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("annals.db");
         drop(init(&path)?);

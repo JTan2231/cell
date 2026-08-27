@@ -197,6 +197,22 @@ fn failed_json(output: &Output, code: &str) -> TestResult<Value> {
     Ok(envelope)
 }
 
+fn remove_retry_provenance(receipt: &mut Value) -> TestResult {
+    let object = receipt
+        .as_object_mut()
+        .ok_or("job receipt was not an object")?;
+    for field in [
+        "retry_event_id",
+        "retry_ordinal",
+        "retry_of_job_id",
+        "retry_of_ingestion_id",
+        "retry_reconciliation_id",
+    ] {
+        object.remove(field);
+    }
+    Ok(())
+}
+
 fn conflict_json(output: &Output) -> TestResult<Value> {
     assert_eq!(
         output.status.code(),
@@ -305,6 +321,23 @@ fn only_archived_receipt(root: &Path, state: &str) -> TestResult<Value> {
     Ok(serde_json::from_slice(&fs::read(
         envelope.path().join("job.json"),
     )?)?)
+}
+
+fn archived_receipt(root: &Path, state: &str, job_id: &str) -> TestResult<Value> {
+    Ok(serde_json::from_slice(&fs::read(
+        root.join(state).join(job_id).join("job.json"),
+    )?)?)
+}
+
+fn fail_next_inbox_job(installation: &Installation) -> TestResult {
+    fs::write(&installation.counter, b"0\n")?;
+    let output = installation
+        .command()
+        .args(["inbox", "run"])
+        .env("ANNALS_FAKE_FAIL_FIRST", "1")
+        .output()?;
+    failed_json(&output, "inbox_job_failed")?;
+    Ok(())
 }
 
 fn assert_unchanged(expected: &Material, actual: &Material) {
@@ -652,7 +685,7 @@ fn register_pause_and_resume_control_the_durable_queue() -> TestResult {
     for envelope in fs::read_dir(installation.inbox.join("queued"))? {
         let envelope = envelope?;
         let receipt: Value = serde_json::from_slice(&fs::read(envelope.path().join("job.json"))?)?;
-        assert_eq!(receipt["version"], 5);
+        assert_eq!(receipt["version"], 6);
         assert_eq!(receipt["priority"], "normal");
         assert_eq!(receipt["state"], "queued");
         assert_eq!(receipt["attempts"], 0);
@@ -746,7 +779,7 @@ fn priority_enqueue_runs_before_the_existing_queue_in_argument_order() -> TestRe
     for envelope in fs::read_dir(installation.inbox.join("queued"))? {
         let envelope = envelope?;
         let receipt: Value = serde_json::from_slice(&fs::read(envelope.path().join("job.json"))?)?;
-        assert_eq!(receipt["version"], 5);
+        assert_eq!(receipt["version"], 6);
         priorities.insert(
             receipt["original_name"]
                 .as_str()
@@ -871,6 +904,7 @@ fn version_four_queued_jobs_upgrade_into_the_normal_lane() -> TestResult {
         .join("queued/j00000000000000000001/job.json");
     let mut receipt: Value = serde_json::from_slice(&fs::read(&receipt_path)?)?;
     receipt["version"] = Value::from(4);
+    remove_retry_provenance(&mut receipt)?;
     receipt
         .as_object_mut()
         .ok_or("job receipt was not an object")?
@@ -883,7 +917,7 @@ fn version_four_queued_jobs_upgrade_into_the_normal_lane() -> TestResult {
     assert_eq!(run["stopped_for_pause"], true);
 
     let upgraded: Value = serde_json::from_slice(&fs::read(receipt_path)?)?;
-    assert_eq!(upgraded["version"], 5);
+    assert_eq!(upgraded["version"], 6);
     assert_eq!(upgraded["priority"], "normal");
     let status = installation.json_ok(["inbox", "status"])?;
     assert_eq!(status["priority_queued"], 0);
@@ -1520,6 +1554,7 @@ fn legacy_unstarted_processing_receipt_migrates_to_queued_while_paused() -> Test
     let mut receipt: Value = serde_json::from_slice(&fs::read(queued.join("job.json"))?)?;
     receipt["version"] = Value::from(2);
     receipt["state"] = Value::from("processing");
+    remove_retry_provenance(&mut receipt)?;
     {
         let object = receipt.as_object_mut().ok_or("receipt is not an object")?;
         object.remove("sequence");
@@ -1540,7 +1575,7 @@ fn legacy_unstarted_processing_receipt_migrates_to_queued_while_paused() -> Test
     let migrated: Value = serde_json::from_slice(&fs::read(
         installation.inbox.join("queued").join(id).join("job.json"),
     )?)?;
-    assert_eq!(migrated["version"], 5);
+    assert_eq!(migrated["version"], 6);
     assert_eq!(migrated["priority"], "normal");
     assert_eq!(migrated["state"], "queued");
     assert_eq!(migrated["sequence"], 1);
@@ -1572,6 +1607,7 @@ fn legacy_processing_receipt_with_a_delivery_record_stays_processing() -> TestRe
         .to_owned();
     receipt["version"] = Value::from(2);
     receipt["state"] = Value::from("processing");
+    remove_retry_provenance(&mut receipt)?;
     {
         let object = receipt.as_object_mut().ok_or("receipt is not an object")?;
         object.remove("sequence");
@@ -1604,7 +1640,7 @@ fn legacy_processing_receipt_with_a_delivery_record_stays_processing() -> TestRe
             .join(id)
             .join("job.json"),
     )?)?;
-    assert_eq!(migrated["version"], 5);
+    assert_eq!(migrated["version"], 6);
     assert_eq!(migrated["priority"], "normal");
     assert_eq!(migrated["state"], "processing");
     assert_eq!(migrated["attempts"], 0);
@@ -1683,7 +1719,7 @@ fn maintenance_smoke_does_not_rewrite_predecessor_spool_state() -> TestResult {
             .inbox
             .join("failed/j00000000000000000007/job.json"),
     )?)?;
-    assert_eq!(upgraded_receipt["version"], 5);
+    assert_eq!(upgraded_receipt["version"], 6);
     assert_eq!(upgraded_receipt["priority"], "normal");
     assert_eq!(upgraded_receipt["first_seen_at"], "2026-08-20T19:00:00Z");
     assert_eq!(upgraded_receipt["claimed_at"], "2026-08-20T19:00:00Z");
@@ -1701,7 +1737,7 @@ fn maintenance_smoke_does_not_rewrite_predecessor_spool_state() -> TestResult {
             .inbox
             .join("done/j00000000000000000008/job.json"),
     )?)?;
-    assert_eq!(repaired_receipt["version"], 5);
+    assert_eq!(repaired_receipt["version"], 6);
     assert_eq!(repaired_receipt["priority"], "normal");
 
     let settled = installation.json_ok(["inbox", "run", "--settle-seconds", "0"])?;
@@ -2118,7 +2154,7 @@ fn legacy_done_receipt_reuses_its_applied_reconciliation() -> TestResult {
     let upgraded: Value = serde_json::from_slice(&fs::read(
         installation.inbox.join("done").join(id).join("job.json"),
     )?)?;
-    assert_eq!(upgraded["version"], 5);
+    assert_eq!(upgraded["version"], 6);
     assert_eq!(upgraded["priority"], "normal");
     assert_eq!(upgraded["state"], "done");
     assert_eq!(upgraded["first_seen_at"], "2026-08-20T20:00:00Z");
@@ -2379,6 +2415,449 @@ fn redropping_an_ingested_source_runs_one_examination() -> TestResult {
     assert_eq!(log["head_revision"], 1);
     assert_eq!(log["commits"].as_array().map(Vec::len), Some(1));
     assert_eq!(log["commits"][0]["summary"], "Integrate inbox source 1");
+    Ok(())
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn bounded_retry_event_reexamines_retained_failures_and_preserves_originals() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "01-first.md",
+        b"Shared inbox claim.\nFirst failed source.\n",
+        0o640,
+    )?;
+    installation.incoming(
+        "02-second.md",
+        b"Shared inbox claim.\nSecond failed source.\n",
+        0o600,
+    )?;
+    fail_next_inbox_job(&installation)?;
+    fail_next_inbox_job(&installation)?;
+
+    let first_job = "j00000000000000000001";
+    let second_job = "j00000000000000000002";
+    let first_receipt_path = installation
+        .inbox
+        .join("failed")
+        .join(first_job)
+        .join("job.json");
+    let second_receipt_path = installation
+        .inbox
+        .join("failed")
+        .join(second_job)
+        .join("job.json");
+    for path in [&first_receipt_path, &second_receipt_path] {
+        let mut receipt: Value = serde_json::from_slice(&fs::read(path)?)?;
+        receipt["version"] = Value::from(5);
+        remove_retry_provenance(&mut receipt)?;
+        fs::write(path, serde_json::to_vec_pretty(&receipt)?)?;
+    }
+    let first_receipt_before = fs::read(&first_receipt_path)?;
+    let second_receipt_before = fs::read(&second_receipt_path)?;
+    let failed_before = archived_material(&installation.inbox, "failed")?;
+
+    let preview = installation.json_ok([
+        "inbox",
+        "retry",
+        "preview",
+        "--from",
+        first_job,
+        "--through",
+        second_job,
+    ])?;
+    assert_eq!(preview["items"].as_array().map(Vec::len), Some(2));
+    assert_eq!(preview["items"][0]["original_job_id"], first_job);
+    assert_eq!(preview["items"][1]["original_job_id"], second_job);
+    assert!(preview["items"][0].get("original_work_id").is_none());
+    assert!(preview["items"][0]["already_selected_by"].is_null());
+
+    let unpaused = installation
+        .command()
+        .args([
+            "inbox",
+            "retry",
+            "start",
+            "--from",
+            first_job,
+            "--through",
+            second_job,
+        ])
+        .output()?;
+    failed_json(&unpaused, "inbox_retry_requires_pause")?;
+
+    installation.json_ok(["inbox", "pause"])?;
+    let completed = installation.json_ok([
+        "inbox",
+        "retry",
+        "start",
+        "--from",
+        first_job,
+        "--through",
+        second_job,
+        "--reason",
+        "recover the bounded authentication outage",
+    ])?;
+    assert_eq!(completed["event"]["id"], 1);
+    assert_eq!(completed["event"]["state"], "completed");
+    assert_eq!(
+        completed["event"]["reason"],
+        "recover the bounded authentication outage"
+    );
+    assert_eq!(completed["summary"]["selected"], 2);
+    assert_eq!(completed["summary"]["attempted"], 2);
+    assert_eq!(completed["summary"]["applied"], 2);
+    assert_eq!(completed["summary"]["remaining"], 0);
+    assert_eq!(
+        completed["items"][0]["child_job_id"],
+        "j00000000000000000003"
+    );
+    assert_eq!(
+        completed["items"][1]["child_job_id"],
+        "j00000000000000000004"
+    );
+    assert_eq!(completed["items"][0]["outcome"], "applied");
+    assert_eq!(completed["items"][1]["outcome"], "applied");
+    assert!(completed["items"][0].get("original_work_id").is_none());
+    assert_eq!(fs::read_to_string(&installation.counter)?, "3\n");
+
+    assert_eq!(fs::read(&first_receipt_path)?, first_receipt_before);
+    assert_eq!(fs::read(&second_receipt_path)?, second_receipt_before);
+    let failed_after = archived_material(&installation.inbox, "failed")?;
+    assert_eq!(failed_after.len(), 2);
+    for (name, before) in failed_before {
+        assert_unchanged(
+            &before,
+            failed_after
+                .get(&name)
+                .ok_or("original failed material disappeared")?,
+        );
+    }
+
+    for (child_job, original_job) in [
+        ("j00000000000000000003", first_job),
+        ("j00000000000000000004", second_job),
+    ] {
+        let receipt = archived_receipt(&installation.inbox, "done", child_job)?;
+        assert_eq!(receipt["version"], 6);
+        assert_eq!(receipt["state"], "done");
+        assert_eq!(receipt["attempts"], 1);
+        assert_eq!(receipt["retry_event_id"], 1);
+        assert_eq!(receipt["retry_of_job_id"], original_job);
+        assert!(receipt["retry_of_ingestion_id"].is_number());
+        assert_eq!(receipt["result_status"], "applied");
+    }
+    let status = installation.json_ok(["inbox", "status"])?;
+    assert_eq!(status["paused"], true);
+    assert_eq!(status["failed"], 2);
+    assert_eq!(status["done"], 2);
+    assert_eq!(status["queued"], 0);
+
+    let selected_again = installation
+        .command()
+        .args([
+            "inbox",
+            "retry",
+            "start",
+            "--from",
+            first_job,
+            "--through",
+            second_job,
+        ])
+        .output()?;
+    failed_json(&selected_again, "inbox_retry_original_already_selected")?;
+    let resumed = installation.json_ok(["inbox", "resume"])?;
+    assert_eq!(resumed["paused"], false);
+    Ok(())
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn halted_retry_continues_only_unattempted_children() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    for (name, detail) in [
+        ("01-first.md", "First"),
+        ("02-second.md", "Second"),
+        ("03-third.md", "Third"),
+    ] {
+        installation.incoming(
+            name,
+            format!("Shared inbox claim.\n{detail} failed source.\n").as_bytes(),
+            0o600,
+        )?;
+    }
+    for _ in 0..3 {
+        fail_next_inbox_job(&installation)?;
+    }
+    installation.json_ok(["inbox", "pause"])?;
+    fs::write(&installation.counter, b"0\n")?;
+
+    let first_job = "j00000000000000000001";
+    let third_job = "j00000000000000000003";
+    let output = installation
+        .command()
+        .args([
+            "inbox",
+            "retry",
+            "start",
+            "--from",
+            first_job,
+            "--through",
+            third_job,
+        ])
+        .env("ANNALS_FAKE_FAIL_FIRST", "1")
+        .output()?;
+    failed_json(&output, "inbox_retry_event_halted")?;
+
+    let halted = installation.json_ok(["inbox", "retry", "status", "1"])?;
+    assert_eq!(halted["event"]["state"], "halted");
+    assert_eq!(halted["event"]["last_halt"]["code"], "model_runner_failed");
+    assert!(
+        halted["event"]["last_halt"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("simulated model failure"))
+    );
+    assert_eq!(halted["summary"]["selected"], 3);
+    assert_eq!(halted["summary"]["attempted"], 1);
+    assert_eq!(halted["summary"]["failed"], 1);
+    assert_eq!(halted["summary"]["remaining"], 2);
+    assert_eq!(halted["items"][0]["outcome"], "failed");
+    assert_eq!(halted["items"][1]["outcome"], "not_attempted");
+    assert_eq!(halted["items"][2]["outcome"], "not_attempted");
+    assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
+
+    let resume_while_open = installation.command().args(["inbox", "resume"]).output()?;
+    failed_json(&resume_while_open, "inbox_retry_event_active")?;
+
+    let completed = installation.json_ok(["inbox", "retry", "continue", "1"])?;
+    assert_eq!(completed["event"]["state"], "completed");
+    assert_eq!(completed["summary"]["attempted"], 3);
+    assert_eq!(completed["summary"]["applied"], 2);
+    assert_eq!(completed["summary"]["failed"], 1);
+    assert_eq!(completed["summary"]["remaining"], 0);
+    assert_eq!(completed["items"][0]["outcome"], "failed");
+    assert_eq!(completed["items"][1]["outcome"], "applied");
+    assert_eq!(completed["items"][2]["outcome"], "applied");
+    assert_eq!(fs::read_to_string(&installation.counter)?, "3\n");
+
+    let retry_failed_child = completed["items"][0]["child_job_id"]
+        .as_str()
+        .ok_or("failed retry child had no job ID")?;
+    let preview = installation.json_ok([
+        "inbox",
+        "retry",
+        "preview",
+        "--from",
+        retry_failed_child,
+        "--through",
+        retry_failed_child,
+    ])?;
+    assert_eq!(preview["items"].as_array().map(Vec::len), Some(1));
+    assert!(preview["items"][0]["already_selected_by"].is_null());
+    Ok(())
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn retry_reexamines_a_pending_reconciliation_that_becomes_stale_in_the_event() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "01-first.md",
+        b"Shared inbox claim.\nFirst source with a pending change.\n",
+        0o600,
+    )?;
+    installation.incoming(
+        "02-second.md",
+        b"Shared inbox claim.\nSecond source with a pending change.\n",
+        0o600,
+    )?;
+    fail_next_inbox_job(&installation)?;
+    fail_next_inbox_job(&installation)?;
+
+    installation.json_ok(["integrate", "--work", "01-first", "--reexamine"])?;
+    installation.json_ok(["integrate", "--work", "02-second", "--reexamine"])?;
+    let connection = rusqlite::Connection::open(&installation.library)?;
+    let mut statement = connection.prepare(
+        "SELECT work.label, reconciliation.id
+         FROM reconciliations AS reconciliation
+         JOIN reconciliation_requests AS request
+           ON request.id = reconciliation.request_id
+         JOIN works AS work ON work.id = request.work_id
+         WHERE reconciliation.status = 'pending'
+         ORDER BY reconciliation.id",
+    )?;
+    let pending = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(statement);
+    drop(connection);
+    assert_eq!(pending.len(), 2);
+
+    for (job_id, label) in [
+        ("j00000000000000000001", "01-first"),
+        ("j00000000000000000002", "02-second"),
+    ] {
+        let reconciliation_id = pending
+            .iter()
+            .find(|(work, _)| work == label)
+            .map(|(_, id)| *id)
+            .ok_or("pending reconciliation was absent")?;
+        let path = installation
+            .inbox
+            .join("failed")
+            .join(job_id)
+            .join("job.json");
+        let mut receipt: Value = serde_json::from_slice(&fs::read(&path)?)?;
+        receipt["reconciliation_id"] = Value::from(reconciliation_id);
+        fs::write(path, serde_json::to_vec_pretty(&receipt)?)?;
+    }
+
+    installation.json_ok(["inbox", "pause"])?;
+    let completed = installation.json_ok([
+        "inbox",
+        "retry",
+        "start",
+        "--from",
+        "j00000000000000000001",
+        "--through",
+        "j00000000000000000002",
+    ])?;
+    assert_eq!(completed["event"]["state"], "completed");
+    assert_eq!(completed["summary"]["applied"], 2);
+    assert_eq!(completed["summary"]["failed"], 0);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "4\n");
+
+    let first_child = archived_receipt(&installation.inbox, "done", "j00000000000000000003")?;
+    let second_child = archived_receipt(&installation.inbox, "done", "j00000000000000000004")?;
+    assert_eq!(
+        first_child["reconciliation_id"],
+        first_child["retry_reconciliation_id"]
+    );
+    assert_ne!(
+        second_child["reconciliation_id"],
+        second_child["retry_reconciliation_id"]
+    );
+    assert_eq!(second_child["result_status"], "applied");
+    Ok(())
+}
+
+#[test]
+fn retry_does_not_adopt_an_unlinked_reconciliation_for_the_same_work() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "source.md",
+        b"Shared inbox claim.\nA source with unrelated later work.\n",
+        0o600,
+    )?;
+    fail_next_inbox_job(&installation)?;
+    installation.json_ok(["integrate", "--work", "source", "--reexamine"])?;
+    let connection = rusqlite::Connection::open(&installation.library)?;
+    let unrelated_id = connection.query_row(
+        "SELECT reconciliation.id
+         FROM reconciliations AS reconciliation
+         JOIN reconciliation_requests AS request
+           ON request.id = reconciliation.request_id
+         JOIN works AS work ON work.id = request.work_id
+         WHERE work.label = 'source' AND reconciliation.status = 'pending'",
+        [],
+        |row| row.get::<_, i64>(0),
+    )?;
+    drop(connection);
+
+    installation.json_ok(["inbox", "pause"])?;
+    let job = "j00000000000000000001";
+    let completed =
+        installation.json_ok(["inbox", "retry", "start", "--from", job, "--through", job])?;
+    assert_eq!(completed["summary"]["applied"], 1);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "3\n");
+    let child = archived_receipt(&installation.inbox, "done", "j00000000000000000002")?;
+    assert!(child["retry_reconciliation_id"].is_null());
+    assert_ne!(child["reconciliation_id"], unrelated_id);
+    let connection = rusqlite::Connection::open(&installation.library)?;
+    let unrelated_status = connection.query_row(
+        "SELECT status FROM reconciliations WHERE id = ?1",
+        [unrelated_id],
+        |row| row.get::<_, String>(0),
+    )?;
+    assert_eq!(unrelated_status, "superseded");
+    Ok(())
+}
+
+#[test]
+fn retry_rejects_a_pre_retention_failure_without_creating_an_event() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming("invalid.md", &[0xff, 0xfe, 0xfd], 0o600)?;
+    let run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(run["failed"], 1);
+
+    let job = "j00000000000000000001";
+    let preview = installation
+        .command()
+        .args(["inbox", "retry", "preview", "--from", job, "--through", job])
+        .output()?;
+    failed_json(&preview, "inbox_retry_original_not_retained")?;
+
+    installation.json_ok(["inbox", "pause"])?;
+    let start = installation
+        .command()
+        .args(["inbox", "retry", "start", "--from", job, "--through", job])
+        .output()?;
+    failed_json(&start, "inbox_retry_original_not_retained")?;
+    let events = installation.json_ok(["inbox", "retry", "status"])?;
+    assert!(events["events"].as_array().is_some_and(Vec::is_empty));
+    let status = installation.json_ok(["inbox", "status"])?;
+    assert_eq!(status["failed"], 1);
+    assert_eq!(status["queued"], 0);
+    Ok(())
+}
+
+#[test]
+fn retry_auth_preflight_halts_before_any_child_attempt() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "auth.md",
+        b"Shared inbox claim.\nOriginal failed source.\n",
+        0o600,
+    )?;
+    fail_next_inbox_job(&installation)?;
+    installation.json_ok(["inbox", "pause"])?;
+
+    let job = "j00000000000000000001";
+    let output = installation
+        .command()
+        .args(["inbox", "retry", "start", "--from", job, "--through", job])
+        .env("ANNALS_FAKE_AUTH_FAIL", "1")
+        .output()?;
+    failed_json(&output, "model_auth_unavailable")?;
+
+    let halted = installation.json_ok(["inbox", "retry", "status", "1"])?;
+    assert_eq!(halted["event"]["state"], "halted");
+    assert_eq!(halted["summary"]["attempted"], 0);
+    assert_eq!(halted["summary"]["remaining"], 1);
+    assert_eq!(halted["items"][0]["outcome"], "not_attempted");
+    assert!(halted["items"][0]["child_delivery_id"].is_null());
+    let child_job = halted["items"][0]["child_job_id"]
+        .as_str()
+        .ok_or("retry child had no job ID")?;
+    let receipt = archived_receipt(&installation.inbox, "queued", child_job)?;
+    assert_eq!(receipt["attempts"], 0);
+    assert!(receipt["ingestion_id"].is_null());
+    assert!(receipt["model_run_token"].is_null());
+    assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
+
+    let completed = installation.json_ok(["inbox", "retry", "continue", "1"])?;
+    assert_eq!(completed["event"]["state"], "completed");
+    assert_eq!(completed["summary"]["applied"], 1);
+    assert_eq!(completed["summary"]["remaining"], 0);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "2\n");
     Ok(())
 }
 

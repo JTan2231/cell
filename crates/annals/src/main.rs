@@ -7,6 +7,7 @@ mod db;
 mod error;
 mod graph;
 mod inbox;
+mod inbox_retry_store;
 mod index;
 mod ingestion;
 mod liaison;

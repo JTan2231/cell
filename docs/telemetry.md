@@ -57,6 +57,13 @@ unattributed runs, and latest recorded budget snapshot. Job-receipt discovery
 includes processing, done, duplicates, failed, and skipped envelopes; a
 skipped job remains a failed source delivery for reporting purposes.
 
+A retry child is a distinct source delivery and is reported separately from
+its original failure. If it starts a new examination, that model run and its
+tokens are attributed to the child. Reusing the original attempt's exact valid
+reconciliation creates no new model attempt. `annals inbox retry status` is the
+authoritative view that pairs the two deliveries and their outcomes; the
+telemetry report does not merge them or reattribute the original attempt.
+
 `budget` makes live `account/rateLimits/read` and `account/usage/read` requests
 through the configured real Codex. It stores the allowance snapshot and prints
 the account plan, available limit windows, used percentages, reset times, and

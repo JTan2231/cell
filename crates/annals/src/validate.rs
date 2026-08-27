@@ -16,6 +16,61 @@ struct StoredCommit {
     actor: String,
 }
 
+#[derive(Debug)]
+struct StoredRetryEvent {
+    id: i64,
+    from_job_id: String,
+    through_job_id: String,
+    state: String,
+    active_slot: i64,
+    created_at: String,
+    ready_at: Option<String>,
+    completed_at: Option<String>,
+    last_halted_at: Option<String>,
+    last_halt_code: Option<String>,
+    last_halt_message: Option<String>,
+}
+
+#[derive(Debug)]
+struct StoredRetryItem {
+    ordinal: i64,
+    original_job_id: String,
+    original_sequence: i64,
+    original_ingestion_id: i64,
+    original_completed_at: String,
+    original_error_code: String,
+    original_error_message: String,
+    original_work_id: Option<i64>,
+    child_job_id: Option<String>,
+    child_sequence: Option<i64>,
+    child_ingestion_id: Option<i64>,
+    actual_original_id: Option<i64>,
+    actual_original_delivery_key: Option<String>,
+    actual_original_channel: Option<String>,
+    actual_original_status: Option<String>,
+    actual_original_completed_at: Option<String>,
+    actual_original_error_code: Option<String>,
+    actual_original_error_message: Option<String>,
+    actual_original_work_id: Option<i64>,
+    actual_child_id: Option<i64>,
+    actual_child_delivery_key: Option<String>,
+    actual_child_channel: Option<String>,
+    actual_child_status: Option<String>,
+    actual_child_result: Option<String>,
+    actual_child_error_code: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RetryOutcome {
+    NotAttempted,
+    Processing,
+    Applied,
+    Recorded,
+    Failed,
+    Skipped,
+    Invalid,
+}
+
 /// Read-only, full replay validation of the library.
 ///
 /// No materialized corpus is compared because none exists.  The validator
@@ -37,6 +92,7 @@ pub fn validate(connection: &Connection) -> Result<ValidationReport, AppError> {
     check_reconciliations(connection, &commits, &mut issues)?;
     check_drafts_and_runs(connection, &mut issues)?;
     check_ingestions(connection, &mut issues)?;
+    check_inbox_retries(connection, &mut issues)?;
 
     Ok(ValidationReport {
         valid: issues.is_empty(),
@@ -779,6 +835,449 @@ fn check_ingestions(
     Ok(())
 }
 
+fn check_inbox_retries(
+    connection: &Connection,
+    issues: &mut Vec<ValidationIssue>,
+) -> Result<(), AppError> {
+    let active = connection.query_row(
+        "SELECT COUNT(*) FROM inbox_retry_events WHERE state <> 'completed'",
+        [],
+        |row| row.get::<_, i64>(0),
+    )?;
+    if active > 1 {
+        issue(
+            issues,
+            "invalid_inbox_retry_event",
+            format!("{active} inbox retry events are unfinished; at most one may be active"),
+        );
+    }
+
+    for (column, label) in [
+        ("original_ingestion_id", "original source delivery"),
+        ("child_job_id", "retry child job"),
+        ("child_ingestion_id", "retry child source delivery"),
+    ] {
+        let duplicates = connection.query_row(
+            &format!(
+                "SELECT COUNT(*) FROM (
+                     SELECT {column} FROM inbox_retry_items
+                     WHERE {column} IS NOT NULL
+                     GROUP BY {column} HAVING COUNT(*) > 1
+                 )"
+            ),
+            [],
+            |row| row.get::<_, i64>(0),
+        )?;
+        if duplicates != 0 {
+            issue(
+                issues,
+                "invalid_inbox_retry_item",
+                format!(
+                    "{duplicates} duplicated {label} links violate direct-child retry provenance"
+                ),
+            );
+        }
+    }
+
+    let mut statement = connection.prepare(
+        "SELECT id, from_job_id, through_job_id, state, active_slot, created_at,
+                ready_at, completed_at, last_halted_at, last_halt_code,
+                last_halt_message
+         FROM inbox_retry_events ORDER BY id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(StoredRetryEvent {
+            id: row.get(0)?,
+            from_job_id: row.get(1)?,
+            through_job_id: row.get(2)?,
+            state: row.get(3)?,
+            active_slot: row.get(4)?,
+            created_at: row.get(5)?,
+            ready_at: row.get(6)?,
+            completed_at: row.get(7)?,
+            last_halted_at: row.get(8)?,
+            last_halt_code: row.get(9)?,
+            last_halt_message: row.get(10)?,
+        })
+    })?;
+    let events = rows.collect::<Result<Vec<_>, _>>()?;
+    for event in events {
+        check_retry_event(connection, &event, issues)?;
+    }
+    Ok(())
+}
+
+fn check_retry_event(
+    connection: &Connection,
+    event: &StoredRetryEvent,
+    issues: &mut Vec<ValidationIssue>,
+) -> Result<(), AppError> {
+    if !retry_event_lifecycle_is_valid(event) {
+        issue(
+            issues,
+            "invalid_inbox_retry_event",
+            format!("inbox retry event {} has an incoherent lifecycle", event.id),
+        );
+    }
+
+    let items = load_retry_items(connection, event.id)?;
+    if items.is_empty() {
+        issue(
+            issues,
+            "invalid_inbox_retry_event",
+            format!("inbox retry event {} has no frozen retry items", event.id),
+        );
+        return Ok(());
+    }
+
+    let mut outcomes = Vec::with_capacity(items.len());
+    for (position, item) in items.iter().enumerate() {
+        let expected_ordinal = i64::try_from(position).unwrap_or(i64::MAX);
+        if item.ordinal != expected_ordinal {
+            issue(
+                issues,
+                "invalid_inbox_retry_event",
+                format!(
+                    "inbox retry event {} has a noncontiguous item ordinal at position {position}",
+                    event.id
+                ),
+            );
+        }
+        check_retry_original(event.id, item, issues);
+        let outcome = check_retry_child(event.id, item, issues);
+        outcomes.push(outcome);
+    }
+
+    if items.first().map(|item| item.original_job_id.as_str()) != Some(event.from_job_id.as_str())
+        || items.last().map(|item| item.original_job_id.as_str())
+            != Some(event.through_job_id.as_str())
+    {
+        issue(
+            issues,
+            "invalid_inbox_retry_event",
+            format!(
+                "inbox retry event {} anchors do not match its first and last retry items",
+                event.id
+            ),
+        );
+    }
+
+    if items.windows(2).any(|pair| {
+        (
+            &pair[0].original_completed_at,
+            pair[0].original_ingestion_id,
+        ) >= (
+            &pair[1].original_completed_at,
+            pair[1].original_ingestion_id,
+        )
+    }) {
+        issue(
+            issues,
+            "invalid_inbox_retry_event",
+            format!(
+                "inbox retry event {} items are not in source-delivery failure order",
+                event.id
+            ),
+        );
+    }
+
+    check_retry_membership(connection, event.id, &items, issues)?;
+
+    let all_children_published = items.iter().all(|item| item.child_job_id.is_some());
+    let any_child_delivery = items.iter().any(|item| item.child_ingestion_id.is_some());
+    let any_processing = outcomes.contains(&RetryOutcome::Processing);
+    let any_remaining = outcomes.iter().any(|outcome| {
+        matches!(
+            outcome,
+            RetryOutcome::NotAttempted | RetryOutcome::Processing
+        )
+    });
+    let state_matches_items = match event.state.as_str() {
+        "preparing" => !any_child_delivery,
+        "running" => all_children_published,
+        "halted" => all_children_published && !any_processing,
+        "completed" => all_children_published && !any_remaining,
+        _ => false,
+    };
+    if !state_matches_items {
+        issue(
+            issues,
+            "invalid_inbox_retry_event",
+            format!(
+                "inbox retry event {} state {:?} is inconsistent with its retry items",
+                event.id, event.state
+            ),
+        );
+    }
+    Ok(())
+}
+
+fn retry_event_lifecycle_is_valid(event: &StoredRetryEvent) -> bool {
+    let halt = match (
+        event.last_halted_at.as_deref(),
+        event.last_halt_code.as_deref(),
+        event.last_halt_message.as_deref(),
+    ) {
+        (None, None, None) => Some(false),
+        (Some(at), Some(code), Some(message))
+            if !at.trim().is_empty() && !code.trim().is_empty() && !message.trim().is_empty() =>
+        {
+            Some(true)
+        }
+        _ => None,
+    };
+    if event.active_slot != 1 || event.created_at.trim().is_empty() || halt.is_none() {
+        return false;
+    }
+    let ready = event
+        .ready_at
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty());
+    let completed = event
+        .completed_at
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty());
+    match event.state.as_str() {
+        "preparing" => {
+            event.ready_at.is_none() && event.completed_at.is_none() && halt == Some(false)
+        }
+        "running" => ready && event.completed_at.is_none(),
+        "halted" => ready && event.completed_at.is_none() && halt == Some(true),
+        "completed" => ready && completed,
+        _ => false,
+    }
+}
+
+fn load_retry_items(
+    connection: &Connection,
+    event_id: i64,
+) -> Result<Vec<StoredRetryItem>, AppError> {
+    let mut statement = connection.prepare(
+        "SELECT item.ordinal, item.original_job_id, item.original_sequence,
+                item.original_ingestion_id, item.original_completed_at,
+                item.original_error_code, item.original_error_message,
+                item.original_work_id, item.child_job_id, item.child_sequence,
+                item.child_ingestion_id,
+                original.id, original.delivery_key, original.channel, original.status,
+                original.completed_at, original.error_code, original.error_message,
+                original.work_id,
+                child.id, child.delivery_key, child.channel, child.status, child.result,
+                child.error_code
+         FROM inbox_retry_items AS item
+         LEFT JOIN ingestions AS original ON original.id = item.original_ingestion_id
+         LEFT JOIN ingestions AS child ON child.id = item.child_ingestion_id
+         WHERE item.event_id = ?1
+         ORDER BY item.ordinal",
+    )?;
+    let rows = statement.query_map([event_id], |row| {
+        Ok(StoredRetryItem {
+            ordinal: row.get(0)?,
+            original_job_id: row.get(1)?,
+            original_sequence: row.get(2)?,
+            original_ingestion_id: row.get(3)?,
+            original_completed_at: row.get(4)?,
+            original_error_code: row.get(5)?,
+            original_error_message: row.get(6)?,
+            original_work_id: row.get(7)?,
+            child_job_id: row.get(8)?,
+            child_sequence: row.get(9)?,
+            child_ingestion_id: row.get(10)?,
+            actual_original_id: row.get(11)?,
+            actual_original_delivery_key: row.get(12)?,
+            actual_original_channel: row.get(13)?,
+            actual_original_status: row.get(14)?,
+            actual_original_completed_at: row.get(15)?,
+            actual_original_error_code: row.get(16)?,
+            actual_original_error_message: row.get(17)?,
+            actual_original_work_id: row.get(18)?,
+            actual_child_id: row.get(19)?,
+            actual_child_delivery_key: row.get(20)?,
+            actual_child_channel: row.get(21)?,
+            actual_child_status: row.get(22)?,
+            actual_child_result: row.get(23)?,
+            actual_child_error_code: row.get(24)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
+fn check_retry_original(event_id: i64, item: &StoredRetryItem, issues: &mut Vec<ValidationIssue>) {
+    let sequence = retry_job_sequence(&item.original_job_id);
+    let matches = item.actual_original_id == Some(item.original_ingestion_id)
+        && item.actual_original_channel.as_deref() == Some("inbox")
+        && item.actual_original_status.as_deref() == Some("failed")
+        && item.actual_original_error_code.as_deref() != Some("inbox_job_skipped")
+        && item.actual_original_completed_at.as_deref()
+            == Some(item.original_completed_at.as_str())
+        && item.actual_original_error_code.as_deref() == Some(item.original_error_code.as_str())
+        && item.actual_original_error_message.as_deref()
+            == Some(item.original_error_message.as_str())
+        && item.original_work_id.is_some()
+        && item.actual_original_work_id == item.original_work_id
+        && sequence == Some(item.original_sequence)
+        && item
+            .actual_original_delivery_key
+            .as_deref()
+            .is_some_and(|key| delivery_key_matches_job(key, &item.original_job_id));
+    if !matches {
+        issue(
+            issues,
+            "invalid_inbox_retry_item",
+            format!(
+                "inbox retry event {event_id} item {} does not match its original failed source delivery",
+                item.ordinal
+            ),
+        );
+    }
+}
+
+fn check_retry_child(
+    event_id: i64,
+    item: &StoredRetryItem,
+    issues: &mut Vec<ValidationIssue>,
+) -> RetryOutcome {
+    let child_job_is_valid = match (&item.child_job_id, item.child_sequence) {
+        (None, None) => item.child_ingestion_id.is_none(),
+        (Some(job_id), Some(sequence)) => {
+            job_id != &item.original_job_id && retry_job_sequence(job_id) == Some(sequence)
+        }
+        _ => false,
+    };
+    let child_delivery_is_valid = match item.child_ingestion_id {
+        None => item.actual_child_id.is_none(),
+        Some(child_id) => {
+            Some(child_id) == item.actual_child_id
+                && Some(child_id) != Some(item.original_ingestion_id)
+                && item.actual_child_channel.as_deref() == Some("inbox")
+                && item.child_job_id.as_deref().is_some_and(|job_id| {
+                    item.actual_child_delivery_key
+                        .as_deref()
+                        .is_some_and(|key| delivery_key_matches_job(key, job_id))
+                })
+        }
+    };
+    if !child_job_is_valid || !child_delivery_is_valid {
+        issue(
+            issues,
+            "invalid_inbox_retry_item",
+            format!(
+                "inbox retry event {event_id} item {} has invalid retry child provenance",
+                item.ordinal
+            ),
+        );
+    }
+
+    let outcome = match item.child_ingestion_id {
+        None => RetryOutcome::NotAttempted,
+        Some(_) if item.actual_child_id.is_none() => RetryOutcome::Invalid,
+        Some(_) => match item.actual_child_status.as_deref() {
+            Some("processing") => RetryOutcome::Processing,
+            Some("completed") if item.actual_child_result.as_deref() == Some("applied") => {
+                RetryOutcome::Applied
+            }
+            Some("completed") if item.actual_child_result.as_deref() == Some("recorded") => {
+                RetryOutcome::Recorded
+            }
+            Some("failed")
+                if item.actual_child_error_code.as_deref() == Some("inbox_job_skipped") =>
+            {
+                RetryOutcome::Skipped
+            }
+            Some("failed") => RetryOutcome::Failed,
+            _ => RetryOutcome::Invalid,
+        },
+    };
+    if outcome == RetryOutcome::Invalid {
+        issue(
+            issues,
+            "invalid_inbox_retry_item",
+            format!(
+                "inbox retry event {event_id} item {} has an invalid retry child outcome",
+                item.ordinal
+            ),
+        );
+    }
+    outcome
+}
+
+fn check_retry_membership(
+    connection: &Connection,
+    event_id: i64,
+    items: &[StoredRetryItem],
+    issues: &mut Vec<ValidationIssue>,
+) -> Result<(), AppError> {
+    let Some(first) = items.first() else {
+        return Ok(());
+    };
+    let Some(last) = items.last() else {
+        return Ok(());
+    };
+    let mut statement = connection.prepare(
+        "SELECT id FROM ingestions
+         WHERE channel = 'inbox' AND status = 'failed'
+           AND error_code <> 'inbox_job_skipped'
+           AND (completed_at > ?1 OR (completed_at = ?1 AND id >= ?2))
+           AND (completed_at < ?3 OR (completed_at = ?3 AND id <= ?4))
+         ORDER BY completed_at, id",
+    )?;
+    let expected = statement
+        .query_map(
+            rusqlite::params![
+                first.original_completed_at,
+                first.original_ingestion_id,
+                last.original_completed_at,
+                last.original_ingestion_id,
+            ],
+            |row| row.get::<_, i64>(0),
+        )?
+        .collect::<Result<Vec<_>, _>>()?;
+    let stored = items
+        .iter()
+        .map(|item| item.original_ingestion_id)
+        .collect::<Vec<_>>();
+    if stored != expected {
+        issue(
+            issues,
+            "invalid_inbox_retry_event",
+            format!(
+                "inbox retry event {event_id} does not contain the complete bounded failure range"
+            ),
+        );
+    }
+    Ok(())
+}
+
+fn retry_job_sequence(job_id: &str) -> Option<i64> {
+    let bytes = job_id.as_bytes();
+    if bytes.len() < 21 || bytes[0] != b'j' || !bytes[1..21].iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    let suffix = &bytes[21..];
+    if !suffix.is_empty()
+        && (suffix.len() < 2
+            || suffix[0] != b'-'
+            || !suffix[1..].iter().all(u8::is_ascii_digit)
+            || std::str::from_utf8(&suffix[1..])
+                .ok()
+                .and_then(|value| value.parse::<u64>().ok())
+                .is_none_or(|value| value == 0))
+    {
+        return None;
+    }
+    std::str::from_utf8(&bytes[1..21])
+        .ok()?
+        .parse::<i64>()
+        .ok()
+        .filter(|sequence| *sequence > 0)
+}
+
+fn delivery_key_matches_job(delivery_key: &str, job_id: &str) -> bool {
+    delivery_key
+        .strip_prefix("inbox:")
+        .and_then(|rest| rest.split_once(':'))
+        .is_some_and(|(stored_job_id, _)| stored_job_id == job_id)
+}
+
 fn issue(issues: &mut Vec<ValidationIssue>, code: &str, message: impl Into<String>) {
     issues.push(ValidationIssue {
         code: code.to_owned(),
@@ -788,10 +1287,12 @@ fn issue(issues: &mut Vec<ValidationIssue>, code: &str, message: impl Into<Strin
 
 #[cfg(test)]
 mod tests {
+    use rusqlite::params;
     use serde_json::json;
 
     use super::*;
     use crate::corpus::store_work;
+    use crate::inbox_retry_store;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -836,6 +1337,205 @@ mod tests {
             )
         }));
         Ok(())
+    }
+
+    #[test]
+    fn retry_events_validate_while_preparing_and_after_completion() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let mut connection = crate::db::init(&directory.path().join("annals.db"))?;
+        failed_inbox_delivery(&connection, 1, "2026-08-27T00:00:01Z")?;
+        failed_inbox_delivery(&connection, 2, "2026-08-27T00:00:02Z")?;
+        let selection = inbox_retry_store::preview(
+            &connection,
+            "j00000000000000000001",
+            "j00000000000000000002",
+        )?;
+        let event_id =
+            inbox_retry_store::create_event(&mut connection, &selection, Some("auth repair"))?
+                .event
+                .id;
+        assert!(validate(&connection)?.valid);
+
+        for (ordinal, sequence) in [(0, 3_u64), (1, 4_u64)] {
+            let job_id = format!("j{sequence:020}");
+            inbox_retry_store::link_child_job(&connection, event_id, ordinal, &job_id, sequence)?;
+        }
+        inbox_retry_store::mark_running(&connection, event_id)?;
+        for sequence in [3_u64, 4_u64] {
+            let job_id = format!("j{sequence:020}");
+            let child_id = failed_inbox_delivery(
+                &connection,
+                sequence,
+                &format!("2026-08-27T00:00:0{sequence}Z"),
+            )?;
+            inbox_retry_store::link_child_delivery(&connection, event_id, &job_id, child_id)?;
+        }
+        inbox_retry_store::complete(&connection, event_id)?;
+        assert!(validate(&connection)?.valid);
+        Ok(())
+    }
+
+    #[test]
+    fn retry_validation_reports_changed_original_snapshot() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let mut connection = crate::db::init(&directory.path().join("annals.db"))?;
+        failed_inbox_delivery(&connection, 1, "2026-08-27T00:00:01Z")?;
+        let selection = inbox_retry_store::preview(
+            &connection,
+            "j00000000000000000001",
+            "j00000000000000000001",
+        )?;
+        inbox_retry_store::create_event(&mut connection, &selection, None)?;
+        connection.execute("DROP TRIGGER inbox_retry_items_original_immutable", [])?;
+        connection.execute(
+            "UPDATE inbox_retry_items SET original_error_message = 'changed'",
+            [],
+        )?;
+
+        let report = validate(&connection)?;
+        assert!(!report.valid);
+        assert!(report.issues.iter().any(|issue| {
+            issue.code == "invalid_inbox_retry_item"
+                && issue.message.contains("original failed source delivery")
+        }));
+        Ok(())
+    }
+
+    #[test]
+    fn retry_validation_reports_incomplete_frozen_range() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let mut connection = crate::db::init(&directory.path().join("annals.db"))?;
+        for sequence in 1..=3 {
+            failed_inbox_delivery(
+                &connection,
+                sequence,
+                &format!("2026-08-27T00:00:0{sequence}Z"),
+            )?;
+        }
+        let selection = inbox_retry_store::preview(
+            &connection,
+            "j00000000000000000001",
+            "j00000000000000000003",
+        )?;
+        inbox_retry_store::create_event(&mut connection, &selection, None)?;
+        connection.execute("DROP TRIGGER inbox_retry_items_no_delete", [])?;
+        connection.execute(
+            "DELETE FROM inbox_retry_items WHERE event_id = 1 AND ordinal = 1",
+            [],
+        )?;
+
+        let report = validate(&connection)?;
+        assert!(!report.valid);
+        assert!(report.issues.iter().any(|issue| {
+            issue.code == "invalid_inbox_retry_event"
+                && issue.message.contains("complete bounded failure range")
+        }));
+        Ok(())
+    }
+
+    #[test]
+    fn retry_validation_rejects_retained_child_outcome() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let mut connection = crate::db::init(&directory.path().join("annals.db"))?;
+        failed_inbox_delivery(&connection, 1, "2026-08-27T00:00:01Z")?;
+        let selection = inbox_retry_store::preview(
+            &connection,
+            "j00000000000000000001",
+            "j00000000000000000001",
+        )?;
+        let event_id = inbox_retry_store::create_event(&mut connection, &selection, None)?
+            .event
+            .id;
+        let child_job_id = "j00000000000000000002";
+        inbox_retry_store::link_child_job(&connection, event_id, 0, child_job_id, 2)?;
+        inbox_retry_store::mark_running(&connection, event_id)?;
+        let work = store_work(&mut connection, "Retry", "same source")?;
+        connection.execute(
+            "INSERT INTO ingestions(
+                 delivery_key, source_name, channel, first_seen_at, ingested_at,
+                 completed_at, status, work_id, new_work, result
+             ) VALUES(?1, 'retry.txt', 'inbox', 'seen', 'ingested',
+                      '2026-08-27T00:00:02Z', 'completed', ?2, 0, 'retained')",
+            params![format!("inbox:{child_job_id}:seen"), work.id],
+        )?;
+        let child_id = connection.last_insert_rowid();
+        inbox_retry_store::link_child_delivery(&connection, event_id, child_job_id, child_id)?;
+        connection.execute(
+            "UPDATE inbox_retry_events
+             SET state = 'completed', completed_at = '2026-08-27T00:00:03Z'
+             WHERE id = ?1",
+            [event_id],
+        )?;
+
+        let report = validate(&connection)?;
+        assert!(!report.valid);
+        assert!(report.issues.iter().any(|issue| {
+            issue.code == "invalid_inbox_retry_item"
+                && issue.message.contains("invalid retry child outcome")
+        }));
+        Ok(())
+    }
+
+    #[test]
+    fn retry_validation_reports_unpublished_running_event() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let mut connection = crate::db::init(&directory.path().join("annals.db"))?;
+        failed_inbox_delivery(&connection, 1, "2026-08-27T00:00:01Z")?;
+        failed_inbox_delivery(&connection, 2, "2026-08-27T00:00:02Z")?;
+        let selection = inbox_retry_store::preview(
+            &connection,
+            "j00000000000000000001",
+            "j00000000000000000002",
+        )?;
+        let event_id = inbox_retry_store::create_event(&mut connection, &selection, None)?
+            .event
+            .id;
+        inbox_retry_store::link_child_job(&connection, event_id, 0, "j00000000000000000003", 3)?;
+        connection.execute(
+            "UPDATE inbox_retry_events
+             SET state = 'running', ready_at = '2026-08-27T00:00:03Z'
+             WHERE id = ?1",
+            [event_id],
+        )?;
+
+        let report = validate(&connection)?;
+        assert!(!report.valid);
+        assert!(report.issues.iter().any(|issue| {
+            issue.code == "invalid_inbox_retry_event"
+                && issue.message.contains("inconsistent with its retry items")
+        }));
+        Ok(())
+    }
+
+    fn failed_inbox_delivery(
+        connection: &Connection,
+        job_sequence: u64,
+        completed_at: &str,
+    ) -> Result<i64, rusqlite::Error> {
+        let job_id = format!("j{job_sequence:020}");
+        let text = format!("source-{job_sequence}");
+        let digest = corpus::sha256_hex(text.as_bytes());
+        connection.execute(
+            "INSERT INTO works(label, normalized_label, text, sha256, created_at)
+             VALUES(?1, ?1, ?2, ?3, 'now')",
+            params![format!("work-{job_sequence}"), text, digest,],
+        )?;
+        let work_id = connection.last_insert_rowid();
+        connection.execute(
+            "INSERT INTO ingestions(
+                 delivery_key, source_name, channel, first_seen_at, ingested_at,
+                 completed_at, status, work_id, new_work, error_code, error_message
+             ) VALUES(?1, ?2, 'inbox', ?3, ?3, ?4, 'failed', ?5, 1,
+                      'model_runner_failed', 'source delivery failed')",
+            params![
+                format!("inbox:{job_id}:{completed_at}"),
+                format!("source-{job_sequence}.txt"),
+                format!("seen-{job_sequence}"),
+                completed_at,
+                work_id,
+            ],
+        )?;
+        Ok(connection.last_insert_rowid())
     }
 
     fn applied_fixture() -> Result<(Connection, corpus::ReconciliationRecord), AppError> {

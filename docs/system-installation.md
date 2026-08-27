@@ -50,10 +50,11 @@ changing `report.md`. The `material` subdirectory means even a source named
 same-filesystem moves preserve the source's bytes, basename, inode, mode, and
 modification time.
 
-The current `job.json` receipt format is version 5 and is authoritative after
-registration or direct enqueue. `.queue.json` assigns a UTC first-seen time and
-prospective monotonic sequence when Annals first observes incoming material;
-pathname bytes break observation ties. Registration moves the source into
+The current `job.json` receipt format is version 6 and is authoritative after
+registration, direct enqueue, or retry publication. `.queue.json` assigns a
+UTC first-seen time and prospective monotonic sequence when Annals first
+observes incoming material; pathname bytes break observation ties. Registration
+moves the source into
 `queued/` and preserves the sequence in a receipt with state
 `queued`, `priority` set to `normal`, attempts zero, and no database
 source-delivery record. Direct enqueue instead copies an explicitly selected
@@ -64,17 +65,31 @@ or the lowest-sequence normal job when no priority job is queued, to
 to one, and starts the delivery record. A job receives no second processing
 attempt.
 
-`.run.lock` prevents overlapping workers. `.control.lock` is held only around
-registration, direct enqueue, queued-job priority changes, dispatch, sequence
-allocation, pause changes, interruption, and terminal disposition; it is never
-held during liaison work. `.paused` is the operator-owned dispatch gate managed
-by `annals inbox pause` and `resume`. A validated `interrupt.json` is a durable
+Ordinary version-6 receipts have null retry provenance. A retry child's receipt
+sets `retry_event_id`, `retry_ordinal`, `retry_of_job_id`, and
+`retry_of_ingestion_id` together. It may also set `retry_reconciliation_id`
+when the original attempt owns one exact reconciliation eligible for validation
+and reuse. `retry_ordinal` is the zero-based position in the event's frozen
+failure order. The first four fields are all present or all absent; a
+reconciliation ID is never a license to adopt unrelated work history. Existing
+version-5 receipts are accepted with null retry fields; a normal later receipt
+rewrite emits version 6 while keeping job identity, attempt, priority,
+source-delivery linkage, and terminal archive. Selecting a failed original for
+retry does not itself rewrite that historical receipt.
+
+`.run.lock` prevents overlapping ordinary or retry workers. `.control.lock` is
+held only around registration, direct enqueue, queued-job priority changes,
+ordinary or retry dispatch, retry-child publication, sequence allocation,
+pause changes, interruption, and terminal disposition; it is never held during
+liaison work. `.paused` is the operator-owned dispatch gate managed by
+`annals inbox pause` and `resume`. A validated `interrupt.json` is a durable
 request bound to its named processing job. The macOS deployer temporarily
 creates `.maintenance` to make a running worker stop cleanly after its current
-job and to prevent other spool mutation during cutover. These operational files
-are not retained works. Do not create, remove, or edit their contents directly.
+job and to prevent other spool mutation during cutover. These operational
+files are not retained works. Do not create, remove, or edit their contents
+directly.
 
-One invocation:
+One ordinary `inbox run` invocation:
 
 1. takes the inbox lock;
 2. performs no registration, enqueue, priority change, repair, or dispatch when
@@ -103,7 +118,8 @@ ordering. Every job-processing error fails the source delivery and moves the
 envelope to `failed/` on its first attempt. Known item-local source errors let
 draining continue. An unexpected model, runner, or runtime processing failure
 instead ends the activation nonzero after archival; successors remain queued
-for the next activation. The failed job is not retried.
+for the next activation. A failed job is never retried automatically; bounded
+operator retry is a separate event described below.
 
 `annals inbox register` exposes the same admission phase without starting a
 delivery. It can register arrivals while a different worker is processing a
@@ -133,9 +149,64 @@ already won the control lock, that job is current and may finish; if pause won,
 the job stays queued. Once `pause` returns, no later job can start. Scheduled
 activations continue registering arrivals while paused and exit successfully.
 `annals inbox resume` clears only `.paused`; it does not start a worker and
-never clears `.maintenance`. Use an explicit `inbox run` for immediate work or
-wait for the next launchd or systemd activation. Both commands are idempotent,
-and an operator pause survives deployment.
+never clears `.maintenance`. It also refuses while a retry event is preparing,
+running, or halted. Use an explicit `inbox run` for immediate ordinary work or
+wait for the next launchd or systemd activation. Both commands are idempotent
+when no retry event blocks resume, and an operator pause survives deployment.
+
+Bounded retry is an attended, quiescent operation:
+
+Only failures that reached retained-work identity are eligible. Correct and
+redeliver a pre-retention source failure as a new job because its archive has
+no durable digest that can prove unchanged retry material.
+
+```sh
+annals inbox pause
+annals inbox status
+annals inbox retry preview --from FIRST_FAILED_JOB --through LAST_FAILED_JOB
+annals inbox retry start --from FIRST_FAILED_JOB --through LAST_FAILED_JOB \
+  --reason "credential outage"
+annals inbox retry status
+```
+
+Both job anchors are required and inclusive. Preview orders their failed
+source deliveries by completion time and delivery ID, not by queue sequence,
+and changes no state. A delivery already used as an original remains visible
+but is marked ineligible with its prior event and any child provenance; start
+rejects the whole interval rather than silently omitting it. Start requires the
+pause to be set, no active job, and no maintenance marker. It freezes exactly
+the previewed failure interval and runs fresh linked children in that order
+while ordinary dispatch remains paused. The original failed envelopes stay in
+`failed/`. Each retry child copies its original's unchanged source into the
+normal spool directories; its receipt identifies the event and original job
+rather than placing it in a separate retry directory. Its lane is an internal
+publication detail: the event controls its order, and ordinary priority-change
+commands reject it.
+
+Start and continue run one authenticated account preflight before their first
+zero-attempt child claim. A failed preflight halts the event while every
+remaining child stays queued at attempts zero with no child delivery or model
+run.
+
+A known item-local failure is recorded in the event and does not stop later
+members. An unexpected model, runner, or runtime failure halts the event and
+leaves later members not attempted. After correcting the cause, inspect the
+report and continue only that event:
+
+```sh
+annals inbox retry status EVENT_ID
+annals inbox retry continue EVENT_ID
+```
+
+`inbox interrupt` may target an active retry child. Either `--as failed` or
+`--as skipped` archives that child with the requested outcome and halts the
+event; a later `retry continue` advances only members that were not attempted.
+
+Continue never gives an already failed or skipped retry child another attempt.
+A further attempt for a failed child requires another explicit bounded event.
+Resume ordinary dispatch only after the retry event is completed. Completion
+can include item-local failed or skipped outcomes, so inspect the durable status
+report rather than treating a zero process exit as "every child succeeded."
 
 `annals inbox interrupt JOB_ID --as failed|skipped [--reason TEXT]` durably
 requests that one specifically named processing job stop. The required job ID
@@ -585,6 +656,12 @@ delivery record. This makes credential loss programmatically containable, while
 the attended device login remains the recovery step when Codex requires user
 authorization.
 
+If the credential outage was discovered only after a release had already
+terminalized a stretch of jobs, keep the inbox paused after the canary and use
+the bounded retry preview, start, and status sequence. Resume ordinary dispatch
+only after that event completes. Never move those historical failed envelopes
+back into the queue.
+
 ### Deploy or update
 
 The deployer does not compile the workspace or install Codex. `ci.sh` checks the
@@ -616,6 +693,12 @@ failure restores the old selectors, configs, plist, and service.
 Authentication, the Annals library, telemetry ledger, spool, logs, pause state,
 and archives are retained.
 
+The version-4 deploy path invokes the candidate's additive `migrate` after the
+backup and while the service is quiescent. It adds retry-event provenance to a
+version-3 library without replacing its works, deliveries, reconciliations,
+commits, spool, or archives. The rollback transaction retains the pre-migration
+backup if candidate validation or cutover fails.
+
 No operator timing or manual service stop is required. It is safe to run the
 same deployment command while a delivery is in progress; by default the
 deployer waits up to 3,900 seconds for the current liaison's 60-minute limit
@@ -626,9 +709,10 @@ Set `ANNALS_UPDATE_WAIT_SECONDS` to another nonnegative number when a caller
 needs a shorter deadline. `--no-start` installs and validates without reading
 or changing launchd state.
 
-Schema version 3 intentionally cannot open an older library. For this specific
-breaking boundary, use the guarded fresh-state operation after `ci.sh` is
-green:
+Schema version 3 established the intentional boundary that cannot open an
+older library. Version 4 migrates version 3 additively; it does not change the
+older boundary. For a pre-version-3 installation, use the guarded fresh-state
+operation after `ci.sh` is green:
 
 ```sh
 ./packaging/launchd/deploy-user.sh \
@@ -693,6 +777,8 @@ annals inbox pause
 annals inbox register
 annals inbox resume
 annals inbox interrupt JOB_ID --as skipped --reason "operator request"
+annals inbox retry preview --from FIRST_FAILED_JOB --through LAST_FAILED_JOB
+annals inbox retry status
 annals-usage report
 annals-usage budget
 annals-usage doctor
@@ -744,6 +830,14 @@ processing failures are also terminalized in `failed/` on the first attempt,
 but the current activation exits nonzero and leaves successors queued for the
 next activation.
 
+Do not move failed envelopes back into `queued/` or edit their receipts. For a
+recoverable stretch, use the bounded retry sequence above. `retry preview`
+requires two failed-job anchors and reports the exact inclusive membership.
+`retry start` records that frozen list, preserves every original delivery and
+envelope, and creates a distinct linked child for each member. `retry status`
+pairs each original failure with its child outcome, so the audit shows what was
+and was not recovered.
+
 An authenticated account preflight failure is earlier than job processing and
 has different effects: no envelope is claimed, no attempt is recorded, and no
 source delivery starts. The activation exits nonzero with the next job still
@@ -783,6 +877,12 @@ content-addressed storage keeps the exact source bytes stable, and durable job
 progress lets recovery finish success without starting another liaison. Once
 an attempt is recorded, an interrupted job is never examined again.
 
+Retry publication crosses the same SQLite-and-spool boundary. The complete
+membership is durable before processing, and an event remains `preparing`
+until every exact child is published. `retry continue` recovers an interrupted
+publication idempotently: it recognizes a child already present or publishes
+the one missing child, without widening the event or duplicating an attempt.
+
 On Linux, stop scheduling before maintenance that changes the executable,
 configuration, or library:
 
@@ -797,13 +897,15 @@ marker and restores scheduling automatically.
 Use `inbox pause` for ordinary processing control instead of manipulating the
 external timer or `.maintenance`. Pause continues admission and survives an
 update; maintenance is reserved for a deployment boundary and blocks
-registration, direct enqueue, priority changes, and dispatch. `inbox resume`
-never removes maintenance. Use `inbox interrupt` for one active job; it remains
-independent of pause and maintenance.
+registration, direct enqueue, priority changes, retry execution, and dispatch.
+`inbox resume` never removes maintenance and refuses an unfinished retry event.
+Use `inbox interrupt` for one active job; it remains independent of pause and
+maintenance.
 
 Use `annals backup` for a consistent SQLite backup rather than copying a live
 WAL database, and run `annals validate` periodically. Include the spool when a
-backup must preserve pending work, its priority choices, and sequence order.
+backup must preserve pending work, an unfinished retry event's child envelopes,
+priority choices, and sequence order.
 Keep the `done`, `duplicates`, `failed`, and `skipped` envelopes according to
 the installation's retention policy; Annals does not silently delete source
 files from these archives.

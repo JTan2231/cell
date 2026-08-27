@@ -251,8 +251,56 @@ pub enum InboxCommand {
     Resume,
     /// Stop one processing job and archive it with the requested disposition.
     Interrupt(InboxInterruptArgs),
+    /// Preview, run, and inspect bounded failed-job retry events.
+    #[command(subcommand)]
+    Retry(InboxRetryCommand),
     /// Report queued, active, completed, duplicate, and failed inbox state.
     Status,
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum InboxRetryCommand {
+    /// Preview the failed jobs in an inclusive failure-order window.
+    Preview(InboxRetryWindowArgs),
+    /// Freeze and run a bounded failed-job retry event.
+    Start(InboxRetryStartArgs),
+    /// Show one retry event, or list recent events when no identifier is given.
+    Status(InboxRetryStatusArgs),
+    /// Continue publication or unattempted members of an interrupted event.
+    Continue(InboxRetryContinueArgs),
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct InboxRetryWindowArgs {
+    /// First failed inbox job in the inclusive failure-order window.
+    #[arg(long = "from", value_name = "JOB_ID")]
+    pub from_job_id: String,
+    /// Last failed inbox job in the inclusive failure-order window.
+    #[arg(long = "through", value_name = "JOB_ID")]
+    pub through_job_id: String,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct InboxRetryStartArgs {
+    #[command(flatten)]
+    pub window: InboxRetryWindowArgs,
+    /// Operator explanation retained with the retry event.
+    #[arg(long, value_name = "TEXT")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct InboxRetryStatusArgs {
+    /// Retry event identifier. Omit to list recent and open events.
+    #[arg(value_name = "EVENT_ID")]
+    pub event_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct InboxRetryContinueArgs {
+    /// Retry event to continue.
+    #[arg(value_name = "EVENT_ID")]
+    pub event_id: i64,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -439,7 +487,7 @@ mod tests {
 
     use super::{
         ChangeCommand, Cli, Command, ConceptCommand, InboxCommand, InboxInterruptDisposition,
-        IngestionChannel, IngestionStatus, LatelyTime, WorkCommand,
+        InboxRetryCommand, IngestionChannel, IngestionStatus, LatelyTime, WorkCommand,
     };
 
     #[test]
@@ -643,6 +691,72 @@ mod tests {
         ));
         assert!(
             Cli::try_parse_from(["annals", "inbox", "interrupt", "j00000000000000000042"]).is_err()
+        );
+    }
+
+    #[test]
+    fn inbox_retry_commands_parse() {
+        assert!(matches!(
+            Cli::try_parse_from([
+                "annals",
+                "inbox",
+                "retry",
+                "preview",
+                "--from",
+                "j00000000000000000007",
+                "--through",
+                "j00000000000000000019"
+            ])
+            .map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Retry(
+                InboxRetryCommand::Preview(args)
+            ))) if args.from_job_id == "j00000000000000000007"
+                && args.through_job_id == "j00000000000000000019"
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "annals",
+                "inbox",
+                "retry",
+                "start",
+                "--from",
+                "j00000000000000000007",
+                "--through",
+                "j00000000000000000019",
+                "--reason",
+                "provider outage"
+            ])
+            .map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Retry(
+                InboxRetryCommand::Start(args)
+            ))) if args.window.from_job_id == "j00000000000000000007"
+                && args.window.through_job_id == "j00000000000000000019"
+                && args.reason.as_deref() == Some("provider outage")
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "inbox", "retry", "status", "42"])
+                .map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Retry(
+                InboxRetryCommand::Status(args)
+            ))) if args.event_id == Some(42)
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "inbox", "retry", "continue", "42"])
+                .map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Retry(
+                InboxRetryCommand::Continue(args)
+            ))) if args.event_id == 42
+        ));
+        assert!(
+            Cli::try_parse_from([
+                "annals",
+                "inbox",
+                "retry",
+                "preview",
+                "--from",
+                "j00000000000000000007"
+            ])
+            .is_err()
         );
     }
 }

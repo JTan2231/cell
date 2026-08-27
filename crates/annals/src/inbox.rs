@@ -18,21 +18,22 @@ use serde::{Deserialize, Serialize};
 use crate::app::{read_utf8, work_label};
 use crate::cli::{
     InboxEnqueueArgs, InboxInterruptArgs, InboxInterruptDisposition, InboxPriorityArgs,
+    InboxRetryContinueArgs, InboxRetryStartArgs, InboxRetryStatusArgs, InboxRetryWindowArgs,
     InboxRunArgs,
 };
 use crate::config::Config;
 use crate::corpus::{
-    ReconciliationRecord, now, reconciliation_by_id, sha256_hex,
+    ReconciliationRecord, now, reconciliation_by_id, revision, sha256_hex,
     store_ingested_work_with_optional_label,
 };
 use crate::db;
 use crate::error::AppError;
 use crate::model_runner::{ModelSettings, Runner};
-use crate::render::CommandOutput;
-use crate::{ingestion, liaison, resolver};
+use crate::render::{CommandOutput, render_terminal_text};
+use crate::{inbox_retry_store, ingestion, liaison, resolver};
 
 const QUEUE_VERSION: u32 = 4;
-const RECEIPT_VERSION: u32 = 5;
+const RECEIPT_VERSION: u32 = 6;
 const INTERRUPT_VERSION: u32 = 1;
 const MAX_INTERRUPT_REASON_CHARACTERS: usize = 1_000;
 
@@ -471,6 +472,40 @@ struct JobReceipt {
     state: String,
     attempts: u32,
     delivery_key: String,
+    retry_event_id: Option<i64>,
+    retry_ordinal: Option<u64>,
+    retry_of_job_id: Option<String>,
+    retry_of_ingestion_id: Option<i64>,
+    retry_reconciliation_id: Option<i64>,
+    ingestion_id: Option<i64>,
+    source_size_bytes: Option<u64>,
+    source_created_at: Option<String>,
+    source_modified_at: Option<String>,
+    first_seen_at: String,
+    claimed_at: String,
+    started_at: Option<String>,
+    completed_at: Option<String>,
+    source_sha256: Option<String>,
+    work: Option<String>,
+    reconciliation_id: Option<i64>,
+    model_run_token: Option<String>,
+    result_status: Option<String>,
+    result_revision: Option<i64>,
+    last_error: Option<ReceiptError>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VersionFiveJobReceipt {
+    version: u32,
+    id: String,
+    sequence: u64,
+    priority: JobPriority,
+    original_name: String,
+    original_name_base64: String,
+    state: String,
+    attempts: u32,
+    delivery_key: String,
     ingestion_id: Option<i64>,
     source_size_bytes: Option<u64>,
     source_created_at: Option<String>,
@@ -682,6 +717,19 @@ pub(crate) fn run(
     let mut queue = BTreeMap::new();
     for envelope in recovered_envelopes {
         insert_queued(&mut queue, envelope)?;
+    }
+
+    if !spool.maintenance_requested()?
+        && !spool.pause_requested()?
+        && let Some(event) = inbox_retry_store::active_event(&db::open_read(library)?)?
+    {
+        return Err(AppError::conflict(
+            "inbox_retry_event_active",
+            format!(
+                "retry event {} is {}; restore the inbox pause and continue that event",
+                event.id, event.state
+            ),
+        ));
     }
 
     let settings = ModelSettings::new(config.liaison.quality, config.liaison.model.as_deref());
@@ -909,6 +957,759 @@ pub(crate) fn enqueue(config: &Config, args: &InboxEnqueueArgs) -> Result<Comman
     Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
 }
 
+pub(crate) fn retry_preview(
+    library: &Path,
+    config: &Config,
+    args: &InboxRetryWindowArgs,
+) -> Result<CommandOutput, AppError> {
+    let inbox = config.inbox()?;
+    let spool = Spool::new(&inbox.root);
+    let connection = db::open_read(library)?;
+    let selection =
+        inbox_retry_store::preview(&connection, &args.from_job_id, &args.through_job_id)?;
+    validate_retry_selection_material(library, &spool, &selection)?;
+    let eligible = selection
+        .items
+        .iter()
+        .filter(|item| item.already_selected_by.is_none())
+        .count();
+    let mut human = format!(
+        "Retry preview: {} failed inbox jobs from {} through {} in delivery completion order\nEligible: {}; already selected: {}",
+        selection.items.len(),
+        selection.from_job_id,
+        selection.through_job_id,
+        eligible,
+        selection.items.len().saturating_sub(eligible),
+    );
+    for item in &selection.items {
+        let eligibility = item.already_selected_by.map_or_else(
+            || "eligible".to_owned(),
+            |event_id| format!("already selected by event {event_id}"),
+        );
+        let _ = write!(
+            human,
+            "\n{}  {}  {}",
+            item.original_job_id, item.original_error_code, eligibility
+        );
+    }
+    Ok(CommandOutput::new(serde_json::to_value(selection)?, human))
+}
+
+pub(crate) fn retry_start(
+    library: &Path,
+    config: &Config,
+    args: &InboxRetryStartArgs,
+    forward_progress: bool,
+) -> Result<CommandOutput, AppError> {
+    let inbox = config.inbox()?;
+    let spool = Spool::new(&inbox.root);
+    spool.create()?;
+    let _run = spool.acquire_lock()?;
+    require_retry_boundary(&spool, inbox.settle_seconds, None)?;
+
+    let selection = inbox_retry_store::preview(
+        &db::open_read(library)?,
+        &args.window.from_job_id,
+        &args.window.through_job_id,
+    )?;
+    validate_retry_selection_material(library, &spool, &selection)?;
+    let mut connection = db::open_write(library)?;
+    let report =
+        inbox_retry_store::create_event(&mut connection, &selection, args.reason.as_deref())?;
+    drop(connection);
+
+    publish_retry_children(library, &spool, report.event.id, false)?;
+    inbox_retry_store::mark_running(&db::open_write(library)?, report.event.id)?;
+    run_retry_event(library, config, &spool, report.event.id, forward_progress)
+}
+
+pub(crate) fn retry_continue(
+    library: &Path,
+    config: &Config,
+    args: &InboxRetryContinueArgs,
+    forward_progress: bool,
+) -> Result<CommandOutput, AppError> {
+    let inbox = config.inbox()?;
+    let spool = Spool::new(&inbox.root);
+    spool.create()?;
+    let _run = spool.acquire_lock()?;
+    let report = inbox_retry_store::event_report(&db::open_read(library)?, args.event_id)?;
+    if report.event.state == "completed" {
+        return Err(AppError::conflict(
+            "inbox_retry_event_completed",
+            format!("retry event {} is already completed", args.event_id),
+        ));
+    }
+    require_retry_boundary(&spool, inbox.settle_seconds, Some(args.event_id))?;
+    if report.event.state == "preparing" {
+        publish_retry_children(library, &spool, args.event_id, true)?;
+        inbox_retry_store::mark_running(&db::open_write(library)?, args.event_id)?;
+    } else if report.event.state == "halted" {
+        inbox_retry_store::resume_running(&db::open_write(library)?, args.event_id)?;
+    } else if report.event.state != "running" {
+        return Err(AppError::conflict(
+            "inbox_retry_state_conflict",
+            format!(
+                "retry event {} is {}; cannot continue it",
+                args.event_id, report.event.state
+            ),
+        ));
+    }
+    run_retry_event(library, config, &spool, args.event_id, forward_progress)
+}
+
+pub(crate) fn retry_status(
+    library: &Path,
+    args: &InboxRetryStatusArgs,
+) -> Result<CommandOutput, AppError> {
+    let connection = db::open_read(library)?;
+    if let Some(event_id) = args.event_id {
+        let report = inbox_retry_store::event_report(&connection, event_id)?;
+        return retry_report_output(report, false);
+    }
+    let events = inbox_retry_store::list_events(&connection)?;
+    let mut human = format!("Retry events: {}", events.len());
+    for event in &events {
+        let _ = write!(
+            human,
+            "\n{}  {}  {} through {}  {} members",
+            event.id, event.state, event.from_job_id, event.through_job_id, event.member_count
+        );
+    }
+    Ok(CommandOutput::new(
+        serde_json::json!({ "events": events }),
+        human,
+    ))
+}
+
+fn require_retry_boundary(
+    spool: &Spool,
+    settle_seconds: u64,
+    event_id: Option<i64>,
+) -> Result<(), AppError> {
+    let _control = spool.acquire_control_lock()?;
+    if !spool.pause_requested()? {
+        return Err(AppError::conflict(
+            "inbox_retry_requires_pause",
+            "retry events require the inbox to be paused",
+        ));
+    }
+    if spool.maintenance_requested()? {
+        return Err(AppError::conflict(
+            "inbox_maintenance_active",
+            "inbox maintenance prevents retry event processing",
+        ));
+    }
+    let status = inspect(spool, settle_seconds)?;
+    if status.processing == 0 {
+        return Ok(());
+    }
+    let Some(event_id) = event_id else {
+        return Err(AppError::conflict(
+            "inbox_retry_processing_active",
+            "retry start requires the inbox to have no processing job",
+        ));
+    };
+    let index = read_index(spool)?;
+    let processing = scan_envelopes_at(&spool.processing, &index, false)?;
+    if processing.iter().all(|scanned| {
+        scanned.envelope.receipt.retry_event_id == Some(event_id)
+            && scanned.envelope.receipt.retry_ordinal.is_some()
+    }) {
+        return Ok(());
+    }
+    Err(AppError::conflict(
+        "inbox_retry_processing_active",
+        format!("retry event {event_id} cannot continue while another inbox job is processing"),
+    ))
+}
+
+fn validate_retry_selection_material(
+    library: &Path,
+    spool: &Spool,
+    selection: &inbox_retry_store::RetrySelection,
+) -> Result<(), AppError> {
+    for item in &selection.items {
+        let _ = retry_original_envelope(library, spool, item)?;
+    }
+    Ok(())
+}
+
+fn retry_original_envelope(
+    library: &Path,
+    spool: &Spool,
+    item: &inbox_retry_store::RetrySelectionItem,
+) -> Result<Envelope, AppError> {
+    let envelope = read_envelope_at(&spool.failed, &item.original_job_id, false)?;
+    let receipt = &envelope.receipt;
+    if receipt.state != "failed"
+        || receipt.sequence != item.original_sequence
+        || receipt.ingestion_id != Some(item.original_delivery_id)
+        || receipt.last_error.as_ref().map(|error| error.code.as_str())
+            != Some(item.original_error_code.as_str())
+    {
+        return Err(AppError::unexpected(
+            "invalid_inbox_retry_original",
+            format!(
+                "failed job receipt {} does not match source delivery {}",
+                item.original_job_id, item.original_delivery_id
+            ),
+        ));
+    }
+    let metadata = fs::symlink_metadata(&envelope.source)?;
+    if !metadata.file_type().is_file() || receipt.source_size_bytes != Some(metadata.len()) {
+        return Err(AppError::unexpected(
+            "invalid_inbox_retry_original",
+            format!(
+                "failed job {} has changed source material",
+                item.original_job_id
+            ),
+        ));
+    }
+    let bytes = fs::read(&envelope.source)?;
+    if let Some(expected) = receipt.source_sha256.as_deref()
+        && sha256_hex(&bytes) != expected
+    {
+        return Err(AppError::unexpected(
+            "inbox_source_changed",
+            format!(
+                "failed job {} source digest has changed",
+                item.original_job_id
+            ),
+        ));
+    }
+    let connection = db::open_read(library)?;
+    match item.original_work_id {
+        Some(work_id) => {
+            let (label, digest) = connection.query_row(
+                "SELECT label, sha256 FROM works WHERE id = ?1",
+                [work_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )?;
+            if receipt.work.as_deref() != Some(&label)
+                || receipt.source_sha256.as_deref() != Some(&digest)
+            {
+                return Err(AppError::unexpected(
+                    "invalid_inbox_retry_original",
+                    format!(
+                        "failed job {} does not match retained work {work_id}",
+                        item.original_job_id
+                    ),
+                ));
+            }
+        }
+        None => {
+            return Err(AppError::unexpected(
+                "inbox_retry_original_not_retained",
+                format!(
+                    "failed job {} has no retained work identity and cannot be retried; deliver corrected source material as a new job",
+                    item.original_job_id
+                ),
+            ));
+        }
+    }
+    Ok(envelope)
+}
+
+fn read_envelope_at(parent: &Path, id: &str, recovered: bool) -> Result<Envelope, AppError> {
+    validate_requested_job_id(id)?;
+    let directory = parent.join(id);
+    match fs::symlink_metadata(&directory) {
+        Ok(metadata) if metadata.file_type().is_dir() => {}
+        Ok(_) => {
+            return Err(AppError::unexpected(
+                "invalid_job_envelope",
+                format!(
+                    "inbox job envelope is not a directory: {}",
+                    directory.display()
+                ),
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(AppError::not_found(
+                "inbox_retry_material_not_found",
+                format!("inbox job archive was not found: {id}"),
+            ));
+        }
+        Err(error) => return Err(error.into()),
+    }
+    let source = sole_material(&directory.join("material"))?.ok_or_else(|| {
+        AppError::unexpected(
+            "invalid_job_envelope",
+            format!("inbox job {id} has no source material"),
+        )
+    })?;
+    let (receipt, _) = read_receipt(&directory.join("job.json"), id, &source)?;
+    validate_receipt(&receipt, id, &source)?;
+    Ok(Envelope {
+        id: id.to_owned(),
+        directory,
+        source,
+        expected_identity: None,
+        receipt,
+        recovered,
+    })
+}
+
+fn publish_retry_children(
+    library: &Path,
+    spool: &Spool,
+    event_id: i64,
+    recover_published: bool,
+) -> Result<(), AppError> {
+    if recover_published {
+        recover_published_retry_children(library, spool, event_id)?;
+    }
+    let report = inbox_retry_store::event_report(&db::open_read(library)?, event_id)?;
+    for item in report
+        .items
+        .iter()
+        .filter(|item| item.child_job_id.is_none())
+    {
+        let selection_item = inbox_retry_store::RetrySelectionItem {
+            ordinal: item.ordinal,
+            original_job_id: item.original_job_id.clone(),
+            original_sequence: item.original_sequence,
+            original_delivery_id: item.original_delivery_id,
+            original_completed_at: item.original_completed_at.clone(),
+            original_error_code: item.original_error_code.clone(),
+            original_error_message: item.original_error_message.clone(),
+            original_work_id: item.original_work_id,
+            already_selected_by: None,
+            already_selected_child_job_id: None,
+            already_selected_child_delivery_id: None,
+        };
+        let original = retry_original_envelope(library, spool, &selection_item)?;
+        let retry_reconciliation_id = eligible_retry_reconciliation(
+            library,
+            item.original_work_id,
+            original.receipt.reconciliation_id,
+        )?;
+        let child = publish_retry_child(
+            spool,
+            event_id,
+            item.ordinal,
+            item.original_delivery_id,
+            &item.original_job_id,
+            retry_reconciliation_id,
+            &original.source,
+        )?;
+        inbox_retry_store::link_child_job(
+            &db::open_write(library)?,
+            event_id,
+            item.ordinal,
+            &child.id,
+            child.sequence,
+        )?;
+    }
+    Ok(())
+}
+
+fn eligible_retry_reconciliation(
+    library: &Path,
+    original_work_id: Option<i64>,
+    reconciliation_id: Option<i64>,
+) -> Result<Option<i64>, AppError> {
+    let Some(reconciliation_id) = reconciliation_id else {
+        return Ok(None);
+    };
+    let connection = db::open_read(library)?;
+    let record = reconciliation_by_id(&connection, reconciliation_id)?;
+    if Some(record.work_id) != original_work_id {
+        return Err(AppError::unexpected(
+            "invalid_inbox_retry_original",
+            format!(
+                "reconciliation {reconciliation_id} does not belong to its failed source delivery"
+            ),
+        ));
+    }
+    match record.status.as_str() {
+        "applied" | "recorded" => Ok(Some(record.id)),
+        "pending" if record.base_revision == revision(&connection)? => Ok(Some(record.id)),
+        "pending" | "superseded" => Ok(None),
+        other => Err(AppError::database(
+            "invalid_reconciliation",
+            format!("reconciliation {reconciliation_id} has invalid status {other:?}"),
+        )),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn publish_retry_child(
+    spool: &Spool,
+    event_id: i64,
+    ordinal: i64,
+    original_delivery_id: i64,
+    original_job_id: &str,
+    retry_reconciliation_id: Option<i64>,
+    source: &Path,
+) -> Result<RegisteredJob, AppError> {
+    let staged = stage_enqueue_source(
+        spool,
+        source,
+        usize::try_from(ordinal).map_err(|_| {
+            AppError::unexpected("invalid_inbox_retry_item", "retry ordinal is invalid")
+        })?,
+    )?;
+    let result = (|| {
+        let _control = spool.acquire_control_lock()?;
+        if !spool.pause_requested()? {
+            return Err(AppError::conflict(
+                "inbox_retry_requires_pause",
+                "retry event publication requires the inbox to remain paused",
+            ));
+        }
+        if spool.maintenance_requested()? {
+            return Err(AppError::conflict(
+                "inbox_maintenance_active",
+                "inbox maintenance prevents retry event publication",
+            ));
+        }
+        let mut index = read_index(spool)?;
+        repair_sequence_high_water(spool, &mut index)?;
+        let sequence = index.next_sequence;
+        index.next_sequence = sequence.checked_add(1).ok_or_else(|| {
+            AppError::unexpected("inbox_sequence_overflow", "inbox sequence is exhausted")
+        })?;
+        write_index(&spool.index, &index)?;
+
+        let id = available_job_id(spool, sequence);
+        let mut receipt = new_receipt(&id, sequence, &staged.name, &staged.metadata)?;
+        receipt.priority = JobPriority::Priority;
+        receipt.retry_event_id = Some(event_id);
+        receipt.retry_ordinal = Some(u64::try_from(ordinal).map_err(|_| {
+            AppError::unexpected("invalid_inbox_retry_item", "retry ordinal is invalid")
+        })?);
+        receipt.retry_of_job_id = Some(original_job_id.to_owned());
+        receipt.retry_of_ingestion_id = Some(original_delivery_id);
+        receipt.retry_reconciliation_id = retry_reconciliation_id;
+        let envelope = Envelope {
+            id: id.clone(),
+            directory: staged.directory.clone(),
+            source: staged.source.clone(),
+            expected_identity: Some(FileIdentity::from(&fs::symlink_metadata(&staged.source)?)),
+            receipt,
+            recovered: false,
+        };
+        write_receipt(&envelope)?;
+        let target = spool.queued.join(&id);
+        fs::rename(&envelope.directory, &target).map_err(|error| {
+            AppError::unexpected(
+                "inbox_retry_publish_failed",
+                format!("unable to publish retry child {id}: {error}"),
+            )
+        })?;
+        Ok(RegisteredJob::from(&envelope))
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir_all(&staged.directory);
+    }
+    result
+}
+
+fn recover_published_retry_children(
+    library: &Path,
+    spool: &Spool,
+    event_id: i64,
+) -> Result<(), AppError> {
+    let report = inbox_retry_store::event_report(&db::open_read(library)?, event_id)?;
+    let expected = report
+        .items
+        .iter()
+        .map(|item| (item.ordinal, item))
+        .collect::<BTreeMap<_, _>>();
+    let index = read_index(spool)?;
+    let mut found = BTreeMap::<i64, String>::new();
+    for parent in [
+        &spool.queued,
+        &spool.processing,
+        &spool.done,
+        &spool.duplicates,
+        &spool.failed,
+        &spool.skipped,
+    ] {
+        for scanned in scan_envelopes_at(parent, &index, false)? {
+            let receipt = &scanned.envelope.receipt;
+            if receipt.retry_event_id != Some(event_id) {
+                continue;
+            }
+            let ordinal = receipt
+                .retry_ordinal
+                .and_then(|value| i64::try_from(value).ok())
+                .ok_or_else(|| {
+                    AppError::unexpected("invalid_job_receipt", "retry child has no valid ordinal")
+                })?;
+            let item = expected.get(&ordinal).ok_or_else(|| {
+                AppError::unexpected(
+                    "invalid_job_receipt",
+                    format!(
+                        "retry child {} names unknown item {ordinal}",
+                        scanned.envelope.id
+                    ),
+                )
+            })?;
+            if receipt.retry_of_job_id.as_deref() != Some(&item.original_job_id)
+                || receipt.retry_of_ingestion_id != Some(item.original_delivery_id)
+            {
+                return Err(AppError::unexpected(
+                    "invalid_job_receipt",
+                    format!(
+                        "retry child {} does not match event {event_id} item {ordinal}",
+                        scanned.envelope.id
+                    ),
+                ));
+            }
+            if found.insert(ordinal, scanned.envelope.id.clone()).is_some() {
+                return Err(AppError::unexpected(
+                    "invalid_inbox_retry_publication",
+                    format!("retry event {event_id} has two children for item {ordinal}"),
+                ));
+            }
+            inbox_retry_store::link_child_job(
+                &db::open_write(library)?,
+                event_id,
+                ordinal,
+                &scanned.envelope.id,
+                scanned.envelope.receipt.sequence,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn run_retry_event(
+    library: &Path,
+    config: &Config,
+    spool: &Spool,
+    event_id: i64,
+    forward_progress: bool,
+) -> Result<CommandOutput, AppError> {
+    let initial = inbox_retry_store::event_report(&db::open_read(library)?, event_id)?;
+    let existing_unsuccessful = initial
+        .items
+        .iter()
+        .filter(|item| matches!(item.outcome.as_str(), "failed" | "skipped"))
+        .filter_map(|item| item.child_job_id.clone())
+        .collect::<BTreeSet<_>>();
+    let settings = ModelSettings::new(config.liaison.quality, config.liaison.model.as_deref());
+    let runner = Runner::for_program(&config.liaison.codex);
+    let mut auth_preflight_complete = false;
+    let mut summary = empty_run_summary(spool);
+
+    for initial_item in initial.items {
+        let child_job_id = initial_item.child_job_id.as_deref().ok_or_else(|| {
+            AppError::unexpected(
+                "inbox_retry_publication_incomplete",
+                format!(
+                    "retry event {event_id} item {} has no child job",
+                    initial_item.ordinal
+                ),
+            )
+        })?;
+        let processing_exists = spool.processing.join(child_job_id).is_dir();
+        if !processing_exists && matches!(initial_item.outcome.as_str(), "applied" | "recorded") {
+            continue;
+        }
+        if !processing_exists
+            && matches!(initial_item.outcome.as_str(), "failed" | "skipped")
+            && existing_unsuccessful.contains(child_job_id)
+        {
+            continue;
+        }
+
+        let mut envelope = retry_child_envelope(spool, event_id, &initial_item)?;
+        if envelope.receipt.attempts == 0 && !auth_preflight_complete {
+            if let Err(error) = runner.preflight_auth() {
+                inbox_retry_store::halt(
+                    &db::open_write(library)?,
+                    event_id,
+                    error.code(),
+                    &error.to_string(),
+                )?;
+                return Err(error);
+            }
+            auth_preflight_complete = true;
+        }
+        if envelope.receipt.state == "queued" {
+            let _control = spool.acquire_control_lock()?;
+            if !spool.pause_requested()? || spool.maintenance_requested()? {
+                return Err(AppError::conflict(
+                    "inbox_retry_boundary_changed",
+                    "retry event stopped because the inbox control boundary changed",
+                ));
+            }
+            envelope = dispatch(spool, envelope)?;
+        }
+        if let Err(error) = process_one(
+            library,
+            spool,
+            envelope,
+            &settings,
+            &runner,
+            forward_progress,
+            &mut summary,
+        ) {
+            let terminal = inbox_retry_store::event_report(&db::open_read(library)?, event_id)?;
+            let item = terminal
+                .items
+                .iter()
+                .find(|item| item.child_job_id.as_deref() == Some(child_job_id));
+            let code = item
+                .and_then(|item| item.child_error_code.as_deref())
+                .unwrap_or_else(|| error.code());
+            let message = error.to_string();
+            inbox_retry_store::halt(&db::open_write(library)?, event_id, code, &message)?;
+            return Err(AppError::unexpected(
+                "inbox_retry_event_halted",
+                format!("retry event {event_id} halted after child {child_job_id}: {message}"),
+            ));
+        }
+
+        let after = inbox_retry_store::event_report(&db::open_read(library)?, event_id)?;
+        let item = after
+            .items
+            .iter()
+            .find(|item| item.child_job_id.as_deref() == Some(child_job_id))
+            .ok_or_else(|| {
+                AppError::unexpected(
+                    "inbox_retry_child_not_found",
+                    format!("retry child disappeared from event {event_id}: {child_job_id}"),
+                )
+            })?;
+        if matches!(item.outcome.as_str(), "failed" | "skipped")
+            && !existing_unsuccessful.contains(child_job_id)
+            && !permanent_source_error_code(item.child_error_code.as_deref())
+        {
+            let code = item
+                .child_error_code
+                .as_deref()
+                .unwrap_or("inbox_retry_failed");
+            let message = item
+                .child_error_message
+                .as_deref()
+                .unwrap_or("retry child failed");
+            inbox_retry_store::halt(&db::open_write(library)?, event_id, code, message)?;
+            return Err(AppError::unexpected(
+                "inbox_retry_event_halted",
+                format!("retry event {event_id} halted after child {child_job_id}: {message}"),
+            ));
+        }
+    }
+
+    inbox_retry_store::complete(&db::open_write(library)?, event_id)?;
+    let report = inbox_retry_store::event_report(&db::open_read(library)?, event_id)?;
+    retry_report_output(report, true)
+}
+
+fn retry_child_envelope(
+    spool: &Spool,
+    event_id: i64,
+    item: &inbox_retry_store::RetryItem,
+) -> Result<Envelope, AppError> {
+    let child_job_id = item.child_job_id.as_deref().ok_or_else(|| {
+        AppError::unexpected(
+            "inbox_retry_publication_incomplete",
+            "retry item has no child job",
+        )
+    })?;
+    let (parent, recovered) = if spool.processing.join(child_job_id).exists() {
+        (&spool.processing, true)
+    } else if spool.queued.join(child_job_id).exists() {
+        (&spool.queued, false)
+    } else {
+        return Err(AppError::not_found(
+            "inbox_retry_child_not_found",
+            format!("retry child envelope was not found: {child_job_id}"),
+        ));
+    };
+    let envelope = read_envelope_at(parent, child_job_id, recovered)?;
+    if envelope.receipt.retry_event_id != Some(event_id)
+        || envelope.receipt.retry_ordinal != u64::try_from(item.ordinal).ok()
+        || envelope.receipt.retry_of_job_id.as_deref() != Some(&item.original_job_id)
+        || envelope.receipt.retry_of_ingestion_id != Some(item.original_delivery_id)
+    {
+        return Err(AppError::unexpected(
+            "invalid_job_receipt",
+            format!("retry child {child_job_id} does not match event {event_id}"),
+        ));
+    }
+    Ok(envelope)
+}
+
+fn empty_run_summary(spool: &Spool) -> RunSummary {
+    RunSummary {
+        root: spool.root.display().to_string(),
+        settle_seconds: 0,
+        registered: 0,
+        attempted: 0,
+        applied: 0,
+        recorded: 0,
+        duplicates: 0,
+        failed: 0,
+        skipped: 0,
+        recovered: 0,
+        remaining: 0,
+        settling: 0,
+        ignored: 0,
+        elapsed_seconds: 0.0,
+        queue_drained: false,
+        stopped_for_pause: false,
+        stopped_for_maintenance: false,
+    }
+}
+
+fn retry_report_output(
+    report: inbox_retry_store::RetryEventReport,
+    mutation: bool,
+) -> Result<CommandOutput, AppError> {
+    let mut human = format!(
+        "Retry event {} — {}\nWindow: {} through {}\nReason: {}\nCreated: {}; ready: {}; completed: {}\nSelected: {}; attempted: {}; succeeded: {} ({} applied, {} recorded); unsuccessful: {} ({} failed, {} skipped); remaining: {}",
+        report.event.id,
+        report.event.state,
+        report.event.from_job_id,
+        report.event.through_job_id,
+        report.event.reason.as_deref().map_or_else(
+            || "none".to_owned(),
+            |reason| render_terminal_text(reason, false)
+        ),
+        report.event.created_at,
+        report.event.ready_at.as_deref().unwrap_or("not ready"),
+        report
+            .event
+            .completed_at
+            .as_deref()
+            .unwrap_or("not completed"),
+        report.summary.selected,
+        report.summary.attempted,
+        report.summary.succeeded,
+        report.summary.applied,
+        report.summary.recorded,
+        report.summary.unsuccessful,
+        report.summary.failed,
+        report.summary.skipped,
+        report.summary.remaining,
+    );
+    if let Some(halt) = &report.event.last_halt {
+        let _ = write!(
+            human,
+            "\nLast halt: {}  {}  {}",
+            halt.halted_at,
+            render_terminal_text(&halt.code, false),
+            render_terminal_text(&halt.message, false),
+        );
+    }
+    for item in &report.items {
+        let child = item.child_job_id.as_deref().unwrap_or("not published");
+        let _ = write!(
+            human,
+            "\n{} ({}) -> {} ({})",
+            item.original_job_id, item.original_error_code, child, item.outcome
+        );
+    }
+    let output = CommandOutput::new(serde_json::to_value(report)?, human);
+    Ok(if mutation { output.mutation() } else { output })
+}
+
 pub(crate) fn prioritize(
     config: &Config,
     args: &InboxPriorityArgs,
@@ -976,6 +1777,18 @@ fn set_priority(
         return Err(AppError::conflict(
             "inbox_job_not_queued",
             format!("inbox job {} is no longer queued", scanned.envelope.id),
+        ));
+    }
+    if let Some(scanned) = selected
+        .iter()
+        .find(|scanned| scanned.envelope.receipt.retry_event_id.is_some())
+    {
+        return Err(AppError::conflict(
+            "inbox_retry_child_priority_fixed",
+            format!(
+                "retry child {} is controlled by its retry event",
+                scanned.envelope.id
+            ),
         ));
     }
     let mut changed = 0;
@@ -1391,7 +2204,16 @@ pub(crate) fn pause(config: &Config) -> Result<CommandOutput, AppError> {
     set_pause(config, true)
 }
 
-pub(crate) fn resume(config: &Config) -> Result<CommandOutput, AppError> {
+pub(crate) fn resume(library: &Path, config: &Config) -> Result<CommandOutput, AppError> {
+    if let Some(event) = inbox_retry_store::active_event(&db::open_read(library)?)? {
+        return Err(AppError::conflict(
+            "inbox_retry_event_active",
+            format!(
+                "retry event {} is {}; complete it before resuming ordinary inbox dispatch",
+                event.id, event.state
+            ),
+        ));
+    }
     set_pause(config, false)
 }
 
@@ -1745,14 +2567,29 @@ fn process_work(
     envelope.receipt.work = Some(work.label.clone());
     write_receipt(envelope)?;
 
-    if let Some(record) =
-        receipt_reconciliation(&connection, work.id, envelope.receipt.reconciliation_id)?
-    {
+    let reconciliation_id = envelope
+        .receipt
+        .reconciliation_id
+        .or(envelope.receipt.retry_reconciliation_id);
+    if let Some(record) = receipt_reconciliation(&connection, work.id, reconciliation_id)? {
+        let retry_pending_is_current = envelope.receipt.retry_reconciliation_id != Some(record.id)
+            || record.base_revision == revision(&connection)?;
         match record.status.as_str() {
-            "applied" | "recorded" | "pending" => {
+            "applied" | "recorded" => {
+                if envelope.receipt.reconciliation_id != Some(record.id) {
+                    envelope.receipt.reconciliation_id = Some(record.id);
+                    write_receipt(envelope)?;
+                }
                 return Ok(WorkProcessing::Reconciliation(record));
             }
-            "superseded" => {}
+            "pending" if retry_pending_is_current => {
+                if envelope.receipt.reconciliation_id != Some(record.id) {
+                    envelope.receipt.reconciliation_id = Some(record.id);
+                    write_receipt(envelope)?;
+                }
+                return Ok(WorkProcessing::Reconciliation(record));
+            }
+            "pending" | "superseded" => {}
             _ => {
                 return Err(AppError::database(
                     "invalid_reconciliation",
@@ -1761,7 +2598,7 @@ fn process_work(
             }
         }
     }
-    if !stored.new_work {
+    if !stored.new_work && envelope.receipt.retry_event_id.is_none() {
         drop(connection);
         if let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
             liaison::abandon_run(library, previous_token, work.id)?;
@@ -1785,7 +2622,7 @@ fn process_work(
         &work,
         settings,
         forward_progress,
-        false,
+        envelope.receipt.retry_event_id.is_some(),
         runner,
         Some(&run_token),
         &cancellation_requested,
@@ -1877,7 +2714,9 @@ fn recover_attempt(
         };
     }
 
-    if delivery_retention_is_duplicate(library, ingestion_id)? {
+    if envelope.receipt.retry_event_id.is_none()
+        && delivery_retention_is_duplicate(library, ingestion_id)?
+    {
         return complete_job(
             library,
             spool,
@@ -2255,14 +3094,20 @@ fn completion_from_receipt(receipt: &JobReceipt) -> Result<Completion, AppError>
 }
 
 fn permanent_source_error(error: &AppError) -> bool {
+    permanent_source_error_code(Some(error.code()))
+}
+
+fn permanent_source_error_code(code: Option<&str>) -> bool {
     matches!(
-        error.code(),
-        "input_not_utf8"
-            | "empty_work"
-            | "work_name_required"
-            | "invalid_label"
-            | "invalid_inbox_source"
-            | "work_name_exists"
+        code,
+        Some(
+            "input_not_utf8"
+                | "empty_work"
+                | "work_name_required"
+                | "invalid_label"
+                | "invalid_inbox_source"
+                | "work_name_exists"
+        )
     )
 }
 
@@ -2893,6 +3738,11 @@ fn read_receipt(path: &Path, id: &str, source: &Path) -> Result<(JobReceipt, u32
         RECEIPT_VERSION => serde_json::from_slice(&bytes)
             .map(|receipt| (receipt, RECEIPT_VERSION))
             .map_err(|error| invalid_receipt(path, &error)),
+        5 => {
+            let receipt: VersionFiveJobReceipt =
+                serde_json::from_slice(&bytes).map_err(|error| invalid_receipt(path, &error))?;
+            upgrade_version_five_receipt(receipt, id).map(|receipt| (receipt, 5))
+        }
         4 => {
             let receipt: VersionFourJobReceipt =
                 serde_json::from_slice(&bytes).map_err(|error| invalid_receipt(path, &error))?;
@@ -2920,6 +3770,49 @@ fn read_receipt(path: &Path, id: &str, source: &Path) -> Result<(JobReceipt, u32
     }
 }
 
+fn upgrade_version_five_receipt(
+    receipt: VersionFiveJobReceipt,
+    id: &str,
+) -> Result<JobReceipt, AppError> {
+    if receipt.version != 5 || receipt.id != id {
+        return Err(AppError::unexpected(
+            "invalid_job_receipt",
+            format!("version 5 job receipt does not match envelope {id}"),
+        ));
+    }
+    Ok(JobReceipt {
+        version: RECEIPT_VERSION,
+        id: receipt.id,
+        sequence: receipt.sequence,
+        priority: receipt.priority,
+        original_name: receipt.original_name,
+        original_name_base64: receipt.original_name_base64,
+        state: receipt.state,
+        attempts: receipt.attempts,
+        delivery_key: receipt.delivery_key,
+        retry_event_id: None,
+        retry_ordinal: None,
+        retry_of_job_id: None,
+        retry_of_ingestion_id: None,
+        retry_reconciliation_id: None,
+        ingestion_id: receipt.ingestion_id,
+        source_size_bytes: receipt.source_size_bytes,
+        source_created_at: receipt.source_created_at,
+        source_modified_at: receipt.source_modified_at,
+        first_seen_at: receipt.first_seen_at,
+        claimed_at: receipt.claimed_at,
+        started_at: receipt.started_at,
+        completed_at: receipt.completed_at,
+        source_sha256: receipt.source_sha256,
+        work: receipt.work,
+        reconciliation_id: receipt.reconciliation_id,
+        model_run_token: receipt.model_run_token,
+        result_status: receipt.result_status,
+        result_revision: receipt.result_revision,
+        last_error: receipt.last_error,
+    })
+}
+
 fn upgrade_version_four_receipt(
     receipt: VersionFourJobReceipt,
     id: &str,
@@ -2940,6 +3833,11 @@ fn upgrade_version_four_receipt(
         state: receipt.state,
         attempts: receipt.attempts,
         delivery_key: receipt.delivery_key,
+        retry_event_id: None,
+        retry_ordinal: None,
+        retry_of_job_id: None,
+        retry_of_ingestion_id: None,
+        retry_reconciliation_id: None,
         ingestion_id: receipt.ingestion_id,
         source_size_bytes: receipt.source_size_bytes,
         source_created_at: receipt.source_created_at,
@@ -2978,6 +3876,11 @@ fn upgrade_version_three_receipt(
         state: receipt.state,
         attempts: receipt.attempts,
         delivery_key: receipt.delivery_key,
+        retry_event_id: None,
+        retry_ordinal: None,
+        retry_of_job_id: None,
+        retry_of_ingestion_id: None,
+        retry_reconciliation_id: None,
         ingestion_id: receipt.ingestion_id,
         source_size_bytes: receipt.source_size_bytes,
         source_created_at: receipt.source_created_at,
@@ -3016,6 +3919,11 @@ fn upgrade_version_two_receipt(
         state: receipt.state,
         attempts: receipt.attempts,
         delivery_key: receipt.delivery_key,
+        retry_event_id: None,
+        retry_ordinal: None,
+        retry_of_job_id: None,
+        retry_of_ingestion_id: None,
+        retry_reconciliation_id: None,
         ingestion_id: receipt.ingestion_id,
         source_size_bytes: receipt.source_size_bytes,
         source_created_at: receipt.source_created_at,
@@ -3162,6 +4070,11 @@ fn upgrade_legacy_receipt(
         state: "processing".to_owned(),
         attempts: legacy.attempts,
         delivery_key: format!("inbox:{id}:{}", legacy.created_at),
+        retry_event_id: None,
+        retry_ordinal: None,
+        retry_of_job_id: None,
+        retry_of_ingestion_id: None,
+        retry_reconciliation_id: None,
         ingestion_id: None,
         source_size_bytes: metadata.source_size_bytes,
         source_created_at: metadata.source_created_at,
@@ -3181,7 +4094,7 @@ fn upgrade_legacy_receipt(
 }
 
 fn ensure_ingestion(library: &Path, envelope: &mut Envelope) -> Result<i64, AppError> {
-    let connection = db::open_write(library)?;
+    let mut connection = db::open_write(library)?;
     let metadata = ingestion::SourceMetadata {
         source_name: envelope.receipt.original_name.clone(),
         source_size_bytes: envelope.receipt.source_size_bytes,
@@ -3189,14 +4102,18 @@ fn ensure_ingestion(library: &Path, envelope: &mut Envelope) -> Result<i64, AppE
         source_modified_at: envelope.receipt.source_modified_at.clone(),
         first_seen_at: envelope.receipt.first_seen_at.clone(),
     };
+    let transaction = connection.transaction()?;
     let ingestion_id = ingestion::begin(
-        &connection,
+        &transaction,
         &ingestion::NewIngestion {
             delivery_key: Some(&envelope.receipt.delivery_key),
             channel: "inbox",
             metadata: &metadata,
         },
     )?;
+    if let Some(event_id) = envelope.receipt.retry_event_id {
+        inbox_retry_store::link_child_delivery(&transaction, event_id, &envelope.id, ingestion_id)?;
+    }
     if envelope
         .receipt
         .ingestion_id
@@ -3208,8 +4125,11 @@ fn ensure_ingestion(library: &Path, envelope: &mut Envelope) -> Result<i64, AppE
         ));
     }
     if envelope.receipt.ingestion_id.is_none() {
+        transaction.commit()?;
         envelope.receipt.ingestion_id = Some(ingestion_id);
         write_receipt(envelope)?;
+    } else {
+        transaction.commit()?;
     }
     Ok(ingestion_id)
 }
@@ -3270,6 +4190,11 @@ fn new_receipt(
         state: "queued".to_owned(),
         attempts: 0,
         delivery_key: format!("inbox:{id}:{}", metadata.first_seen_at),
+        retry_event_id: None,
+        retry_ordinal: None,
+        retry_of_job_id: None,
+        retry_of_ingestion_id: None,
+        retry_reconciliation_id: None,
         ingestion_id: None,
         source_size_bytes: metadata.source_size_bytes,
         source_created_at: metadata.source_created_at.clone(),
@@ -3297,7 +4222,28 @@ fn validate_receipt(receipt: &JobReceipt, id: &str, source: &Path) -> Result<(),
     let retained_work_is_valid = receipt.source_sha256.is_some() == receipt.work.is_some();
     let identifiers_are_valid = receipt.ingestion_id.is_none_or(|value| value > 0)
         && receipt.reconciliation_id.is_none_or(|value| value > 0)
-        && receipt.result_revision.is_none_or(|value| value > 0);
+        && receipt.result_revision.is_none_or(|value| value > 0)
+        && receipt
+            .retry_reconciliation_id
+            .is_none_or(|value| value > 0);
+    let retry_is_valid = match (
+        receipt.retry_event_id,
+        receipt.retry_ordinal,
+        receipt.retry_of_job_id.as_deref(),
+        receipt.retry_of_ingestion_id,
+    ) {
+        (None, None, None, None) => receipt.retry_reconciliation_id.is_none(),
+        (Some(event_id), Some(_), Some(original_job_id), Some(original_ingestion_id)) => {
+            event_id > 0
+                && original_ingestion_id > 0
+                && original_job_id != receipt.id
+                && validate_requested_job_id(original_job_id).is_ok()
+                && receipt
+                    .ingestion_id
+                    .is_none_or(|ingestion_id| ingestion_id != original_ingestion_id)
+        }
+        _ => false,
+    };
     let optional_text_is_valid = [
         receipt.started_at.as_deref(),
         receipt.completed_at.as_deref(),
@@ -3362,6 +4308,7 @@ fn validate_receipt(receipt: &JobReceipt, id: &str, source: &Path) -> Result<(),
         || !attempt_is_valid
         || !retained_work_is_valid
         || !identifiers_are_valid
+        || !retry_is_valid
         || !optional_text_is_valid
         || !error_is_valid
         || !state_is_valid

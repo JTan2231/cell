@@ -244,12 +244,14 @@ the authenticated dispatch preflight. Follow the installation guide's
 [attended reauthentication sequence](docs/system-installation.md#attended-reauthentication)
 to pause, renew through `annals-usage`, verify, canary, and resume.
 
-Schema version 3 is an intentional fresh-state boundary. Its one-time installed
-cutover adds `--fresh-state` to the command above. That mode archives the old
-library, telemetry ledger, sidecars, and spool as one rollback generation,
-validates the empty replacement, imports the uncompleted backlog while
-preserving priority choices and sequence order within each lane, explicitly
-resumes it, and only then wakes launchd. See the
+The current schema is version 4. Normal deployment additively migrates a
+version-3 library to add bounded retry-event provenance while retaining its
+contents and spool. Version 3 remains the intentional fresh-state boundary;
+the one-time cutover from an older schema adds `--fresh-state` to the command
+above. That mode archives the old library, telemetry ledger, sidecars, and spool
+as one rollback generation, validates the empty replacement, imports the
+uncompleted backlog while preserving priority choices and sequence order
+within each lane, explicitly resumes it, and only then wakes launchd. See the
 [system installation guide](docs/system-installation.md) for the guarded
 sequence and recovery receipt.
 
@@ -265,6 +267,8 @@ annals inbox register
 annals inbox enqueue --priority ./report.md
 annals inbox prioritize JOB_ID
 annals inbox deprioritize JOB_ID
+annals inbox retry preview --from FIRST_FAILED_JOB --through LAST_FAILED_JOB
+annals inbox retry status
 annals inbox resume
 ```
 
@@ -287,12 +291,16 @@ minutes.
 `annals inbox pause` lets the current delivery finish and prevents the next
 queued job from starting. Timer activations continue registering arrivals
 while paused, and direct enqueue and queued-job priority changes remain
-available. `annals inbox resume` reopens dispatch but does not itself start a
-worker; use `annals inbox run` for immediate processing or wait for the next
+available. While paused and quiescent, two inclusive failed-job anchors can be
+previewed and started as one durable retry event. The event freezes its exact
+membership, preserves every original failure, and records the outcome of each
+fresh linked child; there is no retry-all command. `annals inbox resume` refuses
+an unfinished retry event, and otherwise reopens dispatch without starting a
+worker. Use `annals inbox run` for immediate processing or wait for the next
 LaunchAgent wake-up. The operator pause is independent of deployer maintenance
 and survives updates. The LaunchAgent runs only while that macOS user is logged
-in and wakes again at the next login. For migration, status, removal, and Linux
-systemd instructions, see the [system installation
+in and wakes again at the next login. For retry, migration, status, removal,
+and Linux systemd instructions, see the [system installation
 guide](docs/system-installation.md).
 
 See the [documentation index](docs/README.md) for the command, protocol,

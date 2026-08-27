@@ -13,8 +13,8 @@ use crate::change::{
 };
 use crate::cli::{
     ChangeCommand, ChangeSelectArgs, ChangeShowArgs, Cli, CliGraphDirection, Command,
-    ConceptCommand, ConceptPageArgs, ConceptShowArgs, GraphArgs, InboxCommand, IntegrateArgs,
-    LatelyArgs, PagedAtArgs, SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand,
+    ConceptCommand, ConceptPageArgs, ConceptShowArgs, GraphArgs, InboxCommand, InboxRetryCommand,
+    IntegrateArgs, LatelyArgs, PagedAtArgs, SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand,
 };
 use crate::config::Config;
 use crate::corpus::{
@@ -99,8 +99,16 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
             InboxCommand::Deprioritize(args) => inbox::deprioritize(config, args),
             InboxCommand::ImportBacklog(args) => inbox::import_backlog(config, &args.from),
             InboxCommand::Pause => inbox::pause(config),
-            InboxCommand::Resume => inbox::resume(config),
+            InboxCommand::Resume => inbox::resume(path, config),
             InboxCommand::Interrupt(args) => inbox::interrupt(path, config, args),
+            InboxCommand::Retry(command) => match command {
+                InboxRetryCommand::Preview(args) => inbox::retry_preview(path, config, args),
+                InboxRetryCommand::Start(args) => inbox::retry_start(path, config, args, !cli.json),
+                InboxRetryCommand::Status(args) => inbox::retry_status(path, args),
+                InboxRetryCommand::Continue(args) => {
+                    inbox::retry_continue(path, config, args, !cli.json)
+                }
+            },
             InboxCommand::Status => inbox::status(config),
         },
         Command::Change(command) => match command {
@@ -219,7 +227,7 @@ fn validate_library(path: &Path) -> Result<CommandOutput, AppError> {
 }
 
 fn backup(path: &Path, output: &Path) -> Result<CommandOutput, AppError> {
-    let connection = db::open_read(path)?;
+    let connection = db::open_backup_source(path)?;
     db::backup(&connection, output)?;
     Ok(CommandOutput::new(
         json!({ "output": output.display().to_string() }),

@@ -47,11 +47,15 @@ annals backup OUTPUT
 ```
 
 `init` creates revision zero and refuses to replace an existing library.
-`migrate` is an idempotent current-format check. Schema version 3 is a
-deliberate fresh-state boundary: the command rejects older libraries without
-mutating them and refuses libraries created by a newer executable. Use the
-macOS deployer's guarded `--fresh-state` cutover when replacing an older
-installed library.
+`migrate` upgrades a version-3 library to version 4 by adding bounded inbox
+retry provenance; it does not reinterpret works, deliveries, reconciliations,
+or corpus history. Version 3 remains the deliberate fresh-state boundary, so
+the command rejects libraries older than version 3 without mutating them and
+refuses libraries created by a newer executable. Repeating `migrate` on a
+version-4 library is an idempotent current-format check. Use the macOS
+deployer's guarded `--fresh-state` cutover when replacing a pre-version-3
+installed library. The version-3-to-4 migration is one transaction; failure
+leaves the library at version 3 without partial retry tables.
 `stats` reports revision and corpus, graph, work, reconciliation, history,
 model-run, and database-size information.
 
@@ -180,12 +184,18 @@ annals inbox run [--settle-seconds SECONDS]
 annals inbox pause
 annals inbox resume
 annals inbox interrupt JOB_ID --as failed|skipped [--reason TEXT]
+annals inbox retry preview --from JOB_ID --through JOB_ID
+annals inbox retry start --from JOB_ID --through JOB_ID [--reason TEXT]
+annals inbox retry status [EVENT_ID]
+annals inbox retry continue EVENT_ID
 annals inbox status
 ```
 
-All commands require an `[inbox]` config section with `root`. The optional
-config key `settle_seconds` defaults to 60; the `register` and `run` flags
-override it. A zero settling interval is allowed. `status` is read-only.
+All commands except `inbox retry status` require an `[inbox]` config section
+with `root`; retry-event reports are durable library reads and can be selected
+with `--library` alone. The optional config key `settle_seconds` defaults to 60;
+the `register` and `run` flags override it. A zero settling interval is allowed.
+`inbox status`, `inbox retry preview`, and `inbox retry status` are read-only.
 
 `inbox register` moves every settled file into a durable queued job without
 processing it. Each file moves, without changing its basename or bytes, into
@@ -214,7 +224,8 @@ can precede newer priority jobs. Requesting the lane a job already has is an
 idempotent success. The result reports the spool root, requested and changed
 counts, selected priority, requested jobs, the priority-queued count, and the
 next job. Naming a processing or terminal job, or an unknown job ID, is an
-error rather than a request to alter history.
+error rather than a request to alter history. A retry child is controlled by
+its retry event and cannot be prioritized or deprioritized independently.
 
 `inbox run` takes the activation-long spool lock, performs the same
 registration phase, and drains jobs sequentially while processing is allowed.
@@ -264,8 +275,10 @@ registering arrivals, leaving the next envelope in `queued/`.
 a worker; dispatch resumes on the next external scheduler activation or an
 explicit `inbox run`. The operator-owned `.paused` state is independent of the
 Annals-owned `.maintenance` deployment boundary, and `resume` never removes
-maintenance. Maintenance blocks registration, direct enqueue, priority
-changes, repair, and dispatch.
+maintenance. It refuses to clear the pause while a retry event is preparing,
+running, or halted, so ordinary dispatch cannot interleave with an unfinished
+event. Maintenance blocks registration, direct enqueue, priority changes,
+repair, retry execution, and ordinary dispatch.
 
 `inbox interrupt` durably requests that the named processing job stop and
 requires an explicit `failed` or `skipped` disposition. `--reason` records
@@ -297,6 +310,113 @@ conclusively retained duplicate or the job's exact linked reconciliation. If
 there is no durable success to finish, it fails and archives the interrupted
 job. A durable interrupt request preserves its selected failed or skipped
 disposition through recovery.
+
+### Bounded retry events
+
+`inbox retry preview` is a read-only selection check. Both `--from` and
+`--through` are required and must name terminal failed inbox jobs. Annals orders
+failed source deliveries by `(completed_at, delivery ID)`, resolves both
+anchors in that order, and selects the inclusive interval. This is failure
+order, not job sequence: priority dispatch can make those orders differ. The
+preview reports the ordered candidate jobs, delivery IDs, failure details, and
+count without creating an event or a child job. A failed delivery already used
+as an original in another event remains visible in its interval but is marked
+ineligible with that prior event and any child provenance. Reversed anchors and
+an anchor that is absent, not failed, or not an inbox delivery are errors. The
+whole preview also fails if any selected delivery lacks its matching terminal
+envelope, unchanged retained source identity, or archived material. Only
+failures after work retention are retryable: a pre-retention source error has
+no durable digest against which Annals can validate its archive, so correct the
+source and deliver it as a new job instead. There are no omitted, open-ended,
+or retry-all bounds. An operator-skipped job is not a failed-job candidate even
+though its source delivery has failed status. The two anchors may be equal to
+select one failed job.
+
+JSON preview output contains `from_job_id`, `through_job_id`, and ordered
+`items`. Each item exposes its zero-based `ordinal`, original job, sequence,
+delivery, completion time, and error. Nullable `already_selected_by`,
+`already_selected_child_job_id`, and
+`already_selected_child_delivery_id` carry prior retry provenance; null means
+the item is eligible.
+
+`inbox retry start` resolves the same interval and freezes that exact ordered
+membership in one durable event before processing it. The optional reason must
+be trimmed, nonempty operator context of at most 1,000 characters; Annals
+retains it with the event. Start requires the operator pause to be set, no
+processing job, no other unfinished retry event, and no deployment maintenance.
+It rejects the complete window when any member is ineligible and never silently
+drops a member.
+Ordinary arrivals remain intact and registrable while the pause is set, but the
+retry runner's run lock excludes a simultaneous scheduled activation and no
+ordinary queued job interleaves with the event.
+
+For every frozen member, Annals preserves the original failed envelope and
+failed delivery record and creates a fresh retry child job and source delivery
+linked to both the event and original. The child envelope copies the original
+unchanged source material; it never moves material out of `failed/`. Retry
+children run sequentially in the frozen failure order and each has one attempt.
+They are event-controlled even if Annals uses a spool priority lane internally;
+ordinary priority dispatch does not select or order them during the event.
+Their explicit retry intent bypasses the fresh-job duplicate cutoff:
+recognizing already retained bytes does not end the child with result
+`retained`. Annals instead continues into integration. It may finish or reuse
+the exact pending, applied, or recorded reconciliation owned by the original
+failed attempt when its ownership and context still validate; otherwise it
+begins a fresh examination. Retry does not blindly force reexamination and
+never adopts an unrelated reconciliation for the same work. In particular, a
+pending record is reusable only while HEAD still equals its base; a stale or
+superseded record is not handed to the child.
+
+Publication is recoverable across the SQLite-and-spool boundary. An event is
+visible as `preparing` while its durable frozen items are being published, and
+recovery creates or recognizes each one exact child without widening the
+selection or duplicating an attempt. It becomes `running` while children are
+processed. Before the first zero-attempt child claim in each start or continue
+invocation, Annals performs the same authenticated account preflight as
+ordinary dispatch. A failed preflight changes the event to `halted` but leaves
+every remaining child queued with attempts zero and creates no child delivery
+or model-run row. A known item-local failure terminalizes its child and
+advances to the next frozen item. An unexpected model, runner, or runtime
+failure terminalizes the current child, changes the event to `halted`, exits
+nonzero, and leaves later members `not_attempted`. Interrupting an active retry
+child with either disposition also halts the event after archiving that member;
+its outcome is `failed` or `skipped` as requested. The outer pause is already
+set, so this is the operator stop mechanism for the event.
+
+`inbox retry continue EVENT_ID` requires the same paused, quiescent,
+non-maintenance state as start. It completes interrupted publication when
+needed, accepts a crash-stale `running` event after acquiring the run lock, and
+advances only the selected event's `not_attempted` items. It never retries a
+failed or skipped child. Continuing a completed event is a conflict; an unknown
+event ID is not found. An event becomes `completed` only when all frozen items
+are terminal. A later bounded event may select a failed child, making another
+attempt an explicit chain; use the same child for both bounds when it is the
+only desired member.
+
+`inbox retry status EVENT_ID` reports the durable event bounds, reason, state,
+lifecycle times, latest halt details, a summary, and ordered items. The summary
+reports selected, attempted, succeeded, unsuccessful, and remaining totals plus
+each outcome count. Each item pairs the original job, delivery, and failure
+with its linked child job and delivery and derives one outcome:
+`not_attempted`, `processing`, `applied`, `recorded`, `failed`, or `skipped`.
+The aggregates are derived too, not copied counters, so the report remains
+consistent with delivery history after recovery. A missing child or a queued
+zero-attempt child is `not_attempted`. Without an event ID, `status` lists the
+20 most recent completed events plus the one unfinished event, if present.
+Neither form mutates the event or spool.
+
+The JSON event report has `event`, `summary`, and `items`. `event` carries the
+bounds, optional reason, lifecycle fields, optional `last_halt`, and member
+count. `summary` carries the totals described above. Each item repeats its
+frozen original snapshot, adds nullable child job, sequence, delivery,
+lifecycle, result, revision, and error fields, and ends with its derived
+`outcome`. The no-ID list form returns an `events` array of event records.
+
+Start and continue exit zero when the event reaches `completed`, even when its
+durable report contains item-local `failed` or `skipped` outcomes. They exit
+nonzero when preflight, an unexpected processing error, or an operator
+interruption leaves the event `halted`. The event report, not the process exit
+code alone, is the success/failure accounting surface.
 
 Human `inbox status` reports incoming files split into ready and settling,
 the total queued count and its priority subset, processing envelopes, the next
@@ -386,6 +506,11 @@ independent of the terminal result:
 | `pending` | Integration completed with a reconciliation awaiting application. |
 | `applied` | Integration completed and created the reported corpus revision. |
 | `recorded` | Integration completed without a corpus change. |
+
+A retry child likewise appears as a new inbox source delivery, while its
+original remains failed at its original completion time. `lately` reports each
+delivery independently; use `inbox retry status` for their event and
+parent-child relationship.
 
 A processing delivery has not reached a terminal outcome and has no result.
 An inbox job-processing error fails the delivery on its first attempt.

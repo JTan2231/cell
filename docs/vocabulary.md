@@ -182,6 +182,37 @@ manual integration, including an input whose bytes are already retained and
   `skipped`, while its already-started source delivery has status `failed` and
   error code `inbox_job_skipped`.
 
+**Inbox retry event / retry item / retry child**
+: An inbox retry event is one durable, bounded operator recovery action. Its
+  required `from` and `through` anchors name failed inbox jobs and are inclusive
+  in source-delivery failure order: `completed_at`, then delivery ID. Annals
+  freezes the selected retry items when the event starts, so later failures
+  cannot enter it. There is no open-ended or retry-all event. Each retry item
+  retains the original failed job and delivery and links them to at most one
+  fresh retry child job and source delivery. The originals remain unchanged.
+  A retry child has one processing attempt, like every other inbox job, but its
+  explicit retry intent carries it past the ordinary fresh-duplicate retention
+  boundary and into integration. It may reuse the exact reconciliation owned
+  by the original attempt when that record is valid; otherwise it starts a new
+  examination. An event report derives each item's current outcome from the
+  linked retry child rather than rewriting original history.
+  Only a failed job with retained-work identity is eligible; a pre-retention
+  source failure must be corrected and delivered as a new job.
+
+**Retry event state / retry item outcome**
+: A retry event is `preparing` while its frozen items are being published as
+  retry children, `running` while those children are being processed, `halted`
+  after a failed authenticated preflight or an unexpected model, runner, or
+  runtime failure, or when an operator interrupts the active retry child, and
+  `completed` after every frozen item reaches a terminal outcome. A retry item
+  is `not_attempted`, `processing`, `applied`, `recorded`, `failed`, or
+  `skipped`.
+  `not_attempted` covers an item whose child is not yet published or is still
+  queued with zero attempts. Continuing a halted event advances only those
+  items; it never gives a failed retry child another attempt. A later event may
+  select that failed child as one of its own bounded originals, forming an
+  explicit retry chain rather than changing either earlier attempt.
+
 **Work and delivery times**
 : `first_retained_at` belongs to a work and records when those content-addressed
   bytes first entered the library. It remains unchanged across duplicate
@@ -402,6 +433,8 @@ Several independent lifecycles reuse words such as `applied`, `recorded`, and
 | Inbox job receipt | state | `queued`, `processing`, `done`, `failed`, `skipped` |
 | Inbox job receipt | `priority` | `normal`, `priority` |
 | Inbox job receipt | `result_status` | `retained`, `applied`, `recorded` |
+| Inbox retry event | state | `preparing`, `running`, `halted`, `completed` |
+| Inbox retry item | outcome | `not_attempted`, `processing`, `applied`, `recorded`, `failed`, `skipped` |
 | Commit | kind | `change`, `shake`, `revert` |
 | Shake invocation | status | `unchanged`, `confirmation_required`, `cancelled`, `applied` |
 | Recent activity | `time_basis` | `created`, `modified`, `first-seen`, `ingested`, `completed` |
@@ -435,6 +468,8 @@ details. These expressions simplify the language without changing the model.
 | source delivery | source arrival or import attempt |
 | delivery record | source history entry |
 | priority inbox job | queued source to run before normal queued sources |
+| inbox retry event | bounded recovery run for a named stretch of failed sources |
+| retry child | new linked attempt for one failed source |
 | corpus | evidence-backed map of ideas |
 | concept | idea |
 | concept label | idea label or idea name |
@@ -488,6 +523,10 @@ and grounded in exact source language.
   latter.
 - Distinguish a job's immutable sequence from its binary inbox priority lane.
   Priority dispatch does not preempt a processing delivery.
+- Describe a retry event by both inclusive failed-job anchors. Do not call a
+  retry event a retry-all operation or imply that it selects future failures.
+- Distinguish an original failed job and delivery from their fresh retry child;
+  retry never changes or reopens the originals.
 - Qualify *label* as a work label or concept label when ambiguity is possible.
 - Qualify *root* as a root concept or spool root when ambiguity is possible.
 - Say *reconciliation request*, *reconciliation record*, *operation*, *effect*,

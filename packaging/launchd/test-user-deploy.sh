@@ -120,6 +120,7 @@ case "$command" in
         cp "$state/annals.db" "$1"
         ;;
     migrate)
+        printf '%s\n' migrated >>"$state/annals.db"
         : >"$state/migrated"
         ;;
     *)
@@ -416,6 +417,7 @@ chmod 0755 "$alternate_codex"
 : >"$fail_bootstrap"
 config_before_rejection=$(shasum -a 256 "$state/config.toml" | awk '{print $1}')
 usage_config_before_rejection=$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')
+library_before_rejection=$(shasum -a 256 "$state/annals.db" | awk '{print $1}')
 if ANNALS_TEST_CODEX="$alternate_codex" \
     deploy >"$temporary/rejected.out" 2>"$temporary/rejected.err"
 then
@@ -431,6 +433,7 @@ fi
 [ ! -e "$kickstart_order_error" ]
 [ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" = "$config_before_rejection" ]
 [ "$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')" = "$usage_config_before_rejection" ]
+[ "$(shasum -a 256 "$state/annals.db" | awk '{print $1}')" = "$library_before_rejection" ]
 grep -Fx "codex = \"$codex\"" "$state/usage.toml" >/dev/null
 
 : >"$fail_kickstart"
