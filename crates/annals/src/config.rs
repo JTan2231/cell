@@ -26,22 +26,12 @@ pub(crate) struct InboxConfig {
     pub settle_seconds: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct LiaisonConfig {
     pub quality: ModelQuality,
     pub model: Option<String>,
-    pub codex: PathBuf,
-}
-
-impl Default for LiaisonConfig {
-    fn default() -> Self {
-        Self {
-            quality: ModelQuality::default(),
-            model: None,
-            codex: PathBuf::from("annals-usage"),
-        }
-    }
+    pub nucleus_socket: Option<PathBuf>,
 }
 
 impl Config {
@@ -83,6 +73,11 @@ impl Config {
         {
             inbox.root = directory.join(&inbox.root);
         }
+        if let Some(socket) = &mut self.liaison.nucleus_socket
+            && socket.is_relative()
+        {
+            *socket = directory.join(&*socket);
+        }
     }
 
     fn validate(&self) -> Result<(), AppError> {
@@ -104,10 +99,15 @@ impl Config {
                 "inbox.root must not be empty",
             ));
         }
-        if self.liaison.codex.as_os_str().is_empty() {
+        if self
+            .liaison
+            .nucleus_socket
+            .as_ref()
+            .is_some_and(|socket| socket.as_os_str().is_empty())
+        {
             return Err(AppError::invalid(
                 "invalid_config",
-                "liaison.codex must not be empty",
+                "liaison.nucleus_socket must not be empty",
             ));
         }
         if self

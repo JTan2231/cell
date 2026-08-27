@@ -10,11 +10,11 @@ const CONFIG_NAME: &str = "usage.toml";
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct UsageConfig {
-    pub(crate) codex: PathBuf,
+    pub(crate) nucleus: PathBuf,
+    pub(crate) nucleus_socket: Option<PathBuf>,
     pub(crate) database: PathBuf,
     pub(crate) library: PathBuf,
     pub(crate) spool: PathBuf,
-    pub(crate) codex_home: PathBuf,
     #[serde(skip)]
     pub(crate) path: PathBuf,
 }
@@ -22,11 +22,11 @@ pub(crate) struct UsageConfig {
 impl Default for UsageConfig {
     fn default() -> Self {
         Self {
-            codex: PathBuf::from("codex"),
+            nucleus: PathBuf::from("nucleus"),
+            nucleus_socket: None,
             database: PathBuf::from("usage.db"),
             library: PathBuf::from("annals.db"),
             spool: PathBuf::from("spool"),
-            codex_home: PathBuf::from("codex-home"),
             path: PathBuf::new(),
         }
     }
@@ -48,26 +48,34 @@ impl UsageConfig {
         })?;
         config.validate()?;
         let directory = path.parent().unwrap_or_else(|| Path::new("."));
-        resolve_relative(&mut config.codex, directory);
+        resolve_relative(&mut config.nucleus, directory);
+        if let Some(socket) = &mut config.nucleus_socket {
+            resolve_relative(socket, directory);
+        }
         resolve_relative(&mut config.database, directory);
         resolve_relative(&mut config.library, directory);
         resolve_relative(&mut config.spool, directory);
-        resolve_relative(&mut config.codex_home, directory);
         config.path = path;
         Ok(config)
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
         for (name, path) in [
-            ("codex", &self.codex),
+            ("nucleus", &self.nucleus),
             ("database", &self.database),
             ("library", &self.library),
             ("spool", &self.spool),
-            ("codex_home", &self.codex_home),
         ] {
             if path.as_os_str().is_empty() {
                 return Err(ConfigError::EmptyPath(name));
             }
+        }
+        if self
+            .nucleus_socket
+            .as_ref()
+            .is_some_and(|socket| socket.as_os_str().is_empty())
+        {
+            return Err(ConfigError::EmptyPath("nucleus_socket"));
         }
         Ok(())
     }
@@ -135,16 +143,19 @@ mod tests {
         let path = directory.path().join("usage.toml");
         fs::write(
             &path,
-            "codex = \"bin/codex\"\ndatabase = \"usage.db\"\n\
-             library = \"annals.db\"\nspool = \"spool\"\ncodex_home = \"codex-home\"\n",
+            "nucleus = \"bin/nucleus\"\nnucleus_socket = \"run/nucleus.sock\"\n\
+             database = \"usage.db\"\nlibrary = \"annals.db\"\nspool = \"spool\"\n",
         )?;
 
         let config = UsageConfig::load(Some(&path))?;
-        assert_eq!(config.codex, directory.path().join("bin/codex"));
+        assert_eq!(config.nucleus, directory.path().join("bin/nucleus"));
+        assert_eq!(
+            config.nucleus_socket,
+            Some(directory.path().join("run/nucleus.sock"))
+        );
         assert_eq!(config.database, directory.path().join("usage.db"));
         assert_eq!(config.library, directory.path().join("annals.db"));
         assert_eq!(config.spool, directory.path().join("spool"));
-        assert_eq!(config.codex_home, directory.path().join("codex-home"));
         Ok(())
     }
 

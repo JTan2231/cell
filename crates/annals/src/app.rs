@@ -334,7 +334,7 @@ fn integrate(
     let quality = args.quality.unwrap_or(config.liaison.quality);
     let model = args.model.as_deref().or(config.liaison.model.as_deref());
     let settings = ModelSettings::new(quality, model);
-    let runner = Runner::for_program(&config.liaison.codex);
+    let runner = Runner::for_socket(config.liaison.nucleus_socket.as_deref());
     let record = liaison::integrate_with_runner(
         path,
         &work,

@@ -546,8 +546,8 @@ Annals records that job as failed rather than silently changing the label.
 ## macOS user LaunchAgent
 
 The macOS installation belongs entirely to the logged-in user. This is the
-important maintenance boundary: Annals, the telemetry proxy and ledger, Codex,
-its scheduler definition, and all release files have exactly that user's
+important maintenance boundary: Annals, its telemetry ledger, Nucleus, its
+scheduler definitions, and all release files have exactly that user's
 authority. Updating the complete application therefore needs no stored
 administrator credential, privileged helper, or passwordless `sudo` rule.
 
@@ -555,17 +555,13 @@ The layout is:
 
 ```text
 $HOME/.local/bin/annals                 # frontend -> current release
-$HOME/.local/bin/annals-usage           # CLI/proxy -> current release
+$HOME/.local/bin/annals-usage           # companion CLI -> current release
 $HOME/Library/LaunchAgents/org.annals.inbox.plist
 $HOME/Library/Application Support/Annals/
 |-- config.toml
 |-- usage.toml
 |-- annals.db
 |-- usage.db
-|-- codex-home/
-|   |-- config.toml
-|   |-- auth.json
-|   `-- .annals-auth.lock
 |-- log/
 |-- backups/
 |-- install/
@@ -588,46 +584,44 @@ $HOME/Library/Application Support/Annals/
 ```
 
 The Annals frontend supplies the state-local config only when no explicit
-config or library was selected. That config points `[liaison].codex` at the
-current release's `annals-usage` proxy, and `usage.toml` points the proxy at the
-real Codex executable and the companion state paths. The LaunchAgent runs
-`annals --quiet inbox run` with the user's real `HOME` and a private,
-state-local `CODEX_HOME`. Add `$HOME/.local/bin` to `PATH` for interactive use;
-launchd uses the absolute Annals frontend path.
+config or library was selected. Both `config.toml` and `usage.toml` select the
+already deployed Nucleus socket. The LaunchAgent runs `annals --quiet inbox
+run` with the user's real `HOME`; it does not set `CODEX_HOME`. Add
+`$HOME/.local/bin` to `PATH` for interactive use; launchd uses the absolute
+Annals frontend path.
 
 This LaunchAgent is available only while the user is logged in. It resumes at
 the next login after a logout or restart. A service that must run at the login
 window needs a system LaunchDaemon and cannot also be fully maintained by an
 unprivileged user.
 
-### State-local Codex authentication
+### Nucleus-owned Codex authentication
 
-The deployer verifies existing state-local authentication but does not start an
-interactive login. For a fresh installation, authenticate once before the
-first deploy:
+Deploy Nucleus before Annals. During this migration, import the currently
+signed-in Annals Codex home once; Nucleus copies its credential rather than
+sharing that directory:
 
 ```sh
-STATE_DIR="$HOME/Library/Application Support/Annals"
-install -d -m 0700 "$STATE_DIR/codex-home"
-printf '%s\n' 'cli_auth_credentials_store = "file"' \
-  > "$STATE_DIR/codex-home/config.toml"
-chmod 0600 "$STATE_DIR/codex-home/config.toml"
-HOME="$HOME" CODEX_HOME="$STATE_DIR/codex-home" \
-  codex login --device-auth
+../nucleus/target/release/nucleus service install \
+  --daemon ../nucleus/target/release/nucleusd \
+  --codex-home "$HOME/Library/Application Support/Annals/codex-home"
+../nucleus/target/release/nucleus service status
+../nucleus/target/release/nucleus health
 ```
 
-Keep that directory private. The first deployment's authenticated doctor check
-verifies the login. After installation, always use
-`annals-usage login --device-auth` for reauthentication: the wrapper holds the
-same exclusive lease used for examinations while Codex updates the persistent
-`auth.json`. Migration from the former system installation retains its existing
-state-local credentials.
+Nucleus creates and thereafter owns
+`$HOME/Library/Application Support/Nucleus/codex-home`. The former Annals
+credential directory is only the initial import source and is not a runtime
+path or a synchronized backup. The first Annals deployment's doctor check verifies Nucleus
+readiness and authentication. `annals-usage login --device-auth` delegates to
+`nucleus auth login --device-auth`, which uses the same Nucleus credential lease
+as daemon jobs and account reads.
 
 #### Attended reauthentication
 
 If authentication becomes unavailable, pause dispatch and wait until
 `annals inbox status` reports no active job. Then renew and verify the
-state-local credentials:
+Nucleus-owned credentials:
 
 ```sh
 annals inbox pause
@@ -664,34 +658,52 @@ back into the queue.
 
 ### Deploy or update
 
-The deployer does not compile the workspace or install Codex. `ci.sh` checks the
-tree and builds both release executables:
+The deployer does not compile either workspace or install Nucleus. `ci.sh`
+checks the Annals tree and builds both Annals release executables:
 
 ```sh
 ./ci.sh
 ./packaging/launchd/deploy-user.sh \
   --binary "$PWD/target/release/annals" \
   --usage-binary "$PWD/target/release/annals-usage" \
-  --codex "$(command -v codex)"
+  --nucleus "$HOME/.local/bin/nucleus" \
+  --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock"
 ```
 
 That same command is the normal unattended update operation. It preflights the
 candidate binaries, configuration, and library before cutover.
-Complete program releases contain Annals, the telemetry proxy, frontend,
+Complete program releases contain Annals, the telemetry companion, frontend,
 updater, rendered LaunchAgent, and a hash manifest. During an update the
-deployer disables new activations and writes the maintenance marker. An active
-worker is allowed to finish its current delivery, then stops before claiming
-another; an idle worker stops immediately. The deployer then makes a consistent
-Annals library backup, verifies the current schema, and runs the candidate's
-authenticated doctor check after the old service is quiescent. Only then does
-it atomically switch the `current` selector. It updates both command links and
-both configs inside the same rollback-protected deployment transaction, then
-validates through the candidate and installed frontends before reloading
-launchd and waking the worker. The operator-owned pause marker is retained, so
-that wake-up does not dispatch queued jobs when the installation was paused. A
-failure restores the old selectors, configs, plist, and service.
-Authentication, the Annals library, telemetry ledger, spool, logs, pause state,
+deployer acquires its update lock and immediately writes the maintenance
+marker, establishing the no-new-claim boundary before candidate preparation.
+It then disables new activations. An active worker is allowed to finish its
+current delivery, then stops before claiming another; an idle worker stops
+immediately. The deployer then makes a consistent Annals library backup,
+verifies the current schema, and runs the candidate's authenticated doctor
+check after the old service is quiescent. Only then does it atomically switch
+the `current` selector. It updates both command links and both configs inside
+the same rollback-protected deployment transaction, then validates through the
+candidate and installed frontends before reloading launchd and waking the
+worker. The operator-owned pause marker is retained, so that wake-up does not
+dispatch queued jobs when the installation was paused. A failure restores the
+old selectors, configs, plist, and service.
+The Annals library, telemetry ledger, spool, logs, pause state,
 and archives are retained.
+
+Every successful update from an existing release also writes a durable
+`rollback_snapshot` path into `install/last-update.json`. That private directory
+contains the pre-cutover `config.toml`, `usage.toml`, LaunchAgent plist, and a
+`rollback.json` naming the previous and replacement release selectors. A
+post-commit rollback must restore those files together with the previous
+release selector while the inbox is under maintenance; switching only
+`install/current` is not sufficient when configuration schemas changed. The
+deployment snapshot deliberately contains no credentials. Nucleus refreshes
+only its owned home, so the former Annals Codex home may be stale. Reverting to
+the old invocation system therefore also requires stopping Nucleus and either
+securely transferring the current credential back under private directory and
+file modes or completing an attended login before Annals resumes. Pre-commit
+failures continue to restore the configuration artifacts automatically from
+the live transaction.
 
 The version-4 deploy path invokes the candidate's additive `migrate` after the
 backup and while the service is quiescent. It adds retry-event provenance to a
@@ -703,7 +715,7 @@ No operator timing or manual service stop is required. It is safe to run the
 same deployment command while a delivery is in progress; by default the
 deployer waits up to 3,900 seconds for the current liaison's 60-minute limit
 plus headroom. The cutover itself occurs only after the inbox lock becomes
-idle, so one delivery cannot straddle the old and new proxy binaries.
+idle, so one delivery cannot straddle old and new Annals binaries.
 
 Set `ANNALS_UPDATE_WAIT_SECONDS` to another nonnegative number when a caller
 needs a shorter deadline. `--no-start` installs and validates without reading
@@ -718,7 +730,8 @@ operation after `ci.sh` is green:
 ./packaging/launchd/deploy-user.sh \
   --binary "$PWD/target/release/annals" \
   --usage-binary "$PWD/target/release/annals-usage" \
-  --codex "$(command -v codex)" \
+  --nucleus "$HOME/.local/bin/nucleus" \
+  --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock" \
   --fresh-state
 ```
 
@@ -752,7 +765,8 @@ operator's graphical session:
 sudo ./packaging/launchd/migrate-to-user.sh \
   --binary "$PWD/target/release/annals" \
   --usage-binary "$PWD/target/release/annals-usage" \
-  --codex "$(command -v codex)"
+  --nucleus "$HOME/.local/bin/nucleus" \
+  --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock"
 ```
 
 The migration disables and drains `system/org.annals.inbox`, moves the whole

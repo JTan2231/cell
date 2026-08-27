@@ -12,6 +12,8 @@ use std::time::{Duration, Instant, SystemTime};
 use serde_json::Value;
 use tempfile::TempDir;
 
+use nucleus_daemon::{ServeConfig, serve};
+
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 const LEGACY_QUEUE_WITH_SETTLING_ENTRY: &[u8] = br#"{
@@ -51,6 +53,12 @@ struct Installation {
     inbox: PathBuf,
     counter: PathBuf,
     codex: PathBuf,
+    controls: PathBuf,
+}
+
+struct InstallationCommand {
+    inner: Command,
+    controls: PathBuf,
 }
 
 #[derive(Debug)]
@@ -69,8 +77,12 @@ impl Installation {
         let inbox = directory.path().join("spool");
         let counter = directory.path().join("fake-codex-counter");
         let codex = directory.path().join("fake-codex");
+        let socket = directory.path().join("nucleus.sock");
+        let controls = directory.path().join("fake-controls");
         fs::create_dir_all(library.parent().ok_or("library had no parent directory")?)?;
-        write_fake_codex(&codex)?;
+        fs::create_dir(&controls)?;
+        write_fake_codex(&codex, &counter, &controls)?;
+        start_fake_nucleus(directory.path(), &socket, &codex)?;
         fs::write(
             &config,
             format!(
@@ -84,11 +96,11 @@ impl Installation {
                     "[liaison]\n",
                     "quality = \"medium\"\n",
                     "model = \"fake-model\"\n",
-                    "codex = {}\n",
+                    "nucleus_socket = {}\n",
                 ),
                 toml_string(&library),
                 toml_string(&inbox),
-                toml_string(&codex),
+                toml_string(&socket),
                 settle_seconds = settle_seconds,
             ),
         )?;
@@ -99,10 +111,12 @@ impl Installation {
             inbox,
             counter,
             codex,
+            controls,
         })
     }
 
-    fn command(&self) -> Command {
+    fn command(&self) -> InstallationCommand {
+        reset_controls(&self.controls);
         let mut command = Command::new(env!("CARGO_BIN_EXE_annals"));
         command
             .arg("--config")
@@ -115,7 +129,10 @@ impl Installation {
                 self.directory.path().join("source-codex-home"),
             )
             .current_dir(self.directory.path());
-        command
+        InstallationCommand {
+            inner: command,
+            controls: self.controls.clone(),
+        }
     }
 
     fn json_ok<I, S>(&self, arguments: I) -> TestResult<Value>
@@ -158,6 +175,72 @@ impl Installation {
             command.args(["--reason", reason]);
         }
         command.output()
+    }
+}
+
+impl InstallationCommand {
+    fn arg(&mut self, argument: impl AsRef<OsStr>) -> &mut Self {
+        self.inner.arg(argument);
+        self
+    }
+
+    fn args<I, S>(&mut self, arguments: I) -> &mut Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        self.inner.args(arguments);
+        self
+    }
+
+    fn env(&mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) -> &mut Self {
+        let key = key.as_ref();
+        let value = value.as_ref();
+        self.inner.env(key, value);
+        if let Some(name) = fake_control_name(key)
+            && let Err(error) = fs::write(self.controls.join(name), value.as_encoded_bytes())
+        {
+            panic!("write fake Nucleus control {name}: {error}");
+        }
+        self
+    }
+
+    fn stdout(&mut self, configuration: Stdio) -> &mut Self {
+        self.inner.stdout(configuration);
+        self
+    }
+
+    fn stderr(&mut self, configuration: Stdio) -> &mut Self {
+        self.inner.stderr(configuration);
+        self
+    }
+
+    fn spawn(&mut self) -> io::Result<Child> {
+        self.inner.spawn()
+    }
+
+    fn output(&mut self) -> io::Result<Output> {
+        self.inner.output()
+    }
+}
+
+fn fake_control_name(key: &OsStr) -> Option<&'static str> {
+    match key.to_str()? {
+        "ANNALS_FAKE_AUTH_FAIL" => Some("auth-fail"),
+        "ANNALS_FAKE_FAIL_FIRST" => Some("fail-first"),
+        "ANNALS_FAKE_BLOCK_READY" => Some("block-ready"),
+        "ANNALS_FAKE_BLOCK_RELEASE" => Some("block-release"),
+        "ANNALS_FAKE_AFTER_SUBMIT_READY" => Some("after-submit-ready"),
+        "ANNALS_FAKE_AFTER_SUBMIT_RELEASE" => Some("after-submit-release"),
+        _ => None,
+    }
+}
+
+fn reset_controls(controls: &Path) {
+    if let Ok(entries) = fs::read_dir(controls) {
+        for entry in entries.flatten() {
+            let _ = fs::remove_file(entry.path());
+        }
     }
 }
 
@@ -1750,7 +1833,15 @@ fn maintenance_smoke_does_not_rewrite_predecessor_spool_state() -> TestResult {
     );
     assert_eq!(fs::read_to_string(&installation.counter)?, "2\n");
 
-    let lately = installation.json_ok(["lately", "--channel", "inbox", "--by", "first-seen"])?;
+    let lately = installation.json_ok([
+        "lately",
+        "--channel",
+        "inbox",
+        "--by",
+        "first-seen",
+        "--since",
+        "2026-01-01",
+    ])?;
     assert_eq!(lately["delivery_count"], 3);
     assert_eq!(
         lately["deliveries"]
@@ -2861,65 +2952,181 @@ fn retry_auth_preflight_halts_before_any_child_attempt() -> TestResult {
     Ok(())
 }
 
-fn write_fake_codex(path: &Path) -> TestResult {
-    fs::write(
-        path,
-        r#"#!/bin/sh
+const COMPATIBLE_PROTOCOL_SCHEMA: &str = r##"{
+  "definitions": {
+    "ClientRequest": {"oneOf": [
+      {"properties":{"method":{"enum":["initialize"]},"params":{"$ref":"#/definitions/InitializeParams"}}},
+      {"properties":{"method":{"enum":["thread/start"]},"params":{"$ref":"#/definitions/v2/ThreadStartParams"}}},
+      {"properties":{"method":{"enum":["turn/start"]},"params":{"$ref":"#/definitions/v2/TurnStartParams"}}},
+      {"properties":{"method":{"enum":["mcpServerStatus/list"]},"params":{"$ref":"#/definitions/v2/ListMcpServerStatusParams"}}}
+    ]},
+    "ServerRequest": {"oneOf": [
+      {"properties":{"method":{"enum":["item/tool/call"]},"params":{"$ref":"#/definitions/DynamicToolCallParams"}}}
+    ]},
+    "ServerNotification": {"oneOf": [
+      {"properties":{"method":{"enum":["item/completed"]},"params":{"$ref":"#/definitions/v2/ItemCompletedNotification"}}},
+      {"properties":{"method":{"enum":["turn/completed"]},"params":{"$ref":"#/definitions/v2/TurnCompletedNotification"}}},
+      {"properties":{"method":{"enum":["thread/tokenUsage/updated"]},"params":{"$ref":"#/definitions/v2/ThreadTokenUsageUpdatedNotification"}}}
+    ]},
+    "DynamicToolCallParams": {"required":["arguments","callId","threadId","tool","turnId"]},
+    "v2": {
+      "ThreadStartParams": {"properties":{
+        "approvalPolicy":{},"baseInstructions":{},"cwd":{},"developerInstructions":{},
+        "dynamicTools":{},"ephemeral":{},"environments":{},"experimentalRawEvents":{},
+        "model":{},"sandbox":{}
+      }},
+      "AskForApproval": {"enum":["never"]},
+      "SandboxMode": {"enum":["read-only","workspace-write"]},
+      "TurnStartParams": {
+        "required":["input","threadId"],
+        "properties":{"effort":{},"environments":{},"input":{},"threadId":{}}
+      },
+      "DynamicToolSpec": {"oneOf":[{
+        "required":["description","inputSchema","name","type"],
+        "properties":{"type":{"enum":["function"]}}
+      }]},
+      "ThreadStartResponse": {"required":["thread"]},
+      "TurnStartResponse": {"required":["turn"]},
+      "Thread": {"required":["id"]},
+      "Turn": {"required":["id","status"]},
+      "TurnStatus": {"enum":["completed","failed"]},
+      "ItemCompletedNotification": {"required":["item","threadId","turnId"]},
+      "TurnCompletedNotification": {"required":["threadId","turn"]},
+      "ThreadTokenUsageUpdatedNotification": {"required":["threadId","tokenUsage","turnId"]},
+      "RawResponseCompletedNotification": {"required":["responseId","threadId","turnId"]}
+    }
+  }
+}"##;
+
+fn start_fake_nucleus(root: &Path, socket: &Path, codex: &Path) -> TestResult {
+    let codex_home = root.join("nucleus-codex-home");
+    fs::create_dir(&codex_home)?;
+    fs::set_permissions(&codex_home, fs::Permissions::from_mode(0o700))?;
+    let config = codex_home.join("config.toml");
+    fs::write(&config, "cli_auth_credentials_store = \"file\"\n")?;
+    fs::set_permissions(&config, fs::Permissions::from_mode(0o600))?;
+    let auth = codex_home.join("auth.json");
+    fs::write(&auth, "{\"OPENAI_API_KEY\":\"test-api-key\"}\n")?;
+    fs::set_permissions(&auth, fs::Permissions::from_mode(0o600))?;
+    let serve_config = ServeConfig {
+        socket: socket.to_path_buf(),
+        database: root.join("nucleus.db"),
+        codex: codex.to_path_buf(),
+        codex_home,
+    };
+    thread::spawn(move || {
+        let runtime = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(runtime) => runtime,
+            Err(error) => panic!("start fake Nucleus runtime: {error}"),
+        };
+        if let Err(error) = runtime.block_on(serve(serve_config)) {
+            panic!("serve fake Nucleus: {error}");
+        }
+    });
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !socket.exists() {
+        if Instant::now() >= deadline {
+            return Err("fake Nucleus did not create its socket".into());
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    Ok(())
+}
+
+fn write_fake_codex(path: &Path, counter: &Path, controls: &Path) -> TestResult {
+    let script = r#"#!/bin/sh
 set -eu
 
-if [ "${1:-}" = "debug" ]; then
-  printf '%s\n' '{"models":[{"slug":"fake-model"}]}'
+if [ "${1:-}" = "--version" ]; then
+  printf '%s\n' 'codex-cli 0.146.0'
   exit 0
 fi
+
+if [ "${1:-}" = "debug" ] && [ "${2:-}" = "models" ]; then
+  printf '%s\n' '{"models":[{"slug":"fake-model","supported_reasoning_levels":[{"effort":"medium"},{"effort":"max"}],"default_reasoning_level":"medium","shell_type":"disabled","supports_search_tool":false}]}'
+  exit 0
+fi
+
+case " $* " in
+  *" generate-json-schema "*)
+    output=''
+    take_output=0
+    for argument in "$@"; do
+      if [ "$take_output" -eq 1 ]; then
+        output=$argument
+        break
+      fi
+      if [ "$argument" = "--out" ]; then
+        take_output=1
+      fi
+    done
+    test -n "$output"
+    mkdir -p "$output"
+    printf '%s\n' '__PROTOCOL_SCHEMA__' > "$output/codex_app_server_protocol.schemas.json"
+    exit 0
+    ;;
+esac
 
 IFS= read -r ignored
 printf '%s\n' '{"jsonrpc":"2.0","id":0,"result":{}}'
 IFS= read -r ignored
-IFS= read -r ignored
-if [ "${ANNALS_AUTH_PREFLIGHT:-0}" -eq 1 ]; then
-  if [ "${ANNALS_FAKE_AUTH_FAIL:-0}" -eq 1 ]; then
+IFS= read -r request
+case "$request" in
+  *'account/rateLimits/read'*)
+  if [ -f '__CONTROLS__/auth-fail' ]; then
     printf '%s\n' '{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"refresh_token_reused: please log out and sign in again"}}'
   else
-    printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
+    printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"rateLimits":{}}}'
   fi
   exit 0
-fi
+  ;;
+esac
+
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"data":[],"nextCursor":null}}'
 IFS= read -r ignored
 printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"thread":{"id":"thread"}}}'
 IFS= read -r ignored
 printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"turn":{"id":"turn"}}}'
 
-counter=${ANNALS_FAKE_COUNTER:?}
+counter='__COUNTER__'
 number=0
 if [ -f "$counter" ]; then
   number=$(sed -n '1p' "$counter")
 fi
 number=$((number + 1))
 printf '%s\n' "$number" > "$counter"
-if [ "$number" -eq 1 ] && [ -n "${ANNALS_FAKE_BLOCK_READY:-}" ]; then
-  release=${ANNALS_FAKE_BLOCK_RELEASE:?}
-  printf '%s\n' ready > "$ANNALS_FAKE_BLOCK_READY"
+if [ "$number" -eq 1 ] && [ -f '__CONTROLS__/block-ready' ]; then
+  ready=$(cat '__CONTROLS__/block-ready')
+  release=$(cat '__CONTROLS__/block-release')
+  printf '%s\n' ready > "$ready"
   while [ ! -f "$release" ]; do
     sleep 0.01
   done
 fi
-if [ "$number" -eq 1 ] && [ "${ANNALS_FAKE_FAIL_FIRST:-0}" -eq 1 ]; then
+if [ "$number" -eq 1 ] && [ -f '__CONTROLS__/fail-first' ]; then
   printf '%s\n' 'simulated model failure' >&2
   exit 19
 fi
 printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":20,\"method\":\"item/tool/call\",\"params\":{\"threadId\":\"thread\",\"turnId\":\"turn\",\"callId\":\"call\",\"namespace\":null,\"tool\":\"submit_reconciliation\",\"arguments\":{\"summary\":\"Integrate inbox source $number\",\"operations\":[{\"action\":\"create_concept\",\"ref\":\"inbox_item\",\"label\":\"Inbox concept $number\",\"parents\":[],\"evidence\":[{\"quote\":\"Shared inbox claim.\"}]}]}}}"
 IFS= read -r ignored
-if [ "$number" -eq 1 ] && [ -n "${ANNALS_FAKE_AFTER_SUBMIT_READY:-}" ]; then
-  submit_release=${ANNALS_FAKE_AFTER_SUBMIT_RELEASE:?}
-  printf '%s\n' ready > "$ANNALS_FAKE_AFTER_SUBMIT_READY"
+if [ "$number" -eq 1 ] && [ -f '__CONTROLS__/after-submit-ready' ]; then
+  submit_ready=$(cat '__CONTROLS__/after-submit-ready')
+  submit_release=$(cat '__CONTROLS__/after-submit-release')
+  printf '%s\n' ready > "$submit_ready"
   while [ ! -f "$submit_release" ]; do
     sleep 0.01
   done
 fi
+printf '%s\n' '{"jsonrpc":"2.0","method":"item/completed","params":{"threadId":"thread","turnId":"turn","item":{"id":"message","type":"agentMessage","text":"fake completed"}}}'
 printf '%s\n' '{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thread","turn":{"id":"turn","status":"completed"}}}'
-"#,
-    )?;
+"#
+        .replace("__PROTOCOL_SCHEMA__", COMPATIBLE_PROTOCOL_SCHEMA)
+        .replace("__COUNTER__", &counter.display().to_string())
+        .replace("__CONTROLS__", &controls.display().to_string());
+    fs::write(path, script)?;
     let mut permissions = fs::metadata(path)?.permissions();
     permissions.set_mode(0o700);
     fs::set_permissions(path, permissions)?;

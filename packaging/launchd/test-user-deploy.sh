@@ -14,7 +14,8 @@ package="$temporary/package"
 home="$temporary/Operator Home"
 candidate="$temporary/annals-candidate"
 usage_candidate="$temporary/annals-usage-candidate"
-codex="$temporary/codex"
+nucleus="$temporary/nucleus"
+nucleus_socket="$temporary/nucleus.sock"
 launchctl="$temporary/launchctl"
 launchctl_log="$temporary/launchctl.log"
 mkdir -p "$package" "$home/Library/Application Support/Annals/codex-home"
@@ -48,6 +49,11 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$config" ] || config=${ANNALS_CONFIG:?}
 state=$(CDPATH= cd "$(dirname "$config")" && pwd)
+if [ -f "$state/expect-maintenance-before-checks" ] \
+    && [ ! -f "$state/spool/.maintenance" ]
+then
+    : >"$state/maintenance-order-error"
+fi
 command=${1:?}
 shift
 if [ "$command" = inbox ]; then
@@ -73,12 +79,20 @@ case "$command" in
                     | wc -l | tr -d ' ')
                 processing=$(find "$state/spool/processing" -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
                     | wc -l | tr -d ' ')
+                locked=false
                 paused=false
                 maintenance=false
                 [ ! -f "$state/spool/.paused" ] || paused=true
                 [ ! -f "$state/spool/.maintenance" ] || maintenance=true
-                printf '{"ok":true,"data":{"locked":false,"queued":%s,"processing":%s,"paused":%s,"maintenance":%s}}\n' \
-                    "$queued" "$processing" "$paused" "$maintenance"
+                if [ -f "$state/simulate-running-worker" ] \
+                    && [ "$maintenance" = true ] \
+                    && [ ! -f "$state/active-delivery-finished" ]
+                then
+                    : >"$state/active-delivery-finished"
+                    locked=true
+                fi
+                printf '{"ok":true,"data":{"locked":%s,"queued":%s,"processing":%s,"paused":%s,"maintenance":%s}}\n' \
+                    "$locked" "$queued" "$processing" "$paused" "$maintenance"
                 ;;
             run)
                 [ -f "$state/spool/.maintenance" ]
@@ -151,13 +165,13 @@ case "${1:-}" in
             .usage.toml.*) ;;
             *) fail "doctor used unexpected config $config" ;;
         esac
-        [ "$(cat "$state/codex-home/auth.json")" = credential-sentinel ] \
-            || fail 'doctor observed changed authentication'
-        [ "$(stat -f '%Lp' "$state/codex-home/auth.json")" = 600 ] \
-            || fail 'doctor observed insecure authentication mode'
-        [ "$(cat "$state/codex-home/config.toml")" = \
-            'cli_auth_credentials_store = "file"' ] \
-            || fail 'doctor observed ambient Codex configuration'
+        configured_nucleus=$(sed -n 's/^nucleus = "\([^"]*\)"$/\1/p' "$config")
+        [ -n "$configured_nucleus" ] && [ -x "$configured_nucleus" ] \
+            || fail 'doctor observed an unavailable Nucleus executable'
+        grep -Fx "nucleus_socket = \"__NUCLEUS_SOCKET__\"" "$config" >/dev/null \
+            || fail 'doctor observed the wrong Nucleus socket'
+        [ "${CODEX_HOME-unset}" = unset ] \
+            || fail 'doctor inherited an Annals-owned CODEX_HOME'
         [ ! -e "$state/service-loaded" ] || {
             printf '%s\n' 'doctor ran while the old service was loaded' >&2
             exit 1
@@ -171,19 +185,28 @@ case "${1:-}" in
     *) exit 1 ;;
 esac
 EOF
+sed -i '' \
+    -e "s|__NUCLEUS__|$nucleus|g" \
+    -e "s|__NUCLEUS_SOCKET__|$nucleus_socket|g" \
+    "$usage_candidate"
 chmod 0755 "$usage_candidate"
 
-cat >"$codex" <<'EOF'
+cat >"$nucleus" <<'EOF'
 #!/bin/sh
 case "${1:-}" in
-    --version) printf '%s\n' 'codex test' ;;
-    login) [ "${2:-}" = status ] ;;
+    --version) printf '%s\n' 'nucleus test' ;;
     *) exit 1 ;;
 esac
 EOF
-chmod 0755 "$codex"
+chmod 0755 "$nucleus"
+: >"$nucleus_socket"
 printf '%s\n' credential-sentinel \
     >"$home/Library/Application Support/Annals/codex-home/auth.json"
+printf '%s\n' legacy-config-sentinel \
+    >"$home/Library/Application Support/Annals/codex-home/config.toml"
+chmod 0600 \
+    "$home/Library/Application Support/Annals/codex-home/auth.json" \
+    "$home/Library/Application Support/Annals/codex-home/config.toml"
 
 cat >"$launchctl" <<EOF
 #!/bin/sh
@@ -193,11 +216,12 @@ EOF
 chmod 0755 "$launchctl"
 
 deploy() {
-    selected_codex=${ANNALS_TEST_CODEX:-$codex}
+    selected_nucleus=${ANNALS_TEST_NUCLEUS:-$nucleus}
     HOME="$home" "$package/deploy-user.sh" \
         --binary "$candidate" \
         --usage-binary "$usage_candidate" \
-        --codex "$selected_codex" \
+        --nucleus "$selected_nucleus" \
+        --nucleus-socket "$nucleus_socket" \
         --home "$home" \
         --launchctl "$launchctl" \
         "$@"
@@ -224,16 +248,14 @@ plist="$home/Library/LaunchAgents/org.annals.inbox.plist"
 [ -d "$state/spool/skipped" ]
 [ "$(cat "$state/codex-home/auth.json")" = credential-sentinel ]
 [ "$(stat -f '%Lp' "$state/codex-home/auth.json")" = 600 ]
-[ "$(cat "$state/codex-home/config.toml")" = \
-    'cli_auth_credentials_store = "file"' ]
+[ "$(cat "$state/codex-home/config.toml")" = legacy-config-sentinel ]
 [ "$(stat -f '%Lp' "$state/codex-home/config.toml")" = 600 ]
 [ "$(tail -n 1 "$state/usage-doctor.log")" = 'doctor current=none' ]
 grep -Fx 'library = "annals.db"' "$state/config.toml" >/dev/null
 grep -Fx 'root = "spool"' "$state/config.toml" >/dev/null
-proxy="$state/install/current/libexec/annals-usage"
-grep -Fx "codex = \"$proxy\"" "$state/config.toml" >/dev/null
-grep -Fx "codex = \"$codex\"" "$state/usage.toml" >/dev/null
-grep -Fx "codex_home = \"$state/codex-home\"" "$state/usage.toml" >/dev/null
+grep -Fx "nucleus_socket = \"$nucleus_socket\"" "$state/config.toml" >/dev/null
+grep -Fx "nucleus = \"$nucleus\"" "$state/usage.toml" >/dev/null
+grep -Fx "nucleus_socket = \"$nucleus_socket\"" "$state/usage.toml" >/dev/null
 grep -Fx "library = \"$state/annals.db\"" "$state/usage.toml" >/dev/null
 grep -Fx "spool = \"$state/spool\"" "$state/usage.toml" >/dev/null
 grep -Fx "database = \"$state/usage.db\"" "$state/usage.toml" >/dev/null
@@ -244,7 +266,7 @@ default_environment=$(env -u ANNALS_CONFIG -u ANNALS_LIBRARY -u CODEX_HOME \
 printf '%s\n' "$default_environment" \
     | grep -Fx "config=$state/config.toml" >/dev/null
 printf '%s\n' "$default_environment" \
-    | grep -Fx "codex_home=$state/codex-home" >/dev/null
+    | grep -Fx 'codex_home=<unset>' >/dev/null
 custom_codex_home="$temporary/custom-codex-home"
 alternate_config="$temporary/alternate.toml"
 : >"$alternate_config"
@@ -271,7 +293,10 @@ if plutil -extract ProgramArguments.4 raw -o - "$plist" >/dev/null 2>&1; then
 fi
 [ "$(plutil -extract WorkingDirectory raw -o - "$plist")" = "$state" ]
 [ "$(plutil -extract EnvironmentVariables.HOME raw -o - "$plist")" = "$home" ]
-[ "$(plutil -extract EnvironmentVariables.CODEX_HOME raw -o - "$plist")" = "$state/codex-home" ]
+if plutil -extract EnvironmentVariables.CODEX_HOME raw -o - "$plist" >/dev/null 2>&1; then
+    printf '%s\n' 'user LaunchAgent unexpectedly owns CODEX_HOME' >&2
+    exit 1
+fi
 if plutil -extract UserName raw -o - "$plist" >/dev/null 2>&1; then
     printf '%s\n' 'user LaunchAgent unexpectedly contains UserName' >&2
     exit 1
@@ -282,22 +307,14 @@ first_release=$(readlink "$state/install/current")
 first_candidate_hash=$(shasum -a 256 "$candidate" | awk '{print $1}')
 printf '%s\n' 'ambient_setting = true' >>"$state/codex-home/config.toml"
 codex_config_with_ambient_setting=$(cat "$state/codex-home/config.toml")
-if deploy --no-start >"$temporary/ambient-config.out" \
-    2>"$temporary/ambient-config.err"
-then
-    printf '%s\n' 'deployment unexpectedly accepted ambient Codex configuration' >&2
-    exit 1
-fi
+deploy --no-start >/dev/null
 [ "$(cat "$state/codex-home/config.toml")" = \
     "$codex_config_with_ambient_setting" ]
-printf '%s\n' 'cli_auth_credentials_store = "file"' \
-    >"$state/codex-home/config.toml"
-chmod 0600 "$state/codex-home/config.toml"
 # Simulate the configuration written by releases before annals-usage became
-# the default Codex proxy. Deployment must migrate only the Codex selector and
+# the default Codex proxy. Deployment must migrate only the liaison selector and
 # preserve the rest of the document.
-awk -v codex="$codex" '
-    /^[[:space:]]*codex[[:space:]]*=/ {
+awk -v codex="$nucleus" '
+    /^[[:space:]]*nucleus_socket[[:space:]]*=/ {
         print "codex = \"" codex "\""
         next
     }
@@ -306,7 +323,7 @@ awk -v codex="$codex" '
 printf '%s\n' '# retained operator setting' >>"$state/config.legacy.toml"
 mv "$state/config.legacy.toml" "$state/config.toml"
 legacy_config_hash=$(shasum -a 256 "$state/config.toml" | awk '{print $1}')
-grep -Fx "codex = \"$codex\"" "$state/config.toml" >/dev/null
+grep -Fx "codex = \"$nucleus\"" "$state/config.toml" >/dev/null
 printf '%s\n' '# candidate update' >>"$candidate"
 second_candidate_hash=$(shasum -a 256 "$candidate" | awk '{print $1}')
 [ "$first_candidate_hash" != "$second_candidate_hash" ]
@@ -322,8 +339,18 @@ fi
     "doctor current=$first_release" ]
 [ "$(readlink "$state/install/previous")" = "$first_release" ]
 [ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" != "$legacy_config_hash" ]
-grep -Fx "codex = \"$proxy\"" "$state/config.toml" >/dev/null
+grep -Fx "nucleus_socket = \"$nucleus_socket\"" "$state/config.toml" >/dev/null
 grep -Fx '# retained operator setting' "$state/config.toml" >/dev/null
+rollback_snapshot=$(sed -n 's/^  "rollback_snapshot": "\([^"]*\)",$/\1/p' \
+    "$state/install/last-update.json")
+[ -n "$rollback_snapshot" ]
+[ -f "$rollback_snapshot/config.toml" ]
+[ -f "$rollback_snapshot/usage.toml" ]
+[ -f "$rollback_snapshot/agent.plist" ]
+[ -f "$rollback_snapshot/rollback.json" ]
+grep -Fx "codex = \"$nucleus\"" "$rollback_snapshot/config.toml" >/dev/null
+grep -F "\"release\": \"$first_release\"" \
+    "$rollback_snapshot/rollback.json" >/dev/null
 config_hash=$(shasum -a 256 "$state/config.toml" | awk '{print $1}')
 usage_config_hash=$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')
 backup_count=$(find "$state/backups" -type f -maxdepth 1 | wc -l | tr -d ' ')
@@ -396,10 +423,17 @@ esac
 EOF
 chmod 0755 "$launchctl"
 
+mkdir -p "$state/spool/queued/successor/material"
+printf '%s\n' successor >"$state/spool/queued/successor/material/source.txt"
+: >"$state/simulate-running-worker"
+: >"$state/expect-maintenance-before-checks"
 printf '%s\n' '# launchd update' >>"$candidate"
 deploy >/dev/null
 running_release=$(readlink "$state/install/current")
 [ "$running_release" != "$second_release" ]
+[ ! -e "$state/maintenance-order-error" ]
+[ -f "$state/active-delivery-finished" ]
+[ -f "$state/spool/queued/successor/material/source.txt" ]
 [ -f "$loaded" ]
 [ ! -e "$state/spool/.maintenance" ]
 [ -f "$state/spool/.paused" ]
@@ -411,14 +445,14 @@ running_release=$(readlink "$state/install/current")
     'inbox status validate inbox status inbox run backup migrate validate inbox status validate inbox status ' ]
 
 printf '%s\n' '# rejected update' >>"$candidate"
-alternate_codex="$temporary/alternate-codex"
-cp "$codex" "$alternate_codex"
-chmod 0755 "$alternate_codex"
+alternate_nucleus="$temporary/alternate-nucleus"
+cp "$nucleus" "$alternate_nucleus"
+chmod 0755 "$alternate_nucleus"
 : >"$fail_bootstrap"
 config_before_rejection=$(shasum -a 256 "$state/config.toml" | awk '{print $1}')
 usage_config_before_rejection=$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')
 library_before_rejection=$(shasum -a 256 "$state/annals.db" | awk '{print $1}')
-if ANNALS_TEST_CODEX="$alternate_codex" \
+if ANNALS_TEST_NUCLEUS="$alternate_nucleus" \
     deploy >"$temporary/rejected.out" 2>"$temporary/rejected.err"
 then
     printf '%s\n' 'deployment unexpectedly survived a bootstrap failure' >&2
@@ -434,7 +468,7 @@ fi
 [ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" = "$config_before_rejection" ]
 [ "$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')" = "$usage_config_before_rejection" ]
 [ "$(shasum -a 256 "$state/annals.db" | awk '{print $1}')" = "$library_before_rejection" ]
-grep -Fx "codex = \"$codex\"" "$state/usage.toml" >/dev/null
+grep -Fx "nucleus = \"$nucleus\"" "$state/usage.toml" >/dev/null
 
 : >"$fail_kickstart"
 deploy >"$temporary/kickstart-warning.out" 2>"$temporary/kickstart-warning.err"
@@ -470,14 +504,14 @@ fi
 rm -f "$state/spool/fail-import"
 fresh_output=$(deploy --fresh-state)
 [ ! -s "$state/annals.db" ]
-[ "$(find "$state/spool/queued" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" -eq 2 ]
+[ "$(find "$state/spool/queued" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" -eq 3 ]
 [ "$(find "$state/spool/processing" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" -eq 0 ]
 [ -d "$state/spool/skipped" ]
 [ ! -e "$state/spool/.paused" ]
 [ ! -e "$state/spool/.maintenance" ]
 [ -f "$loaded" ]
 grep -F '"fresh_state": true' "$state/install/last-update.json" >/dev/null
-grep -F '"imported_backlog": 2' "$state/install/last-update.json" >/dev/null
+grep -F '"imported_backlog": 3' "$state/install/last-update.json" >/dev/null
 generation=$(sed -n 's/^  "rollback_generation": "\([^"]*\)",$/\1/p' \
     "$state/install/last-update.json")
 [ -n "$generation" ]
@@ -486,6 +520,6 @@ generation=$(sed -n 's/^  "rollback_generation": "\([^"]*\)",$/\1/p' \
 [ -f "$state/backups/generations/$generation/spool/skipped/preserved" ]
 [ -f "$state/backups/generations/$generation/spool/processing/j00000000000000000090/material/first.txt" ]
 [ -f "$state/backups/generations/$generation/spool/queued/j00000000000000000091/material/second.txt" ]
-printf '%s\n' "$fresh_output" | grep -F 'Imported backlog: 2' >/dev/null
+printf '%s\n' "$fresh_output" | grep -F 'Imported backlog: 3' >/dev/null
 
 printf '%s\n' 'user deploy test passed'

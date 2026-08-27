@@ -20,9 +20,7 @@ done
 
 if [ "$target_selected" -eq 0 ]; then
     ANNALS_CONFIG=$DEFAULT_CONFIG
-    CODEX_HOME="$STATE_DIR/codex-home"
     export ANNALS_CONFIG
-    export CODEX_HOME
 fi
 
 exec "$PAYLOAD" "$@"

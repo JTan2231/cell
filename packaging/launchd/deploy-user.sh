@@ -15,7 +15,8 @@ SOURCE_UPDATER="$SCRIPT_DIR/deploy-user.sh"
 
 binary_path=
 usage_binary_path=
-codex_path=
+nucleus_path=
+nucleus_socket=
 install_home=${HOME:-}
 launchctl_path=/bin/launchctl
 no_start=0
@@ -24,7 +25,7 @@ fresh_state=0
 usage() {
     cat <<'EOF'
 Usage: deploy-user.sh --binary ABSOLUTE_PATH --usage-binary ABSOLUTE_PATH \
-  --codex ABSOLUTE_PATH [OPTIONS]
+  --nucleus ABSOLUTE_PATH --nucleus-socket ABSOLUTE_PATH [OPTIONS]
 
 Install or update the complete user-owned macOS Annals release.
 
@@ -54,9 +55,14 @@ while [ "$#" -gt 0 ]; do
             usage_binary_path=$2
             shift 2
             ;;
-        --codex)
-            [ "$#" -ge 2 ] || fail '--codex requires a path'
-            codex_path=$2
+        --nucleus)
+            [ "$#" -ge 2 ] || fail '--nucleus requires a path'
+            nucleus_path=$2
+            shift 2
+            ;;
+        --nucleus-socket)
+            [ "$#" -ge 2 ] || fail '--nucleus-socket requires a path'
+            nucleus_socket=$2
             shift 2
             ;;
         --home)
@@ -95,7 +101,7 @@ operator_uid=$(id -u)
 operator=$(id -un)
 
 [ -n "$usage_binary_path" ] || fail '--usage-binary is required'
-for value_name in binary_path usage_binary_path codex_path install_home launchctl_path; do
+for value_name in binary_path usage_binary_path nucleus_path nucleus_socket install_home launchctl_path; do
     eval "value=\${$value_name}"
     [ -n "$value" ] || fail "--${value_name%_path} is required"
     case "$value" in
@@ -112,10 +118,10 @@ done
     || fail "Annals candidate is not an executable regular file: $binary_path"
 [ -f "$usage_binary_path" ] && [ ! -L "$usage_binary_path" ] && [ -x "$usage_binary_path" ] \
     || fail "Annals usage candidate is not an executable regular file: $usage_binary_path"
-[ -e "$codex_path" ] && [ -x "$codex_path" ] \
-    || fail "Codex executable is unavailable: $codex_path"
-[ "$usage_binary_path" != "$codex_path" ] \
-    || fail 'the Annals usage candidate and real Codex executable must differ'
+[ -e "$nucleus_path" ] && [ -x "$nucleus_path" ] \
+    || fail "Nucleus executable is unavailable: $nucleus_path"
+[ "$usage_binary_path" != "$nucleus_path" ] \
+    || fail 'the Annals usage candidate and Nucleus executable must differ'
 [ -f "$launchctl_path" ] && [ -x "$launchctl_path" ] \
     || fail "launchctl is unavailable: $launchctl_path"
 for source in "$SOURCE_FRONTEND" "$SOURCE_PLIST" "$SOURCE_UPDATER"; do
@@ -126,23 +132,24 @@ for command in awk date grep install mv plutil readlink sed shasum stat; do
     command -v "$command" >/dev/null 2>&1 || fail "required command not found: $command"
 done
 
-codex_lines=$(printf '%s\n' "$codex_path" | wc -l | tr -d ' ')
-[ "$codex_lines" -eq 1 ] \
-    || fail 'the Codex path contains a newline'
-case "$codex_path" in
-    *\"*|*\\*) fail 'the Codex path contains characters unsupported by config rendering' ;;
-esac
+for config_value in "$nucleus_path" "$nucleus_socket"; do
+    value_lines=$(printf '%s\n' "$config_value" | wc -l | tr -d ' ')
+    [ "$value_lines" -eq 1 ] \
+        || fail 'a Nucleus path contains a newline'
+    case "$config_value" in
+        *\"*|*\\*) fail 'a Nucleus path contains characters unsupported by config rendering' ;;
+    esac
+done
 
 STATE_DIR="$install_home/Library/Application Support/Annals"
 CONFIG_PATH="$STATE_DIR/config.toml"
 USAGE_CONFIG_PATH="$STATE_DIR/usage.toml"
 LIBRARY_PATH="$STATE_DIR/annals.db"
 USAGE_LIBRARY_PATH="$STATE_DIR/usage.db"
-CODEX_HOME="$STATE_DIR/codex-home"
-CODEX_CONFIG_PATH="$CODEX_HOME/config.toml"
 SPOOL_DIR="$STATE_DIR/spool"
 INSTALL_DIR="$STATE_DIR/install"
 RELEASES_DIR="$INSTALL_DIR/releases"
+DEPLOYMENT_BACKUPS_DIR="$STATE_DIR/backups/deployments"
 CURRENT_LINK="$INSTALL_DIR/current"
 PREVIOUS_LINK="$INSTALL_DIR/previous"
 UPDATE_LOCK="$INSTALL_DIR/.update-lock"
@@ -151,7 +158,6 @@ PAUSED_MARKER="$SPOOL_DIR/.paused"
 CLI_DIR="$install_home/.local/bin"
 CLI_PATH="$CLI_DIR/annals"
 USAGE_CLI_PATH="$CLI_DIR/annals-usage"
-USAGE_PROXY_PATH="$INSTALL_DIR/current/libexec/annals-usage"
 AGENT_DIR="$install_home/Library/LaunchAgents"
 AGENT_PLIST="$AGENT_DIR/$SERVICE_LABEL.plist"
 SERVICE_TARGET="gui/$operator_uid/$SERVICE_LABEL"
@@ -170,7 +176,6 @@ old_usage_cli=0
 old_plist=0
 old_config=0
 old_usage_config=0
-old_codex_config=0
 was_loaded=0
 service_stopped=0
 launchd_changed=0
@@ -178,13 +183,14 @@ marker_created=0
 switched=0
 config_changed=0
 usage_config_changed=0
-codex_config_changed=0
 committed=0
 lock_created=0
 fresh_state_switched=0
 pause_created=0
 imported_backlog=0
 backup_path=
+rollback_snapshot=
+rollback_snapshot_created=0
 library_backup_ready=0
 library_migration_may_need_rollback=0
 
@@ -279,14 +285,6 @@ cleanup() {
                 rm -f "$USAGE_CONFIG_PATH"
             fi
         fi
-        if [ "$codex_config_changed" -eq 1 ]; then
-            if [ "$old_codex_config" -eq 1 ]; then
-                install -m 0600 "$transaction_dir/codex-config.toml" \
-                    "$CODEX_CONFIG_PATH"
-            else
-                rm -f "$CODEX_CONFIG_PATH"
-            fi
-        fi
         restore_fresh_generation
         if [ "$library_migration_may_need_rollback" -eq 1 ] \
             && [ "$library_backup_ready" -eq 1 ]
@@ -297,6 +295,9 @@ cleanup() {
         fi
         if [ "$launchd_changed" -eq 1 ] || [ "$service_stopped" -eq 1 ] || [ "$switched" -eq 1 ]; then
             restore_service
+        fi
+        if [ "$rollback_snapshot_created" -eq 1 ]; then
+            rm -rf "$rollback_snapshot"
         fi
     fi
     if [ "$marker_created" -eq 1 ]; then
@@ -334,7 +335,6 @@ plutil -lint "$SOURCE_PLIST" >/dev/null
 
 for path in \
     "$STATE_DIR" \
-    "$CODEX_HOME" \
     "$STATE_DIR/log" \
     "$SPOOL_DIR" \
     "$SPOOL_DIR/incoming" \
@@ -346,7 +346,8 @@ for path in \
     "$SPOOL_DIR/skipped" \
     "$INSTALL_DIR" \
     "$RELEASES_DIR" \
-    "$STATE_DIR/backups"
+    "$STATE_DIR/backups" \
+    "$DEPLOYMENT_BACKUPS_DIR"
 do
     if [ -L "$path" ]; then
         fail "refusing symlink at directory path: $path"
@@ -358,6 +359,11 @@ if [ -L "$PAUSED_MARKER" ] \
     || { [ -e "$PAUSED_MARKER" ] && [ ! -f "$PAUSED_MARKER" ]; }
 then
     fail "invalid inbox pause marker: $PAUSED_MARKER"
+fi
+if [ -L "$MAINTENANCE_MARKER" ] \
+    || { [ -e "$MAINTENANCE_MARKER" ] && [ ! -f "$MAINTENANCE_MARKER" ]; }
+then
+    fail "invalid inbox maintenance marker: $MAINTENANCE_MARKER"
 fi
 for path in "$CLI_DIR" "$AGENT_DIR"; do
     if [ -L "$path" ]; then
@@ -371,52 +377,72 @@ if ! mkdir "$UPDATE_LOCK" 2>/dev/null; then
 fi
 lock_created=1
 
+# Establish the no-new-claim boundary as soon as this deployment owns the update lock. The
+# currently active delivery may finish, but the worker observes maintenance before claiming its
+# successor while candidate preparation and validation continue.
+if [ "$no_start" -eq 0 ] && [ ! -e "$MAINTENANCE_MARKER" ]; then
+    : >"$MAINTENANCE_MARKER"
+    marker_created=1
+fi
+
 if [ -L "$CONFIG_PATH" ] || { [ -e "$CONFIG_PATH" ] && [ ! -f "$CONFIG_PATH" ]; }; then
     fail "invalid configuration path: $CONFIG_PATH"
 fi
 temporary_config="$STATE_DIR/.config.toml.$$"
 if [ -e "$CONFIG_PATH" ]; then
-    if ! awk -v proxy="$USAGE_PROXY_PATH" '
+    if ! awk -v socket="$nucleus_socket" '
         BEGIN {
             in_liaison = 0
-            changed = 0
+            saw_liaison = 0
+            selected = 0
         }
         /^\[liaison\][[:space:]]*$/ {
             in_liaison = 1
+            saw_liaison = 1
             print
             next
         }
         /^\[/ {
+            if (in_liaison && selected == 0) {
+                print "nucleus_socket = \"" socket "\""
+                selected = 1
+            }
             in_liaison = 0
         }
-        in_liaison && /^[[:space:]]*codex[[:space:]]*=/ {
-            print "codex = \"" proxy "\""
-            changed++
+        in_liaison && /^[[:space:]]*(codex|nucleus_socket)[[:space:]]*=/ {
+            if (selected == 0) {
+                print "nucleus_socket = \"" socket "\""
+                selected = 1
+            }
             next
         }
         {
             print
         }
         END {
-            if (changed != 1) {
+            if (in_liaison && selected == 0) {
+                print "nucleus_socket = \"" socket "\""
+                selected = 1
+            }
+            if (!saw_liaison || selected != 1) {
                 exit 1
             }
         }
     ' "$CONFIG_PATH" >"$temporary_config"
     then
-        fail "unable to select the Annals usage proxy in $CONFIG_PATH"
+        fail "unable to select Nucleus in $CONFIG_PATH"
     fi
 else
     {
         printf '%s\n' 'library = "annals.db"'
         printf '%s\n' '' '[inbox]' 'root = "spool"' 'settle_seconds = 60'
         printf '%s\n' '' '[liaison]' 'quality = "high"'
-        printf 'codex = "%s"\n' "$USAGE_PROXY_PATH"
+        printf 'nucleus_socket = "%s"\n' "$nucleus_socket"
     } >"$temporary_config"
 fi
 chmod 0600 "$temporary_config"
-grep -Fqx "codex = \"$USAGE_PROXY_PATH\"" "$temporary_config" \
-    || fail "candidate configuration does not select the Annals usage proxy: $temporary_config"
+grep -Fqx "nucleus_socket = \"$nucleus_socket\"" "$temporary_config" \
+    || fail "candidate configuration does not select Nucleus: $temporary_config"
 
 if [ -L "$USAGE_CONFIG_PATH" ] \
     || { [ -e "$USAGE_CONFIG_PATH" ] && [ ! -f "$USAGE_CONFIG_PATH" ]; }
@@ -425,29 +451,19 @@ then
 fi
 temporary_usage_config="$STATE_DIR/.usage.toml.$$"
 {
-    printf 'codex = "%s"\n' "$codex_path"
-    printf 'codex_home = "%s"\n' "$CODEX_HOME"
+    printf 'nucleus = "%s"\n' "$nucleus_path"
+    printf 'nucleus_socket = "%s"\n' "$nucleus_socket"
     printf 'library = "%s"\n' "$LIBRARY_PATH"
     printf 'spool = "%s"\n' "$SPOOL_DIR"
     printf 'database = "%s"\n' "$USAGE_LIBRARY_PATH"
 } >"$temporary_usage_config"
 chmod 0600 "$temporary_usage_config"
 
-[ -f "$CODEX_HOME/auth.json" ] && [ ! -L "$CODEX_HOME/auth.json" ] \
-    || fail "missing state-local Codex authentication: $CODEX_HOME/auth.json"
-chmod 0600 "$CODEX_HOME/auth.json"
-if [ -L "$CODEX_CONFIG_PATH" ] \
-    || { [ -e "$CODEX_CONFIG_PATH" ] && [ ! -f "$CODEX_CONFIG_PATH" ]; }
-then
-    fail "invalid state-local Codex configuration: $CODEX_CONFIG_PATH"
-fi
-
 run_with_installation_environment() {
     (
         cd "$STATE_DIR"
         env -i \
             HOME="$install_home" \
-            CODEX_HOME="$CODEX_HOME" \
             PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin \
             USER="$operator" \
             LOGNAME="$operator" \
@@ -486,7 +502,6 @@ plutil -remove ProgramArguments.0 "$temporary_plist"
 plutil -insert ProgramArguments.0 -string "$CLI_PATH" "$temporary_plist"
 plutil -replace WorkingDirectory -string "$STATE_DIR" "$temporary_plist"
 plutil -replace EnvironmentVariables.HOME -string "$install_home" "$temporary_plist"
-plutil -replace EnvironmentVariables.CODEX_HOME -string "$CODEX_HOME" "$temporary_plist"
 plutil -replace StandardOutPath -string "$STATE_DIR/log/inbox.stdout.log" "$temporary_plist"
 plutil -replace StandardErrorPath -string "$STATE_DIR/log/inbox.stderr.log" "$temporary_plist"
 plutil -lint "$temporary_plist" >/dev/null
@@ -603,12 +618,6 @@ if [ -f "$USAGE_CONFIG_PATH" ]; then
     old_usage_config=1
     install -m 0600 "$USAGE_CONFIG_PATH" "$transaction_dir/usage.toml"
 fi
-if [ -f "$CODEX_CONFIG_PATH" ]; then
-    old_codex_config=1
-    install -m 0600 "$CODEX_CONFIG_PATH" \
-        "$transaction_dir/codex-config.toml"
-fi
-
 if [ "$fresh_state" -eq 1 ]; then
     fresh_stage="$transaction_dir/fresh-state"
     install -d -m 0700 \
@@ -705,32 +714,15 @@ if [ "$no_start" -eq 0 ]; then
         run_active_annals --quiet inbox register --settle-seconds 0
     fi
 
-    if [ ! -e "$MAINTENANCE_MARKER" ]; then
-        : >"$MAINTENANCE_MARKER"
-        marker_created=1
-    elif [ ! -f "$MAINTENANCE_MARKER" ] || [ -L "$MAINTENANCE_MARKER" ]; then
-        fail "invalid inbox maintenance marker: $MAINTENANCE_MARKER"
-    fi
-
     if [ "$was_loaded" -eq 1 ]; then
         "$launchctl_path" bootout --wait "$SERVICE_TARGET" >/dev/null
         service_stopped=1
     fi
 fi
 
-if [ -f "$CODEX_CONFIG_PATH" ]; then
-    chmod 0600 "$CODEX_CONFIG_PATH"
-else
-    printf '%s\n' 'cli_auth_credentials_store = "file"' \
-        >"$transaction_dir/codex-config.next.toml"
-    chmod 0600 "$transaction_dir/codex-config.next.toml"
-    codex_config_changed=1
-    mv -f "$transaction_dir/codex-config.next.toml" "$CODEX_CONFIG_PATH"
-fi
-
 run_with_installation_environment "$usage_binary_path" doctor \
     --config "$temporary_usage_config" >/dev/null \
-    || fail 'candidate Annals usage doctor could not authenticate with state-local Codex credentials'
+    || fail 'candidate Annals usage doctor could not verify Nucleus authentication'
 
 if [ "$no_start" -eq 0 ]; then
     smoke_json=$(run_with_installation_environment "$binary_path" \
@@ -855,6 +847,32 @@ if [ "$no_start" -eq 0 ]; then
 fi
 
 completed_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+if [ -n "$old_current" ] && [ "$old_current" != "$new_current" ]; then
+    rollback_name="pre-$release_id-$(date -u '+%Y%m%dT%H%M%SZ')-$$"
+    rollback_snapshot="$DEPLOYMENT_BACKUPS_DIR/$rollback_name"
+    rollback_stage="$transaction_dir/rollback-snapshot"
+    install -d -m 0700 "$rollback_stage"
+    if [ "$old_config" -eq 1 ]; then
+        install -m 0600 "$transaction_dir/config.toml" "$rollback_stage/config.toml"
+    fi
+    if [ "$old_usage_config" -eq 1 ]; then
+        install -m 0600 "$transaction_dir/usage.toml" "$rollback_stage/usage.toml"
+    fi
+    if [ "$old_plist" -eq 1 ]; then
+        install -m 0600 "$transaction_dir/agent.plist" "$rollback_stage/agent.plist"
+    fi
+    {
+        printf '{\n'
+        printf '  "format": 1,\n'
+        printf '  "release": "%s",\n' "$old_current"
+        printf '  "replacement_release": "%s",\n' "$new_current"
+        printf '  "created_at": "%s"\n' "$completed_at"
+        printf '}\n'
+    } >"$rollback_stage/rollback.json"
+    chmod 0600 "$rollback_stage/rollback.json"
+    mv "$rollback_stage" "$rollback_snapshot"
+    rollback_snapshot_created=1
+fi
 receipt="$INSTALL_DIR/last-update.json.tmp.$$"
 {
     printf '{\n'
@@ -866,6 +884,9 @@ receipt="$INSTALL_DIR/last-update.json.tmp.$$"
         printf '  "imported_backlog": %s,\n' "$imported_backlog"
     else
         printf '  "fresh_state": false,\n'
+    fi
+    if [ -n "$rollback_snapshot" ]; then
+        printf '  "rollback_snapshot": "%s",\n' "$rollback_snapshot"
     fi
     printf '  "completed_at": "%s"\n' "$completed_at"
     printf '}\n'

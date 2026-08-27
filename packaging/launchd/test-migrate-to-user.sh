@@ -34,10 +34,11 @@ case " $* " in
     *) exit 0 ;;
 esac
 EOF
-    cat >"$tools_dir/codex" <<'EOF'
+    cat >"$tools_dir/nucleus" <<'EOF'
 #!/bin/sh
 exit 0
 EOF
+    : >"$tools_dir/nucleus.sock"
     cat >"$tools_dir/operator-runner" <<'EOF'
 #!/bin/sh
 [ "$1" = -u ] || exit 91
@@ -97,7 +98,7 @@ while [ "\$#" -gt 0 ]; do
         --launchctl) launchctl=\$2; shift 2 ;;
         --usage-binary) usage_binary=\$2; shift 2 ;;
         --fresh-state) shift ;;
-        --binary|--codex) shift 2 ;;
+        --binary|--nucleus|--nucleus-socket) shift 2 ;;
         *) exit 93 ;;
     esac
 done
@@ -149,7 +150,7 @@ root = "/Library/Application Support/Annals/spool"
 
 [liaison]
 quality = "high"
-codex = "$fixture/tools/codex"
+codex = "$fixture/tools/nucleus"
 EOF
     printf '%s\n' database >"$state/annals.db"
     printf '%s\n' wal >"$state/annals.db-wal"
@@ -175,7 +176,8 @@ run_migration() {
         "$MIGRATOR" \
         --binary "$fixture/tools/annals" \
         --usage-binary "$fixture/tools/annals-usage" \
-        --codex "$fixture/tools/codex" \
+        --nucleus "$fixture/tools/nucleus" \
+        --nucleus-socket "$fixture/tools/nucleus.sock" \
         --legacy-prefix "$fixture/legacy" \
         --launchctl "$fixture/tools/launchctl" \
         --dscl "$fixture/tools/dscl" \

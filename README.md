@@ -21,20 +21,21 @@ not content supplied to the liaison or part of the runtime contract.
 ## Requirements
 
 - macOS or Linux and Rust 1.97.1 to build the repository;
-- an installed and authenticated `codex` executable for `annals integrate` or
-  `annals inbox run`;
-- no daemon or separate database server.
+- an installed, running, and authenticated Nucleus service for `annals
+  integrate` or `annals inbox run`.
 
-The repository is a virtual Cargo workspace. The `annals` package lives under
-`crates/annals`, and the separate `annals-usage` package provides the default
-Codex proxy and consumption reports. A workspace release build produces both
-`target/release/annals` and `target/release/annals-usage`.
+The repository is a virtual Cargo workspace. Its Nucleus Rust dependencies are
+pinned to the `v0.2.0` tag in `JTan2231/nucleus-rs`; building Annals therefore
+requires Git credentials with read access to that repository.
+The `annals` package lives under `crates/annals`, and the separate
+`annals-usage` package provides consumption reports. A workspace release build
+produces both `target/release/annals` and `target/release/annals-usage`.
 
 The liaison defaults to high quality: `gpt-5.6-sol` with max reasoning.
 `--quality low` selects `gpt-5.6-luna` with medium reasoning, and `--quality
 medium` selects `gpt-5.6-terra` with medium reasoning. `--model` provides an
 exact model override. Annals gives the liaison a short pointer prompt and
-exactly nine session-scoped tools through an isolated Codex app-server; no
+exactly nine session-scoped tools through a Nucleus-owned isolated Codex app-server; no
 shell, web, planning, user-input, or multi-agent tools are available. The
 complete work is not placed in the prompt. The liaison starts a reconciliation
 draft, corrects only operations Annals identifies when needed, and may inspect
@@ -213,36 +214,42 @@ exact content-addressed release IDs used by the macOS deployer.
 
 ## Scheduled macOS installation
 
-The macOS installation is deliberately user-owned, so Codex running as that
-user can update the whole application without administrator credentials. After
-state-local Codex authentication is prepared as described in the
-[system installation guide](docs/system-installation.md), deploy with:
+The macOS installation is deliberately user-owned. Deploy Nucleus first,
+import or establish authentication through Nucleus, and verify that its daemon
+is healthy. Then deploy Annals with the Nucleus executable and socket:
 
 ```sh
 ./ci.sh
 ./packaging/launchd/deploy-user.sh \
   --binary "$PWD/target/release/annals" \
   --usage-binary "$PWD/target/release/annals-usage" \
-  --codex "$(command -v codex)"
+  --nucleus "$HOME/.local/bin/nucleus" \
+  --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock"
 ```
 
 The deployer installs `~/.local/bin/annals` and
 `~/.local/bin/annals-usage`, versioned complete releases under
 `~/Library/Application Support/Annals/install`, and a user LaunchAgent under
-`~/Library/LaunchAgents`. It also selects the proxy in Annals' configuration and
-keeps the companion `usage.toml` and `usage.db` beside the Annals library.
+`~/Library/LaunchAgents`. It selects the Nucleus socket in Annals'
+configuration and keeps the companion `usage.toml` and `usage.db` beside the
+Annals library.
 Running the same command again is the unattended update process. It drains the
 worker between jobs, takes a consistent Annals library backup, switches both
 binaries through one release selector, updates both configurations within a
 rollback-protected transaction, validates the result, and automatically
 restores the previous release if launchd cutover fails. Configuration,
-credentials, library data, telemetry, logs, the operator pause state, and
+library data, telemetry, logs, the operator pause state, and
 queued or archived sources are retained.
+For a later operator-requested rollback, `install/last-update.json` names a
+durable snapshot containing the prior configs and LaunchAgent; restore that
+snapshot together with the `previous` release selector. Credentials are not
+included: reverting to the old invocation system also requires a secure
+current-credential transfer or attended login while both services are stopped.
 
-If the state-local Codex login expires, queued jobs remain unattempted behind
-the authenticated dispatch preflight. Follow the installation guide's
-[attended reauthentication sequence](docs/system-installation.md#attended-reauthentication)
-to pause, renew through `annals-usage`, verify, canary, and resume.
+If Nucleus authentication expires, queued jobs remain unattempted behind the
+authenticated dispatch preflight. Pause Annals, run `annals-usage login
+--device-auth` (which delegates to `nucleus auth login --device-auth`), verify
+with `annals-usage doctor`, canary, and resume.
 
 The current schema is version 4. Normal deployment additively migrates a
 version-3 library to add bounded retry-event provenance while retaining its

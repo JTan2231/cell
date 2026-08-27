@@ -20,8 +20,6 @@
     <dict>
         <key>HOME</key>
         <string>__ANNALS_HOME__</string>
-        <key>CODEX_HOME</key>
-        <string>__ANNALS_CODEX_HOME__</string>
     </dict>
 
     <key>RunAtLoad</key>

@@ -1,8 +1,9 @@
 # Consumption telemetry
 
 `annals-usage` is a separate workspace package and companion CLI that measures
-the Codex consumption caused by Annals examinations. It is also Annals' default
-Codex proxy. Its purpose is to make the measurable boundary explicit: a report
+the Codex consumption caused by Annals examinations. Nucleus, not
+`annals-usage`, owns invocation and authentication. The companion's purpose is
+to make the measurable boundary explicit: a report
 states both the recorded token totals and the quality of the observation rather
 than filling historical or protocol gaps with estimates.
 
@@ -11,35 +12,43 @@ The normal installed path is:
 ```text
 Annals examination
         |
-        | model-run token
+        | deterministic job + model-run token
         v
-annals-usage proxy ---- exact and cumulative events ----> usage.db
+     Nucleus ---- exact raw Codex protocol records ----> annals-usage sync
         |
         v
-   real Codex
+ Nucleus-owned Codex                                usage.db
 ```
 
-The proxy preserves the Codex arguments, standard streams, and exit status.
-For `app-server --stdio`, it observes token and rate-limit events and enables
-per-response usage events on `thread/start`. It does not change the liaison
-prompt, model, reasoning effort, or tool set. The model-run token supplied by
-Annals correlates an observed run with the library's model-run record and, for
-an inbox examination, its source delivery and job receipt.
+Nucleus stores the exact app-server protocol input and output independently of
+the Annals process. The model-run token in the Nucleus requester identity
+correlates a terminal job with the library's model-run record and, for an inbox
+examination, its source delivery and job receipt. `annals-usage report`
+materializes a pending row for an active Annals job and incrementally imports
+previously unseen terminal jobs one at a time. It
+replays raw token, response-usage, rate-limit, and turn-completion messages into
+the companion ledger without changing the liaison prompt, model, reasoning
+effort, or tool set. Replayed events retain their Nucleus observation times, so
+historical ordering is not shifted to report time. Non-Codex schemas,
+undecodable records, missing usage, and incomplete terminal streams are
+disclosed as coverage gaps.
 
-For every invocation that reaches real Codex, `annals-usage` holds an exclusive
-lease at `codex_home/.annals-auth.lock` and explicitly sets that persistent,
-state-local home as `CODEX_HOME`. Login and token refresh therefore update the
-one authoritative `auth.json` in place. Proxy and passthrough invocations wait
-for the lease; the interactive `budget` and `doctor` commands instead report
-that authentication is busy. `report` reads stored data and needs no lease.
+Each terminal import is one SQLite transaction: pending-row replacement, raw
+event replay, source-delivery attribution, and terminalization either commit
+together or leave the prior row unchanged for retry. A retained terminal
+receipt can also repair a completed Nucleus run imported without delivery
+attribution; the repair preserves the run identity and atomically replaces its
+derived event rows from Nucleus's retained log. Completed tokens that do not
+need attribution repair are filtered before fetching job details or logs. Attempt
+start and completion times come from Nucleus. If Nucleus is temporarily
+unavailable, `report` warns on stderr and reports the observations already
+retained in `usage.db`; model execution itself is unaffected.
 
-Telemetry is fail-open for an examination. If the companion database cannot be
-opened or an event cannot be recorded, the proxy reports that telemetry is
-unavailable on stderr and continues forwarding Codex traffic. It records a
-turn's completion before forwarding that completion to Annals, because Annals
-may close the isolated app-server immediately afterward.
-Credential validation and lease acquisition are not telemetry: they fail
-closed before real Codex starts.
+Nucleus owns one persistent Codex home and the cross-process authentication
+lease. Annals and `annals-usage` never read, copy, or configure its credentials.
+Interactive `budget` and `doctor` account reads use a nonblocking lease request
+and preserve the existing busy error behavior. Inbox authentication preflight
+may wait up to 30 seconds before leaving a new job unattempted.
 
 ## CLI
 
@@ -47,6 +56,7 @@ closed before real Codex starts.
 annals-usage report [--json] [--limit N] [--config PATH]
 annals-usage budget [--json] [--config PATH]
 annals-usage doctor [--config PATH]
+annals-usage login --device-auth
 ```
 
 `report` joins recent delivery records from the Annals library with observed
@@ -64,8 +74,8 @@ reconciliation creates no new model attempt. `annals inbox retry status` is the
 authoritative view that pairs the two deliveries and their outcomes; the
 telemetry report does not merge them or reattribute the original attempt.
 
-`budget` makes live `account/rateLimits/read` and `account/usage/read` requests
-through the configured real Codex. It stores the allowance snapshot and prints
+`budget` asks Nucleus to make live `account/rateLimits/read` and
+`account/usage/read` requests. It stores the allowance snapshot and prints
 the account plan, available limit windows, used percentages, reset times, and
 credit fields. It also shows lifetime, peak-day, and latest-day account token
 activity as a clearly labeled cross-check; those global activity tokens are not
@@ -74,14 +84,15 @@ separate endpoint is available, the complete activity result alongside the
 observation time and scope. Activity-read failure is reported but does not hide
 a successful allowance read.
 
-`doctor` checks the referenced Annals library, spool, state-local Codex home,
-and real Codex path; opens or creates the telemetry database; reads the Codex
-version; validates the private credential configuration; and performs an
-authenticated account-limit request while holding the credential lease.
+`doctor` checks the referenced Annals library, spool, Nucleus executable and
+socket; opens or creates the telemetry database; reads the Nucleus and Codex
+versions; validates readiness; and performs a nonblocking authenticated
+account-limit request through Nucleus.
 
-Help and version flags belong to `annals-usage`. Any other invocation is passed
-through to the configured real Codex. This lets Annals select one executable as
-its Codex command while retaining ordinary app-server behavior.
+Help and version flags belong to `annals-usage`. `login --device-auth`
+delegates to the configured `nucleus auth login --device-auth` command. Other
+former proxy/passthrough invocations are rejected; Annals communicates only
+with Nucleus.
 
 ## Token accounting
 
@@ -172,11 +183,11 @@ The installed macOS deployment writes
 `$HOME/Library/Application Support/Annals/usage.toml`:
 
 ```toml
-codex = "/absolute/path/to/the/real/codex"
+nucleus = "/absolute/path/to/nucleus"
+nucleus_socket = "/absolute/path/to/nucleus.sock"
 database = "/absolute/path/to/usage.db"
 library = "/absolute/path/to/annals.db"
 spool = "/absolute/path/to/spool"
-codex_home = "/absolute/path/to/codex-home"
 ```
 
 An explicit `--config` selects the report, budget, or doctor configuration.
@@ -185,19 +196,11 @@ beside a nonempty `ANNALS_CONFIG`, then to the macOS state path under `HOME`.
 Relative values are resolved from the selected configuration's directory, and
 unknown keys are rejected.
 
-The selected `codex_home` must be a private directory. Its private, regular
-`config.toml` must contain only:
-
-```toml
-cli_auth_credentials_store = "file"
-```
-
-This makes the state-local file the sole credential authority while preventing
-ambient Codex configuration from entering the constrained liaison runtime.
-Use `annals-usage login --device-auth` rather than invoking real Codex directly
-against this home once the scheduled service can run; the passthrough login is
-serialized by the same lease. Codex may rewrite `auth.json` during refresh, and
-the successor credential remains in this persistent home for the next run.
+`nucleus_socket` may be omitted to use Nucleus's standard current-user socket.
+The executable is used only for delegated login; reports, budget reads, and
+doctor communicate over the socket. Use `annals-usage login --device-auth` or
+`nucleus auth login --device-auth`; both leave credential storage and lease
+ownership entirely inside Nucleus.
 
 `usage.db` is a companion SQLite ledger in the same installation state as the
 Annals library and is accessible to the same user. It is intentionally not part
@@ -210,13 +213,13 @@ delivery records, reconciliations, or corpus revisions. The ledger retains:
 - account quota snapshots.
 
 Deployments retain `usage.toml` and `usage.db` alongside the library and spool.
-The macOS deployer switches Annals and `annals-usage` together, so a scheduled
-worker never needs a manual proxy update. See [System installation and
+The macOS deployer switches Annals and `annals-usage` together and pins both
+configs to the deployed Nucleus socket. See [System installation and
 scheduled inbox](system-installation.md#macos-user-launchagent).
 
 ## Authority and limits
 
-For source deliveries processed through the proxy, the telemetry ledger plus
+For source deliveries processed through Nucleus, the telemetry ledger plus
 the Annals library and job receipts is the supported accounting surface. The
 coverage value is part of that authority: `exact` is a measured total, while a
 gap or legacy value explicitly means that no authoritative total exists.

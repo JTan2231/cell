@@ -11,7 +11,8 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 
 binary_path=
 usage_binary_path=
-codex_path=
+nucleus_path=
+nucleus_socket=
 legacy_prefix=${ANNALS_MIGRATION_LEGACY_PREFIX:-}
 legacy_state_override=${ANNALS_MIGRATION_LEGACY_STATE:-}
 launchctl_path=${ANNALS_MIGRATION_LAUNCHCTL:-/bin/launchctl}
@@ -22,7 +23,7 @@ deploy_path=${ANNALS_MIGRATION_DEPLOY:-$SCRIPT_DIR/deploy-user.sh}
 usage() {
     cat <<'EOF'
 Usage: migrate-to-user.sh --binary ABSOLUTE_PATH --usage-binary ABSOLUTE_PATH \
-  --codex ABSOLUTE_PATH [OPTIONS]
+  --nucleus ABSOLUTE_PATH --nucleus-socket ABSOLUTE_PATH [OPTIONS]
 
 Move the legacy system Annals installation into the selected operator's home
 and deploy the complete user-owned installation. Run this command as root.
@@ -46,7 +47,8 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         --binary) binary_path=${2:?}; shift 2 ;;
         --usage-binary) usage_binary_path=${2:?}; shift 2 ;;
-        --codex) codex_path=${2:?}; shift 2 ;;
+        --nucleus) nucleus_path=${2:?}; shift 2 ;;
+        --nucleus-socket) nucleus_socket=${2:?}; shift 2 ;;
         --legacy-prefix) legacy_prefix=${2:?}; shift 2 ;;
         --legacy-state) legacy_state_override=${2:?}; shift 2 ;;
         --launchctl) launchctl_path=${2:?}; shift 2 ;;
@@ -69,7 +71,7 @@ fi
 
 [ -n "$usage_binary_path" ] || fail '--usage-binary is required'
 for value_name in \
-    binary_path usage_binary_path codex_path launchctl_path dscl_path operator_runner deploy_path
+    binary_path usage_binary_path nucleus_path nucleus_socket launchctl_path dscl_path operator_runner deploy_path
 do
     eval "value=\${$value_name}"
     [ -n "$value" ] || fail "$value_name is required"
@@ -81,8 +83,8 @@ do
     [ -f "$executable" ] && [ -x "$executable" ] && [ ! -L "$executable" ] \
         || fail "required executable is unavailable: $executable"
 done
-if [ ! -x "$codex_path" ] || { [ ! -f "$codex_path" ] && [ ! -L "$codex_path" ]; }; then
-    fail "Codex executable is unavailable: $codex_path"
+if [ ! -x "$nucleus_path" ] || { [ ! -f "$nucleus_path" ] && [ ! -L "$nucleus_path" ]; }; then
+    fail "Nucleus executable is unavailable: $nucleus_path"
 fi
 
 LEGACY_FRONTEND="$legacy_prefix/usr/local/bin/annals"
@@ -328,7 +330,8 @@ fi
 run_as_operator "$deploy_path" \
     --binary "$binary_path" \
     --usage-binary "$usage_binary_path" \
-    --codex "$codex_path" \
+    --nucleus "$nucleus_path" \
+    --nucleus-socket "$nucleus_socket" \
     --home "$operator_home" \
     --launchctl "$launchctl_path" \
     --fresh-state

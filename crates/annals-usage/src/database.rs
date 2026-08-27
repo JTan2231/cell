@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -231,6 +232,170 @@ impl UsageDatabase {
         Ok(self.connection.last_insert_rowid())
     }
 
+    pub(crate) fn imported_model_run_tokens(&self) -> Result<BTreeSet<String>, DatabaseError> {
+        let mut statement = self.connection.prepare(
+            "SELECT model_run_token FROM runs \
+             WHERE model_run_token IS NOT NULL \
+               AND status != 'running' AND coverage != 'pending'",
+        )?;
+        let rows = statement.query_map([], |row| row.get(0))?;
+        rows.collect::<Result<_, _>>().map_err(Into::into)
+    }
+
+    pub(crate) fn unattributed_model_run_tokens(&self) -> Result<BTreeSet<String>, DatabaseError> {
+        let mut statement = self.connection.prepare(
+            "SELECT model_run_token FROM runs \
+             WHERE model_run_token IS NOT NULL AND delivery_id IS NULL",
+        )?;
+        let rows = statement.query_map([], |row| row.get(0))?;
+        rows.collect::<Result<_, _>>().map_err(Into::into)
+    }
+
+    pub(crate) fn model_run_import_is_complete(&self, token: &str) -> Result<bool, DatabaseError> {
+        self.connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM runs \
+                 WHERE model_run_token = ?1 \
+                   AND status != 'running' AND coverage != 'pending')",
+                [token],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn has_model_run_token(&self, token: &str) -> Result<bool, DatabaseError> {
+        self.connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM runs WHERE model_run_token = ?1)",
+                [token],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn begin_or_reset_run(
+        &self,
+        identity: &RunIdentity,
+        codex_version: Option<&str>,
+    ) -> Result<i64, DatabaseError> {
+        let Some(token) = identity.model_run_token.as_deref() else {
+            return Err(DatabaseError::MissingImportToken);
+        };
+        let existing = self
+            .connection
+            .query_row(
+                "SELECT id FROM runs WHERE model_run_token = ?1",
+                [token],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?;
+        let Some(run_id) = existing else {
+            self.connection.execute(
+                "INSERT INTO runs(\
+                     model_run_token, annals_model_run_id, delivery_id, inbox_job_id, attempt, \
+                     work_id, work_label, source_name, base_revision, model, reasoning_effort, \
+                     observer_version, codex_version, status, coverage, started_at_ms\
+                 ) VALUES(\
+                     ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, \
+                     'running', 'pending', ?14\
+                 )",
+                params![
+                    identity.model_run_token,
+                    identity.annals_model_run_id,
+                    identity.delivery_id,
+                    identity.inbox_job_id,
+                    identity.attempt,
+                    identity.work_id,
+                    identity.work_label,
+                    identity.source_name,
+                    identity.base_revision,
+                    identity.model,
+                    identity.reasoning_effort,
+                    env!("CARGO_PKG_VERSION"),
+                    codex_version,
+                    now_millis()?
+                ],
+            )?;
+            return Ok(self.connection.last_insert_rowid());
+        };
+
+        self.connection
+            .execute("DELETE FROM token_snapshots WHERE run_id = ?1", [run_id])?;
+        self.connection
+            .execute("DELETE FROM response_usages WHERE run_id = ?1", [run_id])?;
+        self.connection
+            .execute("DELETE FROM quota_snapshots WHERE run_id = ?1", [run_id])?;
+        self.connection.execute(
+            "UPDATE runs SET \
+                 annals_model_run_id = ?1, delivery_id = ?2, inbox_job_id = ?3, attempt = ?4, \
+                 work_id = ?5, work_label = ?6, source_name = ?7, base_revision = ?8, \
+                 model = ?9, reasoning_effort = ?10, observer_version = ?11, \
+                 codex_version = ?12, thread_id = NULL, turn_id = NULL, status = 'running', \
+                 coverage = 'pending', started_at_ms = ?13, completed_at_ms = NULL, \
+                 input_tokens = NULL, cached_input_tokens = NULL, \
+                 cache_write_input_tokens = NULL, output_tokens = NULL, \
+                 reasoning_output_tokens = NULL, total_tokens = NULL, \
+                 model_context_window = NULL, exact_stream_complete = 1, error = NULL \
+             WHERE id = ?14",
+            params![
+                identity.annals_model_run_id,
+                identity.delivery_id,
+                identity.inbox_job_id,
+                identity.attempt,
+                identity.work_id,
+                identity.work_label,
+                identity.source_name,
+                identity.base_revision,
+                identity.model,
+                identity.reasoning_effort,
+                env!("CARGO_PKG_VERSION"),
+                codex_version,
+                now_millis()?,
+                run_id,
+            ],
+        )?;
+        Ok(run_id)
+    }
+
+    pub(crate) fn transaction<T, E>(
+        &mut self,
+        operation: impl FnOnce(&mut Self) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<DatabaseError>,
+    {
+        self.connection
+            .execute_batch("BEGIN IMMEDIATE")
+            .map_err(DatabaseError::from)?;
+        match operation(self) {
+            Ok(value) => {
+                if let Err(error) = self.connection.execute_batch("COMMIT") {
+                    let _ = self.connection.execute_batch("ROLLBACK");
+                    return Err(DatabaseError::from(error).into());
+                }
+                Ok(value)
+            }
+            Err(error) => {
+                let _ = self.connection.execute_batch("ROLLBACK");
+                Err(error)
+            }
+        }
+    }
+
+    pub(crate) fn set_run_timestamps(
+        &self,
+        run_id: i64,
+        started_at_ms: i64,
+        completed_at_ms: Option<i64>,
+    ) -> Result<(), DatabaseError> {
+        self.connection.execute(
+            "UPDATE runs SET started_at_ms = ?1, \
+             completed_at_ms = COALESCE(?2, completed_at_ms) WHERE id = ?3",
+            params![started_at_ms, completed_at_ms, run_id],
+        )?;
+        Ok(())
+    }
+
     pub(crate) fn bind_thread(
         &self,
         run_id: i64,
@@ -250,9 +415,9 @@ impl UsageDatabase {
         thread_id: &str,
         turn_id: &str,
         usage: &ThreadTokenUsage,
+        observed_at_ms: i64,
     ) -> Result<(), DatabaseError> {
         let sequence = next_sequence(&self.connection, "token_snapshots", run_id)?;
-        let observed_at = now_millis()?;
         let last = usage.last;
         let total = usage.total;
         self.connection.execute(
@@ -269,7 +434,7 @@ impl UsageDatabase {
             params![
                 run_id,
                 sequence,
-                observed_at,
+                observed_at_ms,
                 thread_id,
                 turn_id,
                 last.input_tokens,
@@ -331,6 +496,7 @@ impl UsageDatabase {
         thread_id: &str,
         turn_id: &str,
         usage: TokenUsageBreakdown,
+        observed_at_ms: i64,
     ) -> Result<(), DatabaseError> {
         if !usage.is_consistent() {
             self.record_exact_gap(
@@ -349,7 +515,7 @@ impl UsageDatabase {
             params![
                 run_id,
                 sequence,
-                now_millis()?,
+                observed_at_ms,
                 response_id,
                 thread_id,
                 turn_id,
@@ -370,12 +536,22 @@ impl UsageDatabase {
         source: &str,
         payload: &Value,
     ) -> Result<(), DatabaseError> {
+        self.record_quota_snapshot_at(run_id, source, payload, now_millis()?)
+    }
+
+    pub(crate) fn record_quota_snapshot_at(
+        &self,
+        run_id: Option<i64>,
+        source: &str,
+        payload: &Value,
+        observed_at_ms: i64,
+    ) -> Result<(), DatabaseError> {
         self.connection.execute(
             "INSERT INTO quota_snapshots(run_id, observed_at_ms, source, payload) \
              VALUES(?1, ?2, ?3, ?4)",
             params![
                 run_id,
-                now_millis()?,
+                observed_at_ms,
                 source,
                 serde_json::to_string(payload)?
             ],
@@ -383,6 +559,7 @@ impl UsageDatabase {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn complete_run(
         &self,
         run_id: i64,
@@ -485,7 +662,8 @@ impl UsageDatabase {
         self.connection.execute(
             "UPDATE runs SET \
                  status = ?1, thread_id = COALESCE(?2, thread_id), \
-                 turn_id = COALESCE(?3, turn_id), completed_at_ms = ?4, \
+                 turn_id = COALESCE(?3, turn_id), \
+                 completed_at_ms = COALESCE(completed_at_ms, ?4), \
                  coverage = CASE WHEN coverage = 'pending' THEN 'gap' ELSE coverage END \
              WHERE id = ?5",
             params![status, thread_id, turn_id, now_millis()?, run_id],
@@ -499,7 +677,8 @@ impl UsageDatabase {
         status: &str,
     ) -> Result<(), DatabaseError> {
         self.connection.execute(
-            "UPDATE runs SET status = ?1, completed_at_ms = ?2, coverage = 'gap', \
+            "UPDATE runs SET status = ?1, \
+                 completed_at_ms = COALESCE(completed_at_ms, ?2), coverage = 'gap', \
                  exact_stream_complete = 0, \
                  error = COALESCE(error, 'the proxy ended before turn completion') \
              WHERE id = ?3",
@@ -599,6 +778,7 @@ impl RunIdentity {
     pub(crate) fn resolve(
         config: &UsageConfig,
         token: Option<&str>,
+        receipts: &ModelRunReceipts,
     ) -> Result<Self, DatabaseError> {
         let Some(token) = token else {
             return Ok(Self::unattributed());
@@ -633,11 +813,11 @@ impl RunIdentity {
                 ..Self::unattributed()
             });
         };
-        let receipt = receipt_for_token(&config.spool, token)?;
+        let receipt = receipts.get(token);
         let (delivery_id, inbox_job_id, attempt) = receipt.map_or((None, None, None), |receipt| {
             (
                 receipt.ingestion_id,
-                Some(receipt.id),
+                Some(receipt.id.clone()),
                 Some(i64::from(receipt.attempts)),
             )
         });
@@ -685,39 +865,57 @@ impl RunIdentity {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct JobReceipt {
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct JobReceipt {
     id: String,
     attempts: u32,
-    ingestion_id: Option<i64>,
+    pub(crate) ingestion_id: Option<i64>,
     model_run_token: Option<String>,
 }
 
-fn receipt_for_token(spool: &Path, token: &str) -> Result<Option<JobReceipt>, DatabaseError> {
-    let processing = spool.join("processing");
-    let entries = match fs::read_dir(&processing) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(source) => {
-            return Err(DatabaseError::ReadDirectory {
-                path: processing,
-                source,
-            });
-        }
-    };
-    for entry in entries {
-        let path = entry?.path().join("job.json");
-        let document = match fs::read_to_string(&path) {
-            Ok(document) => document,
+pub(crate) type ModelRunReceipts = BTreeMap<String, JobReceipt>;
+
+pub(crate) fn read_model_run_receipts(spool: &Path) -> Result<ModelRunReceipts, DatabaseError> {
+    let mut receipts = ModelRunReceipts::new();
+    // Processing comes first so a concurrent atomic move into a terminal lane is observed in at
+    // least one location. Seeing the same job in both scans is harmless; a token naming different
+    // jobs is corrupt durable state.
+    for state in ["processing", "done", "duplicates", "failed", "skipped"] {
+        let directory = spool.join(state);
+        let entries = match fs::read_dir(&directory) {
+            Ok(entries) => entries,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(source) => return Err(DatabaseError::ReadReceipt { path, source }),
+            Err(source) => {
+                return Err(DatabaseError::ReadDirectory {
+                    path: directory,
+                    source,
+                });
+            }
         };
-        let receipt: JobReceipt = serde_json::from_str(&document)?;
-        if receipt.model_run_token.as_deref() == Some(token) {
-            return Ok(Some(receipt));
+        for entry in entries {
+            let path = entry?.path().join("job.json");
+            let document = match fs::read_to_string(&path) {
+                Ok(document) => document,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(source) => return Err(DatabaseError::ReadReceipt { path, source }),
+            };
+            let receipt: JobReceipt = serde_json::from_str(&document)?;
+            let Some(token) = receipt.model_run_token.clone() else {
+                continue;
+            };
+            if let Some(existing) = receipts.get(&token)
+                && existing.id != receipt.id
+            {
+                return Err(DatabaseError::DuplicateModelRunReceipt {
+                    token,
+                    first_job: existing.id.clone(),
+                    second_job: receipt.id,
+                });
+            }
+            receipts.insert(token, receipt);
         }
     }
-    Ok(None)
+    Ok(receipts)
 }
 
 fn stored_run_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredRun> {
@@ -793,6 +991,8 @@ pub(crate) enum DatabaseError {
     },
     #[error("unsupported telemetry database schema version {0}")]
     UnsupportedSchema(i64),
+    #[error("a Nucleus telemetry import requires a model-run token")]
+    MissingImportToken,
     #[error("unable to read inbox directory {path}: {source}")]
     ReadDirectory {
         path: std::path::PathBuf,
@@ -804,6 +1004,12 @@ pub(crate) enum DatabaseError {
         path: std::path::PathBuf,
         #[source]
         source: std::io::Error,
+    },
+    #[error("model run token {token} appears in multiple inbox jobs: {first_job} and {second_job}")]
+    DuplicateModelRunReceipt {
+        token: String,
+        first_job: String,
+        second_job: String,
     },
     #[error("system clock is before the Unix epoch: {0}")]
     Clock(std::time::SystemTimeError),
@@ -819,7 +1025,7 @@ pub(crate) enum DatabaseError {
 
 #[cfg(test)]
 mod tests {
-    use super::{RunIdentity, UsageDatabase};
+    use super::{DatabaseError, RunIdentity, UsageDatabase};
     use crate::types::{ThreadTokenUsage, TokenUsageBreakdown};
 
     #[test]
@@ -839,6 +1045,7 @@ mod tests {
                 total: first,
                 model_context_window: Some(1000),
             },
+            1_000,
         )?;
         let second = breakdown(250, 50);
         database.record_token_usage(
@@ -850,6 +1057,7 @@ mod tests {
                 total: second,
                 model_context_window: Some(1000),
             },
+            2_000,
         )?;
         database.complete_run(run_id, "completed", Some("thread"), Some("turn"))?;
 
@@ -867,8 +1075,8 @@ mod tests {
         let run_id = database.begin_run(&RunIdentity::unattributed(), None)?;
         let first = breakdown(100, 20);
         let second = breakdown(150, 30);
-        database.record_response_usage(run_id, "response-1", "thread", "turn", first)?;
-        database.record_response_usage(run_id, "response-2", "thread", "turn", second)?;
+        database.record_response_usage(run_id, "response-1", "thread", "turn", first, 1_000)?;
+        database.record_response_usage(run_id, "response-2", "thread", "turn", second, 2_000)?;
         database.record_token_usage(
             run_id,
             "thread",
@@ -878,6 +1086,7 @@ mod tests {
                 total: breakdown(250, 50),
                 model_context_window: Some(1_000),
             },
+            3_000,
         )?;
         database.complete_run(run_id, "completed", Some("thread"), Some("turn"))?;
 
@@ -907,6 +1116,7 @@ mod tests {
                 total: cumulative,
                 model_context_window: None,
             },
+            1_000,
         )?;
         database.complete_run(run_id, "completed", Some("thread"), Some("turn"))?;
 
@@ -930,6 +1140,7 @@ mod tests {
             "thread",
             "turn",
             breakdown(100, 20),
+            1_000,
         )?;
         let cumulative = breakdown(250, 50);
         database.record_token_usage(
@@ -941,6 +1152,7 @@ mod tests {
                 total: cumulative,
                 model_context_window: None,
             },
+            2_000,
         )?;
         database.complete_run(run_id, "completed", Some("thread"), Some("turn"))?;
 
@@ -967,6 +1179,7 @@ mod tests {
             "thread",
             "turn",
             breakdown(100, 20),
+            1_000,
         )?;
         database.finish_incomplete_run(run_id, "codex-exit-1")?;
 
@@ -979,6 +1192,49 @@ mod tests {
             run.error.as_deref(),
             Some("the proxy ended before turn completion")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn failed_terminal_import_transaction_restores_the_pending_placeholder()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let mut database = UsageDatabase::open(&directory.path().join("usage.db"))?;
+        let mut identity = RunIdentity::unattributed();
+        identity.model_run_token = Some("run-token".to_owned());
+        let run_id = database.begin_run(&identity, Some("codex test"))?;
+        database.set_run_timestamps(run_id, 1234, Some(5678))?;
+
+        assert!(database.has_model_run_token("run-token")?);
+        assert!(database.imported_model_run_tokens()?.is_empty());
+        let result = database.transaction::<(), DatabaseError>(|database| {
+            let replacement = database.begin_or_reset_run(&identity, Some("codex replacement"))?;
+            assert_eq!(replacement, run_id);
+            let usage = breakdown(100, 20);
+            database.record_token_usage(
+                replacement,
+                "thread",
+                "turn",
+                &ThreadTokenUsage {
+                    last: usage,
+                    total: usage,
+                    model_context_window: None,
+                },
+                2_000,
+            )?;
+            // Coverage has already changed, but a running row is not a completed import marker.
+            assert!(database.imported_model_run_tokens()?.is_empty());
+            Err(DatabaseError::ClockOverflow)
+        });
+        assert!(matches!(result, Err(DatabaseError::ClockOverflow)));
+
+        let run = &database.runs(1)?[0];
+        assert_eq!(run.started_at_ms, 1234);
+        assert_eq!(run.completed_at_ms, Some(5678));
+        assert_eq!(run.coverage, "pending");
+        assert_eq!(run.status, "running");
+        assert!(run.usage.is_none());
+        assert!(database.imported_model_run_tokens()?.is_empty());
         Ok(())
     }
 

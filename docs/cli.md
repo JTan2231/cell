@@ -125,16 +125,14 @@ then `[liaison].quality` in the selected config, then `high`:
 
 `--model` resolves from the command line, then `[liaison].model`, then the
 model selected by the quality preset. It changes only the model; the selected
-quality continues to choose reasoning effort. `[liaison].codex` selects the
-Codex executable and defaults to `annals-usage`. The companion executable
-proxies the isolated Codex app-server while recording token consumption; its
-own configuration selects the real `codex` executable and the persistent,
-state-local Codex home. It serializes every real-Codex invocation with one
-credential lease so refreshes update that home in place. Selecting another
-`[liaison].codex` path bypasses both this lease and the observation layer; the
-custom runner owns credential serialization. Annals still uses the selected
-executable for its generic authenticated account preflight before queued
-dispatch.
+quality continues to choose reasoning effort. `[liaison].nucleus_socket`
+optionally selects a nonstandard Nucleus Unix socket. Annals submits the same
+prompt, base and developer instructions, model, reasoning effort, and exact
+nine-tool contract as one Nucleus job. There is no direct Codex fallback.
+Nucleus owns the isolated app-server process, persistent authentication,
+credential refresh, and serialization. Annals asks Nucleus for an
+authenticated account preflight before a queued dispatch; it may wait up to 30
+seconds, and failure leaves the envelope queued with attempts zero.
 
 The liaison submits a provisional, best-current interpretation. It does not
 filter source material by estimated novelty or salience and does not claim an
@@ -154,19 +152,22 @@ The separate companion CLI has three reporting commands:
 annals-usage report [--json] [--limit N] [--config PATH]
 annals-usage budget [--json] [--config PATH]
 annals-usage doctor [--config PATH]
+annals-usage login --device-auth
 ```
 
-`report` attributes observed model-run attempts to recent source
-deliveries. Its coverage field distinguishes exact per-response totals,
+`report` imports previously unseen terminal Annals jobs from Nucleus and
+attributes their observed model-run attempts to recent source deliveries. Its
+coverage field distinguishes exact per-response totals,
 cumulative fallbacks, known zero-use deliveries, pending work, reused
 examinations, and unobserved history. `budget` records and displays a live,
 account-global Codex allowance snapshot and labels the account's lifetime and
 daily token activity as contextual rather than allowance units. The backend
 exposes neither a token denominator for that allowance nor a per-delivery
 subscription share. `doctor` checks the companion configuration and ledger,
-the Annals paths, the real Codex executable, and authenticated account-telemetry
-access. `budget` and `doctor` report that authentication is busy instead of
-waiting when another proxy invocation owns the credential lease.
+the Annals paths, Nucleus and authenticated account-telemetry access. `budget`
+and `doctor` report that authentication is busy instead of waiting when another
+Nucleus operation owns the credential lease. `login` delegates to `nucleus auth
+login`, so Annals never owns credential files.
 
 The token categories overlap: cached and cache-write tokens are subsets of
 input, reasoning tokens are a subset of output, and total is input plus output.

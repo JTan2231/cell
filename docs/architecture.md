@@ -146,25 +146,38 @@ each original failed and what its bounded recovery attempt did.
 
 ## Liaison boundary
 
-The liaison runs in an isolated Codex app-server session. Its pointer prompt
+The liaison runs as a Nucleus job backed by an isolated Codex app-server
+session. Its pointer prompt
 contains the work label and frozen base revision, not the complete work or
 repository instructions. Session-scoped tools provide bounded work reading,
 corpus browsing, and reconciliation-draft operations. No shell, web, planning,
 user-input, or multi-agent tools are exposed.
 
-The default `annals-usage` command owns authentication for that session. It
-holds one exclusive lease on the installation's persistent, state-local
-`CODEX_HOME` for each real-Codex invocation, and explicitly gives that home to
-Codex. Refreshes therefore replace credentials in place under the same lease;
-Annals does not copy `auth.json` into a disposable runtime. The dedicated
-Codex `config.toml` is private and may select only the file credential store,
-so persistent authentication does not import ambient tools or other Codex
-configuration into the constrained liaison.
+Annals registers the exact nine-tool contract with Nucleus, submits a
+deterministically identified job, and services Nucleus's durable requester
+mailbox. The base and developer instructions, pointer prompt, model, reasoning
+effort, lack of builtin shell/web access, and tool schemas are the same as the
+former in-process runner contract. A repeated ambiguous submission carries
+byte-identical request content. Tool results are cached before transmission,
+so retry after an ambiguous transport failure never executes an Annals backend
+operation twice. Annals continues to determine success from the durable
+recorded reconciliation, not from the model's final message.
 
-Selecting a custom `[liaison].codex` executable bypasses the wrapper-owned
-lease and makes credential serialization the custom runner's responsibility.
-The runner still performs its generic authenticated account preflight before
-the first queued dispatch.
+Nucleus exclusively owns Codex process isolation, persistent authentication,
+credential refresh, and serialization across jobs and account operations.
+Annals neither reads nor sets `CODEX_HOME` and has no direct-runner fallback.
+`[liaison].nucleus_socket` optionally selects a nonstandard Unix socket; its
+default is Nucleus's current-user socket. Before the first new queued attempt,
+Annals asks Nucleus for an authenticated account preflight and may wait up to
+30 seconds for Nucleus's authentication lease. Failure leaves the envelope
+queued with attempts zero and no source-delivery record.
+
+Nucleus retains exact raw app-server input, output, stderr, lifecycle records,
+attempt identity, and terminal output. Annals drains those logs, forwards the
+same sanitized stderr diagnostics when requested, services pending tool calls,
+and watches terminal lifecycle before retrieving the final attempt report. A
+sparse job-state probe covers a daemon crash between persisting terminal state
+and its lifecycle record without repeatedly scanning a growing log.
 
 Bounded work reads use natural heading, quotation, continuation, or document
 edge anchors rather than offsets. A heading or quotation anchor must resolve

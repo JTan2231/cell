@@ -733,7 +733,7 @@ pub(crate) fn run(
     }
 
     let settings = ModelSettings::new(config.liaison.quality, config.liaison.model.as_deref());
-    let runner = Runner::for_program(&config.liaison.codex);
+    let runner = Runner::for_socket(config.liaison.nucleus_socket.as_deref());
     let mut auth_preflight_complete = false;
     let mut summary = RunSummary {
         root: spool.root.display().to_string(),
@@ -1492,7 +1492,7 @@ fn run_retry_event(
         .filter_map(|item| item.child_job_id.clone())
         .collect::<BTreeSet<_>>();
     let settings = ModelSettings::new(config.liaison.quality, config.liaison.model.as_deref());
-    let runner = Runner::for_program(&config.liaison.codex);
+    let runner = Runner::for_socket(config.liaison.nucleus_socket.as_deref());
     let mut auth_preflight_complete = false;
     let mut summary = empty_run_summary(spool);
 
@@ -2343,6 +2343,7 @@ pub(crate) fn interrupt(
         // database close while terminalizing, so a transient failure here
         // must not report that the accepted request itself failed.
         let _ = liaison::interrupt_run(library, token, &explanation);
+        Runner::for_socket(config.liaison.nucleus_socket.as_deref()).cancel_liaison(token);
     }
     // The postcheck resolves a submission race when the database is readable.
     // Otherwise the durable marker remains authoritative and recovery retries.
@@ -2454,6 +2455,9 @@ fn process_one(
     }
     if envelope.recovered && envelope.receipt.attempts > 0 {
         let _control = spool.acquire_control_lock()?;
+        if let Some(token) = envelope.receipt.model_run_token.as_deref() {
+            runner.cancel_liaison(token);
+        }
         return recover_attempt(library, spool, &mut envelope, ingestion_id, summary);
     }
     summary.attempted += 1;
@@ -2601,6 +2605,7 @@ fn process_work(
     if !stored.new_work && envelope.receipt.retry_event_id.is_none() {
         drop(connection);
         if let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
+            runner.cancel_liaison(previous_token);
             liaison::abandon_run(library, previous_token, work.id)?;
         }
         return Ok(WorkProcessing::Duplicate);
@@ -2610,6 +2615,7 @@ fn process_work(
     })?;
     drop(connection);
     if let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
+        runner.cancel_liaison(previous_token);
         liaison::abandon_run(library, previous_token, work.id)?;
     }
     envelope.receipt.model_run_token = Some(run_token.clone());
