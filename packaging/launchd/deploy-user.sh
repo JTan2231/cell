@@ -33,7 +33,7 @@ Options:
   --launchctl ABSOLUTE_PATH  Override launchctl (primarily for tests)
   --no-start                 Do not inspect or change launchd state
   --fresh-state              Replace the library and spool as one rollback generation,
-                             import its uncompleted FIFO, and resume processing
+                             import its uncompleted backlog in lane order, and resume processing
 EOF
 }
 

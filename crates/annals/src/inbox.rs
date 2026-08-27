@@ -1177,7 +1177,7 @@ fn rollback_enqueued_sources(spool: &Spool, published: &[Envelope]) -> Result<()
     Ok(())
 }
 
-/// Copy the uncompleted FIFO from an archived spool into a fresh spool.
+/// Copy the uncompleted priority lanes from an archived spool into a fresh spool.
 ///
 /// This is deliberately stricter than ordinary registration.  Deployment
 /// must hold both dispatch barriers, and the destination cannot already own
@@ -3769,7 +3769,7 @@ mod tests {
         FileIdentity, JobPriority, QUEUE_VERSION, QueueIndex, Spool, backlog_sources,
         cleanup_staged_enqueue, import_backlog_source, path_has_identity, publish_enqueued_sources,
         read_index, register_settled_locked, scan_envelopes_at, scan_incoming,
-        stage_enqueue_source, write_index,
+        stage_enqueue_source, write_index, write_receipt,
     };
 
     #[test]
@@ -3868,7 +3868,7 @@ mod tests {
     }
 
     #[test]
-    fn backlog_import_resets_envelopes_in_original_fifo_order()
+    fn backlog_import_preserves_priority_lane_and_sequence_order()
     -> Result<(), Box<dyn std::error::Error>> {
         let source_directory = tempfile::tempdir()?;
         let source = Spool::new(source_directory.path());
@@ -3877,7 +3877,9 @@ mod tests {
         let first = register_settled_locked(&source, 0)?;
         fs::rename(&first[0].directory, source.processing.join(&first[0].id))?;
         fs::write(source.incoming.join("earlier-name.txt"), "second")?;
-        register_settled_locked(&source, 0)?;
+        let mut second = register_settled_locked(&source, 0)?;
+        second[0].receipt.priority = JobPriority::Priority;
+        write_receipt(&second[0])?;
         fs::write(source.incoming.join("late-arrival.txt"), "third")?;
 
         let destination_directory = tempfile::tempdir()?;
@@ -3897,6 +3899,7 @@ mod tests {
                     item.envelope.receipt.sequence,
                     fs::read_to_string(item.envelope.source)?,
                     item.envelope.receipt.attempts,
+                    item.envelope.receipt.priority,
                 ))
             })
             .collect::<Result<Vec<_>, std::io::Error>>()?;
@@ -3905,12 +3908,12 @@ mod tests {
         assert_eq!(
             by_sequence,
             vec![
-                (1, "first".to_owned(), 0),
-                (2, "second".to_owned(), 0),
-                (3, "third".to_owned(), 0),
+                (1, "second".to_owned(), 0, JobPriority::Priority),
+                (2, "first".to_owned(), 0, JobPriority::Normal),
+                (3, "third".to_owned(), 0, JobPriority::Normal),
             ]
         );
-        assert_eq!(fs::read_to_string(&backlog[0].path)?, "first");
+        assert_eq!(fs::read_to_string(&backlog[0].path)?, "second");
         Ok(())
     }
 
