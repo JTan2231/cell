@@ -11,6 +11,8 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+fs2.workspace = true
+nucleus-codex = { path = "../nucleus-codex" }
 nucleus-client = { path = "../nucleus-client" }
 nucleus-core = { path = "../nucleus-core" }
 serde.workspace = true

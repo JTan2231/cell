@@ -6,11 +6,12 @@ use std::time::{Duration, Instant};
 
 use nucleus_client::{ClientError, NucleusClient};
 use nucleus_core::{
-    AbsolutePath, AgentInvocationV1, BuiltinToolsV1, ErrorResponseV1, JobId, JobRequestV1,
-    JobState, LifecycleEventKind, LifecycleEventV1, ListJobsQueryV1, LogSchemaV1, LogStream,
-    LogsQueryV1, PROTOCOL_VERSION_V1, Requester, SchemaId, TimeoutSeconds, ToolCallState,
-    ToolCallsQueryV1, ToolDefinitionV1, ToolResultV1, ToolsetDefinitionsV1, ToolsetRef,
-    ToolsetRegistrationV1, WorkspaceAccess, sha256_digest,
+    AbsolutePath, AccountSnapshotQueryV1, AgentInvocationV1, BuiltinToolsV1, ErrorResponseV1,
+    JobId, JobRequestV1, JobState, LaunchContextRegistrationV1, LaunchEnvironmentVariableV1,
+    LifecycleEventKind, LifecycleEventV1, ListJobsQueryV1, LogSchemaV1, LogStream, LogsQueryV1,
+    PROTOCOL_VERSION_V1, Requester, SchemaId, TimeoutSeconds, ToolCallState, ToolCallsQueryV1,
+    ToolDefinitionV1, ToolResultV1, ToolsetDefinitionsV1, ToolsetRef, ToolsetRegistrationV1,
+    WorkspaceAccess, sha256_digest,
 };
 use serde_json::value::to_raw_value;
 use serde_json::{Value, json};
@@ -33,18 +34,19 @@ const COMPATIBLE_PROTOCOL_SCHEMA: &str = r##"{
     ]},
     "ServerNotification": {"oneOf": [
       {"properties":{"method":{"enum":["item/completed"]},"params":{"$ref":"#/definitions/v2/ItemCompletedNotification"}}},
-      {"properties":{"method":{"enum":["turn/completed"]},"params":{"$ref":"#/definitions/v2/TurnCompletedNotification"}}}
+      {"properties":{"method":{"enum":["turn/completed"]},"params":{"$ref":"#/definitions/v2/TurnCompletedNotification"}}},
+      {"properties":{"method":{"enum":["thread/tokenUsage/updated"]},"params":{"$ref":"#/definitions/v2/ThreadTokenUsageUpdatedNotification"}}}
     ]},
     "DynamicToolCallParams": {"required":["arguments","callId","threadId","tool","turnId"]},
     "v2": {
       "ThreadStartParams": {"properties":{
-        "approvalPolicy":{},"baseInstructions":{},"cwd":{},"dynamicTools":{},"ephemeral":{},"model":{},"sandbox":{}
+        "approvalPolicy":{},"baseInstructions":{},"cwd":{},"developerInstructions":{},"dynamicTools":{},"ephemeral":{},"environments":{},"experimentalRawEvents":{},"model":{},"sandbox":{}
       }},
       "AskForApproval": {"enum":["never"]},
       "SandboxMode": {"enum":["read-only","workspace-write"]},
       "TurnStartParams": {
         "required":["input","threadId"],
-        "properties":{"effort":{},"input":{},"threadId":{}}
+        "properties":{"effort":{},"environments":{},"input":{},"threadId":{}}
       },
       "DynamicToolSpec": {"oneOf":[{
         "required":["description","inputSchema","name","type"],
@@ -56,7 +58,9 @@ const COMPATIBLE_PROTOCOL_SCHEMA: &str = r##"{
       "Turn": {"required":["id","status"]},
       "TurnStatus": {"enum":["completed","failed"]},
       "ItemCompletedNotification": {"required":["item","threadId","turnId"]},
-      "TurnCompletedNotification": {"required":["threadId","turn"]}
+      "TurnCompletedNotification": {"required":["threadId","turn"]},
+      "ThreadTokenUsageUpdatedNotification": {"required":["threadId","tokenUsage","turnId"]},
+      "RawResponseCompletedNotification": {"required":["responseId","threadId","turnId"]}
     }
   }
 }"##;
@@ -108,7 +112,28 @@ impl DaemonFixture {
         let home = root.join("home");
         let codex_home = home.join(".codex");
         fs::create_dir_all(&codex_home).or_panic("create fake Codex home");
-        fs::write(codex_home.join("auth.json"), b"{}\n").or_panic("write fake auth");
+        fs::set_permissions(&codex_home, fs::Permissions::from_mode(0o700))
+            .or_panic("secure fake Codex home");
+        fs::write(
+            codex_home.join("config.toml"),
+            b"cli_auth_credentials_store = \"file\"\n",
+        )
+        .or_panic("write fake config");
+        fs::set_permissions(
+            codex_home.join("config.toml"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .or_panic("secure fake config");
+        fs::write(
+            codex_home.join("auth.json"),
+            br#"{"OPENAI_API_KEY":"fixture"}"#,
+        )
+        .or_panic("write fake auth");
+        fs::set_permissions(
+            codex_home.join("auth.json"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .or_panic("secure fake auth");
         write_fake_codex(&fake_codex, codex_version, protocol_schema);
 
         let stderr_path = root.join("nucleusd.stderr.log");
@@ -122,6 +147,8 @@ impl DaemonFixture {
             .arg(&database)
             .arg("--codex")
             .arg(&fake_codex)
+            .arg("--codex-home")
+            .arg(&codex_home)
             .env("HOME", &home)
             .env("CODEX_HOME", &codex_home)
             .env("RUST_LOG", "nucleus=debug")
@@ -213,12 +240,25 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
     let health = fixture.client.health().await.or_panic("read daemon health");
     assert_eq!(health.version, PROTOCOL_VERSION_V1);
     assert_eq!(health.status, "ok");
+    assert!(health.accepting_jobs);
+    assert!(health.authentication.authenticated);
+    let account = fixture
+        .client
+        .account_snapshot(&AccountSnapshotQueryV1 {
+            include_usage: false,
+            wait_seconds: 0,
+        })
+        .await
+        .or_panic("read Nucleus-owned account snapshot");
+    assert_eq!(account.rate_limits, json!({ "data": [] }));
 
     let requester = Requester {
         program: "todo".to_owned(),
         id: "todo-contract-42".to_owned(),
     };
-    let request = fixture.request("job-contract-success", requester.clone(), "COMPLETE");
+    let mut request = fixture.request("job-contract-success", requester.clone(), "COMPLETE");
+    request.developer_instructions =
+        Some("Keep the base contract and this rule separate.".to_owned());
     assert_strict_request_rejection(&fixture, &request).await;
 
     let schema_json = to_raw_value(&json!({
@@ -364,6 +404,13 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
     let completed = wait_for_state(&fixture, &request.id, JobState::Completed).await;
     assert_eq!(completed.summary.requester, request.requester);
     assert_eq!(completed.attempts.len(), 1);
+    let output = completed.attempts[0]
+        .output
+        .as_ref()
+        .or_panic("completed attempt has structured output");
+    assert_eq!(output.thread_id, "thread-fake");
+    assert_eq!(output.turn_id, "turn-fake");
+    assert_eq!(output.final_message, "fake completed");
     let logs = fixture
         .client
         .logs(
@@ -397,6 +444,25 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
             .any(|record| record.stream == LogStream::HarnessOutput)
     );
     assert!(lifecycle_events(&logs.records).contains(&LifecycleEventKind::JobCompleted));
+    let thread_start = protocol_request(&logs.records, "thread/start");
+    assert_eq!(
+        thread_start.pointer("/params/baseInstructions"),
+        Some(&json!(request.instructions))
+    );
+    assert_eq!(
+        thread_start.pointer("/params/developerInstructions"),
+        Some(&json!(request.developer_instructions))
+    );
+    assert_eq!(
+        thread_start.pointer("/params/experimentalRawEvents"),
+        Some(&json!(true))
+    );
+    assert_eq!(
+        thread_start.pointer("/params/environments"),
+        Some(&json!([]))
+    );
+    let turn_start = protocol_request(&logs.records, "turn/start");
+    assert_eq!(turn_start.pointer("/params/environments"), Some(&json!([])));
     for record in &logs.records {
         let stored_schema = fixture
             .client
@@ -443,6 +509,24 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
         serde_json::from_str::<Value>(call.call.arguments.get()).or_panic("decode tool arguments"),
         json!({ "todoId": "todo-1" })
     );
+    let pending_logs = fixture
+        .client
+        .logs(&tool_request.id, &LogsQueryV1::default())
+        .await
+        .or_panic("raw tool request is durable with mailbox projection");
+    let raw_call = pending_logs
+        .records
+        .iter()
+        .find(|record| record.sequence == call.call.request_sequence)
+        .or_panic("tool request sequence names its raw log record");
+    assert_eq!(raw_call.stream, LogStream::HarnessOutput);
+    assert_eq!(
+        serde_json::from_str::<Value>(raw_call.payload.get())
+            .or_panic("decode raw tool request")
+            .pointer("/params/callId")
+            .and_then(Value::as_str),
+        Some("call-1")
+    );
     let result_payload =
         to_raw_value(&json!({ "answer": "fake todo result" })).or_panic("encode tool result");
     let answered = fixture
@@ -481,6 +565,85 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
             .any(|record| record.stream == LogStream::Requester && record.schema_id == schema.id)
     );
 
+    let launch_requester = Requester {
+        program: "todo".to_owned(),
+        id: "todo-launch-context-1".to_owned(),
+    };
+    let launch = fixture
+        .client
+        .register_launch_context(&LaunchContextRegistrationV1 {
+            version: PROTOCOL_VERSION_V1,
+            requester: launch_requester.clone(),
+            environment: vec![
+                LaunchEnvironmentVariableV1 {
+                    name: "CALLER_ONLY".to_owned(),
+                    value: "preserved".to_owned(),
+                },
+                LaunchEnvironmentVariableV1 {
+                    name: "SUPER_SECRET".to_owned(),
+                    value: "must-not-be-persisted".to_owned(),
+                },
+                LaunchEnvironmentVariableV1 {
+                    name: "CODEX_HOME".to_owned(),
+                    value: "/attacker/home".to_owned(),
+                },
+                LaunchEnvironmentVariableV1 {
+                    name: "CODEX_EXEC_SERVER_URL".to_owned(),
+                    value: "https://attacker.invalid".to_owned(),
+                },
+            ],
+        })
+        .await
+        .or_panic("register caller launch context");
+    let mut launch_job = fixture.request(
+        "job-contract-launch-context",
+        launch_requester,
+        "CHECK_LAUNCH_CONTEXT",
+    );
+    launch_job.invocation.workspace_access = WorkspaceAccess::ReadOnly;
+    launch_job.invocation.builtin_tools.local_execution = true;
+    launch_job.invocation.launch_context = Some(launch.id.clone());
+    fixture
+        .client
+        .submit_job(&launch_job)
+        .await
+        .or_panic("submit launch-context job");
+    wait_for_state(&fixture, &launch_job.id, JobState::Completed).await;
+    fixture
+        .client
+        .submit_job(&launch_job)
+        .await
+        .or_panic("identical resubmit precedes one-shot context consumption");
+    let stored_launch_job = fixture
+        .client
+        .get_job(&launch_job.id)
+        .await
+        .or_panic("read launch-context job");
+    assert!(
+        !serde_json::to_string(&stored_launch_job)
+            .or_panic("encode stored launch-context job")
+            .contains("must-not-be-persisted")
+    );
+    let launch_logs = fixture
+        .client
+        .logs(&launch_job.id, &LogsQueryV1::default())
+        .await
+        .or_panic("read launch-context logs");
+    assert!(
+        !serde_json::to_string(&launch_logs)
+            .or_panic("encode launch-context logs")
+            .contains("must-not-be-persisted")
+    );
+    let mut reused_context = launch_job.clone();
+    reused_context.id = JobId::new("job-contract-consumed-context");
+    match fixture.client.submit_job(&reused_context).await {
+        Err(ClientError::Api { status, code, .. }) => {
+            assert_eq!(status, 404);
+            assert_eq!(code, "not_found");
+        }
+        result => panic!("consumed launch context was accepted: {result:?}"),
+    }
+
     let cancel_request = fixture.request(
         "job-contract-cancel",
         Requester {
@@ -512,6 +675,34 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
     assert!(cancellation_events.contains(&LifecycleEventKind::CancellationRequested));
     assert!(cancellation_events.contains(&LifecycleEventKind::AttemptCancelled));
     assert!(cancellation_events.contains(&LifecycleEventKind::JobCancelled));
+
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn health_degrades_when_authoritative_authentication_is_invalid() {
+    let fixture = DaemonFixture::start().await;
+    fs::write(
+        fixture.temporary.path().join("home/.codex/auth.json"),
+        br#"{"tokens":"#,
+    )
+    .or_panic("truncate authoritative authentication");
+
+    let health = fixture
+        .client
+        .health()
+        .await
+        .or_panic("read degraded health");
+    assert_eq!(health.status, "degraded");
+    assert!(!health.accepting_jobs);
+    assert!(!health.authentication.authenticated);
+    assert!(
+        health
+            .authentication
+            .detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("auth.json is not valid JSON"))
+    );
 
     fixture.shutdown().await;
 }
@@ -636,7 +827,7 @@ async fn wait_for_state(
         }
         assert!(
             !job.summary.state.is_terminal(),
-            "job reached {:?}, expected {expected:?}; {}",
+            "job reached {:?}, expected {expected:?}: {job:#?}; {}",
             job.summary.state,
             fixture.diagnostics()
         );
@@ -657,6 +848,15 @@ fn lifecycle_events(records: &[nucleus_core::LogRecordV1]) -> Vec<LifecycleEvent
         .collect()
 }
 
+fn protocol_request(records: &[nucleus_core::LogRecordV1], method: &str) -> Value {
+    records
+        .iter()
+        .filter(|record| record.stream == LogStream::HarnessInput)
+        .filter_map(|record| serde_json::from_str::<Value>(record.payload.get()).ok())
+        .find(|message| message.get("method").and_then(Value::as_str) == Some(method))
+        .unwrap_or_else(|| panic!("missing {method} protocol request"))
+}
+
 fn write_fake_codex(path: &Path, version: &str, protocol_schema: &str) {
     const SCRIPT: &str = r#"#!/bin/sh
 set -eu
@@ -667,7 +867,7 @@ if [ "${1:-}" = "--version" ]; then
 fi
 
 if [ "${1:-}" = "debug" ] && [ "${2:-}" = "models" ]; then
-  printf '%s\n' '{"models":[{"slug":"fake-model","supported_reasoning_levels":[{"effort":"low"},{"effort":"medium"}],"default_reasoning_level":"low","shell_type":"disabled","supports_search_tool":false}]}'
+  printf '%s\n' '{"models":[{"slug":"fake-model","supported_reasoning_levels":[{"effort":"low"},{"effort":"medium"}],"default_reasoning_level":"low","shell_type":"shell_command","supports_search_tool":false}]}'
   exit 0
 fi
 
@@ -702,6 +902,13 @@ IFS= read -r turn_start
 printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"turn":{"id":"turn-fake"}}}'
 
 case "$turn_start" in
+  *CHECK_LAUNCH_CONTEXT*)
+    test "${CALLER_ONLY:-}" = preserved
+    test "${SUPER_SECRET:-}" = must-not-be-persisted
+    test "${RUST_LOG+x}" != x
+    test "${CODEX_EXEC_SERVER_URL+x}" != x
+    test "${CODEX_HOME:-}" != /attacker/home
+    ;;
   *WAIT_FOR_CANCEL*)
     trap 'exit 0' TERM INT
     while :; do sleep 1; done

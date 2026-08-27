@@ -13,7 +13,8 @@ One v1 job request contains only runtime information:
     "program": "todo",
     "id": "todo-request-8f53d6"
   },
-  "instructions": "Act as Todo's research liaison. Research without modifying state and create exactly one todo through create_todo.",
+  "instructions": "Act as Todo's research liaison. Research without modifying state.",
+  "developerInstructions": "Create exactly one todo through create_todo.",
   "prompt": "Research the direction thoroughly and create exactly one todo using the supplied tool.",
   "invocation": {
     "version": 1,
@@ -43,12 +44,12 @@ requester.id)` is indexed so a reporting surface can find every job for one
 domain run without Nucleus knowing that domain's schema. `parent` is an optional
 job ID for invocation provenance; it does not create workflow semantics.
 
-`instructions` carries the requester's durable liaison contract at instruction
-priority; `prompt` is the input for this particular job. The Codex adapter uses
-the former as `baseInstructions`, clears bundled model messages, and sends only
-the latter as the turn's user text. Annals and Todo can therefore preserve their
-current tool and completion contracts without flattening them into a user
-message.
+`instructions` carries the requester's base contract and optional
+`developerInstructions` carries its distinct developer contract; `prompt` is
+the input for this particular job. The Codex adapter forwards the three values
+separately as `baseInstructions`, `developerInstructions`, and the turn's user
+text. It clears bundled model messages. Existing Annals and Todo instruction
+priority is therefore preserved rather than flattened into one message.
 
 The configurable invocation domain is deliberately closed:
 
@@ -59,11 +60,22 @@ The configurable invocation domain is deliberately closed:
 - explicit built-in tool policy (`localExecution` and `webSearch`)
 - positive wall-clock timeout
 - optional versioned toolset reference
+- optional ID of a short-lived launch context registered immediately before
+  submission
 
-Every v1 invocation is ephemeral, unattended, and uses `approvalPolicy=never`.
-There is one attempt and no automatic retry. There is no request field for a
-command, argv, environment, Codex config, approval behavior, isolation mode, or
-output format.
+Every v1 invocation is ephemeral, unattended, enables Codex raw-response
+telemetry, and uses `approvalPolicy=never`. There is one attempt and no
+automatic retry. There is no request field for a command, argv, Codex config,
+approval behavior, isolation mode, or output format.
+
+Todo preserves caller-environment behavior through `POST /v1/launch-contexts`.
+The body contains the requester identity and a complete environment snapshot;
+the response contains a 120-second, single-use ID. Nucleus retains the values
+only in daemon memory. A fresh job with that ID starts Codex with an empty
+environment, applies the snapshot, removes `CODEX_EXEC_SERVER_URL`, and replaces
+`CODEX_HOME` with the Nucleus-owned isolated home. The stored job contains only
+the opaque ID. An identical resubmission finds the existing job before checking
+or consuming the one-shot context.
 
 ## How harness differences are handled
 
@@ -87,9 +99,10 @@ new portable semantic requires a new version of the Nucleus invocation
 contract.
 
 `workspaceAccess=none` gives Codex an empty temporary working directory under a
-read-only sandbox. `read-only` uses the requested directory under a read-only
-sandbox. `read-write` uses it under Codex's workspace-write sandbox. Approvals
-remain disabled in all three cases. `localExecution=false` removes Codex's
+read-only sandbox and explicitly sends `environments: []` on both thread and
+turn start. `read-only` uses the requested directory under a read-only sandbox.
+`read-write` uses it under Codex's workspace-write sandbox. Approvals remain
+disabled in all three cases. `localExecution=false` removes Codex's
 command, inspection, and edit primitives; `webSearch=false` removes live search.
 The Codex adapter rejects local execution with `workspaceAccess=none` because it
 cannot prove that combination's filesystem semantics. Todo uses `true/true`;
@@ -183,9 +196,20 @@ Todo binds both from its originating request:
 ```
 
 Nucleus verifies that the requester identity matches the job, accepts exactly
-one result, records it, and returns it to the blocked app-server call. If the
-requester disappears, the job remains visibly `waiting_on_requester` until it is
-cancelled or times out. Nucleus never runs domain tools itself.
+one result, records it, and returns it to the blocked app-server call. The raw
+`item/tool/call` log row and its pending mailbox projection are committed in one
+SQLite transaction, and `requestSequence` names that raw row. The requester
+result row and mailbox answer are likewise atomic: that transaction rejects a
+new answer once either the owning job or attempt is terminal. Nucleus commits
+`ToolCallAnswered` before waking Codex, so a fast completion cannot place its
+terminal lifecycle records ahead of the answer. If the requester disappears,
+the job remains visibly `waiting_on_requester` until it is cancelled or times
+out. Nucleus never runs domain tools itself.
+
+A completed attempt also exposes a small structured `output` object containing
+`threadId`, `turnId`, and `finalMessage`. Raw protocol logs remain authoritative
+for telemetry and audit; this projection saves callers from reconstructing the
+normal terminal response.
 
 ## Raw log model
 
@@ -222,7 +246,9 @@ Nucleus lifecycle and control events use a small Nucleus-owned schema in the
 same ordered log. This covers admission, process start, tool waiting,
 cancellation, completion, timeout, and a `lost` attempt detected after daemon
 restart. Operational truth therefore does not require inspecting a process tree
-or an ephemeral stderr tail.
+or an ephemeral stderr tail. Cancellation is durable at admission boundaries:
+the daemon seeds each new invocation's watch from `cancellation_requested_at`
+after publishing its sender, so a request overlapping startup cannot be lost.
 
 Reporting reads:
 
@@ -240,6 +266,8 @@ The v1 server is available only on a per-user Unix socket:
 
 ```text
 GET    /v1/health
+GET    /v1/account?includeUsage=false&waitSeconds=0
+POST   /v1/launch-contexts
 POST   /v1/jobs
 GET    /v1/jobs
 GET    /v1/jobs/{job}
@@ -252,6 +280,34 @@ GET    /v1/schemas/{schema}
 POST   /v1/toolsets
 GET    /v1/toolsets/{provider}/{name}/{version}
 ```
+
+Health reports whether jobs are currently accepted, the checked harness
+identity and executable, adapter capabilities, supported protocol/harness
+versions, and authentication readiness. `nucleus health` exits nonzero for a
+degraded document. Account reads run under the same exclusive credential lease
+as jobs: `waitSeconds=0` is a nonblocking try-lock for interactive budget/doctor
+commands, while the Annals inbox preflight uses up to 30 seconds. Lease
+contention returns `authentication_busy`; credential or account failure returns
+`model_auth_unavailable`. `rateLimits` and optional `usage` are the unmodified
+results of Codex's `account/rateLimits/read` and `account/usage/read` methods.
+
+## Authentication ownership
+
+The macOS service has one authoritative home at
+`~/Library/Application Support/Nucleus/codex-home` (directory mode `0700`). Its
+`config.toml` is a private regular file no larger than 64 KiB and may contain
+only `cli_auth_credentials_store = "file"`; `auth.json` is a private regular
+file with mode `0600`. `nucleus service install --codex-home SOURCE` imports the
+currently signed-in `auth.json` after the old daemon has been stopped, so the
+import cannot race an in-flight refresh. Credential state is forward-only and
+is deliberately excluded from installation rollback: restoring binaries and
+the LaunchAgent must never replace a token refreshed by either the old or the
+replacement daemon with an earlier, already-consumed credential.
+
+Jobs use isolated temporary Codex homes, but the exclusive credential lease is
+held from copy-in through atomic, fsynced refresh copy-back. Account reads and
+`nucleus auth login --device-auth` use the same lease. Once imported, Annals and
+Todo do not read, write, refresh, or lock Codex credentials themselves.
 
 The standard service installer secures its state directory as mode `0700`; the
 daemon secures the database and socket as mode `0600`. There is no TCP listener

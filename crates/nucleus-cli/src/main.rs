@@ -8,9 +8,10 @@ use std::time::{Duration, Instant};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use nucleus_client::{ClientError, NucleusClient};
+use nucleus_codex::{CodexError, CodexHarness};
 use nucleus_core::{
-    JobId, JobRequestV1, JobState, ListJobsQueryV1, LogSchemaV1, LogsQueryV1, SchemaId, ToolCallId,
-    ToolCallsQueryV1, ToolResultV1, ToolsetRegistrationV1,
+    AccountSnapshotQueryV1, JobId, JobRequestV1, JobState, ListJobsQueryV1, LogSchemaV1,
+    LogsQueryV1, SchemaId, ToolCallId, ToolCallsQueryV1, ToolResultV1, ToolsetRegistrationV1,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -37,6 +38,18 @@ struct Cli {
 enum Command {
     /// Inspect daemon availability.
     Health,
+    /// Read the authenticated Codex account owned by Nucleus.
+    Account {
+        /// Also read account token activity; failure is reported in usageError.
+        #[arg(long)]
+        include_usage: bool,
+        /// Seconds to wait for Nucleus's credential lease; zero is nonblocking.
+        #[arg(long, default_value_t = 0)]
+        wait: u32,
+    },
+    /// Manage Nucleus-owned Codex authentication.
+    #[command(subcommand)]
+    Auth(AuthCommand),
     /// Submit and inspect agent jobs.
     #[command(subcommand)]
     Jobs(JobsCommand),
@@ -52,6 +65,18 @@ enum Command {
     /// Install and control the per-user macOS background service.
     #[command(subcommand)]
     Service(ServiceCommand),
+}
+
+#[derive(Debug, Subcommand)]
+enum AuthCommand {
+    /// Run an attended Codex login under Nucleus's exclusive credential lease.
+    Login {
+        #[arg(long)]
+        device_auth: bool,
+        /// Exact Codex executable; defaults to `NUCLEUS_CODEX` or `PATH`.
+        #[arg(long)]
+        codex: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -179,7 +204,7 @@ enum ServiceCommand {
         /// Codex binary; resolved now and stored as an absolute plist argument.
         #[arg(long)]
         codex: Option<PathBuf>,
-        /// Existing Codex state directory; canonicalized and exported as `CODEX_HOME`.
+        /// Existing signed-in Codex home whose auth.json is copied into Nucleus-owned state.
         #[arg(long, value_name = "DIRECTORY")]
         codex_home: Option<PathBuf>,
     },
@@ -197,6 +222,8 @@ enum CliError {
     Client(#[from] ClientError),
     #[error(transparent)]
     Service(#[from] ServiceError),
+    #[error(transparent)]
+    Codex(#[from] CodexError),
     #[error("unable to read {path}: {source}")]
     Read {
         path: String,
@@ -240,7 +267,7 @@ struct InstalledOutput<'a> {
     socket: &'a Path,
     logs: &'a Path,
     codex: &'a Path,
-    codex_home: Option<&'a Path>,
+    codex_home: &'a Path,
     health: nucleus_core::HealthResponseV1,
 }
 
@@ -284,6 +311,12 @@ async fn run(cli: Cli) -> Result<(), CliError> {
             }
             run_service(command, compact).await
         }
+        Command::Auth(command) => {
+            if cli.socket.is_some() {
+                return Err(CliError::ServiceSocketOverride);
+            }
+            run_auth(command).await
+        }
         command => {
             let client = match cli.socket {
                 Some(socket) => NucleusClient::new(socket)?,
@@ -296,12 +329,55 @@ async fn run(cli: Cli) -> Result<(), CliError> {
 
 async fn run_api(command: Command, client: NucleusClient, compact: bool) -> Result<(), CliError> {
     match command {
-        Command::Health => print_json(&client.health().await?, compact),
+        Command::Health => {
+            let health = client.health().await?;
+            print_json(&health, compact)?;
+            if !health.accepting_jobs || health.status != "ok" {
+                return Err(CliError::ServiceUnhealthy(format!(
+                    "daemon reported status {:?} and acceptingJobs={}",
+                    health.status, health.accepting_jobs
+                )));
+            }
+            Ok(())
+        }
+        Command::Account {
+            include_usage,
+            wait,
+        } => print_json(
+            &client
+                .account_snapshot(&AccountSnapshotQueryV1 {
+                    include_usage,
+                    wait_seconds: wait,
+                })
+                .await?,
+            compact,
+        ),
         Command::Jobs(command) => run_jobs(command, &client, compact).await,
         Command::Schemas(command) => run_schemas(command, &client, compact).await,
         Command::Toolsets(command) => run_toolsets(command, &client, compact).await,
         Command::ToolCalls(command) => run_tool_calls(command, &client, compact).await,
+        Command::Auth(_) => unreachable!("auth commands are handled before client creation"),
         Command::Service(_) => unreachable!("service commands are handled before client creation"),
+    }
+}
+
+async fn run_auth(command: AuthCommand) -> Result<(), CliError> {
+    let paths = ServicePaths::for_current_user()?;
+    service::prepare_codex_home(&paths)?;
+    match command {
+        AuthCommand::Login { device_auth, codex } => {
+            let codex = service::find_codex(codex.as_deref())?;
+            let status = CodexHarness::with_codex_home(codex, &paths.codex_home)
+                .login(device_auth)
+                .await?;
+            if status.success() {
+                Ok(())
+            } else {
+                Err(CliError::ServiceUnhealthy(format!(
+                    "Codex login exited with status {status}"
+                )))
+            }
+        }
     }
 }
 
@@ -509,7 +585,7 @@ async fn run_service(command: ServiceCommand, compact: bool) -> Result<(), CliEr
                     socket: &installed.paths.socket,
                     logs: &installed.paths.log_dir,
                     codex: &installed.codex,
-                    codex_home: installed.codex_home.as_deref(),
+                    codex_home: &installed.codex_home,
                     health,
                 },
                 compact,

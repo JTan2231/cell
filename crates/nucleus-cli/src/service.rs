@@ -6,6 +6,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+use nucleus_codex::validate_auth_document;
 use thiserror::Error;
 
 pub const SERVICE_LABEL: &str = "org.nucleus.daemon";
@@ -51,6 +52,7 @@ pub struct ServicePaths {
     pub state_dir: PathBuf,
     pub socket: PathBuf,
     pub database: PathBuf,
+    pub codex_home: PathBuf,
     pub log_dir: PathBuf,
     pub stdout_log: PathBuf,
     pub stderr_log: PathBuf,
@@ -75,6 +77,7 @@ impl ServicePaths {
             home: home.to_path_buf(),
             socket: state_dir.join("nucleus.sock"),
             database: state_dir.join("nucleus.db"),
+            codex_home: state_dir.join("codex-home"),
             stdout_log: log_dir.join("nucleusd.stdout.log"),
             stderr_log: log_dir.join("nucleusd.stderr.log"),
             launch_agent: home
@@ -89,6 +92,7 @@ impl ServicePaths {
 
     fn create_directories(&self) -> Result<(), ServiceError> {
         create_private_dir(&self.state_dir)?;
+        create_private_dir(&self.codex_home)?;
         create_private_dir(&self.log_dir)?;
         create_dir(parent(&self.launch_agent)?, 0o700)?;
         create_dir(parent(&self.daemon)?, 0o755)?;
@@ -100,7 +104,7 @@ impl ServicePaths {
 pub struct InstallResult {
     pub paths: ServicePaths,
     pub codex: PathBuf,
-    pub codex_home: Option<PathBuf>,
+    pub codex_home: PathBuf,
     previous: PreviousInstallation,
     target: String,
 }
@@ -156,6 +160,11 @@ impl PreviousInstallation {
         restore_file(&paths.cli, self.cli.as_ref())?;
         restore_file(&paths.launch_agent, self.launch_agent.as_ref())?;
 
+        // Authentication is forward-only. Either the old daemon can refresh it
+        // before bootout or the replacement can refresh it before a later
+        // health-check rollback. Restoring a byte snapshot here could therefore
+        // resurrect a stale, already-consumed refresh token.
+
         if self.was_loaded && replace_service {
             command_success(
                 "/bin/launchctl",
@@ -194,7 +203,7 @@ pub fn install(
     let cli_source = canonical_current_executable()?;
     let daemon_source = find_daemon(&cli_source, daemon_source)?;
     let codex = find_codex(codex_source)?;
-    let codex_home = find_codex_home(codex_home_source)?;
+    let source_codex_home = find_codex_home(codex_home_source)?;
     let target = service_target()?;
     let was_loaded = launchctl([OsStr::new("print"), OsStr::new(&target)])?
         .status
@@ -214,7 +223,7 @@ pub fn install(
         if cli_source != paths.cli {
             copy_executable(&cli_source, &paths.cli)?;
         }
-        let plist = render_plist(&paths, &codex, codex_home.as_deref());
+        let plist = render_plist(&paths, &codex);
         atomic_write(&paths.launch_agent, plist.as_bytes(), 0o600)?;
         validate_plist(&paths.launch_agent)?;
         command_success(
@@ -229,6 +238,11 @@ pub fn install(
             )?;
         }
         service_replaced = true;
+        // Credential authority may be refreshed by a running daemon. Import it
+        // only after the previous service is fully stopped. Authentication is
+        // deliberately excluded from rollback so later refreshes remain
+        // authoritative even if bootstrap or the health check fails.
+        prepare_owned_codex_home(&paths.codex_home, source_codex_home.as_deref())?;
         command_success(
             "/bin/launchctl",
             &Command::new("/bin/launchctl")
@@ -254,10 +268,11 @@ pub fn install(
         return Err(error);
     }
 
+    let owned_codex_home = paths.codex_home.clone();
     Ok(InstallResult {
         paths,
         codex,
-        codex_home,
+        codex_home: owned_codex_home,
         previous,
         target,
     })
@@ -379,6 +394,57 @@ pub fn find_codex_home(requested: Option<&Path>) -> Result<Option<PathBuf>, Serv
     Ok(Some(resolved))
 }
 
+fn prepare_owned_codex_home(destination: &Path, source: Option<&Path>) -> Result<(), ServiceError> {
+    create_private_dir(destination)?;
+    atomic_write(
+        &destination.join("config.toml"),
+        b"cli_auth_credentials_store = \"file\"\n",
+        0o600,
+    )?;
+    let Some(source) = source else {
+        return Ok(());
+    };
+    let source_auth = source.join("auth.json");
+    let metadata = fs::symlink_metadata(&source_auth).map_err(|source_error| ServiceError::Io {
+        operation: "inspect source Codex authentication",
+        path: source_auth.clone(),
+        source: source_error,
+    })?;
+    if !metadata.file_type().is_file()
+        || metadata.permissions().mode() & 0o777 != 0o600
+        || metadata.len() == 0
+        || metadata.len() > 4 * 1024 * 1024
+    {
+        return Err(ServiceError::Io {
+            operation: "validate source Codex authentication",
+            path: source_auth,
+            source: io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "auth.json must be a nonempty mode-0600 regular file no larger than 4194304 bytes",
+            ),
+        });
+    }
+    let destination_auth = destination.join("auth.json");
+    let bytes = fs::read(&source_auth).map_err(|source_error| ServiceError::Io {
+        operation: "read source Codex authentication",
+        path: source_auth.clone(),
+        source: source_error,
+    })?;
+    validate_auth_document(&bytes).map_err(|source_error| ServiceError::Io {
+        operation: "validate source Codex authentication",
+        path: source_auth,
+        source: io::Error::new(io::ErrorKind::InvalidData, source_error.to_string()),
+    })?;
+    if fs::canonicalize(source).is_ok_and(|source| source == destination) {
+        return Ok(());
+    }
+    atomic_write(&destination_auth, &bytes, 0o600)
+}
+
+pub fn prepare_codex_home(paths: &ServicePaths) -> Result<(), ServiceError> {
+    prepare_owned_codex_home(&paths.codex_home, None)
+}
+
 fn resolve_executable(candidate: &Path) -> Result<PathBuf, ServiceError> {
     if !is_executable(candidate) {
         return Err(ServiceError::CodexNotFound);
@@ -390,13 +456,7 @@ fn resolve_executable(candidate: &Path) -> Result<PathBuf, ServiceError> {
     })
 }
 
-pub fn render_plist(paths: &ServicePaths, codex: &Path, codex_home: Option<&Path>) -> String {
-    let codex_home_environment = codex_home.map_or_else(String::new, |path| {
-        format!(
-            "        <key>CODEX_HOME</key>\n        <string>{}</string>\n",
-            xml_escape(&path.to_string_lossy())
-        )
-    });
+pub fn render_plist(paths: &ServicePaths, codex: &Path) -> String {
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -417,7 +477,9 @@ pub fn render_plist(paths: &ServicePaths, codex: &Path, codex_home: Option<&Path
     <dict>
         <key>HOME</key>
         <string>{home}</string>
-{codex_home_environment}        <key>PATH</key>
+        <key>CODEX_HOME</key>
+        <string>{codex_home}</string>
+        <key>PATH</key>
         <string>{path}</string>
     </dict>
     <key>KeepAlive</key>
@@ -436,7 +498,7 @@ pub fn render_plist(paths: &ServicePaths, codex: &Path, codex_home: Option<&Path
         codex = xml_escape(&codex.to_string_lossy()),
         state = xml_escape(&paths.state_dir.to_string_lossy()),
         home = xml_escape(&paths.home.to_string_lossy()),
-        codex_home_environment = codex_home_environment,
+        codex_home = xml_escape(&paths.codex_home.to_string_lossy()),
         path = xml_escape(&service_path(&paths.home)),
         stdout = xml_escape(&paths.stdout_log.to_string_lossy()),
         stderr = xml_escape(&paths.stderr_log.to_string_lossy()),
@@ -784,13 +846,7 @@ mod tests {
     #[test]
     fn plist_uses_only_absolute_paths_and_escapes_them() {
         let paths = ServicePaths::under_home(Path::new("/Users/a&b"));
-        let plist = render_plist(
-            &paths,
-            Path::new("/opt/homebrew/bin/codex"),
-            Some(Path::new(
-                "/Users/a&b/Library/Application Support/Annals/codex-home",
-            )),
-        );
+        let plist = render_plist(&paths, Path::new("/opt/homebrew/bin/codex"));
         assert!(plist.contains("<string>/Users/a&amp;b/.local/libexec/nucleusd</string>"));
         assert!(plist.contains("<string>serve</string>"));
         assert!(plist.contains("<string>--codex</string>"));
@@ -798,7 +854,7 @@ mod tests {
         assert!(plist.contains("<key>HOME</key>"));
         assert!(plist.contains("<key>CODEX_HOME</key>"));
         assert!(plist.contains(
-            "<string>/Users/a&amp;b/Library/Application Support/Annals/codex-home</string>"
+            "<string>/Users/a&amp;b/Library/Application Support/Nucleus/codex-home</string>"
         ));
         assert!(plist.contains("/Users/a&amp;b/.cargo/bin"));
         assert!(plist.contains("<integer>63</integer>"));
@@ -807,11 +863,14 @@ mod tests {
     }
 
     #[test]
-    fn plist_omits_codex_home_by_default() {
+    fn plist_always_uses_nucleus_owned_codex_home() {
         let paths = ServicePaths::under_home(Path::new("/Users/example"));
-        let plist = render_plist(&paths, Path::new("/opt/homebrew/bin/codex"), None);
+        let plist = render_plist(&paths, Path::new("/opt/homebrew/bin/codex"));
 
-        assert!(!plist.contains("<key>CODEX_HOME</key>"));
+        assert!(plist.contains("<key>CODEX_HOME</key>"));
+        assert!(plist.contains(
+            "<string>/Users/example/Library/Application Support/Nucleus/codex-home</string>"
+        ));
     }
 
     #[cfg(target_os = "macos")]
@@ -822,12 +881,7 @@ mod tests {
         let plist = temporary.path().join("org.nucleus.daemon.plist");
         atomic_write(
             &plist,
-            render_plist(
-                &paths,
-                Path::new("/opt/homebrew/bin/codex"),
-                Some(Path::new("/Users/example/.codex")),
-            )
-            .as_bytes(),
+            render_plist(&paths, Path::new("/opt/homebrew/bin/codex")).as_bytes(),
             0o600,
         )
         .or_panic("write plist");
@@ -913,25 +967,156 @@ mod tests {
     }
 
     #[test]
+    fn imports_authentication_into_private_nucleus_owned_home() {
+        let temporary = tempfile::tempdir().or_panic("create temporary directory");
+        let source = temporary.path().join("annals-codex-home");
+        let destination = temporary.path().join("nucleus-codex-home");
+        let authentication =
+            br#"{"tokens":{"access_token":"signed-in","refresh_token":"refresh"}}"#;
+        fs::create_dir(&source).or_panic("create source Codex home");
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o700))
+            .or_panic("secure source Codex home");
+        let source_auth = source.join("auth.json");
+        fs::write(&source_auth, authentication).or_panic("write source authentication");
+        fs::set_permissions(&source_auth, fs::Permissions::from_mode(0o600))
+            .or_panic("secure source authentication");
+
+        prepare_owned_codex_home(&destination, Some(&source)).or_panic("import authentication");
+
+        assert_eq!(
+            fs::read(destination.join("auth.json")).or_panic("read imported authentication"),
+            authentication
+        );
+        assert_eq!(
+            fs::read_to_string(destination.join("config.toml")).or_panic("read managed config"),
+            "cli_auth_credentials_store = \"file\"\n"
+        );
+        assert_eq!(
+            destination
+                .metadata()
+                .or_panic("inspect owned Codex home")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        for file in ["config.toml", "auth.json"] {
+            assert_eq!(
+                destination
+                    .join(file)
+                    .metadata()
+                    .or_panic("inspect owned credential file")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_authentication_import_preserves_authoritative_file() {
+        let temporary = tempfile::tempdir().or_panic("create temporary directory");
+        let paths = ServicePaths::under_home(temporary.path());
+        paths
+            .create_directories()
+            .or_panic("create installation directories");
+        let authoritative = br#"{"OPENAI_API_KEY":"authoritative"}"#;
+        atomic_write(&paths.codex_home.join("auth.json"), authoritative, 0o600)
+            .or_panic("write authoritative authentication");
+        let source = temporary.path().join("invalid-source");
+        create_private_dir(&source).or_panic("create source home");
+        atomic_write(&source.join("auth.json"), br#"{"tokens":"#, 0o600)
+            .or_panic("write truncated source authentication");
+
+        let result = prepare_owned_codex_home(&paths.codex_home, Some(&source));
+        assert!(result.is_err(), "truncated authentication must be rejected");
+
+        assert_eq!(
+            fs::read(paths.codex_home.join("auth.json"))
+                .or_panic("read authoritative authentication"),
+            authoritative
+        );
+    }
+
+    #[test]
+    fn installation_rollback_preserves_refresh_after_static_snapshot() {
+        let temporary = tempfile::tempdir().or_panic("create temporary directory");
+        let paths = ServicePaths::under_home(temporary.path());
+        paths
+            .create_directories()
+            .or_panic("create installation directories");
+        atomic_write(
+            &paths.codex_home.join("auth.json"),
+            br#"{"OPENAI_API_KEY":"before-snapshot"}"#,
+            0o600,
+        )
+        .or_panic("write initial authentication");
+        let previous =
+            PreviousInstallation::capture(&paths, false).or_panic("snapshot static installation");
+        let refreshed = br#"{"OPENAI_API_KEY":"old-daemon-refresh"}"#;
+        atomic_write(&paths.codex_home.join("auth.json"), refreshed, 0o600)
+            .or_panic("simulate refresh before bootout");
+
+        previous
+            .restore(&paths, "unused-test-target", false)
+            .or_panic("restore static installation");
+
+        assert_eq!(
+            fs::read(paths.codex_home.join("auth.json")).or_panic("read refreshed auth"),
+            refreshed
+        );
+    }
+
+    #[test]
+    fn installation_rollback_preserves_refresh_after_replacement_bootstrap() {
+        let temporary = tempfile::tempdir().or_panic("create temporary directory");
+        let paths = ServicePaths::under_home(temporary.path());
+        paths
+            .create_directories()
+            .or_panic("create installation directories");
+        atomic_write(
+            &paths.codex_home.join("auth.json"),
+            br#"{"OPENAI_API_KEY":"before-install"}"#,
+            0o600,
+        )
+        .or_panic("write initial authentication");
+        let previous =
+            PreviousInstallation::capture(&paths, false).or_panic("snapshot static installation");
+        atomic_write(
+            &paths.codex_home.join("auth.json"),
+            br#"{"OPENAI_API_KEY":"imported"}"#,
+            0o600,
+        )
+        .or_panic("simulate authentication import");
+        let refreshed = br#"{"OPENAI_API_KEY":"replacement-daemon-refresh"}"#;
+        atomic_write(&paths.codex_home.join("auth.json"), refreshed, 0o600)
+            .or_panic("simulate refresh after bootstrap");
+
+        previous
+            .restore(&paths, "unused-test-target", false)
+            .or_panic("restore static installation");
+
+        assert_eq!(
+            fs::read(paths.codex_home.join("auth.json")).or_panic("read refreshed auth"),
+            refreshed
+        );
+    }
+
+    #[test]
     fn installation_snapshot_restores_prior_codex_home_plist() {
         let temporary = tempfile::tempdir().or_panic("create temporary directory");
         let paths = ServicePaths::under_home(temporary.path());
         paths
             .create_directories()
             .or_panic("create installation directories");
-        let original = render_plist(
-            &paths,
-            Path::new("/usr/local/bin/codex"),
-            Some(Path::new(
-                "/Users/example/Library/Application Support/Annals/codex-home",
-            )),
-        );
+        let original = render_plist(&paths, Path::new("/usr/local/bin/codex"));
         atomic_write(&paths.launch_agent, original.as_bytes(), 0o600)
             .or_panic("write original plist");
         let previous =
             PreviousInstallation::capture(&paths, false).or_panic("snapshot original installation");
 
-        let replacement = render_plist(&paths, Path::new("/usr/local/bin/codex"), None);
+        let replacement = render_plist(&paths, Path::new("/usr/local/bin/codex"));
         atomic_write(&paths.launch_agent, replacement.as_bytes(), 0o600)
             .or_panic("write replacement plist");
         previous

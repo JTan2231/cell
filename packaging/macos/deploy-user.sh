@@ -16,7 +16,7 @@ Usage: deploy-user.sh --binary ABSOLUTE_PATH --daemon ABSOLUTE_PATH \
 Install or update the current user's macOS Nucleus service.
 
 Options:
-  --codex-home ABSOLUTE_PATH  Reuse an existing Codex state directory
+  --codex-home ABSOLUTE_PATH  Import signed-in auth into Nucleus-owned state
   --home ABSOLUTE_PATH        Override the operator home (primarily for tests)
 EOF
 }

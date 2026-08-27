@@ -4,15 +4,19 @@
 //! Codex command-line arguments. The adapter owns the translation to a concrete,
 //! inspected Codex installation.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
+use std::fs::{self, File, OpenOptions};
 use std::future;
 use std::io;
+use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command as StdCommand, Stdio};
+use std::sync::Arc;
 use std::time::Duration;
 
+use fs2::FileExt as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -24,10 +28,15 @@ use tokio::task::JoinHandle;
 
 pub use nucleus_core::{BuiltinToolsV1, WorkspaceAccess};
 
-const MAX_PROTOCOL_BYTES: u64 = 256 * 1024 * 1024;
-const MAX_MODEL_CATALOG_BYTES: usize = 8 * 1024 * 1024;
+const MAX_PROTOCOL_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_MODEL_CATALOG_BYTES: usize = 4 * 1024 * 1024;
+const MAX_ACCOUNT_PROTOCOL_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_ACCOUNT_STDERR_BYTES: usize = 64 * 1024;
+const MAX_AUTH_BYTES: u64 = 4 * 1024 * 1024;
 const STDERR_CHUNK_BYTES: usize = 8 * 1024;
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
+const AUTH_LOCK_NAME: &str = ".nucleus-auth.lock";
+const AUTH_CONFIG: &str = "cli_auth_credentials_store = \"file\"\n";
 
 /// The exact Codex CLI release whose app-server contract this adapter proves.
 /// Supporting another release requires reviewing and updating the protocol
@@ -92,6 +101,7 @@ pub struct DynamicTool {
 #[derive(Debug, Clone)]
 pub struct CodexRunSpec {
     pub instructions: String,
+    pub developer_instructions: Option<String>,
     pub prompt: String,
     pub model: String,
     pub reasoning_effort: Option<String>,
@@ -100,6 +110,9 @@ pub struct CodexRunSpec {
     pub builtin_tools: BuiltinToolsV1,
     pub timeout: Duration,
     pub tools: Vec<DynamicTool>,
+    /// Exact requester process environment supplied through a memory-only
+    /// launch context. `None` inherits the Nucleus daemon environment.
+    pub launch_environment: Option<BTreeMap<String, String>>,
 }
 
 /// Exact installed-harness identity and the capabilities used for validation.
@@ -166,6 +179,22 @@ pub struct CodexOutcome {
     pub final_message: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountSnapshot {
+    pub rate_limits: Value,
+    pub usage: Option<Value>,
+    pub usage_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthenticationReadiness {
+    pub configured: bool,
+    pub authenticated: bool,
+    pub detail: Option<String>,
+}
+
 #[derive(Debug, Error)]
 pub enum CodexError {
     #[error("Codex harness inspection failed: {0}")]
@@ -174,10 +203,16 @@ pub enum CodexError {
     UnsupportedSetting { setting: String, reason: String },
     #[error("could not prepare isolated Codex state: {0}")]
     Preparation(#[source] io::Error),
+    #[error("Codex authentication is unavailable: {0}")]
+    Authentication(String),
+    #[error("Nucleus-owned Codex authentication is currently in use")]
+    AuthenticationBusy,
     #[error("could not start Codex app-server: {0}")]
     Spawn(#[source] io::Error),
     #[error("Codex app-server protocol failed: {0}")]
     Protocol(String),
+    #[error("Codex app-server exited unsuccessfully ({status})")]
+    HarnessFailure { status: std::process::ExitStatus },
     #[error("the durable event consumer disconnected")]
     EventConsumerDisconnected,
     #[error("job cancelled")]
@@ -191,6 +226,8 @@ pub enum CodexError {
 #[derive(Debug, Clone)]
 pub struct CodexHarness {
     executable: PathBuf,
+    codex_home: Option<PathBuf>,
+    credential_gate: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Default for CodexHarness {
@@ -204,12 +241,215 @@ impl CodexHarness {
     pub fn new(executable: impl Into<PathBuf>) -> Self {
         Self {
             executable: executable.into(),
+            codex_home: default_codex_home(),
+            credential_gate: Arc::new(tokio::sync::Mutex::new(())),
+        }
+    }
+
+    /// Construct an adapter whose sole persistent authentication authority is
+    /// the supplied Nucleus-owned Codex home.
+    #[must_use]
+    pub fn with_codex_home(executable: impl Into<PathBuf>, codex_home: impl Into<PathBuf>) -> Self {
+        Self {
+            executable: executable.into(),
+            codex_home: Some(codex_home.into()),
+            credential_gate: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
     #[must_use]
     pub fn executable(&self) -> &Path {
         &self.executable
+    }
+
+    #[must_use]
+    pub fn codex_home(&self) -> Option<&Path> {
+        self.codex_home.as_deref()
+    }
+
+    /// Inspect the Nucleus-owned credential files without contacting Codex.
+    #[must_use]
+    pub fn authentication_readiness(&self) -> AuthenticationReadiness {
+        let Some(home) = self.codex_home.as_deref() else {
+            return AuthenticationReadiness {
+                configured: false,
+                authenticated: false,
+                detail: Some("no Nucleus Codex home is configured".to_owned()),
+            };
+        };
+        match validate_credential_home(home, true) {
+            Ok(()) => AuthenticationReadiness {
+                configured: true,
+                authenticated: true,
+                detail: None,
+            },
+            Err(error) => AuthenticationReadiness {
+                configured: home.join("config.toml").is_file(),
+                authenticated: false,
+                detail: Some(error.to_string()),
+            },
+        }
+    }
+
+    /// Read authenticated account limits, and optionally account usage,
+    /// without starting a model turn. The credential lease is held for the
+    /// complete app-server session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authentication, spawn, protocol, or timeout error.
+    pub async fn read_account_snapshot(
+        &self,
+        include_usage: bool,
+        lease_wait: Duration,
+        timeout: Duration,
+    ) -> Result<AccountSnapshot, CodexError> {
+        let deadline = tokio::time::Instant::now()
+            .checked_add(timeout)
+            .ok_or_else(|| unsupported("timeout", "cannot represent account deadline"))?;
+        let _lease = if lease_wait.is_zero() {
+            self.try_acquire_credential_lease().await?
+        } else {
+            tokio::time::timeout(lease_wait, self.acquire_credential_lease())
+                .await
+                .map_err(|_| CodexError::AuthenticationBusy)??
+        };
+        let home = self.codex_home.as_deref().ok_or_else(|| {
+            CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
+        })?;
+
+        let mut command = self.command();
+        for feature in DISABLED_FEATURES {
+            command.args(["--disable", feature]);
+        }
+        for setting in CONFIG_OVERRIDES {
+            command.args(["-c", setting]);
+        }
+        command
+            .args(["app-server", "--stdio"])
+            .env("CODEX_HOME", home)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        command.as_std_mut().process_group(0);
+        let mut child = command.spawn().map_err(CodexError::Spawn)?;
+        let group = child.id();
+        let mut guard = ProcessGroupGuard::new(group);
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| CodexError::Protocol("account app-server omitted stdin".to_owned()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| CodexError::Protocol("account app-server omitted stdout".to_owned()))?;
+        let mut stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| CodexError::Protocol("account app-server omitted stderr".to_owned()))?;
+        let stderr_task = tokio::spawn(async move { read_bounded_stderr(&mut stderr).await });
+        let mut protocol = AccountProtocol::new(stdin, stdout, deadline);
+        let result = async {
+            protocol
+                .request(
+                    0,
+                    "initialize",
+                    Some(json!({
+                        "clientInfo": {
+                            "name": "nucleus",
+                            "title": "Nucleus",
+                            "version": env!("CARGO_PKG_VERSION")
+                        }
+                    })),
+                )
+                .await?;
+            protocol.notify("initialized", Some(json!({}))).await?;
+            let rate_limits = protocol
+                .request(1, "account/rateLimits/read", Some(json!({})))
+                .await?;
+            let (usage, usage_error) = if include_usage {
+                match protocol
+                    .request(2, "account/usage/read", Some(json!({})))
+                    .await
+                {
+                    Ok(value) => (Some(value), None),
+                    Err(error) => (None, Some(error.to_string())),
+                }
+            } else {
+                (None, None)
+            };
+            Ok(AccountSnapshot {
+                rate_limits,
+                usage,
+                usage_error,
+            })
+        }
+        .await;
+        terminate_process_group(&mut child, &mut guard).await;
+        let stderr = match stderr_task.await {
+            Ok(Ok(stderr)) => stderr,
+            Ok(Err(_)) | Err(_) => Vec::new(),
+        };
+        result.map_err(|error| account_error_with_stderr(error, &stderr))
+    }
+
+    /// Run an attended Codex login against the Nucleus-owned credential home.
+    /// This uses the same cross-process credential lease as jobs and account
+    /// reads, so login cannot race token refresh.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authentication, spawn, or wait error.
+    pub async fn login(&self, device_auth: bool) -> Result<std::process::ExitStatus, CodexError> {
+        let _lease = self.acquire_credential_lease().await?;
+        let home = self.codex_home.as_deref().ok_or_else(|| {
+            CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
+        })?;
+        let mut command = self.command();
+        command.arg("login");
+        if device_auth {
+            command.arg("--device-auth");
+        }
+        command
+            .env("CODEX_HOME", home)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        command.status().await.map_err(CodexError::Spawn)
+    }
+
+    async fn acquire_credential_lease(&self) -> Result<CredentialLease, CodexError> {
+        let gate = Arc::clone(&self.credential_gate).lock_owned().await;
+        let home = self.codex_home.clone().ok_or_else(|| {
+            CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
+        })?;
+        let file = tokio::task::spawn_blocking(move || open_credential_lease(&home))
+            .await
+            .map_err(|error| {
+                CodexError::Authentication(format!("credential lease worker failed: {error}"))
+            })??;
+        Ok(CredentialLease {
+            _gate: gate,
+            _file: file,
+        })
+    }
+
+    async fn try_acquire_credential_lease(&self) -> Result<CredentialLease, CodexError> {
+        let gate = Arc::clone(&self.credential_gate)
+            .try_lock_owned()
+            .map_err(|_| CodexError::AuthenticationBusy)?;
+        let home = self.codex_home.clone().ok_or_else(|| {
+            CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
+        })?;
+        let file = tokio::task::spawn_blocking(move || try_open_credential_lease(&home))
+            .await
+            .map_err(|error| {
+                CodexError::Authentication(format!("credential lease worker failed: {error}"))
+            })??;
+        Ok(CredentialLease {
+            _gate: gate,
+            _file: file,
+        })
     }
 
     /// Inspect the exact binary used to execute jobs. Validation never assumes
@@ -502,6 +742,7 @@ impl CodexHarness {
         spec: &CodexRunSpec,
     ) -> Result<PathBuf, CodexError> {
         let mut command = self.command();
+        apply_launch_environment(&mut command, spec);
         command
             .args(["debug", "models", "--bundled"])
             .env("CODEX_HOME", codex_home)
@@ -544,6 +785,7 @@ impl CodexHarness {
     /// Returns an error for validation, preparation, protocol, tool-mailbox,
     /// cancellation, timeout, or harness-turn failure. The harness process group
     /// is cleaned up before ordinary return and by a drop guard if aborted.
+    #[allow(clippy::too_many_lines)]
     pub async fn run(
         &self,
         inspection: &HarnessInspection,
@@ -555,12 +797,26 @@ impl CodexHarness {
         let deadline = tokio::time::Instant::now()
             .checked_add(spec.timeout)
             .ok_or_else(|| unsupported("timeoutSeconds", "cannot represent deadline"))?;
+        let _lease = {
+            let lease = self.acquire_credential_lease();
+            tokio::pin!(lease);
+            let cancellation = wait_for_cancellation(&mut cancelled);
+            tokio::pin!(cancellation);
+            tokio::select! {
+                result = &mut lease => result?,
+                () = &mut cancellation => return Err(CodexError::Cancelled),
+                () = tokio::time::sleep_until(deadline) => return Err(CodexError::TimedOut),
+            }
+        };
         let temporary = TempDir::new().map_err(CodexError::Preparation)?;
         let codex_home = temporary.path().join("codex-home");
         tokio::fs::create_dir(&codex_home)
             .await
             .map_err(CodexError::Preparation)?;
-        copy_codex_auth(&codex_home).await?;
+        let persistent_home = self.codex_home.as_deref().ok_or_else(|| {
+            CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
+        })?;
+        prepare_isolated_codex_home(persistent_home, &codex_home).await?;
         let catalog_path = {
             let preparation = async {
                 let current_version = self.read_version().await?;
@@ -647,14 +903,46 @@ impl CodexHarness {
             }
         };
 
+        // A clean stdout EOF is ambiguous until the direct child status is
+        // known. Give an already-closing child a brief chance to report its
+        // status so an unsuccessful harness exit is not mislabeled as malformed
+        // JSON-RPC.
+        let observed_exit = if matches!(
+            &result,
+            Err(CodexError::Protocol(message)) if message == "app-server stdout closed"
+        ) {
+            match tokio::time::timeout(Duration::from_millis(250), child.wait()).await {
+                Ok(Ok(status)) => Some(status),
+                Ok(Err(error)) => {
+                    return Err(CodexError::Protocol(format!(
+                        "could not read app-server exit status: {error}"
+                    )));
+                }
+                Err(_) => None,
+            }
+        } else {
+            child.try_wait().map_err(|error| {
+                CodexError::Protocol(format!("could not read app-server exit status: {error}"))
+            })?
+        };
+
         terminate_process_group(&mut child, &mut process_group).await;
         let stdout_result = join_reader(stdout_task, "stdout").await;
         let stderr_result = join_reader(stderr_task, "stderr").await;
         drop(events);
+        let auth_result = persist_refreshed_auth(&codex_home, persistent_home).await;
 
         stdout_result?;
         stderr_result?;
-        result
+        auth_result?;
+        match (result, observed_exit) {
+            (Err(CodexError::Protocol(message)), Some(status))
+                if message == "app-server stdout closed" && !status.success() =>
+            {
+                Err(CodexError::HarnessFailure { status })
+            }
+            (result, _) => result,
+        }
     }
 
     fn command(&self) -> Command {
@@ -673,6 +961,7 @@ impl CodexHarness {
         catalog_path: &Path,
     ) -> Result<Command, CodexError> {
         let mut command = self.command();
+        apply_launch_environment(&mut command, spec);
         for feature in DISABLED_FEATURES {
             command.args(["--disable", feature]);
         }
@@ -743,20 +1032,23 @@ impl ProtocolClient {
             WorkspaceAccess::None | WorkspaceAccess::ReadOnly => "read-only",
             WorkspaceAccess::ReadWrite => "workspace-write",
         };
-        let thread = self
-            .request(
-                "thread/start",
-                json!({
-                    "model": spec.model,
-                    "cwd": effective_cwd.display().to_string(),
-                    "approvalPolicy": "never",
-                    "sandbox": sandbox,
-                    "baseInstructions": spec.instructions,
-                    "ephemeral": true,
-                    "dynamicTools": dynamic_tools
-                }),
-            )
-            .await?;
+        let mut thread_params = json!({
+            "model": spec.model,
+            "cwd": effective_cwd.display().to_string(),
+            "approvalPolicy": "never",
+            "sandbox": sandbox,
+            "baseInstructions": spec.instructions,
+            "ephemeral": true,
+            "experimentalRawEvents": true,
+            "dynamicTools": dynamic_tools
+        });
+        if let Some(instructions) = &spec.developer_instructions {
+            thread_params["developerInstructions"] = json!(instructions);
+        }
+        if matches!(spec.workspace_access, WorkspaceAccess::None) {
+            thread_params["environments"] = json!([]);
+        }
+        let thread = self.request("thread/start", thread_params).await?;
         let thread_id = required_string(&thread, "/thread/id", "thread/start response")?;
         self.active_thread_id = Some(thread_id.clone());
         let mut turn_params = json!({
@@ -765,6 +1057,9 @@ impl ProtocolClient {
         });
         if let Some(effort) = &spec.reasoning_effort {
             turn_params["effort"] = json!(effort);
+        }
+        if matches!(spec.workspace_access, WorkspaceAccess::None) {
+            turn_params["environments"] = json!([]);
         }
         let turn = self.request("turn/start", turn_params).await?;
         let turn_id = required_string(&turn, "/turn/id", "turn/start response")?;
@@ -1058,6 +1353,11 @@ fn verify_protocol_semantics(document: &Value) -> Result<(), CodexError> {
             "turn/completed",
             "#/definitions/v2/TurnCompletedNotification",
         ),
+        (
+            "ServerNotification",
+            "thread/tokenUsage/updated",
+            "#/definitions/v2/ThreadTokenUsageUpdatedNotification",
+        ),
     ] {
         require_method(document, definition, method, params_ref)?;
     }
@@ -1070,8 +1370,11 @@ fn verify_protocol_semantics(document: &Value) -> Result<(), CodexError> {
             "approvalPolicy",
             "baseInstructions",
             "cwd",
+            "developerInstructions",
             "dynamicTools",
             "ephemeral",
+            "environments",
+            "experimentalRawEvents",
             "model",
             "sandbox",
         ],
@@ -1089,7 +1392,7 @@ fn verify_protocol_semantics(document: &Value) -> Result<(), CodexError> {
     require_properties(
         turn_start,
         "v2/TurnStartParams",
-        &["effort", "input", "threadId"],
+        &["effort", "environments", "input", "threadId"],
     )?;
     require_required(turn_start, "v2/TurnStartParams", &["input", "threadId"])?;
 
@@ -1153,6 +1456,16 @@ fn verify_protocol_semantics(document: &Value) -> Result<(), CodexError> {
         protocol_definition(document, &["v2", "TurnCompletedNotification"])?,
         "v2/TurnCompletedNotification",
         &["threadId", "turn"],
+    )?;
+    require_required(
+        protocol_definition(document, &["v2", "ThreadTokenUsageUpdatedNotification"])?,
+        "v2/ThreadTokenUsageUpdatedNotification",
+        &["threadId", "tokenUsage", "turnId"],
+    )?;
+    require_required(
+        protocol_definition(document, &["v2", "RawResponseCompletedNotification"])?,
+        "v2/RawResponseCompletedNotification",
+        &["responseId", "threadId", "turnId"],
     )
 }
 
@@ -1474,6 +1787,45 @@ async fn read_stderr(
     }
 }
 
+async fn read_bounded_stderr(stderr: &mut tokio::process::ChildStderr) -> io::Result<Vec<u8>> {
+    let mut tail = Vec::new();
+    let mut buffer = vec![0_u8; STDERR_CHUNK_BYTES];
+    loop {
+        let count = stderr.read(&mut buffer).await?;
+        if count == 0 {
+            return Ok(tail);
+        }
+        retain_tail(&mut tail, &buffer[..count], MAX_ACCOUNT_STDERR_BYTES);
+    }
+}
+
+fn retain_tail(tail: &mut Vec<u8>, bytes: &[u8], limit: usize) {
+    if bytes.len() >= limit {
+        tail.clear();
+        tail.extend_from_slice(&bytes[bytes.len() - limit..]);
+        return;
+    }
+    let excess = tail.len().saturating_add(bytes.len()).saturating_sub(limit);
+    if excess > 0 {
+        tail.drain(..excess);
+    }
+    tail.extend_from_slice(bytes);
+}
+
+fn account_error_with_stderr(error: CodexError, stderr: &[u8]) -> CodexError {
+    let stderr = String::from_utf8_lossy(stderr);
+    let stderr = stderr.trim();
+    if stderr.is_empty() {
+        return error;
+    }
+    let sanitized = stderr
+        .chars()
+        .flat_map(char::escape_default)
+        .take(4_096)
+        .collect::<String>();
+    CodexError::Authentication(format!("{error}; stderr: {sanitized}"))
+}
+
 async fn wait_for_cancellation(cancelled: &mut watch::Receiver<bool>) {
     loop {
         if *cancelled.borrow() {
@@ -1559,35 +1911,353 @@ async fn join_reader(
         .map_err(|error| CodexError::Protocol(format!("{stream} reader task failed: {error}")))?
 }
 
-async fn copy_codex_auth(isolated_home: &Path) -> Result<(), CodexError> {
-    let source_home = std::env::var_os("CODEX_HOME")
+struct CredentialLease {
+    _gate: tokio::sync::OwnedMutexGuard<()>,
+    _file: File,
+}
+
+fn default_codex_home() -> Option<PathBuf> {
+    std::env::var_os("CODEX_HOME")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .or_else(|| {
             std::env::var_os("HOME")
                 .filter(|value| !value.is_empty())
                 .map(|home| PathBuf::from(home).join(".codex"))
-        });
-    let Some(source) = source_home.map(|home| home.join("auth.json")) else {
-        return Ok(());
-    };
-    if !source.is_file() {
-        return Ok(());
+        })
+}
+
+fn validate_credential_home(home: &Path, require_auth: bool) -> Result<(), CodexError> {
+    let metadata = fs::symlink_metadata(home).map_err(|error| {
+        CodexError::Authentication(format!("could not inspect {}: {error}", home.display()))
+    })?;
+    if !metadata.file_type().is_dir() || metadata.permissions().mode() & 0o777 != 0o700 {
+        return Err(CodexError::Authentication(format!(
+            "Codex home must be a private regular directory: {}",
+            home.display()
+        )));
     }
-    let bytes = tokio::fs::read(source)
+    let config = home.join("config.toml");
+    let metadata = fs::symlink_metadata(&config).map_err(|error| {
+        CodexError::Authentication(format!("could not inspect {}: {error}", config.display()))
+    })?;
+    if !metadata.file_type().is_file()
+        || metadata.permissions().mode() & 0o777 != 0o600
+        || metadata.len() > 64 * 1024
+    {
+        return Err(CodexError::Authentication(format!(
+            "Codex config must be a private regular file no larger than 65536 bytes: {}",
+            config.display()
+        )));
+    }
+    let document = fs::read_to_string(&config).map_err(|error| {
+        CodexError::Authentication(format!("could not read {}: {error}", config.display()))
+    })?;
+    if document.trim() != AUTH_CONFIG.trim() {
+        return Err(CodexError::Authentication(format!(
+            "Codex config may contain only cli_auth_credentials_store = \"file\": {}",
+            config.display()
+        )));
+    }
+    if require_auth {
+        validate_auth_file(&home.join("auth.json"))?;
+    }
+    Ok(())
+}
+
+fn validate_auth_file(path: &Path) -> Result<(), CodexError> {
+    read_valid_auth_file(path).map(|_| ())
+}
+
+fn read_valid_auth_file(path: &Path) -> Result<Vec<u8>, CodexError> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        CodexError::Authentication(format!("could not inspect {}: {error}", path.display()))
+    })?;
+    if !metadata.file_type().is_file()
+        || metadata.permissions().mode() & 0o777 != 0o600
+        || metadata.len() == 0
+        || metadata.len() > MAX_AUTH_BYTES
+    {
+        return Err(CodexError::Authentication(format!(
+            "auth.json must be a nonempty mode-0600 regular file no larger than {MAX_AUTH_BYTES} bytes: {}",
+            path.display()
+        )));
+    }
+    let bytes = fs::read(path).map_err(|error| {
+        CodexError::Authentication(format!("could not read {}: {error}", path.display()))
+    })?;
+    if bytes.is_empty() || u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_AUTH_BYTES {
+        return Err(CodexError::Authentication(format!(
+            "auth.json must be nonempty and no larger than {MAX_AUTH_BYTES} bytes: {}",
+            path.display()
+        )));
+    }
+    validate_auth_document(&bytes)?;
+    Ok(bytes)
+}
+
+/// Validate the stable credential shape Codex writes to `auth.json`.
+///
+/// File-backed authentication contains either a nonempty API key or a token
+/// pair. Other fields remain intentionally unconstrained so Codex can evolve
+/// its credential metadata without requiring a Nucleus release.
+///
+/// # Errors
+///
+/// Returns [`CodexError::Authentication`] when the document is not a JSON
+/// object containing usable file-backed credentials.
+pub fn validate_auth_document(bytes: &[u8]) -> Result<(), CodexError> {
+    let document: Value = serde_json::from_slice(bytes).map_err(|error| {
+        CodexError::Authentication(format!("auth.json is not valid JSON: {error}"))
+    })?;
+    let object = document.as_object().ok_or_else(|| {
+        CodexError::Authentication("auth.json must contain a JSON object".to_owned())
+    })?;
+    let has_api_key = object
+        .get("OPENAI_API_KEY")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty());
+    let has_token_pair = object
+        .get("tokens")
+        .and_then(Value::as_object)
+        .is_some_and(|tokens| {
+            ["access_token", "refresh_token"].into_iter().all(|name| {
+                tokens
+                    .get(name)
+                    .and_then(Value::as_str)
+                    .is_some_and(|value| !value.trim().is_empty())
+            })
+        });
+    if !has_api_key && !has_token_pair {
+        return Err(CodexError::Authentication(
+            "auth.json must contain a nonempty OPENAI_API_KEY or tokens.access_token and tokens.refresh_token"
+                .to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn open_credential_lease(home: &Path) -> Result<File, CodexError> {
+    let (file, path) = open_credential_lock(home)?;
+    file.lock_exclusive().map_err(|error| {
+        CodexError::Authentication(format!("could not lock {}: {error}", path.display()))
+    })?;
+    Ok(file)
+}
+
+fn try_open_credential_lease(home: &Path) -> Result<File, CodexError> {
+    let (file, path) = open_credential_lock(home)?;
+    match file.try_lock_exclusive() {
+        Ok(()) => Ok(file),
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+            Err(CodexError::AuthenticationBusy)
+        }
+        Err(error) => Err(CodexError::Authentication(format!(
+            "could not lock {}: {error}",
+            path.display()
+        ))),
+    }
+}
+
+fn open_credential_lock(home: &Path) -> Result<(File, PathBuf), CodexError> {
+    validate_credential_home(home, false)?;
+    let path = home.join(AUTH_LOCK_NAME);
+    if let Ok(metadata) = fs::symlink_metadata(&path)
+        && !metadata.file_type().is_file()
+    {
+        return Err(CodexError::Authentication(format!(
+            "credential lease path is not a regular file: {}",
+            path.display()
+        )));
+    }
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(&path)
+        .map_err(|error| {
+            CodexError::Authentication(format!("could not open {}: {error}", path.display()))
+        })?;
+    file.set_permissions(fs::Permissions::from_mode(0o600))
+        .map_err(|error| {
+            CodexError::Authentication(format!("could not secure {}: {error}", path.display()))
+        })?;
+    Ok((file, path))
+}
+
+async fn prepare_isolated_codex_home(
+    persistent_home: &Path,
+    isolated_home: &Path,
+) -> Result<(), CodexError> {
+    validate_credential_home(persistent_home, true)?;
+    tokio::fs::set_permissions(isolated_home, fs::Permissions::from_mode(0o700))
         .await
         .map_err(CodexError::Preparation)?;
-    let destination = isolated_home.join("auth.json");
+    write_private_file(&isolated_home.join("config.toml"), AUTH_CONFIG.as_bytes()).await?;
+    let source = persistent_home.join("auth.json");
+    let bytes = read_valid_auth_file(&source)?;
+    write_private_file(&isolated_home.join("auth.json"), &bytes).await
+}
+
+async fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), CodexError> {
     let mut options = tokio::fs::OpenOptions::new();
     options.write(true).create_new(true).mode(0o600);
-    let mut file = options
-        .open(destination)
-        .await
-        .map_err(CodexError::Preparation)?;
-    file.write_all(&bytes)
+    let mut file = options.open(path).await.map_err(CodexError::Preparation)?;
+    file.write_all(bytes)
         .await
         .map_err(CodexError::Preparation)?;
     file.flush().await.map_err(CodexError::Preparation)
+}
+
+async fn persist_refreshed_auth(
+    isolated_home: &Path,
+    persistent_home: &Path,
+) -> Result<(), CodexError> {
+    let source = isolated_home.join("auth.json");
+    let bytes = read_valid_auth_file(&source)?;
+    let destination = persistent_home.join("auth.json");
+    let destination = destination.clone();
+    tokio::task::spawn_blocking(move || persist_auth_file(&bytes, &destination))
+        .await
+        .map_err(|error| {
+            CodexError::Authentication(format!("auth persistence worker failed: {error}"))
+        })?
+}
+
+fn persist_auth_file(bytes: &[u8], destination: &Path) -> Result<(), CodexError> {
+    use std::io::Write as _;
+
+    let parent = destination.parent().ok_or_else(|| {
+        CodexError::Authentication("auth.json destination has no parent".to_owned())
+    })?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(CodexError::Preparation)?;
+    temporary
+        .as_file()
+        .set_permissions(fs::Permissions::from_mode(0o600))
+        .map_err(CodexError::Preparation)?;
+    temporary
+        .write_all(bytes)
+        .and_then(|()| temporary.as_file().sync_all())
+        .map_err(CodexError::Preparation)?;
+    temporary.persist(destination).map_err(|error| {
+        CodexError::Preparation(io::Error::new(error.error.kind(), error.error.to_string()))
+    })?;
+    File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(CodexError::Preparation)
+}
+
+fn apply_launch_environment(command: &mut Command, spec: &CodexRunSpec) {
+    if let Some(environment) = &spec.launch_environment {
+        command.env_clear();
+        command.envs(environment);
+    }
+    command.env_remove("CODEX_EXEC_SERVER_URL");
+}
+
+struct AccountProtocol {
+    stdin: ChildStdin,
+    stdout: BufReader<tokio::process::ChildStdout>,
+    deadline: tokio::time::Instant,
+    total_bytes: u64,
+}
+
+impl AccountProtocol {
+    fn new(
+        stdin: ChildStdin,
+        stdout: tokio::process::ChildStdout,
+        deadline: tokio::time::Instant,
+    ) -> Self {
+        Self {
+            stdin,
+            stdout: BufReader::new(stdout),
+            deadline,
+            total_bytes: 0,
+        }
+    }
+
+    async fn request(
+        &mut self,
+        id: i64,
+        method: &str,
+        params: Option<Value>,
+    ) -> Result<Value, CodexError> {
+        let mut message = json!({ "jsonrpc": "2.0", "id": id, "method": method });
+        if let Some(params) = params {
+            message["params"] = params;
+        }
+        self.write(&message).await?;
+        loop {
+            let message = self.read().await?;
+            if message.get("id") != Some(&json!(id)) {
+                continue;
+            }
+            if let Some(error) = message.get("error") {
+                let detail = error
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .unwrap_or("request was rejected");
+                return Err(CodexError::Authentication(format!(
+                    "{method} failed: {detail}"
+                )));
+            }
+            return message
+                .get("result")
+                .cloned()
+                .ok_or_else(|| CodexError::Protocol(format!("{method} response omitted result")));
+        }
+    }
+
+    async fn notify(&mut self, method: &str, params: Option<Value>) -> Result<(), CodexError> {
+        let mut message = json!({ "jsonrpc": "2.0", "method": method });
+        if let Some(params) = params {
+            message["params"] = params;
+        }
+        self.write(&message).await
+    }
+
+    async fn write(&mut self, message: &Value) -> Result<(), CodexError> {
+        let mut bytes = serde_json::to_vec(message)
+            .map_err(|error| CodexError::Protocol(format!("could not encode JSON-RPC: {error}")))?;
+        bytes.push(b'\n');
+        tokio::time::timeout_at(self.deadline, self.stdin.write_all(&bytes))
+            .await
+            .map_err(|_| CodexError::TimedOut)?
+            .map_err(|error| CodexError::Protocol(format!("could not write JSON-RPC: {error}")))?;
+        tokio::time::timeout_at(self.deadline, self.stdin.flush())
+            .await
+            .map_err(|_| CodexError::TimedOut)?
+            .map_err(|error| CodexError::Protocol(format!("could not flush JSON-RPC: {error}")))
+    }
+
+    async fn read(&mut self) -> Result<Value, CodexError> {
+        let mut line = Vec::new();
+        let count =
+            tokio::time::timeout_at(self.deadline, self.stdout.read_until(b'\n', &mut line))
+                .await
+                .map_err(|_| CodexError::TimedOut)?
+                .map_err(|error| {
+                    CodexError::Protocol(format!("could not read JSON-RPC: {error}"))
+                })?;
+        if count == 0 {
+            return Err(CodexError::Protocol(
+                "account app-server stdout closed".to_owned(),
+            ));
+        }
+        self.total_bytes = self.total_bytes.saturating_add(count as u64);
+        if self.total_bytes > MAX_ACCOUNT_PROTOCOL_BYTES {
+            return Err(CodexError::Protocol(
+                "account app-server exceeded the protocol output limit".to_owned(),
+            ));
+        }
+        serde_json::from_slice(&line).map_err(|error| {
+            CodexError::Protocol(format!(
+                "account app-server emitted invalid JSON-RPC: {error}"
+            ))
+        })
+    }
 }
 
 fn required_string(value: &Value, pointer: &str, context: &str) -> Result<String, CodexError> {
@@ -1618,11 +2288,13 @@ fn diagnostic(prefix: &str, stderr: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        BuiltinToolsV1, CodexEvent, CodexHarness, CodexRunSpec, DynamicTool, GeneratedSchema,
-        HarnessInspection, ModelCapability, SUPPORTED_CODEX_VERSION, ToolResult, WorkspaceAccess,
-        configured_model_catalog, disabled_features, dynamic_tool_specs, runtime_config,
+        BuiltinToolsV1, CodexError, CodexEvent, CodexHarness, CodexRunSpec, DynamicTool,
+        GeneratedSchema, HarnessInspection, ModelCapability, SUPPORTED_CODEX_VERSION, ToolResult,
+        WorkspaceAccess, account_error_with_stderr, configured_model_catalog, disabled_features,
+        dynamic_tool_specs, persist_refreshed_auth, runtime_config, validate_auth_document,
     };
     use serde_json::{Value, json};
+    use std::collections::BTreeMap;
     use std::fs;
     use std::os::unix::fs::PermissionsExt as _;
     use std::path::Path;
@@ -1677,6 +2349,10 @@ mod tests {
                     method_schema(
                         "turn/completed",
                         "#/definitions/v2/TurnCompletedNotification"
+                    ),
+                    method_schema(
+                        "thread/tokenUsage/updated",
+                        "#/definitions/v2/ThreadTokenUsageUpdatedNotification"
                     )
                 ] },
                 "DynamicToolCallParams": {
@@ -1684,14 +2360,15 @@ mod tests {
                 },
                 "v2": {
                     "ThreadStartParams": { "properties": {
-                        "approvalPolicy": {}, "baseInstructions": {}, "cwd": {}, "dynamicTools": {},
-                        "ephemeral": {}, "model": {}, "sandbox": {}
+                        "approvalPolicy": {}, "baseInstructions": {}, "cwd": {},
+                        "developerInstructions": {}, "dynamicTools": {}, "ephemeral": {},
+                        "environments": {}, "experimentalRawEvents": {}, "model": {}, "sandbox": {}
                     } },
                     "AskForApproval": { "enum": ["never"] },
                     "SandboxMode": { "enum": ["read-only", "workspace-write"] },
                     "TurnStartParams": {
                         "required": ["input", "threadId"],
-                        "properties": { "effort": {}, "input": {}, "threadId": {} }
+                        "properties": { "effort": {}, "environments": {}, "input": {}, "threadId": {} }
                     },
                     "DynamicToolSpec": { "oneOf": [{
                         "required": ["description", "inputSchema", "name", "type"],
@@ -1706,6 +2383,12 @@ mod tests {
                         "required": ["item", "threadId", "turnId"]
                     },
                     "TurnCompletedNotification": { "required": ["threadId", "turn"] }
+                    ,"ThreadTokenUsageUpdatedNotification": {
+                        "required": ["threadId", "tokenUsage", "turnId"]
+                    },
+                    "RawResponseCompletedNotification": {
+                        "required": ["responseId", "threadId", "turnId"]
+                    }
                 }
             }
         });
@@ -1722,6 +2405,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("create temporary directory: {error}"));
         let mut spec = CodexRunSpec {
             instructions: "Follow the requester contract.".to_owned(),
+            developer_instructions: None,
             prompt: "work".to_owned(),
             model: "example-model".to_owned(),
             reasoning_effort: Some("medium".to_owned()),
@@ -1733,6 +2417,7 @@ mod tests {
             },
             timeout: Duration::from_secs(30),
             tools: Vec::new(),
+            launch_environment: None,
         };
         let harness = CodexHarness::new("codex");
         harness
@@ -1812,6 +2497,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("create temporary directory: {error}"));
         let mut spec = CodexRunSpec {
             instructions: "Follow the requester contract.".to_owned(),
+            developer_instructions: None,
             prompt: "work".to_owned(),
             model: "example-model".to_owned(),
             reasoning_effort: Some("medium".to_owned()),
@@ -1823,6 +2509,7 @@ mod tests {
             },
             timeout: Duration::from_secs(30),
             tools: Vec::new(),
+            launch_environment: None,
         };
 
         let restricted = configured_model_catalog(&bytes, &spec)
@@ -1860,6 +2547,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("create temporary directory: {error}"));
         let mut spec = CodexRunSpec {
             instructions: "Follow the requester contract.".to_owned(),
+            developer_instructions: None,
             prompt: "work".to_owned(),
             model: "example-model".to_owned(),
             reasoning_effort: None,
@@ -1871,6 +2559,7 @@ mod tests {
             },
             timeout: Duration::from_secs(30),
             tools: Vec::new(),
+            launch_environment: None,
         };
         assert!(disabled_features(&spec).contains(&"code_mode"));
         assert!(disabled_features(&spec).contains(&"standalone_web_search"));
@@ -1888,25 +2577,206 @@ mod tests {
         assert!(settings.contains(&"sandbox_permissions=[\"disk-full-read-access\"]".to_owned()));
     }
 
+    #[test]
+    fn account_failures_include_bounded_sanitized_stderr() {
+        let error = account_error_with_stderr(
+            CodexError::Protocol("account/rateLimits/read failed".to_owned()),
+            b"HTTP 401: refresh_token_reused\x1b\n",
+        );
+        let message = error.to_string();
+        assert!(message.contains("refresh_token_reused"));
+        assert!(message.contains("\\u{1b}"));
+        assert!(!message.contains('\u{1b}'));
+    }
+
+    #[test]
+    fn authentication_document_requires_usable_file_credentials() {
+        for invalid in [
+            b"".as_slice(),
+            b"{}".as_slice(),
+            b"[]".as_slice(),
+            br#"{"tokens":"#.as_slice(),
+            br#"{"OPENAI_API_KEY":"  "}"#.as_slice(),
+            br#"{"tokens":{"access_token":"access","refresh_token":""}}"#.as_slice(),
+        ] {
+            assert!(
+                validate_auth_document(invalid).is_err(),
+                "invalid authentication document was accepted: {}",
+                String::from_utf8_lossy(invalid)
+            );
+        }
+        validate_auth_document(br#"{"OPENAI_API_KEY":"key"}"#)
+            .unwrap_or_else(|error| panic!("validate API-key authentication: {error}"));
+        validate_auth_document(
+            br#"{"tokens":{"access_token":"access","refresh_token":"refresh"}}"#,
+        )
+        .unwrap_or_else(|error| panic!("validate token authentication: {error}"));
+    }
+
     #[tokio::test]
+    async fn truncated_refresh_never_replaces_authoritative_authentication()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let persistent_home = directory.path().join("persistent-home");
+        let isolated_home = directory.path().join("isolated-home");
+        fs::create_dir(&persistent_home)?;
+        fs::create_dir(&isolated_home)?;
+        let authoritative = br#"{"OPENAI_API_KEY":"authoritative"}"#;
+        fs::write(persistent_home.join("auth.json"), authoritative)?;
+        fs::set_permissions(
+            persistent_home.join("auth.json"),
+            fs::Permissions::from_mode(0o600),
+        )?;
+        fs::write(isolated_home.join("auth.json"), br#"{"tokens":"#)?;
+        fs::set_permissions(
+            isolated_home.join("auth.json"),
+            fs::Permissions::from_mode(0o600),
+        )?;
+
+        let result = persist_refreshed_auth(&isolated_home, &persistent_home).await;
+        assert!(
+            result.is_err(),
+            "truncated refreshed authentication must be rejected"
+        );
+
+        assert_eq!(fs::read(persistent_home.join("auth.json"))?, authoritative);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn nonblocking_account_lease_reports_authentication_busy()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let codex_home = directory.path().join("codex-home");
+        fs::create_dir(&codex_home)?;
+        fs::set_permissions(&codex_home, fs::Permissions::from_mode(0o700))?;
+        fs::write(
+            codex_home.join("config.toml"),
+            "cli_auth_credentials_store = \"file\"\n",
+        )?;
+        fs::set_permissions(
+            codex_home.join("config.toml"),
+            fs::Permissions::from_mode(0o600),
+        )?;
+        fs::write(
+            codex_home.join("auth.json"),
+            r#"{"OPENAI_API_KEY":"credential"}"#,
+        )?;
+        fs::set_permissions(
+            codex_home.join("auth.json"),
+            fs::Permissions::from_mode(0o600),
+        )?;
+        let harness = CodexHarness::with_codex_home("unused-codex", codex_home);
+        let _held = harness.acquire_credential_lease().await?;
+        let Err(error) = harness.try_acquire_credential_lease().await else {
+            panic!("nonblocking lease unexpectedly succeeded");
+        };
+        assert!(matches!(error, CodexError::AuthenticationBusy));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn launch_environment_is_a_full_snapshot_with_nucleus_overrides()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("environment-codex");
+        let capture = directory.path().join("environment.txt");
+        fs::write(
+            &executable,
+            r#"#!/bin/sh
+set -eu
+env > "$CAPTURE_PATH"
+printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","supports_search_tool":true}]}'
+"#,
+        )?;
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700))?;
+        let codex_home = directory.path().join("isolated-home");
+        fs::create_dir(&codex_home)?;
+        let mut environment = BTreeMap::new();
+        environment.insert("CALLER_ONLY".to_owned(), "present".to_owned());
+        environment.insert("CAPTURE_PATH".to_owned(), capture.display().to_string());
+        environment.insert("CODEX_HOME".to_owned(), "/attacker/home".to_owned());
+        environment.insert(
+            "CODEX_EXEC_SERVER_URL".to_owned(),
+            "https://attacker.invalid".to_owned(),
+        );
+        let spec = CodexRunSpec {
+            instructions: "contract".to_owned(),
+            developer_instructions: None,
+            prompt: "work".to_owned(),
+            model: "example-model".to_owned(),
+            reasoning_effort: None,
+            working_directory: directory.path().to_path_buf(),
+            workspace_access: WorkspaceAccess::ReadOnly,
+            builtin_tools: BuiltinToolsV1 {
+                local_execution: true,
+                web_search: true,
+            },
+            timeout: Duration::from_secs(5),
+            tools: Vec::new(),
+            launch_environment: Some(environment),
+        };
+        let harness = CodexHarness::new(&executable);
+        harness
+            .write_model_catalog(directory.path(), &codex_home, &spec)
+            .await?;
+
+        let captured = fs::read_to_string(capture)?;
+        assert!(captured.lines().any(|line| line == "CALLER_ONLY=present"));
+        assert!(!captured.lines().any(|line| line.starts_with("HOME=")));
+        assert!(
+            !captured
+                .lines()
+                .any(|line| line.starts_with("CODEX_EXEC_SERVER_URL="))
+        );
+        assert!(
+            captured
+                .lines()
+                .any(|line| { line == format!("CODEX_HOME={}", codex_home.display()) })
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn fake_app_server_preserves_protocol_and_cleans_descendants()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
         let executable = directory.path().join("fake-codex");
         let descendant_pid = directory.path().join("descendant.pid");
         write_fake_codex(&executable, &descendant_pid)?;
-        let harness = CodexHarness::new(&executable);
+        let codex_home = directory.path().join("codex-home");
+        fs::create_dir(&codex_home)?;
+        fs::set_permissions(&codex_home, fs::Permissions::from_mode(0o700))?;
+        fs::write(
+            codex_home.join("config.toml"),
+            "cli_auth_credentials_store = \"file\"\n",
+        )?;
+        fs::set_permissions(
+            codex_home.join("config.toml"),
+            fs::Permissions::from_mode(0o600),
+        )?;
+        fs::write(
+            codex_home.join("auth.json"),
+            r#"{"OPENAI_API_KEY":"credential"}"#,
+        )?;
+        fs::set_permissions(
+            codex_home.join("auth.json"),
+            fs::Permissions::from_mode(0o600),
+        )?;
+        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
         let inspection = harness.inspect().await?;
         assert_eq!(inspection.version, SUPPORTED_CODEX_VERSION);
         assert!(inspection.models[0].supports_local_execution);
         assert!(inspection.models[0].supports_web_search);
         let spec = CodexRunSpec {
             instructions: "Use only create_todo and call it once.".to_owned(),
+            developer_instructions: Some("Call the supplied tool exactly once.".to_owned()),
             prompt: "Create one todo".to_owned(),
             model: "example-model".to_owned(),
             reasoning_effort: Some("medium".to_owned()),
             working_directory: directory.path().to_path_buf(),
-            workspace_access: WorkspaceAccess::ReadOnly,
+            workspace_access: WorkspaceAccess::None,
             builtin_tools: BuiltinToolsV1 {
                 local_execution: false,
                 web_search: false,
@@ -1917,6 +2787,7 @@ mod tests {
                 description: "Create one todo".to_owned(),
                 input_schema: json!({"type": "object"}),
             }],
+            launch_environment: None,
         };
         let (events_tx, mut events_rx) = mpsc::channel(32);
         let event_collector = tokio::spawn(async move {
@@ -1961,8 +2832,50 @@ mod tests {
             })
         }));
         assert!(records.iter().any(|record| {
+            std::str::from_utf8(record).is_ok_and(|line| {
+                line.contains("\"developerInstructions\":\"Call the supplied tool exactly once.\"")
+                    && line.contains("\"experimentalRawEvents\":true")
+                    && line.contains("\"environments\":[]")
+            })
+        }));
+        assert!(records.iter().any(|record| {
             std::str::from_utf8(record).is_ok_and(|line| line.contains("\\\"id\\\":\\\"t1\\\""))
         }));
+        assert_eq!(
+            fs::read_to_string(codex_home.join("auth.json"))?,
+            r#"{"OPENAI_API_KEY":"refreshed"}"#
+        );
+
+        let failed_spec = CodexRunSpec {
+            instructions: "contract".to_owned(),
+            developer_instructions: None,
+            prompt: "FAIL_AFTER_THREAD".to_owned(),
+            model: "example-model".to_owned(),
+            reasoning_effort: Some("medium".to_owned()),
+            working_directory: directory.path().to_path_buf(),
+            workspace_access: WorkspaceAccess::None,
+            builtin_tools: BuiltinToolsV1 {
+                local_execution: false,
+                web_search: false,
+            },
+            timeout: Duration::from_secs(5),
+            tools: Vec::new(),
+            launch_environment: None,
+        };
+        let (failed_events, mut failed_events_rx) = mpsc::channel(32);
+        let drain = tokio::spawn(async move { while failed_events_rx.recv().await.is_some() {} });
+        let (_cancel_tx, cancel_rx) = watch::channel(false);
+        let Err(failure) = harness
+            .run(&inspection, failed_spec, failed_events, cancel_rx)
+            .await
+        else {
+            panic!("nonzero app-server exit should fail");
+        };
+        assert!(
+            matches!(failure, CodexError::HarnessFailure { .. }),
+            "unexpected failure: {failure:?}"
+        );
+        drain.await?;
 
         let pid: u32 = fs::read_to_string(&descendant_pid)?.trim().parse()?;
         for _ in 0..20 {
@@ -1993,8 +2906,6 @@ case "$*" in
   *'web_search="disabled"'*) ;;
   *) exit 21 ;;
 esac
-(trap '' TERM; sleep 300) &
-printf '%s\n' "$!" > '{pidfile}'
 printf '%s\n' 'diagnostic' >&2
 IFS= read -r initialize
 printf '%s\n' '{{"id":0,"result":{{}}}}'
@@ -2003,17 +2914,23 @@ IFS= read -r inventory
 printf '%s\n' '{{"id":1,"result":{{"data":[],"nextCursor":null}}}}'
 IFS= read -r thread
 printf '%s\n' '{{"id":2,"result":{{"thread":{{"id":"thread-1"}}}}}}'
-IFS= read -r turn
-printf '%s\n' '{{"id":3,"result":{{"turn":{{"id":"turn-1"}}}}}}'
-printf '%s\n' '{{"id":20,"method":"item/tool/call","params":{{"threadId":"thread-1","turnId":"turn-1","callId":"call-1","namespace":null,"tool":"create_todo","arguments":{{"title":"Actionable"}}}}}}'
+  IFS= read -r turn
+  printf '%s\n' '{{"id":3,"result":{{"turn":{{"id":"turn-1"}}}}}}'
+  case "$turn" in
+    *FAIL_AFTER_THREAD*) exit 19 ;;
+  esac
+  (trap '' TERM; sleep 300) &
+  printf '%s\n' "$!" > '{pidfile}'
+  printf '%s\n' '{{"id":20,"method":"item/tool/call","params":{{"threadId":"thread-1","turnId":"turn-1","callId":"call-1","namespace":null,"tool":"create_todo","arguments":{{"title":"Actionable"}}}}}}'
 IFS= read -r tool_result
 case "$tool_result" in
   *'"success":true'*) ;;
   *) exit 22 ;;
 esac
-printf '%s\n' '{{"method":"item/completed","params":{{"threadId":"thread-1","turnId":"turn-1","item":{{"type":"agentMessage","text":"created"}}}}}}'
-printf '%s\n' '{{"method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"turn-1","status":"completed","items":[{{"type":"agentMessage","text":"created"}}]}}}}}}'
-wait
+  printf '%s\n' '{{"method":"item/completed","params":{{"threadId":"thread-1","turnId":"turn-1","item":{{"type":"agentMessage","text":"created"}}}}}}'
+  printf '%s\n' '{{"method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"turn-1","status":"completed","items":[{{"type":"agentMessage","text":"created"}}]}}}}}}'
+  printf '%s' '{{"OPENAI_API_KEY":"refreshed"}}' > "$CODEX_HOME/auth.json"
+  wait
 "#,
             pidfile = descendant_pid.display(),
         );

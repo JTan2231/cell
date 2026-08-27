@@ -47,6 +47,15 @@ pub enum StoreError {
     #[error("tool call `{call_id}` in job `{job_id}` was already answered differently")]
     ToolResultConflict { job_id: String, call_id: String },
 
+    #[error(
+        "tool call `{call_id}` in job `{job_id}` cannot be answered because its job or attempt `{attempt_id}` is terminal"
+    )]
+    ToolCallOwnerTerminal {
+        job_id: String,
+        call_id: String,
+        attempt_id: String,
+    },
+
     #[error("{entity} `{id}` was not found")]
     NotFound { entity: &'static str, id: String },
 
@@ -1047,6 +1056,7 @@ impl Store {
                 call_id: call_id.to_owned(),
             });
         }
+        ensure_tool_call_owner_nonterminal(&transaction, &current)?;
         let log = append_log_in_transaction(&transaction, &raw_record)?;
         update_tool_call_answer(&transaction, job_id, call_id, &result, log.sequence)?;
         let updated = require_tool_call(&transaction, job_id, call_id)?;
@@ -1078,6 +1088,7 @@ impl Store {
                 call_id: call_id.to_owned(),
             });
         }
+        ensure_tool_call_owner_nonterminal(&transaction, &current)?;
         update_tool_call_answer(&transaction, job_id, call_id, &result, result_sequence)?;
         let updated = require_tool_call(&transaction, job_id, call_id)?;
         transaction.commit()?;
@@ -1419,6 +1430,28 @@ fn ensure_tool_call_log_matches(new: &NewPendingToolCall, log: &NewLogRecord) ->
             attempt_id: new.attempt_id.clone(),
         })
     }
+}
+
+fn ensure_tool_call_owner_nonterminal(
+    transaction: &Transaction<'_>,
+    call: &PendingToolCallRecord,
+) -> Result<()> {
+    let job = require_job(transaction, &call.job_id)?;
+    let attempt = require_attempt(transaction, &call.attempt_id)?;
+    if attempt.job_id != call.job_id {
+        return Err(StoreError::AttemptJobMismatch {
+            job_id: call.job_id.clone(),
+            attempt_id: call.attempt_id.clone(),
+        });
+    }
+    if job.state.is_terminal() || attempt.state.is_terminal() {
+        return Err(StoreError::ToolCallOwnerTerminal {
+            job_id: call.job_id.clone(),
+            call_id: call.id.clone(),
+            attempt_id: call.attempt_id.clone(),
+        });
+    }
+    Ok(())
 }
 
 fn insert_pending_tool_call(
@@ -1824,6 +1857,83 @@ mod tests {
             must_succeed(store.answer_tool_call_with_log("job-1", "call-1", result, result_log));
         assert!(!retry.was_created());
         assert_eq!(must_succeed(store.list_logs("job-1", 0, 10)).len(), 2);
+    }
+
+    #[test]
+    fn stale_tool_result_precheck_cannot_cross_terminal_transition() {
+        let mut store = prepared_store();
+        must_succeed(store.admit_job(job("job-1", "run-1")));
+        let attempt = must_succeed(store.create_attempt(attempt("job-1")));
+        must_succeed(store.transition_attempt(&attempt.id, AttemptState::Running, NOW, None));
+        let call = NewPendingToolCall {
+            id: "call-1".to_owned(),
+            job_id: "job-1".to_owned(),
+            attempt_id: attempt.id.clone(),
+            tool_name: "submit_reconciliation".to_owned(),
+            arguments_schema_id: "tool.arguments.v1".to_owned(),
+            arguments_bytes: br#"{"draft":7}"#.to_vec(),
+            created_at: NOW.to_owned(),
+        };
+        must_succeed(store.record_pending_tool_call(
+            call,
+            NewLogRecord {
+                job_id: "job-1".to_owned(),
+                attempt_id: Some(attempt.id.clone()),
+                observed_at: NOW.to_owned(),
+                emitted_at: None,
+                stream: "harness.output".to_owned(),
+                schema_id: "harness.output.v1".to_owned(),
+                payload: b"tool call".to_vec(),
+            },
+        ));
+
+        // Reproduce the handler's former race deterministically: both stale
+        // reads are nonterminal, then cancellation wins before the answer's
+        // durable transaction begins.
+        let stale_job = must_exist(must_succeed(store.get_job("job-1")));
+        let stale_call = must_exist(must_succeed(store.get_tool_call("job-1", "call-1")));
+        assert!(!stale_job.state.is_terminal());
+        assert_eq!(stale_call.state, ToolCallState::Pending);
+        must_succeed(store.transition_attempt(
+            &attempt.id,
+            AttemptState::Cancelled,
+            LATER,
+            Some("requested"),
+        ));
+        let logs_before = must_succeed(store.list_logs("job-1", 0, 10));
+        let result = NewToolResult {
+            schema_id: "tool.result.v1".to_owned(),
+            result_bytes: br#"{"ok":true}"#.to_vec(),
+            is_error: false,
+            answered_at: LATER.to_owned(),
+        };
+        let answer = store.answer_tool_call_with_log(
+            "job-1",
+            "call-1",
+            result.clone(),
+            NewLogRecord {
+                job_id: "job-1".to_owned(),
+                attempt_id: Some(attempt.id.clone()),
+                observed_at: LATER.to_owned(),
+                emitted_at: None,
+                stream: "requester".to_owned(),
+                schema_id: result.schema_id,
+                payload: result.result_bytes,
+            },
+        );
+
+        assert!(matches!(
+            answer,
+            Err(StoreError::ToolCallOwnerTerminal {
+                job_id,
+                call_id,
+                attempt_id,
+            }) if job_id == "job-1" && call_id == "call-1" && attempt_id == attempt.id
+        ));
+        let stored = must_exist(must_succeed(store.get_tool_call("job-1", "call-1")));
+        assert_eq!(stored.state, ToolCallState::Pending);
+        assert!(stored.result_bytes.is_none());
+        assert_eq!(must_succeed(store.list_logs("job-1", 0, 10)), logs_before);
     }
 
     #[test]

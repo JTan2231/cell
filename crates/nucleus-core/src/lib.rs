@@ -67,6 +67,7 @@ string_id!(HarnessId);
 string_id!(ModelId);
 string_id!(SchemaId);
 string_id!(ToolCallId);
+string_id!(LaunchContextId);
 
 /// An absolute working directory as supplied in a request.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -119,6 +120,99 @@ impl TimeoutSeconds {
 pub struct Requester {
     pub program: String,
     pub id: String,
+}
+
+/// One variable in an ephemeral launch environment. Variables use strings
+/// because the public API is JSON; names must also satisfy the host process
+/// environment rules.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LaunchEnvironmentVariableV1 {
+    pub name: String,
+    pub value: String,
+}
+
+/// A short-lived launch environment uploaded separately from a durable job.
+/// Nucleus retains this value only in daemon memory and consumes it when the
+/// referenced job is admitted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LaunchContextRegistrationV1 {
+    pub version: u32,
+    pub requester: Requester,
+    pub environment: Vec<LaunchEnvironmentVariableV1>,
+}
+
+impl LaunchContextRegistrationV1 {
+    /// Validate the bounded process environment before sending it.
+    ///
+    /// # Errors
+    ///
+    /// Returns every invalid name, duplicate, or size violation.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        const MAX_VARIABLES: usize = 4_096;
+        const MAX_ENVIRONMENT_BYTES: usize = 1024 * 1024;
+
+        let mut issues = Vec::new();
+        check_version("version", self.version, &mut issues);
+        check_program("requester.program", &self.requester.program, &mut issues);
+        check_nonempty_bounded(
+            "requester.id",
+            &self.requester.id,
+            MAX_IDENTIFIER_LEN,
+            &mut issues,
+        );
+        if self.environment.len() > MAX_VARIABLES {
+            issues.push(ValidationIssue::new(
+                "environment",
+                "too_many",
+                format!("environment may contain at most {MAX_VARIABLES} variables"),
+            ));
+        }
+        let mut names = std::collections::BTreeSet::new();
+        let mut total = 0_usize;
+        for (index, variable) in self.environment.iter().enumerate() {
+            total = total
+                .saturating_add(variable.name.len())
+                .saturating_add(variable.value.len());
+            if variable.name.is_empty()
+                || variable.name.contains('=')
+                || variable.name.contains('\0')
+            {
+                issues.push(ValidationIssue::new(
+                    format!("environment[{index}].name"),
+                    "invalid_environment_name",
+                    "environment variable names must be nonempty and contain neither '=' nor NUL",
+                ));
+            } else if !names.insert(variable.name.as_str()) {
+                issues.push(ValidationIssue::new(
+                    format!("environment[{index}].name"),
+                    "duplicate",
+                    "environment variable names must be unique",
+                ));
+            }
+            if variable.value.contains('\0') {
+                issues.push(ValidationIssue::new(
+                    format!("environment[{index}].value"),
+                    "invalid_environment_value",
+                    "environment variable values must not contain NUL",
+                ));
+            }
+        }
+        if total > MAX_ENVIRONMENT_BYTES {
+            issues.push(ValidationIssue::new(
+                "environment",
+                "too_large",
+                format!("environment may contain at most {MAX_ENVIRONMENT_BYTES} bytes"),
+            ));
+        }
+
+        if issues.is_empty() {
+            Ok(())
+        } else {
+            Err(ValidationError { issues })
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -180,6 +274,10 @@ pub struct AgentInvocationV1 {
     pub timeout_seconds: TimeoutSeconds,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub toolset: Option<ToolsetRef>,
+    /// Reference to an ephemeral, daemon-memory-only launch context. The
+    /// referenced environment is never included in this durable job request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch_context: Option<LaunchContextId>,
 }
 
 impl AgentInvocationV1 {
@@ -202,6 +300,7 @@ impl AgentInvocationV1 {
             builtin_tools,
             timeout_seconds,
             toolset: None,
+            launch_context: None,
         }
     }
 }
@@ -217,6 +316,10 @@ pub struct JobRequestV1 {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent: Option<JobId>,
     pub instructions: String,
+    /// Optional developer-priority instructions kept separate from the base
+    /// instructions for harnesses that distinguish the two roles.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub developer_instructions: Option<String>,
     pub prompt: String,
     pub invocation: AgentInvocationV1,
 }
@@ -238,6 +341,7 @@ impl JobRequestV1 {
             requester,
             parent: None,
             instructions: instructions.into(),
+            developer_instructions: None,
             prompt: prompt.into(),
             invocation,
         }
@@ -276,6 +380,17 @@ impl JobRequestV1 {
                 "instructions",
                 "empty",
                 "instructions must not be empty",
+            ));
+        }
+        if self
+            .developer_instructions
+            .as_ref()
+            .is_some_and(|instructions| instructions.trim().is_empty())
+        {
+            issues.push(ValidationIssue::new(
+                "developerInstructions",
+                "empty",
+                "developerInstructions must not be empty when supplied",
             ));
         }
         if self.prompt.trim().is_empty() {
@@ -376,6 +491,14 @@ impl AgentInvocationV1 {
                     "toolset version must be greater than zero",
                 ));
             }
+        }
+        if let Some(context) = &self.launch_context {
+            check_identifier(
+                "invocation.launchContext",
+                context.as_str(),
+                MAX_IDENTIFIER_LEN,
+                issues,
+            );
         }
     }
 }
@@ -497,6 +620,10 @@ pub enum HarnessCapability {
     RawJsonlInput,
     RawJsonlOutput,
     TurnInterruption,
+    DeveloperInstructions,
+    ExplicitEmptyEnvironments,
+    ExperimentalRawEvents,
+    PersistentFileAuthentication,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -579,6 +706,15 @@ pub enum AttemptTerminalReason {
     RequesterUnavailable,
 }
 
+/// Structured successful harness output retained alongside raw lifecycle logs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttemptOutputV1 {
+    pub thread_id: String,
+    pub turn_id: String,
+    pub final_message: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AttemptV1 {
@@ -597,6 +733,8 @@ pub struct AttemptV1 {
     pub terminal_reason: Option<AttemptTerminalReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<AttemptOutputV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1102,10 +1240,87 @@ pub struct CancelJobResponseV1 {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LaunchContextAcceptedV1 {
+    pub version: u32,
+    pub id: LaunchContextId,
+    pub expires_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthenticationReadinessV1 {
+    pub codex_home: AbsolutePath,
+    pub configured: bool,
+    pub authenticated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HealthResponseV1 {
     pub version: u32,
     pub status: String,
     pub daemon_version: String,
+    pub accepting_jobs: bool,
+    pub checked_at: String,
+    pub supported_protocol_versions: Vec<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub harness: Option<HarnessIdentity>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub harness_executable: Option<AbsolutePath>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<HarnessCapability>,
+    pub authentication: AuthenticationReadinessV1,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccountSnapshotQueryV1 {
+    #[serde(default)]
+    pub include_usage: bool,
+    /// How long to wait for the credential lease. Zero is a nonblocking
+    /// try-lock; values are capped at thirty seconds.
+    #[serde(default)]
+    pub wait_seconds: u32,
+}
+
+impl AccountSnapshotQueryV1 {
+    /// Validate the bounded credential-lease wait.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the wait exceeds thirty seconds.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.wait_seconds <= 30 {
+            Ok(())
+        } else {
+            Err(ValidationError {
+                issues: vec![ValidationIssue::new(
+                    "waitSeconds",
+                    "out_of_range",
+                    "waitSeconds must be at most 30",
+                )],
+            })
+        }
+    }
+}
+
+/// An authenticated account read performed under Nucleus's exclusive
+/// credential lease. External result objects remain opaque JSON.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountSnapshotV1 {
+    pub version: u32,
+    pub observed_at: String,
+    pub harness: HarnessIdentity,
+    pub rate_limits: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -2,7 +2,7 @@
 
 mod schemas;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs;
 use std::io;
@@ -24,13 +24,15 @@ use nucleus_codex::{
     HarnessInspection, ProtocolDirection, ToolResult,
 };
 use nucleus_core::{
-    AttemptId, AttemptState, AttemptTerminalReason, AttemptV1, CancelJobResponseV1,
-    ErrorResponseV1, HealthResponseV1, JobAcceptedV1, JobId, JobRequestV1, JobState, JobSummaryV1,
-    JobV1, LifecycleEventKind, LifecycleEventV1, ListJobsQueryV1, ListJobsResponseV1, LogRecordV1,
-    LogSchemaV1, LogStream, LogsQueryV1, LogsResponseV1, PROTOCOL_VERSION_V1, PendingToolCallV1,
-    ReasoningEffort, RegisteredToolsetV1, Requester, SchemaId, ToolCallId, ToolCallState,
-    ToolCallV1, ToolCallsQueryV1, ToolCallsResponseV1, ToolResultV1, ToolsetDefinitionsV1,
-    ToolsetRegistrationV1, sha256_digest,
+    AbsolutePath, AccountSnapshotQueryV1, AccountSnapshotV1, AttemptId, AttemptOutputV1,
+    AttemptState, AttemptTerminalReason, AttemptV1, AuthenticationReadinessV1, CancelJobResponseV1,
+    ErrorResponseV1, HarnessCapability, HarnessIdentity, HealthResponseV1, JobAcceptedV1, JobId,
+    JobRequestV1, JobState, JobSummaryV1, JobV1, LaunchContextAcceptedV1, LaunchContextId,
+    LaunchContextRegistrationV1, LifecycleEventKind, LifecycleEventV1, ListJobsQueryV1,
+    ListJobsResponseV1, LogRecordV1, LogSchemaV1, LogStream, LogsQueryV1, LogsResponseV1,
+    PROTOCOL_VERSION_V1, PendingToolCallV1, ReasoningEffort, RegisteredToolsetV1, Requester,
+    SchemaId, ToolCallId, ToolCallState, ToolCallV1, ToolCallsQueryV1, ToolCallsResponseV1,
+    ToolResultV1, ToolsetDefinitionsV1, ToolsetRegistrationV1, sha256_digest,
 };
 use nucleus_store::{
     AttemptRecord, AttemptState as StoreAttemptState, JobRecord, JobState as StoreJobState,
@@ -58,6 +60,8 @@ const DEFAULT_PAGE: usize = 100;
 const LOG_FOLLOW_WAIT: Duration = Duration::from_secs(25);
 const STARTUP_INSPECTION_TIMEOUT: Duration = Duration::from_secs(3);
 const ADMISSION_INSPECTION_TIMEOUT: Duration = Duration::from_secs(10);
+const ACCOUNT_TIMEOUT: Duration = Duration::from_secs(30);
+const LAUNCH_CONTEXT_TTL: Duration = Duration::from_secs(120);
 
 type ToolReplyKey = (String, String);
 
@@ -66,6 +70,7 @@ pub struct ServeConfig {
     pub socket: PathBuf,
     pub database: PathBuf,
     pub codex: PathBuf,
+    pub codex_home: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -73,6 +78,7 @@ pub struct StandardPaths {
     pub state_dir: PathBuf,
     pub socket: PathBuf,
     pub database: PathBuf,
+    pub codex_home: PathBuf,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -101,11 +107,19 @@ pub enum DaemonError {
 pub struct AppState {
     store: Arc<Mutex<Store>>,
     codex: CodexHarness,
-    harness_ready: bool,
     cancellations: Arc<Mutex<HashMap<String, watch::Sender<bool>>>>,
     tool_replies: Arc<Mutex<HashMap<ToolReplyKey, oneshot::Sender<ToolResult>>>>,
     changes: broadcast::Sender<String>,
     mailbox_changes: broadcast::Sender<String>,
+    launch_contexts: Arc<Mutex<HashMap<String, EphemeralLaunchContext>>>,
+}
+
+#[derive(Clone)]
+struct EphemeralLaunchContext {
+    requester: Requester,
+    environment: BTreeMap<String, String>,
+    expires: tokio::time::Instant,
+    bound_job_id: Option<String>,
 }
 
 impl AppState {
@@ -117,31 +131,14 @@ impl AppState {
     pub async fn new(store: Store, codex: CodexHarness) -> Result<Self, DaemonError> {
         let (changes, _) = broadcast::channel(1_024);
         let (mailbox_changes, _) = broadcast::channel(256);
-        let readiness = async {
-            let inspection = codex.inspect().await?;
-            let schema = codex.generate_protocol_schema().await?;
-            codex.validate_protocol_schema(&inspection, &schema)
-        };
-        let harness_ready = match tokio::time::timeout(STARTUP_INSPECTION_TIMEOUT, readiness).await
-        {
-            Ok(Ok(())) => true,
-            Ok(Err(error)) => {
-                warn!(error = %error, "Codex adapter is not ready; job admission will be unavailable");
-                false
-            }
-            Err(_) => {
-                warn!("Codex adapter readiness check timed out; job admission will be unavailable");
-                false
-            }
-        };
         let state = Self {
             store: Arc::new(Mutex::new(store)),
             codex,
-            harness_ready,
             cancellations: Arc::new(Mutex::new(HashMap::new())),
             tool_replies: Arc::new(Mutex::new(HashMap::new())),
             changes,
             mailbox_changes,
+            launch_contexts: Arc::new(Mutex::new(HashMap::new())),
         };
         state.seed_internal_schemas().await?;
         state.recover_interrupted_work().await?;
@@ -183,6 +180,14 @@ impl AppState {
                 &attempt.job_id,
                 Some(&attempt.id),
                 LifecycleEventKind::AttemptLost,
+                Some("nucleusd restarted while the attempt was in progress"),
+                None,
+            )?;
+            append_lifecycle_to_store(
+                &mut store,
+                &attempt.job_id,
+                Some(&attempt.id),
+                LifecycleEventKind::JobFailed,
                 Some("nucleusd restarted while the attempt was in progress"),
                 None,
             )?;
@@ -249,6 +254,7 @@ pub fn standard_paths() -> Result<StandardPaths, DaemonError> {
     Ok(StandardPaths {
         socket: state_dir.join("nucleus.sock"),
         database: state_dir.join("nucleus.db"),
+        codex_home: state_dir.join("codex-home"),
         state_dir,
     })
 }
@@ -288,7 +294,11 @@ pub async fn serve(config: ServeConfig) -> Result<(), DaemonError> {
     prepare_parent(&config.socket)?;
     let store = Store::open(&config.database)?;
     secure_store_files(&config.database)?;
-    let state = AppState::new(store, CodexHarness::new(&config.codex)).await?;
+    let state = AppState::new(
+        store,
+        CodexHarness::with_codex_home(&config.codex, &config.codex_home),
+    )
+    .await?;
     let listener = bind_socket(&config.socket).await?;
     info!(socket = %config.socket.display(), database = %config.database.display(), "nucleusd ready");
     let shutdown_state = state.clone();
@@ -309,6 +319,8 @@ pub async fn serve(config: ServeConfig) -> Result<(), DaemonError> {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1/health", get(health))
+        .route("/v1/account", get(account_snapshot))
+        .route("/v1/launch-contexts", post(register_launch_context))
         .route("/v1/jobs", post(submit_job).get(list_jobs))
         .route("/v1/jobs/{job_id}", get(get_job))
         .route("/v1/jobs/{job_id}/cancel", post(cancel_job))
@@ -327,16 +339,175 @@ pub fn router(state: AppState) -> Router {
 }
 
 async fn health(State(state): State<AppState>) -> Json<HealthResponseV1> {
-    let status = if state.harness_ready {
-        "ok"
-    } else {
-        "degraded"
+    let checked_at = now();
+    let auth = state.codex.authentication_readiness();
+    let readiness = tokio::time::timeout(STARTUP_INSPECTION_TIMEOUT, async {
+        let inspection = state.codex.inspect().await?;
+        let schema = state.codex.generate_protocol_schema().await?;
+        state.codex.validate_protocol_schema(&inspection, &schema)?;
+        Ok::<_, CodexError>(inspection)
+    })
+    .await;
+    let (harness, executable, detail) = match readiness {
+        Ok(Ok(inspection)) => (
+            Some(HarnessIdentity {
+                harness: "codex".into(),
+                harness_version: inspection.version,
+                adapter_version: ADAPTER_VERSION.to_owned(),
+            }),
+            Some(AbsolutePath::new(inspection.executable)),
+            None,
+        ),
+        Ok(Err(error)) => (None, None, Some(error.to_string())),
+        Err(_) => (
+            None,
+            None,
+            Some("Codex readiness inspection timed out".to_owned()),
+        ),
     };
+    let accepting_jobs = harness.is_some() && auth.configured && auth.authenticated;
     Json(HealthResponseV1 {
         version: PROTOCOL_VERSION_V1,
-        status: status.to_owned(),
+        status: if accepting_jobs { "ok" } else { "degraded" }.to_owned(),
         daemon_version: ADAPTER_VERSION.to_owned(),
+        accepting_jobs,
+        checked_at,
+        supported_protocol_versions: vec![PROTOCOL_VERSION_V1],
+        harness,
+        harness_executable: executable,
+        capabilities: vec![
+            HarnessCapability::ExactModel,
+            HarnessCapability::ReasoningEffort,
+            HarnessCapability::WorkspaceNone,
+            HarnessCapability::WorkspaceReadOnly,
+            HarnessCapability::WorkspaceReadWrite,
+            HarnessCapability::BuiltinLocalExecution,
+            HarnessCapability::BuiltinWebSearch,
+            HarnessCapability::DynamicClientTools,
+            HarnessCapability::RawJsonlInput,
+            HarnessCapability::RawJsonlOutput,
+            HarnessCapability::DeveloperInstructions,
+            HarnessCapability::ExplicitEmptyEnvironments,
+            HarnessCapability::ExperimentalRawEvents,
+            HarnessCapability::PersistentFileAuthentication,
+        ],
+        authentication: AuthenticationReadinessV1 {
+            codex_home: AbsolutePath::new(
+                state
+                    .codex
+                    .codex_home()
+                    .unwrap_or_else(|| Path::new("/unconfigured")),
+            ),
+            configured: auth.configured,
+            authenticated: auth.authenticated,
+            detail: auth.detail,
+        },
+        detail,
     })
+}
+
+async fn register_launch_context(
+    State(state): State<AppState>,
+    payload: Result<Json<LaunchContextRegistrationV1>, JsonRejection>,
+) -> Result<(StatusCode, Json<LaunchContextAcceptedV1>), ApiError> {
+    let Json(registration) = payload.map_err(ApiError::invalid_json)?;
+    registration.validate().map_err(ApiError::validation)?;
+    let id = format!("launch_{}", Uuid::now_v7());
+    let expires = tokio::time::Instant::now() + LAUNCH_CONTEXT_TTL;
+    let expires_at = (OffsetDateTime::now_utc()
+        + time::Duration::seconds(LAUNCH_CONTEXT_TTL.as_secs().cast_signed()))
+    .format(&Rfc3339)
+    .unwrap_or_else(|error| panic!("current timestamp must format: {error}"));
+    let environment = registration
+        .environment
+        .into_iter()
+        .map(|variable| (variable.name, variable.value))
+        .collect();
+    let mut contexts = state.launch_contexts.lock().await;
+    let now = tokio::time::Instant::now();
+    contexts.retain(|_, context| context.expires > now);
+    contexts.insert(
+        id.clone(),
+        EphemeralLaunchContext {
+            requester: registration.requester,
+            environment,
+            expires,
+            bound_job_id: None,
+        },
+    );
+    drop(contexts);
+    schedule_launch_context_expiry(Arc::clone(&state.launch_contexts), id.clone(), expires);
+    Ok((
+        StatusCode::CREATED,
+        Json(LaunchContextAcceptedV1 {
+            version: PROTOCOL_VERSION_V1,
+            id: LaunchContextId::new(id),
+            expires_at,
+        }),
+    ))
+}
+
+fn schedule_launch_context_expiry(
+    contexts: Arc<Mutex<HashMap<String, EphemeralLaunchContext>>>,
+    id: String,
+    expires: tokio::time::Instant,
+) {
+    tokio::spawn(async move {
+        tokio::time::sleep_until(expires).await;
+        let mut contexts = contexts.lock().await;
+        if contexts
+            .get(&id)
+            .is_some_and(|context| context.expires == expires)
+        {
+            contexts.remove(&id);
+        }
+    });
+}
+
+async fn account_snapshot(
+    State(state): State<AppState>,
+    query: Result<Query<AccountSnapshotQueryV1>, QueryRejection>,
+) -> Result<Json<AccountSnapshotV1>, ApiError> {
+    let Query(query) = query.map_err(ApiError::invalid_query)?;
+    query.validate().map_err(ApiError::validation)?;
+    let inspection = tokio::time::timeout(ADMISSION_INSPECTION_TIMEOUT, state.codex.inspect())
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "harness_inspection_timed_out",
+                "Codex capability inspection timed out",
+            )
+        })?
+        .map_err(ApiError::harness_unavailable)?;
+    let snapshot = state
+        .codex
+        .read_account_snapshot(
+            query.include_usage,
+            Duration::from_secs(u64::from(query.wait_seconds)),
+            ACCOUNT_TIMEOUT,
+        )
+        .await
+        .map_err(|error| {
+            let code = if matches!(error, CodexError::AuthenticationBusy) {
+                "authentication_busy"
+            } else {
+                "model_auth_unavailable"
+            };
+            ApiError::new(StatusCode::SERVICE_UNAVAILABLE, code, error.to_string())
+        })?;
+    Ok(Json(AccountSnapshotV1 {
+        version: PROTOCOL_VERSION_V1,
+        observed_at: now(),
+        harness: HarnessIdentity {
+            harness: "codex".into(),
+            harness_version: inspection.version,
+            adapter_version: ADAPTER_VERSION.to_owned(),
+        },
+        rate_limits: snapshot.rate_limits,
+        usage: snapshot.usage,
+        usage_error: snapshot.usage_error,
+    }))
 }
 
 #[allow(clippy::too_many_lines)]
@@ -353,21 +524,7 @@ async fn submit_job(
         ));
     }
 
-    if let Some(existing) = {
-        state
-            .store
-            .lock()
-            .await
-            .get_job(request.id.as_str())
-            .map_err(ApiError::store)?
-    } {
-        let requested = serde_json::to_vec(&request).map_err(ApiError::encoding)?;
-        if existing.request_bytes != requested {
-            return Err(ApiError::conflict(
-                "job_conflict",
-                "the job ID is already bound to a different request",
-            ));
-        }
+    if let Some(existing) = exact_existing_job(&state, &request).await? {
         return accepted_response(&state, existing, StatusCode::OK).await;
     }
 
@@ -382,6 +539,12 @@ async fn submit_job(
     {
         return Err(ApiError::not_found("parent job", parent.as_str()));
     }
+    let launch_environment = match resolve_launch_environment(&state, &request).await? {
+        LaunchEnvironmentResolution::Environment(environment) => environment,
+        LaunchEnvironmentResolution::Existing(existing) => {
+            return accepted_response(&state, *existing, StatusCode::OK).await;
+        }
+    };
     let definitions = load_toolset_definitions(&state, &request).await?;
     let dynamic_tools = dynamic_tools(&definitions)?;
     let inspection = tokio::time::timeout(ADMISSION_INSPECTION_TIMEOUT, state.codex.inspect())
@@ -394,7 +557,7 @@ async fn submit_job(
             )
         })?
         .map_err(ApiError::harness_unavailable)?;
-    let spec = codex_spec(&request, dynamic_tools.clone());
+    let spec = codex_spec(&request, dynamic_tools.clone(), launch_environment.clone());
     state
         .codex
         .validate(&inspection, &spec)
@@ -486,17 +649,16 @@ async fn submit_job(
         )?;
         attempt
     };
-    let (cancel_tx, cancel_rx) = watch::channel(false);
-    state
-        .cancellations
-        .lock()
-        .await
-        .insert(job.id.clone(), cancel_tx);
+    if let Some(context) = &request.invocation.launch_context {
+        state.launch_contexts.lock().await.remove(context.as_str());
+    }
+    let cancel_rx = register_cancellation_watch(&state, &job.id).await?;
     let run_state = state.clone();
     let run_request = request.clone();
     let run_inspection = inspection.clone();
     let run_attempt_id = attempt_id.clone();
     let run_definitions = definitions.clone();
+    let run_environment = launch_environment;
     tokio::spawn(async move {
         run_job(
             run_state,
@@ -505,6 +667,7 @@ async fn submit_job(
             run_inspection,
             protocol_schema_id,
             run_definitions,
+            run_environment,
             cancel_rx,
         )
         .await;
@@ -518,10 +681,40 @@ async fn submit_job(
             job_id: JobId::new(job.id),
             state: JobState::Accepted,
             request_digest: sha256_digest(&job.request_bytes),
-            attempt: Some(attempt_to_core(attempt)),
+            attempt: Some(attempt_to_core(attempt, None)),
             log_cursor: cursor,
         }),
     ))
+}
+
+async fn register_cancellation_watch(
+    state: &AppState,
+    job_id: &str,
+) -> Result<watch::Receiver<bool>, ApiError> {
+    let (sender, receiver) = watch::channel(false);
+    state
+        .cancellations
+        .lock()
+        .await
+        .insert(job_id.to_owned(), sender.clone());
+
+    // A cancellation can commit after attempt admission but before the sender
+    // is visible. Once the sender is installed, reread the durable source of
+    // truth. A later cancellation sees the sender; an earlier one is observed
+    // here, so the run cannot start with a fresh false receiver.
+    let cancellation_requested = state
+        .store
+        .lock()
+        .await
+        .get_job(job_id)
+        .map_err(ApiError::store)?
+        .ok_or_else(|| ApiError::not_found("job", job_id))?
+        .cancellation_requested_at
+        .is_some();
+    if cancellation_requested {
+        sender.send_replace(true);
+    }
+    Ok(receiver)
 }
 
 async fn get_job(
@@ -534,7 +727,8 @@ async fn get_job(
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("job", &job_id))?;
     let attempts = store.list_attempts(&job_id).map_err(ApiError::store)?;
-    Ok(Json(job_to_core(job, attempts)?))
+    let outputs = attempt_outputs(&store, &job_id)?;
+    Ok(Json(job_to_core(job, attempts, &outputs)?))
 }
 
 async fn list_jobs(
@@ -885,16 +1079,9 @@ async fn post_tool_result(
             "tool results may only be posted by the job requester",
         ));
     }
-    if job.state.is_terminal() && current.state == StoreToolCallState::Pending {
-        return Err(ApiError::conflict(
-            "job_terminal",
-            "the job ended before this tool result was posted",
-        ));
-    }
-
-    let answered = {
+    let (answered, was_created) = {
         let mut store = state.store.lock().await;
-        store
+        let answered = store
             .answer_tool_call_with_log(
                 &job_id,
                 &call_id,
@@ -914,11 +1101,38 @@ async fn post_tool_result(
                     payload: result.result.get().as_bytes().to_vec(),
                 },
             )
-            .map_err(ApiError::store)?
+            .map_err(ApiError::store)?;
+        let was_created = answered.was_created();
+        let answered = answered.into_inner();
+        if was_created {
+            if let Some(attempt) = store
+                .get_attempt(&answered.attempt_id)
+                .map_err(ApiError::store)?
+                && attempt.state == StoreAttemptState::WaitingOnRequester
+            {
+                store
+                    .transition_attempt(
+                        &answered.attempt_id,
+                        StoreAttemptState::Running,
+                        &now(),
+                        None,
+                    )
+                    .map_err(ApiError::store)?;
+            }
+            append_lifecycle_to_store(
+                &mut store,
+                &job_id,
+                Some(&answered.attempt_id),
+                LifecycleEventKind::ToolCallAnswered,
+                None,
+                None,
+            )?;
+        }
+        (answered, was_created)
     };
-    let was_created = answered.was_created();
-    let answered = answered.into_inner();
     if was_created {
+        // The durable ToolCallAnswered event is committed before waking the
+        // harness, so a fast completion cannot overtake its lifecycle record.
         let reply = state
             .tool_replies
             .lock()
@@ -935,34 +1149,12 @@ async fn post_tool_result(
                 call_id, "accepted tool result without a live harness receiver"
             );
         }
-        let mut store = state.store.lock().await;
-        if let Some(attempt) = store
-            .get_attempt(&answered.attempt_id)
-            .map_err(ApiError::store)?
-            && attempt.state == StoreAttemptState::WaitingOnRequester
-        {
-            store
-                .transition_attempt(
-                    &answered.attempt_id,
-                    StoreAttemptState::Running,
-                    &now(),
-                    None,
-                )
-                .map_err(ApiError::store)?;
-        }
-        append_lifecycle_to_store(
-            &mut store,
-            &job_id,
-            Some(&answered.attempt_id),
-            LifecycleEventKind::ToolCallAnswered,
-            None,
-            None,
-        )?;
     }
     state.notify(&job_id);
     Ok(Json(pending_call_to_core(answered)?))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_job(
     state: AppState,
     request: JobRequestV1,
@@ -970,6 +1162,7 @@ async fn run_job(
     inspection: HarnessInspection,
     protocol_schema_id: String,
     definitions: ToolsetDefinitionsV1,
+    launch_environment: Option<BTreeMap<String, String>>,
     cancel_rx: watch::Receiver<bool>,
 ) {
     let job_id = request.id.to_string();
@@ -987,18 +1180,22 @@ async fn run_job(
             return;
         }
     };
-    let spec = codex_spec(&request, tools);
+    let spec = codex_spec(&request, tools, launch_environment);
     let (events_tx, mut events_rx) = tokio::sync::mpsc::channel(256);
     let run = state.codex.run(&inspection, spec, events_tx, cancel_rx);
     tokio::pin!(run);
-    let mut latest_harness_output = None;
+    let mut pending_tool_records = HashMap::new();
     let mut event_failure: Option<String> = None;
     let run_result = loop {
         tokio::select! {
             result = &mut run => break result,
             event = events_rx.recv() => {
                 let Some(event) = event else {
-                    break Err(CodexError::EventConsumerDisconnected);
+                    // The producer drops its final sender immediately before the run
+                    // future resolves. If channel closure wins this select race, poll
+                    // the run to its actual result instead of reporting a false
+                    // consumer-disconnected protocol failure.
+                    break (&mut run).await;
                 };
                 if event_failure.is_some() {
                     continue;
@@ -1010,7 +1207,7 @@ async fn run_job(
                     &protocol_schema_id,
                     &definitions,
                     event,
-                    &mut latest_harness_output,
+                    &mut pending_tool_records,
                 ).await {
                     event_failure = Some(error.message);
                     if let Some(sender) = state.cancellations.lock().await.get(&job_id) {
@@ -1029,12 +1226,18 @@ async fn run_job(
                 &protocol_schema_id,
                 &definitions,
                 event,
-                &mut latest_harness_output,
+                &mut pending_tool_records,
             )
             .await
         {
             event_failure = Some(error.message);
         }
+    }
+    if event_failure.is_none() && !pending_tool_records.is_empty() {
+        event_failure = Some(
+            "a raw Codex tool request was not projected into the durable requester mailbox"
+                .to_owned(),
+        );
     }
 
     let terminal = if let Some(message) = event_failure {
@@ -1092,7 +1295,7 @@ async fn handle_codex_event(
     protocol_schema_id: &str,
     definitions: &ToolsetDefinitionsV1,
     event: CodexEvent,
-    latest_harness_output: &mut Option<u64>,
+    pending_tool_records: &mut HashMap<String, NewLogRecord>,
 ) -> Result<(), ApiError> {
     match event {
         CodexEvent::Protocol { direction, bytes } => {
@@ -1101,24 +1304,39 @@ async fn handle_codex_event(
                 ProtocolDirection::FromHarness => LogStream::HarnessOutput,
             };
             let payload = trim_jsonl(bytes);
-            let (schema_id, payload, decode_failed) =
-                match serde_json::from_slice::<Value>(&payload) {
-                    Ok(_) => (protocol_schema_id.to_owned(), payload, false),
-                    Err(_) => (BYTES_ID.to_owned(), byte_envelope(&payload), true),
-                };
-            let record = {
+            let decoded = serde_json::from_slice::<Value>(&payload);
+            let (schema_id, payload, decode_failed) = match &decoded {
+                Ok(_) => (protocol_schema_id.to_owned(), payload, false),
+                Err(_) => (BYTES_ID.to_owned(), byte_envelope(&payload), true),
+            };
+            let raw_record = NewLogRecord {
+                job_id: job_id.to_owned(),
+                attempt_id: Some(attempt_id.to_owned()),
+                observed_at: now(),
+                emitted_at: None,
+                stream: log_stream_name(stream).to_owned(),
+                schema_id,
+                payload,
+            };
+            if direction == ProtocolDirection::FromHarness
+                && let Ok(message) = decoded
+                && message.get("method").and_then(Value::as_str) == Some("item/tool/call")
+                && let Some(call_id) = message.pointer("/params/callId").and_then(Value::as_str)
+            {
+                if pending_tool_records
+                    .insert(call_id.to_owned(), raw_record)
+                    .is_some()
+                {
+                    return Err(ApiError::conflict(
+                        "tool_call_conflict",
+                        "Codex reused a tool call ID before mailbox projection",
+                    ));
+                }
+                return Ok(());
+            }
+            {
                 let mut store = state.store.lock().await;
-                let record = store
-                    .append_log(NewLogRecord {
-                        job_id: job_id.to_owned(),
-                        attempt_id: Some(attempt_id.to_owned()),
-                        observed_at: now(),
-                        emitted_at: None,
-                        stream: log_stream_name(stream).to_owned(),
-                        schema_id,
-                        payload,
-                    })
-                    .map_err(ApiError::store)?;
+                store.append_log(raw_record).map_err(ApiError::store)?;
                 if decode_failed {
                     append_lifecycle_to_store(
                         &mut store,
@@ -1131,10 +1349,6 @@ async fn handle_codex_event(
                         None,
                     )?;
                 }
-                record
-            };
-            if direction == ProtocolDirection::FromHarness {
-                *latest_harness_output = Some(record.sequence);
             }
             state.notify(job_id);
         }
@@ -1166,7 +1380,7 @@ async fn handle_codex_event(
                         "Codex requested a tool missing from the admitted toolset",
                     )
                 })?;
-            let request_sequence = latest_harness_output.ok_or_else(|| {
+            let raw_record = pending_tool_records.remove(&call.call_id).ok_or_else(|| {
                 ApiError::internal(
                     "missing_tool_record",
                     "tool call arrived without its raw harness-output record",
@@ -1180,7 +1394,7 @@ async fn handle_codex_event(
                 .insert(key.clone(), call.reply);
             let created = {
                 let mut store = state.store.lock().await;
-                let created = store.create_pending_tool_call(
+                let created = store.record_pending_tool_call(
                     NewPendingToolCall {
                         id: call.call_id.clone(),
                         job_id: job_id.to_owned(),
@@ -1191,7 +1405,7 @@ async fn handle_codex_event(
                             .map_err(ApiError::encoding)?,
                         created_at: now(),
                     },
-                    request_sequence,
+                    raw_record,
                 );
                 let created = match created {
                     Ok(value) => value,
@@ -1419,6 +1633,92 @@ async fn load_toolset_definitions(
     })
 }
 
+async fn exact_existing_job(
+    state: &AppState,
+    request: &JobRequestV1,
+) -> Result<Option<JobRecord>, ApiError> {
+    let existing = state
+        .store
+        .lock()
+        .await
+        .get_job(request.id.as_str())
+        .map_err(ApiError::store)?;
+    let Some(existing) = existing else {
+        return Ok(None);
+    };
+    let requested = serde_json::to_vec(request).map_err(ApiError::encoding)?;
+    if existing.request_bytes != requested {
+        return Err(ApiError::conflict(
+            "job_conflict",
+            "the job ID is already bound to a different request",
+        ));
+    }
+    Ok(Some(existing))
+}
+
+enum LaunchEnvironmentResolution {
+    Environment(Option<BTreeMap<String, String>>),
+    Existing(Box<JobRecord>),
+}
+
+async fn resolve_launch_environment(
+    state: &AppState,
+    request: &JobRequestV1,
+) -> Result<LaunchEnvironmentResolution, ApiError> {
+    match load_launch_environment(state, request).await {
+        Ok(environment) => Ok(LaunchEnvironmentResolution::Environment(environment)),
+        Err(error) if error.status == StatusCode::NOT_FOUND => {
+            // Another identical submission may have admitted the job and
+            // consumed its launch context after our initial idempotency check.
+            // Recheck the durable job before surfacing a stale context miss.
+            if let Some(existing) = exact_existing_job(state, request).await? {
+                Ok(LaunchEnvironmentResolution::Existing(Box::new(existing)))
+            } else {
+                Err(error)
+            }
+        }
+        Err(error) => Err(error),
+    }
+}
+
+async fn load_launch_environment(
+    state: &AppState,
+    request: &JobRequestV1,
+) -> Result<Option<BTreeMap<String, String>>, ApiError> {
+    let Some(reference) = &request.invocation.launch_context else {
+        return Ok(None);
+    };
+    if !request.invocation.builtin_tools.local_execution {
+        return Err(ApiError::unprocessable(
+            "launch_context_without_local_execution",
+            "a launch context is only valid when local execution is enabled",
+        ));
+    }
+    let mut contexts = state.launch_contexts.lock().await;
+    let now = tokio::time::Instant::now();
+    contexts.retain(|_, context| context.expires > now);
+    let context = contexts
+        .get_mut(reference.as_str())
+        .ok_or_else(|| ApiError::not_found("launch context", reference.as_str()))?;
+    if context.requester != request.requester {
+        return Err(ApiError::forbidden(
+            "launch_context_requester_mismatch",
+            "the launch context belongs to a different requester",
+        ));
+    }
+    match context.bound_job_id.as_deref() {
+        None => context.bound_job_id = Some(request.id.to_string()),
+        Some(job_id) if job_id == request.id.as_str() => {}
+        Some(_) => {
+            return Err(ApiError::conflict(
+                "launch_context_in_use",
+                "the launch context is already bound to a different job",
+            ));
+        }
+    }
+    Ok(Some(context.environment.clone()))
+}
+
 fn dynamic_tools(definitions: &ToolsetDefinitionsV1) -> Result<Vec<DynamicTool>, ApiError> {
     definitions
         .tools
@@ -1440,9 +1740,14 @@ fn dynamic_tools(definitions: &ToolsetDefinitionsV1) -> Result<Vec<DynamicTool>,
         .collect()
 }
 
-fn codex_spec(request: &JobRequestV1, tools: Vec<DynamicTool>) -> CodexRunSpec {
+fn codex_spec(
+    request: &JobRequestV1,
+    tools: Vec<DynamicTool>,
+    launch_environment: Option<BTreeMap<String, String>>,
+) -> CodexRunSpec {
     CodexRunSpec {
         instructions: request.instructions.clone(),
+        developer_instructions: request.developer_instructions.clone(),
         prompt: request.prompt.clone(),
         model: request.invocation.model.to_string(),
         reasoning_effort: request
@@ -1455,6 +1760,7 @@ fn codex_spec(request: &JobRequestV1, tools: Vec<DynamicTool>) -> CodexRunSpec {
         builtin_tools: request.invocation.builtin_tools,
         timeout: Duration::from_secs(request.invocation.timeout_seconds.get()),
         tools,
+        launch_environment,
     }
 }
 
@@ -1497,7 +1803,7 @@ async fn accepted_response(
             .await
             .get_attempt(attempt_id)
             .map_err(ApiError::store)?
-            .map(attempt_to_core)
+            .map(|attempt| attempt_to_core(attempt, None))
     } else {
         None
     };
@@ -1572,7 +1878,11 @@ async fn job_terminal(state: &AppState, job_id: &str) -> Result<bool, ApiError> 
         .ok_or_else(|| ApiError::not_found("job", job_id))
 }
 
-fn job_to_core(job: JobRecord, attempts: Vec<AttemptRecord>) -> Result<JobV1, ApiError> {
+fn job_to_core(
+    job: JobRecord,
+    attempts: Vec<AttemptRecord>,
+    outputs: &HashMap<String, AttemptOutputV1>,
+) -> Result<JobV1, ApiError> {
     let request = serde_json::from_slice(&job.request_bytes).map_err(|error| {
         ApiError::internal(
             "stored_request_invalid",
@@ -1583,7 +1893,13 @@ fn job_to_core(job: JobRecord, attempts: Vec<AttemptRecord>) -> Result<JobV1, Ap
         version: PROTOCOL_VERSION_V1,
         summary: job_summary(job),
         request,
-        attempts: attempts.into_iter().map(attempt_to_core).collect(),
+        attempts: attempts
+            .into_iter()
+            .map(|attempt| {
+                let output = outputs.get(&attempt.id).cloned();
+                attempt_to_core(attempt, output)
+            })
+            .collect(),
     })
 }
 
@@ -1606,7 +1922,7 @@ fn job_summary(job: JobRecord) -> JobSummaryV1 {
     }
 }
 
-fn attempt_to_core(attempt: AttemptRecord) -> AttemptV1 {
+fn attempt_to_core(attempt: AttemptRecord, output: Option<AttemptOutputV1>) -> AttemptV1 {
     AttemptV1 {
         version: PROTOCOL_VERSION_V1,
         id: AttemptId::new(attempt.id),
@@ -1626,7 +1942,44 @@ fn attempt_to_core(attempt: AttemptRecord) -> AttemptV1 {
             .as_deref()
             .and_then(parse_terminal_reason),
         terminal_message: attempt.terminal_message,
+        output,
     }
+}
+
+fn attempt_outputs(
+    store: &Store,
+    job_id: &str,
+) -> Result<HashMap<String, AttemptOutputV1>, ApiError> {
+    let mut outputs = HashMap::new();
+    let mut cursor = 0_u64;
+    loop {
+        let records = store
+            .list_logs(job_id, cursor, MAX_PAGE)
+            .map_err(ApiError::store)?;
+        let count = records.len();
+        for record in records {
+            cursor = record.sequence;
+            if record.schema_id != LIFECYCLE_ID {
+                continue;
+            }
+            let Ok(event) = serde_json::from_slice::<LifecycleEventV1>(&record.payload) else {
+                continue;
+            };
+            if event.event != LifecycleEventKind::TurnCompleted {
+                continue;
+            }
+            let (Some(attempt), Some(details)) = (event.attempt_id, event.details) else {
+                continue;
+            };
+            if let Ok(output) = serde_json::from_str::<AttemptOutputV1>(details.get()) {
+                outputs.insert(attempt.to_string(), output);
+            }
+        }
+        if count < MAX_PAGE {
+            break;
+        }
+    }
+    Ok(outputs)
 }
 
 fn log_to_core(record: LogRecord) -> Result<LogRecordV1, ApiError> {
@@ -2020,6 +2373,10 @@ impl ApiError {
 
     fn store(error: StoreError) -> Self {
         match error {
+            StoreError::ToolCallOwnerTerminal { .. } => Self::conflict(
+                "job_terminal",
+                "the job ended before this tool result was posted",
+            ),
             error @ (StoreError::JobConflict(_)
             | StoreError::LogSchemaConflict(_)
             | StoreError::ToolsetConflict { .. }
@@ -2156,5 +2513,435 @@ async fn shutdown_signal() {
     #[cfg(not(unix))]
     {
         let _ = interrupt.await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn launch_context_request(id: &str, context: &LaunchContextId) -> JobRequestV1 {
+        let mut invocation = nucleus_core::AgentInvocationV1::new(
+            "codex",
+            "test-model",
+            AbsolutePath::new("/tmp"),
+            nucleus_core::WorkspaceAccess::ReadOnly,
+            nucleus_core::BuiltinToolsV1 {
+                local_execution: true,
+                web_search: false,
+            },
+            nucleus_core::TimeoutSeconds::new(30),
+        );
+        invocation.launch_context = Some(context.clone());
+        JobRequestV1::new(
+            id,
+            "launch-context reservation test",
+            Requester {
+                program: "todo".to_owned(),
+                id: "todo-request-1".to_owned(),
+            },
+            "base instructions",
+            "prompt",
+            invocation,
+        )
+    }
+
+    #[tokio::test]
+    async fn launch_context_atomically_binds_to_one_job_and_allows_its_retries()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let state =
+            AppState::new(Store::open_in_memory()?, CodexHarness::new("unused-codex")).await?;
+        let context_id = LaunchContextId::new("launch_concurrency_test");
+        state.launch_contexts.lock().await.insert(
+            context_id.to_string(),
+            EphemeralLaunchContext {
+                requester: Requester {
+                    program: "todo".to_owned(),
+                    id: "todo-request-1".to_owned(),
+                },
+                environment: BTreeMap::from([("SECRET".to_owned(), "value".to_owned())]),
+                expires: tokio::time::Instant::now() + LAUNCH_CONTEXT_TTL,
+                bound_job_id: None,
+            },
+        );
+        let first_request = launch_context_request("job-first", &context_id);
+        let second_request = launch_context_request("job-second", &context_id);
+
+        let (first, second) = tokio::join!(
+            load_launch_environment(&state, &first_request),
+            load_launch_environment(&state, &second_request)
+        );
+        let (winner, loser_error) = match (first, second) {
+            (Ok(Some(_)), Err(error)) => (&first_request, error),
+            (Err(error), Ok(Some(_))) => (&second_request, error),
+            results => panic!("exactly one distinct job must reserve the context: {results:?}"),
+        };
+        assert_eq!(loser_error.status, StatusCode::CONFLICT);
+        assert_eq!(loser_error.code, "launch_context_in_use");
+
+        let Ok(Some(retry_environment)) = load_launch_environment(&state, winner).await else {
+            panic!("the bound job's identical retry must retain access");
+        };
+        assert_eq!(
+            retry_environment.get("SECRET").map(String::as_str),
+            Some("value")
+        );
+        assert_eq!(
+            state
+                .launch_contexts
+                .lock()
+                .await
+                .get(context_id.as_str())
+                .and_then(|context| context.bound_job_id.as_deref()),
+            Some(winner.id.as_str())
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn identical_submission_rechecks_job_after_context_was_consumed()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let state =
+            AppState::new(Store::open_in_memory()?, CodexHarness::new("unused-codex")).await?;
+        let context_id = LaunchContextId::new("launch_staged_retry_test");
+        state.launch_contexts.lock().await.insert(
+            context_id.to_string(),
+            EphemeralLaunchContext {
+                requester: Requester {
+                    program: "todo".to_owned(),
+                    id: "todo-request-1".to_owned(),
+                },
+                environment: BTreeMap::from([("SECRET".to_owned(), "value".to_owned())]),
+                expires: tokio::time::Instant::now() + LAUNCH_CONTEXT_TTL,
+                bound_job_id: None,
+            },
+        );
+        let first = launch_context_request("job-identical", &context_id);
+        let second = first.clone();
+        assert!(matches!(exact_existing_job(&state, &first).await, Ok(None)));
+        assert!(matches!(
+            exact_existing_job(&state, &second).await,
+            Ok(None)
+        ));
+
+        let Ok(Some(_)) = load_launch_environment(&state, &first).await else {
+            panic!("first submission must reserve the context");
+        };
+        state.store.lock().await.admit_job(NewJob {
+            id: first.id.to_string(),
+            label: first.label.clone(),
+            requester_program: first.requester.program.clone(),
+            requester_id: first.requester.id.clone(),
+            parent_job_id: None,
+            request_schema_id: JOB_REQUEST_ID.to_owned(),
+            request_bytes: serde_json::to_vec(&first)?,
+            created_at: "2026-08-27T00:00:00Z".to_owned(),
+        })?;
+        state
+            .launch_contexts
+            .lock()
+            .await
+            .remove(context_id.as_str());
+
+        let resolution = resolve_launch_environment(&state, &second)
+            .await
+            .map_err(|error| format!("identical retry was rejected: {}", error.message))?;
+        let LaunchEnvironmentResolution::Existing(existing) = resolution else {
+            panic!("the post-consumption retry must resolve to the admitted job");
+        };
+        assert_eq!(existing.id, first.id.as_str());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn launch_context_is_physically_erased_at_expiry()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let state =
+            AppState::new(Store::open_in_memory()?, CodexHarness::new("unused-codex")).await?;
+        let context_id = "launch_expiry_test".to_owned();
+        let expires = tokio::time::Instant::now() + Duration::from_millis(10);
+        state.launch_contexts.lock().await.insert(
+            context_id.clone(),
+            EphemeralLaunchContext {
+                requester: Requester {
+                    program: "todo".to_owned(),
+                    id: "todo-request-1".to_owned(),
+                },
+                environment: BTreeMap::from([("SECRET".to_owned(), "value".to_owned())]),
+                expires,
+                bound_job_id: None,
+            },
+        );
+        schedule_launch_context_expiry(
+            Arc::clone(&state.launch_contexts),
+            context_id.clone(),
+            expires,
+        );
+
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if !state.launch_contexts.lock().await.contains_key(&context_id) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await?;
+        assert!(!state.launch_contexts.lock().await.contains_key(&context_id));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cancellation_persisted_before_watch_registration_seeds_receiver()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let state =
+            AppState::new(Store::open_in_memory()?, CodexHarness::new("unused-codex")).await?;
+        {
+            let mut store = state.store.lock().await;
+            store.admit_job(NewJob {
+                id: "cancel-overlap-job".to_owned(),
+                label: "cancellation overlap test".to_owned(),
+                requester_program: "test".to_owned(),
+                requester_id: "request-1".to_owned(),
+                parent_job_id: None,
+                request_schema_id: JOB_REQUEST_ID.to_owned(),
+                request_bytes: b"{}".to_vec(),
+                created_at: "2026-08-27T00:00:00Z".to_owned(),
+            })?;
+            store.create_attempt(NewAttempt {
+                id: "cancel-overlap-attempt".to_owned(),
+                job_id: "cancel-overlap-job".to_owned(),
+                ordinal: 1,
+                harness: "codex".to_owned(),
+                harness_version: "test".to_owned(),
+                adapter_version: "test".to_owned(),
+                created_at: "2026-08-27T00:00:01Z".to_owned(),
+            })?;
+            store.request_cancellation("cancel-overlap-job", "2026-08-27T00:00:02Z")?;
+        }
+        assert!(
+            !state
+                .cancellations
+                .lock()
+                .await
+                .contains_key("cancel-overlap-job")
+        );
+
+        let receiver = register_cancellation_watch(&state, "cancel-overlap-job")
+            .await
+            .map_err(|error| error.message)?;
+
+        assert!(*receiver.borrow());
+        assert!(
+            state
+                .cancellations
+                .lock()
+                .await
+                .contains_key("cancel-overlap-job")
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn tool_call_answer_lifecycle_precedes_completion_awakened_by_reply()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let state =
+            AppState::new(Store::open_in_memory()?, CodexHarness::new("unused-codex")).await?;
+        let job_id = "tool-order-job";
+        let attempt_id = "tool-order-attempt";
+        let call_id = "tool-order-call";
+        let requester = Requester {
+            program: "todo".to_owned(),
+            id: "request-1".to_owned(),
+        };
+        {
+            let mut store = state.store.lock().await;
+            store.admit_job(NewJob {
+                id: job_id.to_owned(),
+                label: "tool answer ordering test".to_owned(),
+                requester_program: requester.program.clone(),
+                requester_id: requester.id.clone(),
+                parent_job_id: None,
+                request_schema_id: JOB_REQUEST_ID.to_owned(),
+                request_bytes: b"{}".to_vec(),
+                created_at: "2026-08-27T00:00:00Z".to_owned(),
+            })?;
+            store.create_attempt(NewAttempt {
+                id: attempt_id.to_owned(),
+                job_id: job_id.to_owned(),
+                ordinal: 1,
+                harness: "codex".to_owned(),
+                harness_version: "test".to_owned(),
+                adapter_version: "test".to_owned(),
+                created_at: "2026-08-27T00:00:01Z".to_owned(),
+            })?;
+            store.transition_attempt(
+                attempt_id,
+                StoreAttemptState::Running,
+                "2026-08-27T00:00:02Z",
+                None,
+            )?;
+            store.record_pending_tool_call(
+                NewPendingToolCall {
+                    id: call_id.to_owned(),
+                    job_id: job_id.to_owned(),
+                    attempt_id: attempt_id.to_owned(),
+                    tool_name: "read_todo".to_owned(),
+                    arguments_schema_id: BYTES_ID.to_owned(),
+                    arguments_bytes: br#"{"todoId":"todo-1"}"#.to_vec(),
+                    created_at: "2026-08-27T00:00:03Z".to_owned(),
+                },
+                NewLogRecord {
+                    job_id: job_id.to_owned(),
+                    attempt_id: Some(attempt_id.to_owned()),
+                    observed_at: "2026-08-27T00:00:03Z".to_owned(),
+                    emitted_at: None,
+                    stream: log_stream_name(LogStream::HarnessOutput).to_owned(),
+                    schema_id: BYTES_ID.to_owned(),
+                    payload: b"tool call".to_vec(),
+                },
+            )?;
+            store.transition_attempt(
+                attempt_id,
+                StoreAttemptState::WaitingOnRequester,
+                "2026-08-27T00:00:04Z",
+                None,
+            )?;
+        }
+
+        let (reply_sender, reply_receiver) = oneshot::channel();
+        state
+            .tool_replies
+            .lock()
+            .await
+            .insert((job_id.to_owned(), call_id.to_owned()), reply_sender);
+        let completion_state = state.clone();
+        let completion = tokio::spawn(async move {
+            reply_receiver.await.map_err(|_| "tool reply was dropped")?;
+            let mut store = completion_state.store.lock().await;
+            store.transition_attempt(
+                attempt_id,
+                StoreAttemptState::Completed,
+                "2026-08-27T00:00:05Z",
+                Some("completed"),
+            )?;
+            append_lifecycle_to_store(
+                &mut store,
+                job_id,
+                Some(attempt_id),
+                LifecycleEventKind::AttemptCompleted,
+                None,
+                None,
+            )?;
+            append_lifecycle_to_store(
+                &mut store,
+                job_id,
+                Some(attempt_id),
+                LifecycleEventKind::JobCompleted,
+                None,
+                None,
+            )?;
+            Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+        });
+        let result = ToolResultV1 {
+            version: PROTOCOL_VERSION_V1,
+            call_id: ToolCallId::new(call_id),
+            requester,
+            result_schema_id: SchemaId::new(BYTES_ID),
+            result: to_raw_value(&json!({"answer": "done"}))?,
+            is_error: false,
+        };
+
+        let _response = post_tool_result(
+            State(state.clone()),
+            AxumPath((job_id.to_owned(), call_id.to_owned())),
+            Ok(Json(result)),
+        )
+        .await
+        .map_err(|error| error.message)?;
+        if let Err(error) = completion.await? {
+            return Err(format!("completion task failed: {error}").into());
+        }
+
+        let events = state
+            .store
+            .lock()
+            .await
+            .list_logs(job_id, 0, 100)?
+            .into_iter()
+            .filter(|record| record.schema_id == LIFECYCLE_ID)
+            .map(|record| serde_json::from_slice::<LifecycleEventV1>(&record.payload))
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(
+            events.iter().map(|event| event.event).collect::<Vec<_>>(),
+            vec![
+                LifecycleEventKind::ToolCallAnswered,
+                LifecycleEventKind::AttemptCompleted,
+                LifecycleEventKind::JobCompleted,
+            ]
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn recovery_records_attempt_and_job_terminal_lifecycle_events()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let state =
+            AppState::new(Store::open_in_memory()?, CodexHarness::new("unused-codex")).await?;
+        {
+            let mut store = state.store.lock().await;
+            store.admit_job(NewJob {
+                id: "recovery-job".to_owned(),
+                label: "recovery test".to_owned(),
+                requester_program: "test".to_owned(),
+                requester_id: "request-1".to_owned(),
+                parent_job_id: None,
+                request_schema_id: JOB_REQUEST_ID.to_owned(),
+                request_bytes: b"{}".to_vec(),
+                created_at: "2026-08-27T00:00:00Z".to_owned(),
+            })?;
+            store.create_attempt(NewAttempt {
+                id: "recovery-attempt".to_owned(),
+                job_id: "recovery-job".to_owned(),
+                ordinal: 1,
+                harness: "codex".to_owned(),
+                harness_version: "test".to_owned(),
+                adapter_version: "test".to_owned(),
+                created_at: "2026-08-27T00:00:01Z".to_owned(),
+            })?;
+            store.transition_attempt(
+                "recovery-attempt",
+                StoreAttemptState::Running,
+                "2026-08-27T00:00:02Z",
+                None,
+            )?;
+        }
+
+        state.recover_interrupted_work().await?;
+
+        let store = state.store.lock().await;
+        let job = store
+            .get_job("recovery-job")?
+            .ok_or("recovered job disappeared")?;
+        let attempt = store
+            .get_attempt("recovery-attempt")?
+            .ok_or("recovered attempt disappeared")?;
+        assert_eq!(job.state, StoreJobState::Failed);
+        assert_eq!(attempt.state, StoreAttemptState::Lost);
+        let events = store
+            .list_logs("recovery-job", 0, 100)?
+            .into_iter()
+            .filter(|record| record.schema_id == LIFECYCLE_ID)
+            .map(|record| serde_json::from_slice::<LifecycleEventV1>(&record.payload))
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(
+            events.iter().map(|event| event.event).collect::<Vec<_>>(),
+            vec![
+                LifecycleEventKind::AttemptLost,
+                LifecycleEventKind::JobFailed
+            ]
+        );
+        Ok(())
     }
 }

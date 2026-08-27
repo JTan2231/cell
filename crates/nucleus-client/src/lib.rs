@@ -7,9 +7,10 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use nucleus_core::{
-    CancelJobResponseV1, ErrorResponseV1, HealthResponseV1, JobAcceptedV1, JobId, JobRequestV1,
-    JobV1, ListJobsQueryV1, ListJobsResponseV1, LogSchemaV1, LogsQueryV1, LogsResponseV1,
-    PendingToolCallV1, RegisteredToolsetV1, SchemaId, ToolCallId, ToolCallsQueryV1,
+    AccountSnapshotQueryV1, AccountSnapshotV1, CancelJobResponseV1, ErrorResponseV1,
+    HealthResponseV1, JobAcceptedV1, JobId, JobRequestV1, JobV1, LaunchContextAcceptedV1,
+    LaunchContextRegistrationV1, ListJobsQueryV1, ListJobsResponseV1, LogSchemaV1, LogsQueryV1,
+    LogsResponseV1, PendingToolCallV1, RegisteredToolsetV1, SchemaId, ToolCallId, ToolCallsQueryV1,
     ToolCallsResponseV1, ToolResultV1, ToolsetRegistrationV1,
 };
 use reqwest::{Method, StatusCode};
@@ -102,6 +103,56 @@ impl NucleusClient {
     /// Returns a [`ClientError`] if the API call fails.
     pub async fn health(&self) -> Result<HealthResponseV1, ClientError> {
         self.get("/v1/health").await
+    }
+
+    /// Register a short-lived, memory-only launch environment. The returned
+    /// identifier may be referenced by one subsequently admitted job.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ClientError`] if validation or the API call fails.
+    pub async fn register_launch_context(
+        &self,
+        context: &LaunchContextRegistrationV1,
+    ) -> Result<LaunchContextAcceptedV1, ClientError> {
+        context.validate()?;
+        self.send_json(Method::POST, "/v1/launch-contexts", context)
+            .await
+    }
+
+    /// Perform an authenticated account preflight without starting a model
+    /// turn. This reads rate limits under Nucleus's credential lease.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ClientError`] if the account read fails.
+    pub async fn account_preflight(&self) -> Result<AccountSnapshotV1, ClientError> {
+        self.account_snapshot(&AccountSnapshotQueryV1 {
+            include_usage: false,
+            wait_seconds: 30,
+        })
+        .await
+    }
+
+    /// Read account limits and, when requested, account usage under Nucleus's
+    /// credential lease.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ClientError`] if the account read fails.
+    pub async fn account_snapshot(
+        &self,
+        query: &AccountSnapshotQueryV1,
+    ) -> Result<AccountSnapshotV1, ClientError> {
+        query.validate()?;
+        let response = self
+            .http
+            .get(Self::url("/v1/account"))
+            .query(query)
+            .send()
+            .await
+            .map_err(|source| self.transport(source))?;
+        self.decode(response).await
     }
 
     /// Validate and submit one job.
@@ -465,7 +516,7 @@ mod tests {
             let request = String::from_utf8_lossy(&request[..read]);
             assert!(request.starts_with("GET /v1/health HTTP/1.1"));
 
-            let body = r#"{"version":1,"status":"ok","daemonVersion":"0.1.0"}"#;
+            let body = r#"{"version":1,"status":"ok","daemonVersion":"0.1.0","acceptingJobs":true,"checkedAt":"2026-08-27T00:00:00Z","supportedProtocolVersions":[1],"harness":{"harness":"codex","harnessVersion":"0.146.0","adapterVersion":"0.1.0"},"harnessExecutable":"/opt/homebrew/bin/codex","capabilities":[],"authentication":{"codexHome":"/tmp/codex-home","configured":true,"authenticated":true}}"#;
             let response = format!(
                 "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
                 body.len()
