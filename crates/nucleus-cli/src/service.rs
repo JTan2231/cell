@@ -150,10 +150,7 @@ impl PreviousInstallation {
                 .status
                 .success()
         {
-            command_success(
-                "/bin/launchctl",
-                &launchctl([OsStr::new("bootout"), OsStr::new(target)])?,
-            )?;
+            bootout(target)?;
         }
 
         restore_file(&paths.daemon, self.daemon.as_ref())?;
@@ -232,10 +229,7 @@ pub fn install(
         )?;
 
         if was_loaded {
-            command_success(
-                "/bin/launchctl",
-                &launchctl([OsStr::new("bootout"), OsStr::new(&target)])?,
-            )?;
+            bootout(&target)?;
         }
         service_replaced = true;
         // Credential authority may be refreshed by a running daemon. Import it
@@ -325,10 +319,7 @@ pub fn uninstall(paths: &ServicePaths) -> Result<(), ServiceError> {
         ));
     }
     if loaded {
-        command_success(
-            "/bin/launchctl",
-            &launchctl([OsStr::new("bootout"), OsStr::new(&target)])?,
-        )?;
+        bootout(&target)?;
     }
 
     remove_installed_file(&paths.launch_agent)?;
@@ -741,6 +732,20 @@ fn launchctl<const N: usize>(arguments: [&OsStr; N]) -> Result<Output, ServiceEr
         })
 }
 
+fn bootout(target: &str) -> Result<(), ServiceError> {
+    // launchd can accept bootout before removing the job. Waiting prevents a
+    // replacement bootstrap from racing that transition.
+    command_success("/bin/launchctl", &launchctl(bootout_arguments(target))?)
+}
+
+fn bootout_arguments(target: &str) -> [&OsStr; 3] {
+    [
+        OsStr::new("bootout"),
+        OsStr::new("--wait"),
+        OsStr::new(target),
+    ]
+}
+
 fn command_success(program: &'static str, output: &Output) -> Result<(), ServiceError> {
     if output.status.success() {
         return Ok(());
@@ -840,6 +845,18 @@ mod tests {
         assert_eq!(
             paths.daemon,
             PathBuf::from("/Users/Test Person/.local/libexec/nucleusd")
+        );
+    }
+
+    #[test]
+    fn bootout_waits_for_launchd_to_finish_removing_the_service() {
+        assert_eq!(
+            bootout_arguments("gui/501/org.nucleus.daemon"),
+            [
+                OsStr::new("bootout"),
+                OsStr::new("--wait"),
+                OsStr::new("gui/501/org.nucleus.daemon"),
+            ]
         );
     }
 
