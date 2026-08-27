@@ -82,11 +82,14 @@ One invocation:
 3. recovers queued and previously dispatched jobs;
 4. registers every eligible visible top-level regular file as a queued job;
 5. stops before attempting or dispatching a job when paused;
-6. dispatches the lowest-sequence priority job, or the lowest-sequence normal
+6. performs one authenticated account preflight before the first queued
+   dispatch, leaving every job queued and unattempted if authentication is
+   unavailable;
+7. dispatches the lowest-sequence priority job, or the lowest-sequence normal
    job when the priority lane is empty, for its only attempt, then archives a
    fresh duplicate or integrates and applies a new work;
-7. rescans and registers newly eligible arrivals between jobs; and
-8. continues until the queue is empty, pause or maintenance closes the gate,
+8. rescans and registers newly eligible arrivals between jobs; and
+9. continues until the queue is empty, pause or maintenance closes the gate,
    or an unexpected processing failure is terminalized and ends the activation
    nonzero.
 
@@ -201,6 +204,22 @@ Here `codex` means the real Codex executable, while `[liaison].codex` in the
 Annals config means the proxy. The two paths must not point to the same
 executable.
 
+`annals-usage` owns one exclusive credential lease for the `codex_home` named
+by this configuration and gives that persistent path to every real-Codex child.
+Codex login and refresh update the same state-local `auth.json` in place; Annals
+does not copy credentials into a temporary liaison home. Keep `codex_home`
+private, and give its private `config.toml` exactly one setting:
+
+```toml
+cli_auth_credentials_store = "file"
+```
+
+Additional Codex configuration is rejected so persistent authentication does
+not import ambient tools or providers into the constrained liaison. A custom
+`[liaison].codex` bypasses this wrapper-owned lease and must serialize its own
+credentials, although Annals still performs the generic authenticated account
+preflight through that executable before queued dispatch.
+
 The core executable selects a configuration only from `--config`, then a
 nonempty `ANNALS_CONFIG`. The library resolves from `--library`, then a
 nonempty `ANNALS_LIBRARY`, then `library` in the selected config. If none of
@@ -257,6 +276,9 @@ The packaged units use this layout:
 |-- annals.db
 |-- usage.db
 `-- codex-home/
+    |-- config.toml
+    |-- auth.json
+    `-- .annals-auth.lock
 /var/spool/annals/
 |-- .queue.json
 |-- .run.lock
@@ -304,6 +326,9 @@ sudo install -o root -g annals -m 0640 \
   packaging/systemd/annals.toml /etc/annals/config.toml
 sudo install -o root -g annals -m 0640 \
   packaging/systemd/usage.toml /etc/annals/usage.toml
+printf '%s\n' 'cli_auth_credentials_store = "file"' | \
+  sudo install -o annals -g annals -m 0600 /dev/stdin \
+  /var/lib/annals/codex-home/config.toml
 sudo install -o root -g root -m 0644 \
   packaging/systemd/annals-inbox.service \
   /etc/systemd/system/annals-inbox.service
@@ -314,34 +339,26 @@ sudo install -o root -g root -m 0644 \
 
 Adjust the executable paths in the configs and service if Codex, Annals, or the
 proxy is installed elsewhere. Authenticate real Codex into the service-owned
-`CODEX_HOME`, then verify the login as that same account:
+`CODEX_HOME` through the proxy so the login uses its credential lease:
 
 ```sh
 sudo -u annals env HOME=/var/lib/annals \
-  CODEX_HOME=/var/lib/annals/codex-home \
-  /usr/local/bin/codex \
-  -c 'cli_auth_credentials_store="file"' login --device-auth
-
-sudo -u annals env HOME=/var/lib/annals \
-  CODEX_HOME=/var/lib/annals/codex-home \
-  /usr/local/bin/codex \
-  -c 'cli_auth_credentials_store="file"' login status
+  ANNALS_USAGE_CONFIG=/etc/annals/usage.toml \
+  /usr/local/bin/annals-usage login --device-auth
 ```
 
 Keep this credential directory private. The service does not use an
-administrator's personal Codex home. Annals copies `auth.json` from this
-directory into each isolated liaison runtime, so manual installations force
-file-backed Codex credentials rather than relying on an OS credential store.
+administrator's personal Codex home. Real Codex refreshes `auth.json` in this
+persistent directory while the proxy holds its exclusive lease. Do not invoke
+real Codex directly against the same home while the service may run.
 
 Initialize the library and enable the timer:
 
 ```sh
 sudo -u annals env HOME=/var/lib/annals \
-  CODEX_HOME=/var/lib/annals/codex-home \
   /usr/local/bin/annals --config /etc/annals/config.toml init
 
 sudo -u annals env HOME=/var/lib/annals \
-  CODEX_HOME=/var/lib/annals/codex-home \
   /usr/local/bin/annals-usage doctor \
   --config /etc/annals/usage.toml
 
@@ -475,6 +492,9 @@ $HOME/Library/Application Support/Annals/
 |-- annals.db
 |-- usage.db
 |-- codex-home/
+|   |-- config.toml
+|   |-- auth.json
+|   `-- .annals-auth.lock
 |-- log/
 |-- backups/
 |-- install/
@@ -518,14 +538,52 @@ first deploy:
 ```sh
 STATE_DIR="$HOME/Library/Application Support/Annals"
 install -d -m 0700 "$STATE_DIR/codex-home"
+printf '%s\n' 'cli_auth_credentials_store = "file"' \
+  > "$STATE_DIR/codex-home/config.toml"
+chmod 0600 "$STATE_DIR/codex-home/config.toml"
 HOME="$HOME" CODEX_HOME="$STATE_DIR/codex-home" \
-  codex -c 'cli_auth_credentials_store="file"' login --device-auth
-HOME="$HOME" CODEX_HOME="$STATE_DIR/codex-home" codex login status
+  codex login --device-auth
 ```
 
-Keep that directory private. Annals copies its `auth.json` into each isolated
-liaison runtime rather than relying on an OS credential store. Migration from
-the former system installation retains its existing state-local credentials.
+Keep that directory private. The first deployment's authenticated doctor check
+verifies the login. After installation, always use
+`annals-usage login --device-auth` for reauthentication: the wrapper holds the
+same exclusive lease used for examinations while Codex updates the persistent
+`auth.json`. Migration from the former system installation retains its existing
+state-local credentials.
+
+#### Attended reauthentication
+
+If authentication becomes unavailable, pause dispatch and wait until
+`annals inbox status` reports no active job. Then renew and verify the
+state-local credentials:
+
+```sh
+annals inbox pause
+annals inbox status
+annals-usage login --device-auth
+annals-usage doctor
+```
+
+Run one attended manual integration of a deliberately selected retained work
+as the full liaison canary; omit `--apply`, and use `--reexamine` so an earlier
+examination is not reused:
+
+```sh
+annals integrate --work KNOWN_WORK_LABEL --reexamine
+annals inbox resume
+annals inbox run # optional: dispatch immediately instead of waiting for launchd
+```
+
+The canary creates a new examination and reconciliation record, so choose its
+work intentionally and inspect the resulting pending or recorded
+reconciliation. On Linux, run the same sequence as the service account and set
+`ANNALS_USAGE_CONFIG=/etc/annals/usage.toml` for `annals-usage`, as in the
+installation commands above. A failed inbox account preflight does not consume
+a job attempt: it exits before dispatch, leaving the envelope queued with no
+delivery record. This makes credential loss programmatically containable, while
+the attended device login remains the recovery step when Codex requires user
+authorization.
 
 ### Deploy or update
 
@@ -541,20 +599,22 @@ tree and builds both release executables:
 ```
 
 That same command is the normal unattended update operation. It preflights the
-candidate binaries, configuration, library, and Codex login before cutover.
+candidate binaries, configuration, and library before cutover.
 Complete program releases contain Annals, the telemetry proxy, frontend,
 updater, rendered LaunchAgent, and a hash manifest. During an update the
 deployer disables new activations and writes the maintenance marker. An active
 worker is allowed to finish its current delivery, then stops before claiming
 another; an idle worker stops immediately. The deployer then makes a consistent
-Annals library backup, verifies the current schema, and atomically switches the
-`current` selector. It updates both command links and both configs inside the
-same rollback-protected deployment transaction, then validates through the
-candidate and installed frontends before reloading launchd and waking the
-worker. The operator-owned pause marker is retained, so that wake-up does not
-dispatch queued jobs when the installation was paused. A failure restores the
-old selectors, configs, plist, and service. Authentication, the Annals library,
-telemetry ledger, spool, logs, pause state, and archives are retained.
+Annals library backup, verifies the current schema, and runs the candidate's
+authenticated doctor check after the old service is quiescent. Only then does
+it atomically switch the `current` selector. It updates both command links and
+both configs inside the same rollback-protected deployment transaction, then
+validates through the candidate and installed frontends before reloading
+launchd and waking the worker. The operator-owned pause marker is retained, so
+that wake-up does not dispatch queued jobs when the installation was paused. A
+failure restores the old selectors, configs, plist, and service.
+Authentication, the Annals library, telemetry ledger, spool, logs, pause state,
+and archives are retained.
 
 No operator timing or manual service stop is required. It is safe to run the
 same deployment command while a delivery is in progress; by default the
@@ -683,6 +743,12 @@ attempt; Annals then continues draining. Unexpected model, runner, and runtime
 processing failures are also terminalized in `failed/` on the first attempt,
 but the current activation exits nonzero and leaves successors queued for the
 next activation.
+
+An authenticated account preflight failure is earlier than job processing and
+has different effects: no envelope is claimed, no attempt is recorded, and no
+source delivery starts. The activation exits nonzero with the next job still
+queued. Follow the [attended reauthentication](#attended-reauthentication)
+sequence; do not move or repair the queued envelope.
 
 Recovery never invokes a second liaison for a receipt whose attempts value is
 already positive. It first finishes durable success from that attempt when

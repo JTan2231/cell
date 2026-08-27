@@ -523,12 +523,6 @@ temporary_usage_config=
 codex_config="$CODEX_HOME/config.toml"
 if [ ! -e "$codex_config" ]; then
     printf '%s\n' 'cli_auth_credentials_store = "file"' >"$codex_config"
-elif grep -Eq '^[[:space:]]*cli_auth_credentials_store[[:space:]]*=' "$codex_config"; then
-    grep -Eq '^[[:space:]]*cli_auth_credentials_store[[:space:]]*=[[:space:]]*"file"[[:space:]]*$' \
-        "$codex_config" \
-        || fail "$codex_config must set cli_auth_credentials_store to \"file\""
-else
-    printf '\n%s\n' 'cli_auth_credentials_store = "file"' >>"$codex_config"
 fi
 chown "$operator:$operator_group" "$codex_config"
 chmod 0600 "$codex_config"
@@ -546,7 +540,7 @@ launchctl disable "$SERVICE_TARGET" >/dev/null 2>&1 || true
 run_as_operator "$codex_path" --version >/dev/null \
     || fail "$operator cannot execute $codex_path"
 
-if ! run_as_operator "$codex_path" login status >/dev/null 2>&1; then
+if [ ! -f "$CODEX_HOME/auth.json" ]; then
     if [ -t 0 ] && [ -t 1 ]; then
         printf '%s\n' 'Annals requires a Codex login in its state-local Codex home.'
         run_as_operator "$codex_path" login --device-auth \
@@ -556,8 +550,6 @@ if ! run_as_operator "$codex_path" login status >/dev/null 2>&1; then
     fi
 fi
 
-run_as_operator "$codex_path" login status >/dev/null \
-    || fail "Codex login verification failed for $operator"
 [ -f "$CODEX_HOME/auth.json" ] && [ ! -L "$CODEX_HOME/auth.json" ] \
     || fail "Codex login did not create a regular $CODEX_HOME/auth.json"
 chown "$operator:$operator_group" "$CODEX_HOME/auth.json"
@@ -565,6 +557,9 @@ chmod 0600 "$CODEX_HOME/auth.json"
 
 run_as_operator "$INSTALL_USAGE_FRONTEND" --version >/dev/null \
     || fail "$operator cannot execute the installed Annals usage proxy"
+run_as_operator "$INSTALL_USAGE_FRONTEND" doctor \
+    --config "$USAGE_CONFIG_PATH" >/dev/null \
+    || fail "state-local Codex authentication failed for $operator; run $codex_path logout and $codex_path login --device-auth with CODEX_HOME=$CODEX_HOME, then rerun the installer"
 
 if [ ! -e "$LIBRARY_PATH" ]; then
     run_as_operator "$INSTALL_FRONTEND" init

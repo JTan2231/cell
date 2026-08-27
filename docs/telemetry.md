@@ -26,11 +26,20 @@ prompt, model, reasoning effort, or tool set. The model-run token supplied by
 Annals correlates an observed run with the library's model-run record and, for
 an inbox examination, its source delivery and job receipt.
 
+For every invocation that reaches real Codex, `annals-usage` holds an exclusive
+lease at `codex_home/.annals-auth.lock` and explicitly sets that persistent,
+state-local home as `CODEX_HOME`. Login and token refresh therefore update the
+one authoritative `auth.json` in place. Proxy and passthrough invocations wait
+for the lease; the interactive `budget` and `doctor` commands instead report
+that authentication is busy. `report` reads stored data and needs no lease.
+
 Telemetry is fail-open for an examination. If the companion database cannot be
 opened or an event cannot be recorded, the proxy reports that telemetry is
 unavailable on stderr and continues forwarding Codex traffic. It records a
 turn's completion before forwarding that completion to Annals, because Annals
 may close the isolated app-server immediately afterward.
+Credential validation and lease acquisition are not telemetry: they fail
+closed before real Codex starts.
 
 ## CLI
 
@@ -60,7 +69,8 @@ a successful allowance read.
 
 `doctor` checks the referenced Annals library, spool, state-local Codex home,
 and real Codex path; opens or creates the telemetry database; reads the Codex
-version; and performs an authenticated account-limit request.
+version; validates the private credential configuration; and performs an
+authenticated account-limit request while holding the credential lease.
 
 Help and version flags belong to `annals-usage`. Any other invocation is passed
 through to the configured real Codex. This lets Annals select one executable as
@@ -167,6 +177,20 @@ Otherwise the path resolves from `ANNALS_USAGE_CONFIG`, then to `usage.toml`
 beside a nonempty `ANNALS_CONFIG`, then to the macOS state path under `HOME`.
 Relative values are resolved from the selected configuration's directory, and
 unknown keys are rejected.
+
+The selected `codex_home` must be a private directory. Its private, regular
+`config.toml` must contain only:
+
+```toml
+cli_auth_credentials_store = "file"
+```
+
+This makes the state-local file the sole credential authority while preventing
+ambient Codex configuration from entering the constrained liaison runtime.
+Use `annals-usage login --device-auth` rather than invoking real Codex directly
+against this home once the scheduled service can run; the passthrough login is
+serialized by the same lease. Codex may rewrite `auth.json` during refresh, and
+the successor credential remains in this persistent home for the next run.
 
 `usage.db` is a companion SQLite ledger in the same installation state as the
 Annals library and is accessible to the same user. It is intentionally not part

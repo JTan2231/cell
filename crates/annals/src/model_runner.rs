@@ -1,6 +1,6 @@
 use std::fs;
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+use std::os::unix::fs::PermissionsExt as _;
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -15,6 +15,7 @@ use crate::error::{AppError, AppResult};
 use crate::tool_server::{self, Backend, Tool, ToolFailure, ToolSuccess};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_hours(1);
+const AUTH_PREFLIGHT_TIMEOUT: Duration = Duration::from_secs(30);
 const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const DEFAULT_MAX_STDOUT_BYTES: usize = 64 * 1024 * 1024;
 const DEFAULT_STDERR_TAIL_BYTES: usize = 64 * 1024;
@@ -148,6 +149,30 @@ impl Runner {
         }
     }
 
+    /// Verify that the configured Codex runner can authenticate without starting a model turn.
+    pub(crate) fn preflight_auth(&self) -> AppResult<()> {
+        let temporary = TemporaryDirectory::create()?;
+        let work_dir = temporary.create_subdirectory("work")?;
+        let deadline = Instant::now() + self.timeout.min(AUTH_PREFLIGHT_TIMEOUT);
+        let mut command = Command::new(&self.program);
+        for feature in DISABLED_FEATURES {
+            command.args(["--disable", feature]);
+        }
+        for setting in CONFIG_OVERRIDES {
+            command.args(["-c", setting]);
+        }
+        command
+            .args(["app-server", "--stdio"])
+            .current_dir(&work_dir)
+            .env("CODEX_EXEC_SERVER_URL", "none")
+            .env("ANNALS_AUTH_PREFLIGHT", "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .process_group(0);
+        self.run_auth_preflight_server(command, deadline)
+    }
+
     /// Run one isolated Codex liaison whose only model-visible tools are Annals' nine tools.
     ///
     /// The returned final response is diagnostic only. Application success is determined by the
@@ -185,11 +210,8 @@ impl Runner {
         }
         let temporary = TemporaryDirectory::create()?;
         let work_dir = temporary.create_subdirectory("work")?;
-        let codex_home = temporary.create_subdirectory("codex-home")?;
-        copy_codex_auth(&codex_home)?;
         let catalog_path = self.write_restricted_catalog(
             temporary.path(),
-            &codex_home,
             settings.model(),
             deadline,
             cancellation_requested,
@@ -210,7 +232,6 @@ impl Runner {
         command
             .args(["-c", &catalog_setting, "app-server", "--stdio"])
             .current_dir(&work_dir)
-            .env("CODEX_HOME", &codex_home)
             .env("CODEX_EXEC_SERVER_URL", "none")
             .env("ANNALS_MODEL_RUN_TOKEN", model_run_token)
             .stdin(Stdio::piped())
@@ -234,7 +255,6 @@ impl Runner {
     fn write_restricted_catalog(
         &self,
         directory: &Path,
-        codex_home: &Path,
         model: &str,
         deadline: Instant,
         cancellation_requested: &dyn Fn() -> bool,
@@ -249,7 +269,6 @@ impl Runner {
         let mut command = Command::new(&self.program);
         command
             .args(["debug", "models", "--bundled"])
-            .env("CODEX_HOME", codex_home)
             .env("CODEX_EXEC_SERVER_URL", "none")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -410,6 +429,81 @@ impl Runner {
         }
         result.map_err(|error| runtime_error(error.code, &error.message, &diagnostics))
     }
+
+    fn run_auth_preflight_server(&self, mut command: Command, deadline: Instant) -> AppResult<()> {
+        let program = command.get_program().display().to_string();
+        let mut child = command.spawn().map_err(|error| {
+            AppError::unexpected(
+                "model_auth_unavailable",
+                format!("could not start authentication preflight {program}: {error}"),
+            )
+        })?;
+        let group = child.id();
+        let (Some(stdin), Some(stdout), Some(stderr)) =
+            (child.stdin.take(), child.stdout.take(), child.stderr.take())
+        else {
+            terminate(&mut child, group);
+            let _ = child.wait();
+            return Err(AppError::unexpected(
+                "model_auth_unavailable",
+                "authentication preflight did not provide all configured pipes",
+            ));
+        };
+
+        let (output_sender, output_receiver) = mpsc::channel();
+        let output_limit = self.max_stdout_bytes;
+        let output =
+            thread::spawn(move || read_protocol_lines(stdout, output_limit, &output_sender));
+        let stderr_limit = self.stderr_tail_bytes;
+        let diagnostics = thread::spawn(move || read_stderr(stderr, stderr_limit, false));
+        let mut backend = PreflightBackend;
+        let cancellation_requested = || false;
+        let result = ProtocolClient {
+            stdin,
+            output: output_receiver,
+            deadline,
+            backend: &mut backend,
+            reconciliation_recorded: false,
+            final_response: String::new(),
+            cancellation_requested: &cancellation_requested,
+        }
+        .preflight_auth();
+
+        terminate(&mut child, group);
+        let _ = child.wait();
+        let output_result = output.join().map_err(|_| {
+            AppError::unexpected(
+                "model_auth_unavailable",
+                "authentication preflight output worker panicked",
+            )
+        })?;
+        let diagnostics = diagnostics.join().map_err(|_| {
+            AppError::unexpected(
+                "model_auth_unavailable",
+                "authentication preflight diagnostics worker panicked",
+            )
+        })??;
+        if let Err(error) = output_result {
+            return Err(runtime_error(
+                "model_auth_unavailable",
+                &format!("could not read authentication preflight output: {error}"),
+                &diagnostics,
+            ));
+        }
+        result
+            .map_err(|error| runtime_error("model_auth_unavailable", &error.message, &diagnostics))
+    }
+}
+
+struct PreflightBackend;
+
+impl Backend for PreflightBackend {
+    fn call(&mut self, _tool: Tool, _arguments: Value) -> Result<ToolSuccess, ToolFailure> {
+        Err(ToolFailure::new(
+            "invalid_tool_call",
+            "authentication preflight does not accept tool calls",
+        ))
+    }
 }
 
 struct ProtocolClient<'a, B> {
@@ -423,6 +517,23 @@ struct ProtocolClient<'a, B> {
 }
 
 impl<B: Backend> ProtocolClient<'_, B> {
+    fn preflight_auth(mut self) -> Result<(), RuntimeFailure> {
+        self.request(
+            0,
+            "initialize",
+            &json!({
+                "clientInfo": {
+                    "name": "annals",
+                    "title": "Annals",
+                    "version": env!("CARGO_PKG_VERSION")
+                }
+            }),
+        )?;
+        self.notify("initialized", None)?;
+        self.request(1, "account/rateLimits/read", &json!({}))?;
+        Ok(())
+    }
+
     fn run(
         mut self,
         work_dir: &Path,
@@ -943,31 +1054,6 @@ fn restricted_model_catalog(bytes: &[u8], selected_model: &str) -> AppResult<Val
     Ok(catalog)
 }
 
-fn copy_codex_auth(isolated_home: &Path) -> AppResult<()> {
-    let source_home = std::env::var_os("CODEX_HOME")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .filter(|value| !value.is_empty())
-                .map(|home| PathBuf::from(home).join(".codex"))
-        });
-    let Some(source) = source_home.map(|home| home.join("auth.json")) else {
-        return Ok(());
-    };
-    if source.is_file() {
-        let mut source = fs::File::open(source)?;
-        let mut destination = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(isolated_home.join("auth.json"))?;
-        io::copy(&mut source, &mut destination)?;
-        destination.flush()?;
-    }
-    Ok(())
-}
-
 fn read_protocol_lines(
     reader: impl Read,
     limit: usize,
@@ -1080,7 +1166,18 @@ fn runtime_error(code: &'static str, message: &str, diagnostics: &[u8]) -> AppEr
                 .collect::<String>()
         )
     };
-    AppError::unexpected(code, format!("{message}{suffix}"))
+    let message = format!("{message}{suffix}");
+    let normalized = message.to_ascii_lowercase();
+    let code = if normalized.contains("refresh_token_reused")
+        || normalized.contains("refresh token has already been used")
+        || normalized.contains("please log out and sign in again")
+        || normalized.contains("401 unauthorized")
+    {
+        "model_auth_unavailable"
+    } else {
+        code
+    };
+    AppError::unexpected(code, message)
 }
 
 struct TemporaryDirectory {
@@ -1141,7 +1238,28 @@ mod tests {
     use super::{
         CONFIG_OVERRIDES, ModelQuality, ModelSettings, Runner, dispatch_tool_call,
         dynamic_tool_specs, model_tool_result, read_limited_output, restricted_model_catalog,
+        runtime_error,
     };
+
+    #[test]
+    fn reused_refresh_token_has_a_stable_authentication_error_code() {
+        let error = runtime_error(
+            "model_runner_failed",
+            "model liaison failed",
+            b"HTTP 401: refresh_token_reused; please log out and sign in again",
+        );
+        assert_eq!(error.code(), "model_auth_unavailable");
+    }
+
+    #[test]
+    fn unrelated_runner_failure_keeps_its_error_code() {
+        let error = runtime_error(
+            "model_runner_failed",
+            "model liaison failed",
+            b"HTTP 503: service unavailable",
+        );
+        assert_eq!(error.code(), "model_runner_failed");
+    }
 
     #[test]
     fn quality_presets_select_the_expected_model_and_effort() {
@@ -1612,12 +1730,9 @@ exit 99
         fs::set_permissions(&program, permissions)?;
 
         let runner = Runner::new(&program, Duration::from_millis(300));
-        let codex_home = directory.path().join("codex-home");
-        fs::create_dir(&codex_home)?;
         let started = Instant::now();
         let Err(error) = runner.write_restricted_catalog(
             directory.path(),
-            &codex_home,
             settings.model(),
             started + runner.timeout,
             &|| false,

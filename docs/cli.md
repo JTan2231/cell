@@ -124,8 +124,13 @@ model selected by the quality preset. It changes only the model; the selected
 quality continues to choose reasoning effort. `[liaison].codex` selects the
 Codex executable and defaults to `annals-usage`. The companion executable
 proxies the isolated Codex app-server while recording token consumption; its
-own configuration selects the real `codex` executable. Selecting another
-`[liaison].codex` path bypasses this observation layer.
+own configuration selects the real `codex` executable and the persistent,
+state-local Codex home. It serializes every real-Codex invocation with one
+credential lease so refreshes update that home in place. Selecting another
+`[liaison].codex` path bypasses both this lease and the observation layer; the
+custom runner owns credential serialization. Annals still uses the selected
+executable for its generic authenticated account preflight before queued
+dispatch.
 
 The liaison submits a provisional, best-current interpretation. It does not
 filter source material by estimated novelty or salience and does not claim an
@@ -156,7 +161,8 @@ daily token activity as contextual rather than allowance units. The backend
 exposes neither a token denominator for that allowance nor a per-delivery
 subscription share. `doctor` checks the companion configuration and ledger,
 the Annals paths, the real Codex executable, and authenticated account-telemetry
-access.
+access. `budget` and `doctor` report that authentication is busy instead of
+waiting when another proxy invocation owns the credential lease.
 
 The token categories overlap: cached and cache-write tokens are subsets of
 input, reasoning tokens are a subset of output, and total is input plus output.
@@ -212,6 +218,13 @@ error rather than a request to alter history.
 
 `inbox run` takes the activation-long spool lock, performs the same
 registration phase, and drains jobs sequentially while processing is allowed.
+After recovery and registration, it performs one authenticated account
+preflight before its first queued dispatch. The preflight does not claim a job,
+increment attempts, or start a source delivery. If it fails, `inbox run` exits
+nonzero while the next envelope remains under `queued/` with attempts zero and
+no database delivery record. An already processing job is recovered before
+this check.
+
 Dispatch atomically moves the lowest-sequence priority envelope, or the
 lowest-sequence normal envelope when no priority job is queued, to
 `processing/`. It changes the receipt to `processing`, increments its attempts

@@ -686,6 +686,7 @@ pub(crate) fn run(
 
     let settings = ModelSettings::new(config.liaison.quality, config.liaison.model.as_deref());
     let runner = Runner::for_program(&config.liaison.codex);
+    let mut auth_preflight_complete = false;
     let mut summary = RunSummary {
         root: spool.root.display().to_string(),
         settle_seconds,
@@ -734,6 +735,16 @@ pub(crate) fn run(
         if spool.pause_requested()? && !finish_processing {
             summary.stopped_for_pause = true;
             break;
+        }
+        if !auth_preflight_complete
+            && queue
+                .first_key_value()
+                .is_some_and(|(_, envelope)| envelope.receipt.state == "queued")
+        {
+            drop(control);
+            runner.preflight_auth()?;
+            auth_preflight_complete = true;
+            continue;
         }
         let Some((key, envelope)) = queue.pop_first() else {
             break;

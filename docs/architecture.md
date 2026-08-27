@@ -69,6 +69,13 @@ allow draining to continue; an unexpected model, runner, or runtime processing
 failure ends the activation nonzero, leaving later jobs queued for the next
 activation.
 
+After recovery and registration, Annals performs one authenticated account
+preflight before the activation's first queued dispatch. The preflight does not
+claim an envelope, increment its attempts, or start a source delivery. If
+authentication is unavailable, the activation ends nonzero and every queued
+job remains unstarted. An already processing job is recovered before this
+queued-dispatch check.
+
 The activation-long run lock excludes workers. A shorter control lock orders
 dispatch, pause, registration, direct enqueue, queued-job priority changes,
 interruption, and terminal job disposition. Priority changes apply only to
@@ -92,6 +99,20 @@ contains the work label and frozen base revision, not the complete work or
 repository instructions. Session-scoped tools provide bounded work reading,
 corpus browsing, and reconciliation-draft operations. No shell, web, planning,
 user-input, or multi-agent tools are exposed.
+
+The default `annals-usage` command owns authentication for that session. It
+holds one exclusive lease on the installation's persistent, state-local
+`CODEX_HOME` for each real-Codex invocation, and explicitly gives that home to
+Codex. Refreshes therefore replace credentials in place under the same lease;
+Annals does not copy `auth.json` into a disposable runtime. The dedicated
+Codex `config.toml` is private and may select only the file credential store,
+so persistent authentication does not import ambient tools or other Codex
+configuration into the constrained liaison.
+
+Selecting a custom `[liaison].codex` executable bypasses the wrapper-owned
+lease and makes credential serialization the custom runner's responsibility.
+The runner still performs its generic authenticated account preflight before
+the first queued dispatch.
 
 Bounded work reads use natural heading, quotation, continuation, or document
 edge anchors rather than offsets. A heading or quotation anchor must resolve

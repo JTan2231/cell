@@ -948,6 +948,54 @@ fn pause_during_processing_leaves_later_and_new_arrivals_queued() -> TestResult 
 }
 
 #[test]
+fn authentication_preflight_failure_leaves_every_source_queued() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "01-first.md",
+        b"Shared inbox claim.\nFirst source.\n",
+        0o600,
+    )?;
+    installation.incoming(
+        "02-second.md",
+        b"Shared inbox claim.\nSecond source.\n",
+        0o600,
+    )?;
+
+    for _ in 0..2 {
+        let output = installation
+            .command()
+            .args(["inbox", "run"])
+            .env("ANNALS_FAKE_AUTH_FAIL", "1")
+            .output()?;
+        let error = unsuccessful_json(&output)?;
+        assert_eq!(error["error"]["code"], "model_auth_unavailable");
+
+        let status = installation.json_ok(["inbox", "status"])?;
+        assert_eq!(status["queued"], 2);
+        assert_eq!(status["processing"], 0);
+        assert_eq!(status["failed"], 0);
+        assert!(!installation.counter.exists());
+        for envelope in fs::read_dir(installation.inbox.join("queued"))? {
+            let envelope = envelope?;
+            let receipt: Value =
+                serde_json::from_slice(&fs::read(envelope.path().join("job.json"))?)?;
+            assert_eq!(receipt["state"], "queued");
+            assert_eq!(receipt["attempts"], 0);
+        }
+        let library = installation.json_ok(["stats"])?;
+        assert_eq!(library["work_count"], 0);
+        assert_eq!(library["model_run_count"], 0);
+    }
+
+    let recovered = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(recovered["attempted"], 2);
+    assert_eq!(recovered["applied"], 2);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "2\n");
+    Ok(())
+}
+
+#[test]
 fn first_model_failure_is_archived_once_and_stops_only_that_activation() -> TestResult {
     let installation = Installation::new(0)?;
     installation.init()?;
@@ -2349,6 +2397,14 @@ IFS= read -r ignored
 printf '%s\n' '{"jsonrpc":"2.0","id":0,"result":{}}'
 IFS= read -r ignored
 IFS= read -r ignored
+if [ "${ANNALS_AUTH_PREFLIGHT:-0}" -eq 1 ]; then
+  if [ "${ANNALS_FAKE_AUTH_FAIL:-0}" -eq 1 ]; then
+    printf '%s\n' '{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"refresh_token_reused: please log out and sign in again"}}'
+  else
+    printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
+  fi
+  exit 0
+fi
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"data":[],"nextCursor":null}}'
 IFS= read -r ignored
 printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"thread":{"id":"thread"}}}'

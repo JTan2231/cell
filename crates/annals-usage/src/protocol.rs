@@ -160,14 +160,16 @@ pub(crate) enum ProtocolEvent {
 
 /// Run a Codex command without observing its protocol.
 ///
-/// This is used for commands such as `debug models --bundled`. All three standard streams and
-/// the inherited environment are left unchanged.
+/// This is used for commands such as `debug models --bundled`. All three standard streams are
+/// inherited, and the configured state-local Codex home is authoritative.
 pub(crate) fn run_passthrough(
     codex: &Path,
     arguments: &[OsString],
+    codex_home: &Path,
 ) -> Result<ExitStatus, ProtocolError> {
     Command::new(codex)
         .args(arguments)
+        .env("CODEX_HOME", codex_home)
         .status()
         .map_err(|source| ProtocolError::Spawn { source })
 }
@@ -181,6 +183,7 @@ pub(crate) fn run_passthrough(
 pub(crate) fn run_stdio_proxy<F>(
     codex: &Path,
     arguments: &[OsString],
+    codex_home: &Path,
     mut observer: F,
 ) -> Result<ExitStatus, ProtocolError>
 where
@@ -188,6 +191,7 @@ where
 {
     let mut child = Command::new(codex)
         .args(arguments)
+        .env("CODEX_HOME", codex_home)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -719,10 +723,36 @@ pub(crate) enum ProtocolError {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
     use std::fs;
     use std::os::unix::fs::PermissionsExt as _;
 
     use super::*;
+
+    #[test]
+    fn passthrough_uses_the_explicit_codex_home() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let codex_home = directory.path().join("state-local-codex-home");
+        fs::create_dir(&codex_home)?;
+        let marker = directory.path().join("marker");
+        let fake_codex = directory.path().join("fake-codex");
+        fs::write(
+            &fake_codex,
+            format!(
+                "#!/bin/sh\nset -eu\n[ \"${{CODEX_HOME:-}}\" = '{}' ]\n[ \"$1\" = login ]\nprintf '%s\\n' ok > '{}'\n",
+                codex_home.display(),
+                marker.display()
+            ),
+        )?;
+        let mut permissions = fs::metadata(&fake_codex)?.permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(&fake_codex, permissions)?;
+
+        let status = run_passthrough(&fake_codex, &[OsString::from("login")], &codex_home)?;
+        assert!(status.success());
+        assert_eq!(fs::read_to_string(marker)?, "ok\n");
+        Ok(())
+    }
 
     #[test]
     fn thread_start_enables_raw_response_events() -> Result<(), Box<dyn std::error::Error>> {

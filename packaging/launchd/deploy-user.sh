@@ -139,6 +139,7 @@ USAGE_CONFIG_PATH="$STATE_DIR/usage.toml"
 LIBRARY_PATH="$STATE_DIR/annals.db"
 USAGE_LIBRARY_PATH="$STATE_DIR/usage.db"
 CODEX_HOME="$STATE_DIR/codex-home"
+CODEX_CONFIG_PATH="$CODEX_HOME/config.toml"
 SPOOL_DIR="$STATE_DIR/spool"
 INSTALL_DIR="$STATE_DIR/install"
 RELEASES_DIR="$INSTALL_DIR/releases"
@@ -169,6 +170,7 @@ old_usage_cli=0
 old_plist=0
 old_config=0
 old_usage_config=0
+old_codex_config=0
 was_loaded=0
 service_stopped=0
 launchd_changed=0
@@ -176,6 +178,7 @@ marker_created=0
 switched=0
 config_changed=0
 usage_config_changed=0
+codex_config_changed=0
 committed=0
 lock_created=0
 fresh_state_switched=0
@@ -271,6 +274,14 @@ cleanup() {
                 install -m 0600 "$transaction_dir/usage.toml" "$USAGE_CONFIG_PATH"
             else
                 rm -f "$USAGE_CONFIG_PATH"
+            fi
+        fi
+        if [ "$codex_config_changed" -eq 1 ]; then
+            if [ "$old_codex_config" -eq 1 ]; then
+                install -m 0600 "$transaction_dir/codex-config.toml" \
+                    "$CODEX_CONFIG_PATH"
+            else
+                rm -f "$CODEX_CONFIG_PATH"
             fi
         fi
         restore_fresh_generation
@@ -415,6 +426,11 @@ chmod 0600 "$temporary_usage_config"
 [ -f "$CODEX_HOME/auth.json" ] && [ ! -L "$CODEX_HOME/auth.json" ] \
     || fail "missing state-local Codex authentication: $CODEX_HOME/auth.json"
 chmod 0600 "$CODEX_HOME/auth.json"
+if [ -L "$CODEX_CONFIG_PATH" ] \
+    || { [ -e "$CODEX_CONFIG_PATH" ] && [ ! -f "$CODEX_CONFIG_PATH" ]; }
+then
+    fail "invalid state-local Codex configuration: $CODEX_CONFIG_PATH"
+fi
 
 run_with_installation_environment() {
     (
@@ -437,9 +453,6 @@ run_active_annals() {
             --config "$temporary_config" "$@"
     fi
 }
-
-run_with_installation_environment "$codex_path" login status >/dev/null \
-    || fail 'state-local Codex login is not valid'
 
 library_existed=1
 if [ ! -e "$LIBRARY_PATH" ]; then
@@ -580,6 +593,11 @@ if [ -f "$USAGE_CONFIG_PATH" ]; then
     old_usage_config=1
     install -m 0600 "$USAGE_CONFIG_PATH" "$transaction_dir/usage.toml"
 fi
+if [ -f "$CODEX_CONFIG_PATH" ]; then
+    old_codex_config=1
+    install -m 0600 "$CODEX_CONFIG_PATH" \
+        "$transaction_dir/codex-config.toml"
+fi
 
 if [ "$fresh_state" -eq 1 ]; then
     fresh_stage="$transaction_dir/fresh-state"
@@ -689,6 +707,20 @@ if [ "$no_start" -eq 0 ]; then
         service_stopped=1
     fi
 fi
+
+if [ -f "$CODEX_CONFIG_PATH" ]; then
+    chmod 0600 "$CODEX_CONFIG_PATH"
+else
+    printf '%s\n' 'cli_auth_credentials_store = "file"' \
+        >"$transaction_dir/codex-config.next.toml"
+    chmod 0600 "$transaction_dir/codex-config.next.toml"
+    codex_config_changed=1
+    mv -f "$transaction_dir/codex-config.next.toml" "$CODEX_CONFIG_PATH"
+fi
+
+run_with_installation_environment "$usage_binary_path" doctor \
+    --config "$temporary_usage_config" >/dev/null \
+    || fail 'candidate Annals usage doctor could not authenticate with state-local Codex credentials'
 
 if [ "$no_start" -eq 0 ]; then
     smoke_json=$(run_with_installation_environment "$binary_path" \

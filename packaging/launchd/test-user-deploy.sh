@@ -56,6 +56,10 @@ else
     printf '%s\n' "$command" >>"$state/candidate-commands.log"
 fi
 case "$command" in
+    environment)
+        printf 'config=%s\n' "$config"
+        printf 'codex_home=%s\n' "${CODEX_HOME-<unset>}"
+        ;;
     init)
         : >"$state/annals.db"
         ;;
@@ -128,8 +132,41 @@ chmod 0755 "$candidate"
 
 cat >"$usage_candidate" <<'EOF'
 #!/bin/sh
+set -eu
+fail() {
+    printf 'fake annals-usage: %s\n' "$*" >&2
+    exit 1
+}
 case "${1:-}" in
-    --version) printf '%s\n' 'annals-usage test-candidate' ;;
+    --version)
+        printf '%s\n' 'annals-usage test-candidate'
+        ;;
+    doctor)
+        [ "$#" -eq 3 ] || fail 'doctor argument count'
+        [ "$2" = --config ] || fail 'doctor omitted --config'
+        config=$3
+        state=$(CDPATH= cd "$(dirname "$config")" && pwd)
+        case "${config##*/}" in
+            .usage.toml.*) ;;
+            *) fail "doctor used unexpected config $config" ;;
+        esac
+        [ "$(cat "$state/codex-home/auth.json")" = credential-sentinel ] \
+            || fail 'doctor observed changed authentication'
+        [ "$(stat -f '%Lp' "$state/codex-home/auth.json")" = 600 ] \
+            || fail 'doctor observed insecure authentication mode'
+        [ "$(cat "$state/codex-home/config.toml")" = \
+            'cli_auth_credentials_store = "file"' ] \
+            || fail 'doctor observed ambient Codex configuration'
+        [ ! -e "$state/service-loaded" ] || {
+            printf '%s\n' 'doctor ran while the old service was loaded' >&2
+            exit 1
+        }
+        current=none
+        if [ -L "$state/install/current" ]; then
+            current=$(readlink "$state/install/current")
+        fi
+        printf 'doctor current=%s\n' "$current" >>"$state/usage-doctor.log"
+        ;;
     *) exit 1 ;;
 esac
 EOF
@@ -144,7 +181,8 @@ case "${1:-}" in
 esac
 EOF
 chmod 0755 "$codex"
-: >"$home/Library/Application Support/Annals/codex-home/auth.json"
+printf '%s\n' credential-sentinel \
+    >"$home/Library/Application Support/Annals/codex-home/auth.json"
 
 cat >"$launchctl" <<EOF
 #!/bin/sh
@@ -183,6 +221,12 @@ plist="$home/Library/LaunchAgents/org.annals.inbox.plist"
 [ -d "$state/spool/queued" ]
 [ -d "$state/spool/duplicates" ]
 [ -d "$state/spool/skipped" ]
+[ "$(cat "$state/codex-home/auth.json")" = credential-sentinel ]
+[ "$(stat -f '%Lp' "$state/codex-home/auth.json")" = 600 ]
+[ "$(cat "$state/codex-home/config.toml")" = \
+    'cli_auth_credentials_store = "file"' ]
+[ "$(stat -f '%Lp' "$state/codex-home/config.toml")" = 600 ]
+[ "$(tail -n 1 "$state/usage-doctor.log")" = 'doctor current=none' ]
 grep -Fx 'library = "annals.db"' "$state/config.toml" >/dev/null
 grep -Fx 'root = "spool"' "$state/config.toml" >/dev/null
 proxy="$state/install/current/libexec/annals-usage"
@@ -194,6 +238,22 @@ grep -Fx "spool = \"$state/spool\"" "$state/usage.toml" >/dev/null
 grep -Fx "database = \"$state/usage.db\"" "$state/usage.toml" >/dev/null
 [ "$(readlink "$usage_cli")" = "$state/install/current/libexec/annals-usage" ]
 HOME="$home" "$usage_cli" --version >/dev/null
+default_environment=$(env -u ANNALS_CONFIG -u ANNALS_LIBRARY -u CODEX_HOME \
+    HOME="$home" "$cli" environment)
+printf '%s\n' "$default_environment" \
+    | grep -Fx "config=$state/config.toml" >/dev/null
+printf '%s\n' "$default_environment" \
+    | grep -Fx "codex_home=$state/codex-home" >/dev/null
+custom_codex_home="$temporary/custom-codex-home"
+alternate_config="$temporary/alternate.toml"
+: >"$alternate_config"
+alternate_environment=$(env -u ANNALS_CONFIG -u ANNALS_LIBRARY \
+    HOME="$home" CODEX_HOME="$custom_codex_home" \
+    "$cli" --config "$alternate_config" environment)
+printf '%s\n' "$alternate_environment" \
+    | grep -Fx "config=$alternate_config" >/dev/null
+printf '%s\n' "$alternate_environment" \
+    | grep -Fx "codex_home=$custom_codex_home" >/dev/null
 usage_candidate_hash=$(shasum -a 256 "$usage_candidate" | awk '{print $1}')
 grep -Fx "  \"usage_binary_sha256\": \"$usage_candidate_hash\"," \
     "$state/install/current/manifest.json" >/dev/null
@@ -219,6 +279,19 @@ HOME="$home" "$cli" validate >/dev/null
 
 first_release=$(readlink "$state/install/current")
 first_candidate_hash=$(shasum -a 256 "$candidate" | awk '{print $1}')
+printf '%s\n' 'ambient_setting = true' >>"$state/codex-home/config.toml"
+codex_config_with_ambient_setting=$(cat "$state/codex-home/config.toml")
+if deploy --no-start >"$temporary/ambient-config.out" \
+    2>"$temporary/ambient-config.err"
+then
+    printf '%s\n' 'deployment unexpectedly accepted ambient Codex configuration' >&2
+    exit 1
+fi
+[ "$(cat "$state/codex-home/config.toml")" = \
+    "$codex_config_with_ambient_setting" ]
+printf '%s\n' 'cli_auth_credentials_store = "file"' \
+    >"$state/codex-home/config.toml"
+chmod 0600 "$state/codex-home/config.toml"
 # Simulate the configuration written by releases before annals-usage became
 # the default Codex proxy. Deployment must migrate only the Codex selector and
 # preserve the rest of the document.
@@ -244,6 +317,8 @@ if [ "$first_release" = "$second_release" ]; then
         "$first_candidate_hash" "$second_candidate_hash" "$first_release" >&2
     exit 1
 fi
+[ "$(tail -n 1 "$state/usage-doctor.log")" = \
+    "doctor current=$first_release" ]
 [ "$(readlink "$state/install/previous")" = "$first_release" ]
 [ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" != "$legacy_config_hash" ]
 grep -Fx "codex = \"$proxy\"" "$state/config.toml" >/dev/null
@@ -275,7 +350,7 @@ fi
 install -m 0755 "$package/deploy-user.sh" \
     "$state/install/current/package/deploy-user.sh"
 
-loaded="$temporary/service-loaded"
+loaded="$state/service-loaded"
 fail_bootstrap="$temporary/fail-next-bootstrap"
 fail_kickstart="$temporary/fail-next-kickstart"
 kickstart_order_error="$temporary/kickstart-order-error"
@@ -327,6 +402,10 @@ running_release=$(readlink "$state/install/current")
 [ -f "$loaded" ]
 [ ! -e "$state/spool/.maintenance" ]
 [ -f "$state/spool/.paused" ]
+[ "$(cat "$state/codex-home/auth.json")" = credential-sentinel ]
+[ "$(stat -f '%Lp' "$state/codex-home/auth.json")" = 600 ]
+[ "$(tail -n 1 "$state/usage-doctor.log")" = \
+    "doctor current=$second_release" ]
 [ "$(tail -n 10 "$state/candidate-commands.log" | tr '\n' ' ')" = \
     'inbox status validate inbox status inbox run backup migrate validate inbox status validate inbox status ' ]
 

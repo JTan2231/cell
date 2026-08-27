@@ -1,3 +1,4 @@
+mod auth;
 mod budget;
 mod config;
 mod database;
@@ -14,6 +15,7 @@ use clap::Parser;
 use serde_json::json;
 use thiserror::Error;
 
+use crate::auth::CredentialLease;
 use crate::budget::BudgetReport;
 use crate::config::UsageConfig;
 use crate::database::{RunIdentity, UsageDatabase};
@@ -80,6 +82,7 @@ fn run_report(options: &ReportOptions) -> Result<(), AppError> {
 
 fn run_budget(options: &BudgetOptions) -> Result<(), AppError> {
     let config = UsageConfig::load(options.config.as_deref())?;
+    let _lease = CredentialLease::try_acquire(&config.codex_home)?;
     let snapshot = protocol::read_account_snapshot(&config.codex, Some(&config.codex_home))?;
     let database = UsageDatabase::open(&config.database)?;
     database.record_quota_snapshot(
@@ -111,16 +114,26 @@ fn run_doctor(options: &DoctorOptions) -> Result<(), AppError> {
         }
     }
     let _database = UsageDatabase::open(&config.database)?;
-    let codex_version = codex_version(&config.codex)?;
-    let budget = protocol::read_account_snapshot(&config.codex, Some(&config.codex_home));
-    if let Err(error) = budget {
-        failures.push(format!("account rate-limit read failed: {error}"));
+    let mut codex_version_text = None;
+    match CredentialLease::try_acquire(&config.codex_home) {
+        Ok(_lease) => {
+            codex_version_text = Some(codex_version(&config.codex, &config.codex_home)?);
+            if let Err(error) =
+                protocol::read_account_snapshot(&config.codex, Some(&config.codex_home))
+            {
+                failures.push(format!("account rate-limit read failed: {error}"));
+            }
+        }
+        Err(error) => failures.push(error.to_string()),
     }
     if failures.is_empty() {
         println!("annals-usage doctor: healthy");
         println!("Configuration: {}", config.path.display());
         println!("Ledger:        {}", config.database.display());
-        println!("Real Codex:    {codex_version}");
+        println!(
+            "Real Codex:    {}",
+            codex_version_text.as_deref().unwrap_or("unavailable")
+        );
         return Ok(());
     }
     Err(AppError::Doctor(failures.join("; ")))
@@ -128,16 +141,20 @@ fn run_doctor(options: &DoctorOptions) -> Result<(), AppError> {
 
 fn run_as_proxy(arguments: &[OsString]) -> Result<Outcome, AppError> {
     let config = UsageConfig::load(None)?;
+    let _lease = CredentialLease::acquire(&config.codex_home)?;
     let is_stdio_app_server = arguments.iter().any(|argument| argument == "app-server")
         && arguments.iter().any(|argument| argument == "--stdio");
     if !is_stdio_app_server {
-        return protocol::run_passthrough(&config.codex, arguments)
+        return protocol::run_passthrough(&config.codex, arguments, &config.codex_home)
             .map(Outcome::Child)
             .map_err(Into::into);
     }
 
-    let mut recorder = RunRecorder::start(&config);
-    let result = protocol::run_stdio_proxy(&config.codex, arguments, |event| {
+    let mut recorder = std::env::var_os("ANNALS_AUTH_PREFLIGHT")
+        .is_none()
+        .then(|| RunRecorder::start(&config))
+        .flatten();
+    let result = protocol::run_stdio_proxy(&config.codex, arguments, &config.codex_home, |event| {
         let Some(recorder) = recorder.as_mut() else {
             return Ok(());
         };
@@ -168,7 +185,7 @@ impl RunRecorder {
             let token = std::env::var("ANNALS_MODEL_RUN_TOKEN").ok();
             let identity = RunIdentity::resolve(config, token.as_deref())?;
             let mut database = UsageDatabase::open(&config.database)?;
-            let codex_version = codex_version(&config.codex).ok();
+            let codex_version = codex_version(&config.codex, &config.codex_home).ok();
             let run_id = database.begin_run(&identity, codex_version.as_deref())?;
             Ok(Self {
                 database,
@@ -269,8 +286,14 @@ impl RunRecorder {
     }
 }
 
-fn codex_version(codex: &std::path::Path) -> Result<String, AppError> {
-    let output = Command::new(codex).arg("--version").output()?;
+fn codex_version(
+    codex: &std::path::Path,
+    codex_home: &std::path::Path,
+) -> Result<String, AppError> {
+    let output = Command::new(codex)
+        .arg("--version")
+        .env("CODEX_HOME", codex_home)
+        .output()?;
     if !output.status.success() {
         return Err(AppError::CodexVersion(output.status));
     }
@@ -334,6 +357,8 @@ enum Outcome {
 
 #[derive(Debug, Error)]
 enum AppError {
+    #[error(transparent)]
+    Auth(#[from] crate::auth::AuthLeaseError),
     #[error(transparent)]
     Config(#[from] crate::config::ConfigError),
     #[error(transparent)]

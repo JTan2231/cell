@@ -155,8 +155,11 @@ manual integration, including an input whose bytes are already retained and
   envelope and assigns its immutable monotonic sequence. Direct enqueue copies
   an explicitly selected file into a complete queued envelope without changing
   the original and may select either lane. Neither action starts a source
-  delivery or creates a database delivery record. Dispatch claims the next job
-  for its one processing attempt. `prioritize` and `deprioritize` change only a
+  delivery or creates a database delivery record. Before the first queued
+  dispatch in an activation, Annals performs an authenticated account preflight.
+  A preflight failure ends the activation while the next job remains queued
+  with zero attempts and no delivery record. Dispatch claims the next job for
+  its one processing attempt. `prioritize` and `deprioritize` change only a
   queued job's lane; they never renumber it. Every job-processing error is
   terminal. A known item-local source error fails and archives that job while
   draining continues. An unexpected model, runner, or runtime processing
