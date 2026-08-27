@@ -236,6 +236,12 @@ pub enum InboxCommand {
     Run(InboxRunArgs),
     /// Register settled inbox files as durable queued jobs without processing them.
     Register(InboxRunArgs),
+    /// Copy explicit files into durable queued jobs.
+    Enqueue(InboxEnqueueArgs),
+    /// Move queued jobs into the priority lane.
+    Prioritize(InboxPriorityArgs),
+    /// Return queued jobs to the normal lane.
+    Deprioritize(InboxPriorityArgs),
     /// Import uncompleted envelopes into a fresh, quiesced inbox.
     #[command(hide = true)]
     ImportBacklog(InboxImportArgs),
@@ -280,6 +286,23 @@ pub struct InboxRunArgs {
     /// Minimum age of an unchanged incoming file.
     #[arg(long, value_name = "SECONDS")]
     pub settle_seconds: Option<u64>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct InboxEnqueueArgs {
+    /// Complete regular files to copy into the inbox queue.
+    #[arg(value_name = "FILE", required = true, num_args = 1..)]
+    pub inputs: Vec<PathBuf>,
+    /// Dispatch these jobs before normal queued jobs.
+    #[arg(long)]
+    pub priority: bool,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct InboxPriorityArgs {
+    /// Exact identifiers of queued inbox jobs.
+    #[arg(value_name = "JOB_ID", required = true, num_args = 1..)]
+    pub job_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Subcommand)]
@@ -552,6 +575,46 @@ mod tests {
             Ok(Command::Inbox(InboxCommand::Register(args)))
                 if args.settle_seconds == Some(0)
         ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "annals",
+                "inbox",
+                "enqueue",
+                "--priority",
+                "first.md",
+                "second.txt"
+            ])
+            .map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Enqueue(args)))
+                if args.priority && args.inputs.len() == 2
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "annals",
+                "inbox",
+                "prioritize",
+                "j00000000000000000042",
+                "j00000000000000000043"
+            ])
+            .map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Prioritize(args)))
+                if args.job_ids
+                    == ["j00000000000000000042", "j00000000000000000043"]
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "annals",
+                "inbox",
+                "deprioritize",
+                "j00000000000000000042"
+            ])
+            .map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Deprioritize(args)))
+                if args.job_ids == ["j00000000000000000042"]
+        ));
+        assert!(Cli::try_parse_from(["annals", "inbox", "enqueue"]).is_err());
+        assert!(Cli::try_parse_from(["annals", "inbox", "prioritize"]).is_err());
+        assert!(Cli::try_parse_from(["annals", "inbox", "deprioritize"]).is_err());
         assert!(matches!(
             Cli::try_parse_from(["annals", "inbox", "pause"]).map(|cli| cli.command),
             Ok(Command::Inbox(InboxCommand::Pause))

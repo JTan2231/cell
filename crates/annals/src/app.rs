@@ -94,6 +94,9 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
         Command::Inbox(command) => match command {
             InboxCommand::Run(args) => inbox::run(path, config, args, !cli.json),
             InboxCommand::Register(args) => inbox::register(config, args),
+            InboxCommand::Enqueue(args) => inbox::enqueue(config, args),
+            InboxCommand::Prioritize(args) => inbox::prioritize(config, args),
+            InboxCommand::Deprioritize(args) => inbox::deprioritize(config, args),
             InboxCommand::ImportBacklog(args) => inbox::import_backlog(config, &args.from),
             InboxCommand::Pause => inbox::pause(config),
             InboxCommand::Resume => inbox::resume(config),

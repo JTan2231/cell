@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::ffi::{OsStr, OsString};
+use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
 use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::{
@@ -15,7 +16,10 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Serialize};
 
 use crate::app::{read_utf8, work_label};
-use crate::cli::{InboxInterruptArgs, InboxInterruptDisposition, InboxRunArgs};
+use crate::cli::{
+    InboxEnqueueArgs, InboxInterruptArgs, InboxInterruptDisposition, InboxPriorityArgs,
+    InboxRunArgs,
+};
 use crate::config::Config;
 use crate::corpus::{
     ReconciliationRecord, now, reconciliation_by_id, sha256_hex,
@@ -28,7 +32,7 @@ use crate::render::CommandOutput;
 use crate::{ingestion, liaison, resolver};
 
 const QUEUE_VERSION: u32 = 4;
-const RECEIPT_VERSION: u32 = 4;
+const RECEIPT_VERSION: u32 = 5;
 const INTERRUPT_VERSION: u32 = 1;
 const MAX_INTERRUPT_REASON_CHARACTERS: usize = 1_000;
 
@@ -248,6 +252,7 @@ struct InboxStatus {
     settling: usize,
     ignored: usize,
     queued: usize,
+    priority_queued: usize,
     next_job: Option<RegisteredJob>,
     active_job: Option<ActiveJob>,
     processing: usize,
@@ -296,11 +301,34 @@ struct RegistrationSummary {
 }
 
 #[derive(Debug, Serialize)]
+struct EnqueueSummary {
+    root: String,
+    registered: usize,
+    priority: JobPriority,
+    jobs: Vec<RegisteredJob>,
+    queued: usize,
+    priority_queued: usize,
+    next_job: Option<RegisteredJob>,
+}
+
+#[derive(Debug, Serialize)]
+struct PrioritySummary {
+    root: String,
+    requested: usize,
+    changed: usize,
+    priority: JobPriority,
+    jobs: Vec<RegisteredJob>,
+    priority_queued: usize,
+    next_job: Option<RegisteredJob>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct RegisteredJob {
     id: String,
     sequence: u64,
     source_name: String,
     registered_at: String,
+    priority: JobPriority,
 }
 
 #[derive(Debug, Serialize)]
@@ -311,6 +339,7 @@ struct ActiveJob {
     attempts: u32,
     started_at: Option<String>,
     interrupt_requested: Option<String>,
+    priority: JobPriority,
 }
 
 #[derive(Debug, Serialize)]
@@ -334,6 +363,14 @@ struct BacklogSource {
     path: PathBuf,
     name: OsString,
     metadata: ingestion::SourceMetadata,
+    priority: JobPriority,
+}
+
+struct StagedEnqueue {
+    directory: PathBuf,
+    source: PathBuf,
+    name: OsString,
+    metadata: ingestion::SourceMetadata,
 }
 
 impl From<&Envelope> for RegisteredJob {
@@ -343,6 +380,7 @@ impl From<&Envelope> for RegisteredJob {
             sequence: envelope.receipt.sequence,
             source_name: envelope.receipt.original_name.clone(),
             registered_at: envelope.receipt.claimed_at.clone(),
+            priority: envelope.receipt.priority,
         }
     }
 }
@@ -427,6 +465,7 @@ struct JobReceipt {
     version: u32,
     id: String,
     sequence: u64,
+    priority: JobPriority,
     original_name: String,
     original_name_base64: String,
     state: String,
@@ -447,6 +486,64 @@ struct JobReceipt {
     result_status: Option<String>,
     result_revision: Option<i64>,
     last_error: Option<ReceiptError>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VersionFourJobReceipt {
+    version: u32,
+    id: String,
+    sequence: u64,
+    original_name: String,
+    original_name_base64: String,
+    state: String,
+    attempts: u32,
+    delivery_key: String,
+    ingestion_id: Option<i64>,
+    source_size_bytes: Option<u64>,
+    source_created_at: Option<String>,
+    source_modified_at: Option<String>,
+    first_seen_at: String,
+    claimed_at: String,
+    started_at: Option<String>,
+    completed_at: Option<String>,
+    source_sha256: Option<String>,
+    work: Option<String>,
+    reconciliation_id: Option<i64>,
+    model_run_token: Option<String>,
+    result_status: Option<String>,
+    result_revision: Option<i64>,
+    last_error: Option<ReceiptError>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum JobPriority {
+    #[default]
+    Normal,
+    Priority,
+}
+
+impl std::fmt::Display for JobPriority {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Normal => "normal",
+            Self::Priority => "priority",
+        })
+    }
+}
+
+type DispatchKey = (u8, u8, u64, String);
+
+fn dispatch_key(envelope: &Envelope) -> DispatchKey {
+    let state_rank = u8::from(envelope.receipt.state == "queued");
+    let priority_rank = u8::from(envelope.receipt.priority != JobPriority::Priority);
+    (
+        state_rank,
+        priority_rank,
+        envelope.receipt.sequence,
+        envelope.id.clone(),
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -708,7 +805,7 @@ pub(crate) fn register(config: &Config, args: &InboxRunArgs) -> Result<CommandOu
         paused: status.paused,
         maintenance: status.maintenance,
     };
-    let human = format!(
+    let mut human = format!(
         "Registered {} inbox {}; {} queued, {} ready, {} settling{}",
         summary.registered,
         if summary.registered == 1 {
@@ -727,7 +824,357 @@ pub(crate) fn register(config: &Config, args: &InboxRunArgs) -> Result<CommandOu
             ""
         },
     );
+    for job in &summary.jobs {
+        let _ = write!(human, "\n{}  {}", job.id, job.source_name);
+    }
     Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
+}
+
+pub(crate) fn enqueue(config: &Config, args: &InboxEnqueueArgs) -> Result<CommandOutput, AppError> {
+    let inbox = config.inbox()?;
+    let spool = Spool::new(&inbox.root);
+    spool.create()?;
+    {
+        let _control = spool.acquire_control_lock()?;
+        if spool.maintenance_requested()? {
+            return Err(AppError::conflict(
+                "inbox_maintenance_active",
+                "inbox maintenance prevents enqueueing jobs",
+            ));
+        }
+    }
+
+    let mut staged = Vec::with_capacity(args.inputs.len());
+    for (ordinal, input) in args.inputs.iter().enumerate() {
+        match stage_enqueue_source(&spool, input, ordinal) {
+            Ok(source) => staged.push(source),
+            Err(error) => {
+                cleanup_staged_enqueue(&staged);
+                return Err(error);
+            }
+        }
+    }
+
+    let result = publish_enqueued_sources(
+        &spool,
+        &staged,
+        if args.priority {
+            JobPriority::Priority
+        } else {
+            JobPriority::Normal
+        },
+    );
+    cleanup_staged_enqueue(&staged);
+    let jobs = result?;
+    let _control = spool.acquire_control_lock()?;
+    let status = inspect(&spool, inbox.settle_seconds)?;
+    let priority = if args.priority {
+        JobPriority::Priority
+    } else {
+        JobPriority::Normal
+    };
+    let summary = EnqueueSummary {
+        root: spool.root.display().to_string(),
+        registered: jobs.len(),
+        priority,
+        jobs,
+        queued: status.queued,
+        priority_queued: status.priority_queued,
+        next_job: status.next_job,
+    };
+    let mut human = format!(
+        "Enqueued {} {} inbox {}",
+        summary.registered,
+        summary.priority,
+        if summary.registered == 1 {
+            "job"
+        } else {
+            "jobs"
+        }
+    );
+    for job in &summary.jobs {
+        let _ = write!(human, "\n{}  {}", job.id, job.source_name);
+    }
+    Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
+}
+
+pub(crate) fn prioritize(
+    config: &Config,
+    args: &InboxPriorityArgs,
+) -> Result<CommandOutput, AppError> {
+    set_priority(config, args, JobPriority::Priority)
+}
+
+pub(crate) fn deprioritize(
+    config: &Config,
+    args: &InboxPriorityArgs,
+) -> Result<CommandOutput, AppError> {
+    set_priority(config, args, JobPriority::Normal)
+}
+
+fn set_priority(
+    config: &Config,
+    args: &InboxPriorityArgs,
+    priority: JobPriority,
+) -> Result<CommandOutput, AppError> {
+    let inbox = config.inbox()?;
+    let spool = Spool::new(&inbox.root);
+    spool.create()?;
+    let _control = spool.acquire_control_lock()?;
+    if spool.maintenance_requested()? {
+        return Err(AppError::conflict(
+            "inbox_maintenance_active",
+            "inbox maintenance prevents changing job priority",
+        ));
+    }
+
+    let requested = args.job_ids.iter().cloned().collect::<BTreeSet<_>>();
+    for id in &requested {
+        validate_requested_job_id(id)?;
+    }
+    let index = read_index(&spool)?;
+    let mut queued = scan_envelopes_at(&spool.queued, &index, false)?
+        .into_iter()
+        .map(|scanned| (scanned.envelope.id.clone(), scanned))
+        .collect::<BTreeMap<_, _>>();
+    for id in &requested {
+        if queued.contains_key(id) {
+            continue;
+        }
+        if job_id_exists(&spool, id) {
+            return Err(AppError::conflict(
+                "inbox_job_not_queued",
+                format!("inbox job {id} is no longer queued"),
+            ));
+        }
+        return Err(AppError::not_found(
+            "inbox_job_not_found",
+            format!("inbox job was not found: {id}"),
+        ));
+    }
+
+    let mut selected = requested
+        .iter()
+        .filter_map(|id| queued.remove(id))
+        .collect::<Vec<_>>();
+    selected.sort_by_key(|scanned| scanned.envelope.receipt.sequence);
+    if let Some(scanned) = selected
+        .iter()
+        .find(|scanned| scanned.envelope.receipt.state != "queued")
+    {
+        return Err(AppError::conflict(
+            "inbox_job_not_queued",
+            format!("inbox job {} is no longer queued", scanned.envelope.id),
+        ));
+    }
+    let mut changed = 0;
+    let mut jobs = Vec::with_capacity(selected.len());
+    for mut scanned in selected {
+        let priority_changed = scanned.envelope.receipt.priority != priority;
+        if priority_changed {
+            scanned.envelope.receipt.priority = priority;
+            changed += 1;
+        }
+        if priority_changed || scanned.stored_version != RECEIPT_VERSION {
+            write_receipt(&scanned.envelope)?;
+        }
+        jobs.push(RegisteredJob::from(&scanned.envelope));
+    }
+
+    let status = inspect(&spool, inbox.settle_seconds)?;
+    let summary = PrioritySummary {
+        root: spool.root.display().to_string(),
+        requested: requested.len(),
+        changed,
+        priority,
+        jobs,
+        priority_queued: status.priority_queued,
+        next_job: status.next_job,
+    };
+    let human = format!(
+        "Set {} of {} requested inbox {} to {} priority",
+        summary.changed,
+        summary.requested,
+        if summary.requested == 1 {
+            "job"
+        } else {
+            "jobs"
+        },
+        summary.priority,
+    );
+    Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
+}
+
+fn stage_enqueue_source(
+    spool: &Spool,
+    input: &Path,
+    ordinal: usize,
+) -> Result<StagedEnqueue, AppError> {
+    let before = fs::symlink_metadata(input).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            AppError::not_found(
+                "inbox_enqueue_source_not_found",
+                format!("enqueue source was not found: {}", input.display()),
+            )
+        } else {
+            error.into()
+        }
+    })?;
+    if !before.file_type().is_file() {
+        return Err(AppError::invalid(
+            "invalid_inbox_source",
+            format!("enqueue source is not a regular file: {}", input.display()),
+        ));
+    }
+    let name = input
+        .file_name()
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| {
+            AppError::invalid(
+                "invalid_inbox_source",
+                format!("enqueue source has no basename: {}", input.display()),
+            )
+        })?
+        .to_os_string();
+    let first_seen_at = now()?;
+    let metadata = metadata_from_filesystem(&name, &before, &first_seen_at)?;
+    let directory = enqueue_staging_directory(spool, ordinal)?;
+    let material = directory.join("material");
+    if let Err(error) = create_private_directory(&material) {
+        let _ = fs::remove_dir(&directory);
+        return Err(error.into());
+    }
+    let source = material.join(&name);
+    if let Err(error) = fs::copy(input, &source) {
+        let _ = fs::remove_dir_all(&directory);
+        return Err(AppError::unexpected(
+            "inbox_enqueue_copy_failed",
+            format!("unable to stage {}: {error}", input.display()),
+        ));
+    }
+    let after = match fs::symlink_metadata(input) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&directory);
+            return Err(error.into());
+        }
+    };
+    if !after.file_type().is_file() || FileIdentity::from(&before) != FileIdentity::from(&after) {
+        let _ = fs::remove_dir_all(&directory);
+        return Err(AppError::conflict(
+            "inbox_enqueue_source_changed",
+            format!(
+                "enqueue source changed while it was copied: {}",
+                input.display()
+            ),
+        ));
+    }
+    Ok(StagedEnqueue {
+        directory,
+        source,
+        name,
+        metadata,
+    })
+}
+
+fn enqueue_staging_directory(spool: &Spool, ordinal: usize) -> Result<PathBuf, AppError> {
+    let parent = spool.root.parent().ok_or_else(|| {
+        AppError::invalid(
+            "invalid_inbox_root",
+            "the inbox root must have a parent directory for enqueue staging",
+        )
+    })?;
+    for nonce in 0_u32..1_000 {
+        let path = parent.join(format!(
+            ".annals-enqueue-{}-{ordinal}-{nonce}",
+            std::process::id()
+        ));
+        match create_private_directory(&path) {
+            Ok(()) => return Ok(path),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(AppError::unexpected(
+        "inbox_enqueue_staging_exhausted",
+        "unable to allocate a private inbox enqueue staging directory",
+    ))
+}
+
+fn cleanup_staged_enqueue(staged: &[StagedEnqueue]) {
+    for source in staged {
+        let _ = fs::remove_dir_all(&source.directory);
+    }
+}
+
+fn publish_enqueued_sources(
+    spool: &Spool,
+    staged: &[StagedEnqueue],
+    priority: JobPriority,
+) -> Result<Vec<RegisteredJob>, AppError> {
+    let _control = spool.acquire_control_lock()?;
+    if spool.maintenance_requested()? {
+        return Err(AppError::conflict(
+            "inbox_maintenance_active",
+            "inbox maintenance prevents enqueueing jobs",
+        ));
+    }
+    let mut index = read_index(spool)?;
+    repair_sequence_high_water(spool, &mut index)?;
+    let mut sequences = Vec::with_capacity(staged.len());
+    for _ in staged {
+        let sequence = index.next_sequence;
+        index.next_sequence = sequence.checked_add(1).ok_or_else(|| {
+            AppError::unexpected("inbox_sequence_overflow", "inbox sequence is exhausted")
+        })?;
+        sequences.push(sequence);
+    }
+    write_index(&spool.index, &index)?;
+
+    let mut planned = Vec::with_capacity(staged.len());
+    for (source, sequence) in staged.iter().zip(sequences) {
+        let id = available_job_id(spool, sequence);
+        let mut receipt = new_receipt(&id, sequence, &source.name, &source.metadata)?;
+        receipt.priority = priority;
+        let envelope = Envelope {
+            id,
+            directory: source.directory.clone(),
+            source: source.source.clone(),
+            expected_identity: Some(FileIdentity::from(&fs::symlink_metadata(&source.source)?)),
+            receipt,
+            recovered: false,
+        };
+        write_receipt(&envelope)?;
+        planned.push(envelope);
+    }
+
+    for (published, envelope) in planned.iter().enumerate() {
+        let target = spool.queued.join(&envelope.id);
+        if let Err(error) = fs::rename(&envelope.directory, &target) {
+            rollback_enqueued_sources(spool, &planned[..published])?;
+            return Err(AppError::unexpected(
+                "inbox_enqueue_publish_failed",
+                format!("unable to publish inbox job {}: {error}", envelope.id),
+            ));
+        }
+    }
+    Ok(planned.iter().map(RegisteredJob::from).collect())
+}
+
+fn rollback_enqueued_sources(spool: &Spool, published: &[Envelope]) -> Result<(), AppError> {
+    for envelope in published.iter().rev() {
+        let source = spool.queued.join(&envelope.id);
+        fs::rename(&source, &envelope.directory).map_err(|error| {
+            AppError::unexpected(
+                "inbox_enqueue_rollback_failed",
+                format!(
+                    "unable to roll back published inbox job {}: {error}",
+                    envelope.id
+                ),
+            )
+        })?;
+    }
+    Ok(())
 }
 
 /// Copy the uncompleted FIFO from an archived spool into a fresh spool.
@@ -820,7 +1267,7 @@ pub(crate) fn import_backlog(
 fn backlog_sources(spool: &Spool) -> Result<Vec<BacklogSource>, AppError> {
     let mut source_index = read_index(spool)?;
     repair_sequence_high_water(spool, &mut source_index)?;
-    let mut ordered = BTreeMap::<(u64, String), BacklogSource>::new();
+    let mut ordered = BTreeMap::<(u8, u64, String), BacklogSource>::new();
     for directory in [&spool.processing, &spool.queued] {
         for scanned in scan_envelopes_at(directory, &source_index, false)? {
             let receipt = &scanned.envelope.receipt;
@@ -843,7 +1290,8 @@ fn backlog_sources(spool: &Spool) -> Result<Vec<BacklogSource>, AppError> {
                 .to_os_string();
             let metadata =
                 metadata_for_recovered_source(&scanned.envelope.source, &receipt.first_seen_at)?;
-            let key = (receipt.sequence, scanned.envelope.id.clone());
+            let lane = u8::from(receipt.priority != JobPriority::Priority);
+            let key = (lane, receipt.sequence, scanned.envelope.id.clone());
             if ordered
                 .insert(
                     key,
@@ -851,6 +1299,7 @@ fn backlog_sources(spool: &Spool) -> Result<Vec<BacklogSource>, AppError> {
                         path: scanned.envelope.source,
                         name,
                         metadata,
+                        priority: receipt.priority,
                     },
                 )
                 .is_some()
@@ -866,11 +1315,12 @@ fn backlog_sources(spool: &Spool) -> Result<Vec<BacklogSource>, AppError> {
     let (incoming, _) = scan_incoming(spool, &mut source_index, 0)?;
     for candidate in incoming {
         ordered.insert(
-            (candidate.sequence, candidate.key),
+            (1, candidate.sequence, candidate.key),
             BacklogSource {
                 path: candidate.path,
                 name: candidate.name,
                 metadata: candidate.metadata,
+                priority: JobPriority::Normal,
             },
         );
     }
@@ -913,7 +1363,8 @@ fn import_backlog_source(
         ));
     }
     fs::set_permissions(&destination, fs::Permissions::from_mode(0o600))?;
-    let receipt = new_receipt(&id, sequence, &source.name, &source.metadata)?;
+    let mut receipt = new_receipt(&id, sequence, &source.name, &source.metadata)?;
+    receipt.priority = source.priority;
     let envelope = Envelope {
         id,
         directory,
@@ -1100,19 +1551,20 @@ pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
     let value = inspect(&spool, inbox.settle_seconds)?;
     let next = value.next_job.as_ref().map_or_else(
         || "none".to_owned(),
-        |job| format!("{} ({})", job.id, job.source_name),
+        |job| format!("{} ({}, {})", job.id, job.source_name, job.priority),
     );
     let active = value.active_job.as_ref().map_or_else(
         || "none".to_owned(),
-        |job| format!("{} ({})", job.id, job.source_name),
+        |job| format!("{} ({}, {})", job.id, job.source_name, job.priority),
     );
     let human = format!(
-        "Inbox: {}\nIncoming: {} ({} ready, {} settling)\nQueued: {}\nNext queued: {}\nProcessing: {}\nActive: {}\nDone: {}\nDuplicates: {}\nFailed: {}\nSkipped: {}\nLocked: {}\nPaused: {}\nMaintenance: {}",
+        "Inbox: {}\nIncoming: {} ({} ready, {} settling)\nQueued: {} ({} priority)\nNext queued: {}\nProcessing: {}\nActive: {}\nDone: {}\nDuplicates: {}\nFailed: {}\nSkipped: {}\nLocked: {}\nPaused: {}\nMaintenance: {}",
         value.root,
         value.incoming,
         value.ready,
         value.settling,
         value.queued,
+        value.priority_queued,
         next,
         value.processing,
         active,
@@ -1835,11 +2287,11 @@ fn register_settled_locked(spool: &Spool, settle_seconds: u64) -> Result<Vec<Env
 }
 
 fn insert_queued(
-    queue: &mut BTreeMap<(u64, String), Envelope>,
+    queue: &mut BTreeMap<DispatchKey, Envelope>,
     envelope: Envelope,
 ) -> Result<(), AppError> {
     let id = envelope.id.clone();
-    let key = (envelope.receipt.sequence, envelope.id.clone());
+    let key = dispatch_key(&envelope);
     match queue.entry(key) {
         Entry::Vacant(entry) => {
             entry.insert(envelope);
@@ -2300,7 +2752,6 @@ fn relocate_envelope(mut envelope: Envelope, destination: &Path) -> Result<Envel
 fn validate_recovered_order(envelopes: &[Envelope]) -> Result<(), AppError> {
     let mut sequences = BTreeSet::new();
     let mut processing = Vec::new();
-    let mut queued = Vec::new();
     for envelope in envelopes {
         if !sequences.insert(envelope.receipt.sequence) {
             return Err(AppError::unexpected(
@@ -2311,10 +2762,8 @@ fn validate_recovered_order(envelopes: &[Envelope]) -> Result<(), AppError> {
                 ),
             ));
         }
-        match envelope.receipt.state.as_str() {
-            "queued" => queued.push(envelope.receipt.sequence),
-            "processing" => processing.push(envelope.receipt.sequence),
-            _ => {}
+        if envelope.receipt.state == "processing" {
+            processing.push(envelope.receipt.sequence);
         }
     }
     if processing.len() > 1 {
@@ -2323,31 +2772,23 @@ fn validate_recovered_order(envelopes: &[Envelope]) -> Result<(), AppError> {
             "more than one inbox job is in processing state",
         ));
     }
-    if let (Some(processing), Some(queued)) =
-        (processing.into_iter().next(), queued.into_iter().min())
-        && processing > queued
-    {
-        return Err(AppError::unexpected(
-            "invalid_inbox_order",
-            "an inbox processing job is ordered behind a queued job",
-        ));
-    }
     Ok(())
 }
 
 fn refresh_queued(
     spool: &Spool,
-    queue: &mut BTreeMap<(u64, String), Envelope>,
+    queue: &mut BTreeMap<DispatchKey, Envelope>,
 ) -> Result<(), AppError> {
     let index = read_index(spool)?;
+    let processing = std::mem::take(queue)
+        .into_values()
+        .filter(|envelope| envelope.receipt.state != "queued")
+        .collect::<Vec<_>>();
+    for envelope in processing {
+        insert_queued(queue, envelope)?;
+    }
     for scanned in scan_envelopes_at(&spool.queued, &index, false)? {
-        let key = (
-            scanned.envelope.receipt.sequence,
-            scanned.envelope.id.clone(),
-        );
-        if !queue.contains_key(&key) {
-            insert_queued(queue, scanned.envelope)?;
-        }
+        insert_queued(queue, scanned.envelope)?;
     }
     Ok(())
 }
@@ -2441,6 +2882,11 @@ fn read_receipt(path: &Path, id: &str, source: &Path) -> Result<(JobReceipt, u32
         RECEIPT_VERSION => serde_json::from_slice(&bytes)
             .map(|receipt| (receipt, RECEIPT_VERSION))
             .map_err(|error| invalid_receipt(path, &error)),
+        4 => {
+            let receipt: VersionFourJobReceipt =
+                serde_json::from_slice(&bytes).map_err(|error| invalid_receipt(path, &error))?;
+            upgrade_version_four_receipt(receipt, id).map(|receipt| (receipt, 4))
+        }
         3 => {
             let receipt: VersionThreeJobReceipt =
                 serde_json::from_slice(&bytes).map_err(|error| invalid_receipt(path, &error))?;
@@ -2463,6 +2909,44 @@ fn read_receipt(path: &Path, id: &str, source: &Path) -> Result<(JobReceipt, u32
     }
 }
 
+fn upgrade_version_four_receipt(
+    receipt: VersionFourJobReceipt,
+    id: &str,
+) -> Result<JobReceipt, AppError> {
+    if receipt.version != 4 || receipt.id != id {
+        return Err(AppError::unexpected(
+            "invalid_job_receipt",
+            format!("version 4 job receipt does not match envelope {id}"),
+        ));
+    }
+    Ok(JobReceipt {
+        version: RECEIPT_VERSION,
+        id: receipt.id,
+        sequence: receipt.sequence,
+        priority: JobPriority::Normal,
+        original_name: receipt.original_name,
+        original_name_base64: receipt.original_name_base64,
+        state: receipt.state,
+        attempts: receipt.attempts,
+        delivery_key: receipt.delivery_key,
+        ingestion_id: receipt.ingestion_id,
+        source_size_bytes: receipt.source_size_bytes,
+        source_created_at: receipt.source_created_at,
+        source_modified_at: receipt.source_modified_at,
+        first_seen_at: receipt.first_seen_at,
+        claimed_at: receipt.claimed_at,
+        started_at: receipt.started_at,
+        completed_at: receipt.completed_at,
+        source_sha256: receipt.source_sha256,
+        work: receipt.work,
+        reconciliation_id: receipt.reconciliation_id,
+        model_run_token: receipt.model_run_token,
+        result_status: receipt.result_status,
+        result_revision: receipt.result_revision,
+        last_error: receipt.last_error,
+    })
+}
+
 fn upgrade_version_three_receipt(
     receipt: VersionThreeJobReceipt,
     id: &str,
@@ -2477,6 +2961,7 @@ fn upgrade_version_three_receipt(
         version: RECEIPT_VERSION,
         id: receipt.id,
         sequence: receipt.sequence,
+        priority: JobPriority::Normal,
         original_name: receipt.original_name,
         original_name_base64: receipt.original_name_base64,
         state: receipt.state,
@@ -2514,6 +2999,7 @@ fn upgrade_version_two_receipt(
         version: RECEIPT_VERSION,
         id: receipt.id,
         sequence: sequence_from_job_id(id)?,
+        priority: JobPriority::Normal,
         original_name: receipt.original_name,
         original_name_base64: receipt.original_name_base64,
         state: receipt.state,
@@ -2659,6 +3145,7 @@ fn upgrade_legacy_receipt(
         version: RECEIPT_VERSION,
         id: legacy.id,
         sequence: sequence_from_job_id(id)?,
+        priority: JobPriority::Normal,
         original_name: legacy.original_name,
         original_name_base64: legacy.original_name_base64,
         state: "processing".to_owned(),
@@ -2766,6 +3253,7 @@ fn new_receipt(
         version: RECEIPT_VERSION,
         id: id.to_owned(),
         sequence,
+        priority: JobPriority::Normal,
         original_name: name.to_string_lossy().into_owned(),
         original_name_base64: URL_SAFE_NO_PAD.encode(name.as_bytes()),
         state: "queued".to_owned(),
@@ -3174,14 +3662,16 @@ fn inspect(spool: &Spool, settle_seconds: u64) -> Result<InboxStatus, AppError> 
             }
         }
     }
+    let (queued, priority_queued, next_job) = queued_overview(spool)?;
     Ok(InboxStatus {
         root: spool.root.display().to_string(),
         incoming,
         ready,
         settling,
         ignored,
-        queued: count_directories(&spool.queued)?,
-        next_job: next_queued_job(spool)?,
+        queued,
+        priority_queued,
+        next_job,
         active_job: active_job(spool)?,
         processing: count_directories(&spool.processing)?,
         done: count_directories(&spool.done)?,
@@ -3218,49 +3708,35 @@ fn active_job(spool: &Spool) -> Result<Option<ActiveJob>, AppError> {
         attempts: envelope.receipt.attempts,
         started_at: envelope.receipt.started_at,
         interrupt_requested,
+        priority: envelope.receipt.priority,
     }))
 }
 
-fn next_queued_job(spool: &Spool) -> Result<Option<RegisteredJob>, AppError> {
-    if !spool.queued.exists() {
-        return Ok(None);
-    }
-    let mut next: Option<(u64, String, PathBuf)> = None;
-    for entry in fs::read_dir(&spool.queued)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_dir() {
-            continue;
-        }
-        let id = entry.file_name().to_string_lossy().into_owned();
-        let sequence = sequence_from_job_id(&id)?;
-        let candidate = (sequence, id, entry.path());
-        if next
-            .as_ref()
-            .is_none_or(|current| (&candidate.0, &candidate.1) < (&current.0, &current.1))
-        {
-            next = Some(candidate);
-        }
-    }
-    let Some((_, id, directory)) = next else {
-        return Ok(None);
-    };
-    let source = sole_material(&directory.join("material"))?.ok_or_else(|| {
-        AppError::unexpected(
+fn queued_overview(spool: &Spool) -> Result<(usize, usize, Option<RegisteredJob>), AppError> {
+    let index = read_index(spool)?;
+    let mut envelopes = scan_envelopes_at(&spool.queued, &index, false)?
+        .into_iter()
+        .map(|scanned| scanned.envelope)
+        .collect::<Vec<_>>();
+    if let Some(envelope) = envelopes
+        .iter()
+        .find(|envelope| envelope.receipt.state != "queued")
+    {
+        return Err(AppError::unexpected(
             "invalid_job_envelope",
-            format!("queued inbox job {id} has no source material"),
-        )
-    })?;
-    let (receipt, _) = read_receipt(&directory.join("job.json"), &id, &source)?;
-    validate_receipt(&receipt, &id, &source)?;
-    let envelope = Envelope {
-        id,
-        directory,
-        source,
-        expected_identity: None,
-        receipt,
-        recovered: false,
-    };
-    Ok(Some(RegisteredJob::from(&envelope)))
+            format!(
+                "queued inbox job {} has state {}",
+                envelope.id, envelope.receipt.state
+            ),
+        ));
+    }
+    let priority = envelopes
+        .iter()
+        .filter(|envelope| envelope.receipt.priority == JobPriority::Priority)
+        .count();
+    envelopes.sort_by_key(dispatch_key);
+    let next = envelopes.first().map(RegisteredJob::from);
+    Ok((envelopes.len(), priority, next))
 }
 
 fn count_directories(path: &Path) -> Result<usize, AppError> {
@@ -3290,10 +3766,45 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     use super::{
-        FileIdentity, QUEUE_VERSION, QueueIndex, Spool, backlog_sources, import_backlog_source,
-        path_has_identity, read_index, register_settled_locked, scan_envelopes_at, scan_incoming,
-        write_index,
+        FileIdentity, JobPriority, QUEUE_VERSION, QueueIndex, Spool, backlog_sources,
+        cleanup_staged_enqueue, import_backlog_source, path_has_identity, publish_enqueued_sources,
+        read_index, register_settled_locked, scan_envelopes_at, scan_incoming,
+        stage_enqueue_source, write_index,
     };
+
+    #[test]
+    fn multi_file_enqueue_rolls_back_an_earlier_publication_when_a_later_one_fails()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let spool = Spool::new(&directory.path().join("spool"));
+        spool.create()?;
+        let first_input = directory.path().join("first.txt");
+        let second_input = directory.path().join("second.txt");
+        fs::write(&first_input, "first")?;
+        fs::write(&second_input, "second")?;
+
+        let first = stage_enqueue_source(&spool, &first_input, 0)?;
+        let mut second = stage_enqueue_source(&spool, &second_input, 1)?;
+        let nested = first.directory.join("later-staging");
+        fs::rename(&second.directory, &nested)?;
+        second.directory = nested;
+        second.source = second.directory.join("material").join(&second.name);
+        let staged = vec![first, second];
+
+        let Err(error) = publish_enqueued_sources(&spool, &staged, JobPriority::Priority) else {
+            return Err("partial enqueue publication unexpectedly succeeded".into());
+        };
+        assert_eq!(error.code(), "inbox_enqueue_publish_failed");
+        assert_eq!(fs::read_dir(&spool.queued)?.count(), 0);
+        assert!(staged[0].directory.is_dir());
+        assert!(staged[1].directory.is_dir());
+        assert_eq!(fs::read_to_string(&staged[0].source)?, "first");
+        assert_eq!(fs::read_to_string(&staged[1].source)?, "second");
+
+        cleanup_staged_enqueue(&staged);
+        assert!(!staged[0].directory.exists());
+        Ok(())
+    }
 
     #[test]
     fn empty_version_one_queue_index_is_upgraded_and_persisted()

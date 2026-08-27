@@ -46,10 +46,13 @@ names a corpus revision. Captured size and filesystem times describe the
 delivery, while `first_seen_at`, `ingested_at`, and `completed_at` describe the
 Annals lifecycle.
 
-Queued work lives outside SQLite. Each filesystem envelope has an immutable
-FIFO sequence and source bytes. Dispatch creates or recovers its ingestion
-receipt using the envelope's stable delivery key. A fresh exact-byte duplicate
-completes as retained without an examination, reconciliation, or commit.
+Queued jobs live outside SQLite. Each filesystem envelope has unchanged source
+bytes, an immutable sequence, and a durable `normal` or `priority` lane in its
+job receipt. Dispatch finishes any processing job, then selects priority jobs
+before normal jobs and follows sequence order within each lane. It creates or
+recovers the database delivery record using the envelope's stable delivery key.
+A fresh exact-byte duplicate completes as retained without an examination,
+reconciliation, or commit.
 
 ## Corpus state
 

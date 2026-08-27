@@ -133,21 +133,31 @@ manual integration, including an input whose bytes are already retained and
   `--name` supplies a work label.
 
 **Inbox job / job envelope / job receipt**
-: An inbox job is one registered, durable FIFO queue item. Its envelope is the
+: An inbox job is one registered, durable queue item. Its envelope is the
   filesystem directory containing unchanged source material and `job.json`.
   Call `job.json` the *job receipt*. It is a mutable operational record
   distinct from the database delivery record; always qualify which record or
-  receipt is meant. A queued job has never started. Dispatch moves the strict
-  FIFO head from `queued/` to `processing/` and starts its source delivery.
+  receipt is meant. A queued job has never started. Dispatch moves the next
+  job from `queued/` to `processing/` and starts its source delivery.
   Successful integrated jobs are archived in `done/`, fresh duplicate jobs in
   `duplicates/`, failed jobs in `failed/`, and operator-skipped jobs in
   `skipped/`. Each job has at most one processing attempt.
 
-**Inbox registration / dispatch**
+**Inbox priority lane**
+: Each inbox job belongs to either the `normal` or `priority` lane. Dispatch
+  finishes any processing job, then selects priority jobs before normal jobs
+  and uses immutable sequence order within each lane. Priority is a binary
+  operational scheduling choice, not a mutable sequence or corpus property.
+  There is no fairness or starvation protection for the normal lane.
+
+**Inbox registration / enqueue / dispatch**
 : Registration moves a settled file from `incoming/` into a queued job
-  envelope and assigns its immutable FIFO sequence. It does not start a source
-  delivery or create a database delivery record. Dispatch claims the oldest
-  queued job for its one processing attempt. Every job-processing error is
+  envelope and assigns its immutable monotonic sequence. Direct enqueue copies
+  an explicitly selected file into a complete queued envelope without changing
+  the original and may select either lane. Neither action starts a source
+  delivery or creates a database delivery record. Dispatch claims the next job
+  for its one processing attempt. `prioritize` and `deprioritize` change only a
+  queued job's lane; they never renumber it. Every job-processing error is
   terminal. A known item-local source error fails and archives that job while
   draining continues. An unexpected model, runner, or runtime processing
   failure also fails and archives the job, then ends the activation nonzero;
@@ -387,6 +397,7 @@ Several independent lifecycles reuse words such as `applied`, `recorded`, and
 | Source delivery | retention | `new`, `duplicate` |
 | Source delivery | result | `retained`, `pending`, `applied`, `recorded` |
 | Inbox job receipt | state | `queued`, `processing`, `done`, `failed`, `skipped` |
+| Inbox job receipt | `priority` | `normal`, `priority` |
 | Inbox job receipt | `result_status` | `retained`, `applied`, `recorded` |
 | Commit | kind | `change`, `shake`, `revert` |
 | Shake invocation | status | `unchanged`, `confirmation_required`, `cancelled`, `applied` |
@@ -420,6 +431,7 @@ details. These expressions simplify the language without changing the model.
 | work | retained source document |
 | source delivery | source arrival or import attempt |
 | delivery record | source history entry |
+| priority inbox job | queued source to run before normal queued sources |
 | corpus | evidence-backed map of ideas |
 | concept | idea |
 | concept label | idea label or idea name |
@@ -469,7 +481,10 @@ and grounded in exact source language.
 - Reserve *work* for the immutable retained source object; use *job* or *queue
   item* for operational work waiting to run.
 - Distinguish a *queued inbox job* from a *processing source delivery*;
-  registration creates the former and dispatch starts the latter.
+  registration or direct enqueue creates the former and dispatch starts the
+  latter.
+- Distinguish a job's immutable sequence from its binary inbox priority lane.
+  Priority dispatch does not preempt a processing delivery.
 - Qualify *label* as a work label or concept label when ambiguity is possible.
 - Qualify *root* as a root concept or spool root when ambiguity is possible.
 - Say *reconciliation request*, *reconciliation record*, *operation*, *effect*,

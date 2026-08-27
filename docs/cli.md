@@ -167,6 +167,9 @@ The complete accounting and configuration contract is documented in
 
 ```text
 annals inbox register [--settle-seconds SECONDS]
+annals inbox enqueue [--priority] FILE...
+annals inbox prioritize JOB_ID...
+annals inbox deprioritize JOB_ID...
 annals inbox run [--settle-seconds SECONDS]
 annals inbox pause
 annals inbox resume
@@ -174,7 +177,7 @@ annals inbox interrupt JOB_ID --as failed|skipped [--reason TEXT]
 annals inbox status
 ```
 
-All six commands require an `[inbox]` config section with `root`. The optional
+All commands require an `[inbox]` config section with `root`. The optional
 config key `settle_seconds` defaults to 60; the `register` and `run` flags
 override it. A zero settling interval is allowed. `status` is read-only.
 
@@ -183,21 +186,47 @@ processing it. Each file moves, without changing its basename or bytes, into
 `queued/JOB_ID/material/` beside an operational `job.json` receipt. The
 receipt has state `queued`, attempts zero, and an immutable monotonic sequence.
 Registration creates no database source-delivery record. Human output reports
-the registered jobs; JSON includes each assigned job ID and sequence.
+the registered jobs; JSON includes each assigned job ID and sequence with
+`priority` set to `normal`.
+
+`inbox enqueue` copies each explicitly named regular file directly into a new
+durable queued envelope and leaves the original file unchanged. It bypasses
+`incoming/` and the settling interval: the envelope becomes dispatchable only
+after its material and receipt are complete, so admission cannot race a
+partial copy. Files receive immutable monotonic sequences in argument order
+and enter the normal lane unless `--priority` selects the priority lane. The
+result reports the spool root, selected priority, registered count, each job's
+ID, sequence, and priority, the total queued and priority-queued counts, and
+the next job. Like registration, enqueue starts no source delivery.
+
+`inbox prioritize JOB_ID...` moves the named queued jobs to the priority lane;
+`inbox deprioritize JOB_ID...` moves them to the normal lane. Both operate only
+on jobs that are still under `queued/`, hold the queue-control lock for the
+mutation, and leave each job ID and immutable sequence unchanged. Argument
+order therefore does not reorder jobs; an older normal job moved to priority
+can precede newer priority jobs. Requesting the lane a job already has is an
+idempotent success. The result reports the spool root, requested and changed
+counts, selected priority, requested jobs, the priority-queued count, and the
+next job. Naming a processing or terminal job, or an unknown job ID, is an
+error rather than a request to alter history.
 
 `inbox run` takes the activation-long spool lock, performs the same
 registration phase, and drains jobs sequentially while processing is allowed.
-Dispatch atomically moves the oldest queued envelope to `processing/`, changes
-its receipt to `processing`, increments its attempts from zero to one, and
-starts its database source delivery. A job receives no second processing
-attempt. A fresh job that retains a new work enters model-assisted integration
-with immediate application. A fresh job whose exact bytes select an existing
-work completes with `duplicate` retention and result `retained`, without an
-examination, reconciliation, or commit. Content identity is resolved before
-the incoming filename is considered as a label, so a duplicate keeps the
-retained work's canonical label even when its basename is unusable or belongs
-to another work. Explicit manual `integrate` remains available for deliberate
-integration of an already retained work.
+Dispatch atomically moves the lowest-sequence priority envelope, or the
+lowest-sequence normal envelope when no priority job is queued, to
+`processing/`. It changes the receipt to `processing`, increments its attempts
+from zero to one, and starts its database source delivery. A priority arrival
+never preempts a processing job, and a continuing priority stream can starve
+the normal lane; there is no starvation protection. A job receives no second
+processing attempt. A fresh job that retains a new work enters model-assisted
+integration with immediate application. A fresh job whose exact bytes select an
+existing work completes with `duplicate` retention and result `retained`,
+without an examination,
+reconciliation, or commit. Content identity is resolved before the incoming
+filename is considered as a label, so a duplicate keeps the retained work's
+canonical label even when its basename is unusable or belongs to another work.
+Explicit manual `integrate` remains available for deliberate integration of an
+already retained work.
 
 Applied and recorded envelopes move whole from `processing/` to `done/`,
 retained duplicate envelopes to `duplicates/`, failed envelopes to `failed/`,
@@ -214,14 +243,16 @@ allowed to finish, but no later queued job starts. A short-lived queue-control
 lock orders pause against dispatch: if dispatch wins, that job is the current
 job allowed to finish; once `pause` returns, no additional job can be claimed.
 Registration remains available while paused, including the registration phase
-of scheduled `inbox run` activations. Such an activation exits successfully
-after registering arrivals, leaving the next envelope in `queued/`.
+of scheduled `inbox run` activations. Direct enqueue and queued-job priority
+changes also remain available. Such an activation exits successfully after
+registering arrivals, leaving the next envelope in `queued/`.
 
 `inbox resume` idempotently removes only the operator pause. It does not start
 a worker; dispatch resumes on the next external scheduler activation or an
 explicit `inbox run`. The operator-owned `.paused` state is independent of the
 Annals-owned `.maintenance` deployment boundary, and `resume` never removes
-maintenance.
+maintenance. Maintenance blocks registration, direct enqueue, priority
+changes, repair, and dispatch.
 
 `inbox interrupt` durably requests that the named processing job stop and
 requires an explicit `failed` or `skipped` disposition. `--reason` records
@@ -236,9 +267,10 @@ as too late when the job already has a durable terminal delivery outcome or an
 applied or recorded reconciliation. A pending reconciliation remains
 interruptible until inbox automatic application begins.
 
-Only visible top-level regular files not ending in `.part` are candidates.
-Eligible files are registered in persisted first-seen order and dispatched by
-their immutable sequence. Invalid UTF-8, empty input, unusable
+Only visible top-level regular files not ending in `.part` are candidates for
+automatic registration. Eligible files are registered in persisted first-seen
+order into the normal lane. Dispatch prefers the priority lane and follows
+immutable sequence within each lane. Invalid UTF-8, empty input, unusable
 filename-derived labels, label conflicts, and other known item-local source
 errors are archived as failed on the first attempt, and draining continues.
 Unexpected model, runner, and runtime processing failures are also archived as
@@ -254,10 +286,13 @@ job. A durable interrupt request preserves its selected failed or skipped
 disposition through recovery.
 
 Human `inbox status` reports incoming files split into ready and settling,
-queued and processing envelopes, the active job's identity, terminal archives
-including skipped jobs, whether a worker is active, and the independent paused
-and maintenance states. JSON exposes `attempts`, `started_at`, and
-`interrupt_requested` under `active_job` and also reports ignored entries.
+the total queued count and its priority subset, processing envelopes, the next
+and active jobs' identities and priorities, terminal archives including
+skipped jobs, whether a worker is active, and the independent paused and
+maintenance states. JSON exposes the subset as `priority_queued` and each next
+or active job's `priority`; `attempts`, `started_at`, and
+`interrupt_requested` remain specific to `active_job`. It also reports ignored
+entries.
 Human `inbox run` reports registered, attempted, applied, recorded, duplicates,
 failed, skipped, remaining, settling, whether the runnable queue was drained,
 and whether pause or maintenance stopped dispatch. `queue_drained` is false
@@ -269,9 +304,9 @@ and recovery mechanism; Annals has no resident daemon or internal scheduler.
 See the [system installation guide](system-installation.md) for the complete
 spool, recovery, control, and scheduler contract.
 
-Because registration has not started a source delivery, queued jobs appear in
-`inbox status` but not in `lately`. They enter source-delivery history when
-dispatched.
+Because registration and direct enqueue do not start a source delivery, queued
+jobs appear in `inbox status` but not in `lately`. They enter source-delivery
+history when dispatched.
 
 ## Recent source activity
 

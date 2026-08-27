@@ -345,6 +345,21 @@ fn status_count(value: &Value, state: &str) -> Option<u64> {
     }
 }
 
+fn registered_job_id(summary: &Value, source_name: &str) -> TestResult<String> {
+    summary["jobs"]
+        .as_array()
+        .and_then(|jobs| jobs.iter().find(|job| job["source_name"] == source_name))
+        .and_then(|job| job["id"].as_str())
+        .map(str::to_owned)
+        .ok_or_else(|| format!("registered job for {source_name} was absent").into())
+}
+
+fn assert_work_summary(installation: &Installation, work: &str, expected: &str) -> TestResult {
+    let shown = installation.json_ok(["change", "show", "--work", work])?;
+    assert_eq!(shown["reconciliation"]["summary"], expected);
+    Ok(())
+}
+
 #[test]
 fn configuration_selects_paths_and_library_overrides_follow_precedence() -> TestResult {
     let installation = Installation::new(0)?;
@@ -637,7 +652,8 @@ fn register_pause_and_resume_control_the_durable_queue() -> TestResult {
     for envelope in fs::read_dir(installation.inbox.join("queued"))? {
         let envelope = envelope?;
         let receipt: Value = serde_json::from_slice(&fs::read(envelope.path().join("job.json"))?)?;
-        assert_eq!(receipt["version"], 4);
+        assert_eq!(receipt["version"], 5);
+        assert_eq!(receipt["priority"], "normal");
         assert_eq!(receipt["state"], "queued");
         assert_eq!(receipt["attempts"], 0);
         assert!(receipt["sequence"].is_number());
@@ -674,6 +690,204 @@ fn register_pause_and_resume_control_the_durable_queue() -> TestResult {
     assert_eq!(fs::read_to_string(&installation.counter)?, "3\n");
     let already_resumed = installation.json_ok(["inbox", "resume"])?;
     assert_eq!(already_resumed["changed"], false);
+    Ok(())
+}
+
+#[test]
+fn priority_enqueue_runs_before_the_existing_queue_in_argument_order() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "01-normal.md",
+        b"Shared inbox claim.\nFirst normal source.\n",
+        0o600,
+    )?;
+    installation.incoming(
+        "02-normal.md",
+        b"Shared inbox claim.\nSecond normal source.\n",
+        0o600,
+    )?;
+    let registered = installation.json_ok(["inbox", "register"])?;
+    assert_eq!(registered["registered"], 2);
+
+    let priority_first = installation.directory.path().join("z-priority.md");
+    let priority_second = installation.directory.path().join("a-priority.md");
+    fs::write(
+        &priority_first,
+        b"Shared inbox claim.\nFirst priority source.\n",
+    )?;
+    fs::write(
+        &priority_second,
+        b"Shared inbox claim.\nSecond priority source.\n",
+    )?;
+    let expected_first = material(&priority_first)?;
+    let expected_second = material(&priority_second)?;
+
+    let output = installation
+        .command()
+        .args(["inbox", "enqueue", "--priority"])
+        .arg(&priority_first)
+        .arg(&priority_second)
+        .output()?;
+    let enqueued = successful_json(&output)?;
+    assert_eq!(enqueued["registered"], 2);
+    assert_eq!(enqueued["queued"], 4);
+    assert_eq!(enqueued["priority_queued"], 2);
+    assert_eq!(enqueued["jobs"][0]["source_name"], "z-priority.md");
+    assert_eq!(enqueued["jobs"][0]["priority"], "priority");
+    assert_eq!(enqueued["jobs"][1]["source_name"], "a-priority.md");
+    assert_eq!(enqueued["jobs"][1]["priority"], "priority");
+    assert_eq!(enqueued["next_job"]["source_name"], "z-priority.md");
+    assert_eq!(enqueued["next_job"]["priority"], "priority");
+    assert_unchanged(&expected_first, &material(&priority_first)?);
+    assert_unchanged(&expected_second, &material(&priority_second)?);
+
+    let mut priorities = BTreeMap::new();
+    for envelope in fs::read_dir(installation.inbox.join("queued"))? {
+        let envelope = envelope?;
+        let receipt: Value = serde_json::from_slice(&fs::read(envelope.path().join("job.json"))?)?;
+        assert_eq!(receipt["version"], 5);
+        priorities.insert(
+            receipt["original_name"]
+                .as_str()
+                .ok_or("queued job receipt had no source name")?
+                .to_owned(),
+            receipt["priority"]
+                .as_str()
+                .ok_or("queued job receipt had no priority")?
+                .to_owned(),
+        );
+    }
+    assert_eq!(priorities["01-normal.md"], "normal");
+    assert_eq!(priorities["02-normal.md"], "normal");
+    assert_eq!(priorities["z-priority.md"], "priority");
+    assert_eq!(priorities["a-priority.md"], "priority");
+
+    let run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(run["attempted"], 4);
+    assert_work_summary(&installation, "z-priority", "Integrate inbox source 1")?;
+    assert_work_summary(&installation, "a-priority", "Integrate inbox source 2")?;
+    assert_work_summary(&installation, "01-normal", "Integrate inbox source 3")?;
+    assert_work_summary(&installation, "02-normal", "Integrate inbox source 4")?;
+    Ok(())
+}
+
+#[test]
+fn queued_jobs_can_be_prioritized_and_deprioritized_idempotently() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    for (name, bytes) in [
+        (
+            "01-oldest.md",
+            b"Shared inbox claim.\nOldest normal source.\n".as_slice(),
+        ),
+        (
+            "02-priority.md",
+            b"Shared inbox claim.\nFirst selected priority source.\n".as_slice(),
+        ),
+        (
+            "03-priority.md",
+            b"Shared inbox claim.\nSecond selected priority source.\n".as_slice(),
+        ),
+        (
+            "04-normal.md",
+            b"Shared inbox claim.\nLast normal source.\n".as_slice(),
+        ),
+    ] {
+        installation.incoming(name, bytes, 0o600)?;
+    }
+    let registered = installation.json_ok(["inbox", "register"])?;
+    let second = registered_job_id(&registered, "02-priority.md")?;
+    let third = registered_job_id(&registered, "03-priority.md")?;
+    let fourth = registered_job_id(&registered, "04-normal.md")?;
+
+    let first_priority = installation
+        .command()
+        .args(["inbox", "prioritize"])
+        .arg(&third)
+        .arg(&second)
+        .output()?;
+    let first_priority = successful_json(&first_priority)?;
+    assert_eq!(first_priority["requested"], 2);
+    assert_eq!(first_priority["changed"], 2);
+    assert_eq!(first_priority["priority_queued"], 2);
+    assert_eq!(first_priority["next_job"]["source_name"], "02-priority.md");
+
+    let repeated_priority = installation
+        .command()
+        .args(["inbox", "prioritize"])
+        .arg(&third)
+        .arg(&second)
+        .output()?;
+    assert_eq!(successful_json(&repeated_priority)?["changed"], 0);
+
+    let fourth_priority = installation
+        .command()
+        .args(["inbox", "prioritize"])
+        .arg(&fourth)
+        .output()?;
+    assert_eq!(successful_json(&fourth_priority)?["changed"], 1);
+    let fourth_normal = installation
+        .command()
+        .args(["inbox", "deprioritize"])
+        .arg(&fourth)
+        .output()?;
+    assert_eq!(successful_json(&fourth_normal)?["changed"], 1);
+    let repeated_normal = installation
+        .command()
+        .args(["inbox", "deprioritize"])
+        .arg(&fourth)
+        .output()?;
+    assert_eq!(successful_json(&repeated_normal)?["changed"], 0);
+
+    let status = installation.json_ok(["inbox", "status"])?;
+    assert_eq!(status["queued"], 4);
+    assert_eq!(status["priority_queued"], 2);
+    assert_eq!(status["next_job"]["source_name"], "02-priority.md");
+    assert_eq!(status["next_job"]["priority"], "priority");
+
+    let run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(run["attempted"], 4);
+    assert_work_summary(&installation, "02-priority", "Integrate inbox source 1")?;
+    assert_work_summary(&installation, "03-priority", "Integrate inbox source 2")?;
+    assert_work_summary(&installation, "01-oldest", "Integrate inbox source 3")?;
+    assert_work_summary(&installation, "04-normal", "Integrate inbox source 4")?;
+    Ok(())
+}
+
+#[test]
+fn version_four_queued_jobs_upgrade_into_the_normal_lane() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "legacy-normal.md",
+        b"Shared inbox claim.\nQueued before priority lanes existed.\n",
+        0o600,
+    )?;
+    installation.json_ok(["inbox", "register"])?;
+
+    let receipt_path = installation
+        .inbox
+        .join("queued/j00000000000000000001/job.json");
+    let mut receipt: Value = serde_json::from_slice(&fs::read(&receipt_path)?)?;
+    receipt["version"] = Value::from(4);
+    receipt
+        .as_object_mut()
+        .ok_or("job receipt was not an object")?
+        .remove("priority");
+    fs::write(&receipt_path, serde_json::to_vec_pretty(&receipt)?)?;
+
+    installation.json_ok(["inbox", "pause"])?;
+    let run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(run["attempted"], 0);
+    assert_eq!(run["stopped_for_pause"], true);
+
+    let upgraded: Value = serde_json::from_slice(&fs::read(receipt_path)?)?;
+    assert_eq!(upgraded["version"], 5);
+    assert_eq!(upgraded["priority"], "normal");
+    let status = installation.json_ok(["inbox", "status"])?;
+    assert_eq!(status["priority_queued"], 0);
+    assert_eq!(status["next_job"]["priority"], "normal");
     Ok(())
 }
 
@@ -1258,10 +1472,11 @@ fn legacy_unstarted_processing_receipt_migrates_to_queued_while_paused() -> Test
     let mut receipt: Value = serde_json::from_slice(&fs::read(queued.join("job.json"))?)?;
     receipt["version"] = Value::from(2);
     receipt["state"] = Value::from("processing");
-    receipt
-        .as_object_mut()
-        .ok_or("receipt is not an object")?
-        .remove("sequence");
+    {
+        let object = receipt.as_object_mut().ok_or("receipt is not an object")?;
+        object.remove("sequence");
+        object.remove("priority");
+    }
     fs::write(
         queued.join("job.json"),
         serde_json::to_vec_pretty(&receipt)?,
@@ -1277,7 +1492,8 @@ fn legacy_unstarted_processing_receipt_migrates_to_queued_while_paused() -> Test
     let migrated: Value = serde_json::from_slice(&fs::read(
         installation.inbox.join("queued").join(id).join("job.json"),
     )?)?;
-    assert_eq!(migrated["version"], 4);
+    assert_eq!(migrated["version"], 5);
+    assert_eq!(migrated["priority"], "normal");
     assert_eq!(migrated["state"], "queued");
     assert_eq!(migrated["sequence"], 1);
     let lately = installation.json_ok(["lately", "--channel", "inbox"])?;
@@ -1308,10 +1524,11 @@ fn legacy_processing_receipt_with_a_delivery_record_stays_processing() -> TestRe
         .to_owned();
     receipt["version"] = Value::from(2);
     receipt["state"] = Value::from("processing");
-    receipt
-        .as_object_mut()
-        .ok_or("receipt is not an object")?
-        .remove("sequence");
+    {
+        let object = receipt.as_object_mut().ok_or("receipt is not an object")?;
+        object.remove("sequence");
+        object.remove("priority");
+    }
     fs::write(
         queued.join("job.json"),
         serde_json::to_vec_pretty(&receipt)?,
@@ -1339,7 +1556,8 @@ fn legacy_processing_receipt_with_a_delivery_record_stays_processing() -> TestRe
             .join(id)
             .join("job.json"),
     )?)?;
-    assert_eq!(migrated["version"], 4);
+    assert_eq!(migrated["version"], 5);
+    assert_eq!(migrated["priority"], "normal");
     assert_eq!(migrated["state"], "processing");
     assert_eq!(migrated["attempts"], 0);
     let lately = installation.json_ok(["lately", "--channel", "inbox", "--by", "first-seen"])?;
@@ -1349,6 +1567,7 @@ fn legacy_processing_receipt_with_a_delivery_record_stays_processing() -> TestRe
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn maintenance_smoke_does_not_rewrite_predecessor_spool_state() -> TestResult {
     let installation = Installation::new(3_600)?;
     installation.init()?;
@@ -1416,7 +1635,8 @@ fn maintenance_smoke_does_not_rewrite_predecessor_spool_state() -> TestResult {
             .inbox
             .join("failed/j00000000000000000007/job.json"),
     )?)?;
-    assert_eq!(upgraded_receipt["version"], 4);
+    assert_eq!(upgraded_receipt["version"], 5);
+    assert_eq!(upgraded_receipt["priority"], "normal");
     assert_eq!(upgraded_receipt["first_seen_at"], "2026-08-20T19:00:00Z");
     assert_eq!(upgraded_receipt["claimed_at"], "2026-08-20T19:00:00Z");
     assert_eq!(
@@ -1433,7 +1653,8 @@ fn maintenance_smoke_does_not_rewrite_predecessor_spool_state() -> TestResult {
             .inbox
             .join("done/j00000000000000000008/job.json"),
     )?)?;
-    assert_eq!(repaired_receipt["version"], 4);
+    assert_eq!(repaired_receipt["version"], 5);
+    assert_eq!(repaired_receipt["priority"], "normal");
 
     let settled = installation.json_ok(["inbox", "run", "--settle-seconds", "0"])?;
     assert_eq!(settled["attempted"], 1);
@@ -1849,7 +2070,8 @@ fn legacy_done_receipt_reuses_its_applied_reconciliation() -> TestResult {
     let upgraded: Value = serde_json::from_slice(&fs::read(
         installation.inbox.join("done").join(id).join("job.json"),
     )?)?;
-    assert_eq!(upgraded["version"], 4);
+    assert_eq!(upgraded["version"], 5);
+    assert_eq!(upgraded["priority"], "normal");
     assert_eq!(upgraded["state"], "done");
     assert_eq!(upgraded["first_seen_at"], "2026-08-20T20:00:00Z");
     assert_eq!(upgraded["reconciliation_id"], reconciliation_id);

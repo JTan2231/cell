@@ -56,21 +56,28 @@ metadata and lifecycle status. Several deliveries can select the same work.
 
 The filesystem inbox separates admission from dispatch. Registration moves a
 settled source into `queued/JOB_ID/material`, assigns an immutable monotonic
-sequence, and writes an unstarted job receipt. Dispatch moves only the FIFO
-head to `processing`, creates or recovers its database receipt, and starts the
-delivery's only processing attempt. Every job-processing error fails the
-delivery and archives the envelope. Known item-local source errors allow
-draining to continue; an unexpected model, runner, or runtime processing
+sequence, and writes an unstarted normal-lane job receipt. Direct enqueue
+copies explicitly selected files into complete unstarted envelopes, leaves the
+originals unchanged, and can select the priority lane without passing through
+settling admission. Dispatch finishes any active job, then moves the
+lowest-sequence priority envelope, or the lowest-sequence normal envelope when
+the priority lane is empty, to `processing`. It creates or recovers the
+database receipt and starts the delivery's only processing attempt. A
+continuing priority stream may starve normal jobs. Every job-processing error
+fails the delivery and archives the envelope. Known item-local source errors
+allow draining to continue; an unexpected model, runner, or runtime processing
 failure ends the activation nonzero, leaving later jobs queued for the next
 activation.
 
 The activation-long run lock excludes workers. A shorter control lock orders
-dispatch, pause, registration, interruption, and terminal job disposition.
-Operator pause allows the current delivery to finish and blocks the next
-claim. A durable interrupt targets one named processing job for failed or
+dispatch, pause, registration, direct enqueue, queued-job priority changes,
+interruption, and terminal job disposition. Priority changes apply only to
+queued envelopes, preserve their immutable sequences, and are visible to the
+next claim. Operator pause allows the current delivery to finish and blocks the
+next claim. A durable interrupt targets one named processing job for failed or
 skipped archival without itself pausing later dispatch. Deployment maintenance
-blocks registration, repair, and dispatch. Pause and maintenance are
-independent; `resume` never removes maintenance.
+blocks registration, enqueue, repair, priority changes, and dispatch. Pause and
+maintenance are independent; `resume` never removes maintenance.
 
 Recovery never starts a second liaison for a job whose receipt records an
 attempt. It may finish durable success already established by that attempt,
@@ -203,13 +210,14 @@ old library, telemetry ledger, sidecars, and whole spool into one rollback
 generation and switches in the staged state.
 
 After candidate and installed validation, a dedicated import operation reads
-the archived queued envelopes in their original FIFO order, copies their
-unchanged source bytes into new unstarted envelopes, and verifies the
-destination count. Attempted processing envelopes are terminalized rather than
-imported for another liaison run. The importer requires an otherwise fresh
-destination with both pause and maintenance active. The deployer clears the
-operator pause while maintenance still prevents dispatch, commits its cutover
-receipt, then removes maintenance and wakes launchd.
+the archived queued envelopes in lane and immutable-sequence order, preserves
+their priority choices, copies their unchanged source bytes into new unstarted
+envelopes, and verifies the destination count. Attempted processing envelopes
+are terminalized rather than imported for another liaison run. The importer
+requires an otherwise fresh destination with both pause and maintenance
+active. The deployer clears the operator pause while maintenance still prevents
+dispatch, commits its cutover receipt, then removes maintenance and wakes
+launchd.
 
 Any failure before that commit restores the previous release selector,
 configuration, library and sidecars, spool, pause state, and service. On

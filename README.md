@@ -242,8 +242,9 @@ queued or archived sources are retained.
 Schema version 3 is an intentional fresh-state boundary. Its one-time installed
 cutover adds `--fresh-state` to the command above. That mode archives the old
 library, telemetry ledger, sidecars, and spool as one rollback generation,
-validates the empty replacement, imports the uncompleted backlog in stable
-FIFO order, explicitly resumes it, and only then wakes launchd. See the
+validates the empty replacement, imports the uncompleted backlog while
+preserving priority choices and sequence order within each lane, explicitly
+resumes it, and only then wakes launchd. See the
 [system installation guide](docs/system-installation.md) for the guarded
 sequence and recovery receipt.
 
@@ -256,23 +257,32 @@ annals validate
 annals inbox status
 annals inbox pause
 annals inbox register
+annals inbox enqueue --priority ./report.md
+annals inbox prioritize JOB_ID
+annals inbox deprioritize JOB_ID
 annals inbox resume
 ```
 
 Drop complete UTF-8 files into
 `$HOME/Library/Application Support/Annals/spool/incoming`. The one-shot worker
 runs at login and then receives another wake-up every five minutes while idle.
-Registration moves each settled arrival into a durable `queued/` job with an
-immutable FIFO sequence; `annals inbox register` exposes that admission step
-without starting a delivery. An activation performs the same registration and
-drains the queue until it is empty; it has no item-count or lifetime cap. New
-arrivals are rescanned between jobs. New works enter the liaison flow, while
-fresh exact-byte duplicates complete at retention and move to `duplicates/`;
-each individual liaison is limited to 60 minutes.
+Registration moves each settled arrival into a durable normal-lane `queued/`
+job with an immutable sequence; `annals inbox register` exposes that admission
+step without starting a delivery. `annals inbox enqueue` copies explicitly
+selected files directly into queued jobs and `--priority` selects the priority
+lane. Named queued jobs can move between lanes with `prioritize` and
+`deprioritize` without changing their sequences. An activation performs the
+same registration, dispatches priority jobs before normal jobs in sequence
+order within each lane, and drains the queue until it is empty; it has no
+item-count or lifetime cap. New arrivals are rescanned between jobs. New works
+enter the liaison flow, while fresh exact-byte duplicates complete at
+retention and move to `duplicates/`; each individual liaison is limited to 60
+minutes.
 
 `annals inbox pause` lets the current delivery finish and prevents the next
 queued job from starting. Timer activations continue registering arrivals
-while paused. `annals inbox resume` reopens dispatch but does not itself start a
+while paused, and direct enqueue and queued-job priority changes remain
+available. `annals inbox resume` reopens dispatch but does not itself start a
 worker; use `annals inbox run` for immediate processing or wait for the next
 LaunchAgent wake-up. The operator pause is independent of deployer maintenance
 and survives updates. The LaunchAgent runs only while that macOS user is logged
