@@ -19,6 +19,8 @@ use thiserror::Error;
 
 use crate::service::{ServiceError, ServicePaths};
 
+const OPERATOR_MANUAL: &str = include_str!("../../../docs/operator-manual.md");
+
 #[derive(Debug, Parser)]
 #[command(name = "nucleus", version, about = "Run and observe local agent jobs")]
 struct Cli {
@@ -36,6 +38,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Print the built-in operator manual as Markdown.
+    Manual,
     /// Inspect daemon availability.
     Health,
     /// Read the authenticated Codex account owned by Nucleus.
@@ -305,6 +309,7 @@ async fn main() -> ExitCode {
 async fn run(cli: Cli) -> Result<(), CliError> {
     let compact = cli.compact;
     match cli.command {
+        Command::Manual => print_manual(),
         Command::Service(command) => {
             if cli.socket.is_some() {
                 return Err(CliError::ServiceSocketOverride);
@@ -356,9 +361,17 @@ async fn run_api(command: Command, client: NucleusClient, compact: bool) -> Resu
         Command::Schemas(command) => run_schemas(command, &client, compact).await,
         Command::Toolsets(command) => run_toolsets(command, &client, compact).await,
         Command::ToolCalls(command) => run_tool_calls(command, &client, compact).await,
+        Command::Manual => unreachable!("manual is handled before client creation"),
         Command::Auth(_) => unreachable!("auth commands are handled before client creation"),
         Command::Service(_) => unreachable!("service commands are handled before client creation"),
     }
+}
+
+fn print_manual() -> Result<(), CliError> {
+    io::stdout()
+        .lock()
+        .write_all(OPERATOR_MANUAL.as_bytes())
+        .map_err(CliError::Output)
 }
 
 async fn run_auth(command: AuthCommand) -> Result<(), CliError> {

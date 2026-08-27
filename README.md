@@ -11,6 +11,11 @@ commands, arbitrary argv, retries, or workflow graphs. A requester that needs
 caller-process environment parity can register a short-lived, memory-only
 launch context; those values never enter the job or log database.
 
+For operating the installed system or changing a boundary shared with Annals,
+Todo, or Codex, start with [the operator manual](docs/operator-manual.md). An
+installed release also makes its version-matched manual available with
+`nucleus manual`.
+
 ## Build and run
 
 ```sh
