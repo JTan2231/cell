@@ -7,8 +7,9 @@ this implementation.
 
 `./ci.sh` is the complete checked-in gate and has a hard 60-second wall-clock
 limit. It runs formatting, Clippy, tests, documentation, and a release build
-for every workspace package under Rust 1.97.1. Exceeding 60 seconds is a CI
-failure.
+for the `annals` and `annals-usage` packages under Rust 1.97.1. The limit applies
+to this Annals project gate independently of the other Cell project gates;
+exceeding 60 seconds is an Annals CI failure.
 
 Focused graph tests also inspect SQLite query plans for parent, child, and
 evidence pages. They require the connection-local replay projection's indexes

@@ -23,24 +23,26 @@ status vocabulary beyond `open` and `done`.
 - a healthy, authenticated per-user Nucleus service for `todo new`;
 - no separate Todo daemon or database server.
 
-Todo's Nucleus client and contract dependencies are pinned to the matching
-versioned Nucleus release, so a sibling Nucleus source checkout is not required.
+Todo is a member of the Cargo workspace rooted at `/Users/joey/rust/cell`.
+The root workspace supplies its Nucleus client, contract, and third-party
+dependencies while Todo continues to own its domain behavior and state.
 
 ## Build and use
 
 ```sh
+cd /Users/joey/rust/cell/todo
 ./ci.sh
-cargo build --release
+cargo build --manifest-path ../Cargo.toml --package todo --release
 
-target/release/todo --database ./todo.db init
-target/release/todo --database ./todo.db new \
+/Users/joey/rust/cell/target/release/todo --database ./todo.db init
+/Users/joey/rust/cell/target/release/todo --database ./todo.db new \
   "Need to report token consumption statistics" \
   --source /absolute/path/to/the-originating-conversation.jsonl
-target/release/todo --database ./todo.db list
-target/release/todo --database ./todo.db show t1
-target/release/todo --database ./todo.db note add t1 \
+/Users/joey/rust/cell/target/release/todo --database ./todo.db list
+/Users/joey/rust/cell/target/release/todo --database ./todo.db show t1
+/Users/joey/rust/cell/target/release/todo --database ./todo.db note add t1 \
   "Confirmed that the account allowance has no exposed token denominator."
-target/release/todo --database ./todo.db done t1
+/Users/joey/rust/cell/target/release/todo --database ./todo.db done t1
 ```
 
 The source is usually a Codex conversation transcript, and the command help
@@ -57,7 +59,7 @@ data, and installation contracts.
 
 ## Release
 
-Todo releases use annotated tags named `vMAJOR.MINOR.PATCH`. From a clean
+Todo releases use annotated tags named `todo-vMAJOR.MINOR.PATCH`. From a clean
 `main` branch that exactly matches `origin/main`, run one of:
 
 ```sh
@@ -66,9 +68,10 @@ Todo releases use annotated tags named `vMAJOR.MINOR.PATCH`. From a clean
 ./release.sh --major
 ```
 
-The script bumps `crates/todo/Cargo.toml`, refreshes `Cargo.lock`, runs the
-complete CI suite, verifies the release binary version, commits and tags the
-release, and atomically pushes `main` with its tag.
+The script bumps `crates/todo/Cargo.toml`, refreshes the root workspace
+`Cargo.lock`, runs Todo's complete CI suite, verifies the release binary
+version, commits and tags the release, and atomically pushes `main` with its
+tag.
 
 ## User-owned macOS deployment
 
@@ -76,7 +79,7 @@ After a release build, deploy without administrator privileges:
 
 ```sh
 ./packaging/macos/deploy-user.sh \
-  --binary "$PWD/target/release/todo"
+  --binary "/Users/joey/rust/cell/target/release/todo"
 ```
 
 This installs `~/.local/bin/todo`, initializes

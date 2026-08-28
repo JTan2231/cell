@@ -21,7 +21,7 @@ One v1 job request contains only runtime information:
     "harness": "codex",
     "model": "gpt-5.6-terra",
     "reasoningEffort": "medium",
-    "cwd": "/Users/joey/rust/todo",
+    "cwd": "/Users/joey/rust/cell/todo",
     "workspaceAccess": "read-only",
     "builtinTools": {
       "localExecution": true,

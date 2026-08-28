@@ -20,16 +20,17 @@ not content supplied to the liaison or part of the runtime contract.
 
 ## Requirements
 
-- macOS or Linux and Rust 1.97.1 to build the repository;
+- macOS or Linux and Rust 1.97.1 to build the Cell workspace;
 - an installed, running, and authenticated Nucleus service for `annals
   integrate` or `annals inbox run`.
 
-The repository is a virtual Cargo workspace. Its Nucleus Rust dependencies are
-pinned to the `v0.2.0` tag in `JTan2231/nucleus-rs`; building Annals therefore
-requires Git credentials with read access to that repository.
-The `annals` package lives under `crates/annals`, and the separate
-`annals-usage` package provides consumption reports. A workspace release build
-produces both `target/release/annals` and `target/release/annals-usage`.
+Annals is an independent product within the Cell monorepo and root Cargo
+workspace. From the Cell root its packages live under `annals/crates/annals`
+and `annals/crates/annals-usage`; this README and the product scripts are under
+`annals/`. Nucleus is another independent product in the same workspace, and
+the Annals packages use its local workspace crates directly. The shared lockfile
+is `../Cargo.lock`, and Annals release builds produce `../target/release/annals`
+and `../target/release/annals-usage` when commands are run from this directory.
 
 The liaison defaults to high quality: `gpt-5.6-sol` with max reasoning.
 `--quality low` selects `gpt-5.6-luna` with medium reasoning, and `--quality
@@ -46,7 +47,7 @@ model's final response, is the deliverable.
 
 ```sh
 ./ci.sh
-cargo build --release
+cargo build --release --package annals --package annals-usage
 ```
 
 Create a library, examine a work, review the reconciliation, and apply its
@@ -184,9 +185,9 @@ cannot be divided into an exact per-delivery subscription share. See
 
 ## Release
 
-The two workspace packages are versioned independently in
+The two Annals packages are versioned independently in
 `crates/annals/Cargo.toml` and `crates/annals-usage/Cargo.toml`. Annals releases
-use annotated tags named `vMAJOR.MINOR.PATCH`; `annals-usage` releases use
+use annotated tags named `annals-vMAJOR.MINOR.PATCH`; `annals-usage` releases use
 `annals-usage-vMAJOR.MINOR.PATCH`. From a clean `main` branch that exactly
 matches `origin/main`, release Annals with one of:
 
@@ -206,11 +207,12 @@ separately with:
 ```
 
 An empty `origin` is also accepted for the first publication. The script bumps
-only the selected package version, refreshes the shared `Cargo.lock`, runs the
-complete workspace `ci.sh` suite on the bumped tree, creates a release commit,
-tags that commit, and atomically pushes `main` and only that tag. Both package
-versions are independent of library schema versions, corpus revisions, and the
-exact content-addressed release IDs used by the macOS deployer.
+only the selected package version, refreshes the Cell root `Cargo.lock`, runs
+the complete 60-second Annals `ci.sh` suite on the bumped tree, creates a
+release commit, tags that commit, and atomically pushes `main` and only that
+tag. Both package versions are independent of library schema versions, corpus
+revisions, and the exact content-addressed release IDs used by the macOS
+deployer.
 
 ## Scheduled macOS installation
 
@@ -221,8 +223,8 @@ is healthy. Then deploy Annals with the Nucleus executable and socket:
 ```sh
 ./ci.sh
 ./packaging/launchd/deploy-user.sh \
-  --binary "$PWD/target/release/annals" \
-  --usage-binary "$PWD/target/release/annals-usage" \
+  --binary "$PWD/../target/release/annals" \
+  --usage-binary "$PWD/../target/release/annals-usage" \
   --nucleus "$HOME/.local/bin/nucleus" \
   --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock"
 ```

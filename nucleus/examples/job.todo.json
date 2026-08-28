@@ -14,7 +14,7 @@
     "harness": "codex",
     "model": "gpt-5.6-terra",
     "reasoningEffort": "medium",
-    "cwd": "/Users/joey/rust/todo",
+    "cwd": "/Users/joey/rust/cell/todo",
     "workspaceAccess": "read-only",
     "builtinTools": {
       "localExecution": true,

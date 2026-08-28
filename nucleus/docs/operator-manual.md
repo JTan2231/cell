@@ -66,11 +66,11 @@ unless the daemon is compatible, authenticated, and accepting jobs. Its output
 identifies the daemon and harness versions, executable, protocol versions,
 adapter capabilities, and authentication readiness.
 
-A requester's Rust dependency tag, the installed Nucleus patch release, the
-public protocol version, the store schema, and the exact supported Codex
-version are separate compatibility axes. A requester pinned to an older
-Nucleus patch can be compatible with a newer daemon when they share the same
-public protocol. Do not require lockstep patch releases without a contract
+A requester's compiled Nucleus client source, the installed Nucleus patch
+release, the public protocol version, the store schema, and the exact supported
+Codex version are separate compatibility axes. A requester built from an older
+compatible client revision can use a newer daemon when they share the same
+public protocol. Do not require lockstep product releases without a contract
 reason.
 
 ## Topology and authority
@@ -96,6 +96,10 @@ Nucleus is a per-user execution coordinator, not a project registry or workflow
 engine. A requester submits one closed, versioned invocation. Nucleus validates
 it, starts one harness attempt, retains the protocol, and coordinates dynamic
 tool calls. The requester continues to own the work that motivated the job.
+
+Nucleus, Annals, Annals Usage, and Todo share the Cell source repository, Cargo
+workspace, and lockfile. That source layout does not merge their release,
+installation, state, backup, recovery, or domain-success boundaries.
 
 The following distinctions are operationally important:
 
@@ -154,7 +158,7 @@ procedures into this manual.
 | Public invocation protocol | `nucleus-core`, HTTP contract, runtime contract | `supportedProtocolVersions` in health and the request types | Additive support can be deployed daemon-first. An incompatible change requires a new protocol version and coordinated requester cutover. |
 | Nucleus store schema | `nucleus-store` schema and migration code | SQLite `PRAGMA user_version` and the source constant | A newer schema can make binary-only rollback unsafe. It needs an explicit migration and database rollback plan. |
 | Codex harness | `nucleus-codex` adapter and semantic checks | Harness identity in health | The adapter supports an exact inspected Codex release. Update and prove the adapter before replacing the executable. |
-| Requester client pin | Requester's manifest and adapter | Its `Cargo.toml` or HTTP client implementation | Repin only when it needs new types or behavior, not merely because the daemon patch changed. |
+| Requester client build | Shared Cargo workspace and requester adapter | Workspace manifests, lockfile, and requester source revision | Rebuild when it needs changed types or behavior. Runtime compatibility still follows the public protocol, not source lockstep. |
 | Log schema and toolset | Immutable Nucleus registrations plus requester code | Registration identity and digest | Publish a new schema ID or toolset version. Historical jobs keep the old decoder and definition. |
 | Requester domain schema | Requester's database and migrations | Requester-specific validation and doctor commands | The requester owns migration, backup, success, and rollback. Nucleus must not duplicate it. |
 
@@ -347,10 +351,11 @@ not Todo fields, Annals revisions, or another application's workflow states.
 
 ### 2. Select the client and compatibility boundary
 
-Rust requesters should pin compatible `nucleus-core` and `nucleus-client`
-releases. Another language may implement the documented HTTP API over the
-per-user Unix socket. Do not shell out to the human CLI as the application
-protocol when the typed client or HTTP surface is available.
+Rust requesters in Cell should use its workspace `nucleus-core` and
+`nucleus-client` sources without crate version pins. Another language may
+implement the documented HTTP API over the per-user Unix socket. Do not shell
+out to the human CLI as the application protocol when the typed client or HTTP
+surface is available.
 
 At startup or before work, require strict health and verify the protocol and
 capabilities the requester needs. Do not compare only the daemon patch string.
@@ -486,7 +491,7 @@ ordering, rollback boundary, and operator documentation before production use.
 If the requester exposes a distinct user-facing durable outcome, add one short
 capability card to this manual and the global routing instructions. State its
 positive triggers, explicit non-triggers, authority, and Nucleus relationship.
-Keep detailed CLI and domain procedures in its own repository.
+Keep detailed CLI and domain procedures in its own product tree.
 
 ## Route changes by their authority
 
@@ -510,22 +515,28 @@ Keep detailed CLI and domain procedures in its own repository.
 1. Decide whether the patch changes any public semantic, store schema, harness
    support, operator action, or requester obligation. Update this manual and the
    exact contract documents when it does.
-2. Run the repository quality gate:
+2. Run the Nucleus product quality gate from the Cell checkout:
 
    ```sh
-   ./ci.sh
+   cd /Users/joey/rust/cell
+   ./nucleus/ci.sh
    ```
 
-3. If publishing a release, run `release.sh` only from clean `main` that exactly
-   matches `origin/main`. The script changes versions, commits, tags, and pushes;
+   Its 60-second budget covers only the six Nucleus packages and Nucleus's
+   shell and packaging checks. A root aggregate CI run does not replace or
+   shorten that per-product budget.
+
+3. If publishing a release, run `nucleus/release.sh` only from clean `main` that
+   exactly matches `origin/main`. The script changes the Nucleus workspace
+   version, commits, creates a `nucleus-vMAJOR.MINOR.PATCH` tag, and pushes;
    invoking it is a publication action, not a build step.
 4. Quiesce requesters if replacing the daemon could lose active work.
 5. Deploy matching CLI and daemon candidates with the exact Codex executable:
 
    ```sh
-   ./packaging/macos/deploy-user.sh \
-     --binary "$PWD/target/release/nucleus" \
-     --daemon "$PWD/target/release/nucleusd" \
+   /Users/joey/rust/cell/nucleus/packaging/macos/deploy-user.sh \
+     --binary /Users/joey/rust/cell/target/release/nucleus \
+     --daemon /Users/joey/rust/cell/target/release/nucleusd \
      --codex /absolute/path/to/codex
    ```
 
@@ -550,8 +561,8 @@ rejects any version it has not proved.
    capabilities.
 6. Run a fresh Nucleus job, a deliberate Todo creation when affected, and an
    Annals reconciliation canary when affected.
-7. Repin requesters only if the stable Nucleus types or semantics they consume
-   changed.
+7. Rebuild affected requesters only if the stable Nucleus types or semantics
+   they consume changed.
 
 ### Public protocol or client change
 
@@ -563,8 +574,8 @@ rejects any version it has not proved.
    the new form.
 4. For an incompatible change, retain both versions during migration when
    possible. Otherwise quiesce all requesters for a coordinated cutover.
-5. Update requester pins and adapters deliberately. Prove duplicate admission,
-   mailbox, domain-success, and failure semantics again.
+5. Update requester adapters deliberately. Prove duplicate admission, mailbox,
+   domain-success, and failure semantics again.
 
 ### Nucleus database schema change
 
@@ -678,8 +689,8 @@ Update this manual in the same change whenever public compatibility, persistent
 state, authentication or service ownership, deployment order, requester
 boundaries, operator action, recovery, or canary obligations change. Prefer
 proof commands and versioned authorities over “last verified” dates. Keep
-networked cross-repository canaries in the release procedure rather than making
-Nucleus CI depend on sibling checkouts.
+networked cross-product canaries in the release procedure rather than folding
+them into Nucleus's 60-second product CI.
 
 ## Reference map
 
@@ -689,30 +700,30 @@ directory.
 
 ### Nucleus
 
-- [README](/Users/joey/rust/nucleus/README.md): build, install, readiness,
+- [README](/Users/joey/rust/cell/nucleus/README.md): build, install, readiness,
   storage warning, and smoke entry points.
-- [Runtime contract](/Users/joey/rust/nucleus/docs/runtime-contract.md): exact
+- [Runtime contract](/Users/joey/rust/cell/nucleus/docs/runtime-contract.md): exact
   request, harness, mailbox, raw log, HTTP, authentication, and security
   semantics.
-- [Annals and Todo handoff](/Users/joey/rust/nucleus/docs/annals-todo-handoff.md):
+- [Annals and Todo handoff](/Users/joey/rust/cell/nucleus/docs/annals-todo-handoff.md):
   current requester ownership and shared acceptance checks.
-- [`examples/`](/Users/joey/rust/nucleus/examples): complete request, schema,
+- [`examples/`](/Users/joey/rust/cell/nucleus/examples): complete request, schema,
   and toolset templates.
-- [`packaging/macos/deploy-user.sh`](/Users/joey/rust/nucleus/packaging/macos/deploy-user.sh):
+- [`packaging/macos/deploy-user.sh`](/Users/joey/rust/cell/nucleus/packaging/macos/deploy-user.sh):
   guarded user-service deployment.
-- [`release.sh`](/Users/joey/rust/nucleus/release.sh): publication workflow; it
+- [`release.sh`](/Users/joey/rust/cell/nucleus/release.sh): publication workflow; it
   commits, tags, and pushes.
 
 ### Annals
 
-- [Documentation index](/Users/joey/rust/annals/docs/README.md)
-- [Architecture](/Users/joey/rust/annals/docs/architecture.md)
-- [System installation and recovery](/Users/joey/rust/annals/docs/system-installation.md)
-- [Consumption telemetry](/Users/joey/rust/annals/docs/telemetry.md)
+- [Documentation index](/Users/joey/rust/cell/annals/docs/README.md)
+- [Architecture](/Users/joey/rust/cell/annals/docs/architecture.md)
+- [System installation and recovery](/Users/joey/rust/cell/annals/docs/system-installation.md)
+- [Consumption telemetry](/Users/joey/rust/cell/annals/docs/telemetry.md)
 
 ### Todo
 
-- [Documentation index](/Users/joey/rust/todo/docs/README.md)
-- [Architecture](/Users/joey/rust/todo/docs/architecture.md)
-- [CLI contract](/Users/joey/rust/todo/docs/cli.md)
-- [User-owned installation](/Users/joey/rust/todo/docs/system-installation.md)
+- [Documentation index](/Users/joey/rust/cell/todo/docs/README.md)
+- [Architecture](/Users/joey/rust/cell/todo/docs/architecture.md)
+- [CLI contract](/Users/joey/rust/cell/todo/docs/cli.md)
+- [User-owned installation](/Users/joey/rust/cell/todo/docs/system-installation.md)

@@ -14,7 +14,7 @@
     "harness": "codex",
     "model": "gpt-5.6-sol",
     "reasoningEffort": "max",
-    "cwd": "/Users/joey/rust/annals",
+    "cwd": "/Users/joey/rust/cell/annals",
     "workspaceAccess": "none",
     "builtinTools": {
       "localExecution": false,

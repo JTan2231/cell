@@ -27,8 +27,12 @@ case "$1" in
 esac
 
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
-cd "$SCRIPT_DIR"
-manifest_path=crates/todo/Cargo.toml
+WORKSPACE_DIR=$(CDPATH='' cd "$SCRIPT_DIR/.." && pwd)
+cd "$WORKSPACE_DIR"
+workspace_manifest=Cargo.toml
+lockfile_path=Cargo.lock
+manifest_path=todo/crates/todo/Cargo.toml
+ci_path=todo/ci.sh
 
 for tool in awk git grep; do
     command -v "$tool" >/dev/null 2>&1 || fail "required tool not found: $tool"
@@ -46,8 +50,8 @@ if ! command -v cargo >/dev/null 2>&1; then
 fi
 command -v cargo >/dev/null 2>&1 || fail 'required tool not found: cargo'
 
-[ -f Cargo.toml ] || fail 'workspace Cargo.toml not found'
-[ -f Cargo.lock ] || fail 'Cargo.lock not found'
+[ -f "$workspace_manifest" ] || fail 'root workspace Cargo.toml not found'
+[ -f "$lockfile_path" ] || fail 'root Cargo.lock not found'
 [ -f "$manifest_path" ] || fail "package manifest not found: $manifest_path"
 
 [ -z "$(git status --porcelain --untracked-files=all)" ] \
@@ -60,7 +64,8 @@ git remote get-url origin >/dev/null 2>&1 \
 git var GIT_AUTHOR_IDENT >/dev/null 2>&1 \
     || fail 'Git author identity is not configured'
 
-cargo metadata --locked --offline --no-deps --format-version 1 >/dev/null \
+cargo metadata --manifest-path "$workspace_manifest" \
+    --locked --offline --format-version 1 >/dev/null \
     || fail 'Cargo.toml and Cargo.lock are not synchronized'
 
 current_version=$(awk '
@@ -97,7 +102,7 @@ case "$bump" in
 esac
 
 new_version="$major.$minor.$patch"
-tag="v$new_version"
+tag="todo-v$new_version"
 local_revision=$(git rev-parse HEAD)
 
 if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
@@ -127,9 +132,9 @@ cleanup() {
     set +e
     rm -f "$manifest_tmp"
     if [ "$rollback_version_files" = true ]; then
-        git restore --staged --worktree -- "$manifest_path" Cargo.lock
-        printf 'release.sh: restored %s and Cargo.lock after failure\n' \
-            "$manifest_path" >&2
+        git restore --staged --worktree -- "$manifest_path" "$lockfile_path"
+        printf 'release.sh: restored %s and %s after failure\n' \
+            "$manifest_path" "$lockfile_path" >&2
     fi
     exit "$status"
 }
@@ -154,11 +159,14 @@ awk -v old="$current_version" -v new="$new_version" '
     || fail "unable to update the package version in $manifest_path"
 mv "$manifest_tmp" "$manifest_path"
 
-cargo update --workspace --offline || fail 'unable to refresh Cargo.lock'
-cargo metadata --locked --offline --no-deps --format-version 1 >/dev/null \
+cargo metadata --manifest-path "$workspace_manifest" \
+    --offline --format-version 1 >/dev/null \
+    || fail 'unable to refresh root Cargo.lock'
+cargo metadata --manifest-path "$workspace_manifest" \
+    --locked --offline --format-version 1 >/dev/null \
     || fail 'the bumped manifest and lockfile are not synchronized'
 
-./ci.sh
+"$ci_path"
 
 reported_version=$(target/release/todo --version) \
     || fail 'unable to read the release binary version'
@@ -170,12 +178,12 @@ reported_version=$(target/release/todo --version) \
 [ -z "$(git ls-files --others --exclude-standard)" ] \
     || fail 'untracked files appeared while running release checks'
 changed_files=$(git diff --name-only)
-expected_files=$(printf '%s\n' Cargo.lock "$manifest_path")
+expected_files=$(printf '%s\n' "$lockfile_path" "$manifest_path")
 [ "$changed_files" = "$expected_files" ] \
-    || fail "files other than $manifest_path and Cargo.lock changed during release checks"
+    || fail "files other than $manifest_path and $lockfile_path changed during release checks"
 git diff --check
 
-git add -- "$manifest_path" Cargo.lock
+git add -- "$manifest_path" "$lockfile_path"
 git diff --cached --check
 git commit -m "Release $tag"
 
@@ -185,10 +193,10 @@ trap - 0 1 2 15
 [ -z "$(git status --porcelain --untracked-files=all)" ] \
     || fail 'the worktree changed while creating the release commit'
 
-if ! git tag -a "$tag" -m "Todo $tag"; then
+if ! git tag -a "$tag" -m "Todo v$new_version"; then
     printf '%s\n' \
         "release.sh: tagging failed; the local release commit was preserved" \
-        "release.sh: retry with: git tag -a $tag -m 'Todo $tag'" >&2
+        "release.sh: retry with: git tag -a $tag -m 'Todo v$new_version'" >&2
     exit 1
 fi
 

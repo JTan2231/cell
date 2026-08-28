@@ -6,6 +6,9 @@ MAX_SECONDS=60
 EXPECTED_RUST_VERSION=1.97.1
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
+WORKSPACE_DIR=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
+WORKSPACE_MANIFEST="$WORKSPACE_DIR/Cargo.toml"
+WORKSPACE_LOCK="$WORKSPACE_DIR/Cargo.lock"
 
 # Run the complete check suite under one wall-clock deadline. GNU/BusyBox
 # timeout covers Linux; Perl provides the same process-group timeout on macOS.
@@ -108,8 +111,14 @@ case "$(cargo --version)" in
         ;;
 esac
 
-if [ ! -f Cargo.lock ]; then
-    printf 'ci.sh: Cargo.lock is required for reproducible builds\n' >&2
+if [ ! -f "$WORKSPACE_MANIFEST" ]; then
+    printf 'ci.sh: workspace manifest not found: %s\n' \
+        "$WORKSPACE_MANIFEST" >&2
+    exit 1
+fi
+
+if [ ! -f "$WORKSPACE_LOCK" ]; then
+    printf 'ci.sh: workspace Cargo.lock is required for reproducible builds\n' >&2
     exit 1
 fi
 
@@ -161,10 +170,21 @@ if [ "$(uname -s)" = Darwin ] && command -v plutil >/dev/null 2>&1; then
 fi
 
 printf '%s\n' '==> rustfmt'
-cargo fmt --all -- --check
+cargo fmt \
+    --manifest-path "$WORKSPACE_MANIFEST" \
+    --package annals \
+    --package annals-usage \
+    -- --check
 
 printf '%s\n' '==> clippy'
-cargo clippy --workspace --all-targets --locked --keep-going -- \
+cargo clippy \
+    --manifest-path "$WORKSPACE_MANIFEST" \
+    --package annals \
+    --package annals-usage \
+    --all-targets \
+    --locked \
+    --keep-going \
+    -- \
     -D warnings \
     -F unsafe_code \
     -D clippy::all \
@@ -176,12 +196,27 @@ cargo clippy --workspace --all-targets --locked --keep-going -- \
     -D clippy::expect_used
 
 printf '%s\n' '==> tests'
-cargo test --workspace --locked --no-fail-fast
+cargo test \
+    --manifest-path "$WORKSPACE_MANIFEST" \
+    --package annals \
+    --package annals-usage \
+    --locked \
+    --no-fail-fast
 
 printf '%s\n' '==> rustdoc'
-RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
+RUSTDOCFLAGS='-D warnings' cargo doc \
+    --manifest-path "$WORKSPACE_MANIFEST" \
+    --package annals \
+    --package annals-usage \
+    --no-deps \
+    --locked
 
 printf '%s\n' '==> release build'
-cargo build --workspace --release --locked
+cargo build \
+    --manifest-path "$WORKSPACE_MANIFEST" \
+    --package annals \
+    --package annals-usage \
+    --release \
+    --locked
 
 printf '%s\n' 'ci.sh: green'

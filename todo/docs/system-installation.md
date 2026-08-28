@@ -10,9 +10,10 @@ Install and authenticate Nucleus first, then build and test Todo and pass its
 absolute executable path to the deployer:
 
 ```sh
+cd /Users/joey/rust/cell/todo
 ./ci.sh
 ./packaging/macos/deploy-user.sh \
-  --binary "$PWD/target/release/todo"
+  --binary "/Users/joey/rust/cell/target/release/todo"
 ```
 
 The layout is:

@@ -24,13 +24,13 @@ fi
 
 case "$package" in
     annals)
-        manifest_path=crates/annals/Cargo.toml
+        manifest_path=annals/crates/annals/Cargo.toml
         binary_name=annals
-        tag_prefix=
+        tag_prefix=annals-
         product_name=Annals
         ;;
     annals-usage)
-        manifest_path=crates/annals-usage/Cargo.toml
+        manifest_path=annals/crates/annals-usage/Cargo.toml
         binary_name=annals-usage
         tag_prefix=annals-usage-
         product_name='Annals Usage'
@@ -52,7 +52,8 @@ case "$1" in
 esac
 
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
-cd "$SCRIPT_DIR"
+WORKSPACE_DIR=$(CDPATH='' cd "$SCRIPT_DIR/.." && pwd)
+cd "$WORKSPACE_DIR"
 
 for tool in awk git grep; do
     if ! command -v "$tool" >/dev/null 2>&1; then
@@ -77,8 +78,8 @@ if ! command -v cargo >/dev/null 2>&1; then
     fail 'required tool not found: cargo'
 fi
 
-[ -f Cargo.toml ] || fail 'workspace Cargo.toml not found'
-[ -f Cargo.lock ] || fail 'Cargo.lock not found'
+[ -f Cargo.toml ] || fail 'Cell workspace Cargo.toml not found'
+[ -f Cargo.lock ] || fail 'Cell workspace Cargo.lock not found'
 [ -f "$manifest_path" ] || fail "package manifest not found: $manifest_path"
 
 if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
@@ -94,7 +95,7 @@ git remote get-url origin >/dev/null 2>&1 \
 git var GIT_AUTHOR_IDENT >/dev/null 2>&1 \
     || fail 'Git author identity is not configured'
 
-cargo metadata --locked --offline --no-deps --format-version 1 >/dev/null \
+cargo metadata --locked --offline --format-version 1 >/dev/null \
     || fail 'Cargo.toml and Cargo.lock are not synchronized'
 
 current_version=$(awk '
@@ -222,12 +223,12 @@ then
 fi
 mv "$manifest_tmp" "$manifest_path"
 
-cargo update --workspace --offline \
+cargo metadata --offline --format-version 1 >/dev/null \
     || fail 'unable to refresh Cargo.lock'
-cargo metadata --locked --offline --no-deps --format-version 1 >/dev/null \
+cargo metadata --locked --offline --format-version 1 >/dev/null \
     || fail 'the bumped manifest and lockfile are not synchronized'
 
-./ci.sh
+./annals/ci.sh
 
 reported_version=$("target/release/$binary_name" --version) \
     || fail 'unable to read the release binary version'

@@ -371,13 +371,13 @@ create WAL and shared-memory sidecars next to both databases.
 Build Annals, create a non-login service account, and install the files:
 
 ```sh
-cargo build --release
+cargo build --release --package annals --package annals-usage
 
 sudo groupadd --system annals
 sudo useradd --system --gid annals --home-dir /var/lib/annals \
   --shell /usr/sbin/nologin annals
-sudo install -m 0755 target/release/annals /usr/local/bin/annals
-sudo install -m 0755 target/release/annals-usage \
+sudo install -m 0755 ../target/release/annals /usr/local/bin/annals
+sudo install -m 0755 ../target/release/annals-usage \
   /usr/local/bin/annals-usage
 
 sudo install -d -o root -g annals -m 0750 /etc/annals
@@ -602,11 +602,11 @@ signed-in Annals Codex home once; Nucleus copies its credential rather than
 sharing that directory:
 
 ```sh
-../nucleus/target/release/nucleus service install \
-  --daemon ../nucleus/target/release/nucleusd \
+../target/release/nucleus service install \
+  --daemon ../target/release/nucleusd \
   --codex-home "$HOME/Library/Application Support/Annals/codex-home"
-../nucleus/target/release/nucleus service status
-../nucleus/target/release/nucleus health
+../target/release/nucleus service status
+../target/release/nucleus health
 ```
 
 Nucleus creates and thereafter owns
@@ -658,14 +658,15 @@ back into the queue.
 
 ### Deploy or update
 
-The deployer does not compile either workspace or install Nucleus. `ci.sh`
-checks the Annals tree and builds both Annals release executables:
+The deployer does not compile the Cell workspace or install Nucleus. `ci.sh`
+checks only the two Annals packages and builds both Annals release executables
+under the Cell root target directory:
 
 ```sh
 ./ci.sh
 ./packaging/launchd/deploy-user.sh \
-  --binary "$PWD/target/release/annals" \
-  --usage-binary "$PWD/target/release/annals-usage" \
+  --binary "$PWD/../target/release/annals" \
+  --usage-binary "$PWD/../target/release/annals-usage" \
   --nucleus "$HOME/.local/bin/nucleus" \
   --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock"
 ```
@@ -728,8 +729,8 @@ operation after `ci.sh` is green:
 
 ```sh
 ./packaging/launchd/deploy-user.sh \
-  --binary "$PWD/target/release/annals" \
-  --usage-binary "$PWD/target/release/annals-usage" \
+  --binary "$PWD/../target/release/annals" \
+  --usage-binary "$PWD/../target/release/annals-usage" \
   --nucleus "$HOME/.local/bin/nucleus" \
   --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock" \
   --fresh-state
@@ -763,8 +764,8 @@ operator's graphical session:
 ```sh
 ./ci.sh
 sudo ./packaging/launchd/migrate-to-user.sh \
-  --binary "$PWD/target/release/annals" \
-  --usage-binary "$PWD/target/release/annals-usage" \
+  --binary "$PWD/../target/release/annals" \
+  --usage-binary "$PWD/../target/release/annals-usage" \
   --nucleus "$HOME/.local/bin/nucleus" \
   --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock"
 ```

@@ -13,7 +13,7 @@
     "harness": "codex",
     "model": "gpt-5.6-terra",
     "reasoningEffort": "low",
-    "cwd": "/Users/joey/rust/nucleus",
+    "cwd": "/Users/joey/rust/cell/nucleus",
     "workspaceAccess": "none",
     "builtinTools": {
       "localExecution": false,

@@ -1,7 +1,7 @@
 # Annals and Todo integration handoff
 
 Nucleus exposes the shared execution boundary used by the Annals and Todo
-adapters. Their domain behavior remains in their own repositories; the public
+adapters. Their domain behavior remains in their own product trees; the public
 contract below is the deployment and compatibility boundary.
 
 Before either adapter submits work, import the currently signed-in Annals Codex

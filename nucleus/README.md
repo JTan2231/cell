@@ -19,8 +19,11 @@ installed release also makes its version-matched manual available with
 ## Build and run
 
 ```sh
-/Users/joey/.cargo/bin/cargo build --release
-target/release/nucleusd serve
+cd /Users/joey/rust/cell
+/Users/joey/.cargo/bin/cargo build --release \
+  --package nucleus-cli \
+  --package nucleus-daemon
+/Users/joey/rust/cell/target/release/nucleusd serve
 ```
 
 By default the daemon listens on the Unix socket at
@@ -28,7 +31,7 @@ By default the daemon listens on the Unix socket at
 the same directory. For an isolated foreground instance:
 
 ```sh
-target/release/nucleusd serve \
+/Users/joey/rust/cell/target/release/nucleusd serve \
   --socket /tmp/nucleus.sock \
   --database /tmp/nucleus.db \
   --codex /opt/homebrew/bin/codex \
@@ -38,11 +41,11 @@ target/release/nucleusd serve \
 Install it as the current user's always-on LaunchAgent:
 
 ```sh
-target/release/nucleus service install \
-  --daemon target/release/nucleusd \
+/Users/joey/rust/cell/target/release/nucleus service install \
+  --daemon /Users/joey/rust/cell/target/release/nucleusd \
   --codex-home "$HOME/path/to/current-signed-in-codex-home"
-target/release/nucleus service status
-target/release/nucleus health
+/Users/joey/rust/cell/target/release/nucleus service status
+/Users/joey/rust/cell/target/release/nucleus health
 ```
 
 Installation copies the binaries to `~/.local`, writes
@@ -59,8 +62,8 @@ isolated job home is atomically copied back before the lease is released.
 If Nucleus has no signed-in credential yet, authenticate the owned home with:
 
 ```sh
-target/release/nucleus auth login --device-auth
-target/release/nucleus account --wait 0
+/Users/joey/rust/cell/target/release/nucleus auth login --device-auth
+/Users/joey/rust/cell/target/release/nucleus account --wait 0
 ```
 
 `nucleus health` is strict: it prints the readiness document but exits nonzero
@@ -82,7 +85,7 @@ rotation policy.
 ## Submit a smoke job
 
 ```sh
-nucleus jobs submit examples/job.smoke.json
+nucleus jobs submit /Users/joey/rust/cell/nucleus/examples/job.smoke.json
 nucleus jobs show nucleus-smoke-01
 nucleus jobs logs --follow nucleus-smoke-01
 ```
@@ -91,9 +94,11 @@ The Todo adapter uses the same checked-in requester contracts; these commands
 exercise the underlying registration and mailbox surface directly:
 
 ```sh
-nucleus schemas register examples/schema.todo-create-result.json
-nucleus toolsets register examples/toolset.todo.json
-nucleus jobs submit examples/job.todo.json
+nucleus schemas register \
+  /Users/joey/rust/cell/nucleus/examples/schema.todo-create-result.json
+nucleus toolsets register \
+  /Users/joey/rust/cell/nucleus/examples/toolset.todo.json
+nucleus jobs submit /Users/joey/rust/cell/nucleus/examples/job.todo.json
 nucleus jobs show todo-research-2026-08-26-01
 nucleus tool-calls pending --wait 30 todo-research-2026-08-26-01
 ```
@@ -103,7 +108,8 @@ The HTTP API is also available directly over the Unix socket:
 ```sh
 curl --unix-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock" \
   -H 'content-type: application/json' \
-  --data-binary @examples/job.smoke.json \
+  --data-binary \
+    @/Users/joey/rust/cell/nucleus/examples/job.smoke.json \
   http://nucleus.local/v1/jobs
 ```
 

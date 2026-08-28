@@ -5,6 +5,9 @@ set -eu
 MAX_SECONDS=60
 EXPECTED_RUST_VERSION=1.97.1
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
+WORKSPACE_DIR=$(CDPATH='' cd "$SCRIPT_DIR/.." && pwd)
+WORKSPACE_MANIFEST="$WORKSPACE_DIR/Cargo.toml"
+WORKSPACE_LOCK="$WORKSPACE_DIR/Cargo.lock"
 SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
 
 if [ "${TODO_CI_TIMEOUT_ACTIVE:-0}" != 1 ]; then
@@ -100,8 +103,13 @@ case "$(cargo --version)" in
         ;;
 esac
 
-if [ ! -f Cargo.lock ]; then
-    printf '%s\n' 'ci.sh: Cargo.lock is required for reproducible builds' >&2
+[ -f "$WORKSPACE_MANIFEST" ] || {
+    printf '%s\n' 'ci.sh: root workspace Cargo.toml is required' >&2
+    exit 1
+}
+
+if [ ! -f "$WORKSPACE_LOCK" ]; then
+    printf '%s\n' 'ci.sh: root Cargo.lock is required for reproducible builds' >&2
     exit 1
 fi
 
@@ -125,10 +133,11 @@ packaging/macos/test-frontend.sh
 packaging/macos/test-deploy-user.sh
 
 printf '%s\n' '==> rustfmt'
-cargo fmt --all -- --check
+cargo fmt --manifest-path "$WORKSPACE_MANIFEST" --package todo -- --check
 
 printf '%s\n' '==> clippy'
-cargo clippy --workspace --all-targets --locked --keep-going -- \
+cargo clippy --manifest-path "$WORKSPACE_MANIFEST" \
+    --package todo --all-targets --locked --keep-going -- \
     -D warnings \
     -F unsafe_code \
     -D clippy::all \
@@ -140,12 +149,15 @@ cargo clippy --workspace --all-targets --locked --keep-going -- \
     -D clippy::expect_used
 
 printf '%s\n' '==> tests'
-cargo test --workspace --locked --no-fail-fast
+cargo test --manifest-path "$WORKSPACE_MANIFEST" \
+    --package todo --locked --no-fail-fast
 
 printf '%s\n' '==> rustdoc'
-RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
+RUSTDOCFLAGS='-D warnings' cargo doc --manifest-path "$WORKSPACE_MANIFEST" \
+    --package todo --no-deps --locked
 
 printf '%s\n' '==> release build'
-cargo build --workspace --release --locked
+cargo build --manifest-path "$WORKSPACE_MANIFEST" \
+    --package todo --release --locked
 
 printf '%s\n' 'ci.sh: green'
