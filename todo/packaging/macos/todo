@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -eu
+
+STATE_DIR=${TODO_STATE_DIR:-${HOME:?}/Library/Application Support/Todo}
+PAYLOAD="$STATE_DIR/install/current/libexec/todo"
+DEFAULT_CONFIG="$STATE_DIR/config.toml"
+
+target_selected=0
+if [ -n "${TODO_CONFIG:-}" ] || [ -n "${TODO_DATABASE:-}" ]; then
+    target_selected=1
+fi
+for argument in "$@"; do
+    case "$argument" in
+        --config|--config=*|--database|--database=*)
+            target_selected=1
+            ;;
+    esac
+done
+
+if [ "$target_selected" -eq 0 ]; then
+    TODO_CONFIG=$DEFAULT_CONFIG
+    export TODO_CONFIG
+fi
+
+exec "$PAYLOAD" "$@"
