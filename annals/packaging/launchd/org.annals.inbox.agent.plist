@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>org.annals.inbox</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__ANNALS_FRONTEND__</string>
+        <string>--quiet</string>
+        <string>inbox</string>
+        <string>run</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__ANNALS_STATE__</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>__ANNALS_HOME__</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>Umask</key>
+    <string>077</string>
+
+    <key>StandardOutPath</key>
+    <string>__ANNALS_STDOUT__</string>
+    <key>StandardErrorPath</key>
+    <string>__ANNALS_STDERR__</string>
+</dict>
+</plist>

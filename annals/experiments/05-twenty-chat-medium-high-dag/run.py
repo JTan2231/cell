@@ -1,0 +1,995 @@
+#!/usr/bin/env python3
+"""Run a reproducible medium-versus-high Annals DAG ingestion experiment."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+
+ARM_ORDER = ("medium", "high")
+EXPECTED_INPUTS = 20
+
+
+def fail(message: str) -> None:
+    raise RuntimeError(message)
+
+
+def now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def write_json(path: Path, value: Any) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    os.chmod(temporary, 0o600)
+    temporary.replace(path)
+
+
+def load_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def command(
+    arguments: list[str],
+    *,
+    stdout_path: Path | None = None,
+    stderr_path: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
+    stdout_handle = stdout_path.open("w", encoding="utf-8") if stdout_path else None
+    stderr_handle = stderr_path.open("w", encoding="utf-8") if stderr_path else None
+    try:
+        result = subprocess.run(
+            arguments,
+            check=False,
+            text=True,
+            stdout=stdout_handle or subprocess.PIPE,
+            stderr=stderr_handle or subprocess.PIPE,
+        )
+    finally:
+        if stdout_handle:
+            stdout_handle.close()
+        if stderr_handle:
+            stderr_handle.close()
+    return result
+
+
+def checked(arguments: list[str], *, output: Path | None = None) -> str:
+    result = command(arguments, stdout_path=output)
+    if result.returncode != 0:
+        detail = result.stderr.strip() if result.stderr else "no diagnostic output"
+        fail(f"command failed ({result.returncode}): {' '.join(arguments)}\n{detail}")
+    return result.stdout or ""
+
+
+def json_command(arguments: list[str], *, output: Path | None = None) -> Any:
+    text = checked(arguments, output=output)
+    if output:
+        text = output.read_text(encoding="utf-8")
+    payload = json.loads(text)
+    if not payload.get("ok"):
+        fail(f"Annals returned an error: {payload}")
+    return payload["data"]
+
+
+def render_transcript(source: Path, label: str) -> tuple[str, dict[str, Any]]:
+    pieces = [
+        f"# {label}",
+        "",
+        "_Recovered from a local Codex session. This transcript includes only "
+        "human-visible user and assistant messages._",
+        "",
+    ]
+    user_messages = 0
+    assistant_messages = 0
+    session_id = None
+    session_timestamp = None
+
+    with source.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, 1):
+            record = json.loads(line)
+            if line_number == 1 and record.get("type") == "session_meta":
+                payload = record.get("payload", {})
+                session_id = payload.get("session_id") or payload.get("id")
+                session_timestamp = payload.get("timestamp")
+            if record.get("type") != "event_msg":
+                continue
+            payload = record.get("payload", {})
+            message_type = payload.get("type")
+            if message_type == "user_message":
+                heading = f"## User — {record['timestamp']}"
+                user_messages += 1
+            elif message_type == "agent_message":
+                suffix = " (commentary)" if payload.get("phase") == "commentary" else ""
+                heading = f"## Assistant{suffix} — {record['timestamp']}"
+                assistant_messages += 1
+            else:
+                continue
+            message = payload.get("message")
+            if not isinstance(message, str):
+                fail(f"visible message in {source} is not text")
+            pieces.extend((heading, "", message, ""))
+
+    if user_messages == 0 or assistant_messages == 0:
+        fail(f"{source} does not contain a complete visible conversation")
+    text = "\n".join(pieces) + "\n"
+    return text, {
+        "session_id": session_id,
+        "session_timestamp": session_timestamp,
+        "user_messages": user_messages,
+        "assistant_messages": assistant_messages,
+        "visible_characters": len(text),
+    }
+
+
+def annals_arguments(binary: Path, database: Path, *arguments: str) -> list[str]:
+    return [str(binary), "--library", str(database), "--json", *arguments]
+
+
+def reconciliation_state(database: Path, label: str) -> dict[str, Any] | None:
+    connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        row = connection.execute(
+            """
+            SELECT r.id, r.status, r.base_revision, r.model_run_id,
+                   r.applied_revision
+            FROM reconciliations AS r
+            JOIN works AS w ON w.id = r.work_id
+            WHERE w.label = ? AND r.model_run_id IS NOT NULL
+            ORDER BY r.id DESC
+            LIMIT 1
+            """,
+            (label,),
+        ).fetchone()
+    finally:
+        connection.close()
+    if row is None:
+        return None
+    return dict(row)
+
+
+def model_run_count(database: Path, label: str) -> int:
+    connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+    try:
+        return int(
+            connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM model_runs AS r
+                JOIN works AS w ON w.id = r.work_id
+                WHERE w.label = ?
+                """,
+                (label,),
+            ).fetchone()[0]
+        )
+    finally:
+        connection.close()
+
+
+def running_model_runs(database: Path, label: str) -> list[int]:
+    connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+    try:
+        return [
+            int(row[0])
+            for row in connection.execute(
+                """
+                SELECT r.id
+                FROM model_runs AS r JOIN works AS w ON w.id = r.work_id
+                WHERE w.label = ? AND r.status = 'running'
+                ORDER BY r.id
+                """,
+                (label,),
+            )
+        ]
+    finally:
+        connection.close()
+
+
+def slug(label: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")[:60]
+
+
+def verify_run(run_dir: Path) -> tuple[dict[str, Any], Path]:
+    config = load_json(run_dir / "config.json")
+    binary = run_dir / config["annals_binary"]
+    if sha256(binary) != config["annals_sha256"]:
+        fail("the snapshotted Annals binary no longer matches config.json")
+    runner = run_dir / config["runner"]
+    if sha256(runner) != config["runner_sha256"]:
+        fail("the snapshotted experiment runner no longer matches config.json")
+    if sha256(Path(__file__).resolve()) != config["runner_sha256"]:
+        fail(f"resume with the snapshotted runner: {runner}")
+    locked = load_json(run_dir / "manifest.lock.json")
+    if len(locked) != EXPECTED_INPUTS:
+        fail("the locked manifest no longer has exactly 20 inputs")
+    for item in locked:
+        path = run_dir / item["input"]
+        if path.stat().st_size != item["size_bytes"] or sha256(path) != item["sha256"]:
+            fail(f"snapshotted input changed: {path}")
+    for arm in ARM_ORDER:
+        database = run_dir / f"{arm}.db"
+        if not database.is_file():
+            fail(f"missing experiment database: {database}")
+        connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+        try:
+            works = connection.execute(
+                "SELECT label, sha256 FROM works ORDER BY id"
+            ).fetchall()
+        finally:
+            connection.close()
+        expected = [(item["label"], item["sha256"]) for item in locked]
+        if works != expected:
+            fail(f"{arm} work inventory differs from the locked manifest")
+    return config, binary
+
+
+def acquire_lock(run_dir: Path) -> Any:
+    lock_path = run_dir / "runner.lock"
+    handle = lock_path.open("a+", encoding="utf-8")
+    os.chmod(lock_path, 0o600)
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        fail(f"another experiment process holds {lock_path}")
+    handle.seek(0)
+    handle.truncate()
+    handle.write(f"pid={os.getpid()} started={now()}\n")
+    handle.flush()
+    return handle
+
+
+def setup(manifest_path: Path, run_dir: Path, annals: Path) -> None:
+    if run_dir.exists():
+        fail(f"run directory already exists: {run_dir}")
+    source_manifest = load_json(manifest_path)
+    if not isinstance(source_manifest, list) or len(source_manifest) != EXPECTED_INPUTS:
+        fail("source manifest must be a JSON array containing exactly 20 entries")
+    labels = [item.get("label") for item in source_manifest]
+    if any(not isinstance(label, str) or not label.strip() for label in labels):
+        fail("every manifest entry needs a nonempty label")
+    if len(set(labels)) != len(labels):
+        fail("manifest labels must be unique")
+    if not annals.is_file() or not os.access(annals, os.X_OK):
+        fail(f"Annals executable is not usable: {annals}")
+
+    run_dir.mkdir(parents=True, mode=0o700)
+    inputs_dir = run_dir / "inputs"
+    setup_dir = run_dir / "setup"
+    inputs_dir.mkdir(mode=0o700)
+    setup_dir.mkdir(mode=0o700)
+    (run_dir / "logs" / "medium").mkdir(parents=True, mode=0o700)
+    (run_dir / "logs" / "high").mkdir(parents=True, mode=0o700)
+
+    binary = run_dir / "annals"
+    shutil.copy2(annals, binary)
+    os.chmod(binary, 0o700)
+    shutil.copy2(Path(__file__).resolve(), run_dir / "runner.py")
+    os.chmod(run_dir / "runner.py", 0o700)
+    shutil.copy2(manifest_path, run_dir / "manifest.source.json")
+    os.chmod(run_dir / "manifest.source.json", 0o600)
+
+    locked: list[dict[str, Any]] = []
+    for index, item in enumerate(source_manifest, 1):
+        source = Path(item["source"]).expanduser()
+        if not source.is_file():
+            fail(f"source session does not exist: {source}")
+        label = item["label"]
+        text, metadata = render_transcript(source, label)
+        input_path = inputs_dir / f"{index:02d}.md"
+        input_path.write_text(text, encoding="utf-8")
+        os.chmod(input_path, 0o600)
+        locked.append(
+            {
+                "index": index,
+                "label": label,
+                "input": str(input_path.relative_to(run_dir)),
+                "sha256": sha256(input_path),
+                "size_bytes": input_path.stat().st_size,
+                "source": item["source"],
+                "source_sha256": sha256(source),
+                **metadata,
+            }
+        )
+    write_json(run_dir / "manifest.lock.json", locked)
+
+    config = {
+        "created_at": now(),
+        "annals_binary": "annals",
+        "annals_sha256": sha256(binary),
+        "runner": "runner.py",
+        "runner_sha256": sha256(run_dir / "runner.py"),
+        "qualities": list(ARM_ORDER),
+        "input_count": EXPECTED_INPUTS,
+        "policy": "record every model reconciliation and apply every corpus-changing projection",
+        "methodology_notes": [
+            "Inputs retain every visible event message, including visible messages from "
+            "rolled-back turns, to match the earlier three-work experiments.",
+            "Each model examination mechanically records one reconciliation. Corpus-changing "
+            "projections apply immediately; equal projections remain recorded without a commit.",
+            "Later works therefore compare autonomous preset-specific corpus trajectories, "
+            "not isolated independent trials.",
+            "Copied-forward context in works 16 through 18 is interactional reuse, not "
+            "independent corroboration.",
+            "The first arm alternates by work to reduce order-correlated runtime effects.",
+        ],
+    }
+    write_json(run_dir / "config.json", config)
+
+    seed = run_dir / "seed.db"
+    json_command(
+        annals_arguments(binary, seed, "init"), output=setup_dir / "seed-init.json"
+    )
+    for item in locked:
+        json_command(
+            annals_arguments(
+                binary,
+                seed,
+                "work",
+                "add",
+                str(run_dir / item["input"]),
+                "--name",
+                item["label"],
+            ),
+            output=setup_dir / f"{item['index']:02d}-work-add.json",
+        )
+    validation = json_command(
+        annals_arguments(binary, seed, "validate"),
+        output=setup_dir / "seed-validate.json",
+    )
+    stats = json_command(
+        annals_arguments(binary, seed, "stats"), output=setup_dir / "seed-stats.json"
+    )
+    if not validation["valid"] or stats["revision"] != 0 or stats["work_count"] != 20:
+        fail("seed library did not validate as a 20-work revision-zero library")
+    for arm in ARM_ORDER:
+        json_command(
+            annals_arguments(binary, seed, "backup", str(run_dir / f"{arm}.db")),
+            output=setup_dir / f"backup-{arm}.json",
+        )
+        os.chmod(run_dir / f"{arm}.db", 0o600)
+    verify_run(run_dir)
+
+
+def process_work(
+    run_dir: Path,
+    binary: Path,
+    item: dict[str, Any],
+    arm: str,
+) -> None:
+    database = run_dir / f"{arm}.db"
+    label = item["label"]
+    running = running_model_runs(database, label)
+    if running:
+        fail(
+            f"{arm}/{label} has unfinished model run(s) {running}; "
+            "inspect the database before resuming"
+        )
+    state = reconciliation_state(database, label)
+    if state is not None:
+        if state["status"] in ("applied", "recorded"):
+            return
+        if state["status"] != "pending":
+            fail(f"unexpected latest reconciliation state for {arm}/{label}: {state}")
+        apply_pending(run_dir, binary, database, item, arm, state)
+        return
+
+    attempt = model_run_count(database, label) + 1
+    work_dir = run_dir / "logs" / arm / f"{item['index']:02d}-{slug(label)}"
+    work_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    stdout_path = work_dir / f"attempt-{attempt:02d}.integrate.json"
+    stderr_path = work_dir / f"attempt-{attempt:02d}.integrate.stderr"
+    metadata_path = work_dir / f"attempt-{attempt:02d}.meta.json"
+    started_at = now()
+    started = time.monotonic()
+    print(f"[{item['index']:02d}/20] {arm}: examining {label}", flush=True)
+    result = command(
+        annals_arguments(
+            binary,
+            database,
+            "integrate",
+            "--work",
+            label,
+            "--quality",
+            arm,
+            "--apply",
+        ),
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
+    )
+    write_json(
+        metadata_path,
+        {
+            "started_at": started_at,
+            "completed_at": now(),
+            "elapsed_seconds": round(time.monotonic() - started, 3),
+            "exit_code": result.returncode,
+        },
+    )
+    if result.returncode != 0:
+        fail(
+            f"integration failed for {arm}/{label}; inspect {stderr_path} and resume later"
+        )
+    state = reconciliation_state(database, label)
+    if state is None:
+        fail(f"integration produced no reconciliation for {arm}/{label}")
+    if state["status"] == "pending":
+        apply_pending(run_dir, binary, database, item, arm, state)
+    elif state["status"] in ("applied", "recorded"):
+        print(f"[{item['index']:02d}/20] {arm}: {state['status']}", flush=True)
+    else:
+        fail(f"unexpected submitted reconciliation state for {arm}/{label}: {state}")
+
+
+def apply_pending(
+    run_dir: Path,
+    binary: Path,
+    database: Path,
+    item: dict[str, Any],
+    arm: str,
+    state: dict[str, Any],
+) -> None:
+    work_dir = run_dir / "logs" / arm / f"{item['index']:02d}-{slug(item['label'])}"
+    work_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    output = work_dir / f"reconciliation-{state['id']}.apply.json"
+    json_command(
+        annals_arguments(binary, database, "change", "apply", "--work", item["label"]),
+        output=output,
+    )
+    applied = reconciliation_state(database, item["label"])
+    if (
+        applied is None
+        or applied["id"] != state["id"]
+        or applied["status"] != "applied"
+    ):
+        fail(f"reconciliation did not apply for {arm}/{item['label']}: {applied}")
+    print(f"[{item['index']:02d}/20] {arm}: applied", flush=True)
+
+
+def run_experiment(run_dir: Path) -> None:
+    _, binary = verify_run(run_dir)
+    locked = load_json(run_dir / "manifest.lock.json")
+    for offset, item in enumerate(locked):
+        arms = ARM_ORDER if offset % 2 == 0 else tuple(reversed(ARM_ORDER))
+        for arm in arms:
+            process_work(run_dir, binary, item, arm)
+    make_report(run_dir)
+
+
+def arm_summary(database: Path) -> dict[str, Any]:
+    connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        revision = int(
+            connection.execute("SELECT revision FROM library_state").fetchone()[0]
+        )
+        concept_values = [
+            {"id": f"c{int(row[0])}", "label": row[1]}
+            for row in connection.execute("SELECT id, label FROM concepts ORDER BY id")
+        ]
+        concepts = len(concept_values)
+        concept_labels = [concept["label"] for concept in concept_values]
+        edge_values = [
+            {
+                "parent": {"id": f"c{int(row[0])}", "label": row[1]},
+                "child": {"id": f"c{int(row[2])}", "label": row[3]},
+            }
+            for row in connection.execute(
+                """
+                SELECT parent.id, parent.label, child.id, child.label
+                FROM concept_edges AS edge
+                JOIN concepts AS parent ON parent.id = edge.parent_id
+                JOIN concepts AS child ON child.id = edge.child_id
+                ORDER BY parent.id, child.id
+                """
+            )
+        ]
+        edges = len(edge_values)
+        parent_counts: dict[str, int] = {}
+        concepts_with_children: set[str] = set()
+        for edge in edge_values:
+            parent_id = edge["parent"]["id"]
+            child_id = edge["child"]["id"]
+            concepts_with_children.add(parent_id)
+            parent_counts[child_id] = parent_counts.get(child_id, 0) + 1
+        root_values = [
+            concept for concept in concept_values if concept["id"] not in parent_counts
+        ]
+        roots = len(root_values)
+        leaves = sum(
+            concept["id"] not in concepts_with_children for concept in concept_values
+        )
+        shared_concepts = sum(count > 1 for count in parent_counts.values())
+        edge_label_values = [
+            {
+                "parent_label": edge["parent"]["label"],
+                "child_label": edge["child"]["label"],
+            }
+            for edge in edge_values
+        ]
+        max_depth = int(
+            connection.execute(
+                """
+                WITH RECURSIVE depths(id, depth) AS (
+                    SELECT concept.id, 1
+                    FROM concepts AS concept
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM concept_edges AS edge
+                        WHERE edge.child_id = concept.id
+                    )
+                    UNION
+                    SELECT edge.child_id, depths.depth + 1
+                    FROM depths
+                    JOIN concept_edges AS edge ON edge.parent_id = depths.id
+                )
+                SELECT COALESCE(MAX(depth), 0) FROM depths
+                """
+            ).fetchone()[0]
+        )
+        evidence = int(
+            connection.execute("SELECT COUNT(*) FROM evidence").fetchone()[0]
+        )
+        evidence_quotes = [
+            {"work": row[0], "quote": row[1]}
+            for row in connection.execute(
+                """
+                SELECT w.label,
+                       CAST(substr(CAST(w.text AS BLOB), e.start_byte + 1,
+                                   e.end_byte - e.start_byte) AS TEXT)
+                FROM evidence AS e JOIN works AS w ON w.id = e.work_id
+                ORDER BY e.concept_id, e.work_id, e.start_byte, e.end_byte
+                """
+            )
+        ]
+        evidence_links = [
+            {
+                "concept": {"id": f"c{int(row[0])}", "label": row[1]},
+                "work": row[2],
+                "start_byte": row[3],
+                "end_byte": row[4],
+                "quote": row[5],
+            }
+            for row in connection.execute(
+                """
+                SELECT e.concept_id, c.label, w.label, e.start_byte, e.end_byte,
+                       CAST(substr(CAST(w.text AS BLOB), e.start_byte + 1,
+                                   e.end_byte - e.start_byte) AS TEXT)
+                FROM evidence AS e
+                JOIN concepts AS c ON c.id = e.concept_id
+                JOIN works AS w ON w.id = e.work_id
+                ORDER BY e.concept_id, e.work_id, e.start_byte, e.end_byte
+                """
+            )
+        ]
+        evidence_label_values = [
+            {
+                "concept_label": link["concept"]["label"],
+                "work": link["work"],
+                "start_byte": link["start_byte"],
+                "end_byte": link["end_byte"],
+                "quote": link["quote"],
+            }
+            for link in evidence_links
+        ]
+
+        runs = [
+            dict(row)
+            for row in connection.execute(
+                """
+            SELECT r.id, w.label AS work, r.base_revision, r.status, r.model,
+                   r.reasoning_effort, r.prompt_version,
+                   ROUND((julianday(r.completed_at) - julianday(r.created_at)) * 86400, 3)
+                       AS elapsed_seconds
+            FROM model_runs AS r JOIN works AS w ON w.id = r.work_id
+            ORDER BY r.id
+            """
+            )
+        ]
+        calls = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT model_run_id, tool_name, arguments, result, succeeded FROM tool_calls"
+            )
+        ]
+        attempted_queries = 0
+        successful_queries = 0
+        attempted_read_regions = 0
+        successful_read_regions = 0
+        attempted_inspect_requests = 0
+        successful_inspect_requests = 0
+        attempted_material_bytes = 0
+        successful_material_bytes = 0
+        for call in calls:
+            arguments = json.loads(call["arguments"])
+            queries = len(arguments.get("queries", []))
+            regions = len(arguments.get("regions", []))
+            inspect_requests = len(arguments.get("requests", []))
+            material_bytes = len(call["arguments"].encode()) + len(
+                call["result"].encode()
+            )
+            attempted_queries += queries
+            attempted_read_regions += regions
+            attempted_inspect_requests += inspect_requests
+            attempted_material_bytes += material_bytes
+            if call["succeeded"]:
+                successful_queries += queries
+                successful_read_regions += regions
+                successful_inspect_requests += inspect_requests
+                successful_material_bytes += material_bytes
+
+        reconciliations = []
+        for row in connection.execute(
+            """
+            SELECT r.id, w.label AS work, r.base_revision, r.status, r.summary,
+                   r.submitted_request, r.resolved_reconciliation, r.actor,
+                   r.applied_revision
+            FROM reconciliations AS r JOIN works AS w ON w.id = r.work_id
+            WHERE r.model_run_id IS NOT NULL
+            ORDER BY r.id
+            """
+        ):
+            value = dict(row)
+            request = json.loads(value.pop("submitted_request"))
+            resolved = json.loads(value.pop("resolved_reconciliation"))
+            operations = request.get("operations", [])
+            evidence_selectors = [
+                selector
+                for operation in operations
+                for selector in operation.get("evidence", [])
+            ]
+            value["operation_count"] = len(operations)
+            value["operation_actions"] = [
+                operation.get("action") for operation in operations
+            ]
+            value["resolved_operation_count"] = len(resolved.get("operations", []))
+            value["evidence_selector_count"] = len(evidence_selectors)
+            value["evidence_selector_qualifiers"] = count_values(
+                qualifier
+                for selector in evidence_selectors
+                for qualifier in ("within_heading", "preceded_by", "followed_by")
+                if qualifier in selector
+            )
+            value["annotations"] = request.get("annotations", [])
+            reconciliations.append(value)
+        latest_by_work = {
+            reconciliation["work"]: reconciliation for reconciliation in reconciliations
+        }
+        return {
+            "revision": revision,
+            "concepts": concepts,
+            "edges": edges,
+            "roots": roots,
+            "leaves": leaves,
+            "shared_concepts": shared_concepts,
+            "max_depth": max_depth,
+            "evidence_links": evidence,
+            "concept_values": concept_values,
+            "concept_labels": concept_labels,
+            "root_values": root_values,
+            "edge_values": edge_values,
+            "edge_label_values": edge_label_values,
+            "evidence_quotes": evidence_quotes,
+            "evidence_link_values": evidence_links,
+            "evidence_label_values": evidence_label_values,
+            "model_runs": {
+                "count": len(runs),
+                "elapsed_seconds": round(
+                    sum(run["elapsed_seconds"] or 0 for run in runs), 3
+                ),
+                "statuses": count_values(run["status"] for run in runs),
+                "models": count_values(
+                    f"{run['model']}/{run['reasoning_effort']}" for run in runs
+                ),
+            },
+            "tools": {
+                "calls": len(calls),
+                "failed_calls": sum(not call["succeeded"] for call in calls),
+                "by_name": count_values(call["tool_name"] for call in calls),
+                "attempted_query_selectors": attempted_queries,
+                "successful_query_selectors": successful_queries,
+                "attempted_read_regions": attempted_read_regions,
+                "successful_read_regions": successful_read_regions,
+                "attempted_inspect_requests": attempted_inspect_requests,
+                "successful_inspect_requests": successful_inspect_requests,
+                "attempted_argument_and_result_bytes": attempted_material_bytes,
+                "successful_argument_and_result_bytes": successful_material_bytes,
+            },
+            "reconciliations": {
+                "count": len(reconciliations),
+                "statuses": count_values(r["status"] for r in reconciliations),
+                "operations": sum(r["operation_count"] for r in reconciliations),
+                "operations_by_action": count_values(
+                    action
+                    for reconciliation in reconciliations
+                    for action in reconciliation["operation_actions"]
+                ),
+                "evidence_selectors": sum(
+                    r["evidence_selector_count"] for r in reconciliations
+                ),
+                "evidence_selector_qualifiers": count_values(
+                    qualifier
+                    for reconciliation in reconciliations
+                    for qualifier, count in reconciliation[
+                        "evidence_selector_qualifiers"
+                    ].items()
+                    for _ in range(count)
+                ),
+                "annotations": sum(len(r["annotations"]) for r in reconciliations),
+                "with_annotations": sum(
+                    bool(r["annotations"]) for r in reconciliations
+                ),
+            },
+            "runs": runs,
+            "per_work": latest_by_work,
+        }
+    finally:
+        connection.close()
+
+
+def count_values(values: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+def overlap(left: list[Any], right: list[Any]) -> dict[str, Any]:
+    left_set = {json.dumps(value, ensure_ascii=False, sort_keys=True) for value in left}
+    right_set = {
+        json.dumps(value, ensure_ascii=False, sort_keys=True) for value in right
+    }
+    union = left_set | right_set
+    return {
+        "medium": len(left_set),
+        "high": len(right_set),
+        "shared": len(left_set & right_set),
+        "jaccard": round(len(left_set & right_set) / len(union), 4) if union else 1.0,
+    }
+
+
+def make_report(run_dir: Path) -> None:
+    _, binary = verify_run(run_dir)
+    reports = run_dir / "reports"
+    reports.mkdir(exist_ok=True, mode=0o700)
+    summaries: dict[str, Any] = {}
+    cli_commands = {
+        "stats": ("stats",),
+        "validate": ("validate",),
+        "overview": ("overview",),
+        "roots": ("roots", "--limit", "100"),
+        "reconciliations": ("change", "list"),
+        "log": ("log", "--limit", "100"),
+    }
+    for arm in ARM_ORDER:
+        database = run_dir / f"{arm}.db"
+        arm_dir = reports / arm
+        arm_dir.mkdir(exist_ok=True, mode=0o700)
+        for name, arguments in cli_commands.items():
+            json_command(
+                annals_arguments(binary, database, *arguments),
+                output=arm_dir / f"{name}.json",
+            )
+        stats = load_json(arm_dir / "stats.json")["data"]
+        json_command(
+            annals_arguments(binary, database, "diff", "0", str(stats["revision"])),
+            output=arm_dir / "diff.json",
+        )
+        summaries[arm] = arm_summary(database)
+
+    labels = [item["label"] for item in load_json(run_dir / "manifest.lock.json")]
+    per_work = []
+    for label in labels:
+        medium = summaries["medium"]["per_work"].get(label)
+        high = summaries["high"]["per_work"].get(label)
+        per_work.append({"work": label, "medium": medium, "high": high})
+    report = {
+        "generated_at": now(),
+        "input_count": EXPECTED_INPUTS,
+        "arms": summaries,
+        "comparison": {
+            "distinct_label_overlap": overlap(
+                summaries["medium"]["concept_labels"],
+                summaries["high"]["concept_labels"],
+            ),
+            "label_edge_overlap": overlap(
+                summaries["medium"]["edge_label_values"],
+                summaries["high"]["edge_label_values"],
+            ),
+            "exact_quotation_overlap": overlap(
+                summaries["medium"]["evidence_quotes"],
+                summaries["high"]["evidence_quotes"],
+            ),
+            "label_evidence_link_overlap": overlap(
+                summaries["medium"]["evidence_label_values"],
+                summaries["high"]["evidence_label_values"],
+            ),
+            "per_work": per_work,
+        },
+    }
+    write_json(reports / "comparison.json", report)
+    write_markdown_report(reports / "comparison.md", report)
+    print(f"Report written to {reports / 'comparison.md'}", flush=True)
+
+
+def write_markdown_report(path: Path, report: dict[str, Any]) -> None:
+    medium = report["arms"]["medium"]
+    high = report["arms"]["high"]
+    lines = [
+        "# Annals preset experiment",
+        "",
+        f"Generated: {report['generated_at']}",
+        "",
+        "| Metric | Medium | High |",
+        "| --- | ---: | ---: |",
+    ]
+    metrics = (
+        ("Revision", "revision"),
+        ("Concepts", "concepts"),
+        ("Parent edges", "edges"),
+        ("Roots", "roots"),
+        ("Leaves", "leaves"),
+        ("Shared concepts", "shared_concepts"),
+        ("Maximum root-to-node depth", "max_depth"),
+        ("Evidence links", "evidence_links"),
+    )
+    for label, key in metrics:
+        lines.append(f"| {label} | {medium[key]} | {high[key]} |")
+    lines.extend(
+        [
+            f"| Model seconds | {medium['model_runs']['elapsed_seconds']} | "
+            f"{high['model_runs']['elapsed_seconds']} |",
+            f"| Tool calls | {medium['tools']['calls']} | {high['tools']['calls']} |",
+            f"| Failed tool calls | {medium['tools']['failed_calls']} | "
+            f"{high['tools']['failed_calls']} |",
+            f"| Model reconciliations | {medium['reconciliations']['count']} | "
+            f"{high['reconciliations']['count']} |",
+            f"| Applied reconciliations | "
+            f"{medium['reconciliations']['statuses'].get('applied', 0)} | "
+            f"{high['reconciliations']['statuses'].get('applied', 0)} |",
+            f"| Recorded equal reconciliations | "
+            f"{medium['reconciliations']['statuses'].get('recorded', 0)} | "
+            f"{high['reconciliations']['statuses'].get('recorded', 0)} |",
+            f"| Reconciliation operations | "
+            f"{medium['reconciliations']['operations']} | "
+            f"{high['reconciliations']['operations']} |",
+            f"| Evidence selectors | "
+            f"{medium['reconciliations']['evidence_selectors']} | "
+            f"{high['reconciliations']['evidence_selectors']} |",
+            f"| Annotations | {medium['reconciliations']['annotations']} | "
+            f"{high['reconciliations']['annotations']} |",
+            "",
+            "## Per-work outcomes",
+            "",
+            "| # | Work | Medium | High |",
+            "| ---: | --- | --- | --- |",
+        ]
+    )
+    for index, item in enumerate(report["comparison"]["per_work"], 1):
+        lines.append(
+            f"| {index} | {item['work']} | {reconciliation_cell(item['medium'])} | "
+            f"{reconciliation_cell(item['high'])} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Final concepts",
+            "",
+            "### Medium",
+            "",
+            *[
+                f"- {value['id']} — {value['label']}"
+                for value in medium["concept_values"]
+            ],
+            "",
+            "### High",
+            "",
+            *[
+                f"- {value['id']} — {value['label']}"
+                for value in high["concept_values"]
+            ],
+            "",
+        ]
+    )
+    path.write_text("\n".join(lines), encoding="utf-8")
+    os.chmod(path, 0o600)
+
+
+def reconciliation_cell(reconciliation: dict[str, Any] | None) -> str:
+    if reconciliation is None:
+        return "missing"
+    status = reconciliation["status"]
+    if reconciliation["applied_revision"] is not None:
+        status += f"@{reconciliation['applied_revision']}"
+    actions = count_values(reconciliation["operation_actions"])
+    action_summary = ", ".join(
+        f"{action}×{count}" if count > 1 else action
+        for action, count in actions.items()
+    )
+    return (
+        f"{status}; {reconciliation['operation_count']} ops ({action_summary}); "
+        f"{reconciliation['evidence_selector_count']} evidence; "
+        f"{len(reconciliation['annotations'])} annotations"
+    )
+
+
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    start = subparsers.add_parser("start", help="create and run a fresh experiment")
+    start.add_argument("--manifest", type=Path, required=True)
+    start.add_argument("--run-dir", type=Path, required=True)
+    start.add_argument("--annals", type=Path, required=True)
+    resume = subparsers.add_parser("resume", help="resume an existing experiment")
+    resume.add_argument("--run-dir", type=Path, required=True)
+    report = subparsers.add_parser("report", help="regenerate read-only reports")
+    report.add_argument("--run-dir", type=Path, required=True)
+    return parser.parse_args()
+
+
+def main() -> int:
+    os.umask(0o077)
+    arguments = parse_arguments()
+    try:
+        if arguments.command == "start":
+            setup(
+                arguments.manifest.expanduser().resolve(),
+                arguments.run_dir.expanduser().resolve(),
+                arguments.annals.expanduser().resolve(),
+            )
+            run_dir = arguments.run_dir.expanduser().resolve()
+            lock = acquire_lock(run_dir)
+            try:
+                run_experiment(run_dir)
+            finally:
+                lock.close()
+        elif arguments.command == "resume":
+            run_dir = arguments.run_dir.expanduser().resolve()
+            lock = acquire_lock(run_dir)
+            try:
+                run_experiment(run_dir)
+            finally:
+                lock.close()
+        else:
+            run_dir = arguments.run_dir.expanduser().resolve()
+            lock = acquire_lock(run_dir)
+            try:
+                make_report(run_dir)
+            finally:
+                lock.close()
+    except (
+        OSError,
+        ValueError,
+        RuntimeError,
+        sqlite3.Error,
+        json.JSONDecodeError,
+    ) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,24 @@
+[package]
+name = "annals"
+version = "0.11.0"
+edition.workspace = true
+
+[dependencies]
+base64 = "0.22.1"
+clap = { version = "4.5.46", features = ["derive"] }
+fs2 = "0.4.3"
+nucleus-client = { git = "https://github.com/JTan2231/nucleus-rs.git", tag = "v0.2.0" }
+nucleus-core = { git = "https://github.com/JTan2231/nucleus-rs.git", tag = "v0.2.0" }
+rusqlite = { version = "0.40.0", features = ["backup", "bundled"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = { version = "1.0.143", features = ["raw_value"] }
+sha2 = "0.10.9"
+thiserror = "2.0.16"
+time = { version = "0.3.41", features = ["formatting", "parsing"] }
+tokio = { version = "1.53", features = ["rt", "time"] }
+toml = "1.1.4"
+unicode-normalization = "0.1.24"
+
+[dev-dependencies]
+nucleus-daemon = { git = "https://github.com/JTan2231/nucleus-rs.git", tag = "v0.2.0" }
+tempfile = "3.21.0"

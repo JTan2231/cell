@@ -1,0 +1,194 @@
+use std::ffi::OsStr;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use serde::Deserialize;
+
+use crate::error::AppError;
+use crate::model_runner::ModelQuality;
+
+const DEFAULT_SETTLE_SECONDS: u64 = 60;
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Config {
+    pub library: Option<PathBuf>,
+    pub inbox: Option<InboxConfig>,
+    #[serde(default)]
+    pub liaison: LiaisonConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct InboxConfig {
+    pub root: PathBuf,
+    #[serde(default = "default_settle_seconds")]
+    pub settle_seconds: u64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct LiaisonConfig {
+    pub quality: ModelQuality,
+    pub model: Option<String>,
+    pub nucleus_socket: Option<PathBuf>,
+}
+
+impl Config {
+    pub fn load(explicit: Option<&PathBuf>) -> Result<Self, AppError> {
+        let environment = std::env::var_os("ANNALS_CONFIG");
+        let path = resolve_config_path(explicit.map(PathBuf::as_path), environment.as_deref());
+        let Some(path) = path else {
+            return Ok(Self::default());
+        };
+        Self::read(&path)
+    }
+
+    fn read(path: &Path) -> Result<Self, AppError> {
+        let document = fs::read_to_string(path).map_err(|error| {
+            AppError::invalid(
+                "config_read_failed",
+                format!("unable to read configuration {}: {error}", path.display()),
+            )
+        })?;
+        let mut config: Self = toml::from_str(&document).map_err(|error| {
+            AppError::invalid(
+                "invalid_config",
+                format!("invalid configuration {}: {error}", path.display()),
+            )
+        })?;
+        config.validate()?;
+        config.resolve_relative_paths(path.parent().unwrap_or_else(|| Path::new(".")));
+        Ok(config)
+    }
+
+    fn resolve_relative_paths(&mut self, directory: &Path) {
+        if let Some(library) = &mut self.library
+            && library.is_relative()
+        {
+            *library = directory.join(&*library);
+        }
+        if let Some(inbox) = &mut self.inbox
+            && inbox.root.is_relative()
+        {
+            inbox.root = directory.join(&inbox.root);
+        }
+        if let Some(socket) = &mut self.liaison.nucleus_socket
+            && socket.is_relative()
+        {
+            *socket = directory.join(&*socket);
+        }
+    }
+
+    fn validate(&self) -> Result<(), AppError> {
+        if self
+            .library
+            .as_ref()
+            .is_some_and(|library| library.as_os_str().is_empty())
+        {
+            return Err(AppError::invalid(
+                "invalid_config",
+                "library must not be empty",
+            ));
+        }
+        if let Some(inbox) = &self.inbox
+            && inbox.root.as_os_str().is_empty()
+        {
+            return Err(AppError::invalid(
+                "invalid_config",
+                "inbox.root must not be empty",
+            ));
+        }
+        if self
+            .liaison
+            .nucleus_socket
+            .as_ref()
+            .is_some_and(|socket| socket.as_os_str().is_empty())
+        {
+            return Err(AppError::invalid(
+                "invalid_config",
+                "liaison.nucleus_socket must not be empty",
+            ));
+        }
+        if self
+            .liaison
+            .model
+            .as_ref()
+            .is_some_and(|model| model.trim().is_empty())
+        {
+            return Err(AppError::invalid(
+                "invalid_config",
+                "liaison.model must not be blank",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn inbox(&self) -> Result<&InboxConfig, AppError> {
+        self.inbox.as_ref().ok_or_else(|| {
+            AppError::invalid(
+                "inbox_not_configured",
+                "the selected configuration does not define [inbox]",
+            )
+        })
+    }
+}
+
+fn resolve_config_path(explicit: Option<&Path>, environment: Option<&OsStr>) -> Option<PathBuf> {
+    explicit.map(Path::to_path_buf).or_else(|| {
+        environment
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+    })
+}
+
+const fn default_settle_seconds() -> u64 {
+    DEFAULT_SETTLE_SECONDS
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+    use std::fs;
+    use std::path::Path;
+
+    use super::{Config, resolve_config_path};
+    use crate::model_runner::ModelQuality;
+
+    #[test]
+    fn parses_defaults_and_rejects_unknown_fields() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("annals.toml");
+        fs::write(
+            &path,
+            "library = \"library.db\"\n[inbox]\nroot = \"spool\"\n[liaison]\nquality = \"medium\"\n",
+        )?;
+        let config = Config::read(&path)?;
+        let inbox = config.inbox()?;
+        assert_eq!(inbox.settle_seconds, 60);
+        assert_eq!(inbox.root, directory.path().join("spool"));
+        assert_eq!(config.library, Some(directory.path().join("library.db")));
+        assert_eq!(config.liaison.quality, ModelQuality::Medium);
+
+        fs::write(&path, "unknown = true\n")?;
+        assert!(Config::read(&path).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn config_path_honors_precedence_and_ignores_an_empty_environment() {
+        let explicit = Path::new("explicit.toml");
+        let environment = OsStr::new("environment.toml");
+
+        assert_eq!(
+            resolve_config_path(Some(explicit), Some(environment)).as_deref(),
+            Some(explicit)
+        );
+        assert_eq!(
+            resolve_config_path(None, Some(environment)).as_deref(),
+            Some(Path::new("environment.toml"))
+        );
+        assert_eq!(resolve_config_path(None, Some(OsStr::new(""))), None);
+        assert_eq!(resolve_config_path(None, None), None);
+    }
+}

@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -eu
+
+STATE_DIR=${ANNALS_STATE_DIR:-${HOME:?}/Library/Application Support/Annals}
+PAYLOAD="$STATE_DIR/install/current/libexec/annals"
+DEFAULT_CONFIG="$STATE_DIR/config.toml"
+
+target_selected=0
+if [ -n "${ANNALS_CONFIG:-}" ] || [ -n "${ANNALS_LIBRARY:-}" ]; then
+    target_selected=1
+fi
+for argument in "$@"; do
+    case "$argument" in
+        --config|--config=*|--library|--library=*)
+            target_selected=1
+            ;;
+    esac
+done
+
+if [ "$target_selected" -eq 0 ]; then
+    ANNALS_CONFIG=$DEFAULT_CONFIG
+    export ANNALS_CONFIG
+fi
+
+exec "$PAYLOAD" "$@"

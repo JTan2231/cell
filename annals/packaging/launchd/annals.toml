@@ -1,0 +1,10 @@
+library = "/Library/Application Support/Annals/annals.db"
+
+[inbox]
+root = "/Library/Application Support/Annals/spool"
+settle_seconds = 60
+
+[liaison]
+quality = "high"
+# nucleus_socket = "/Users/operator/Library/Application Support/Nucleus/nucleus.sock"
+# model = "gpt-5.6-sol"

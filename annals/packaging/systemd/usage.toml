@@ -1,0 +1,5 @@
+codex = "/usr/local/bin/codex"
+database = "/var/lib/annals/usage.db"
+library = "/var/lib/annals/annals.db"
+spool = "/var/spool/annals"
+codex_home = "/var/lib/annals/codex-home"

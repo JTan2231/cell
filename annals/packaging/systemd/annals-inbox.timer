@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Annals inbox after boot and between queue-drain activations
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=5min
+AccuracySec=1min
+Unit=annals-inbox.service
+
+[Install]
+WantedBy=timers.target

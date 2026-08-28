@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -eu
+
+PAYLOAD=/usr/local/libexec/annals/annals-usage
+SYSTEM_CONFIG='/Library/Application Support/Annals/usage.toml'
+
+config_selected=0
+if [ -n "${ANNALS_USAGE_CONFIG:-}" ] || [ -n "${ANNALS_CONFIG:-}" ]; then
+    config_selected=1
+fi
+for argument in "$@"; do
+    case "$argument" in
+        --config|--config=*)
+            config_selected=1
+            ;;
+    esac
+done
+
+if [ "$config_selected" -eq 0 ]; then
+    ANNALS_USAGE_CONFIG=$SYSTEM_CONFIG
+    export ANNALS_USAGE_CONFIG
+fi
+
+exec "$PAYLOAD" "$@"

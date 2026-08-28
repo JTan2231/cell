@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>org.annals.inbox</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/annals</string>
+        <string>--quiet</string>
+        <string>inbox</string>
+        <string>run</string>
+    </array>
+
+    <key>UserName</key>
+    <string>__ANNALS_OPERATOR__</string>
+    <key>GroupName</key>
+    <string>__ANNALS_GROUP__</string>
+    <key>WorkingDirectory</key>
+    <string>/Library/Application Support/Annals</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Library/Application Support/Annals</string>
+        <key>CODEX_HOME</key>
+        <string>/Library/Application Support/Annals/codex-home</string>
+        <key>ANNALS_USAGE_CONFIG</key>
+        <string>/Library/Application Support/Annals/usage.toml</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>Umask</key>
+    <string>077</string>
+
+    <key>StandardOutPath</key>
+    <string>/Library/Application Support/Annals/log/inbox.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Library/Application Support/Annals/log/inbox.stderr.log</string>
+</dict>
+</plist>
