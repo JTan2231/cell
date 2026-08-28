@@ -1,0 +1,39 @@
+[package]
+name = "nucleus-daemon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "nucleus_daemon"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nucleusd"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+base64.workspace = true
+clap.workspace = true
+nucleus-codex = { path = "../nucleus-codex" }
+nucleus-core = { path = "../nucleus-core" }
+nucleus-store = { path = "../nucleus-store" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+tower.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+nucleus-client = { path = "../nucleus-client" }
+reqwest.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true
