@@ -13,6 +13,8 @@ todo show tN
 todo note add tN TEXT|-
 todo done tN
 todo reopen tN
+todo email preview
+todo email send [--scheduled]
 ```
 
 Global options work before or after the subcommand. Commands are
@@ -24,6 +26,33 @@ and are bounded by `--limit`.
 
 `done` and `reopen` are idempotent. Todo content and existing working notes
 cannot be edited or deleted through the CLI.
+
+## Outstanding-todo email
+
+`email preview` renders the exact current digest without reading
+`RESEND_API_KEY` or making a network request. Human output contains `From`,
+`To`, and `Subject` headers followed by the plain-text body. JSON data contains
+`from`, `to`, `todo_count`, `subject`, `text`, and `html`.
+
+`email send` sends that digest immediately through Resend. It requires a
+nonblank `RESEND_API_KEY` with no surrounding whitespace in the process
+environment and uses
+`todo-email/<UUIDv7>` as its idempotency key. `email send --scheduled` also
+sends immediately; it changes only the key to
+`todo-daily-email/<LOCAL YYYY-MM-DD>`, identifying the most recent local 09:00
+occurrence. Neither mode submits a Resend `scheduled_at` value. One invocation
+freezes the body and key for up to three total attempts on transport failures,
+`429`, or `5xx` responses.
+
+Human success is `Sent N outstanding todos to ADDRESS (RESEND_ID)` and is
+suppressed by `--quiet`. JSON data contains `email_id`, `idempotency_key`,
+`scheduled`, `to`, and `todo_count`.
+
+The digest contains all open todos, newest first, as ID and title only. Its
+subject is `Todo: N outstanding`; the text body starts with
+`Outstanding todos: N` and lists `- tN — Title`. When none are open, the body
+is `No outstanding todos.` rather than skipping the occurrence. Email commands
+require `[email]` configuration; other commands do not.
 
 ## Creating a todo
 
@@ -68,7 +97,21 @@ quality = "high"
 # model = "an-exact-model-override"
 ```
 
-Unknown fields and invalid quality values are errors. The deprecated
+Email delivery is optional. For example, the current user deployment may add:
+
+```toml
+[email]
+from = "todo@joeytan.dev"
+to = "j.tan2231@gmail.com"
+```
+
+Those addresses are deployment configuration, not product defaults. `from`
+and `to` are required, nonblank single-line strings when `[email]` is present.
+The sender domain must be verified in Resend. The API key is environment-only;
+it is not a supported TOML field.
+
+Unknown fields, incomplete email configuration, and invalid quality values are
+errors. The deprecated
 `liaison.codex` key remains parseable during the deployment rollback window but
 is ignored; there is no direct-Codex fallback. Nucleus uses `NUCLEUS_SOCKET`
 when set and its standard per-user socket otherwise.

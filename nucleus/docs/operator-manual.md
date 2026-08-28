@@ -76,7 +76,7 @@ reason.
 ## Topology and authority
 
 ```text
-Todo ---------\
+Todo new -----\
                \
 Annals ----------> Nucleus ----------> Codex app-server ----------> account
    |                  |                        |
@@ -91,6 +91,11 @@ Annals ----------> Nucleus ----------> Codex app-server ----------> account
 Annals Usage <------ Nucleus logs and account reads
 Todo SQLite <------- Todo's validated create_todo operation
 ```
+
+Only `todo new` follows the Todo-to-Nucleus arrow. Todo's deterministic
+lifecycle and email commands read its SQLite database directly. In particular,
+the optional daily email path calls Resend without creating a Nucleus job,
+using Nucleus authentication, or depending on Nucleus health.
 
 Nucleus is a per-user execution coordinator, not a project registry or workflow
 engine. A requester submits one closed, versioned invocation. Nucleus validates
@@ -148,7 +153,12 @@ protocol version 1.
 
 Annals and Todo have their own state, installation, backup, and recovery
 boundaries. Do not infer their state from Nucleus or copy their detailed
-procedures into this manual.
+procedures into this manual. Todo's optional
+`~/Library/LaunchAgents/org.todo.daily-email.plist` is a separate user service:
+launchd invokes Todo at 09:00 machine-local time, its zsh runner sources
+`RESEND_API_KEY` from `~/.zshrc`, and its logs live under
+`~/Library/Logs/Todo/`. It is not part of `org.nucleus.daemon` or Nucleus's
+credential lease.
 
 ## Compatibility model
 
@@ -228,6 +238,8 @@ Nucleus has no global drain mode. Quiescence is established at its requesters:
 
 Stopping or replacing `nucleusd` while a job is active makes that attempt
 `lost`. The requester—not Nucleus—decides whether a new domain attempt is safe.
+The Todo daily-email LaunchAgent is not a Nucleus requester and does not need
+to be paused to establish Nucleus quiescence.
 
 ### Authentication recovery
 
@@ -497,7 +509,7 @@ Keep detailed CLI and domain procedures in its own product tree.
 
 | Change | Primary authority | Cross-system obligations |
 | --- | --- | --- |
-| Todo creation, lifecycle, provenance, database, or deployment | Todo | Preserve its Nucleus adapter contract when affected; Nucleus does not gain Todo fields. |
+| Todo creation, lifecycle, provenance, database, email delivery, or deployment | Todo | Preserve its Nucleus adapter contract when affected; the direct Resend path does not become a Nucleus job, and Nucleus does not gain Todo fields. |
 | Annals works, concepts, evidence, reconciliation, inbox, retry, or corpus migration | Annals | Preserve job correlation and adapter behavior when affected; Nucleus does not gain Annals workflow state. |
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
 | New portable invocation meaning or HTTP behavior | Nucleus core/client/daemon | Version the public contract, update examples/tests/docs, then update affected requesters in compatible order. |
@@ -663,6 +675,8 @@ An Annals integration canary creates a real examination and reconciliation
 record even without `--apply`; choose the work deliberately and inspect the
 result. A Todo canary creates a real todo; choose a real source and direction or
 use an isolated Todo database. Do not leave unexplained canary domain records.
+Sending or previewing Todo's email digest does not exercise Nucleus and is not
+a requester canary.
 
 ## Where facts and changes belong
 

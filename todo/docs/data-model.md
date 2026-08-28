@@ -42,3 +42,11 @@ working notes, so the record does not silently rewrite its own history.
 
 Todos are not deleted in version 1. Foreign keys use restrictive deletion
 semantics.
+
+## Email projection
+
+Email configuration, API credentials, rendered digests, Resend identifiers,
+send attempts, and delivery status are not stored in SQLite. A digest is a
+current read projection over the open rows. The installed configuration owns
+the sender and recipient, the process environment owns `RESEND_API_KEY`, and
+Resend owns its external delivery and short-lived idempotency records.

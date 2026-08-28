@@ -53,6 +53,9 @@ pub(crate) enum Command {
     /// Append working notes to a todo.
     #[command(subcommand)]
     Note(NoteCommand),
+    /// Preview or send the outstanding-todo email.
+    #[command(subcommand)]
+    Email(EmailCommand),
     /// Mark a todo done.
     Done(TodoArgs),
     /// Reopen a completed todo.
@@ -118,6 +121,21 @@ pub(crate) struct TodoArgs {
 pub(crate) enum NoteCommand {
     /// Append one immutable working note.
     Add(NoteAddArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub(crate) enum EmailCommand {
+    /// Preview the exact email without sending it.
+    Preview,
+    /// Send the current outstanding todos through Resend.
+    Send(EmailSendArgs),
+}
+
+#[derive(Debug, Clone, Args)]
+pub(crate) struct EmailSendArgs {
+    /// Use the deterministic daily idempotency key intended for launchd.
+    #[arg(long)]
+    pub(crate) scheduled: bool,
 }
 
 #[derive(Debug, Clone, Args)]

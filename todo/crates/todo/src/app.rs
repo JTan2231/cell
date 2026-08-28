@@ -7,12 +7,16 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::cli::{Cli, Command, ListArgs, NewArgs, NoteAddArgs, NoteCommand, SearchArgs};
+use crate::cli::{
+    Cli, Command, EmailCommand, EmailSendArgs, ListArgs, NewArgs, NoteAddArgs, NoteCommand,
+    SearchArgs,
+};
 use crate::config::Config;
+use crate::email::EmailPreview;
 use crate::error::{AppError, AppResult};
 use crate::model::{ModelQuality, TodoId, TodoSummary, TodoView};
 use crate::render::{CommandOutput, terminal_text};
-use crate::{db, liaison, todo_store};
+use crate::{db, email, liaison, todo_store};
 
 const MAX_PAGE_LIMIT: u32 = 1_000;
 
@@ -71,9 +75,61 @@ pub(crate) fn run(cli: &Cli, config: &Config, database: &Path) -> AppResult<Comm
         Command::Note(command) => match command {
             NoteCommand::Add(args) => add_note(database, args),
         },
+        Command::Email(command) => match command {
+            EmailCommand::Preview => preview_email(database, config),
+            EmailCommand::Send(args) => send_email(database, config, args),
+        },
         Command::Done(args) => done(database, args.id),
         Command::Reopen(args) => reopen(database, args.id),
     }
+}
+
+fn preview_email(database: &Path, config: &Config) -> AppResult<CommandOutput> {
+    let preview = build_email(database, config)?;
+    let human = render_email_preview(&preview);
+    Ok(CommandOutput::new(to_value(&preview)?, human))
+}
+
+fn send_email(database: &Path, config: &Config, args: &EmailSendArgs) -> AppResult<CommandOutput> {
+    let preview = build_email(database, config)?;
+    let result = email::send(&preview, args.scheduled)?;
+    let human = format!(
+        "Sent {} outstanding todos to {} ({})",
+        preview.todo_count, preview.to, result.email_id
+    );
+    Ok(CommandOutput::new(
+        json!({
+            "email_id": result.email_id,
+            "idempotency_key": result.idempotency_key,
+            "scheduled": args.scheduled,
+            "to": preview.to,
+            "todo_count": preview.todo_count,
+        }),
+        human,
+    )
+    .mutation())
+}
+
+fn build_email(database: &Path, config: &Config) -> AppResult<EmailPreview> {
+    let email_config = config.email.as_ref().ok_or_else(|| {
+        AppError::invalid(
+            "email_not_configured",
+            "email is not configured; add an [email] section with from and to",
+        )
+    })?;
+    let connection = db::open_read(database)?;
+    let todos = todo_store::list_open(&connection)?;
+    Ok(EmailPreview::new(email_config, &todos))
+}
+
+fn render_email_preview(preview: &EmailPreview) -> String {
+    format!(
+        "From: {}\nTo: {}\nSubject: {}\n\n{}",
+        terminal_text(&preview.from, false),
+        terminal_text(&preview.to, false),
+        terminal_text(&preview.subject, false),
+        preview.text
+    )
 }
 
 fn initialize(database: &Path) -> AppResult<CommandOutput> {

@@ -76,6 +76,17 @@ pub(crate) fn list(
     rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
 }
 
+pub(crate) fn list_open(connection: &Connection) -> AppResult<Vec<TodoSummary>> {
+    let mut statement = connection.prepare(
+        "SELECT id, title, status, created_at, completed_at
+         FROM todos
+         WHERE status = 'open'
+         ORDER BY created_at DESC, id DESC",
+    )?;
+    let rows = statement.query_map([], summary_from_row)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+}
+
 pub(crate) fn search(
     connection: &Connection,
     query: &str,
@@ -282,7 +293,9 @@ fn validate_content(name: &str, value: &str) -> AppResult<()> {
 mod tests {
     use std::path::Path;
 
-    use super::{CreateTodo, append_note, create, list, mark_done, reopen, search, show};
+    use super::{
+        CreateTodo, append_note, create, list, list_open, mark_done, reopen, search, show,
+    };
     use crate::db;
     use crate::model::TodoStatus;
 
@@ -356,6 +369,37 @@ mod tests {
                 .execute("DELETE FROM todo_notes WHERE id = 1", [])
                 .is_err()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn digest_query_returns_every_open_todo() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("todo.db");
+        let mut connection = db::init(&database)?;
+        let transaction = connection.transaction()?;
+        for number in 0..1_005 {
+            transaction.execute(
+                "INSERT INTO todos(title, note, pointer, source_path)
+                 VALUES(?1, 'note', 'pointer', '/tmp/source.md')",
+                [format!("Todo {number}")],
+            )?;
+        }
+        transaction.execute(
+            "INSERT INTO todos(title, note, pointer, source_path, status, completed_at)
+             VALUES('Done', 'note', 'pointer', '/tmp/source.md', 'done',
+                    '2026-08-27T12:00:00.000Z')",
+            [],
+        )?;
+        transaction.commit()?;
+
+        let todos = list_open(&connection)?;
+        assert_eq!(todos.len(), 1_005);
+        assert_eq!(
+            todos.first().map(|todo| todo.title.as_str()),
+            Some("Todo 1004")
+        );
+        assert!(todos.iter().all(|todo| todo.status == TodoStatus::Open));
         Ok(())
     }
 }

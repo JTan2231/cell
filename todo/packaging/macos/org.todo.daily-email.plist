@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>org.todo.daily-email</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>__TODO_EMAIL_RUNNER__</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__TODO_STATE_DIR__</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>__TODO_HOME__</string>
+    </dict>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>Umask</key>
+    <string>077</string>
+
+    <key>StandardOutPath</key>
+    <string>__TODO_STDOUT_PATH__</string>
+    <key>StandardErrorPath</key>
+    <string>__TODO_STDERR_PATH__</string>
+</dict>
+</plist>

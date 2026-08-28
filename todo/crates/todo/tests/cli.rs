@@ -1,3 +1,4 @@
+use std::fs;
 use std::io::Write as _;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
@@ -102,11 +103,68 @@ fn missing_todos_and_invalid_limits_have_stable_errors() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn email_preview_is_offline_and_send_requires_the_resend_key() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let database = directory.path().join("todo.db");
+    let config = directory.path().join("todo.toml");
+    assert!(run(&database, &["init"])?.status.success());
+    seed_todos(&database)?;
+    fs::write(
+        &config,
+        concat!(
+            "[email]\n",
+            "from = \"Todo <todo@example.com>\"\n",
+            "to = \"person@example.com\"\n",
+        ),
+    )?;
+    let config = config.to_str().ok_or("config path is not UTF-8")?;
+
+    let preview = run(
+        &database,
+        &["--config", config, "--json", "email", "preview"],
+    )?;
+    assert!(preview.status.success());
+    let value = stdout_json(&preview)?;
+    assert_eq!(value["data"]["from"], "Todo <todo@example.com>");
+    assert_eq!(value["data"]["to"], "person@example.com");
+    assert_eq!(value["data"]["todo_count"], 1);
+    assert_eq!(value["data"]["subject"], "Todo: 1 outstanding");
+    assert!(
+        value["data"]["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("t1") && text.contains("Research usage reporting"))
+    );
+    assert!(value["data"]["html"].as_str().is_some_and(|html| {
+        html.contains("<strong>t1</strong>") && !html.contains("Determine how usage")
+    }));
+
+    let send = run_without_resend_key(
+        &database,
+        &["--config", config, "--json", "email", "send", "--scheduled"],
+    )?;
+    assert_eq!(send.status.code(), Some(2));
+    assert_eq!(
+        stderr_json(&send)?["error"]["code"],
+        "resend_api_key_not_configured"
+    );
+    Ok(())
+}
+
 fn run(database: &Path, args: &[&str]) -> Result<Output, std::io::Error> {
     Command::new(env!("CARGO_BIN_EXE_todo"))
         .arg("--database")
         .arg(database)
         .args(args)
+        .output()
+}
+
+fn run_without_resend_key(database: &Path, args: &[&str]) -> Result<Output, std::io::Error> {
+    Command::new(env!("CARGO_BIN_EXE_todo"))
+        .arg("--database")
+        .arg(database)
+        .args(args)
+        .env_remove("RESEND_API_KEY")
         .output()
 }
 
