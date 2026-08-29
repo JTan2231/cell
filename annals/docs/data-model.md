@@ -19,8 +19,9 @@ snapshots, or JSON used as operational truth. `CorpusState` is an immutable
 in-memory value reduced from revision zero through the typed effects. Every
 current and historical corpus read uses that same reducer.
 
-The separate `annals-usage` ledger is not part of this schema. See
-[Consumption telemetry](telemetry.md).
+`annals-usage` stores no companion schema. It calculates a disposable report
+from Nucleus model output, this library's attribution records, and inbox job
+receipts. See [Consumption telemetry](telemetry.md).
 
 ## Library identity and revision
 

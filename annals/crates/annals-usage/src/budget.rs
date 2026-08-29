@@ -3,8 +3,6 @@ use serde_json::Value;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-use crate::database::now_millis;
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BudgetReport {
@@ -15,13 +13,15 @@ pub(crate) struct BudgetReport {
 }
 
 impl BudgetReport {
-    pub(crate) fn new(snapshot: Value) -> Result<Self, crate::database::DatabaseError> {
-        Ok(Self {
-            observed_at: format_millis(now_millis()?),
+    pub(crate) fn new(snapshot: Value) -> Self {
+        Self {
+            observed_at: OffsetDateTime::now_utc()
+                .format(&Rfc3339)
+                .unwrap_or_else(|_| "unavailable".to_owned()),
             scope: "account-global Codex subscription state",
             attribution: "not uniquely attributable to Annals or one source delivery",
             snapshot,
-        })
+        }
     }
 }
 
@@ -203,16 +203,6 @@ fn format_seconds(seconds: i64) -> String {
     timestamp
         .format(&Rfc3339)
         .unwrap_or_else(|_| seconds.to_string())
-}
-
-fn format_millis(millis: i64) -> String {
-    let Ok(timestamp) = OffsetDateTime::from_unix_timestamp_nanos(i128::from(millis) * 1_000_000)
-    else {
-        return millis.to_string();
-    };
-    timestamp
-        .format(&Rfc3339)
-        .unwrap_or_else(|_| millis.to_string())
 }
 
 fn grouped(value: i64) -> String {

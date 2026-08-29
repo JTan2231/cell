@@ -34,8 +34,7 @@ CREATE TABLE jobs (
     created_at                 TEXT NOT NULL,
     updated_at                 TEXT NOT NULL,
     completed_at               TEXT,
-    terminal_reason            TEXT,
-    next_log_sequence          INTEGER NOT NULL DEFAULT 1 CHECK (next_log_sequence > 0)
+    terminal_reason            TEXT
 ) STRICT;
 
 CREATE INDEX jobs_by_requester
@@ -95,25 +94,13 @@ CREATE TABLE toolsets (
     PRIMARY KEY (provider, name, version)
 ) STRICT;
 
-CREATE TABLE log_records (
-    job_id          TEXT NOT NULL REFERENCES jobs(id),
-    attempt_id      TEXT,
-    sequence        INTEGER NOT NULL CHECK (sequence > 0),
-    observed_at     TEXT NOT NULL,
-    emitted_at      TEXT,
-    stream          TEXT NOT NULL,
-    schema_id       TEXT NOT NULL REFERENCES log_schemas(id),
-    payload         BLOB NOT NULL,
-    payload_digest  BLOB NOT NULL CHECK (length(payload_digest) = 32),
-    PRIMARY KEY (job_id, sequence),
-    FOREIGN KEY (job_id, attempt_id) REFERENCES attempts(job_id, id)
+CREATE TABLE harness_output_records (
+    attempt_id   TEXT NOT NULL REFERENCES attempts(id),
+    sequence     INTEGER NOT NULL CHECK (sequence > 0),
+    observed_at  TEXT NOT NULL,
+    payload      BLOB NOT NULL,
+    PRIMARY KEY (attempt_id, sequence)
 ) STRICT;
-
-CREATE INDEX log_records_by_attempt
-    ON log_records(attempt_id, sequence);
-
-CREATE INDEX log_records_by_schema
-    ON log_records(schema_id, job_id, sequence);
 
 CREATE TABLE pending_tool_calls (
     job_id               TEXT NOT NULL REFERENCES jobs(id),
@@ -129,20 +116,18 @@ CREATE TABLE pending_tool_calls (
     result_bytes         BLOB,
     result_digest        BLOB CHECK (result_digest IS NULL OR length(result_digest) = 32),
     result_is_error      INTEGER CHECK (result_is_error IN (0, 1)),
-    result_sequence      INTEGER,
     created_at           TEXT NOT NULL,
     answered_at          TEXT,
     PRIMARY KEY (job_id, id),
     FOREIGN KEY (job_id, attempt_id) REFERENCES attempts(job_id, id),
-    FOREIGN KEY (job_id, request_sequence) REFERENCES log_records(job_id, sequence),
-    FOREIGN KEY (job_id, result_sequence) REFERENCES log_records(job_id, sequence),
+    FOREIGN KEY (attempt_id, request_sequence)
+        REFERENCES harness_output_records(attempt_id, sequence),
     CHECK (
         (state = 'pending'
             AND result_schema_id IS NULL
             AND result_bytes IS NULL
             AND result_digest IS NULL
             AND result_is_error IS NULL
-            AND result_sequence IS NULL
             AND answered_at IS NULL)
         OR
         (state = 'answered'
@@ -150,7 +135,6 @@ CREATE TABLE pending_tool_calls (
             AND result_bytes IS NOT NULL
             AND result_digest IS NOT NULL
             AND result_is_error IS NOT NULL
-            AND result_sequence IS NOT NULL
             AND answered_at IS NOT NULL)
     )
 ) STRICT;

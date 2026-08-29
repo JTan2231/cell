@@ -10,14 +10,12 @@ umask 077
 SERVICE_LABEL=org.annals.inbox
 SERVICE_TARGET=system/$SERVICE_LABEL
 STATE_DIR='/Library/Application Support/Annals'
-CODEX_HOME="$STATE_DIR/codex-home"
 SPOOL_DIR="$STATE_DIR/spool"
 MAINTENANCE_MARKER="$SPOOL_DIR/.maintenance"
 PAUSED_MARKER="$SPOOL_DIR/.paused"
 CONFIG_PATH="$STATE_DIR/config.toml"
 USAGE_CONFIG_PATH="$STATE_DIR/usage.toml"
 LIBRARY_PATH="$STATE_DIR/annals.db"
-USAGE_LIBRARY_PATH="$STATE_DIR/usage.db"
 PAYLOAD_DIR=/usr/local/libexec/annals
 INSTALL_PAYLOAD="$PAYLOAD_DIR/annals"
 INSTALL_USAGE_PAYLOAD="$PAYLOAD_DIR/annals-usage"
@@ -34,7 +32,8 @@ operator=
 operator_group=
 binary_path=
 usage_binary_path=
-codex_path=
+nucleus_path=
+nucleus_socket=
 no_start=0
 temporary_config=
 temporary_frontend=
@@ -61,12 +60,14 @@ committed=0
 usage() {
     cat <<'EOF'
 Usage: install.sh --operator USER --binary ABSOLUTE_PATH \
-  --usage-binary ABSOLUTE_PATH --codex ABSOLUTE_PATH [--no-start]
+  --usage-binary ABSOLUTE_PATH --nucleus ABSOLUTE_PATH \
+  --nucleus-socket ABSOLUTE_PATH [--no-start]
 
 Install or update the single-operator macOS Annals LaunchDaemon. The operator
 owns the private state and can use the installed `annals` command without sudo.
 Existing state must already belong to the selected operator; this installer
-does not migrate installations owned by another account.
+does not migrate installations owned by another account. Nucleus must already
+be running and authenticated at the supplied socket.
 EOF
 }
 
@@ -161,9 +162,14 @@ while [ "$#" -gt 0 ]; do
             usage_binary_path=$2
             shift 2
             ;;
-        --codex)
-            [ "$#" -ge 2 ] || fail '--codex requires a path'
-            codex_path=$2
+        --nucleus)
+            [ "$#" -ge 2 ] || fail '--nucleus requires a path'
+            nucleus_path=$2
+            shift 2
+            ;;
+        --nucleus-socket)
+            [ "$#" -ge 2 ] || fail '--nucleus-socket requires a path'
+            nucleus_socket=$2
             shift 2
             ;;
         --no-start)
@@ -185,7 +191,8 @@ done
 [ -n "$operator" ] || fail '--operator is required'
 [ -n "$binary_path" ] || fail '--binary is required'
 [ -n "$usage_binary_path" ] || fail '--usage-binary is required'
-[ -n "$codex_path" ] || fail '--codex is required'
+[ -n "$nucleus_path" ] || fail '--nucleus is required'
+[ -n "$nucleus_socket" ] || fail '--nucleus-socket is required'
 
 case "$operator" in
     *[!A-Za-z0-9._-]*|'') fail "invalid operator user name: $operator" ;;
@@ -205,9 +212,13 @@ case "$usage_binary_path" in
     /*) ;;
     *) fail '--usage-binary must be an absolute path' ;;
 esac
-case "$codex_path" in
+case "$nucleus_path" in
     /*) ;;
-    *) fail '--codex must be an absolute path' ;;
+    *) fail '--nucleus must be an absolute path' ;;
+esac
+case "$nucleus_socket" in
+    /*) ;;
+    *) fail '--nucleus-socket must be an absolute path' ;;
 esac
 
 [ -f "$binary_path" ] && [ ! -L "$binary_path" ] && [ -x "$binary_path" ] \
@@ -215,14 +226,14 @@ esac
 [ -f "$usage_binary_path" ] && [ ! -L "$usage_binary_path" ] \
     && [ -x "$usage_binary_path" ] \
     || fail "Annals usage binary is not an executable regular file: $usage_binary_path"
-[ -f "$codex_path" ] || [ -L "$codex_path" ] \
-    || fail "Codex executable does not exist: $codex_path"
-[ -x "$codex_path" ] || fail "Codex path is not executable: $codex_path"
-[ "$usage_binary_path" != "$codex_path" ] \
-    || fail 'the Annals usage binary and real Codex executable must differ'
-case "$codex_path" in
+[ -f "$nucleus_path" ] || [ -L "$nucleus_path" ] \
+    || fail "Nucleus executable does not exist: $nucleus_path"
+[ -x "$nucleus_path" ] || fail "Nucleus path is not executable: $nucleus_path"
+[ "$usage_binary_path" != "$nucleus_path" ] \
+    || fail 'the Annals usage binary and Nucleus executable must differ'
+case "$nucleus_path" in
     "$INSTALL_USAGE_PAYLOAD"|"$INSTALL_USAGE_FRONTEND")
-        fail 'the real Codex path must not select the installed Annals usage proxy'
+        fail 'the Nucleus path must not select the installed Annals usage command'
         ;;
 esac
 [ -f "$SOURCE_CONFIG" ] && [ ! -L "$SOURCE_CONFIG" ] \
@@ -244,9 +255,9 @@ case "$usage_version" in
     'annals-usage '*) ;;
     *) fail "unexpected Annals usage binary version output: $usage_version" ;;
 esac
-codex_version=$("$codex_path" --version)
-case "$codex_version" in
-    'annals-usage '*) fail 'the supplied real Codex path resolves to annals-usage' ;;
+nucleus_version=$("$nucleus_path" --version)
+case "$nucleus_version" in
+    'annals-usage '*) fail 'the supplied Nucleus path resolves to annals-usage' ;;
 esac
 sh -n "$SOURCE_FRONTEND"
 sh -n "$SOURCE_USAGE_FRONTEND"
@@ -254,11 +265,13 @@ plutil -lint "$SOURCE_PLIST" >/dev/null
 [ "$(plutil -extract Label raw -o - "$SOURCE_PLIST")" = "$SERVICE_LABEL" ] \
     || fail "packaged plist label is not $SERVICE_LABEL"
 
-codex_lines=$(printf '%s\n' "$codex_path" | wc -l | tr -d ' ')
-[ "$codex_lines" -eq 1 ] || fail 'the Codex path must not contain a newline'
-case "$codex_path" in
-    *\"*|*\\*) fail 'the Codex path contains characters unsupported by config rendering' ;;
-esac
+for config_value in "$nucleus_path" "$nucleus_socket"; do
+    value_lines=$(printf '%s\n' "$config_value" | wc -l | tr -d ' ')
+    [ "$value_lines" -eq 1 ] || fail 'a Nucleus path must not contain a newline'
+    case "$config_value" in
+        *\"*|*\\*) fail 'a Nucleus path contains characters unsupported by config rendering' ;;
+    esac
+done
 
 check_directory() {
     path=$1
@@ -282,7 +295,6 @@ check_file() {
 
 for path in \
     "$STATE_DIR" \
-    "$CODEX_HOME" \
     "$STATE_DIR/log" \
     "$SPOOL_DIR" \
     "$SPOOL_DIR/incoming" \
@@ -305,9 +317,6 @@ for path in \
     "$MAINTENANCE_MARKER" \
     "$PAUSED_MARKER" \
     "$LIBRARY_PATH" \
-    "$USAGE_LIBRARY_PATH" \
-    "$CODEX_HOME/config.toml" \
-    "$CODEX_HOME/auth.json" \
     "$INSTALL_PAYLOAD" \
     "$INSTALL_USAGE_PAYLOAD" \
     "$INSTALL_FRONTEND" \
@@ -366,7 +375,6 @@ run_as_operator() {
             || fail "unable to enter operator state directory: $STATE_DIR"
         sudo -u "$operator" env -i \
             HOME="$STATE_DIR" \
-            CODEX_HOME="$CODEX_HOME" \
             ANNALS_USAGE_CONFIG="$USAGE_CONFIG_PATH" \
             PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin \
             USER="$operator" \
@@ -419,7 +427,6 @@ fi
 
 for path in \
     "$STATE_DIR" \
-    "$CODEX_HOME" \
     "$STATE_DIR/log" \
     "$SPOOL_DIR" \
     "$SPOOL_DIR/incoming" \
@@ -458,47 +465,57 @@ temporary_usage_frontend=
 
 temporary_config="$STATE_DIR/.config.toml.install.$$"
 if [ ! -e "$CONFIG_PATH" ]; then
-    install -o "$operator" -g "$operator_group" -m 0600 \
-        "$SOURCE_CONFIG" "$temporary_config"
+    config_source=$SOURCE_CONFIG
 else
     config_owner=$(stat -f '%Su' "$CONFIG_PATH")
     [ "$config_owner" = "$operator" ] \
         || fail "$CONFIG_PATH belongs to $config_owner, not $operator"
-    if ! awk -v proxy="$INSTALL_USAGE_PAYLOAD" '
-        BEGIN {
-            in_liaison = 0
-            changed = 0
-        }
-        /^\[liaison\][[:space:]]*$/ {
-            in_liaison = 1
-            print
-            next
-        }
-        /^\[/ {
-            in_liaison = 0
-        }
-        in_liaison && /^[[:space:]]*codex[[:space:]]*=/ {
-            print "codex = \"" proxy "\""
-            changed++
-            next
-        }
-        {
-            print
-        }
-        END {
-            if (changed != 1) {
-                exit 1
-            }
-        }
-    ' "$CONFIG_PATH" >"$temporary_config"
-    then
-        fail "unable to select the Annals usage proxy in $CONFIG_PATH"
-    fi
-    chown "$operator:$operator_group" "$temporary_config"
-    chmod 0600 "$temporary_config"
+    config_source=$CONFIG_PATH
 fi
-grep -Fqx "codex = \"$INSTALL_USAGE_PAYLOAD\"" "$temporary_config" \
-    || fail 'candidate Annals configuration does not select the usage proxy'
+if ! awk -v socket="$nucleus_socket" '
+    BEGIN {
+        in_liaison = 0
+        saw_liaison = 0
+        selected = 0
+    }
+    /^\[liaison\][[:space:]]*$/ {
+        in_liaison = 1
+        saw_liaison = 1
+        print
+        next
+    }
+    /^\[/ {
+        if (in_liaison && selected == 0) {
+            print "nucleus_socket = \"" socket "\""
+            selected = 1
+        }
+        in_liaison = 0
+    }
+    in_liaison && /^[[:space:]]*(codex|nucleus_socket)[[:space:]]*=/ {
+        if (selected == 0) {
+            print "nucleus_socket = \"" socket "\""
+            selected = 1
+        }
+        next
+    }
+    { print }
+    END {
+        if (in_liaison && selected == 0) {
+            print "nucleus_socket = \"" socket "\""
+            selected = 1
+        }
+        if (!saw_liaison || selected != 1) {
+            exit 1
+        }
+    }
+' "$config_source" >"$temporary_config"
+then
+    fail "unable to select Nucleus in $config_source"
+fi
+chown "$operator:$operator_group" "$temporary_config"
+chmod 0600 "$temporary_config"
+grep -Fqx "nucleus_socket = \"$nucleus_socket\"" "$temporary_config" \
+    || fail 'candidate Annals configuration does not select Nucleus'
 mv -f "$temporary_config" "$CONFIG_PATH"
 temporary_config=
 
@@ -509,23 +526,15 @@ if [ -e "$USAGE_CONFIG_PATH" ]; then
 fi
 temporary_usage_config="$STATE_DIR/.usage.toml.install.$$"
 {
-    printf 'codex = "%s"\n' "$codex_path"
-    printf 'database = "%s"\n' "$USAGE_LIBRARY_PATH"
+    printf 'nucleus = "%s"\n' "$nucleus_path"
+    printf 'nucleus_socket = "%s"\n' "$nucleus_socket"
     printf 'library = "%s"\n' "$LIBRARY_PATH"
     printf 'spool = "%s"\n' "$SPOOL_DIR"
-    printf 'codex_home = "%s"\n' "$CODEX_HOME"
 } >"$temporary_usage_config"
 chown "$operator:$operator_group" "$temporary_usage_config"
 chmod 0600 "$temporary_usage_config"
 mv -f "$temporary_usage_config" "$USAGE_CONFIG_PATH"
 temporary_usage_config=
-
-codex_config="$CODEX_HOME/config.toml"
-if [ ! -e "$codex_config" ]; then
-    printf '%s\n' 'cli_auth_credentials_store = "file"' >"$codex_config"
-fi
-chown "$operator:$operator_group" "$codex_config"
-chmod 0600 "$codex_config"
 
 temporary_plist=/Library/LaunchDaemons/.org.annals.inbox.plist.$$
 install -o root -g wheel -m 0644 "$SOURCE_PLIST" "$temporary_plist"
@@ -537,29 +546,14 @@ temporary_plist=
 
 launchctl disable "$SERVICE_TARGET" >/dev/null 2>&1 || true
 
-run_as_operator "$codex_path" --version >/dev/null \
-    || fail "$operator cannot execute $codex_path"
-
-if [ ! -f "$CODEX_HOME/auth.json" ]; then
-    if [ -t 0 ] && [ -t 1 ]; then
-        printf '%s\n' 'Annals requires a Codex login in its state-local Codex home.'
-        run_as_operator "$codex_path" login --device-auth \
-            || fail 'Codex device authentication did not complete; the service remains disabled'
-    else
-        fail "Codex is not authenticated for $operator; rerun interactively to complete device login"
-    fi
-fi
-
-[ -f "$CODEX_HOME/auth.json" ] && [ ! -L "$CODEX_HOME/auth.json" ] \
-    || fail "Codex login did not create a regular $CODEX_HOME/auth.json"
-chown "$operator:$operator_group" "$CODEX_HOME/auth.json"
-chmod 0600 "$CODEX_HOME/auth.json"
+run_as_operator "$nucleus_path" --version >/dev/null \
+    || fail "$operator cannot execute $nucleus_path"
 
 run_as_operator "$INSTALL_USAGE_FRONTEND" --version >/dev/null \
-    || fail "$operator cannot execute the installed Annals usage proxy"
+    || fail "$operator cannot execute the installed Annals usage companion"
 run_as_operator "$INSTALL_USAGE_FRONTEND" doctor \
     --config "$USAGE_CONFIG_PATH" >/dev/null \
-    || fail "state-local Codex authentication failed for $operator; run $codex_path logout and $codex_path login --device-auth with CODEX_HOME=$CODEX_HOME, then rerun the installer"
+    || fail "Nucleus readiness or authentication failed for $operator; repair Nucleus, then rerun the installer"
 
 if [ ! -e "$LIBRARY_PATH" ]; then
     run_as_operator "$INSTALL_FRONTEND" init
@@ -590,6 +584,14 @@ else
         || fail 'LaunchDaemon verification failed'
     printf '%s\n' 'Annals is installed, validated, and scheduled with launchd.'
 fi
+
+# A live-only Annals Usage installation has no private ledger. This is the last
+# fallible state change before commit, so earlier failures still leave the old
+# release's ledger available to its rollback path.
+rm -f \
+    "$STATE_DIR/usage.db" \
+    "$STATE_DIR/usage.db-wal" \
+    "$STATE_DIR/usage.db-shm"
 
 committed=1
 

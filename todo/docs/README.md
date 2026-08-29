@@ -1,32 +1,50 @@
 # Todo documentation
 
-Todo converts an originating file and a directional need into one researched
-todo, then supports a small deterministic lifecycle and an optional email
-projection of the current open set.
+Todo preserves the distinctions between originating intent, identity,
+observed state, and desired state:
 
 ```text
-source path + direction
-          |
-    read-only research
-          |
-          v
- managed create_todo call
-          |
-          v
-       open todo -- done / reopen
-          |
-          `-- append-only working notes
-
-       open todos -- preview / send -- Resend
-                         ^
-                         `-- launchd at 09:00 local time on macOS
+source + direction
+       |
+       v
+ cN concern ---- research ----> rN pending routing proposal
+                                      |
+                            explicit decision
+                                      |
+                  +-------------------+-------------------+
+                  |                                       |
+          attach/create/revise/unify                 dismiss/defer
+                  |
+                  v
+          tN durable umbrella
+                  |
+          dated assessment
+                  v
+       aN situation assessment
+                  |
+          design reconciliation
+                  v
+       dN proposed design
+                  |
+          explicit decision
+                  v
+        accepted or rejected
 ```
+
+The diagram stops at accepted design. Todo does not turn designs into plans,
+work items, or implementation execution records. Nucleus runtime records for
+the research liaisons are provenance, not evidence that a design was
+implemented.
 
 The implemented contracts are:
 
-- [CLI](cli.md): commands, selectors, email configuration, and output behavior;
-- [Research liaison](liaison.md): prompt, permissions, and creation boundary;
-- [Architecture](architecture.md): runtime components and failure semantics;
-- [Data model](data-model.md): the two relational SQLite tables;
-- [macOS installation](system-installation.md): user-owned deployment, the
-  daily email LaunchAgent, and rollback.
+- [CLI](cli.md): commands, authorization provenance, selectors, migration,
+  email configuration, and output behavior;
+- [Research liaisons](liaison.md): the routing, situation, and design research
+  boundaries and their managed tools;
+- [Architecture](architecture.md): ownership, runtime integration,
+  stale-basis checks, and failure semantics;
+- [Data model](data-model.md): durable identities, immutable revisions,
+  decisions, and version-1 migration;
+- [macOS installation](system-installation.md): user-owned deployment,
+  migration rollback, the daily email LaunchAgent, and recovery.

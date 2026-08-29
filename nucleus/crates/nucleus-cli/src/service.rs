@@ -44,6 +44,19 @@ pub enum ServiceError {
         "installation failed: {install}; restoring the previous installation also failed: {rollback}"
     )]
     InstallRollback { install: String, rollback: String },
+    #[error("unable to inspect database schema at {path}: {source}")]
+    Database {
+        path: PathBuf,
+        #[source]
+        source: rusqlite::Error,
+    },
+    #[error(
+        "automatic binary rollback is unsafe because the database schema changed from {before:?} to {after:?}; keep the candidate binaries and restore a matching pre-cutover database only as an explicit recovery operation"
+    )]
+    SchemaRollbackUnsafe {
+        before: Option<i64>,
+        after: Option<i64>,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -126,6 +139,7 @@ struct PreviousInstallation {
     daemon: Option<FileSnapshot>,
     cli: Option<FileSnapshot>,
     launch_agent: Option<FileSnapshot>,
+    database_schema_version: Option<i64>,
     was_loaded: bool,
 }
 
@@ -135,6 +149,7 @@ impl PreviousInstallation {
             daemon: snapshot_file(&paths.daemon)?,
             cli: snapshot_file(&paths.cli)?,
             launch_agent: snapshot_file(&paths.launch_agent)?,
+            database_schema_version: database_schema_version(&paths.database)?,
             was_loaded,
         })
     }
@@ -145,6 +160,13 @@ impl PreviousInstallation {
         target: &str,
         replace_service: bool,
     ) -> Result<(), ServiceError> {
+        let current_schema = database_schema_version(&paths.database)?;
+        if current_schema != self.database_schema_version {
+            return Err(ServiceError::SchemaRollbackUnsafe {
+                before: self.database_schema_version,
+                after: current_schema,
+            });
+        }
         if replace_service
             && launchctl([OsStr::new("print"), OsStr::new(target)])?
                 .status
@@ -179,6 +201,27 @@ impl PreviousInstallation {
         }
         Ok(())
     }
+}
+
+fn database_schema_version(path: &Path) -> Result<Option<i64>, ServiceError> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let connection = rusqlite::Connection::open_with_flags(
+        path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|source| ServiceError::Database {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map(Some)
+        .map_err(|source| ServiceError::Database {
+            path: path.to_path_buf(),
+            source,
+        })
 }
 
 #[derive(Debug)]
@@ -1118,6 +1161,37 @@ mod tests {
             fs::read(paths.codex_home.join("auth.json")).or_panic("read refreshed auth"),
             refreshed
         );
+    }
+
+    #[test]
+    fn installation_rollback_refuses_to_cross_a_database_schema_cutover() {
+        let temporary = tempfile::tempdir().or_panic("create temporary directory");
+        let paths = ServicePaths::under_home(temporary.path());
+        paths
+            .create_directories()
+            .or_panic("create installation directories");
+        let connection =
+            rusqlite::Connection::open(&paths.database).or_panic("create version-one database");
+        connection
+            .pragma_update(None, "user_version", 1)
+            .or_panic("set version-one schema");
+        drop(connection);
+        let previous =
+            PreviousInstallation::capture(&paths, false).or_panic("snapshot version one");
+        let connection =
+            rusqlite::Connection::open(&paths.database).or_panic("open migrated database");
+        connection
+            .pragma_update(None, "user_version", 2)
+            .or_panic("set version-two schema");
+        drop(connection);
+
+        assert!(matches!(
+            previous.restore(&paths, "unused-test-target", false),
+            Err(ServiceError::SchemaRollbackUnsafe {
+                before: Some(1),
+                after: Some(2)
+            })
+        ));
     }
 
     #[test]

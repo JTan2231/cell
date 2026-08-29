@@ -60,8 +60,11 @@ fn list_search_show_notes_and_statuses_work_end_to_end() -> TestResult {
 
     let shown = run(&database, &["--json", "show", "t1"])?;
     let value = stdout_json(&shown)?;
-    assert_eq!(value["data"]["source_path"], "/tmp/origin.md");
-    assert_eq!(value["data"]["pointer"], "Need the actionable work");
+    assert_eq!(
+        value["data"]["concerns"][0]["source_path"],
+        "/tmp/origin.md"
+    );
+    assert_eq!(value["data"]["direction"], "Need the actionable work");
     assert_eq!(
         value["data"]["working_notes"][0]["text"],
         "First observation"
@@ -100,6 +103,55 @@ fn missing_todos_and_invalid_limits_have_stable_errors() -> TestResult {
     let invalid = run(&database, &["--json", "list", "--limit", "0"])?;
     assert_eq!(invalid.status.code(), Some(2));
     assert_eq!(stderr_json(&invalid)?["error"]["code"], "invalid_limit");
+    Ok(())
+}
+
+#[test]
+fn v2_command_tree_keeps_proposals_separate_from_authorization() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let database = directory.path().join("todo.db");
+
+    for args in [
+        ["concern", "add", "--help"].as_slice(),
+        ["concern", "assess", "--help"].as_slice(),
+        ["routing", "accept", "--help"].as_slice(),
+        ["assess", "--help"].as_slice(),
+        ["situation", "show", "--help"].as_slice(),
+        ["design", "propose", "--help"].as_slice(),
+        ["design", "correct", "--help"].as_slice(),
+        ["design", "accept", "--help"].as_slice(),
+        ["migrate", "--help"].as_slice(),
+    ] {
+        let output = run(&database, args)?;
+        assert!(
+            output.status.success(),
+            "help failed for {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let new_help = run(&database, &["new", "--help"])?;
+    let help = String::from_utf8(new_help.stdout)?;
+    assert!(help.contains("pending routing proposal"));
+
+    for args in [
+        ["--json", "routing", "accept", "r1"].as_slice(),
+        [
+            "--json",
+            "routing",
+            "reject",
+            "r1",
+            "--source",
+            "/tmp/decision.jsonl",
+        ]
+        .as_slice(),
+        ["--json", "design", "accept", "d1"].as_slice(),
+        ["--json", "migrate"].as_slice(),
+    ] {
+        let output = run(&database, args)?;
+        assert_eq!(output.status.code(), Some(2), "accepted {args:?}");
+        assert_eq!(stderr_json(&output)?["error"]["code"], "invalid_command");
+    }
     Ok(())
 }
 
@@ -192,28 +244,56 @@ fn stderr_json(output: &Output) -> Result<Value, serde_json::Error> {
 }
 
 fn seed_todos(database: &Path) -> TestResult {
-    let connection = Connection::open(database)?;
-    connection.execute(
-        "INSERT INTO todos(title, note, pointer, source_path)
-         VALUES(?1, ?2, ?3, ?4)",
-        params![
+    let mut connection = Connection::open(database)?;
+    connection.pragma_update(None, "foreign_keys", true)?;
+    let transaction = connection.transaction()?;
+    for (id, title, summary, direction, source, status, completed_at) in [
+        (
+            1,
             "Research usage reporting",
             "Determine how usage should be reported.",
             "Need the actionable work",
-            "/tmp/origin.md"
-        ],
-    )?;
-    connection.execute(
-        "INSERT INTO todos(
-             title, note, pointer, source_path, status, completed_at
-         ) VALUES(?1, ?2, ?3, ?4, 'done', ?5)",
-        params![
+            "/tmp/origin.md",
+            "open",
+            None,
+        ),
+        (
+            2,
             "Completed example",
             "Already complete.",
             "Historical context",
             "/tmp/older.md",
-            "2026-08-25T12:00:00.000Z"
-        ],
-    )?;
+            "done",
+            Some("2026-08-25T12:00:00.000Z"),
+        ),
+    ] {
+        transaction.execute(
+            "INSERT INTO todos(id, status, completed_at) VALUES(?1, ?2, ?3)",
+            params![id, status, completed_at],
+        )?;
+        transaction.execute(
+            "INSERT INTO concerns(id, body, source_path, status, resolved_at)
+             VALUES(?1, ?2, ?3, 'attached', strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+            params![id, direction, source],
+        )?;
+        transaction.execute(
+            "INSERT INTO todo_direction_revisions(
+                 id, todo_id, revision, title, body, source_concern_id, provenance_kind
+             ) VALUES(?1, ?1, 1, ?2, ?3, ?1, 'legacy_v1')",
+            params![id, title, direction],
+        )?;
+        transaction.execute(
+            "INSERT INTO todo_concerns(id, todo_id, concern_id)
+             VALUES(?1, ?1, ?1)",
+            [id],
+        )?;
+        transaction.execute(
+            "INSERT INTO todo_designs(
+                 id, todo_id, revision, draft_version, state, summary
+             ) VALUES(?1, ?1, 1, 1, 'legacy_unreviewed', ?2)",
+            params![id, summary],
+        )?;
+    }
+    transaction.commit()?;
     Ok(())
 }

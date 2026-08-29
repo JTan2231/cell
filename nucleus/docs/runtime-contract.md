@@ -7,32 +7,26 @@ One v1 job request contains only runtime information:
 ```json
 {
   "version": 1,
-  "id": "todo-research-2026-08-26-01",
-  "label": "Research centralized agent execution",
+  "id": "nucleus-smoke-01",
+  "label": "Verify Nucleus agent execution",
   "requester": {
-    "program": "todo",
-    "id": "todo-request-8f53d6"
+    "program": "nucleus-smoke",
+    "id": "run-01"
   },
-  "instructions": "Act as Todo's research liaison. Research without modifying state.",
-  "developerInstructions": "Create exactly one todo through create_todo.",
-  "prompt": "Research the direction thoroughly and create exactly one todo using the supplied tool.",
+  "instructions": "Answer the user directly, use no tools, and keep the response to one short line.",
+  "prompt": "Reply with exactly NUCLEUS_SMOKE_OK.",
   "invocation": {
     "version": 1,
     "harness": "codex",
     "model": "gpt-5.6-terra",
-    "reasoningEffort": "medium",
-    "cwd": "/Users/joey/rust/cell/todo",
-    "workspaceAccess": "read-only",
+    "reasoningEffort": "low",
+    "cwd": "/Users/joey/rust/cell/nucleus",
+    "workspaceAccess": "none",
     "builtinTools": {
-      "localExecution": true,
-      "webSearch": true
+      "localExecution": false,
+      "webSearch": false
     },
-    "timeoutSeconds": 3600,
-    "toolset": {
-      "provider": "todo",
-      "name": "research-liaison",
-      "version": 1
-    }
+    "timeoutSeconds": 90
   }
 }
 ```
@@ -68,14 +62,15 @@ telemetry, and uses `approvalPolicy=never`. There is one attempt and no
 automatic retry. There is no request field for a command, argv, Codex config,
 approval behavior, isolation mode, or output format.
 
-Todo preserves caller-environment behavior through `POST /v1/launch-contexts`.
-The body contains the requester identity and a complete environment snapshot;
-the response contains a 120-second, single-use ID. Nucleus retains the values
-only in daemon memory. A fresh job with that ID starts Codex with an empty
-environment, applies the snapshot, removes `CODEX_EXEC_SERVER_URL`, and replaces
-`CODEX_HOME` with the Nucleus-owned isolated home. The stored job contains only
-the opaque ID. An identical resubmission finds the existing job before checking
-or consuming the one-shot context.
+A requester that must preserve caller-environment behavior can use
+`POST /v1/launch-contexts`. The body contains the requester identity and a
+complete environment snapshot; the response contains a 120-second, single-use
+ID. Nucleus retains the values only in daemon memory. A fresh job with that ID
+starts Codex with an empty environment, applies the snapshot, removes
+`CODEX_EXEC_SERVER_URL`, and replaces `CODEX_HOME` with the Nucleus-owned
+isolated home. The stored job contains only the opaque ID. An identical
+resubmission finds the existing job before checking or consuming the one-shot
+context. Todo's current stages deliberately do not register a launch context.
 
 ## How harness differences are handled
 
@@ -105,17 +100,28 @@ turn start. `read-only` uses the requested directory under a read-only sandbox.
 disabled in all three cases. `localExecution=false` removes Codex's
 command, inspection, and edit primitives; `webSearch=false` removes live search.
 The Codex adapter rejects local execution with `workspaceAccess=none` because it
-cannot prove that combination's filesystem semantics. Todo uses `true/true`;
-Annals uses `false/false` and receives only its dynamic tools.
+cannot prove that combination's filesystem semantics. Todo's current
+concern-routing, situation-assessment, and design-reconciliation stages use
+`workspaceAccess=none`, `localExecution=false`, and `webSearch=false`; Annals
+also uses `false/false` and receives only its dynamic tools. The historical
+Todo `create_todo` fixture used `true/true` with read-only workspace access.
 
-The contrasting complete requests are checked in at
-[`examples/job.todo.json`](../examples/job.todo.json) and
-[`examples/job.annals.json`](../examples/job.annals.json).
+Current complete requests are checked in at
+[`examples/job.smoke.json`](../examples/job.smoke.json) and
+[`examples/job.annals.json`](../examples/job.annals.json). The checked-in
+[`examples/job.todo.json`](../examples/job.todo.json) and matching schema and
+toolset are immutable historical compatibility fixtures, not the current Todo
+requester flow.
 
 ## Requester-owned tools
 
 A requester registers a versioned toolset before submitting jobs that reference
 it. The registration document is immutable by `(provider, name, version)`.
+
+The example below is Todo's immutable historical `create_todo` fixture. Current
+Todo uses `todo/concern-routing/1`, `todo/situation-assessment/1`, and
+`todo/design-reconciliation/1` with the closed invocation policy above; the
+mailbox mechanics are the same.
 
 ```json
 {
@@ -180,9 +186,10 @@ GET /v1/jobs/todo-research-2026-08-26-01/tool-calls?after=0&waitSeconds=30
 }
 ```
 
-Todo executes `create_todo` against its own database, then posts the result.
-`source` and `direction` are deliberately absent from the model's arguments;
-Todo binds both from its originating request:
+A compatible historical Todo requester executes `create_todo` against its own
+database, then posts the result. `source` and `direction` are deliberately
+absent from the model's arguments; that requester binds both from its
+originating request:
 
 ```json
 {
@@ -196,30 +203,36 @@ Todo binds both from its originating request:
 ```
 
 Nucleus verifies that the requester identity matches the job, accepts exactly
-one result, records it, and returns it to the blocked app-server call. The raw
-`item/tool/call` log row and its pending mailbox projection are committed in one
-SQLite transaction, and `requestSequence` names that raw row. The requester
-result row and mailbox answer are likewise atomic: that transaction rejects a
-new answer once either the owning job or attempt is terminal. Nucleus commits
-`ToolCallAnswered` before waking Codex, so a fast completion cannot place its
-terminal lifecycle records ahead of the answer. If the requester disappears,
-the job remains visibly `waiting_on_requester` until it is cancelled or times
-out. Nucleus never runs domain tools itself.
+one result, records it in the operational mailbox, and returns it to the blocked
+app-server call. The exact stdout `item/tool/call` record and its pending
+mailbox projection are committed in one SQLite transaction, and
+`requestSequence` names that output atom. The requester result is not copied
+into reporting storage. Its mailbox update is committed before Codex is woken,
+and that transaction rejects a new answer once either the owning job or attempt
+is terminal. If the requester disappears, the job remains visibly
+`waiting_on_requester` until it is cancelled or times out. Nucleus never runs
+domain tools itself.
 
 A completed attempt also exposes a small structured `output` object containing
-`threadId`, `turnId`, and `finalMessage`. Raw protocol logs remain authoritative
-for telemetry and audit; this projection saves callers from reconstructing the
-normal terminal response.
+`threadId`, `turnId`, and `finalMessage`. Nucleus derives that object at read
+time from the attempt's stdout atoms; it is not another stored result. The
+projection binds the active thread and turn start responses, accepts only their
+fixed JSON-RPC response identities, accepts only their correlated messages, and
+freezes at that turn's terminal notification.
 
-## Raw log model
+## Harness-output observation ledger
 
-SQLite has relational projections only for coordination: jobs, attempts,
-registered schemas and toolsets, pending tool calls, and monotonically ordered
-log records. It does not have columns for Codex events, token usage, model
-messages, or requester tool arguments.
+SQLite stores operational authority separately from reporting observations.
+Jobs, attempts, cancellation, immutable registrations, and the dynamic-tool
+mailbox are operational records. The reporting ledger has exactly four stored
+columns: `attempt_id`, arrival `sequence`, Nucleus `observed_at`, and the raw
+stdout `payload` bytes. There is one row for every `FromHarness` JSONL record,
+with only its line delimiter removed. Harness input, lifecycle/control events,
+stderr chunks, requester results, schema IDs, digests, event types, token
+totals, and final-output fields are not reporting rows or columns.
 
-Each external JSONL value is stored as raw JSON and references an immutable
-schema registry row:
+`GET /logs` retains the version-one compatibility envelope, but its surrounding
+fields are calculated from the output atom and owning attempt:
 
 ```json
 {
@@ -235,30 +248,42 @@ schema registry row:
 }
 ```
 
-The schema row contains the exact JSON Schema bundle generated by the installed
-Codex executable, with producer and version metadata and its own digest. Nucleus
-stores that document opaquely. It neither expands the external schema into SQL
-columns nor makes job correctness depend on successfully decoding future Codex
-fields. Harness input is retained too, making the protocol exchange auditable;
-stderr bytes are wrapped in a Nucleus-owned JSON envelope.
+`jobId`, `stream=harness.output`, and the Codex protocol `schemaId` come from the
+owning attempt; `payloadDigest` is calculated when read. A JSON value is exposed
+directly only when the public raw-value representation is byte-identical to the
+stored payload. Malformed or non-UTF-8 output, and valid JSON with surrounding
+whitespace that the raw-value type would strip, remains byte-exact in SQLite and
+is exposed reversibly through `nucleus.raw-bytes.v1`'s base64 envelope. The
+public digest always covers the public payload bytes. Sequence is per attempt.
+Version one admits exactly one attempt per job, so the existing numeric job-log
+cursor is unambiguous.
 
-Nucleus lifecycle and control events use a small Nucleus-owned schema in the
-same ordered log. This covers admission, process start, tool waiting,
-cancellation, completion, timeout, and a `lost` attempt detected after daemon
-restart. Operational truth therefore does not require inspecting a process tree
-or an ephemeral stderr tail. Cancellation is durable at admission boundaries:
-the daemon seeds each new invocation's watch from `cancellation_requested_at`
-after publishing its sender, so a request overlapping startup cannot be lost.
+The schema registry still retains the exact generated Codex JSON Schema bundle
+for decoder discovery and immutable request/tool registrations, but no schema
+identity is duplicated on each output row. All interpretations—methods,
+messages, usage observations, totals, coverage, and prices—belong to read-time
+or requester-owned pipelines.
+
+Lifecycle truth comes from job and attempt state, timestamps, cancellation, and
+terminal fields. A daemon restart marks unfinished attempts `lost` without
+adding a reporting row. Stderr is never persisted as chunks; a run retains only
+a bounded in-memory tail and adds its sanitized text to `terminalMessage` on
+failure. The complete stored `terminalMessage`, including the underlying
+failure, is control-sanitized and capped at 16 KiB. Cancellation remains durable
+at admission boundaries: the daemon
+seeds each new invocation's watch from `cancellation_requested_at` after
+publishing its sender, so a request overlapping startup cannot be lost.
 
 Reporting reads:
 
 1. `GET /v1/jobs?requesterProgram=annals&requesterId=<model-run-token>`
 2. `GET /v1/jobs/<id>/logs?after=0`
-3. `GET /v1/schemas/<schema-id>` for any decoder it does not have cached
+3. `GET /v1/schemas/<schema-id>` for a generated harness decoder it does not
+   have cached
 
-`follow=true` is a bounded long poll returning one `LogsResponseV1` page. A CLI
-or UI repeats it. Reports can add materialized views in their own process; those
-views are disposable derivations, not Nucleus's source of truth.
+`follow=true` is a bounded long poll returning one output-only `LogsResponseV1`
+page. A CLI or UI repeats it. Reports calculate projections from these atoms
+and operational attribution; Nucleus does not store reporting materializations.
 
 ## HTTP surface
 
@@ -313,3 +338,12 @@ The standard service installer secures its state directory as mode `0700`; the
 daemon secures the database and socket as mode `0600`. There is no TCP listener
 and no Nucleus authentication protocol in v1. Local user filesystem permissions
 are the trust boundary.
+
+Opening a store-schema-version-1 database performs the explicit version-2
+cutover described in the operator manual. Old mixed logs and historical
+answered mailbox rows are discarded; a pending requester call blocks migration
+only while its owning job and attempt remain nonterminal.
+The post-commit compaction can make first start slower, so install and restart
+wait up to two minutes for health. Once the schema changes, installer rollback
+refuses to restore an incompatible version-one daemon without its matching
+database.

@@ -172,12 +172,11 @@ Annals asks Nucleus for an authenticated account preflight and may wait up to
 30 seconds for Nucleus's authentication lease. Failure leaves the envelope
 queued with attempts zero and no source-delivery record.
 
-Nucleus retains exact raw app-server input, output, stderr, lifecycle records,
-attempt identity, and terminal output. Annals drains those logs, forwards the
-same sanitized stderr diagnostics when requested, services pending tool calls,
-and watches terminal lifecycle before retrieving the final attempt report. A
-sparse job-state probe covers a daemon crash between persisting terminal state
-and its lifecycle record without repeatedly scanning a growing log.
+Nucleus retains exact raw app-server output plus authoritative job, attempt,
+and pending-tool state. Annals services pending tool calls and watches durable
+job state. After completion it derives the final liaison message from ordered
+model output when Nucleus has not already projected that terminal value.
+Execution diagnostics are not a second durable reporting stream.
 
 Bounded work reads use natural heading, quotation, continuation, or document
 edge anchors rather than offsets. A heading or quotation anchor must resolve
@@ -293,7 +292,7 @@ The version-3 boundary uses `deploy-user.sh --fresh-state`. The deployer stages
 and validates a new empty library and paused spool before touching live state.
 It disables activation, pauses dispatch, lets the active delivery finish,
 registers all remaining arrivals, and applies maintenance. It then moves the
-old library, telemetry ledger, sidecars, and whole spool into one rollback
+old library, its sidecars, and whole spool into one rollback
 generation and switches in the staged state.
 
 After candidate and installed validation, a dedicated import operation reads

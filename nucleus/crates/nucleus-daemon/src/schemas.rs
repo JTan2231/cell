@@ -1,5 +1,4 @@
 pub const JOB_REQUEST_ID: &str = "nucleus.job-request.v1";
-pub const LIFECYCLE_ID: &str = "nucleus.lifecycle-event.v1";
 pub const BYTES_ID: &str = "nucleus.raw-bytes.v1";
 pub const TOOLSET_DEFINITIONS_ID: &str = "nucleus.toolset-definitions.v1";
 
@@ -53,25 +52,6 @@ pub const INTERNAL_SCHEMAS: &[InternalSchema] = &[
         }
       }
     }
-  }
-}"#,
-    },
-    InternalSchema {
-        id: LIFECYCLE_ID,
-        name: "Nucleus lifecycle event v1",
-        document: r#"{
-  "$schema":"http://json-schema.org/draft-07/schema#",
-  "title":"LifecycleEventV1",
-  "type":"object",
-  "additionalProperties":false,
-  "required":["version","event","jobId"],
-  "properties":{
-    "version":{"const":1},
-    "event":{"type":"string"},
-    "jobId":{"type":"string"},
-    "attemptId":{"type":"string"},
-    "message":{"type":"string"},
-    "details":true
   }
 }"#,
     },

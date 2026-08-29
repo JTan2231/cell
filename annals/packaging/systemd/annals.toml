@@ -6,5 +6,5 @@ settle_seconds = 60
 
 [liaison]
 quality = "high"
-codex = "/usr/local/bin/annals-usage"
+nucleus_socket = "/var/lib/annals/Library/Application Support/Nucleus/nucleus.sock"
 # model = "gpt-5.6-sol"

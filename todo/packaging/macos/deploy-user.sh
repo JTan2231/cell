@@ -201,6 +201,11 @@ cleanup() {
                 rm -f "$CONFIG_PATH"
             fi
         fi
+        if [ -n "$transaction_dir" ] \
+            && [ -f "$transaction_dir/todo.db.backup" ]; then
+            rm -f "$DATABASE_PATH-wal" "$DATABASE_PATH-shm"
+            install -m 0600 "$transaction_dir/todo.db.backup" "$DATABASE_PATH"
+        fi
         if [ "$plist_changed" -eq 1 ]; then
             if [ "$old_plist" -eq 1 ]; then
                 install -m 0644 "$transaction_dir/$SERVICE_LABEL.plist" "$AGENT_PLIST"
@@ -460,6 +465,10 @@ atomic_symlink "$INSTALL_DIR/current/bin/todo" "$CLI_PATH"
 if [ "$database_was_absent" -eq 1 ]; then
     TODO_STATE_DIR="$STATE_DIR" HOME="$install_home" \
         "$CLI_PATH" --config "$CONFIG_PATH" init >/dev/null
+else
+    TODO_STATE_DIR="$STATE_DIR" HOME="$install_home" \
+        "$CLI_PATH" --config "$CONFIG_PATH" migrate \
+        --backup "$transaction_dir/todo.db.backup" >/dev/null
 fi
 TODO_STATE_DIR="$STATE_DIR" HOME="$install_home" \
     "$CLI_PATH" --config "$CONFIG_PATH" --json list --limit 1 >/dev/null

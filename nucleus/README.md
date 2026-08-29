@@ -3,7 +3,7 @@
 Nucleus is a per-user, local job coordinator for agent harnesses. A requester
 submits a small, versioned invocation contract; Nucleus validates it against the
 installed harness, supervises the process, owns its authentication, and retains
-the complete schema-bound JSONL record. Requesters keep ownership of their
+one exact observation for every harness stdout JSONL record. Requesters keep ownership of their
 domain work and execute any domain tools through Nucleus's durable mailbox.
 
 The first adapter is Codex app-server on macOS. Nucleus does not accept shell
@@ -71,16 +71,29 @@ unless the daemon is compatible, authenticated, and accepting jobs.
 
 ## Operational storage
 
-Nucleus retains job requests and the complete schema-bound app-server protocol
-in `~/Library/Application Support/Nucleus/nucleus.db`. Those records can contain
-prompts, tool arguments and results, and source content emitted while an agent
-researches. Version 1 has no automatic retention limit or pruning policy, so
-operators should monitor free space and treat the database as sensitive local
-state. Back it up with a SQLite-aware backup while the service is stopped (or
-include its WAL consistently); copying only the main database file while the
-daemon is running is not a complete backup. The LaunchAgent's stdout and stderr
-files under `~/Library/Logs/Nucleus` likewise need the host's normal log
+Nucleus retains job and attempt authority, immutable registrations, the durable
+tool mailbox, and an atomic harness-output ledger in
+`~/Library/Application Support/Nucleus/nucleus.db`. Each ledger row contains
+only attempt attribution, arrival sequence, observation time, and exact stdout
+payload bytes. Inputs, lifecycle events, stderr chunks, requester-result log
+rows, and reporting aggregates are not stored there. Requests, mailbox values,
+and model output can still contain sensitive prompts, tool arguments/results,
+and source content. There is no automatic output-retention or pruning policy,
+so operators should monitor free space and treat the database as sensitive
+local state. Back it up with a SQLite-aware backup while the service is stopped
+(or include its WAL consistently); copying only the main database file while
+the daemon is running is not a complete backup. The LaunchAgent's stdout and
+stderr files under `~/Library/Logs/Nucleus` likewise need the host's normal log
 rotation policy.
+
+Opening a version-one database performs a coordinated cutover to store schema
+version 2. It preserves operational jobs, attempts, registrations, cancellation,
+and terminal state, but discards old mixed logs and historical answered mailbox
+rows. The cutover refuses to run with a pending requester call whose job and
+attempt are still nonterminal; stale terminal-owner calls are
+discarded. It then compacts the database before reporting healthy. Installation
+allows two minutes for that work and refuses to restore a version-one binary
+after the schema changes.
 
 ## Submit a smoke job
 
@@ -90,18 +103,10 @@ nucleus jobs show nucleus-smoke-01
 nucleus jobs logs --follow nucleus-smoke-01
 ```
 
-The Todo adapter uses the same checked-in requester contracts; these commands
-exercise the underlying registration and mailbox surface directly:
-
-```sh
-nucleus schemas register \
-  /Users/joey/rust/cell/nucleus/examples/schema.todo-create-result.json
-nucleus toolsets register \
-  /Users/joey/rust/cell/nucleus/examples/toolset.todo.json
-nucleus jobs submit /Users/joey/rust/cell/nucleus/examples/job.todo.json
-nucleus jobs show todo-research-2026-08-26-01
-nucleus tool-calls pending --wait 30 todo-research-2026-08-26-01
-```
+The checked-in Todo job, schema, and toolset files preserve the immutable
+historical `create_todo` contract. They are compatibility fixtures, not a
+current Todo canary. Current Todo uses the three closed requester stages
+documented in [the integration handoff](docs/annals-todo-handoff.md).
 
 The HTTP API is also available directly over the Unix socket:
 
@@ -120,6 +125,7 @@ deployed Annals and Todo adapter contract.
 ## Scope
 
 Nucleus owns admission, compatibility checking, execution lifecycle,
-cancellation, raw protocol retention, and retrieval. It reports that an agent
-turn completed; it cannot decide that an Annals reconciliation or Todo creation
-was successful. That remains authoritative in the requester's database.
+cancellation, exact harness-output retention, and retrieval. It reports that an agent
+turn completed; it cannot decide that an Annals reconciliation or Todo domain
+operation was successful, or authorize a Todo decision. That remains
+authoritative in the requester's database.

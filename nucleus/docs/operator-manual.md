@@ -29,10 +29,10 @@ than one outcome, use each relevant system.
 
 | System | Use it when | It owns | Do not use it for |
 | --- | --- | --- | --- |
-| Todo | An actionable concern or follow-up should be researched and retained for later. | The todo's immutable source provenance and researched content, open/done state, and append-only working notes. | Work requested for immediate completion, general knowledge, or shared runtime policy. |
+| Todo | An actionable concern or follow-up should be researched and retained for later. | Concern provenance, routing and its explicit decisions, stable todo identities, dated situation assessments, proposed or accepted designs, open/done state, and working notes. | Work requested for immediate completion, general knowledge, implementation execution, or shared runtime policy. |
 | Annals | Immutable source material should be retained or reconciled with an evidence-grounded conceptual corpus, or that corpus should be searched or explored. | Retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, or account telemetry. |
-| Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, harness validation and supervision, credential serialization, cancellation, raw protocol history, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, or requester retry policy. |
-| Annals Usage | Annals-attributed model consumption, account allowance, login, or the Annals-to-Nucleus execution path must be inspected. | Its reporting projection and Annals-facing budget and diagnostic commands. | Nucleus runtime authority, Codex credential storage, Annals corpus success, or general job orchestration. |
+| Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, harness validation and supervision, credential serialization, cancellation, exact harness-stdout observations, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, requester retry policy, or reporting materializations. |
+| Annals Usage | Annals-attributed model consumption, account allowance, login, or the Annals-to-Nucleus execution path must be inspected. | Live calculation over Annals attribution and Nucleus output atoms, plus Annals-facing budget and diagnostic commands. | Nucleus runtime authority, durable reporting projections, Codex credential storage, Annals corpus success, or general job orchestration. |
 | Codex | Nucleus needs an inspected harness and account protocol implementation. | Its executable and app-server behavior. | Requester domain policy or a second credential authority for Nucleus jobs. |
 
 Typical routing examples:
@@ -76,31 +76,35 @@ reason.
 ## Topology and authority
 
 ```text
-Todo new -----\
-               \
+Todo research --\
+                 \
 Annals ----------> Nucleus ----------> Codex app-server ----------> account
    |                  |                        |
    |                  |                        `-- isolated job process
    |                  |
-   |                  |-- Nucleus SQLite job and raw protocol history
+   |                  |-- Nucleus SQLite job authority and stdout atoms
    |                  |-- Nucleus-owned Codex authentication
    |                  `-- durable requester-tool mailbox
    |
    `-- Annals corpus, inbox, reconciliation, and recovery authority
 
-Annals Usage <------ Nucleus logs and account reads
-Todo SQLite <------- Todo's validated create_todo operation
+Annals Usage <------ Nucleus output atoms and account reads
+Todo SQLite <------- Todo's validated stage tools and explicit decisions
 ```
 
-Only `todo new` follows the Todo-to-Nucleus arrow. Todo's deterministic
-lifecycle and email commands read its SQLite database directly. In particular,
-the optional daily email path calls Resend without creating a Nucleus job,
-using Nucleus authentication, or depending on Nucleus health.
+Todo's concern-routing, situation-assessment, and design-reconciliation
+research follows the Todo-to-Nucleus arrow. Deterministic concern capture,
+reads, lifecycle changes, routing/design authorization, and email commands use
+Todo's SQLite database directly. In particular, an authorization command
+cannot be invoked by a model, and the optional daily email path calls Resend
+without creating a Nucleus job, using Nucleus authentication, or depending on
+Nucleus health.
 
 Nucleus is a per-user execution coordinator, not a project registry or workflow
 engine. A requester submits one closed, versioned invocation. Nucleus validates
-it, starts one harness attempt, retains the protocol, and coordinates dynamic
-tool calls. The requester continues to own the work that motivated the job.
+it, starts one harness attempt, retains exact harness stdout, and coordinates
+dynamic tool calls. The requester continues to own the work that motivated the
+job.
 
 Nucleus, Annals, Annals Usage, and Todo share the Cell source repository, Cargo
 workspace, and lockfile. That source layout does not merge their release,
@@ -108,19 +112,21 @@ installation, state, backup, recovery, or domain-success boundaries.
 
 The following distinctions are operationally important:
 
-1. **Nucleus completion is not domain success.** Todo succeeds when its row is
-   durably created. Annals succeeds according to its retained reconciliation
-   and delivery state. A model's final prose is diagnostic.
-2. **A domain commit can outlive a runtime failure.** If Todo creates its row or
-   Annals records its reconciliation and Codex later fails, the durable domain
-   result remains authoritative.
+1. **Nucleus completion is not domain success.** Todo succeeds when its
+   stage-specific proposal, assessment, or design operation is durably
+   recorded; authorization is a separate Todo decision. Annals succeeds
+   according to its retained reconciliation and delivery state. A model's
+   final prose is diagnostic.
+2. **A domain commit can outlive a runtime failure.** If Todo records its
+   validated stage result or Annals records its reconciliation and Codex later
+   fails, the durable domain result remains authoritative.
 3. **A requester restart differs from a daemon restart.** A requester can
    rediscover a durable pending tool call. A Nucleus restart cannot resume a
    Codex process; startup marks unfinished attempts `lost` and their jobs failed.
 4. **Registrations are immutable.** Schema IDs and toolset identities preserve
    historical decoding. Change their versions instead of editing old records.
-5. **Reporting projections are disposable.** Annals Usage may materialize
-   Nucleus records, but it does not become an invocation or domain authority.
+5. **Reporting is calculated.** Annals Usage joins requester attribution to
+   Nucleus output atoms without retaining a second reporting database.
 6. **One Nucleus job has one attempt.** Nucleus does not automatically retry.
    A requester owns any new domain attempt and its provenance.
 
@@ -145,7 +151,7 @@ The following distinctions are operationally important:
 
 The complete Nucleus state directory is sensitive. The database can contain
 prompts, tool arguments and results, source content emitted by an agent, and
-the exact raw app-server exchange. The Nucleus-owned Codex home contains the
+exact app-server stdout. The Nucleus-owned Codex home contains the
 authoritative credential and may contain additional Codex-local state. The
 Unix socket has no application-level authentication; local user ownership and
 filesystem permissions are the trust boundary. There is no TCP listener in
@@ -169,7 +175,7 @@ credential lease.
 | Nucleus store schema | `nucleus-store` schema and migration code | SQLite `PRAGMA user_version` and the source constant | A newer schema can make binary-only rollback unsafe. It needs an explicit migration and database rollback plan. |
 | Codex harness | `nucleus-codex` adapter and semantic checks | Harness identity in health | The adapter supports an exact inspected Codex release. Update and prove the adapter before replacing the executable. |
 | Requester client build | Shared Cargo workspace and requester adapter | Workspace manifests, lockfile, and requester source revision | Rebuild when it needs changed types or behavior. Runtime compatibility still follows the public protocol, not source lockstep. |
-| Log schema and toolset | Immutable Nucleus registrations plus requester code | Registration identity and digest | Publish a new schema ID or toolset version. Historical jobs keep the old decoder and definition. |
+| Output decoder and toolset | Attempt harness identity, immutable Nucleus registrations, and requester code | Harness version plus registration identity and digest | Keep a decoder for each retained harness version; publish a new schema ID or toolset version when requester-owned meanings change. |
 | Requester domain schema | Requester's database and migrations | Requester-specific validation and doctor commands | The requester owns migration, backup, success, and rollback. Nucleus must not duplicate it. |
 
 When a portable job meaning changes, update the core types, client, runtime
@@ -195,7 +201,7 @@ nucleus jobs list --state waiting-on-requester
 nucleus jobs list --state failed
 ```
 
-Inspect one job and its ordered schema-bound records with:
+Inspect one job and its ordered harness-output records with:
 
 ```sh
 nucleus jobs show JOB_ID
@@ -272,9 +278,8 @@ Do not overwrite a credential that may have been refreshed by a later daemon.
 
 ### Backup Nucleus state
 
-Nucleus version 1 has no automatic retention, pruning, backup, or restore
-command. Use an explicit, private backup destination and preserve its access
-controls.
+Nucleus has no automatic output-retention, pruning, backup, or restore command.
+Use an explicit, private backup destination and preserve its access controls.
 
 For a backup intended to support service recovery:
 
@@ -309,7 +314,7 @@ For a backup intended to support service recovery:
 
 Restoration is an attended operation. Quiesce and stop the service, preserve
 the current state separately, restore a database only to a binary known to
-support its schema, then validate health and historical job/log reads before
+support its schema, then validate health and retained job/output reads before
 requester canaries. Do not restore old credentials as part of an ordinary
 database rollback. If authentication itself must be recovered, make that an
 explicit choice and expect attended login to be safer than replacing a newer
@@ -324,12 +329,15 @@ du -sh "$HOME/Library/Application Support/Nucleus"
 du -sh "$HOME/Library/Logs/Nucleus"
 ```
 
-Apply the host's normal private-log rotation policy to Nucleus stdout and
-stderr. Do not delete rows from `nucleus.db`, edit immutable registrations, or
-remove individual Codex-home files as ad hoc retention. A supported pruning
-policy must first define which audit and coordination relationships remain
-valid, implement that policy in Nucleus, and include migration and recovery
-tests. Until then, monitor, back up, and retain the state.
+Apply the host's normal private-log rotation policy to the LaunchAgent's stdout
+and stderr files. Do not delete rows from `nucleus.db`, edit immutable
+registrations, or remove individual Codex-home files as ad hoc retention. The
+database's reporting ledger already excludes harness input, lifecycle/control
+events, stderr chunks, requester results, and calculated aggregates; it keeps
+one exact row per harness stdout record. A supported pruning policy must first
+define which observations and coordination relationships remain valid,
+implement that policy in Nucleus, and include migration and recovery tests.
+Until then, monitor, back up, and retain the state.
 
 ### Uninstall and restart semantics
 
@@ -413,10 +421,14 @@ environment. Register the complete snapshot immediately before submission. The
 context is requester-bound, memory-only, single-use, expires after 120 seconds,
 and is not a durable configuration mechanism.
 
-Minimize authority. Todo deliberately needs read-only local and web research;
-Annals deliberately receives neither builtin shell nor web access and operates
-through its bounded tools. A new requester should justify its own combination
-instead of copying either profile.
+Minimize authority. Todo's current concern-routing, situation-assessment, and
+design-reconciliation jobs use `workspaceAccess=none`,
+`builtinTools.localExecution=false`, `builtinTools.webSearch=false`, no launch
+context, and only their bounded managed tools. The immutable
+historical `create_todo` contract used a broader read-only research profile;
+do not copy that legacy profile into current jobs. Annals likewise receives
+neither builtin shell nor web access and operates through bounded tools. A new
+requester should justify its own combination instead of copying either profile.
 
 ### 5. Define immutable schemas and tools
 
@@ -434,6 +446,13 @@ results, tool meaning, or definitions change incompatibly:
 
 Never update old registration rows in SQLite.
 
+Todo's current immutable requester toolsets are
+`todo/concern-routing/1`, `todo/situation-assessment/1`, and
+`todo/design-reconciliation/1`. Their validated calls may write Todo-owned
+`rN`, `aN`, or `dN` state, but cannot authorize routing, accept a design, or
+execute implementation. The historical Todo `create_todo` schema and toolset
+remain immutable for compatibility; current `todo new` does not use them.
+
 ### 6. Implement the lifecycle
 
 A normal requester flow is:
@@ -448,8 +467,8 @@ A normal requester flow is:
    backend, durably bind or cache its exact result, and post that result.
 7. Read the terminal job and structured attempt output.
 8. Use the requester's durable state to decide domain success.
-9. Read Nucleus logs for runtime diagnostics and audit, not as a replacement
-   for the domain result.
+9. Read the output-only Nucleus ledger for protocol diagnostics or reporting,
+   not as a replacement for the domain result.
 
 The requester must recover after an ambiguous transport failure without
 executing a domain mutation twice. The exact implementation belongs with its
@@ -494,7 +513,7 @@ At minimum, test:
 - durable domain success followed by runtime failure; and
 - absence of a direct-runner fallback.
 
-Treat both the requester's state and Nucleus raw logs as sensitive according to
+Treat both the requester's state and Nucleus output atoms as sensitive according to
 the content they can retain. Add a requester canary, backup coverage, release
 ordering, rollback boundary, and operator documentation before production use.
 
@@ -509,7 +528,7 @@ Keep detailed CLI and domain procedures in its own product tree.
 
 | Change | Primary authority | Cross-system obligations |
 | --- | --- | --- |
-| Todo creation, lifecycle, provenance, database, email delivery, or deployment | Todo | Preserve its Nucleus adapter contract when affected; the direct Resend path does not become a Nucleus job, and Nucleus does not gain Todo fields. |
+| Todo concerns, routing and explicit decisions, identities, assessments, designs, lifecycle, provenance, database, email delivery, or deployment | Todo | Preserve its Nucleus adapter contract when affected; the direct Resend path does not become a Nucleus job, and Nucleus does not gain Todo fields. |
 | Annals works, concepts, evidence, reconciliation, inbox, retry, or corpus migration | Annals | Preserve job correlation and adapter behavior when affected; Nucleus does not gain Annals workflow state. |
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
 | New portable invocation meaning or HTTP behavior | Nucleus core/client/daemon | Version the public contract, update examples/tests/docs, then update affected requesters in compatible order. |
@@ -552,9 +571,11 @@ Keep detailed CLI and domain procedures in its own product tree.
      --codex /absolute/path/to/codex
    ```
 
-6. The installer stages files, replaces the LaunchAgent, and checks health. A
-   failed cutover restores its captured binaries and service configuration.
-   Authentication is deliberately excluded from rollback.
+6. The installer stages files, replaces the LaunchAgent, and allows up to two
+   minutes for first-start migration, compaction, and health. A failed cutover
+   restores captured binaries and service configuration only when the database
+   schema did not change. It refuses an unsafe binary-only rollback after a
+   schema cutover. Authentication is deliberately excluded from rollback.
 7. Verify strict health, a fresh generic job, and each affected requester
    canary before resuming dispatch.
 
@@ -591,21 +612,42 @@ rejects any version it has not proved.
 
 ### Nucleus database schema change
 
-The current store initializes schema version 1 and rejects a newer schema, but
-it has no ordered upgrade path from version 1 to a later version. Before schema
-version 2 or any later change:
+The current store schema is version 2 and has an explicit version-one cutover.
+That cutover preserves jobs, attempts, immutable schemas/toolsets, cancellation,
+and terminal state, but deliberately discards the old mixed log and historical
+answered mailbox rows. It refuses to run while a pending requester tool call
+still has a nonterminal owning job and attempt; stale pending rows whose owner
+is terminal are discarded with the other mailbox history. It then creates the
+four-column harness-output ledger and commits the new tables with transitional
+`user_version=1000002`, meaning version 2
+compaction is still pending. Every restart recognizes that durable marker and
+retries `VACUUM` plus a truncating WAL checkpoint; only after both succeed does
+it publish `user_version=2` and allow startup to continue. This reclaims both
+the dropped main-database pages and the migration WAL while the daemon remains
+open. Publishing the completion marker can leave at most its single bounded WAL
+frame. A vacuum or checkpoint failure remains pending and is surfaced again on
+the next startup rather than being masked by launchd restart.
+
+Version-one binaries cannot read schema version 2. The installer records the
+pre-install schema and refuses to restore old binaries if a replacement daemon
+has changed it. Recovery across that boundary requires an explicit matching
+database and binary pair; credentials remain forward-only and separate.
+
+For version 3 or any later change:
 
 1. Implement explicit, incremental migrations from every supported prior
    version.
-2. Add a real old-schema fixture containing representative jobs, attempts,
-   schemas, logs, and pending or answered tool calls.
-3. Prove migration is transactional and idempotent where repetition is allowed.
-4. Quiesce requesters, stop Nucleus, and take a consistent pre-migration backup.
+2. Add a real old-schema fixture containing representative operational state
+   and output atoms.
+3. Prove migration is transactional and test any post-commit maintenance.
+4. Quiesce requesters, require zero pending requester calls, stop Nucleus, and
+   take a consistent pre-migration backup when rollback or retained history is
+   required.
 5. Define whether the old binary can read the migrated database. If not,
    rollback requires both the old binaries and the pre-migration database;
    installer binary rollback alone is unsafe.
-6. Migrate and validate historical reads, digests, lifecycle projections,
-   foreign keys, and new behavior before requester canaries.
+6. Validate operational state, output ordering, mailbox foreign keys, derived
+   reads, file compaction, and requester canaries.
 7. Keep credential restoration separate. A database rollback must not replace a
    newer Nucleus-owned credential.
 
@@ -646,8 +688,9 @@ version 2 or any later change:
 | Attempt is `lost` | Nucleus restarted while the harness attempt was unfinished. | Inspect domain state first. Let the requester decide whether and how to create a new attempt. |
 | Nucleus job failed after a domain commit | Runtime completion failed after the requester established success. | Preserve the domain result, correlate the Nucleus failure for diagnostics, and do not repeat the mutation. |
 | Nucleus job completed without the required domain record | The model turn completed but the requester did not establish domain success. | Follow requester failure policy; Nucleus completion alone is insufficient. |
-| Installation reports rollback | Candidate health or cutover failed and captured program/service artifacts were restored. | Verify the restored service and forward-only authentication, inspect logs, and do not assume a database migration was rolled back. |
-| State or logs grow continuously | Version 1 has no automatic pruning or log rotation. | Measure both paths, apply private host log rotation, and plan supported retention rather than deleting rows. |
+| Installation reports rollback | Candidate health or cutover failed and captured program/service artifacts were restored because the database schema was unchanged. | Verify the restored service and forward-only authentication; inspect diagnostics. |
+| Installation refuses rollback after a schema change | The new database cannot safely be opened by the captured old daemon. | Keep the candidate binaries, inspect the startup error, and use an explicit matching database/binary restore only if recovery requires it. |
+| State or logs grow continuously | Nucleus has no automatic output pruning or host-log rotation. | Measure both paths, apply private host-log rotation, and plan supported output retention rather than deleting rows. |
 
 For Annals failures, use its status, pause, interruption, and bounded retry
 procedures. Never move failed envelopes back into the queue or edit their
@@ -667,7 +710,7 @@ Use layered proof after a shared change:
 3. **Requester proof:** exercise the requester's actual domain result and verify
    its database, not only the Nucleus terminal state.
 4. **Observation proof:** locate the job through requester identity and read its
-   ordered logs.
+   ordered harness-output atoms.
 5. **Resumption:** clear only the requester-owned pause or gate that was set for
    the operation. Do not remove Annals maintenance files manually.
 
@@ -717,7 +760,7 @@ directory.
 - [README](/Users/joey/rust/cell/nucleus/README.md): build, install, readiness,
   storage warning, and smoke entry points.
 - [Runtime contract](/Users/joey/rust/cell/nucleus/docs/runtime-contract.md): exact
-  request, harness, mailbox, raw log, HTTP, authentication, and security
+  request, harness, mailbox, output ledger, HTTP, authentication, and security
   semantics.
 - [Annals and Todo handoff](/Users/joey/rust/cell/nucleus/docs/annals-todo-handoff.md):
   current requester ownership and shared acceptance checks.

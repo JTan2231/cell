@@ -170,6 +170,9 @@ case "${1:-}" in
             || fail 'doctor observed an unavailable Nucleus executable'
         grep -Fx "nucleus_socket = \"__NUCLEUS_SOCKET__\"" "$config" >/dev/null \
             || fail 'doctor observed the wrong Nucleus socket'
+        if grep -Eq '^[[:space:]]*database[[:space:]]*=' "$config"; then
+            fail 'doctor observed an obsolete usage database path'
+        fi
         [ "${CODEX_HOME-unset}" = unset ] \
             || fail 'doctor inherited an Annals-owned CODEX_HOME'
         [ ! -e "$state/service-loaded" ] || {
@@ -258,7 +261,11 @@ grep -Fx "nucleus = \"$nucleus\"" "$state/usage.toml" >/dev/null
 grep -Fx "nucleus_socket = \"$nucleus_socket\"" "$state/usage.toml" >/dev/null
 grep -Fx "library = \"$state/annals.db\"" "$state/usage.toml" >/dev/null
 grep -Fx "spool = \"$state/spool\"" "$state/usage.toml" >/dev/null
-grep -Fx "database = \"$state/usage.db\"" "$state/usage.toml" >/dev/null
+if grep -Eq '^[[:space:]]*database[[:space:]]*=' "$state/usage.toml"; then
+    printf '%s\n' 'usage config unexpectedly contains a database path' >&2
+    exit 1
+fi
+[ ! -e "$state/usage.db" ]
 [ "$(readlink "$usage_cli")" = "$state/install/current/libexec/annals-usage" ]
 HOME="$home" "$usage_cli" --version >/dev/null
 default_environment=$(env -u ANNALS_CONFIG -u ANNALS_LIBRARY -u CODEX_HOME \
@@ -310,8 +317,8 @@ codex_config_with_ambient_setting=$(cat "$state/codex-home/config.toml")
 deploy --no-start >/dev/null
 [ "$(cat "$state/codex-home/config.toml")" = \
     "$codex_config_with_ambient_setting" ]
-# Simulate the configuration written by releases before annals-usage became
-# the default Codex proxy. Deployment must migrate only the liaison selector and
+# Simulate the configuration written before the Nucleus requester integration.
+# Deployment must migrate only the liaison selector and
 # preserve the rest of the document.
 awk -v codex="$nucleus" '
     /^[[:space:]]*nucleus_socket[[:space:]]*=/ {
@@ -324,6 +331,9 @@ printf '%s\n' '# retained operator setting' >>"$state/config.legacy.toml"
 mv "$state/config.legacy.toml" "$state/config.toml"
 legacy_config_hash=$(shasum -a 256 "$state/config.toml" | awk '{print $1}')
 grep -Fx "codex = \"$nucleus\"" "$state/config.toml" >/dev/null
+printf '%s\n' legacy-normal >"$state/usage.db"
+printf '%s\n' legacy-normal-wal >"$state/usage.db-wal"
+printf '%s\n' legacy-normal-shm >"$state/usage.db-shm"
 printf '%s\n' '# candidate update' >>"$candidate"
 second_candidate_hash=$(shasum -a 256 "$candidate" | awk '{print $1}')
 [ "$first_candidate_hash" != "$second_candidate_hash" ]
@@ -341,6 +351,9 @@ fi
 [ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" != "$legacy_config_hash" ]
 grep -Fx "nucleus_socket = \"$nucleus_socket\"" "$state/config.toml" >/dev/null
 grep -Fx '# retained operator setting' "$state/config.toml" >/dev/null
+[ ! -e "$state/usage.db" ]
+[ ! -e "$state/usage.db-wal" ]
+[ ! -e "$state/usage.db-shm" ]
 rollback_snapshot=$(sed -n 's/^  "rollback_snapshot": "\([^"]*\)",$/\1/p' \
     "$state/install/last-update.json")
 [ -n "$rollback_snapshot" ]
@@ -452,6 +465,9 @@ chmod 0755 "$alternate_nucleus"
 config_before_rejection=$(shasum -a 256 "$state/config.toml" | awk '{print $1}')
 usage_config_before_rejection=$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')
 library_before_rejection=$(shasum -a 256 "$state/annals.db" | awk '{print $1}')
+printf '%s\n' rejected-legacy >"$state/usage.db"
+printf '%s\n' rejected-legacy-wal >"$state/usage.db-wal"
+printf '%s\n' rejected-legacy-shm >"$state/usage.db-shm"
 if ANNALS_TEST_NUCLEUS="$alternate_nucleus" \
     deploy >"$temporary/rejected.out" 2>"$temporary/rejected.err"
 then
@@ -468,6 +484,9 @@ fi
 [ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" = "$config_before_rejection" ]
 [ "$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')" = "$usage_config_before_rejection" ]
 [ "$(shasum -a 256 "$state/annals.db" | awk '{print $1}')" = "$library_before_rejection" ]
+[ "$(cat "$state/usage.db")" = rejected-legacy ]
+[ "$(cat "$state/usage.db-wal")" = rejected-legacy-wal ]
+[ "$(cat "$state/usage.db-shm")" = rejected-legacy-shm ]
 grep -Fx "nucleus = \"$nucleus\"" "$state/usage.toml" >/dev/null
 
 : >"$fail_kickstart"
@@ -479,10 +498,16 @@ deploy >"$temporary/kickstart-warning.out" 2>"$temporary/kickstart-warning.err"
 [ -f "$state/spool/.paused" ]
 [ ! -e "$state/install/.update-lock" ]
 [ ! -e "$kickstart_order_error" ]
+[ ! -e "$state/usage.db" ]
+[ ! -e "$state/usage.db-wal" ]
+[ ! -e "$state/usage.db-shm" ]
 grep -F 'warning: unable to wake the installed service' \
     "$temporary/kickstart-warning.err" >/dev/null
 
 printf '%s\n' old-library >"$state/annals.db"
+printf '%s\n' legacy-usage >"$state/usage.db"
+printf '%s\n' legacy-wal >"$state/usage.db-wal"
+printf '%s\n' legacy-shm >"$state/usage.db-shm"
 mkdir -p \
     "$state/spool/processing/j00000000000000000090/material" \
     "$state/spool/queued/j00000000000000000091/material"
@@ -501,6 +526,9 @@ fi
 [ -f "$state/spool/.paused" ]
 [ ! -e "$state/spool/.maintenance" ]
 [ -f "$loaded" ]
+[ "$(cat "$state/usage.db")" = legacy-usage ]
+[ "$(cat "$state/usage.db-wal")" = legacy-wal ]
+[ "$(cat "$state/usage.db-shm")" = legacy-shm ]
 rm -f "$state/spool/fail-import"
 fresh_output=$(deploy --fresh-state)
 [ ! -s "$state/annals.db" ]
@@ -516,6 +544,12 @@ generation=$(sed -n 's/^  "rollback_generation": "\([^"]*\)",$/\1/p' \
     "$state/install/last-update.json")
 [ -n "$generation" ]
 [ "$(cat "$state/backups/generations/$generation/annals.db")" = old-library ]
+[ ! -e "$state/backups/generations/$generation/usage.db" ]
+[ ! -e "$state/backups/generations/$generation/usage.db-wal" ]
+[ ! -e "$state/backups/generations/$generation/usage.db-shm" ]
+[ ! -e "$state/usage.db" ]
+[ ! -e "$state/usage.db-wal" ]
+[ ! -e "$state/usage.db-shm" ]
 [ -f "$state/backups/generations/$generation/spool/duplicates/preserved" ]
 [ -f "$state/backups/generations/$generation/spool/skipped/preserved" ]
 [ -f "$state/backups/generations/$generation/spool/processing/j00000000000000000090/material/first.txt" ]

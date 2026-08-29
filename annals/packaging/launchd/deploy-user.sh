@@ -145,7 +145,6 @@ STATE_DIR="$install_home/Library/Application Support/Annals"
 CONFIG_PATH="$STATE_DIR/config.toml"
 USAGE_CONFIG_PATH="$STATE_DIR/usage.toml"
 LIBRARY_PATH="$STATE_DIR/annals.db"
-USAGE_LIBRARY_PATH="$STATE_DIR/usage.db"
 SPOOL_DIR="$STATE_DIR/spool"
 INSTALL_DIR="$STATE_DIR/install"
 RELEASES_DIR="$INSTALL_DIR/releases"
@@ -193,6 +192,7 @@ rollback_snapshot=
 rollback_snapshot_created=0
 library_backup_ready=0
 library_migration_may_need_rollback=0
+legacy_usage_state_staged=0
 
 atomic_symlink() {
     target=$1
@@ -213,13 +213,36 @@ move_if_present() {
     fi
 }
 
+stage_legacy_usage_state() {
+    legacy_stage="$transaction_dir/legacy-usage-state"
+    for name in usage.db usage.db-wal usage.db-shm; do
+        path="$STATE_DIR/$name"
+        [ ! -L "$path" ] || fail "refusing symlink at legacy usage file: $path"
+        if [ -e "$path" ]; then
+            [ -f "$path" ] || fail "legacy usage path is not a regular file: $path"
+            if [ "$legacy_usage_state_staged" -eq 0 ]; then
+                install -d -m 0700 "$legacy_stage"
+                legacy_usage_state_staged=1
+            fi
+            mv "$path" "$legacy_stage/$name"
+        fi
+    done
+}
+
+restore_legacy_usage_state() {
+    [ "$legacy_usage_state_staged" -eq 1 ] || return 0
+    for name in usage.db usage.db-wal usage.db-shm; do
+        move_if_present "$transaction_dir/legacy-usage-state/$name" "$STATE_DIR/$name"
+    done
+    legacy_usage_state_staged=0
+}
+
 restore_fresh_generation() {
     [ "$fresh_state_switched" -eq 1 ] || return 0
     failed_state="$transaction_dir/failed-fresh-state"
     install -d -m 0700 "$failed_state"
     move_if_present "$SPOOL_DIR" "$failed_state/spool"
-    for name in annals.db annals.db-wal annals.db-shm \
-        usage.db usage.db-wal usage.db-shm
+    for name in annals.db annals.db-wal annals.db-shm
     do
         move_if_present "$STATE_DIR/$name" "$failed_state/$name"
         move_if_present "$generation_dir/$name" "$STATE_DIR/$name"
@@ -286,6 +309,7 @@ cleanup() {
             fi
         fi
         restore_fresh_generation
+        restore_legacy_usage_state
         if [ "$library_migration_may_need_rollback" -eq 1 ] \
             && [ "$library_backup_ready" -eq 1 ]
         then
@@ -455,7 +479,6 @@ temporary_usage_config="$STATE_DIR/.usage.toml.$$"
     printf 'nucleus_socket = "%s"\n' "$nucleus_socket"
     printf 'library = "%s"\n' "$LIBRARY_PATH"
     printf 'spool = "%s"\n' "$SPOOL_DIR"
-    printf 'database = "%s"\n' "$USAGE_LIBRARY_PATH"
 } >"$temporary_usage_config"
 chmod 0600 "$temporary_usage_config"
 
@@ -724,6 +747,10 @@ run_with_installation_environment "$usage_binary_path" doctor \
     --config "$temporary_usage_config" >/dev/null \
     || fail 'candidate Annals usage doctor could not verify Nucleus authentication'
 
+# The live-only companion does not own a database. Retain an obsolete ledger only inside the
+# deployment transaction so a pre-commit rollback can still restore the prior release intact.
+stage_legacy_usage_state
+
 if [ "$no_start" -eq 0 ]; then
     smoke_json=$(run_with_installation_environment "$binary_path" \
         --config "$temporary_config" --json inbox run) \
@@ -739,16 +766,14 @@ if [ "$fresh_state" -eq 1 ]; then
     [ ! -e "$generation_dir" ] \
         || fail "rollback generation already exists: $generation_dir"
     install -d -m 0700 "$STATE_DIR/backups/generations" "$generation_dir"
-    for name in annals.db annals.db-wal annals.db-shm \
-        usage.db usage.db-wal usage.db-shm
+    for name in annals.db annals.db-wal annals.db-shm
     do
         [ ! -L "$STATE_DIR/$name" ] \
             || fail "refusing symlink at state file: $STATE_DIR/$name"
     done
 
     fresh_state_switched=1
-    for name in annals.db annals.db-wal annals.db-shm \
-        usage.db usage.db-wal usage.db-shm
+    for name in annals.db annals.db-wal annals.db-shm
     do
         move_if_present "$STATE_DIR/$name" "$generation_dir/$name"
     done

@@ -59,10 +59,24 @@ shift
 printf '%s\n' "$command" >>"$state/commands.log"
 case "$command" in
     init)
-        : >"$state/todo.db"
+        printf '%s\n' 'v2' >"$state/todo.db"
+        ;;
+    migrate)
+        [ "${1:-}" = --backup ]
+        backup=${2:?}
+        case "$(cat "$state/todo.db")" in
+            v1)
+                [ ! -e "$backup" ]
+                cp "$state/todo.db" "$backup"
+                printf '%s\n' 'v2' >"$state/todo.db"
+                ;;
+            v2) ;;
+            *) exit 1 ;;
+        esac
         ;;
     list)
         [ -f "$state/todo.db" ]
+        [ ! -f "$state/fail-list-after-migrate" ]
         [ "$json" -eq 1 ]
         [ "${1:-}" = --limit ]
         [ "${2:-}" = 1 ]
@@ -254,6 +268,23 @@ fi
 [ -f "$launchctl_state" ]
 grep -Fx '<!-- rollback-sentinel -->' "$agent_plist" >/dev/null
 
+printf '%s\n' 'v1' >"$state/todo.db"
+: >"$state/fail-list-after-migrate"
+if deploy "$candidate" >"$temporary/migration-rollback.out" \
+    2>"$temporary/migration-rollback.err"
+then
+    printf '%s\n' 'deployment unexpectedly kept a failed database migration' >&2
+    exit 1
+fi
+[ "$(cat "$state/todo.db")" = v1 ]
+[ -f "$launchctl_state" ]
+rm -f "$state/fail-list-after-migrate"
+deploy "$candidate" >/dev/null
+[ "$(cat "$state/todo.db")" = v2 ]
+[ -f "$launchctl_state" ]
+
+printf '%s\n' '<!-- rollback-sentinel -->' >>"$agent_plist"
+plutil -lint "$agent_plist" >/dev/null
 failed="$temporary/todo-failed-candidate"
 cat >"$failed" <<'EOF'
 #!/bin/sh

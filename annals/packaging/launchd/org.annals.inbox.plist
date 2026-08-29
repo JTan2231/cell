@@ -24,8 +24,6 @@
     <dict>
         <key>HOME</key>
         <string>/Library/Application Support/Annals</string>
-        <key>CODEX_HOME</key>
-        <string>/Library/Application Support/Annals/codex-home</string>
         <key>ANNALS_USAGE_CONFIG</key>
         <string>/Library/Application Support/Annals/usage.toml</string>
     </dict>

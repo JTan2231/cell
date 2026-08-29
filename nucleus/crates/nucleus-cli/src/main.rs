@@ -20,6 +20,7 @@ use thiserror::Error;
 use crate::service::{ServiceError, ServicePaths};
 
 const OPERATOR_MANUAL: &str = include_str!("../../../docs/operator-manual.md");
+const SERVICE_START_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Parser)]
 #[command(name = "nucleus", version, about = "Run and observe local agent jobs")]
@@ -57,7 +58,7 @@ enum Command {
     /// Submit and inspect agent jobs.
     #[command(subcommand)]
     Jobs(JobsCommand),
-    /// Register and retrieve raw log schemas.
+    /// Register and retrieve immutable decoder and tool schemas.
     #[command(subcommand)]
     Schemas(SchemasCommand),
     /// Register and inspect requester-owned dynamic toolsets.
@@ -108,7 +109,7 @@ enum JobsCommand {
         #[arg(long, default_value_t = 100)]
         limit: u32,
     },
-    /// Read schema-bound records in durable sequence order.
+    /// Read harness-output records in durable arrival order.
     Logs {
         id: String,
         #[arg(long, default_value_t = 0)]
@@ -151,7 +152,7 @@ impl From<JobStateArgument> for JobState {
 
 #[derive(Debug, Subcommand)]
 enum SchemasCommand {
-    /// Register an exact version-one log-schema document.
+    /// Register an exact version-one schema document.
     Register {
         /// Schema registration file, or '-' for standard input.
         #[arg(default_value = "-")]
@@ -248,7 +249,7 @@ enum CliError {
         "--socket does not apply to service commands; the LaunchAgent uses the standard per-user socket"
     )]
     ServiceSocketOverride,
-    #[error("nucleusd did not become healthy within ten seconds: {0}")]
+    #[error("nucleusd did not become healthy before the service-start deadline: {0}")]
     HealthTimeout(String),
     #[error("nucleusd reported an unhealthy state: {0}")]
     ServiceUnhealthy(String),
@@ -647,7 +648,7 @@ async fn run_service(command: ServiceCommand, compact: bool) -> Result<(), CliEr
 }
 
 async fn wait_for_health(socket: &Path) -> Result<nucleus_core::HealthResponseV1, CliError> {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + SERVICE_START_TIMEOUT;
     let client = NucleusClient::new(socket)?;
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());

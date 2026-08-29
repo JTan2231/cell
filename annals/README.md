@@ -177,10 +177,12 @@ annals-usage budget
 annals-usage doctor
 ```
 
-The report distinguishes exact measurements, cumulative fallbacks, deliveries
-that invoked no model, and observations with gaps. Token categories overlap,
-and the Codex subscription percentage has no exposed token denominator, so it
-cannot be divided into an exact per-delivery subscription share. See
+The report is calculated live from Nucleus model output and Annals attribution;
+it stores no reporting database. It distinguishes exact measurements,
+cumulative fallbacks, deliveries that invoked no model, and observations with
+gaps. Token categories overlap, and the Codex subscription percentage has no
+exposed token denominator, so it cannot be divided into an exact per-delivery
+subscription share. See
 [Consumption telemetry](docs/telemetry.md) for the accounting contract.
 
 ## Release
@@ -233,20 +235,18 @@ The deployer installs `~/.local/bin/annals` and
 `~/.local/bin/annals-usage`, versioned complete releases under
 `~/Library/Application Support/Annals/install`, and a user LaunchAgent under
 `~/Library/LaunchAgents`. It selects the Nucleus socket in Annals'
-configuration and keeps the companion `usage.toml` and `usage.db` beside the
-Annals library.
+configuration and keeps the companion `usage.toml` beside the Annals library.
 Running the same command again is the unattended update process. It drains the
 worker between jobs, takes a consistent Annals library backup, switches both
 binaries through one release selector, updates both configurations within a
 rollback-protected transaction, validates the result, and automatically
 restores the previous release if launchd cutover fails. Configuration,
-library data, telemetry, logs, the operator pause state, and
+library data, logs, the operator pause state, and
 queued or archived sources are retained.
 For a later operator-requested rollback, `install/last-update.json` names a
 durable snapshot containing the prior configs and LaunchAgent; restore that
 snapshot together with the `previous` release selector. Credentials are not
-included: reverting to the old invocation system also requires a secure
-current-credential transfer or attended login while both services are stopped.
+included, and Nucleus state remains outside the Annals rollback boundary.
 
 If Nucleus authentication expires, queued jobs remain unattempted behind the
 authenticated dispatch preflight. Pause Annals, run `annals-usage login
@@ -257,12 +257,13 @@ The current schema is version 4. Normal deployment additively migrates a
 version-3 library to add bounded retry-event provenance while retaining its
 contents and spool. Version 3 remains the intentional fresh-state boundary;
 the one-time cutover from an older schema adds `--fresh-state` to the command
-above. That mode archives the old library, telemetry ledger, sidecars, and spool
+above. That mode archives the old library, its sidecars, and the spool
 as one rollback generation, validates the empty replacement, imports the
 uncompleted backlog while preserving priority choices and sequence order
 within each lane, explicitly resumes it, and only then wakes launchd. See the
 [system installation guide](docs/system-installation.md) for the guarded
-sequence and recovery receipt.
+sequence and recovery receipt. Any obsolete `usage.db` and sidecars are
+discarded after a successful cutover rather than entering that generation.
 
 After installation, the user—and Codex running as that user—uses the default
 library without `sudo`:

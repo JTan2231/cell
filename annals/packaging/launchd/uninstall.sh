@@ -43,7 +43,6 @@ run_as_operator() {
             || fail "unable to enter operator state directory: $STATE_DIR"
         sudo -u "$operator" env -i \
             HOME="$STATE_DIR" \
-            CODEX_HOME="$STATE_DIR/codex-home" \
             PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin \
             USER="$operator" \
             LOGNAME="$operator" \
@@ -82,6 +81,6 @@ printf '%s\n' 'Annals scheduling and installed program files were removed, inclu
 if [ -n "$operator" ]; then
     printf 'Operator: %s (%s)\n' "$operator" "$operator_group"
 fi
-printf '%s\n' 'All library and usage state was retained:'
+printf '%s\n' 'All library and operational state was retained:'
 printf '  %s\n' "$STATE_DIR"
 printf '%s\n' 'Remove retained state manually only after making any required backup.'

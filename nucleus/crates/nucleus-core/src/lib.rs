@@ -3,8 +3,8 @@
 //!
 //! These types deliberately describe runtime concerns only. A requester owns
 //! prompt construction, dynamic-tool behavior, and the meaning of its domain
-//! result. Nucleus owns admission, harness execution, lifecycle, and the raw,
-//! schema-bound execution record.
+//! result. Nucleus owns admission, harness execution, lifecycle, and the exact
+//! harness-output observations used by reporting surfaces.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -706,7 +706,7 @@ pub enum AttemptTerminalReason {
     RequesterUnavailable,
 }
 
-/// Structured successful harness output retained alongside raw lifecycle logs.
+/// Structured successful harness output derived from raw harness stdout.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AttemptOutputV1 {
@@ -826,10 +826,10 @@ pub enum LogStream {
     Requester,
 }
 
-/// One exact raw record observed during a job.
+/// One exact harness stdout record observed during a job.
 ///
-/// `payload` remains external-schema data. Its fields are intentionally not
-/// reflected in Nucleus's relational schema.
+/// The surrounding fields are a read-time compatibility envelope. Only the
+/// attempt, sequence, observation time, and exact payload bytes are persisted.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LogRecordV1 {
@@ -1071,8 +1071,6 @@ pub struct PendingToolCallV1 {
     pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub answered_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result_sequence: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

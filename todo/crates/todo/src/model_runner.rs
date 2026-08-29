@@ -1,70 +1,30 @@
 use std::collections::BTreeMap;
-use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use base64::Engine as _;
 use nucleus_client::{ClientError, NucleusClient};
 use nucleus_core::{
     AbsolutePath, AgentInvocationV1, BuiltinToolsV1, JobId, JobRequestV1, JobState,
-    LaunchContextRegistrationV1, LaunchEnvironmentVariableV1, LifecycleEventKind, LifecycleEventV1,
-    LogSchemaV1, LogStream, LogsQueryV1, ModelId, PROTOCOL_VERSION_V1, ReasoningEffort, Requester,
-    SchemaId, TimeoutSeconds, ToolCallsQueryV1, ToolDefinitionV1, ToolResultV1,
-    ToolsetDefinitionsV1, ToolsetRef, ToolsetRegistrationV1, WorkspaceAccess,
+    LaunchContextRegistrationV1, LaunchEnvironmentVariableV1, LogSchemaV1, ModelId,
+    PROTOCOL_VERSION_V1, ReasoningEffort, Requester, SchemaId, TimeoutSeconds, ToolCallsQueryV1,
+    ToolDefinitionV1, ToolResultV1, ToolsetDefinitionsV1, ToolsetRef, ToolsetRegistrationV1,
+    WorkspaceAccess,
 };
+use serde_json::json;
 use serde_json::value::{RawValue, to_raw_value};
-use serde_json::{Value, json};
 use tokio::runtime::Builder;
+#[cfg(test)]
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::model::ModelQuality;
-use crate::tool_server::{self, Backend, Tool, ToolFailure, ToolSuccess};
+use crate::tool_server::{
+    self, Backend, Stage, StageContract, ToolFailure, ToolSuccess, WorkspacePolicy,
+};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_hours(1);
-const DEFAULT_STDERR_TAIL_BYTES: usize = 64 * 1024;
 const MAILBOX_WAIT_SECONDS: u32 = 1;
-const SUMMARY_FALLBACK_POLLS: u32 = 60;
 const TOOLSET_DEFINITIONS_SCHEMA_ID: &str = "nucleus.toolset-definitions.v1";
-const TOOLSET_NAME: &str = "research-liaison";
-const TOOLSET_VERSION: u32 = 1;
-const TOOL_INPUT_SCHEMA_ID: &str = "todo.tool.create-todo.input.v1";
-const TOOL_RESULT_SCHEMA_ID: &str = "todo.tool.create-todo.result.v1";
-const DEVELOPER_INSTRUCTIONS: &str = "Research the direction thoroughly. You may read accessible local and web material, but must not modify anything. Record exactly one todo using only the supplied create_todo tool.";
-
-const TOOL_RESULT_SCHEMA: &str = r#"{
-  "$schema":"http://json-schema.org/draft-07/schema#",
-  "title":"Todo create_todo result",
-  "oneOf":[
-    {
-      "type":"object",
-      "additionalProperties":false,
-      "required":["created","todo"],
-      "properties":{
-        "created":{"const":true},
-        "todo":{
-          "type":"object",
-          "additionalProperties":false,
-          "required":["id","title"],
-          "properties":{"id":{"type":"string"},"title":{"type":"string"}}
-        }
-      }
-    },
-    {
-      "type":"object",
-      "additionalProperties":false,
-      "required":["error"],
-      "properties":{
-        "error":{
-          "type":"object",
-          "additionalProperties":false,
-          "required":["code","message"],
-          "properties":{"code":{"type":"string"},"message":{"type":"string"}}
-        }
-      }
-    }
-  ]
-}"#;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct ModelSettings {
@@ -107,7 +67,43 @@ impl Default for ModelSettings {
 pub(crate) struct Runner {
     socket: Option<PathBuf>,
     timeout: Duration,
-    stderr_tail_bytes: usize,
+}
+
+/// Stable requester and job identities are supplied by Todo's stage receipt.
+/// The legacy wrapper generates them because schema-v1 creation has no receipt.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) struct RunIdentity {
+    requester_id: String,
+    job_id: String,
+}
+
+impl RunIdentity {
+    #[must_use]
+    pub(crate) fn new(requester_id: impl Into<String>, job_id: impl Into<String>) -> Self {
+        Self {
+            requester_id: requester_id.into(),
+            job_id: job_id.into(),
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn requester_id(&self) -> &str {
+        &self.requester_id
+    }
+
+    #[must_use]
+    pub(crate) fn job_id(&self) -> &str {
+        &self.job_id
+    }
+
+    #[cfg(test)]
+    fn fresh(stage: Stage) -> Self {
+        let suffix = Uuid::now_v7();
+        Self::new(
+            format!("todo-{}-request-{suffix}", stage.slug()),
+            format!("todo-{}-{suffix}", stage.slug()),
+        )
+    }
 }
 
 impl Default for Runner {
@@ -115,7 +111,6 @@ impl Default for Runner {
         Self {
             socket: None,
             timeout: DEFAULT_TIMEOUT,
-            stderr_tail_bytes: DEFAULT_STDERR_TAIL_BYTES,
         }
     }
 }
@@ -132,7 +127,6 @@ impl Runner {
         Self {
             socket: Some(socket.into()),
             timeout,
-            ..Self::default()
         }
     }
 
@@ -140,14 +134,38 @@ impl Runner {
     ///
     /// Nucleus owns Codex authentication and execution. Todo retains the prompt, managed tool,
     /// domain transaction, and the rule that a durable creation outranks a later runtime failure.
+    #[cfg(test)]
     pub(crate) fn run_liaison(
         &self,
         settings: &ModelSettings,
         prompt: &str,
         working_directory: &Path,
         backend: &mut impl Backend,
-        forward_stderr: bool,
     ) -> AppResult<String> {
+        self.run_stage(
+            Stage::LegacyCreation,
+            &RunIdentity::fresh(Stage::LegacyCreation),
+            settings,
+            prompt,
+            working_directory,
+            backend,
+        )
+    }
+
+    /// Run one immutable Todo model-stage contract.
+    ///
+    /// New v2 callers persist `identity` before admission so an ambiguous
+    /// submit can be retried with the same job ID and request bytes.
+    pub(crate) fn run_stage(
+        &self,
+        stage: Stage,
+        identity: &RunIdentity,
+        settings: &ModelSettings,
+        prompt: &str,
+        working_directory: &Path,
+        backend: &mut impl Backend,
+    ) -> AppResult<String> {
+        let contract = tool_server::contract(stage);
         let runtime = Builder::new_current_thread()
             .enable_all()
             .build()
@@ -157,7 +175,6 @@ impl Runner {
                     format!("could not initialize the model liaison runtime: {error}"),
                 )
             })?;
-        let mut diagnostics = Vec::new();
         let execution = runtime.block_on(async {
             tokio::time::timeout(self.timeout, async {
                 let client = match &self.socket {
@@ -167,12 +184,12 @@ impl Runner {
                 .map_err(|error| runtime_client_error("model_runner_spawn", &error))?;
                 self.run_with_client(
                     &client,
+                    &contract,
+                    identity,
                     settings,
                     prompt,
                     working_directory,
                     backend,
-                    forward_stderr,
-                    &mut diagnostics,
                 )
                 .await
             })
@@ -182,19 +199,19 @@ impl Runner {
             Ok(result) => result,
             Err(_) => Err(timeout_failure()),
         };
-        result.map_err(|error| runtime_error(error.code, &error.message, &diagnostics))
+        result.map_err(|error| runtime_error(error.code, &error.message))
     }
 
     #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
     async fn run_with_client(
         &self,
         client: &NucleusClient,
+        contract: &StageContract,
+        identity: &RunIdentity,
         settings: &ModelSettings,
         prompt: &str,
         working_directory: &Path,
         backend: &mut impl Backend,
-        forward_stderr: bool,
-        diagnostics: &mut Vec<u8>,
     ) -> Result<String, RuntimeFailure> {
         let health = client
             .health()
@@ -210,8 +227,8 @@ impl Runner {
             ));
         }
 
-        let registration = toolset_registration()?;
-        for schema in tool_schemas()? {
+        let registration = toolset_registration(contract)?;
+        for schema in tool_schemas(contract)? {
             client
                 .register_schema(&schema)
                 .await
@@ -222,42 +239,54 @@ impl Runner {
             .await
             .map_err(|error| runtime_client_error("model_runner_tool_schema", &error))?;
 
-        let suffix = Uuid::now_v7().to_string();
         let requester = Requester {
             program: "todo".to_owned(),
-            id: format!("todo-request-{suffix}"),
+            id: identity.requester_id().to_owned(),
         };
-        let launch_context = client
-            .register_launch_context(&LaunchContextRegistrationV1 {
-                version: PROTOCOL_VERSION_V1,
-                requester: requester.clone(),
-                environment: launch_environment()?,
-            })
-            .await
-            .map_err(|error| runtime_client_error("model_runner_spawn", &error))?;
+        let launch_context = if contract.local_execution {
+            Some(
+                client
+                    .register_launch_context(&LaunchContextRegistrationV1 {
+                        version: PROTOCOL_VERSION_V1,
+                        requester: requester.clone(),
+                        environment: if contract.inherit_environment {
+                            launch_environment()?
+                        } else {
+                            Vec::new()
+                        },
+                    })
+                    .await
+                    .map_err(|error| runtime_client_error("model_runner_spawn", &error))?,
+            )
+        } else {
+            None
+        };
         let mut invocation = AgentInvocationV1::new(
             "codex",
             ModelId::new(settings.model()),
             AbsolutePath::new(working_directory),
-            WorkspaceAccess::ReadOnly,
+            match contract.workspace_policy {
+                WorkspacePolicy::None => WorkspaceAccess::None,
+                WorkspacePolicy::ReadOnly => WorkspaceAccess::ReadOnly,
+            },
             BuiltinToolsV1 {
-                local_execution: true,
-                web_search: true,
+                local_execution: contract.local_execution,
+                web_search: contract.web_search,
             },
             TimeoutSeconds::new(self.timeout.as_secs().max(1)),
         );
         invocation.reasoning_effort = Some(settings.reasoning_effort());
         invocation.toolset = Some(registration.toolset.clone());
-        invocation.launch_context = Some(launch_context.id);
+        invocation.launch_context = launch_context.map(|context| context.id);
         let mut request = JobRequestV1::new(
-            JobId::new(format!("todo-{suffix}")),
-            "Todo research liaison",
+            JobId::new(identity.job_id()),
+            contract.label,
             requester.clone(),
-            tool_server::instructions(),
+            contract.instructions,
             prompt,
             invocation,
         );
-        request.developer_instructions = Some(DEVELOPER_INSTRUCTIONS.to_owned());
+        request.developer_instructions = Some(contract.developer_instructions.to_owned());
 
         let accepted = loop {
             match client.submit_job(&request).await {
@@ -274,31 +303,39 @@ impl Runner {
         };
         let job_id = accepted.job_id;
         let mut tool_after = 0;
-        // Submission returns as the worker starts. Begin at zero so diagnostics emitted between
-        // admission and the HTTP response cannot be skipped.
-        let mut log_after = 0;
-        let mut todo_created = false;
-        let mut final_response = None;
-        let mut terminal_state = None;
-        let mut terminal_attempt = false;
-        let mut polls_since_summary = 0_u32;
         let mut cached_results: BTreeMap<String, CachedToolResult> = BTreeMap::new();
 
         loop {
-            let calls = client
-                .pending_tool_calls(
-                    &job_id,
-                    &ToolCallsQueryV1 {
-                        after: tool_after,
-                        wait_seconds: MAILBOX_WAIT_SECONDS,
-                    },
-                )
-                .await
-                .map_err(|error| runtime_client_error("model_runner_protocol", &error))?;
+            let calls = loop {
+                match client
+                    .pending_tool_calls(
+                        &job_id,
+                        &ToolCallsQueryV1 {
+                            after: tool_after,
+                            wait_seconds: MAILBOX_WAIT_SECONDS,
+                        },
+                    )
+                    .await
+                {
+                    Ok(calls) => break calls,
+                    Err(ClientError::Transport { .. }) => {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                    Err(error) => {
+                        return Err(runtime_client_error("model_runner_protocol", &error));
+                    }
+                }
+            };
             for pending in calls.calls {
                 let call = pending.call;
+                let Some(definition) = contract.tool_named(&call.tool_name) else {
+                    return Err(RuntimeFailure::new(
+                        "model_runner_protocol",
+                        "Nucleus returned a tool call outside the admitted Todo contract",
+                    ));
+                };
                 if call.job_id != job_id
-                    || call.arguments_schema_id.as_str() != TOOL_INPUT_SCHEMA_ID
+                    || call.arguments_schema_id.as_str() != definition.input_schema_id
                 {
                     return Err(RuntimeFailure::new(
                         "model_runner_protocol",
@@ -315,8 +352,13 @@ impl Runner {
                                 format!("Nucleus returned invalid tool arguments: {error}"),
                             )
                         })?;
-                    let result =
-                        dispatch_tool_call(backend, &mut todo_created, &call.tool_name, arguments);
+                    let result = tool_server::dispatch(
+                        backend,
+                        contract,
+                        call.id.as_str(),
+                        &call.tool_name,
+                        arguments,
+                    );
                     let (text, success) = model_tool_result(result);
                     let result = CachedToolResult {
                         payload: RawValue::from_string(text).map_err(|error| {
@@ -334,7 +376,7 @@ impl Runner {
                     version: PROTOCOL_VERSION_V1,
                     call_id: call.id.clone(),
                     requester: requester.clone(),
-                    result_schema_id: SchemaId::new(TOOL_RESULT_SCHEMA_ID),
+                    result_schema_id: SchemaId::new(contract.result_schema_id),
                     result: result.payload,
                     is_error: result.is_error,
                 };
@@ -354,61 +396,32 @@ impl Runner {
                 tool_after = tool_after.max(call.request_sequence);
             }
 
-            read_new_logs(
-                client,
-                &job_id,
-                &mut log_after,
-                diagnostics,
-                forward_stderr,
-                self.stderr_tail_bytes,
-                &mut final_response,
-                &mut terminal_state,
-                &mut terminal_attempt,
-            )
-            .await?;
-            polls_since_summary = polls_since_summary.saturating_add(1);
-            if terminal_state.is_none()
-                && !terminal_attempt
-                && polls_since_summary < SUMMARY_FALLBACK_POLLS
-            {
-                continue;
-            }
-            let job = client
-                .get_job(&job_id)
-                .await
-                .map_err(|error| runtime_client_error("model_runner_protocol", &error))?;
+            let job = loop {
+                match client.get_job(&job_id).await {
+                    Ok(job) => break job,
+                    Err(ClientError::Transport { .. }) => {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                    Err(error) => {
+                        return Err(runtime_client_error("model_runner_protocol", &error));
+                    }
+                }
+            };
             if !job.summary.state.is_terminal() {
-                terminal_attempt = false;
-                polls_since_summary = 0;
                 continue;
-            }
-            read_new_logs(
-                client,
-                &job_id,
-                &mut log_after,
-                diagnostics,
-                forward_stderr,
-                self.stderr_tail_bytes,
-                &mut final_response,
-                &mut terminal_state,
-                &mut terminal_attempt,
-            )
-            .await?;
-            if terminal_state.is_some_and(|state| state != job.summary.state) {
-                return Err(RuntimeFailure::new(
-                    "model_runner_protocol",
-                    "Nucleus job state disagreed with its terminal lifecycle event",
-                ));
             }
             return match job.summary.state {
-                JobState::Completed => Ok(job
+                JobState::Completed => job
                     .attempts
                     .last()
                     .and_then(|attempt| attempt.output.as_ref())
-                    .map_or_else(
-                        || final_response.unwrap_or_default(),
-                        |output| output.final_message.clone(),
-                    )),
+                    .map(|output| output.final_message.clone())
+                    .ok_or_else(|| {
+                        RuntimeFailure::new(
+                            "model_runner_protocol",
+                            "Nucleus completed the liaison without structured attempt output",
+                        )
+                    }),
                 JobState::Failed | JobState::Cancelled => {
                     let attempt = job.attempts.last();
                     let code = if attempt.is_some_and(|attempt| {
@@ -465,230 +478,79 @@ struct CachedToolResult {
     is_error: bool,
 }
 
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
-async fn read_new_logs(
-    client: &NucleusClient,
-    job_id: &JobId,
-    after: &mut u64,
-    diagnostics: &mut Vec<u8>,
-    forward_stderr: bool,
-    stderr_tail_bytes: usize,
-    final_response: &mut Option<String>,
-    terminal_state: &mut Option<JobState>,
-    terminal_attempt: &mut bool,
-) -> Result<(), RuntimeFailure> {
-    loop {
-        let logs = client
-            .logs(
-                job_id,
-                &LogsQueryV1 {
-                    after: *after,
-                    follow: false,
-                    limit: Some(1_000),
-                },
-            )
-            .await
-            .map_err(|error| runtime_client_error("model_runner_protocol", &error))?;
-        let count = logs.records.len();
-        for record in logs.records {
-            match record.stream {
-                LogStream::HarnessStderr => {
-                    let envelope: Value =
-                        serde_json::from_str(record.payload.get()).map_err(|error| {
-                            RuntimeFailure::new(
-                                "model_runner_protocol",
-                                format!("Nucleus returned an invalid stderr envelope: {error}"),
-                            )
-                        })?;
-                    if envelope.get("encoding").and_then(Value::as_str) != Some("base64") {
-                        return Err(RuntimeFailure::new(
-                            "model_runner_protocol",
-                            "Nucleus returned an unsupported stderr encoding",
-                        ));
-                    }
-                    let encoded =
-                        envelope
-                            .get("data")
-                            .and_then(Value::as_str)
-                            .ok_or_else(|| {
-                                RuntimeFailure::new(
-                                    "model_runner_protocol",
-                                    "Nucleus stderr envelope omitted its data",
-                                )
-                            })?;
-                    let bytes = base64::engine::general_purpose::STANDARD
-                        .decode(encoded)
-                        .map_err(|error| {
-                            RuntimeFailure::new(
-                                "model_runner_protocol",
-                                format!("Nucleus returned invalid base64 stderr: {error}"),
-                            )
-                        })?;
-                    retain_stderr(diagnostics, &bytes, stderr_tail_bytes);
-                    if forward_stderr {
-                        forward_diagnostics(&bytes).map_err(|error| {
-                            RuntimeFailure::new(
-                                "model_runner_protocol",
-                                format!("could not forward model runner diagnostics: {error}"),
-                            )
-                        })?;
-                    }
-                }
-                LogStream::NucleusLifecycle => {
-                    let event: LifecycleEventV1 = serde_json::from_str(record.payload.get())
-                        .map_err(|error| {
-                            RuntimeFailure::new(
-                                "model_runner_protocol",
-                                format!("Nucleus returned an invalid lifecycle event: {error}"),
-                            )
-                        })?;
-                    if event.event == LifecycleEventKind::TurnCompleted
-                        && let Some(details) = event.details
-                    {
-                        let details: Value =
-                            serde_json::from_str(details.get()).map_err(|error| {
-                                RuntimeFailure::new(
-                                    "model_runner_protocol",
-                                    format!("Nucleus returned invalid turn details: {error}"),
-                                )
-                            })?;
-                        *final_response = details
-                            .get("finalMessage")
-                            .and_then(Value::as_str)
-                            .map(str::to_owned);
-                    }
-                    match event.event {
-                        LifecycleEventKind::JobCompleted => {
-                            *terminal_state = Some(JobState::Completed);
-                        }
-                        LifecycleEventKind::JobFailed => {
-                            *terminal_state = Some(JobState::Failed);
-                        }
-                        LifecycleEventKind::JobCancelled => {
-                            *terminal_state = Some(JobState::Cancelled);
-                        }
-                        LifecycleEventKind::AttemptCompleted
-                        | LifecycleEventKind::AttemptFailed
-                        | LifecycleEventKind::AttemptTimedOut
-                        | LifecycleEventKind::AttemptCancelled
-                        | LifecycleEventKind::AttemptLost => {
-                            // A terminal attempt is enough to consult the durable summary even if
-                            // a later job lifecycle record is delayed or unavailable.
-                            *terminal_attempt = true;
-                        }
-                        LifecycleEventKind::JobAccepted
-                        | LifecycleEventKind::JobStarted
-                        | LifecycleEventKind::AttemptCreated
-                        | LifecycleEventKind::HarnessValidated
-                        | LifecycleEventKind::ProcessStarted
-                        | LifecycleEventKind::ThreadStarted
-                        | LifecycleEventKind::TurnStarted
-                        | LifecycleEventKind::WaitingOnRequester
-                        | LifecycleEventKind::ToolCallPending
-                        | LifecycleEventKind::ToolCallAnswered
-                        | LifecycleEventKind::CancellationRequested
-                        | LifecycleEventKind::TurnCompleted
-                        | LifecycleEventKind::ProcessExited
-                        | LifecycleEventKind::RecordDecodeFailed => {}
-                    }
-                }
-                LogStream::NucleusControl
-                | LogStream::HarnessInput
-                | LogStream::HarnessOutput
-                | LogStream::Requester => {}
-            }
-        }
-        *after = logs.next_sequence;
-        if count < 1_000 {
-            return Ok(());
-        }
-    }
-}
-
-fn tool_schemas() -> Result<[LogSchemaV1; 2], RuntimeFailure> {
-    let input = tool_server::tool_definitions()
-        .into_iter()
-        .next()
-        .and_then(|definition| definition.get("inputSchema").cloned())
-        .ok_or_else(|| {
-            RuntimeFailure::new(
-                "model_runner_tool_schema",
-                "Todo create_todo definition omitted its input schema",
-            )
-        })?;
-    let input = to_raw_value(&input).map_err(|error| {
-        RuntimeFailure::new(
-            "model_runner_tool_schema",
-            format!("could not encode the Todo input schema: {error}"),
-        )
-    })?;
-    let result = RawValue::from_string(TOOL_RESULT_SCHEMA.to_owned()).map_err(|error| {
-        RuntimeFailure::new(
-            "model_runner_tool_schema",
-            format!("the Todo result schema is invalid: {error}"),
-        )
-    })?;
-    Ok([
-        LogSchemaV1::new(
-            TOOL_INPUT_SCHEMA_ID,
-            "Todo create_todo input",
-            "1",
-            "application/schema+json",
-            "todo",
-            input,
-        ),
-        LogSchemaV1::new(
-            TOOL_RESULT_SCHEMA_ID,
-            "Todo create_todo result",
-            "1",
-            "application/schema+json",
-            "todo",
-            result,
-        ),
-    ])
-}
-
-fn toolset_registration() -> Result<ToolsetRegistrationV1, RuntimeFailure> {
-    let mut definitions = tool_server::tool_definitions();
-    let definition = definitions.pop().ok_or_else(|| {
-        RuntimeFailure::new(
-            "model_runner_tool_schema",
-            "Todo did not define create_todo",
-        )
-    })?;
-    if !definitions.is_empty() {
-        return Err(RuntimeFailure::new(
-            "model_runner_tool_schema",
-            "Todo unexpectedly defined more than one managed tool",
-        ));
-    }
-    let name = required_definition_string(&definition, "name")?;
-    let description = required_definition_string(&definition, "description")?;
-    let input_schema = definition.get("inputSchema").cloned().ok_or_else(|| {
-        RuntimeFailure::new(
-            "model_runner_tool_schema",
-            "Todo create_todo definition omitted its input schema",
-        )
-    })?;
-    let definitions = ToolsetDefinitionsV1 {
-        version: PROTOCOL_VERSION_V1,
-        tools: vec![ToolDefinitionV1 {
-            name,
-            description,
-            input_schema_id: SchemaId::new(TOOL_INPUT_SCHEMA_ID),
-            input_schema: to_raw_value(&input_schema).map_err(|error| {
+fn tool_schemas(contract: &StageContract) -> Result<Vec<LogSchemaV1>, RuntimeFailure> {
+    let mut schemas = contract
+        .tools
+        .iter()
+        .map(|tool| {
+            let schema = to_raw_value(&tool.input_schema).map_err(|error| {
                 RuntimeFailure::new(
                     "model_runner_tool_schema",
-                    format!("could not encode the Todo input schema: {error}"),
+                    format!(
+                        "could not encode {} input schema: {error}",
+                        tool.tool.name()
+                    ),
                 )
-            })?,
-        }],
+            })?;
+            Ok(LogSchemaV1::new(
+                tool.input_schema_id,
+                format!("Todo {} input", tool.tool.name()),
+                "1",
+                "application/schema+json",
+                "todo",
+                schema,
+            ))
+        })
+        .collect::<Result<Vec<_>, RuntimeFailure>>()?;
+    let result = to_raw_value(&contract.result_schema).map_err(|error| {
+        RuntimeFailure::new(
+            "model_runner_tool_schema",
+            format!(
+                "could not encode {} result schema: {error}",
+                contract.toolset_name
+            ),
+        )
+    })?;
+    schemas.push(LogSchemaV1::new(
+        contract.result_schema_id,
+        format!("Todo {} result", contract.toolset_name),
+        "1",
+        "application/schema+json",
+        "todo",
+        result,
+    ));
+    Ok(schemas)
+}
+
+fn toolset_registration(contract: &StageContract) -> Result<ToolsetRegistrationV1, RuntimeFailure> {
+    let definitions = ToolsetDefinitionsV1 {
+        version: PROTOCOL_VERSION_V1,
+        tools: contract
+            .tools
+            .iter()
+            .map(|tool| {
+                Ok(ToolDefinitionV1 {
+                    name: tool.tool.name().to_owned(),
+                    description: tool.description.to_owned(),
+                    input_schema_id: SchemaId::new(tool.input_schema_id),
+                    input_schema: to_raw_value(&tool.input_schema).map_err(|error| {
+                        RuntimeFailure::new(
+                            "model_runner_tool_schema",
+                            format!(
+                                "could not encode {} input schema: {error}",
+                                tool.tool.name()
+                            ),
+                        )
+                    })?,
+                })
+            })
+            .collect::<Result<Vec<_>, RuntimeFailure>>()?,
     };
     ToolsetRegistrationV1::new(
         ToolsetRef {
             provider: "todo".to_owned(),
-            name: TOOLSET_NAME.to_owned(),
-            version: TOOLSET_VERSION,
+            name: contract.toolset_name.to_owned(),
+            version: contract.toolset_version,
         },
         TOOLSET_DEFINITIONS_SCHEMA_ID,
         definitions,
@@ -699,44 +561,6 @@ fn toolset_registration() -> Result<ToolsetRegistrationV1, RuntimeFailure> {
             format!("could not encode the Todo toolset: {error}"),
         )
     })
-}
-
-fn required_definition_string(definition: &Value, field: &str) -> Result<String, RuntimeFailure> {
-    definition
-        .get(field)
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| {
-            RuntimeFailure::new(
-                "model_runner_tool_schema",
-                format!("Todo create_todo definition omitted its {field}"),
-            )
-        })
-}
-
-fn dispatch_tool_call(
-    backend: &mut impl Backend,
-    todo_created: &mut bool,
-    name: &str,
-    arguments: Value,
-) -> Result<ToolSuccess, ToolFailure> {
-    let Some(tool) = Tool::from_name(name) else {
-        return Err(ToolFailure::new(
-            "unknown_tool",
-            format!("unknown Todo tool {name:?}"),
-        ));
-    };
-    if *todo_created {
-        return Err(ToolFailure::new(
-            "todo_already_created",
-            "this liaison session has already created its todo",
-        ));
-    }
-    let result = backend.call(tool, arguments);
-    if result.as_ref().is_ok_and(ToolSuccess::todo_created) {
-        *todo_created = true;
-    }
-    result
 }
 
 fn model_tool_result(result: Result<ToolSuccess, ToolFailure>) -> (String, bool) {
@@ -760,31 +584,6 @@ fn model_tool_result(result: Result<ToolSuccess, ToolFailure>) -> (String, bool)
             )
         }
     }
-}
-
-fn retain_stderr(tail: &mut Vec<u8>, chunk: &[u8], limit: usize) {
-    if chunk.len() >= limit {
-        tail.clear();
-        tail.extend_from_slice(&chunk[chunk.len() - limit..]);
-        return;
-    }
-    let excess = tail.len().saturating_add(chunk.len()).saturating_sub(limit);
-    if excess > 0 {
-        tail.drain(..excess);
-    }
-    tail.extend_from_slice(chunk);
-}
-
-fn forward_diagnostics(bytes: &[u8]) -> io::Result<()> {
-    let mut output = io::stderr().lock();
-    for byte in bytes {
-        if matches!(byte, b'\n' | 0x20..=0x7e | 0x80..=0xff) {
-            output.write_all(&[*byte])?;
-        } else {
-            write!(output, "\\x{byte:02x}")?;
-        }
-    }
-    Ok(())
 }
 
 #[derive(Debug)]
@@ -813,21 +612,8 @@ fn runtime_client_error(code: &'static str, error: &ClientError) -> RuntimeFailu
     RuntimeFailure::new(code, format!("Nucleus request failed: {error}"))
 }
 
-fn runtime_error(code: &'static str, message: &str, diagnostics: &[u8]) -> AppError {
-    let diagnostic = String::from_utf8_lossy(diagnostics);
-    let diagnostic = diagnostic.trim();
-    let suffix = if diagnostic.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "; stderr: {}",
-            diagnostic
-                .chars()
-                .flat_map(char::escape_default)
-                .collect::<String>()
-        )
-    };
-    AppError::unexpected(code, format!("{message}{suffix}"))
+fn runtime_error(code: &'static str, message: &str) -> AppError {
+    AppError::unexpected(code, message)
 }
 
 #[cfg(test)]
@@ -840,12 +626,21 @@ mod tests {
     use serde_json::{Value, json};
 
     use crate::model::ModelQuality;
-    use crate::tool_server::{Backend, Tool, ToolFailure, ToolSuccess};
+    use crate::tool_server::{self, Backend, Call, Stage, ToolFailure, ToolSuccess};
 
     use super::{
-        DEVELOPER_INSTRUCTIONS, ModelSettings, Runner, TOOL_INPUT_SCHEMA_ID, TOOL_RESULT_SCHEMA_ID,
-        dispatch_tool_call, model_tool_result, retain_stderr, tool_schemas, toolset_registration,
+        ModelSettings, RunIdentity, Runner, model_tool_result, tool_schemas, toolset_registration,
     };
+
+    const TOOL_INPUT_SCHEMA_ID: &str = "todo.tool.create-todo.input.v1";
+    const TOOL_RESULT_SCHEMA_ID: &str = "todo.tool.create-todo.result.v1";
+
+    #[test]
+    fn run_identity_exposes_the_persisted_requester_and_job_ids() {
+        let identity = RunIdentity::new("todo-routing-request-r7-v2", "todo-routing-r7-v2");
+        assert_eq!(identity.requester_id(), "todo-routing-request-r7-v2");
+        assert_eq!(identity.job_id(), "todo-routing-r7-v2");
+    }
 
     #[test]
     fn quality_presets_match_annals() {
@@ -868,7 +663,8 @@ mod tests {
 
     #[test]
     fn nucleus_inventory_contains_only_managed_creation() {
-        let Ok(registration) = toolset_registration() else {
+        let contract = tool_server::contract(Stage::LegacyCreation);
+        let Ok(registration) = toolset_registration(&contract) else {
             panic!("valid Todo toolset was rejected");
         };
         assert_eq!(registration.toolset.provider, "todo");
@@ -877,7 +673,7 @@ mod tests {
         let tool = &registration.definitions.tools[0];
         assert_eq!(tool.name, "create_todo");
         assert_eq!(tool.input_schema_id.as_str(), TOOL_INPUT_SCHEMA_ID);
-        let Ok(schemas) = tool_schemas() else {
+        let Ok(schemas) = tool_schemas(&contract) else {
             panic!("valid Todo schemas were rejected");
         };
         assert_eq!(schemas[0].id.as_str(), TOOL_INPUT_SCHEMA_ID);
@@ -886,18 +682,25 @@ mod tests {
 
     #[derive(Default)]
     struct StubBackend {
-        calls: Vec<Value>,
+        calls: Vec<(String, Call)>,
         reject_next: bool,
+        created: bool,
     }
 
     impl Backend for StubBackend {
-        fn call(&mut self, tool: Tool, arguments: Value) -> Result<ToolSuccess, ToolFailure> {
-            assert_eq!(tool, Tool::CreateTodo);
-            self.calls.push(arguments);
+        fn call(&mut self, tool_call_id: &str, call: Call) -> Result<ToolSuccess, ToolFailure> {
+            assert!(matches!(call, Call::CreateTodo(_)));
+            self.calls.push((tool_call_id.to_owned(), call));
             if self.reject_next {
                 self.reject_next = false;
                 Err(ToolFailure::new("invalid_todo", "the title is blank"))
+            } else if self.created {
+                Err(ToolFailure::new(
+                    "todo_already_created",
+                    "this session has already created its todo",
+                ))
             } else {
+                self.created = true;
                 Ok(ToolSuccess::created(json!({
                     "created": true,
                     "todo": { "id": "t1", "title": "Actionable title" }
@@ -911,31 +714,35 @@ mod tests {
         let mut backend = StubBackend {
             calls: Vec::new(),
             reject_next: true,
+            created: false,
         };
-        let mut created = false;
+        let contract = tool_server::contract(Stage::LegacyCreation);
         assert!(
-            dispatch_tool_call(
+            tool_server::dispatch(
                 &mut backend,
-                &mut created,
+                &contract,
+                "call-rejected",
                 "create_todo",
-                json!({ "title": "", "note": "note" }),
+                json!({ "title": "Rejected", "note": "note" }),
             )
             .is_err()
         );
-        assert!(!created);
+        assert!(!backend.created);
         assert!(
-            dispatch_tool_call(
+            tool_server::dispatch(
                 &mut backend,
-                &mut created,
+                &contract,
+                "call-created",
                 "create_todo",
                 json!({ "title": "Title", "note": "Note" }),
             )
             .is_ok()
         );
-        assert!(created);
-        let duplicate = dispatch_tool_call(
+        assert!(backend.created);
+        let duplicate = tool_server::dispatch(
             &mut backend,
-            &mut created,
+            &contract,
+            "call-duplicate",
             "create_todo",
             json!({ "title": "Second", "note": "Second" }),
         );
@@ -943,7 +750,7 @@ mod tests {
             duplicate.as_ref().err().map(ToolFailure::code),
             Some("todo_already_created")
         );
-        assert_eq!(backend.calls.len(), 2);
+        assert_eq!(backend.calls.len(), 3);
     }
 
     #[test]
@@ -974,27 +781,12 @@ mod tests {
     }
 
     #[test]
-    fn stderr_tail_is_bounded() {
-        let mut tail = b"1234".to_vec();
-        retain_stderr(&mut tail, b"56789", 6);
-        assert_eq!(tail, b"456789");
-        retain_stderr(&mut tail, b"abcdefgh", 6);
-        assert_eq!(tail, b"cdefgh");
+    fn nucleus_job_uses_durable_state_and_attempt_output() -> Result<(), Box<dyn std::error::Error>>
+    {
+        exercise_fake_nucleus()
     }
 
-    #[test]
-    fn nucleus_job_preserves_policy_and_dispatches_creation()
-    -> Result<(), Box<dyn std::error::Error>> {
-        exercise_fake_nucleus(true)
-    }
-
-    #[test]
-    fn terminal_attempt_event_falls_back_to_durable_job_summary()
-    -> Result<(), Box<dyn std::error::Error>> {
-        exercise_fake_nucleus(false)
-    }
-
-    fn exercise_fake_nucleus(include_job_terminal: bool) -> Result<(), Box<dyn std::error::Error>> {
+    fn exercise_fake_nucleus() -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
         let socket = directory.path().join("nucleus.sock");
         let listener = UnixListener::bind(&socket)?;
@@ -1002,23 +794,20 @@ mod tests {
         std::fs::create_dir(&working)?;
         let working = std::fs::canonicalize(working)?;
         let expected_working = working.display().to_string();
-        let server = thread::spawn(move || {
-            serve_fake_nucleus(&listener, &expected_working, include_job_terminal)
-        });
+        let server = thread::spawn(move || serve_fake_nucleus(&listener, &expected_working));
 
         let settings = ModelSettings::new(ModelQuality::Low, Some("custom-model"));
         let runner = Runner::new(&socket, Duration::from_secs(5));
         let mut backend = StubBackend::default();
-        let diagnostic = runner.run_liaison(
-            &settings,
-            "Research this need",
-            &working,
-            &mut backend,
-            false,
-        )?;
+        let diagnostic =
+            runner.run_liaison(&settings, "Research this need", &working, &mut backend)?;
         assert_eq!(diagnostic, "created");
         assert_eq!(backend.calls.len(), 1);
-        assert_eq!(backend.calls[0]["title"], "Actionable title");
+        let (tool_call_id, Call::CreateTodo(arguments)) = &backend.calls[0] else {
+            panic!("runner dispatched an unexpected tool");
+        };
+        assert_eq!(tool_call_id, "call-1");
+        assert_eq!(arguments.title, "Actionable title");
 
         let Ok(server_result) = server.join() else {
             panic!("fake Nucleus server panicked");
@@ -1032,7 +821,6 @@ mod tests {
     fn serve_fake_nucleus(
         listener: &UnixListener,
         expected_working: &str,
-        include_job_terminal: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut submitted = None;
         let mut job_id = None;
@@ -1044,7 +832,6 @@ mod tests {
                 &request_line,
                 body.as_deref(),
                 expected_working,
-                include_job_terminal,
                 &mut submitted,
                 &mut job_id,
             );
@@ -1059,7 +846,6 @@ mod tests {
         request_line: &str,
         body: Option<&str>,
         expected_working: &str,
-        include_job_terminal: bool,
         submitted: &mut Option<Value>,
         job_id: &mut Option<String>,
     ) -> Value {
@@ -1118,7 +904,10 @@ mod tests {
             5 => {
                 assert!(request_line.starts_with("POST /v1/jobs "));
                 let request = decode_body(body);
-                assert_eq!(request["developerInstructions"], DEVELOPER_INSTRUCTIONS);
+                assert_eq!(
+                    request["developerInstructions"],
+                    tool_server::contract(Stage::LegacyCreation).developer_instructions
+                );
                 assert_eq!(request["instructions"], super::tool_server::instructions());
                 assert_eq!(request["prompt"], "Research this need");
                 assert_eq!(request["invocation"]["model"], "custom-model");
@@ -1199,145 +988,82 @@ mod tests {
                     },
                     "state": "answered",
                     "createdAt": "2026-08-27T00:00:00Z",
-                    "answeredAt": "2026-08-27T00:00:01Z",
-                    "resultSequence": 2
+                    "answeredAt": "2026-08-27T00:00:01Z"
                 })
             }
             8 => {
-                assert!(request_line.contains("/logs?"));
-                let id = required_test_value(job_id.as_ref());
-                let mut response = json!({
-                    "version": 1,
-                    "jobId": id,
-                    "records": [{
-                        "version": 1,
-                        "jobId": id,
-                        "attemptId": "attempt-1",
-                        "sequence": 1,
-                        "observedAt": "2026-08-27T00:00:01Z",
-                        "stream": "harness.stderr",
-                        "schemaId": "nucleus.raw-bytes.v1",
-                        "payload": {"encoding":"base64","data":"ZGlhZ25vc3RpYwo="},
-                        "payloadDigest": "sha256:fake"
-                    }, {
-                        "version": 1,
-                        "jobId": id,
-                        "attemptId": "attempt-1",
-                        "sequence": 2,
-                        "observedAt": "2026-08-27T00:00:01Z",
-                        "stream": "nucleus.lifecycle",
-                        "schemaId": "nucleus.lifecycle-event.v1",
-                        "payload": {
-                            "version": 1,
-                            "event": "turn_completed",
-                            "jobId": id,
-                            "attemptId": "attempt-1",
-                            "details": {
-                                "threadId": "thread-1",
-                                "turnId": "turn-1",
-                                "finalMessage": "lifecycle fallback"
-                            }
-                        },
-                        "payloadDigest": "sha256:fake"
-                    }, {
-                        "version": 1,
-                        "jobId": id,
-                        "attemptId": "attempt-1",
-                        "sequence": 3,
-                        "observedAt": "2026-08-27T00:00:01Z",
-                        "stream": "nucleus.lifecycle",
-                        "schemaId": "nucleus.lifecycle-event.v1",
-                        "payload": {
-                            "version": 1,
-                            "event": "attempt_completed",
-                            "jobId": id,
-                            "attemptId": "attempt-1",
-                            "message": "Codex turn completed"
-                        },
-                        "payloadDigest": "sha256:fake"
-                    }, {
-                        "version": 1,
-                        "jobId": id,
-                        "attemptId": "attempt-1",
-                        "sequence": 4,
-                        "observedAt": "2026-08-27T00:00:01Z",
-                        "stream": "nucleus.lifecycle",
-                        "schemaId": "nucleus.lifecycle-event.v1",
-                        "payload": {
-                            "version": 1,
-                            "event": "job_completed",
-                            "jobId": id,
-                            "attemptId": "attempt-1",
-                            "message": "Codex turn completed"
-                        },
-                        "payloadDigest": "sha256:fake"
-                    }],
-                    "nextSequence": 4
-                });
-                if !include_job_terminal {
-                    let Some(records) = response["records"].as_array_mut() else {
-                        panic!("fake log records were not an array");
-                    };
-                    records.pop();
-                    response["nextSequence"] = json!(3);
-                }
-                response
+                assert!(request_line.starts_with("GET /v1/jobs/"));
+                assert!(!request_line.contains("/logs"));
+                fake_job_response(submitted.as_ref(), job_id.as_ref(), false)
             }
             9 => {
-                assert!(request_line.starts_with("GET /v1/jobs/"));
-                assert!(!request_line.contains("/logs?"));
+                assert!(request_line.contains("/tool-calls?"));
                 let id = required_test_value(job_id.as_ref());
-                let request = required_test_value(submitted.as_ref());
                 json!({
                     "version": 1,
-                    "summary": {
-                        "version": 1,
-                        "id": id,
-                        "label": "Todo research liaison",
-                        "requester": request["requester"],
-                        "state": "completed",
-                        "requestDigest": "sha256:fake",
-                        "createdAt": "2026-08-27T00:00:00Z",
-                        "updatedAt": "2026-08-27T00:00:01Z",
-                        "completedAt": "2026-08-27T00:00:01Z",
-                        "currentAttemptId": "attempt-1"
-                    },
-                    "request": request,
-                    "attempts": [{
-                        "version": 1,
-                        "id": "attempt-1",
-                        "jobId": id,
-                        "ordinal": 1,
-                        "harness": {
-                            "harness": "codex",
-                            "harnessVersion": "0.146.0",
-                            "adapterVersion": "test"
-                        },
-                        "state": "completed",
-                        "createdAt": "2026-08-27T00:00:00Z",
-                        "startedAt": "2026-08-27T00:00:00Z",
-                        "completedAt": "2026-08-27T00:00:01Z",
-                        "terminalReason": "completed",
-                        "terminalMessage": "Codex turn completed",
-                        "output": {
-                            "threadId": "thread-1",
-                            "turnId": "turn-1",
-                            "finalMessage": "created"
-                        }
-                    }]
+                    "jobId": id,
+                    "calls": [],
+                    "nextSequence": 1
                 })
             }
             10 => {
-                assert!(request_line.contains("/logs?"));
-                json!({
-                    "version": 1,
-                    "jobId": required_test_value(job_id.as_ref()),
-                    "records": [],
-                    "nextSequence": if include_job_terminal { 4 } else { 3 }
-                })
+                assert!(request_line.starts_with("GET /v1/jobs/"));
+                assert!(!request_line.contains("/logs"));
+                fake_job_response(submitted.as_ref(), job_id.as_ref(), true)
             }
             _ => panic!("unexpected fake Nucleus request"),
         }
+    }
+
+    fn fake_job_response(
+        submitted: Option<&Value>,
+        job_id: Option<&String>,
+        completed: bool,
+    ) -> Value {
+        let id = required_test_value(job_id);
+        let request = required_test_value(submitted);
+        let mut summary = json!({
+            "version": 1,
+            "id": id,
+            "label": "Todo research liaison",
+            "requester": request["requester"],
+            "state": if completed { "completed" } else { "running" },
+            "requestDigest": "sha256:fake",
+            "createdAt": "2026-08-27T00:00:00Z",
+            "updatedAt": "2026-08-27T00:00:01Z",
+            "currentAttemptId": "attempt-1"
+        });
+        let mut attempt = json!({
+            "version": 1,
+            "id": "attempt-1",
+            "jobId": id,
+            "ordinal": 1,
+            "harness": {
+                "harness": "codex",
+                "harnessVersion": "0.146.0",
+                "adapterVersion": "test"
+            },
+            "state": if completed { "completed" } else { "running" },
+            "createdAt": "2026-08-27T00:00:00Z",
+            "startedAt": "2026-08-27T00:00:00Z"
+        });
+        if completed {
+            summary["completedAt"] = json!("2026-08-27T00:00:01Z");
+            attempt["completedAt"] = json!("2026-08-27T00:00:01Z");
+            attempt["terminalReason"] = json!("completed");
+            attempt["terminalMessage"] = json!("Codex turn completed");
+            attempt["output"] = json!({
+                "threadId": "thread-1",
+                "turnId": "turn-1",
+                "finalMessage": "created"
+            });
+        }
+        json!({
+            "version": 1,
+            "summary": summary,
+            "request": request,
+            "attempts": [attempt]
+        })
     }
 
     fn decode_body(body: Option<&str>) -> Value {

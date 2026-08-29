@@ -1,5 +1,4 @@
-codex = "/usr/local/bin/codex"
-database = "/var/lib/annals/usage.db"
+nucleus = "/usr/local/bin/nucleus"
+nucleus_socket = "/var/lib/annals/Library/Application Support/Nucleus/nucleus.sock"
 library = "/var/lib/annals/annals.db"
 spool = "/var/spool/annals"
-codex_home = "/var/lib/annals/codex-home"

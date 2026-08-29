@@ -8,10 +8,9 @@ use nucleus_client::{ClientError, NucleusClient};
 use nucleus_core::{
     AbsolutePath, AccountSnapshotQueryV1, AgentInvocationV1, BuiltinToolsV1, ErrorResponseV1,
     JobId, JobRequestV1, JobState, LaunchContextRegistrationV1, LaunchEnvironmentVariableV1,
-    LifecycleEventKind, LifecycleEventV1, ListJobsQueryV1, LogSchemaV1, LogStream, LogsQueryV1,
-    PROTOCOL_VERSION_V1, Requester, SchemaId, TimeoutSeconds, ToolCallState, ToolCallsQueryV1,
-    ToolDefinitionV1, ToolResultV1, ToolsetDefinitionsV1, ToolsetRef, ToolsetRegistrationV1,
-    WorkspaceAccess, sha256_digest,
+    ListJobsQueryV1, LogSchemaV1, LogStream, LogsQueryV1, PROTOCOL_VERSION_V1, Requester, SchemaId,
+    TimeoutSeconds, ToolCallState, ToolCallsQueryV1, ToolDefinitionV1, ToolResultV1,
+    ToolsetDefinitionsV1, ToolsetRef, ToolsetRegistrationV1, WorkspaceAccess, sha256_digest,
 };
 use serde_json::value::to_raw_value;
 use serde_json::{Value, json};
@@ -436,34 +435,25 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
     assert!(
         logs.records
             .iter()
-            .any(|record| record.stream == LogStream::HarnessInput)
+            .all(|record| record.stream == LogStream::HarnessOutput)
     );
     assert!(
         logs.records
             .iter()
-            .any(|record| record.stream == LogStream::HarnessOutput)
-    );
-    assert!(lifecycle_events(&logs.records).contains(&LifecycleEventKind::JobCompleted));
-    let thread_start = protocol_request(&logs.records, "thread/start");
-    assert_eq!(
-        thread_start.pointer("/params/baseInstructions"),
-        Some(&json!(request.instructions))
+            .all(|record| record.attempt_id.is_some())
     );
     assert_eq!(
-        thread_start.pointer("/params/developerInstructions"),
-        Some(&json!(request.developer_instructions))
+        logs.records
+            .iter()
+            .map(|record| record.sequence)
+            .collect::<Vec<_>>(),
+        (1..=logs.next_sequence).collect::<Vec<_>>()
     );
-    assert_eq!(
-        thread_start.pointer("/params/experimentalRawEvents"),
-        Some(&json!(true))
-    );
-    assert_eq!(
-        thread_start.pointer("/params/environments"),
-        Some(&json!([]))
-    );
-    let turn_start = protocol_request(&logs.records, "turn/start");
-    assert_eq!(turn_start.pointer("/params/environments"), Some(&json!([])));
     for record in &logs.records {
+        assert_eq!(
+            record.payload_digest,
+            sha256_digest(record.payload.get().as_bytes())
+        );
         let stored_schema = fixture
             .client
             .get_schema(&record.schema_id)
@@ -546,23 +536,28 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
         .await
         .or_panic("post schema-bound tool result");
     assert_eq!(answered.state, ToolCallState::Answered);
-    assert!(answered.result_sequence.is_some());
     wait_for_state(&fixture, &tool_request.id, JobState::Completed).await;
     let tool_logs = fixture
         .client
         .logs(&tool_request.id, &LogsQueryV1::default())
         .await
         .or_panic("read tool-backed job logs");
-    let tool_events = lifecycle_events(&tool_logs.records);
-    assert!(tool_events.contains(&LifecycleEventKind::WaitingOnRequester));
-    assert!(tool_events.contains(&LifecycleEventKind::ToolCallPending));
-    assert!(tool_events.contains(&LifecycleEventKind::ToolCallAnswered));
-    assert!(tool_events.contains(&LifecycleEventKind::JobCompleted));
     assert!(
         tool_logs
             .records
             .iter()
-            .any(|record| record.stream == LogStream::Requester && record.schema_id == schema.id)
+            .all(|record| record.stream == LogStream::HarnessOutput)
+    );
+    assert!(tool_logs.records.iter().any(|record| {
+        serde_json::from_str::<Value>(record.payload.get())
+            .ok()
+            .and_then(|message| message.get("method").cloned())
+            == Some(json!("item/tool/call"))
+    }));
+    assert!(
+        !serde_json::to_string(&tool_logs)
+            .or_panic("encode tool output records")
+            .contains("fake todo result")
     );
 
     let launch_requester = Requester {
@@ -671,10 +666,12 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
         .logs(&cancel_request.id, &LogsQueryV1::default())
         .await
         .or_panic("read cancelled job logs");
-    let cancellation_events = lifecycle_events(&cancelled_logs.records);
-    assert!(cancellation_events.contains(&LifecycleEventKind::CancellationRequested));
-    assert!(cancellation_events.contains(&LifecycleEventKind::AttemptCancelled));
-    assert!(cancellation_events.contains(&LifecycleEventKind::JobCancelled));
+    assert!(
+        cancelled_logs
+            .records
+            .iter()
+            .all(|record| record.stream == LogStream::HarnessOutput)
+    );
 
     fixture.shutdown().await;
 }
@@ -834,27 +831,6 @@ async fn wait_for_state(
         assert!(Instant::now() < deadline, "job did not reach {expected:?}");
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-}
-
-fn lifecycle_events(records: &[nucleus_core::LogRecordV1]) -> Vec<LifecycleEventKind> {
-    records
-        .iter()
-        .filter(|record| record.stream == LogStream::NucleusLifecycle)
-        .map(|record| {
-            serde_json::from_str::<LifecycleEventV1>(record.payload.get())
-                .or_panic("decode lifecycle record")
-                .event
-        })
-        .collect()
-}
-
-fn protocol_request(records: &[nucleus_core::LogRecordV1], method: &str) -> Value {
-    records
-        .iter()
-        .filter(|record| record.stream == LogStream::HarnessInput)
-        .filter_map(|record| serde_json::from_str::<Value>(record.payload.get()).ok())
-        .find(|message| message.get("method").and_then(Value::as_str) == Some(method))
-        .unwrap_or_else(|| panic!("missing {method} protocol request"))
 }
 
 fn write_fake_codex(path: &Path, version: &str, protocol_schema: &str) {

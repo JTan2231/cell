@@ -21,7 +21,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 use thiserror::Error;
-use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _, AsyncWriteExt as _, BufReader};
+use tokio::io::{
+    AsyncBufReadExt as _, AsyncRead, AsyncReadExt as _, AsyncWriteExt as _, BufReader,
+};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
@@ -1293,16 +1295,36 @@ impl ProtocolClient {
     }
 
     fn record_agent_message(&mut self, message: &Value) {
+        let (Some(thread_id), Some(turn_id)) = (
+            self.active_thread_id.as_deref(),
+            self.active_turn_id.as_deref(),
+        ) else {
+            return;
+        };
         let item = match message.get("method").and_then(Value::as_str) {
-            Some("item/completed") => message.pointer("/params/item"),
-            Some("turn/completed") => message
-                .pointer("/params/turn/items")
-                .and_then(Value::as_array)
-                .and_then(|items| {
-                    items.iter().rev().find(|item| {
-                        item.get("type").and_then(Value::as_str) == Some("agentMessage")
+            Some("item/completed")
+                if message.pointer("/params/threadId").and_then(Value::as_str)
+                    == Some(thread_id)
+                    && message.pointer("/params/turnId").and_then(Value::as_str)
+                        == Some(turn_id) =>
+            {
+                message.pointer("/params/item")
+            }
+            Some("turn/completed")
+                if message.pointer("/params/threadId").and_then(Value::as_str)
+                    == Some(thread_id)
+                    && message.pointer("/params/turn/id").and_then(Value::as_str)
+                        == Some(turn_id) =>
+            {
+                message
+                    .pointer("/params/turn/items")
+                    .and_then(Value::as_array)
+                    .and_then(|items| {
+                        items.iter().rev().find(|item| {
+                            item.get("type").and_then(Value::as_str) == Some("agentMessage")
+                        })
                     })
-                }),
+            }
             _ => None,
         };
         if let Some(text) = item
@@ -1733,9 +1755,19 @@ async fn read_protocol_lines(
     sender: mpsc::Sender<io::Result<Vec<u8>>>,
     events: mpsc::Sender<CodexEvent>,
 ) -> Result<(), CodexError> {
+    read_protocol_lines_with_limit(stdout, sender, events, MAX_PROTOCOL_BYTES).await
+}
+
+async fn read_protocol_lines_with_limit(
+    stdout: impl AsyncRead + Unpin,
+    sender: mpsc::Sender<io::Result<Vec<u8>>>,
+    events: mpsc::Sender<CodexEvent>,
+    max_protocol_bytes: u64,
+) -> Result<(), CodexError> {
     let mut reader = BufReader::new(stdout);
     let mut total = 0_u64;
     let mut protocol_consumer_connected = true;
+    let mut protocol_limit_exceeded = false;
     loop {
         let mut line = Vec::new();
         let count = reader
@@ -1746,22 +1778,34 @@ async fn read_protocol_lines(
             return Ok(());
         }
         total = total.saturating_add(count as u64);
+        let protocol_line = (protocol_consumer_connected
+            && !protocol_limit_exceeded
+            && total <= max_protocol_bytes)
+            .then(|| line.clone());
         events
             .send(CodexEvent::Protocol {
                 direction: ProtocolDirection::FromHarness,
-                bytes: line.clone(),
+                bytes: line,
             })
             .await
             .map_err(|_| CodexError::EventConsumerDisconnected)?;
-        if total > MAX_PROTOCOL_BYTES {
-            let _ = sender
-                .send(Err(io::Error::other(
-                    "app-server exceeded the protocol output limit",
-                )))
-                .await;
-            return Ok(());
+        if !protocol_limit_exceeded && total > max_protocol_bytes {
+            protocol_limit_exceeded = true;
+            if protocol_consumer_connected
+                && sender
+                    .send(Err(io::Error::other(
+                        "app-server exceeded the protocol output limit",
+                    )))
+                    .await
+                    .is_err()
+            {
+                protocol_consumer_connected = false;
+            }
+            continue;
         }
-        if protocol_consumer_connected && sender.send(Ok(line)).await.is_err() {
+        if let Some(line) = protocol_line
+            && sender.send(Ok(line)).await.is_err()
+        {
             protocol_consumer_connected = false;
         }
     }
@@ -2289,9 +2333,10 @@ fn diagnostic(prefix: &str, stderr: &[u8]) -> String {
 mod tests {
     use super::{
         BuiltinToolsV1, CodexError, CodexEvent, CodexHarness, CodexRunSpec, DynamicTool,
-        GeneratedSchema, HarnessInspection, ModelCapability, SUPPORTED_CODEX_VERSION, ToolResult,
-        WorkspaceAccess, account_error_with_stderr, configured_model_catalog, disabled_features,
-        dynamic_tool_specs, persist_refreshed_auth, runtime_config, validate_auth_document,
+        GeneratedSchema, HarnessInspection, ModelCapability, ProtocolDirection,
+        SUPPORTED_CODEX_VERSION, ToolResult, WorkspaceAccess, account_error_with_stderr,
+        configured_model_catalog, disabled_features, dynamic_tool_specs, persist_refreshed_auth,
+        read_protocol_lines_with_limit, runtime_config, validate_auth_document,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeMap;
@@ -2300,7 +2345,61 @@ mod tests {
     use std::path::Path;
     use std::process::{Command, Stdio};
     use std::time::Duration;
+    use tokio::io::{AsyncWriteExt as _, duplex};
     use tokio::sync::{mpsc, watch};
+
+    #[tokio::test]
+    async fn protocol_limit_fails_consumer_but_keeps_ordered_capture_draining()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (reader, mut writer) = duplex(1_024);
+        let (protocol_tx, mut protocol_rx) = mpsc::channel(4);
+        let (events_tx, mut events_rx) = mpsc::channel(4);
+        let reader_task = tokio::spawn(read_protocol_lines_with_limit(
+            reader,
+            protocol_tx,
+            events_tx,
+            4,
+        ));
+        let records = [
+            b"a\n".to_vec(),
+            b"bb\n".to_vec(),
+            b"c\n".to_vec(),
+            b"later\n".to_vec(),
+        ];
+        for record in &records {
+            writer.write_all(record).await?;
+        }
+        writer.shutdown().await?;
+
+        reader_task.await??;
+
+        assert_eq!(
+            protocol_rx
+                .recv()
+                .await
+                .ok_or("protocol consumer closed before its first line")??,
+            b"a\n"
+        );
+        let limit_error = protocol_rx
+            .recv()
+            .await
+            .ok_or("protocol consumer did not receive the limit failure")?
+            .err()
+            .ok_or("limit-crossing line unexpectedly reached the protocol consumer")?;
+        assert!(limit_error.to_string().contains("protocol output limit"));
+        assert!(protocol_rx.recv().await.is_none());
+
+        let mut captured = Vec::new();
+        while let Some(event) = events_rx.recv().await {
+            let CodexEvent::Protocol { direction, bytes } = event else {
+                panic!("stdout reader emitted a non-protocol event");
+            };
+            assert_eq!(direction, ProtocolDirection::FromHarness);
+            captured.push(bytes);
+        }
+        assert_eq!(captured, records);
+        Ok(())
+    }
 
     fn inspection() -> HarnessInspection {
         HarnessInspection {
@@ -2928,7 +3027,8 @@ case "$tool_result" in
   *) exit 22 ;;
 esac
   printf '%s\n' '{{"method":"item/completed","params":{{"threadId":"thread-1","turnId":"turn-1","item":{{"type":"agentMessage","text":"created"}}}}}}'
-  printf '%s\n' '{{"method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"turn-1","status":"completed","items":[{{"type":"agentMessage","text":"created"}}]}}}}}}'
+  printf '%s\n' '{{"method":"turn/completed","params":{{"threadId":"thread-other","turn":{{"id":"turn-other","status":"completed","items":[{{"type":"agentMessage","text":"wrong-turn"}}]}}}}}}'
+  printf '%s\n' '{{"method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"turn-1","status":"completed","items":[]}}}}}}'
   printf '%s' '{{"OPENAI_API_KEY":"refreshed"}}' > "$CODEX_HOME/auth.json"
   wait
 "#,

@@ -195,9 +195,10 @@ impl NucleusClient {
         self.decode(response).await
     }
 
-    /// Fetch one bounded page of schema-bound raw records. A daemon may hold a
+    /// Fetch one bounded page of harness-output records. A daemon may hold a
     /// request with `follow=true` until at least one record becomes available or
-    /// the job becomes terminal.
+    /// the job becomes terminal. Envelope metadata is synthesized from each
+    /// output atom and its owning attempt.
     ///
     /// # Errors
     ///

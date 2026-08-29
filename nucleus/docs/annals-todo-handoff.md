@@ -12,28 +12,50 @@ Nucleus's one exclusive credential lease.
 
 ## Todo
 
-Todo continues to own source provenance, liaison prompt construction,
-`create_todo`, the exactly-once domain rule, and its JSON CLI result. Its Nucleus
-adapter performs this flow:
+Todo owns `cN` concern provenance, pending and decided `rN` routing, stable
+`tN` identities and direction history, dated `aN` assessments, proposed or
+accepted `dN` designs, requester/tool-call correlation, and the explicit human
+authorization boundary. Nucleus owns only admission, runtime state,
+authentication, Codex compatibility, the tool mailbox, and raw stdout atoms.
 
-1. Require strict Nucleus health and register Todo's schema/toolset versions.
-2. Register a complete caller environment snapshot with the memory-only launch
-   context endpoint.
-3. Submit a read-only job referencing that launch context, with
-   `builtinTools.localExecution=true`,
-   `builtinTools.webSearch=true`, Todo's caller working directory as `cwd`, and
-   a Todo request token as `requester.id`.
-4. Put the current base instructions in `instructions`, the existing developer
-   rule in `developerInstructions`, and the source/direction work item in
-   `prompt`.
-5. Long-poll the tool-call mailbox while the job is nonterminal.
-6. Run the existing `create_todo` backend for that call and post its raw result.
-7. Read the terminal attempt's structured output and logs for diagnostics.
+Todo registers three current immutable requester toolsets:
 
-If Todo durably creates the row and the harness later fails, Todo's durable
-domain result remains authoritative, exactly as today. Nucleus should not add a
-Todo success column or a second Todo record. Todo's DB also does not need agent
-transcript tables.
+- `todo/concern-routing/1` proposes one pending `rN` against frozen candidates;
+- `todo/situation-assessment/1` records one immutable `aN` against frozen
+  evidence and authority bases; and
+- `todo/design-reconciliation/1` records or corrects one basis-bound `dN`
+  draft.
+
+The historical Todo `create_todo` schema and toolset remain immutable so old
+registrations retain their meaning. Current `todo new` first captures a `cN`
+deterministically, then uses concern routing; it does not run the historical
+model-authorized creation contract.
+
+For each current stage, Todo's Nucleus adapter performs this flow:
+
+1. Require strict Nucleus health and register the exact stage schemas and
+   toolset idempotently.
+2. Submit a closed job with `workspaceAccess=none`,
+   `builtinTools.localExecution=false`, `builtinTools.webSearch=false`, no
+   launch context, and the Todo stage request token as `requester.id`.
+3. Put stable stage policy in `instructions`/`developerInstructions` and only
+   the frozen stage input in `prompt`.
+4. Long-poll the tool-call mailbox while the job is nonterminal.
+5. Validate each call against the admitted job, stage, schema, and frozen
+   basis; commit its exact Todo domain result before posting the response.
+6. Read terminal `JobV1` state and its derived `AttemptOutputV1`.
+   `terminalMessage` carries the bounded failure diagnostic; Todo does not need
+   the output-ledger endpoint for execution state.
+
+`routing accept`, `routing reject`, `design accept`, and `design reject` bypass
+Nucleus. They require explicit source provenance and recheck their recorded
+bases in Todo's authorization transaction. A model tool call, final prose, a
+ready draft, or a completed Nucleus job is never authorization.
+
+If Todo durably records a proposal, assessment, or draft operation and the
+harness later fails, that committed domain result remains authoritative.
+Nucleus should not add Todo success or domain-state columns, and Todo does not
+need agent transcript tables.
 
 The CLI must fail clearly when Nucleus is unavailable. A hidden fallback to its
 old direct runner would recreate two execution paths and two observability
@@ -60,18 +82,18 @@ Its Nucleus adapter replaces only process/protocol supervision:
    backend and post each result.
 5. Preserve Annals's existing attempt/recovery decision above Nucleus. Each
    Nucleus job itself still has one attempt and no retry.
-6. Read the attempt's structured final response and query schema-bound logs by
-   that model-run token for the usage/report surface. Budget and doctor account
-   reads use `waitSeconds=0` and report `authentication_busy` immediately.
+6. Read the attempt's derived final response and calculate the live usage/report
+   surface from Nucleus's output atoms found by that model-run token. Budget and
+   doctor account reads use `waitSeconds=0` and report `authentication_busy`
+   immediately.
 7. Delegate attended login to `nucleus auth login --device-auth`.
 
 Annals keeps its `model_runs` and `tool_calls`: those establish domain intent and
-reconciliation, while Nucleus establishes runtime and protocol history. For
-compatibility with existing reports, the adapter materializes Nucleus's
-schema-bound log records into the retained `annals-usage` run/event database;
-that database is a reporting projection rather than a second invocation source.
-Budget policy remains in Annals because it affects whether domain work is
-admitted.
+reconciliation, while Nucleus establishes runtime authority and exact stdout
+observations. Annals Usage does not retain a second run/event reporting
+database; it joins Annals attribution to Nucleus atoms and calculates usage,
+coverage, and totals when read. Budget policy remains in Annals because it
+affects whether domain work is admitted.
 
 Annals should not move its inbox queue into Nucleus, and Nucleus should not learn
 about work IDs, corpus revisions, reconciliation, recovery attempts, or Annals
@@ -83,14 +105,17 @@ tool semantics.
   caller needs `ps` inspection to explain the state.
 - A job blocked on a requester tool is visible as `waiting_on_requester`, with a
   durable pending call that survives requester restart.
-- Every Codex stdout JSONL value resolves to the captured schema for the exact
-  harness version.
+- Every Codex stdout JSONL value has exactly one byte-exact Nucleus atom. The
+  log API derives its Codex schema envelope from the owning attempt; bytes that
+  cannot be embedded as the identical raw JSON value use the reversible
+  Nucleus base64 envelope.
 - Querying by `(requester.program, requester.id)` returns all runtime records
   for one Todo or Annals domain run.
 - Duplicate job submissions and duplicate tool results are idempotent only when
   their digests/content match; conflicting reuse is rejected.
-- A Todo launch context is consumed only by a fresh admitted attempt, never
-  persisted, and replaces rather than overlays the daemon environment.
+- A current Todo v2 request has no launch context, no workspace, no builtin
+  local execution, and no inherited caller environment; it can inspect only
+  the frozen material exposed by its admitted stage tools and prompt.
 - A Codex refresh produced by a job is durably copied into Nucleus's
   authoritative `auth.json` before another credential user can start.
 - `nucleus health` exits nonzero unless the daemon is compatible,

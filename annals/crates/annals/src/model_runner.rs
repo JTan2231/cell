@@ -1,16 +1,13 @@
 use std::collections::BTreeMap;
 use std::future::Future;
-use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use base64::Engine as _;
 use nucleus_client::{ClientError, NucleusClient};
 use nucleus_core::{
-    AbsolutePath, AgentInvocationV1, BuiltinToolsV1, JobId, JobRequestV1, JobState,
-    LifecycleEventKind, LifecycleEventV1, LogRecordV1, LogSchemaV1, LogStream, PROTOCOL_VERSION_V1,
-    ReasoningEffort, Requester, SchemaId, TimeoutSeconds, ToolDefinitionV1, ToolResultV1,
-    ToolsetDefinitionsV1, ToolsetRef, ToolsetRegistrationV1, WorkspaceAccess,
+    AbsolutePath, AgentInvocationV1, BuiltinToolsV1, JobId, JobRequestV1, JobState, LogSchemaV1,
+    PROTOCOL_VERSION_V1, ReasoningEffort, Requester, SchemaId, TimeoutSeconds, ToolDefinitionV1,
+    ToolResultV1, ToolsetDefinitionsV1, ToolsetRef, ToolsetRegistrationV1, WorkspaceAccess,
 };
 use serde::Deserialize;
 use serde_json::value::{RawValue, to_raw_value};
@@ -22,13 +19,10 @@ use crate::tool_server::{self, Backend, Tool, ToolFailure, ToolSuccess};
 const DEFAULT_TIMEOUT: Duration = Duration::from_hours(1);
 const AUTH_PREFLIGHT_TIMEOUT: Duration = Duration::from_secs(30);
 const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(250);
-const TERMINAL_STATE_PROBE_INTERVAL: Duration = Duration::from_secs(5);
+const TERMINAL_STATE_PROBE_INTERVAL: Duration = Duration::from_secs(1);
 const BEST_EFFORT_CANCEL_TIMEOUT: Duration = Duration::from_millis(250);
-const DEFAULT_STDERR_TAIL_BYTES: usize = 64 * 1024;
 const TOOLSET_DEFINITIONS_SCHEMA: &str = "nucleus.toolset-definitions.v1";
 const TOOL_RESULT_SCHEMA: &str = "annals.liaison-tool-result.v1";
-const NUCLEUS_LIFECYCLE_SCHEMA: &str = "nucleus.lifecycle-event.v1";
-const NUCLEUS_RAW_BYTES_SCHEMA: &str = "nucleus.raw-bytes.v1";
 const TOOLSET_NAME: &str = "liaison";
 const TOOLSET_VERSION: u32 = 1;
 const DEVELOPER_INSTRUCTIONS: &str = "Use only the nine supplied Annals tools. Complete the session by recording exactly one reconciliation. A successful partial submit or revision is not terminal; correct only the named operations until a tool reports recorded true.";
@@ -93,7 +87,6 @@ impl Default for ModelSettings {
 pub(crate) struct Runner {
     socket: Option<PathBuf>,
     timeout: Duration,
-    stderr_tail_bytes: usize,
 }
 
 impl Default for Runner {
@@ -101,7 +94,6 @@ impl Default for Runner {
         Self {
             socket: None,
             timeout: DEFAULT_TIMEOUT,
-            stderr_tail_bytes: DEFAULT_STDERR_TAIL_BYTES,
         }
     }
 }
@@ -121,7 +113,6 @@ impl Runner {
         Self {
             socket: Some(socket.into()),
             timeout,
-            ..Self::default()
         }
     }
 
@@ -182,7 +173,7 @@ impl Runner {
         prompt: &str,
         model_run_token: &str,
         backend: &mut impl Backend,
-        forward_stderr: bool,
+        _forward_stderr: bool,
         cancellation_requested: &dyn Fn() -> bool,
     ) -> AppResult<String> {
         if cancellation_requested() {
@@ -197,7 +188,6 @@ impl Runner {
             prompt,
             model_run_token,
             backend,
-            forward_stderr,
             cancellation_requested,
             deadline,
         ))
@@ -211,7 +201,6 @@ impl Runner {
         prompt: &str,
         model_run_token: &str,
         backend: &mut impl Backend,
-        forward_stderr: bool,
         cancellation_requested: &dyn Fn() -> bool,
         deadline: Instant,
     ) -> AppResult<String> {
@@ -261,18 +250,14 @@ impl Runner {
                 Err(ClientCallError::Client(ClientError::Transport { .. })) => {
                     tokio::time::sleep(CANCELLATION_POLL_INTERVAL).await;
                 }
-                Err(error) => return Err(client_call_error(error, "model_runner_spawn", &[])),
+                Err(error) => return Err(client_call_error(error, "model_runner_spawn")),
             }
         }
 
         let mut call_cursor = 0_u64;
-        let mut log_cursor = 0_u64;
         let mut reconciliation_recorded = false;
         let mut cached_results = BTreeMap::<String, CachedResult>::new();
-        let mut diagnostics = Vec::new();
-        let mut final_response = String::new();
-        let mut terminal_state = None;
-        let mut last_terminal_probe = Instant::now();
+        let mut last_terminal_probe = None;
 
         loop {
             if cancellation_requested() {
@@ -284,40 +269,23 @@ impl Runner {
                 return Err(timeout_error());
             }
 
-            log_cursor = read_new_logs(
+            let query = nucleus_core::ToolCallsQueryV1 {
+                after: call_cursor,
+                wait_seconds: 0,
+            };
+            let calls = await_retryable_read(
                 client,
                 &job_id,
-                log_cursor,
-                &mut diagnostics,
-                self.stderr_tail_bytes,
-                forward_stderr,
-                &mut final_response,
-                &mut terminal_state,
-                deadline,
-                cancellation_requested,
-            )
-            .await?;
-
-            let calls = await_client_call(
-                client,
-                Some(&job_id),
-                client.pending_tool_calls(
-                    &job_id,
-                    &nucleus_core::ToolCallsQueryV1 {
-                        after: call_cursor,
-                        wait_seconds: 0,
-                    },
-                ),
+                || client.pending_tool_calls(&job_id, &query),
                 deadline,
                 cancellation_requested,
             )
             .await
-            .map_err(|error| client_call_error(error, "model_runner_failed", &diagnostics))?;
+            .map_err(|error| client_call_error(error, "model_runner_failed"))?;
             if calls.job_id != job_id {
                 return Err(runtime_error(
                     "model_runner_protocol",
                     "Nucleus returned a managed-tool mailbox for a different job",
-                    &diagnostics,
                 ));
             }
             for pending in calls.calls {
@@ -331,7 +299,6 @@ impl Runner {
                     return Err(runtime_error(
                         "model_runner_protocol",
                         "Nucleus returned a tool call outside the admitted Annals contract",
-                        &diagnostics,
                     ));
                 }
                 let cached = if let Some(cached) = cached_results.get(call.id.as_str()) {
@@ -344,7 +311,6 @@ impl Runner {
                                 &format!(
                                     "Nucleus returned invalid managed-tool arguments: {error}"
                                 ),
-                                &diagnostics,
                             )
                         })?;
                     let result = if arguments.is_object() {
@@ -396,30 +362,26 @@ impl Runner {
                             tokio::time::sleep(CANCELLATION_POLL_INTERVAL).await;
                         }
                         Err(error) => {
-                            return Err(client_call_error(
-                                error,
-                                "model_runner_failed",
-                                &diagnostics,
-                            ));
+                            return Err(client_call_error(error, "model_runner_failed"));
                         }
                     }
                 }
                 call_cursor = call.request_sequence;
             }
 
-            let terminal_job = if terminal_state.is_some()
-                || last_terminal_probe.elapsed() >= TERMINAL_STATE_PROBE_INTERVAL
+            let terminal_job = if last_terminal_probe
+                .is_none_or(|probe: Instant| probe.elapsed() >= TERMINAL_STATE_PROBE_INTERVAL)
             {
-                last_terminal_probe = Instant::now();
-                let job = await_client_call(
+                last_terminal_probe = Some(Instant::now());
+                let job = await_retryable_read(
                     client,
-                    Some(&job_id),
-                    client.get_job(&job_id),
+                    &job_id,
+                    || client.get_job(&job_id),
                     deadline,
                     cancellation_requested,
                 )
                 .await
-                .map_err(|error| client_call_error(error, "model_runner_failed", &diagnostics))?;
+                .map_err(|error| client_call_error(error, "model_runner_failed"))?;
                 if job.summary.state.is_terminal() {
                     Some(job)
                 } else {
@@ -429,33 +391,6 @@ impl Runner {
                 None
             };
             if let Some(job) = terminal_job {
-                if !job.summary.state.is_terminal() {
-                    return Err(runtime_error(
-                        "model_runner_protocol",
-                        "Nucleus returned a nonterminal job after recording terminal lifecycle",
-                        &diagnostics,
-                    ));
-                }
-                read_new_logs(
-                    client,
-                    &job_id,
-                    log_cursor,
-                    &mut diagnostics,
-                    self.stderr_tail_bytes,
-                    forward_stderr,
-                    &mut final_response,
-                    &mut terminal_state,
-                    deadline,
-                    cancellation_requested,
-                )
-                .await?;
-                if terminal_state_conflicts(terminal_state, job.summary.state) {
-                    return Err(runtime_error(
-                        "model_runner_protocol",
-                        "Nucleus job state disagreed with its terminal lifecycle event",
-                        &diagnostics,
-                    ));
-                }
                 if job.summary.state == JobState::Completed {
                     if let Some(output) = job
                         .attempts
@@ -464,7 +399,8 @@ impl Runner {
                     {
                         return Ok(output.final_message.clone());
                     }
-                    return Ok(final_response);
+                    return read_final_response(client, &job_id, deadline, cancellation_requested)
+                        .await;
                 }
                 let attempt = job.attempts.last();
                 let reason = attempt.and_then(|attempt| attempt.terminal_reason);
@@ -483,7 +419,7 @@ impl Runner {
                     }
                     _ => "model_runner_failed",
                 };
-                return Err(runtime_error(code, message, &diagnostics));
+                return Err(runtime_error(code, message));
             }
             tokio::time::sleep(CANCELLATION_POLL_INTERVAL).await;
         }
@@ -498,10 +434,6 @@ impl Runner {
             });
         result.map_err(|error| client_error("model_runner_spawn", &error))
     }
-}
-
-fn terminal_state_conflicts(observed: Option<JobState>, stored: JobState) -> bool {
-    observed.is_some_and(|observed| observed != stored)
 }
 
 #[derive(Clone)]
@@ -556,13 +488,47 @@ async fn await_client_call<T>(
     }
 }
 
+async fn await_retryable_read<T, Call, CallFuture>(
+    client: &NucleusClient,
+    job_id: &JobId,
+    call: Call,
+    deadline: Instant,
+    cancellation_requested: &dyn Fn() -> bool,
+) -> Result<T, ClientCallError>
+where
+    Call: Fn() -> CallFuture,
+    CallFuture: Future<Output = Result<T, ClientError>>,
+{
+    loop {
+        match await_client_call(
+            client,
+            Some(job_id),
+            call(),
+            deadline,
+            cancellation_requested,
+        )
+        .await
+        {
+            Err(ClientCallError::Client(ClientError::Transport { .. })) => {
+                tokio::time::sleep(
+                    deadline
+                        .saturating_duration_since(Instant::now())
+                        .min(CANCELLATION_POLL_INTERVAL),
+                )
+                .await;
+            }
+            result => return result,
+        }
+    }
+}
+
 async fn cancel_job_bounded(client: &NucleusClient, job_id: &JobId) {
     let _ = tokio::time::timeout(BEST_EFFORT_CANCEL_TIMEOUT, client.cancel_job(job_id)).await;
 }
 
-fn client_call_error(error: ClientCallError, code: &'static str, diagnostics: &[u8]) -> AppError {
+fn client_call_error(error: ClientCallError, code: &'static str) -> AppError {
     match error {
-        ClientCallError::Client(error) => client_error_with_diagnostics(code, &error, diagnostics),
+        ClientCallError::Client(error) => client_error(code, &error),
         ClientCallError::Interrupted => interrupted_error(),
         ClientCallError::TimedOut => timeout_error(),
     }
@@ -594,7 +560,7 @@ async fn register_runtime_contract(
         cancellation_requested,
     )
     .await
-    .map_err(|error| client_call_error(error, "model_runner_tool_schema", &[]))?;
+    .map_err(|error| client_call_error(error, "model_runner_tool_schema"))?;
     let toolset = toolset_registration()?;
     await_client_call(
         client,
@@ -604,7 +570,7 @@ async fn register_runtime_contract(
         cancellation_requested,
     )
     .await
-    .map_err(|error| client_call_error(error, "model_runner_tool_schema", &[]))?;
+    .map_err(|error| client_call_error(error, "model_runner_tool_schema"))?;
     Ok(())
 }
 
@@ -674,217 +640,63 @@ fn tool_call_matches_contract(
         && arguments_schema_id.as_str() == format!("annals.{tool_name}.input.v1")
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn read_new_logs(
+async fn read_final_response(
     client: &NucleusClient,
     job_id: &JobId,
-    after: u64,
-    diagnostics: &mut Vec<u8>,
-    diagnostic_limit: usize,
-    forward_stderr: bool,
-    final_response: &mut String,
-    terminal_state: &mut Option<JobState>,
     deadline: Instant,
     cancellation_requested: &dyn Fn() -> bool,
-) -> AppResult<u64> {
-    let mut cursor = after;
+) -> AppResult<String> {
+    let mut cursor = 0;
+    let mut final_response = String::new();
     loop {
-        let logs = await_client_call(
+        let query = nucleus_core::LogsQueryV1 {
+            after: cursor,
+            follow: false,
+            limit: Some(1_000),
+        };
+        let logs = await_retryable_read(
             client,
-            Some(job_id),
-            client.logs(
-                job_id,
-                &nucleus_core::LogsQueryV1 {
-                    after: cursor,
-                    follow: false,
-                    limit: Some(1_000),
-                },
-            ),
+            job_id,
+            || client.logs(job_id, &query),
             deadline,
             cancellation_requested,
         )
         .await
-        .map_err(|error| client_call_error(error, "model_runner_failed", diagnostics))?;
+        .map_err(|error| client_call_error(error, "model_runner_failed"))?;
         let count = logs.records.len();
         for record in &logs.records {
-            observe_log(
-                record,
-                diagnostics,
-                diagnostic_limit,
-                forward_stderr,
-                final_response,
-                terminal_state,
-            )?;
+            if !record
+                .schema_id
+                .as_str()
+                .starts_with("codex.app-server.protocol.")
+            {
+                return Err(AppError::unexpected(
+                    "model_runner_protocol",
+                    format!(
+                        "Nucleus returned a Codex record under unexpected schema {}",
+                        record.schema_id
+                    ),
+                ));
+            }
+            let value: Value = serde_json::from_str(record.payload.get()).map_err(|error| {
+                AppError::unexpected(
+                    "model_runner_protocol",
+                    format!("Nucleus returned an invalid Codex protocol record: {error}"),
+                )
+            })?;
+            if value.get("method").and_then(Value::as_str) == Some("item/completed")
+                && value.pointer("/params/item/type").and_then(Value::as_str)
+                    == Some("agentMessage")
+                && let Some(text) = value.pointer("/params/item/text").and_then(Value::as_str)
+            {
+                text.clone_into(&mut final_response);
+            }
         }
         cursor = logs.next_sequence;
         if count < 1_000 {
-            return Ok(cursor);
+            return Ok(final_response);
         }
     }
-}
-
-#[allow(clippy::too_many_lines)]
-fn observe_log(
-    record: &LogRecordV1,
-    diagnostics: &mut Vec<u8>,
-    diagnostic_limit: usize,
-    forward_stderr: bool,
-    final_response: &mut String,
-    terminal_state: &mut Option<JobState>,
-) -> AppResult<()> {
-    if record.stream == LogStream::HarnessStderr {
-        if record.schema_id.as_str() != NUCLEUS_RAW_BYTES_SCHEMA {
-            return Err(AppError::unexpected(
-                "model_runner_protocol",
-                format!(
-                    "Nucleus returned a stderr record under unexpected schema {}",
-                    record.schema_id
-                ),
-            ));
-        }
-        let value: Value = serde_json::from_str(record.payload.get()).map_err(|error| {
-            AppError::unexpected(
-                "model_runner_protocol",
-                format!("Nucleus returned an invalid stderr record: {error}"),
-            )
-        })?;
-        if value.get("encoding").and_then(Value::as_str) != Some("base64") {
-            return Err(AppError::unexpected(
-                "model_runner_protocol",
-                "Nucleus returned a stderr record with an unsupported encoding",
-            ));
-        }
-        let bytes = value
-            .get("data")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                AppError::unexpected(
-                    "model_runner_protocol",
-                    "Nucleus stderr record omitted its encoded data",
-                )
-            })
-            .and_then(|data| {
-                base64::engine::general_purpose::STANDARD
-                    .decode(data)
-                    .map_err(|error| {
-                        AppError::unexpected(
-                            "model_runner_protocol",
-                            format!("Nucleus returned invalid base64 stderr data: {error}"),
-                        )
-                    })
-            })?;
-        if forward_stderr {
-            write_sanitized_stderr(&bytes)?;
-        }
-        retain_tail(diagnostics, &bytes, diagnostic_limit);
-    } else if record.stream == LogStream::HarnessOutput {
-        if !record
-            .schema_id
-            .as_str()
-            .starts_with("codex.app-server.protocol.")
-        {
-            return Err(AppError::unexpected(
-                "model_runner_protocol",
-                format!(
-                    "Nucleus returned a Codex record under unexpected schema {}",
-                    record.schema_id
-                ),
-            ));
-        }
-        let value: Value = serde_json::from_str(record.payload.get()).map_err(|error| {
-            AppError::unexpected(
-                "model_runner_protocol",
-                format!("Nucleus returned an invalid Codex protocol record: {error}"),
-            )
-        })?;
-        if value.get("method").and_then(Value::as_str) == Some("item/completed")
-            && value.pointer("/params/item/type").and_then(Value::as_str) == Some("agentMessage")
-            && let Some(text) = value.pointer("/params/item/text").and_then(Value::as_str)
-        {
-            text.clone_into(final_response);
-        }
-    } else if record.stream == LogStream::NucleusLifecycle {
-        if record.schema_id.as_str() != NUCLEUS_LIFECYCLE_SCHEMA {
-            return Err(AppError::unexpected(
-                "model_runner_protocol",
-                format!(
-                    "Nucleus returned a lifecycle record under unexpected schema {}",
-                    record.schema_id
-                ),
-            ));
-        }
-        let event: LifecycleEventV1 =
-            serde_json::from_str(record.payload.get()).map_err(|error| {
-                AppError::unexpected(
-                    "model_runner_protocol",
-                    format!("Nucleus returned an invalid lifecycle event: {error}"),
-                )
-            })?;
-        if event.event == LifecycleEventKind::TurnCompleted
-            && let Some(details) = event.details
-        {
-            let details: Value = serde_json::from_str(details.get()).map_err(|error| {
-                AppError::unexpected(
-                    "model_runner_protocol",
-                    format!("Nucleus returned invalid turn completion details: {error}"),
-                )
-            })?;
-            if let Some(text) = details.get("finalMessage").and_then(Value::as_str) {
-                text.clone_into(final_response);
-            }
-        }
-        match event.event {
-            LifecycleEventKind::JobCompleted => *terminal_state = Some(JobState::Completed),
-            LifecycleEventKind::JobFailed => *terminal_state = Some(JobState::Failed),
-            LifecycleEventKind::JobCancelled => *terminal_state = Some(JobState::Cancelled),
-            LifecycleEventKind::JobAccepted
-            | LifecycleEventKind::JobStarted
-            | LifecycleEventKind::AttemptCreated
-            | LifecycleEventKind::HarnessValidated
-            | LifecycleEventKind::ProcessStarted
-            | LifecycleEventKind::ThreadStarted
-            | LifecycleEventKind::TurnStarted
-            | LifecycleEventKind::WaitingOnRequester
-            | LifecycleEventKind::ToolCallPending
-            | LifecycleEventKind::ToolCallAnswered
-            | LifecycleEventKind::CancellationRequested
-            | LifecycleEventKind::TurnCompleted
-            | LifecycleEventKind::ProcessExited
-            | LifecycleEventKind::AttemptCompleted
-            | LifecycleEventKind::AttemptFailed
-            | LifecycleEventKind::AttemptTimedOut
-            | LifecycleEventKind::AttemptCancelled
-            | LifecycleEventKind::AttemptLost
-            | LifecycleEventKind::RecordDecodeFailed => {}
-        }
-    }
-    Ok(())
-}
-
-fn retain_tail(tail: &mut Vec<u8>, bytes: &[u8], limit: usize) {
-    if bytes.len() >= limit {
-        tail.clear();
-        tail.extend_from_slice(&bytes[bytes.len() - limit..]);
-        return;
-    }
-    let excess = tail.len().saturating_add(bytes.len()).saturating_sub(limit);
-    if excess > 0 {
-        tail.drain(..excess);
-    }
-    tail.extend_from_slice(bytes);
-}
-
-fn write_sanitized_stderr(bytes: &[u8]) -> io::Result<()> {
-    let stderr = io::stderr();
-    let mut output = stderr.lock();
-    for byte in bytes {
-        if matches!(byte, b'\n' | 0x20..=0x7e | 0x80..=0xff) {
-            output.write_all(&[*byte])?;
-        } else {
-            write!(output, "\\x{byte:02x}")?;
-        }
-    }
-    output.flush()
 }
 
 fn dispatch_tool_call(
@@ -965,32 +777,10 @@ fn auth_error(message: &str) -> AppError {
 }
 
 fn client_error(code: &'static str, error: &ClientError) -> AppError {
-    runtime_error(code, &error.to_string(), &[])
+    runtime_error(code, &error.to_string())
 }
 
-fn client_error_with_diagnostics(
-    code: &'static str,
-    error: &ClientError,
-    diagnostics: &[u8],
-) -> AppError {
-    runtime_error(code, &error.to_string(), diagnostics)
-}
-
-fn runtime_error(code: &'static str, message: &str, diagnostics: &[u8]) -> AppError {
-    let diagnostic = String::from_utf8_lossy(diagnostics);
-    let diagnostic = diagnostic.trim();
-    let suffix = if diagnostic.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "; stderr: {}",
-            diagnostic
-                .chars()
-                .flat_map(char::escape_default)
-                .collect::<String>()
-        )
-    };
-    let message = format!("{message}{suffix}");
+fn runtime_error(code: &'static str, message: &str) -> AppError {
     let normalized = message.to_ascii_lowercase();
     let code = if normalized.contains("refresh_token_reused")
         || normalized.contains("refresh token has already been used")
@@ -1063,33 +853,9 @@ mod tests {
     fn reused_refresh_token_has_a_stable_authentication_error_code() {
         let error = runtime_error(
             "model_runner_failed",
-            "model liaison failed",
-            b"HTTP 401: refresh_token_reused; please log out and sign in again",
+            "HTTP 401: refresh_token_reused; please log out and sign in again",
         );
         assert_eq!(error.code(), "model_auth_unavailable");
-    }
-
-    #[test]
-    fn stderr_tail_is_bounded() {
-        let mut tail = Vec::new();
-        retain_tail(&mut tail, b"abcd", 5);
-        retain_tail(&mut tail, b"efgh", 5);
-        assert_eq!(tail, b"defgh");
-        retain_tail(&mut tail, b"123456", 5);
-        assert_eq!(tail, b"23456");
-    }
-
-    #[test]
-    fn durable_terminal_summary_covers_a_missing_lifecycle_record() {
-        assert!(!super::terminal_state_conflicts(None, JobState::Failed));
-        assert!(!super::terminal_state_conflicts(
-            Some(JobState::Completed),
-            JobState::Completed,
-        ));
-        assert!(super::terminal_state_conflicts(
-            Some(JobState::Failed),
-            JobState::Cancelled,
-        ));
     }
 
     #[test]
@@ -1157,6 +923,28 @@ mod tests {
             return Err("a stalled Nucleus ignored cancellation".into());
         };
         assert_eq!(error.code(), "model_runner_interrupted");
+        assert!(started.elapsed() < Duration::from_secs(2));
+        Ok(())
+    }
+
+    #[test]
+    fn idempotent_read_transport_errors_retry_until_the_deadline()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let client = NucleusClient::new(directory.path().join("absent-nucleus.sock"))?;
+        let job_id = JobId::new("annals-retry-read");
+        let started = Instant::now();
+        let result = runtime()?.block_on(await_retryable_read(
+            &client,
+            &job_id,
+            || client.get_job(&job_id),
+            started + Duration::from_millis(300),
+            &|| false,
+        ));
+        if !matches!(result, Err(ClientCallError::TimedOut)) {
+            return Err("a retryable read returned before its deadline".into());
+        }
+        assert!(started.elapsed() >= Duration::from_millis(250));
         assert!(started.elapsed() < Duration::from_secs(2));
         Ok(())
     }

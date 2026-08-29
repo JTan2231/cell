@@ -28,7 +28,7 @@ impl TokenUsageBreakdown {
             && self.output_tokens >= 0
             && self.reasoning_output_tokens >= 0
             && self.total_tokens >= 0
-            && self.total_tokens == self.input_tokens + self.output_tokens
+            && self.input_tokens.checked_add(self.output_tokens) == Some(self.total_tokens)
             && self.ordinary_input_tokens().is_some()
             && self.reasoning_output_tokens <= self.output_tokens
     }
@@ -67,6 +67,17 @@ mod tests {
             input_tokens: 100,
             output_tokens: 20,
             total_tokens: 121,
+            ..TokenUsageBreakdown::default()
+        };
+        assert!(!usage.is_consistent());
+    }
+
+    #[test]
+    fn overflowing_totals_are_inconsistent_without_panicking() {
+        let usage = TokenUsageBreakdown {
+            input_tokens: i64::MAX,
+            output_tokens: 1,
+            total_tokens: i64::MAX,
             ..TokenUsageBreakdown::default()
         };
         assert!(!usage.is_consistent());

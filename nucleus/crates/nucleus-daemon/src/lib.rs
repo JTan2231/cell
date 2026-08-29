@@ -2,7 +2,7 @@
 
 mod schemas;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::env;
 use std::fs;
 use std::io;
@@ -28,19 +28,21 @@ use nucleus_core::{
     AttemptState, AttemptTerminalReason, AttemptV1, AuthenticationReadinessV1, CancelJobResponseV1,
     ErrorResponseV1, HarnessCapability, HarnessIdentity, HealthResponseV1, JobAcceptedV1, JobId,
     JobRequestV1, JobState, JobSummaryV1, JobV1, LaunchContextAcceptedV1, LaunchContextId,
-    LaunchContextRegistrationV1, LifecycleEventKind, LifecycleEventV1, ListJobsQueryV1,
-    ListJobsResponseV1, LogRecordV1, LogSchemaV1, LogStream, LogsQueryV1, LogsResponseV1,
-    PROTOCOL_VERSION_V1, PendingToolCallV1, ReasoningEffort, RegisteredToolsetV1, Requester,
-    SchemaId, ToolCallId, ToolCallState, ToolCallV1, ToolCallsQueryV1, ToolCallsResponseV1,
-    ToolResultV1, ToolsetDefinitionsV1, ToolsetRegistrationV1, sha256_digest,
+    LaunchContextRegistrationV1, ListJobsQueryV1, ListJobsResponseV1, LogRecordV1, LogSchemaV1,
+    LogStream, LogsQueryV1, LogsResponseV1, PROTOCOL_VERSION_V1, PendingToolCallV1,
+    ReasoningEffort, RegisteredToolsetV1, Requester, SchemaId, ToolCallId, ToolCallState,
+    ToolCallV1, ToolCallsQueryV1, ToolCallsResponseV1, ToolResultV1, ToolsetDefinitionsV1,
+    ToolsetRegistrationV1, sha256_digest,
 };
 use nucleus_store::{
-    AttemptRecord, AttemptState as StoreAttemptState, JobRecord, JobState as StoreJobState,
-    LogRecord, LogSchemaRecord, NewAttempt, NewJob, NewLogRecord, NewLogSchema, NewPendingToolCall,
-    NewToolResult, NewToolset, PendingToolCallRecord, Store, StoreError,
-    ToolCallState as StoreToolCallState, ToolsetRecord,
+    AttemptRecord, AttemptState as StoreAttemptState, HarnessOutputRecord, JobRecord,
+    JobState as StoreJobState, LogSchemaRecord, NewAttempt, NewHarnessOutputRecord, NewJob,
+    NewLogSchema, NewPendingToolCall, NewToolResult, NewToolset, PendingToolCallRecord, Store,
+    StoreError, ToolCallState as StoreToolCallState, ToolsetRecord,
 };
-use serde_json::value::{RawValue, to_raw_value};
+use serde_json::value::RawValue;
+#[cfg(test)]
+use serde_json::value::to_raw_value;
 use serde_json::{Value, json};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -49,9 +51,7 @@ use tokio::sync::{Mutex, broadcast, oneshot, watch};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::schemas::{
-    BYTES_ID, INTERNAL_SCHEMAS, JOB_REQUEST_ID, LIFECYCLE_ID, TOOLSET_DEFINITIONS_ID,
-};
+use crate::schemas::{BYTES_ID, INTERNAL_SCHEMAS, JOB_REQUEST_ID, TOOLSET_DEFINITIONS_ID};
 
 const ADAPTER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
@@ -62,6 +62,8 @@ const STARTUP_INSPECTION_TIMEOUT: Duration = Duration::from_secs(3);
 const ADMISSION_INSPECTION_TIMEOUT: Duration = Duration::from_secs(10);
 const ACCOUNT_TIMEOUT: Duration = Duration::from_secs(30);
 const LAUNCH_CONTEXT_TTL: Duration = Duration::from_secs(120);
+const STDERR_TAIL_BYTES: usize = 16 * 1024;
+const TERMINAL_MESSAGE_BYTES: usize = 16 * 1024;
 
 type ToolReplyKey = (String, String);
 
@@ -175,22 +177,6 @@ impl AppState {
                 Some("lost"),
                 Some("nucleusd restarted while the attempt was in progress"),
             )?;
-            append_lifecycle_to_store(
-                &mut store,
-                &attempt.job_id,
-                Some(&attempt.id),
-                LifecycleEventKind::AttemptLost,
-                Some("nucleusd restarted while the attempt was in progress"),
-                None,
-            )?;
-            append_lifecycle_to_store(
-                &mut store,
-                &attempt.job_id,
-                Some(&attempt.id),
-                LifecycleEventKind::JobFailed,
-                Some("nucleusd restarted while the attempt was in progress"),
-                None,
-            )?;
         }
         let jobs = store.list_jobs()?;
         for job in jobs
@@ -198,14 +184,6 @@ impl AppState {
             .filter(|job| job.state == StoreJobState::Accepted && job.current_attempt_id.is_none())
         {
             store.finish_job(&job.id, StoreJobState::Failed, &recovered_at, Some("lost"))?;
-            append_lifecycle_to_store(
-                &mut store,
-                &job.id,
-                None,
-                LifecycleEventKind::JobFailed,
-                Some("nucleusd restarted before the attempt was created"),
-                None,
-            )?;
         }
         Ok(())
     }
@@ -579,7 +557,7 @@ async fn submit_job(
         .codex
         .validate_protocol_schema(&inspection, &generated_schema)
         .map_err(ApiError::harness_compatibility)?;
-    let protocol_schema_id = register_codex_schema(&state, &inspection, generated_schema).await?;
+    register_codex_schema(&state, &inspection, generated_schema).await?;
 
     let created_at = now();
     let request_bytes = serde_json::to_vec(&request).map_err(ApiError::encoding)?;
@@ -605,15 +583,7 @@ async fn submit_job(
     let attempt_id = format!("attempt_{}", Uuid::now_v7());
     let attempt = {
         let mut store = state.store.lock().await;
-        append_lifecycle_to_store(
-            &mut store,
-            &job.id,
-            None,
-            LifecycleEventKind::JobAccepted,
-            Some("job admitted after stable and harness-specific validation"),
-            None,
-        )?;
-        let attempt = store
+        store
             .create_attempt(NewAttempt {
                 id: attempt_id.clone(),
                 job_id: job.id.clone(),
@@ -623,31 +593,7 @@ async fn submit_job(
                 adapter_version: ADAPTER_VERSION.to_owned(),
                 created_at: now(),
             })
-            .map_err(ApiError::store)?;
-        append_lifecycle_to_store(
-            &mut store,
-            &job.id,
-            Some(&attempt_id),
-            LifecycleEventKind::AttemptCreated,
-            None,
-            None,
-        )?;
-        append_lifecycle_to_store(
-            &mut store,
-            &job.id,
-            Some(&attempt_id),
-            LifecycleEventKind::HarnessValidated,
-            Some(&format!("Codex {} validated", inspection.version)),
-            to_raw_value(&json!({
-                "harness": "codex",
-                "harnessVersion": inspection.version,
-                "adapterVersion": ADAPTER_VERSION,
-                "executable": inspection.executable,
-                "protocolSchemaId": protocol_schema_id
-            }))
-            .ok(),
-        )?;
-        attempt
+            .map_err(ApiError::store)?
     };
     if let Some(context) = &request.invocation.launch_context {
         state.launch_contexts.lock().await.remove(context.as_str());
@@ -665,7 +611,6 @@ async fn submit_job(
             run_request,
             run_attempt_id,
             run_inspection,
-            protocol_schema_id,
             run_definitions,
             run_environment,
             cancel_rx,
@@ -727,7 +672,14 @@ async fn get_job(
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("job", &job_id))?;
     let attempts = store.list_attempts(&job_id).map_err(ApiError::store)?;
-    let outputs = attempt_outputs(&store, &job_id)?;
+    let outputs = if attempts
+        .iter()
+        .any(|attempt| attempt.state == StoreAttemptState::Completed)
+    {
+        attempt_outputs(&store, &job_id)?
+    } else {
+        HashMap::new()
+    };
     Ok(Json(job_to_core(job, attempts, &outputs)?))
 }
 
@@ -802,16 +754,6 @@ async fn cancel_job(
                 .request_cancellation(&job_id, &requested_at)
                 .map_err(ApiError::store)?;
             let first = before.cancellation_requested_at.is_none();
-            if first {
-                append_lifecycle_to_store(
-                    &mut store,
-                    &job_id,
-                    job.current_attempt_id.as_deref(),
-                    LifecycleEventKind::CancellationRequested,
-                    None,
-                    None,
-                )?;
-            }
             (job, first)
         }
     };
@@ -1050,13 +992,13 @@ async fn post_tool_result(
             "result version or callId does not match the route",
         ));
     }
-    let (job, current) = {
+    let job = {
         let store = state.store.lock().await;
         let job = store
             .get_job(&job_id)
             .map_err(ApiError::store)?
             .ok_or_else(|| ApiError::not_found("job", &job_id))?;
-        let call = store
+        store
             .get_tool_call(&job_id, &call_id)
             .map_err(ApiError::store)?
             .ok_or_else(|| ApiError::not_found("tool call", &call_id))?;
@@ -1070,7 +1012,7 @@ async fn post_tool_result(
                 result.result_schema_id.as_str(),
             ));
         }
-        (job, call)
+        job
     };
     if job.requester_program != result.requester.program || job.requester_id != result.requester.id
     {
@@ -1082,7 +1024,7 @@ async fn post_tool_result(
     let (answered, was_created) = {
         let mut store = state.store.lock().await;
         let answered = store
-            .answer_tool_call_with_log(
+            .answer_tool_call(
                 &job_id,
                 &call_id,
                 NewToolResult {
@@ -1091,48 +1033,29 @@ async fn post_tool_result(
                     is_error: result.is_error,
                     answered_at: now(),
                 },
-                NewLogRecord {
-                    job_id: job_id.clone(),
-                    attempt_id: Some(current.attempt_id.clone()),
-                    observed_at: now(),
-                    emitted_at: None,
-                    stream: log_stream_name(LogStream::Requester).to_owned(),
-                    schema_id: result.result_schema_id.to_string(),
-                    payload: result.result.get().as_bytes().to_vec(),
-                },
             )
             .map_err(ApiError::store)?;
         let was_created = answered.was_created();
         let answered = answered.into_inner();
-        if was_created {
-            if let Some(attempt) = store
+        if was_created
+            && let Some(attempt) = store
                 .get_attempt(&answered.attempt_id)
                 .map_err(ApiError::store)?
-                && attempt.state == StoreAttemptState::WaitingOnRequester
-            {
-                store
-                    .transition_attempt(
-                        &answered.attempt_id,
-                        StoreAttemptState::Running,
-                        &now(),
-                        None,
-                    )
-                    .map_err(ApiError::store)?;
-            }
-            append_lifecycle_to_store(
-                &mut store,
-                &job_id,
-                Some(&answered.attempt_id),
-                LifecycleEventKind::ToolCallAnswered,
-                None,
-                None,
-            )?;
+            && attempt.state == StoreAttemptState::WaitingOnRequester
+        {
+            store
+                .transition_attempt(
+                    &answered.attempt_id,
+                    StoreAttemptState::Running,
+                    &now(),
+                    None,
+                )
+                .map_err(ApiError::store)?;
         }
         (answered, was_created)
     };
     if was_created {
-        // The durable ToolCallAnswered event is committed before waking the
-        // harness, so a fast completion cannot overtake its lifecycle record.
+        // The exact requester result is durable before the harness is woken.
         let reply = state
             .tool_replies
             .lock()
@@ -1154,20 +1077,19 @@ async fn post_tool_result(
     Ok(Json(pending_call_to_core(answered)?))
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 async fn run_job(
     state: AppState,
     request: JobRequestV1,
     attempt_id: String,
     inspection: HarnessInspection,
-    protocol_schema_id: String,
     definitions: ToolsetDefinitionsV1,
     launch_environment: Option<BTreeMap<String, String>>,
     cancel_rx: watch::Receiver<bool>,
 ) {
     let job_id = request.id.to_string();
     let starting = now();
-    if let Err(failure) = begin_attempt(&state, &job_id, &attempt_id, &starting).await {
+    if let Err(failure) = begin_attempt(&state, &attempt_id, &starting).await {
         error!(job_id, attempt_id, error = %failure.message, "could not start attempt");
         finalize_internal_failure(&state, &job_id, &attempt_id, failure.message).await;
         return;
@@ -1184,7 +1106,8 @@ async fn run_job(
     let (events_tx, mut events_rx) = tokio::sync::mpsc::channel(256);
     let run = state.codex.run(&inspection, spec, events_tx, cancel_rx);
     tokio::pin!(run);
-    let mut pending_tool_records = HashMap::new();
+    let mut pending_outputs = VecDeque::new();
+    let mut stderr_tail = StderrTail::default();
     let mut event_failure: Option<String> = None;
     let run_result = loop {
         tokio::select! {
@@ -1198,16 +1121,26 @@ async fn run_job(
                     break (&mut run).await;
                 };
                 if event_failure.is_some() {
+                    if let Err(error) = capture_after_failure(
+                        &state,
+                        &job_id,
+                        &attempt_id,
+                        event,
+                        &mut pending_outputs,
+                        &mut stderr_tail,
+                    ).await {
+                        error!(job_id, attempt_id, error = %error.message, "could not retain harness output after projection failure");
+                    }
                     continue;
                 }
                 if let Err(error) = handle_codex_event(
                     &state,
                     &job_id,
                     &attempt_id,
-                    &protocol_schema_id,
                     &definitions,
                     event,
-                    &mut pending_tool_records,
+                    &mut pending_outputs,
+                    &mut stderr_tail,
                 ).await {
                     event_failure = Some(error.message);
                     if let Some(sender) = state.cancellations.lock().await.get(&job_id) {
@@ -1218,39 +1151,58 @@ async fn run_job(
         }
     };
     while let Some(event) = events_rx.recv().await {
-        if event_failure.is_none()
-            && let Err(error) = handle_codex_event(
+        if event_failure.is_some() {
+            if let Err(error) = capture_after_failure(
                 &state,
                 &job_id,
                 &attempt_id,
-                &protocol_schema_id,
-                &definitions,
                 event,
-                &mut pending_tool_records,
+                &mut pending_outputs,
+                &mut stderr_tail,
             )
             .await
+            {
+                error!(job_id, attempt_id, error = %error.message, "could not retain harness output after projection failure");
+            }
+        } else if let Err(error) = handle_codex_event(
+            &state,
+            &job_id,
+            &attempt_id,
+            &definitions,
+            event,
+            &mut pending_outputs,
+            &mut stderr_tail,
+        )
+        .await
         {
             event_failure = Some(error.message);
         }
     }
-    if event_failure.is_none() && !pending_tool_records.is_empty() {
+    let had_unprojected_tool_output = pending_outputs
+        .iter()
+        .any(|output| output.tool_call_id.is_some());
+    if let Err(error) = flush_all_outputs(&state, &job_id, &mut pending_outputs).await {
+        event_failure = Some(error.message);
+    } else if event_failure.is_none() && had_unprojected_tool_output {
         event_failure = Some(
             "a raw Codex tool request was not projected into the durable requester mailbox"
                 .to_owned(),
         );
     }
 
-    let terminal = if let Some(message) = event_failure {
+    let mut terminal = if let Some(message) = event_failure {
         TerminalOutcome::failed(
             StoreAttemptState::Failed,
             AttemptTerminalReason::ProtocolError,
-            LifecycleEventKind::AttemptFailed,
             message,
         )
     } else {
         terminal_outcome(run_result)
     };
-    if let Err(error) = finish_attempt(&state, &job_id, &attempt_id, &terminal).await {
+    if terminal.attempt_state != StoreAttemptState::Completed {
+        terminal.append_stderr(&stderr_tail);
+    }
+    if let Err(error) = finish_attempt(&state, &attempt_id, &terminal).await {
         error!(job_id, attempt_id, error = %error.message, "could not persist terminal attempt state");
     }
     state.cancellations.lock().await.remove(&job_id);
@@ -1265,7 +1217,6 @@ async fn run_job(
 
 async fn begin_attempt(
     state: &AppState,
-    job_id: &str,
     attempt_id: &str,
     started_at: &str,
 ) -> Result<(), ApiError> {
@@ -1273,102 +1224,177 @@ async fn begin_attempt(
     store
         .transition_attempt(attempt_id, StoreAttemptState::Starting, started_at, None)
         .map_err(ApiError::store)?;
-    append_lifecycle_to_store(
-        &mut store,
-        job_id,
-        Some(attempt_id),
-        LifecycleEventKind::JobStarted,
-        None,
-        None,
-    )?;
     store
         .transition_attempt(attempt_id, StoreAttemptState::Running, &now(), None)
         .map_err(ApiError::store)?;
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+struct BufferedHarnessOutput {
+    tool_call_id: Option<String>,
+    record: NewHarnessOutputRecord,
+}
+
+#[derive(Default)]
+struct StderrTail {
+    bytes: Vec<u8>,
+}
+
+impl StderrTail {
+    fn push(&mut self, bytes: &[u8]) {
+        if bytes.len() >= STDERR_TAIL_BYTES {
+            self.bytes = bytes[bytes.len() - STDERR_TAIL_BYTES..].to_vec();
+            return;
+        }
+        let overflow = self
+            .bytes
+            .len()
+            .saturating_add(bytes.len())
+            .saturating_sub(STDERR_TAIL_BYTES);
+        if overflow != 0 {
+            self.bytes.drain(..overflow);
+        }
+        self.bytes.extend_from_slice(bytes);
+    }
+
+    fn sanitized(&self) -> String {
+        sanitize_terminal_message(&String::from_utf8_lossy(&self.bytes))
+    }
+}
+
+async fn append_output(
+    state: &AppState,
+    job_id: &str,
+    record: NewHarnessOutputRecord,
+) -> Result<(), ApiError> {
+    state
+        .store
+        .lock()
+        .await
+        .append_harness_output(record)
+        .map_err(ApiError::store)?;
+    state.notify(job_id);
+    Ok(())
+}
+
+async fn capture_protocol_output(
+    state: &AppState,
+    job_id: &str,
+    attempt_id: &str,
+    direction: ProtocolDirection,
+    bytes: Vec<u8>,
+    project_tool_call: bool,
+    pending_outputs: &mut VecDeque<BufferedHarnessOutput>,
+) -> Result<(), ApiError> {
+    if direction == ProtocolDirection::ToHarness {
+        return Ok(());
+    }
+    let payload = trim_jsonl(bytes);
+    let tool_call_id = project_tool_call
+        .then(|| serde_json::from_slice::<Value>(&payload).ok())
+        .flatten()
+        .filter(|message| message.get("method").and_then(Value::as_str) == Some("item/tool/call"))
+        .and_then(|message| {
+            message
+                .pointer("/params/callId")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        });
+    let output = BufferedHarnessOutput {
+        tool_call_id,
+        record: NewHarnessOutputRecord {
+            attempt_id: attempt_id.to_owned(),
+            observed_at: now(),
+            payload,
+        },
+    };
+    if pending_outputs.is_empty() && output.tool_call_id.is_none() {
+        append_output(state, job_id, output.record).await
+    } else {
+        pending_outputs.push_back(output);
+        Ok(())
+    }
+}
+
+async fn capture_after_failure(
+    state: &AppState,
+    job_id: &str,
+    attempt_id: &str,
+    event: CodexEvent,
+    pending_outputs: &mut VecDeque<BufferedHarnessOutput>,
+    stderr_tail: &mut StderrTail,
+) -> Result<(), ApiError> {
+    match event {
+        CodexEvent::Protocol { direction, bytes } => {
+            capture_protocol_output(
+                state,
+                job_id,
+                attempt_id,
+                direction,
+                bytes,
+                false,
+                pending_outputs,
+            )
+            .await?;
+        }
+        CodexEvent::Stderr(bytes) => stderr_tail.push(&bytes),
+        CodexEvent::ToolCall(_) => {}
+    }
+    Ok(())
+}
+
+async fn flush_plain_outputs(
+    state: &AppState,
+    job_id: &str,
+    pending_outputs: &mut VecDeque<BufferedHarnessOutput>,
+) -> Result<(), ApiError> {
+    while pending_outputs
+        .front()
+        .is_some_and(|output| output.tool_call_id.is_none())
+    {
+        let output = pending_outputs
+            .pop_front()
+            .unwrap_or_else(|| unreachable!("front record was checked"));
+        append_output(state, job_id, output.record).await?;
+    }
+    Ok(())
+}
+
+async fn flush_all_outputs(
+    state: &AppState,
+    job_id: &str,
+    pending_outputs: &mut VecDeque<BufferedHarnessOutput>,
+) -> Result<(), ApiError> {
+    while let Some(output) = pending_outputs.pop_front() {
+        append_output(state, job_id, output.record).await?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)]
 async fn handle_codex_event(
     state: &AppState,
     job_id: &str,
     attempt_id: &str,
-    protocol_schema_id: &str,
     definitions: &ToolsetDefinitionsV1,
     event: CodexEvent,
-    pending_tool_records: &mut HashMap<String, NewLogRecord>,
+    pending_outputs: &mut VecDeque<BufferedHarnessOutput>,
+    stderr_tail: &mut StderrTail,
 ) -> Result<(), ApiError> {
     match event {
         CodexEvent::Protocol { direction, bytes } => {
-            let stream = match direction {
-                ProtocolDirection::ToHarness => LogStream::HarnessInput,
-                ProtocolDirection::FromHarness => LogStream::HarnessOutput,
-            };
-            let payload = trim_jsonl(bytes);
-            let decoded = serde_json::from_slice::<Value>(&payload);
-            let (schema_id, payload, decode_failed) = match &decoded {
-                Ok(_) => (protocol_schema_id.to_owned(), payload, false),
-                Err(_) => (BYTES_ID.to_owned(), byte_envelope(&payload), true),
-            };
-            let raw_record = NewLogRecord {
-                job_id: job_id.to_owned(),
-                attempt_id: Some(attempt_id.to_owned()),
-                observed_at: now(),
-                emitted_at: None,
-                stream: log_stream_name(stream).to_owned(),
-                schema_id,
-                payload,
-            };
-            if direction == ProtocolDirection::FromHarness
-                && let Ok(message) = decoded
-                && message.get("method").and_then(Value::as_str) == Some("item/tool/call")
-                && let Some(call_id) = message.pointer("/params/callId").and_then(Value::as_str)
-            {
-                if pending_tool_records
-                    .insert(call_id.to_owned(), raw_record)
-                    .is_some()
-                {
-                    return Err(ApiError::conflict(
-                        "tool_call_conflict",
-                        "Codex reused a tool call ID before mailbox projection",
-                    ));
-                }
-                return Ok(());
-            }
-            {
-                let mut store = state.store.lock().await;
-                store.append_log(raw_record).map_err(ApiError::store)?;
-                if decode_failed {
-                    append_lifecycle_to_store(
-                        &mut store,
-                        job_id,
-                        Some(attempt_id),
-                        LifecycleEventKind::RecordDecodeFailed,
-                        Some(
-                            "Codex emitted a non-JSON protocol line; exact bytes are base64 encoded",
-                        ),
-                        None,
-                    )?;
-                }
-            }
-            state.notify(job_id);
+            capture_protocol_output(
+                state,
+                job_id,
+                attempt_id,
+                direction,
+                bytes,
+                true,
+                pending_outputs,
+            )
+            .await?;
         }
-        CodexEvent::Stderr(bytes) => {
-            state
-                .store
-                .lock()
-                .await
-                .append_log(NewLogRecord {
-                    job_id: job_id.to_owned(),
-                    attempt_id: Some(attempt_id.to_owned()),
-                    observed_at: now(),
-                    emitted_at: None,
-                    stream: log_stream_name(LogStream::HarnessStderr).to_owned(),
-                    schema_id: BYTES_ID.to_owned(),
-                    payload: byte_envelope(&bytes),
-                })
-                .map_err(ApiError::store)?;
-            state.notify(job_id);
-        }
+        CodexEvent::Stderr(bytes) => stderr_tail.push(&bytes),
         CodexEvent::ToolCall(call) => {
             let definition = definitions
                 .tools
@@ -1380,40 +1406,60 @@ async fn handle_codex_event(
                         "Codex requested a tool missing from the admitted toolset",
                     )
                 })?;
-            let raw_record = pending_tool_records.remove(&call.call_id).ok_or_else(|| {
-                ApiError::internal(
+            let Some(buffered) = pending_outputs.front() else {
+                return Err(ApiError::internal(
                     "missing_tool_record",
                     "tool call arrived without its raw harness-output record",
-                )
-            })?;
+                ));
+            };
+            if buffered.tool_call_id.as_deref() != Some(call.call_id.as_str()) {
+                return Err(ApiError::internal(
+                    "tool_record_order_mismatch",
+                    "tool-call projection did not match harness stdout order",
+                ));
+            }
+            let new_call = NewPendingToolCall {
+                id: call.call_id.clone(),
+                job_id: job_id.to_owned(),
+                attempt_id: attempt_id.to_owned(),
+                tool_name: call.name,
+                arguments_schema_id: definition.input_schema_id.to_string(),
+                arguments_bytes: serde_json::to_vec(&call.arguments).map_err(ApiError::encoding)?,
+                created_at: now(),
+            };
+            let raw_record = pending_outputs
+                .pop_front()
+                .unwrap_or_else(|| unreachable!("front record was checked"))
+                .record;
+            let fallback_record = raw_record.clone();
             let key = (job_id.to_owned(), call.call_id.clone());
             state
                 .tool_replies
                 .lock()
                 .await
                 .insert(key.clone(), call.reply);
-            let created = {
+            let recorded = {
                 let mut store = state.store.lock().await;
-                let created = store.record_pending_tool_call(
-                    NewPendingToolCall {
-                        id: call.call_id.clone(),
-                        job_id: job_id.to_owned(),
-                        attempt_id: attempt_id.to_owned(),
-                        tool_name: call.name,
-                        arguments_schema_id: definition.input_schema_id.to_string(),
-                        arguments_bytes: serde_json::to_vec(&call.arguments)
-                            .map_err(ApiError::encoding)?,
-                        created_at: now(),
-                    },
-                    raw_record,
-                );
-                let created = match created {
-                    Ok(value) => value,
-                    Err(error) => {
-                        state.tool_replies.lock().await.remove(&key);
-                        return Err(ApiError::store(error));
-                    }
-                };
+                store.record_pending_tool_call(new_call, raw_record)
+            };
+            let created = match recorded {
+                Ok(created) if created.was_created() => created,
+                Ok(_) => {
+                    state.tool_replies.lock().await.remove(&key);
+                    append_output(state, job_id, fallback_record).await?;
+                    return Err(ApiError::conflict(
+                        "tool_call_conflict",
+                        "Codex reused a tool call ID",
+                    ));
+                }
+                Err(error) => {
+                    state.tool_replies.lock().await.remove(&key);
+                    append_output(state, job_id, fallback_record).await?;
+                    return Err(ApiError::store(error));
+                }
+            };
+            {
+                let mut store = state.store.lock().await;
                 store
                     .transition_attempt(
                         attempt_id,
@@ -1422,33 +1468,11 @@ async fn handle_codex_event(
                         None,
                     )
                     .map_err(ApiError::store)?;
-                append_lifecycle_to_store(
-                    &mut store,
-                    job_id,
-                    Some(attempt_id),
-                    LifecycleEventKind::WaitingOnRequester,
-                    Some(&format!("waiting for tool call {}", call.call_id)),
-                    None,
-                )?;
-                append_lifecycle_to_store(
-                    &mut store,
-                    job_id,
-                    Some(attempt_id),
-                    LifecycleEventKind::ToolCallPending,
-                    Some(&format!("{}:{}", definition.name, call.call_id)),
-                    None,
-                )?;
-                created
-            };
-            if !created.was_created() {
-                state.tool_replies.lock().await.remove(&key);
-                return Err(ApiError::conflict(
-                    "tool_call_conflict",
-                    "Codex reused a tool call ID",
-                ));
             }
+            debug_assert!(created.was_created());
             state.notify(job_id);
             state.notify_mailbox(job_id);
+            flush_plain_outputs(state, job_id, pending_outputs).await?;
         }
     }
     Ok(())
@@ -1457,73 +1481,79 @@ async fn handle_codex_event(
 struct TerminalOutcome {
     attempt_state: StoreAttemptState,
     reason: AttemptTerminalReason,
-    attempt_event: LifecycleEventKind,
-    job_event: LifecycleEventKind,
     message: String,
-    details: Option<Box<RawValue>>,
 }
 
 impl TerminalOutcome {
     fn failed(
         attempt_state: StoreAttemptState,
         reason: AttemptTerminalReason,
-        attempt_event: LifecycleEventKind,
         message: String,
     ) -> Self {
-        let job_event = match attempt_state {
-            StoreAttemptState::Cancelled => LifecycleEventKind::JobCancelled,
-            _ => LifecycleEventKind::JobFailed,
-        };
         Self {
             attempt_state,
             reason,
-            attempt_event,
-            job_event,
             message,
-            details: None,
+        }
+    }
+
+    fn append_stderr(&mut self, stderr_tail: &StderrTail) {
+        let stderr = stderr_tail.sanitized();
+        if !stderr.is_empty() {
+            self.message.push_str("; stderr: ");
+            self.message.push_str(&stderr);
         }
     }
 }
 
+fn sanitize_terminal_message(message: &str) -> String {
+    let mut sanitized = String::with_capacity(message.len().min(TERMINAL_MESSAGE_BYTES));
+    let mut separator_pending = false;
+    for character in message.chars() {
+        if character.is_control() || character.is_whitespace() {
+            separator_pending = !sanitized.is_empty();
+            continue;
+        }
+        let separator_bytes = usize::from(separator_pending);
+        if sanitized.len() + separator_bytes + character.len_utf8() > TERMINAL_MESSAGE_BYTES {
+            break;
+        }
+        if separator_pending {
+            sanitized.push(' ');
+            separator_pending = false;
+        }
+        sanitized.push(character);
+    }
+    sanitized
+}
+
 fn terminal_outcome(result: Result<nucleus_codex::CodexOutcome, CodexError>) -> TerminalOutcome {
     match result {
-        Ok(outcome) => TerminalOutcome {
+        Ok(_) => TerminalOutcome {
             attempt_state: StoreAttemptState::Completed,
             reason: AttemptTerminalReason::Completed,
-            attempt_event: LifecycleEventKind::AttemptCompleted,
-            job_event: LifecycleEventKind::JobCompleted,
             message: "Codex turn completed".to_owned(),
-            details: to_raw_value(&json!({
-                "threadId": outcome.thread_id,
-                "turnId": outcome.turn_id,
-                "finalMessage": outcome.final_message
-            }))
-            .ok(),
         },
         Err(CodexError::Cancelled) => TerminalOutcome::failed(
             StoreAttemptState::Cancelled,
             AttemptTerminalReason::Cancelled,
-            LifecycleEventKind::AttemptCancelled,
             "job cancellation reached the Codex process".to_owned(),
         ),
         Err(CodexError::TimedOut) => TerminalOutcome::failed(
             StoreAttemptState::TimedOut,
             AttemptTerminalReason::TimedOut,
-            LifecycleEventKind::AttemptTimedOut,
             "job exceeded its wall-clock timeout".to_owned(),
         ),
         Err(error @ (CodexError::Protocol(_) | CodexError::EventConsumerDisconnected)) => {
             TerminalOutcome::failed(
                 StoreAttemptState::Failed,
                 AttemptTerminalReason::ProtocolError,
-                LifecycleEventKind::AttemptFailed,
                 error.to_string(),
             )
         }
         Err(error) => TerminalOutcome::failed(
             StoreAttemptState::Failed,
             AttemptTerminalReason::HarnessFailure,
-            LifecycleEventKind::AttemptFailed,
             error.to_string(),
         ),
     }
@@ -1531,12 +1561,12 @@ fn terminal_outcome(result: Result<nucleus_codex::CodexOutcome, CodexError>) -> 
 
 async fn finish_attempt(
     state: &AppState,
-    job_id: &str,
     attempt_id: &str,
     outcome: &TerminalOutcome,
 ) -> Result<(), ApiError> {
     let finished_at = now();
     let reason = terminal_reason_name(outcome.reason);
+    let terminal_message = sanitize_terminal_message(&outcome.message);
     let mut store = state.store.lock().await;
     store
         .transition_attempt_with_message(
@@ -1544,35 +1574,9 @@ async fn finish_attempt(
             outcome.attempt_state,
             &finished_at,
             Some(reason),
-            Some(&outcome.message),
+            Some(&terminal_message),
         )
         .map_err(ApiError::store)?;
-    if outcome.attempt_state == StoreAttemptState::Completed {
-        append_lifecycle_to_store(
-            &mut store,
-            job_id,
-            Some(attempt_id),
-            LifecycleEventKind::TurnCompleted,
-            Some(&outcome.message),
-            outcome.details.clone(),
-        )?;
-    }
-    append_lifecycle_to_store(
-        &mut store,
-        job_id,
-        Some(attempt_id),
-        outcome.attempt_event,
-        Some(&outcome.message),
-        None,
-    )?;
-    append_lifecycle_to_store(
-        &mut store,
-        job_id,
-        Some(attempt_id),
-        outcome.job_event,
-        Some(&outcome.message),
-        None,
-    )?;
     Ok(())
 }
 
@@ -1585,10 +1589,9 @@ async fn finalize_internal_failure(
     let terminal = TerminalOutcome::failed(
         StoreAttemptState::Failed,
         AttemptTerminalReason::ProtocolError,
-        LifecycleEventKind::AttemptFailed,
         message,
     );
-    let _ = finish_attempt(state, job_id, attempt_id, &terminal).await;
+    let _ = finish_attempt(state, attempt_id, &terminal).await;
     state.cancellations.lock().await.remove(job_id);
     state.notify(job_id);
     state.notify_mailbox(job_id);
@@ -1826,7 +1829,7 @@ async fn last_log_sequence(state: &AppState, job_id: &str) -> Result<u64, ApiErr
     let mut cursor = 0;
     loop {
         let page = store
-            .list_logs(job_id, cursor, MAX_PAGE)
+            .list_harness_outputs(job_id, cursor, MAX_PAGE)
             .map_err(ApiError::store)?;
         let Some(last) = page.last() else {
             return Ok(cursor);
@@ -1843,13 +1846,13 @@ async fn load_logs(
     job_id: &str,
     after: u64,
     limit: usize,
-) -> Result<Vec<LogRecord>, ApiError> {
+) -> Result<Vec<HarnessOutputRecord>, ApiError> {
     let store = state.store.lock().await;
     if store.get_job(job_id).map_err(ApiError::store)?.is_none() {
         return Err(ApiError::not_found("job", job_id));
     }
     store
-        .list_logs(job_id, after, limit)
+        .list_harness_outputs(job_id, after, limit)
         .map_err(ApiError::store)
 }
 
@@ -1896,7 +1899,9 @@ fn job_to_core(
         attempts: attempts
             .into_iter()
             .map(|attempt| {
-                let output = outputs.get(&attempt.id).cloned();
+                let output = (attempt.state == StoreAttemptState::Completed)
+                    .then(|| outputs.get(&attempt.id).cloned())
+                    .flatten();
                 attempt_to_core(attempt, output)
             })
             .collect(),
@@ -1946,54 +1951,168 @@ fn attempt_to_core(attempt: AttemptRecord, output: Option<AttemptOutputV1>) -> A
     }
 }
 
+#[derive(Default)]
+struct AttemptOutputProjection {
+    active_thread_id: Option<String>,
+    active_turn_id: Option<String>,
+    final_message: String,
+    terminal: bool,
+    completed: bool,
+}
+
+impl AttemptOutputProjection {
+    fn observe(&mut self, message: &Value) {
+        if self.terminal {
+            return;
+        }
+        if self.active_thread_id.is_none() && message.get("id").and_then(Value::as_i64) == Some(2) {
+            self.active_thread_id = message
+                .pointer("/result/thread/id")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+        }
+        if self.active_thread_id.is_some()
+            && self.active_turn_id.is_none()
+            && message.get("id").and_then(Value::as_i64) == Some(3)
+        {
+            self.active_turn_id = message
+                .pointer("/result/turn/id")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+        }
+        let (Some(thread_id), Some(turn_id)) = (
+            self.active_thread_id.as_deref(),
+            self.active_turn_id.as_deref(),
+        ) else {
+            return;
+        };
+        match message.get("method").and_then(Value::as_str) {
+            Some("item/completed")
+                if message.pointer("/params/threadId").and_then(Value::as_str)
+                    == Some(thread_id)
+                    && message.pointer("/params/turnId").and_then(Value::as_str)
+                        == Some(turn_id) =>
+            {
+                record_agent_message(message, &mut self.final_message);
+            }
+            Some("turn/completed")
+                if message.pointer("/params/threadId").and_then(Value::as_str)
+                    == Some(thread_id)
+                    && message.pointer("/params/turn/id").and_then(Value::as_str)
+                        == Some(turn_id) =>
+            {
+                record_agent_message(message, &mut self.final_message);
+                self.completed = message
+                    .pointer("/params/turn/status")
+                    .and_then(Value::as_str)
+                    == Some("completed");
+                self.terminal = true;
+            }
+            _ => {}
+        }
+    }
+
+    fn into_output(self) -> Option<AttemptOutputV1> {
+        let (Some(thread_id), Some(turn_id)) = (self.active_thread_id, self.active_turn_id) else {
+            return None;
+        };
+        self.completed.then_some(AttemptOutputV1 {
+            thread_id,
+            turn_id,
+            final_message: self.final_message,
+        })
+    }
+}
+
 fn attempt_outputs(
     store: &Store,
     job_id: &str,
 ) -> Result<HashMap<String, AttemptOutputV1>, ApiError> {
-    let mut outputs = HashMap::new();
+    let mut projections: HashMap<String, AttemptOutputProjection> = HashMap::new();
     let mut cursor = 0_u64;
     loop {
         let records = store
-            .list_logs(job_id, cursor, MAX_PAGE)
+            .list_harness_outputs(job_id, cursor, MAX_PAGE)
             .map_err(ApiError::store)?;
         let count = records.len();
         for record in records {
             cursor = record.sequence;
-            if record.schema_id != LIFECYCLE_ID {
-                continue;
-            }
-            let Ok(event) = serde_json::from_slice::<LifecycleEventV1>(&record.payload) else {
+            let Ok(message) = serde_json::from_slice::<Value>(&record.payload) else {
                 continue;
             };
-            if event.event != LifecycleEventKind::TurnCompleted {
-                continue;
-            }
-            let (Some(attempt), Some(details)) = (event.attempt_id, event.details) else {
-                continue;
-            };
-            if let Ok(output) = serde_json::from_str::<AttemptOutputV1>(details.get()) {
-                outputs.insert(attempt.to_string(), output);
-            }
+            projections
+                .entry(record.attempt_id)
+                .or_default()
+                .observe(&message);
         }
         if count < MAX_PAGE {
             break;
         }
     }
+    let outputs = projections
+        .into_iter()
+        .filter_map(|(attempt_id, projection)| {
+            projection.into_output().map(|output| (attempt_id, output))
+        })
+        .collect();
     Ok(outputs)
 }
 
-fn log_to_core(record: LogRecord) -> Result<LogRecordV1, ApiError> {
-    let payload = raw_from_bytes(record.payload, "stored log payload")?;
+fn record_agent_message(message: &Value, final_message: &mut String) {
+    let item = match message.get("method").and_then(Value::as_str) {
+        Some("item/completed") => message.pointer("/params/item"),
+        Some("turn/completed") => message
+            .pointer("/params/turn/items")
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items
+                    .iter()
+                    .rev()
+                    .find(|item| item.get("type").and_then(Value::as_str) == Some("agentMessage"))
+            }),
+        _ => None,
+    };
+    if let Some(text) = item
+        .filter(|item| item.get("type").and_then(Value::as_str) == Some("agentMessage"))
+        .and_then(|item| item.get("text"))
+        .and_then(Value::as_str)
+    {
+        text.clone_into(final_message);
+    }
+}
+
+fn log_to_core(record: HarnessOutputRecord) -> Result<LogRecordV1, ApiError> {
+    let (schema_id, payload, payload_digest) = if let Ok(payload) =
+        raw_from_bytes(record.payload.clone(), "stored output payload")
+        && payload.get().as_bytes() == record.payload.as_slice()
+    {
+        (
+            format!(
+                "codex.app-server.protocol.{}",
+                sanitize_identifier(&record.harness_version)
+            ),
+            payload,
+            sha256_digest(&record.payload),
+        )
+    } else {
+        let envelope = byte_envelope(&record.payload);
+        let digest = sha256_digest(&envelope);
+        (
+            BYTES_ID.to_owned(),
+            raw_from_bytes(envelope, "generated byte envelope")?,
+            digest,
+        )
+    };
     Ok(LogRecordV1 {
         version: PROTOCOL_VERSION_V1,
         job_id: JobId::new(record.job_id),
-        attempt_id: record.attempt_id.map(AttemptId::new),
+        attempt_id: Some(AttemptId::new(record.attempt_id)),
         sequence: record.sequence,
         observed_at: record.observed_at,
-        stream: parse_log_stream(&record.stream)?,
-        schema_id: SchemaId::new(record.schema_id),
+        stream: LogStream::HarnessOutput,
+        schema_id: SchemaId::new(schema_id),
         payload,
-        payload_digest: digest_text(record.payload_digest),
+        payload_digest,
     })
 }
 
@@ -2046,7 +2165,6 @@ fn pending_call_to_core(record: PendingToolCallRecord) -> Result<PendingToolCall
         },
         created_at: record.created_at,
         answered_at: record.answered_at,
-        result_sequence: record.result_sequence,
     })
 }
 
@@ -2077,34 +2195,6 @@ fn validate_schema_registration(schema: &LogSchemaV1) -> Result<(), ApiError> {
         ));
     }
     Ok(())
-}
-
-fn append_lifecycle_to_store(
-    store: &mut Store,
-    job_id: &str,
-    attempt_id: Option<&str>,
-    event: LifecycleEventKind,
-    message: Option<&str>,
-    details: Option<Box<RawValue>>,
-) -> Result<LogRecord, StoreError> {
-    let payload = serde_json::to_vec(&LifecycleEventV1 {
-        version: PROTOCOL_VERSION_V1,
-        event,
-        job_id: JobId::new(job_id),
-        attempt_id: attempt_id.map(AttemptId::new),
-        message: message.map(str::to_owned),
-        details,
-    })
-    .unwrap_or_else(|error| panic!("Nucleus lifecycle events must be serializable: {error}"));
-    store.append_log(NewLogRecord {
-        job_id: job_id.to_owned(),
-        attempt_id: attempt_id.map(str::to_owned),
-        observed_at: now(),
-        emitted_at: None,
-        stream: log_stream_name(LogStream::NucleusLifecycle).to_owned(),
-        schema_id: LIFECYCLE_ID.to_owned(),
-        payload,
-    })
 }
 
 fn raw_from_bytes(bytes: Vec<u8>, context: &str) -> Result<Box<RawValue>, ApiError> {
@@ -2218,32 +2308,6 @@ fn core_attempt_state(value: StoreAttemptState) -> AttemptState {
         StoreAttemptState::Cancelled => AttemptState::Cancelled,
         StoreAttemptState::TimedOut => AttemptState::TimedOut,
         StoreAttemptState::Lost => AttemptState::Lost,
-    }
-}
-
-fn log_stream_name(value: LogStream) -> &'static str {
-    match value {
-        LogStream::NucleusLifecycle => "nucleus.lifecycle",
-        LogStream::NucleusControl => "nucleus.control",
-        LogStream::HarnessInput => "harness.input",
-        LogStream::HarnessOutput => "harness.output",
-        LogStream::HarnessStderr => "harness.stderr",
-        LogStream::Requester => "requester",
-    }
-}
-
-fn parse_log_stream(value: &str) -> Result<LogStream, ApiError> {
-    match value {
-        "nucleus.lifecycle" => Ok(LogStream::NucleusLifecycle),
-        "nucleus.control" => Ok(LogStream::NucleusControl),
-        "harness.input" => Ok(LogStream::HarnessInput),
-        "harness.output" => Ok(LogStream::HarnessOutput),
-        "harness.stderr" => Ok(LogStream::HarnessStderr),
-        "requester" => Ok(LogStream::Requester),
-        _ => Err(ApiError::internal(
-            "stored_stream_invalid",
-            &format!("unknown stored log stream {value:?}"),
-        )),
     }
 }
 
@@ -2744,7 +2808,7 @@ mod tests {
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
-    async fn tool_call_answer_lifecycle_precedes_completion_awakened_by_reply()
+    async fn tool_result_is_durable_before_completion_and_is_not_an_output_record()
     -> Result<(), Box<dyn std::error::Error>> {
         let state =
             AppState::new(Store::open_in_memory()?, CodexHarness::new("unused-codex")).await?;
@@ -2792,13 +2856,9 @@ mod tests {
                     arguments_bytes: br#"{"todoId":"todo-1"}"#.to_vec(),
                     created_at: "2026-08-27T00:00:03Z".to_owned(),
                 },
-                NewLogRecord {
-                    job_id: job_id.to_owned(),
-                    attempt_id: Some(attempt_id.to_owned()),
+                NewHarnessOutputRecord {
+                    attempt_id: attempt_id.to_owned(),
                     observed_at: "2026-08-27T00:00:03Z".to_owned(),
-                    emitted_at: None,
-                    stream: log_stream_name(LogStream::HarnessOutput).to_owned(),
-                    schema_id: BYTES_ID.to_owned(),
                     payload: b"tool call".to_vec(),
                 },
             )?;
@@ -2820,27 +2880,17 @@ mod tests {
         let completion = tokio::spawn(async move {
             reply_receiver.await.map_err(|_| "tool reply was dropped")?;
             let mut store = completion_state.store.lock().await;
+            let answered = store
+                .get_tool_call(job_id, call_id)?
+                .ok_or("answered call disappeared")?;
+            if answered.state != StoreToolCallState::Answered {
+                return Err("harness woke before the requester result was durable".into());
+            }
             store.transition_attempt(
                 attempt_id,
                 StoreAttemptState::Completed,
                 "2026-08-27T00:00:05Z",
                 Some("completed"),
-            )?;
-            append_lifecycle_to_store(
-                &mut store,
-                job_id,
-                Some(attempt_id),
-                LifecycleEventKind::AttemptCompleted,
-                None,
-                None,
-            )?;
-            append_lifecycle_to_store(
-                &mut store,
-                job_id,
-                Some(attempt_id),
-                LifecycleEventKind::JobCompleted,
-                None,
-                None,
             )?;
             Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
         });
@@ -2864,28 +2914,18 @@ mod tests {
             return Err(format!("completion task failed: {error}").into());
         }
 
-        let events = state
+        let outputs = state
             .store
             .lock()
             .await
-            .list_logs(job_id, 0, 100)?
-            .into_iter()
-            .filter(|record| record.schema_id == LIFECYCLE_ID)
-            .map(|record| serde_json::from_slice::<LifecycleEventV1>(&record.payload))
-            .collect::<Result<Vec<_>, _>>()?;
-        assert_eq!(
-            events.iter().map(|event| event.event).collect::<Vec<_>>(),
-            vec![
-                LifecycleEventKind::ToolCallAnswered,
-                LifecycleEventKind::AttemptCompleted,
-                LifecycleEventKind::JobCompleted,
-            ]
-        );
+            .list_harness_outputs(job_id, 0, 100)?;
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].payload, b"tool call");
         Ok(())
     }
 
     #[tokio::test]
-    async fn recovery_records_attempt_and_job_terminal_lifecycle_events()
+    async fn recovery_updates_authoritative_state_without_adding_output_records()
     -> Result<(), Box<dyn std::error::Error>> {
         let state =
             AppState::new(Store::open_in_memory()?, CodexHarness::new("unused-codex")).await?;
@@ -2916,6 +2956,11 @@ mod tests {
                 "2026-08-27T00:00:02Z",
                 None,
             )?;
+            store.append_harness_output(NewHarnessOutputRecord {
+                attempt_id: "recovery-attempt".to_owned(),
+                observed_at: "2026-08-27T00:00:03Z".to_owned(),
+                payload: br#"{"method":"progress"}"#.to_vec(),
+            })?;
         }
 
         state.recover_interrupted_work().await?;
@@ -2929,19 +2974,431 @@ mod tests {
             .ok_or("recovered attempt disappeared")?;
         assert_eq!(job.state, StoreJobState::Failed);
         assert_eq!(attempt.state, StoreAttemptState::Lost);
-        let events = store
-            .list_logs("recovery-job", 0, 100)?
-            .into_iter()
-            .filter(|record| record.schema_id == LIFECYCLE_ID)
-            .map(|record| serde_json::from_slice::<LifecycleEventV1>(&record.payload))
-            .collect::<Result<Vec<_>, _>>()?;
-        assert_eq!(
-            events.iter().map(|event| event.event).collect::<Vec<_>>(),
-            vec![
-                LifecycleEventKind::AttemptLost,
-                LifecycleEventKind::JobFailed
-            ]
+        let outputs = store.list_harness_outputs("recovery-job", 0, 100)?;
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].payload, br#"{"method":"progress"}"#);
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn every_harness_output_is_retained_once_across_tool_projection_failure()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let state =
+            AppState::new(Store::open_in_memory()?, CodexHarness::new("unused-codex")).await?;
+        let job_id = "output-invariant-job";
+        let attempt_id = "output-invariant-attempt";
+        {
+            let mut store = state.store.lock().await;
+            store.admit_job(NewJob {
+                id: job_id.to_owned(),
+                label: "output invariant".to_owned(),
+                requester_program: "todo".to_owned(),
+                requester_id: "request-1".to_owned(),
+                parent_job_id: None,
+                request_schema_id: JOB_REQUEST_ID.to_owned(),
+                request_bytes: b"{}".to_vec(),
+                created_at: "2026-08-27T00:00:00Z".to_owned(),
+            })?;
+            store.create_attempt(NewAttempt {
+                id: attempt_id.to_owned(),
+                job_id: job_id.to_owned(),
+                ordinal: 1,
+                harness: "codex".to_owned(),
+                harness_version: "test".to_owned(),
+                adapter_version: "test".to_owned(),
+                created_at: "2026-08-27T00:00:01Z".to_owned(),
+            })?;
+            store.transition_attempt(
+                attempt_id,
+                StoreAttemptState::Running,
+                "2026-08-27T00:00:02Z",
+                None,
+            )?;
+        }
+        let definitions = ToolsetDefinitionsV1 {
+            version: PROTOCOL_VERSION_V1,
+            tools: vec![nucleus_core::ToolDefinitionV1 {
+                name: "read_todo".to_owned(),
+                description: "read one todo".to_owned(),
+                input_schema_id: SchemaId::new(BYTES_ID),
+                input_schema: to_raw_value(&json!({"type": "object"}))?,
+            }],
+        };
+        let tool_line = br#"{"jsonrpc":"2.0","id":20,"method":"item/tool/call","params":{"threadId":"thread-1","turnId":"turn-1","callId":"call-1","tool":"read_todo","arguments":{"todoId":"todo-1"}}}"#;
+        let between_line = br#"{"jsonrpc":"2.0","method":"thread/tokenUsage/updated","params":{"threadId":"thread-1","turnId":"turn-1"}}"#;
+        let mut pending_outputs = VecDeque::new();
+        let mut stderr_tail = StderrTail::default();
+
+        handle_codex_event(
+            &state,
+            job_id,
+            attempt_id,
+            &definitions,
+            CodexEvent::Protocol {
+                direction: ProtocolDirection::FromHarness,
+                bytes: [tool_line.as_slice(), b"\n"].concat(),
+            },
+            &mut pending_outputs,
+            &mut stderr_tail,
+        )
+        .await
+        .map_err(|error| error.message)?;
+        assert_eq!(pending_outputs.len(), 1);
+        assert!(
+            state
+                .store
+                .lock()
+                .await
+                .list_harness_outputs(job_id, 0, 100)?
+                .is_empty()
         );
+        handle_codex_event(
+            &state,
+            job_id,
+            attempt_id,
+            &definitions,
+            CodexEvent::Protocol {
+                direction: ProtocolDirection::FromHarness,
+                bytes: [between_line.as_slice(), b"\n"].concat(),
+            },
+            &mut pending_outputs,
+            &mut stderr_tail,
+        )
+        .await
+        .map_err(|error| error.message)?;
+        assert_eq!(pending_outputs.len(), 2);
+        assert!(
+            state
+                .store
+                .lock()
+                .await
+                .list_harness_outputs(job_id, 0, 100)?
+                .is_empty()
+        );
+
+        let (reply, _receiver) = oneshot::channel();
+        handle_codex_event(
+            &state,
+            job_id,
+            attempt_id,
+            &definitions,
+            CodexEvent::ToolCall(nucleus_codex::PendingToolCall {
+                call_id: "call-1".to_owned(),
+                name: "read_todo".to_owned(),
+                arguments: json!({"todoId": "todo-1"}),
+                reply,
+            }),
+            &mut pending_outputs,
+            &mut stderr_tail,
+        )
+        .await
+        .map_err(|error| error.message)?;
+        assert!(pending_outputs.is_empty());
+
+        handle_codex_event(
+            &state,
+            job_id,
+            attempt_id,
+            &definitions,
+            CodexEvent::Protocol {
+                direction: ProtocolDirection::FromHarness,
+                bytes: [tool_line.as_slice(), b"\n"].concat(),
+            },
+            &mut pending_outputs,
+            &mut stderr_tail,
+        )
+        .await
+        .map_err(|error| error.message)?;
+        let (duplicate_reply, _duplicate_receiver) = oneshot::channel();
+        let duplicate = handle_codex_event(
+            &state,
+            job_id,
+            attempt_id,
+            &definitions,
+            CodexEvent::ToolCall(nucleus_codex::PendingToolCall {
+                call_id: "call-1".to_owned(),
+                name: "read_todo".to_owned(),
+                arguments: json!({"todoId": "todo-1"}),
+                reply: duplicate_reply,
+            }),
+            &mut pending_outputs,
+            &mut stderr_tail,
+        )
+        .await;
+        assert!(matches!(duplicate, Err(error) if error.code == "tool_call_conflict"));
+
+        let after_failure = br#"{"jsonrpc":"2.0","method":"item/completed","params":{"item":{"type":"agentMessage","text":"after"}}}"#;
+        capture_after_failure(
+            &state,
+            job_id,
+            attempt_id,
+            CodexEvent::Protocol {
+                direction: ProtocolDirection::FromHarness,
+                bytes: [after_failure.as_slice(), b"\n"].concat(),
+            },
+            &mut pending_outputs,
+            &mut stderr_tail,
+        )
+        .await
+        .map_err(|error| error.message)?;
+        flush_all_outputs(&state, job_id, &mut pending_outputs)
+            .await
+            .map_err(|error| error.message)?;
+
+        let outputs = state
+            .store
+            .lock()
+            .await
+            .list_harness_outputs(job_id, 0, 100)?;
+        assert_eq!(outputs.len(), 4);
+        assert_eq!(outputs[0].payload, tool_line);
+        assert_eq!(outputs[1].payload, between_line);
+        assert_eq!(outputs[2].payload, tool_line);
+        assert_eq!(outputs[3].payload, after_failure);
+        assert_eq!(
+            outputs
+                .iter()
+                .map(|output| output.sequence)
+                .collect::<Vec<_>>(),
+            [1, 2, 3, 4]
+        );
+
+        let call_id_position = tool_line
+            .windows(b"call-1".len())
+            .position(|window| window == b"call-1")
+            .unwrap_or_else(|| panic!("tool fixture contains call ID"));
+        let mut unprojected_tool = tool_line.to_vec();
+        unprojected_tool[call_id_position..call_id_position + b"call-1".len()]
+            .copy_from_slice(b"call-2");
+        handle_codex_event(
+            &state,
+            job_id,
+            attempt_id,
+            &definitions,
+            CodexEvent::Protocol {
+                direction: ProtocolDirection::FromHarness,
+                bytes: [unprojected_tool.as_slice(), b"\n"].concat(),
+            },
+            &mut pending_outputs,
+            &mut stderr_tail,
+        )
+        .await
+        .map_err(|error| error.message)?;
+        handle_codex_event(
+            &state,
+            job_id,
+            attempt_id,
+            &definitions,
+            CodexEvent::Protocol {
+                direction: ProtocolDirection::FromHarness,
+                bytes: [after_failure.as_slice(), b"\n"].concat(),
+            },
+            &mut pending_outputs,
+            &mut stderr_tail,
+        )
+        .await
+        .map_err(|error| error.message)?;
+        assert_eq!(pending_outputs.len(), 2);
+        flush_all_outputs(&state, job_id, &mut pending_outputs)
+            .await
+            .map_err(|error| error.message)?;
+        let outputs = state
+            .store
+            .lock()
+            .await
+            .list_harness_outputs(job_id, 4, 100)?;
+        assert_eq!(outputs.len(), 2);
+        assert_eq!(outputs[0].payload, unprojected_tool);
+        assert_eq!(outputs[1].payload, after_failure);
+        Ok(())
+    }
+
+    #[test]
+    fn derived_output_tracks_only_the_active_turn_and_freezes_at_completion() {
+        let mut projection = AttemptOutputProjection::default();
+        for message in [
+            json!({"id": 99, "result": {"thread": {"id": "thread-spoof"}}}),
+            json!({"id": 2, "result": {"thread": {"id": "thread-active"}}}),
+            json!({"id": 98, "result": {"turn": {"id": "turn-spoof"}}}),
+            json!({"id": 3, "result": {"turn": {"id": "turn-active"}}}),
+            json!({
+                "method": "item/completed",
+                "params": {
+                    "threadId": "thread-other",
+                    "turnId": "turn-other",
+                    "item": {"type": "agentMessage", "text": "wrong-before"}
+                }
+            }),
+            json!({
+                "method": "item/completed",
+                "params": {
+                    "threadId": "thread-active",
+                    "turnId": "turn-active",
+                    "item": {"type": "agentMessage", "text": "correct"}
+                }
+            }),
+            json!({
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-other",
+                    "turn": {"id": "turn-other", "status": "failed"}
+                }
+            }),
+            json!({
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-active",
+                    "turn": {"id": "turn-active", "status": "completed"}
+                }
+            }),
+            json!({
+                "method": "item/completed",
+                "params": {
+                    "threadId": "thread-active",
+                    "turnId": "turn-active",
+                    "item": {"type": "agentMessage", "text": "wrong-after"}
+                }
+            }),
+            json!({
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-other",
+                    "turn": {
+                        "id": "turn-other",
+                        "status": "completed",
+                        "items": [{"type": "agentMessage", "text": "wrong-terminal"}]
+                    }
+                }
+            }),
+        ] {
+            projection.observe(&message);
+        }
+
+        let output = projection
+            .into_output()
+            .unwrap_or_else(|| panic!("active completed turn must produce output"));
+        assert_eq!(output.thread_id, "thread-active");
+        assert_eq!(output.turn_id, "turn-active");
+        assert_eq!(output.final_message, "correct");
+    }
+
+    #[test]
+    fn non_byte_exact_public_output_is_reversibly_enveloped_at_read_time() {
+        for (sequence, raw) in [vec![0xff, b'{'], br#"  {"valid":true} 	"#.to_vec()]
+            .into_iter()
+            .enumerate()
+        {
+            let record = log_to_core(HarnessOutputRecord {
+                job_id: "job-1".to_owned(),
+                attempt_id: "attempt-1".to_owned(),
+                harness_version: "0.146.0".to_owned(),
+                sequence: u64::try_from(sequence + 1)
+                    .unwrap_or_else(|error| panic!("convert test sequence: {error}")),
+                observed_at: "2026-08-27T00:00:00Z".to_owned(),
+                payload: raw.clone(),
+            })
+            .unwrap_or_else(|error| panic!("envelope raw output: {}", error.message));
+
+            assert_eq!(record.schema_id.as_str(), BYTES_ID);
+            let envelope: Value = serde_json::from_str(record.payload.get())
+                .unwrap_or_else(|error| panic!("decode byte envelope: {error}"));
+            let encoded = envelope
+                .get("data")
+                .and_then(Value::as_str)
+                .unwrap_or_else(|| panic!("byte envelope omitted data"));
+            assert_eq!(
+                base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .unwrap_or_else(|error| panic!("decode base64 payload: {error}")),
+                raw
+            );
+            assert_eq!(
+                record.payload_digest,
+                sha256_digest(record.payload.get().as_bytes())
+            );
+        }
+    }
+
+    #[test]
+    fn bounded_stderr_tail_only_enriches_terminal_diagnostics() {
+        let mut bounded = StderrTail::default();
+        bounded.push(&vec![b'x'; STDERR_TAIL_BYTES + 1]);
+        assert_eq!(bounded.bytes.len(), STDERR_TAIL_BYTES);
+
+        let mut stderr = StderrTail::default();
+        stderr.push(b"  simulated model\n failure  ");
+        let mut terminal = TerminalOutcome::failed(
+            StoreAttemptState::Failed,
+            AttemptTerminalReason::HarnessFailure,
+            "Codex process failed".to_owned(),
+        );
+        terminal.append_stderr(&stderr);
+        assert_eq!(
+            terminal.message,
+            "Codex process failed; stderr: simulated model failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn stored_terminal_message_is_bounded_and_control_sanitized()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let state =
+            AppState::new(Store::open_in_memory()?, CodexHarness::new("unused-codex")).await?;
+        let job_id = "terminal-message-job";
+        let attempt_id = "terminal-message-attempt";
+        {
+            let mut store = state.store.lock().await;
+            store.admit_job(NewJob {
+                id: job_id.to_owned(),
+                label: "terminal message sanitization".to_owned(),
+                requester_program: "test".to_owned(),
+                requester_id: "request-1".to_owned(),
+                parent_job_id: None,
+                request_schema_id: JOB_REQUEST_ID.to_owned(),
+                request_bytes: b"{}".to_vec(),
+                created_at: "2026-08-27T00:00:00Z".to_owned(),
+            })?;
+            store.create_attempt(NewAttempt {
+                id: attempt_id.to_owned(),
+                job_id: job_id.to_owned(),
+                ordinal: 1,
+                harness: "codex".to_owned(),
+                harness_version: "test".to_owned(),
+                adapter_version: "test".to_owned(),
+                created_at: "2026-08-27T00:00:01Z".to_owned(),
+            })?;
+            store.transition_attempt(
+                attempt_id,
+                StoreAttemptState::Running,
+                "2026-08-27T00:00:02Z",
+                None,
+            )?;
+        }
+        let terminal = TerminalOutcome::failed(
+            StoreAttemptState::Failed,
+            AttemptTerminalReason::ProtocolError,
+            format!(
+                "protocol\0\u{1b}[31m\n{}",
+                "é".repeat(TERMINAL_MESSAGE_BYTES)
+            ),
+        );
+
+        finish_attempt(&state, attempt_id, &terminal)
+            .await
+            .map_err(|error| error.message)?;
+
+        let stored = state
+            .store
+            .lock()
+            .await
+            .get_attempt(attempt_id)?
+            .ok_or("terminal attempt disappeared")?
+            .terminal_message
+            .ok_or("terminal message disappeared")?;
+        assert!(stored.len() <= TERMINAL_MESSAGE_BYTES);
+        assert!(!stored.chars().any(char::is_control));
+        assert!(stored.starts_with("protocol [31m é"));
         Ok(())
     }
 }

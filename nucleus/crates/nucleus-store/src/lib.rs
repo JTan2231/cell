@@ -1,8 +1,9 @@
-//! Durable storage for Nucleus runtime state and schema-bound raw records.
+//! Durable storage for Nucleus runtime state and raw harness-output records.
 //!
 //! The relational schema intentionally projects only facts Nucleus owns. Job
-//! requests, harness messages, tool arguments, tool results, and external
-//! schemas are retained as opaque bytes with SHA-256 digests.
+//! requests, tool arguments, tool results, and external schemas are retained
+//! as opaque operational data. Reporting persistence is limited to each exact
+//! JSONL record observed on harness stdout.
 
 use std::fmt;
 use std::path::Path;
@@ -15,7 +16,8 @@ use rusqlite::{
 use sha2::{Digest as _, Sha256};
 use thiserror::Error;
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION_2_COMPACTION_PENDING: i64 = 1_000_002;
 const DEFAULT_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub type Digest = [u8; 32];
@@ -27,6 +29,25 @@ pub enum StoreError {
 
     #[error("database schema version {found} is newer than supported version {supported}")]
     UnsupportedSchemaVersion { found: i64, supported: i64 },
+
+    #[error(
+        "database schema version 1 has {count} live pending tool call(s); quiesce requesters before the version 2 cutover"
+    )]
+    PendingToolCallsBlockMigration { count: u64 },
+
+    #[error("the version 2 cutover remains compaction-pending after compaction failed: {0}")]
+    PostMigrationCompaction(rusqlite::Error),
+
+    #[error(
+        "the version 2 cutover remains compaction-pending because its WAL checkpoint was busy ({log_frames} frame(s), {checkpointed_frames} checkpointed)"
+    )]
+    PostMigrationCheckpointBusy {
+        log_frames: i64,
+        checkpointed_frames: i64,
+    },
+
+    #[error("version 2 compaction succeeded but recording its completion failed: {0}")]
+    PostMigrationCompletion(rusqlite::Error),
 
     #[error("job `{0}` already exists with a different request")]
     JobConflict(String),
@@ -68,6 +89,9 @@ pub enum StoreError {
 
     #[error("attempt `{attempt_id}` does not belong to job `{job_id}`")]
     AttemptJobMismatch { job_id: String, attempt_id: String },
+
+    #[error("job `{0}` already has its version-one attempt")]
+    AttemptAlreadyExists(String),
 
     #[error("tool-call log record does not match job `{job_id}` and attempt `{attempt_id}`")]
     ToolCallLogMismatch { job_id: String, attempt_id: String },
@@ -328,27 +352,20 @@ pub struct LogSchemaRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NewLogRecord {
-    pub job_id: String,
-    pub attempt_id: Option<String>,
+pub struct NewHarnessOutputRecord {
+    pub attempt_id: String,
     pub observed_at: String,
-    pub emitted_at: Option<String>,
-    pub stream: String,
-    pub schema_id: String,
     pub payload: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LogRecord {
+pub struct HarnessOutputRecord {
     pub job_id: String,
-    pub attempt_id: Option<String>,
+    pub attempt_id: String,
+    pub harness_version: String,
     pub sequence: u64,
     pub observed_at: String,
-    pub emitted_at: Option<String>,
-    pub stream: String,
-    pub schema_id: String,
     pub payload: Vec<u8>,
-    pub payload_digest: Digest,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -406,7 +423,6 @@ pub struct PendingToolCallRecord {
     pub result_bytes: Option<Vec<u8>>,
     pub result_digest: Option<Digest>,
     pub result_is_error: Option<bool>,
-    pub result_sequence: Option<u64>,
     pub created_at: String,
     pub answered_at: Option<String>,
 }
@@ -419,10 +435,28 @@ pub struct Store {
 impl Store {
     /// Opens an existing store, creating and migrating it when necessary.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        Self::open_with_compaction(path.as_ref(), Self::compact_after_migration)
+    }
+
+    fn open_with_compaction<F>(path: &Path, compaction: F) -> Result<Self>
+    where
+        F: FnOnce(&mut Self) -> Result<()>,
+    {
         let connection = Connection::open(path)?;
+        Self::initialize(connection, compaction)
+    }
+
+    fn initialize<F>(connection: Connection, compaction: F) -> Result<Self>
+    where
+        F: FnOnce(&mut Self) -> Result<()>,
+    {
         let mut store = Self { connection };
         store.configure()?;
-        store.migrate()?;
+        let compaction_pending = store.migrate()?;
+        if compaction_pending {
+            compaction(&mut store)?;
+            store.complete_pending_compaction()?;
+        }
         Ok(store)
     }
 
@@ -435,10 +469,7 @@ impl Store {
     /// need the same constraints without filesystem state.
     pub fn open_in_memory() -> Result<Self> {
         let connection = Connection::open_in_memory()?;
-        let mut store = Self { connection };
-        store.configure()?;
-        store.migrate()?;
-        Ok(store)
+        Self::initialize(connection, Self::compact_after_migration)
     }
 
     fn configure(&self) -> Result<()> {
@@ -450,23 +481,81 @@ impl Store {
         Ok(())
     }
 
-    fn migrate(&mut self) -> Result<()> {
+    fn migrate(&mut self) -> Result<bool> {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let found = transaction.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-        if found > SCHEMA_VERSION {
+        if found > SCHEMA_VERSION && found != SCHEMA_VERSION_2_COMPACTION_PENDING {
             return Err(StoreError::UnsupportedSchemaVersion {
                 found,
                 supported: SCHEMA_VERSION,
             });
         }
-        if found == 0 {
-            transaction.execute_batch(include_str!("schema.sql"))?;
-            transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+        match found {
+            0 => {
+                transaction.execute_batch(include_str!("schema.sql"))?;
+                transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+            }
+            1 => {
+                let pending: i64 = transaction.query_row(
+                    "SELECT COUNT(*)
+                     FROM pending_tool_calls AS calls
+                     JOIN jobs ON jobs.id = calls.job_id
+                     JOIN attempts
+                       ON attempts.job_id = calls.job_id AND attempts.id = calls.attempt_id
+                     WHERE calls.state = 'pending'
+                       AND jobs.state IN ('accepted', 'running', 'waiting_on_requester')
+                       AND attempts.state IN (
+                           'pending', 'starting', 'running', 'waiting_on_requester'
+                       )",
+                    [],
+                    |row| row.get(0),
+                )?;
+                if pending != 0 {
+                    return Err(StoreError::PendingToolCallsBlockMigration {
+                        count: u64::try_from(pending).map_err(|error| {
+                            integer_conversion_store_error("pending tool-call count", error)
+                        })?,
+                    });
+                }
+                transaction.execute_batch(include_str!("migrations/v1_to_v2.sql"))?;
+                transaction.pragma_update(
+                    None,
+                    "user_version",
+                    SCHEMA_VERSION_2_COMPACTION_PENDING,
+                )?;
+            }
+            SCHEMA_VERSION | SCHEMA_VERSION_2_COMPACTION_PENDING => {}
+            _ => unreachable!("schema versions above the supported version were rejected"),
         }
         transaction.commit()?;
+        Ok(matches!(found, 1 | SCHEMA_VERSION_2_COMPACTION_PENDING))
+    }
+
+    fn compact_after_migration(&mut self) -> Result<()> {
+        self.connection
+            .execute_batch("VACUUM")
+            .map_err(StoreError::PostMigrationCompaction)?;
+        let (busy, log_frames, checkpointed_frames) = self
+            .connection
+            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get(1)?, row.get(2)?))
+            })
+            .map_err(StoreError::PostMigrationCompaction)?;
+        if busy != 0 {
+            return Err(StoreError::PostMigrationCheckpointBusy {
+                log_frames,
+                checkpointed_frames,
+            });
+        }
         Ok(())
+    }
+
+    fn complete_pending_compaction(&self) -> Result<()> {
+        self.connection
+            .pragma_update(None, "user_version", SCHEMA_VERSION)
+            .map_err(StoreError::PostMigrationCompletion)
     }
 
     pub fn admit_job(&mut self, new: NewJob) -> Result<Admission<JobRecord>> {
@@ -612,6 +701,13 @@ impl Store {
                 from: job.state.to_string(),
                 to: JobState::Accepted.to_string(),
             });
+        }
+        if transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM attempts WHERE job_id = ?1)",
+            [&new.job_id],
+            |row| row.get::<_, bool>(0),
+        )? {
+            return Err(StoreError::AttemptAlreadyExists(new.job_id));
         }
         transaction.execute(
             "INSERT INTO attempts (
@@ -845,39 +941,36 @@ impl Store {
         query_log_schema(&self.connection, id)
     }
 
-    pub fn append_log(&mut self, new: NewLogRecord) -> Result<LogRecord> {
+    pub fn append_harness_output(
+        &mut self,
+        new: NewHarnessOutputRecord,
+    ) -> Result<HarnessOutputRecord> {
         let transaction = self.immediate_transaction()?;
-        let record = append_log_in_transaction(&transaction, &new)?;
+        let record = append_harness_output_in_transaction(&transaction, &new)?;
         transaction.commit()?;
         Ok(record)
     }
 
-    /// Appends all records atomically. Sequence numbers are assigned in input
-    /// order independently for each job.
-    pub fn append_logs(&mut self, records: &[NewLogRecord]) -> Result<Vec<LogRecord>> {
-        let transaction = self.immediate_transaction()?;
-        let appended = records
-            .iter()
-            .map(|record| append_log_in_transaction(&transaction, record))
-            .collect::<Result<Vec<_>>>()?;
-        transaction.commit()?;
-        Ok(appended)
-    }
-
-    pub fn list_logs(&self, job_id: &str, after: u64, limit: usize) -> Result<Vec<LogRecord>> {
+    pub fn list_harness_outputs(
+        &self,
+        job_id: &str,
+        after: u64,
+        limit: usize,
+    ) -> Result<Vec<HarnessOutputRecord>> {
         let mut statement = self.connection.prepare(
             "SELECT
-                job_id, attempt_id, sequence, observed_at, emitted_at, stream,
-                schema_id, payload, payload_digest
-             FROM log_records
-             WHERE job_id = ?1 AND sequence > ?2
-             ORDER BY sequence
+                attempts.job_id, output.attempt_id, attempts.harness_version,
+                output.sequence, output.observed_at, output.payload
+             FROM harness_output_records AS output
+             JOIN attempts ON attempts.id = output.attempt_id
+             WHERE attempts.job_id = ?1 AND output.sequence > ?2
+             ORDER BY attempts.ordinal, output.sequence
              LIMIT ?3",
         )?;
         let records = statement
             .query_map(
                 params![job_id, u64_to_i64(after)?, usize_to_i64(limit)],
-                log_from_row,
+                harness_output_from_row,
             )?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(records)
@@ -931,14 +1024,14 @@ impl Store {
         query_toolset(&self.connection, provider, name, version)
     }
 
-    /// Atomically appends the raw harness record and creates its durable tool
+    /// Atomically appends the raw harness-output record and creates its durable tool
     /// call mailbox projection.
     pub fn record_pending_tool_call(
         &mut self,
         new: NewPendingToolCall,
-        raw_record: NewLogRecord,
+        raw_record: NewHarnessOutputRecord,
     ) -> Result<Admission<PendingToolCallRecord>> {
-        ensure_tool_call_log_matches(&new, &raw_record)?;
+        ensure_tool_call_output_matches(&new, &raw_record)?;
         let transaction = self.immediate_transaction()?;
         if let Some(existing) = query_tool_call(&transaction, &new.job_id, &new.id)? {
             if same_pending_tool_call(&existing, &new) {
@@ -950,8 +1043,14 @@ impl Store {
                 call_id: new.id,
             });
         }
-        let log = append_log_in_transaction(&transaction, &raw_record)?;
-        insert_pending_tool_call(&transaction, &new, log.sequence)?;
+        let output = append_harness_output_in_transaction(&transaction, &raw_record)?;
+        if output.job_id != new.job_id {
+            return Err(StoreError::ToolCallLogMismatch {
+                job_id: new.job_id,
+                attempt_id: output.attempt_id,
+            });
+        }
+        insert_pending_tool_call(&transaction, &new, output.sequence)?;
         let record = require_tool_call(&transaction, &new.job_id, &new.id)?;
         transaction.commit()?;
         Ok(Admission::Created(record))
@@ -1002,7 +1101,7 @@ impl Store {
                 id, job_id, attempt_id, state, tool_name, arguments_schema_id,
                 arguments_bytes, arguments_digest, request_sequence,
                 result_schema_id, result_bytes, result_digest, result_is_error,
-                result_sequence, created_at, answered_at
+                created_at, answered_at
              FROM pending_tool_calls
              WHERE job_id = ?1 AND state = 'pending' AND request_sequence > ?2
              ORDER BY request_sequence
@@ -1021,31 +1120,17 @@ impl Store {
         Ok(records)
     }
 
-    /// Atomically appends the raw requester response and marks the mailbox item
-    /// answered. Retrying the same result is idempotent and appends no duplicate
-    /// record.
-    pub fn answer_tool_call_with_log(
+    /// Marks a mailbox item answered without copying the requester result into
+    /// reporting storage. Retrying the same result is exactly idempotent.
+    pub fn answer_tool_call(
         &mut self,
         job_id: &str,
         call_id: &str,
         result: NewToolResult,
-        raw_record: NewLogRecord,
     ) -> Result<Admission<PendingToolCallRecord>> {
-        if raw_record.job_id != job_id {
-            return Err(StoreError::ToolCallLogMismatch {
-                job_id: job_id.to_owned(),
-                attempt_id: raw_record.attempt_id.unwrap_or_default(),
-            });
-        }
         let result_digest = digest(&result.result_bytes);
         let transaction = self.immediate_transaction()?;
         let current = require_tool_call(&transaction, job_id, call_id)?;
-        if raw_record.attempt_id.as_deref() != Some(current.attempt_id.as_str()) {
-            return Err(StoreError::ToolCallLogMismatch {
-                job_id: job_id.to_owned(),
-                attempt_id: current.attempt_id,
-            });
-        }
         if current.state == ToolCallState::Answered {
             if same_tool_result(&current, &result, result_digest) {
                 transaction.commit()?;
@@ -1057,39 +1142,7 @@ impl Store {
             });
         }
         ensure_tool_call_owner_nonterminal(&transaction, &current)?;
-        let log = append_log_in_transaction(&transaction, &raw_record)?;
-        update_tool_call_answer(&transaction, job_id, call_id, &result, log.sequence)?;
-        let updated = require_tool_call(&transaction, job_id, call_id)?;
-        transaction.commit()?;
-        Ok(Admission::Created(updated))
-    }
-
-    /// Marks a mailbox item answered using a raw record that was already
-    /// appended. Prefer [`Store::answer_tool_call_with_log`] when possible.
-    pub fn answer_tool_call(
-        &mut self,
-        job_id: &str,
-        call_id: &str,
-        result: NewToolResult,
-        result_sequence: u64,
-    ) -> Result<Admission<PendingToolCallRecord>> {
-        let result_digest = digest(&result.result_bytes);
-        let transaction = self.immediate_transaction()?;
-        let current = require_tool_call(&transaction, job_id, call_id)?;
-        if current.state == ToolCallState::Answered {
-            if same_tool_result(&current, &result, result_digest)
-                && current.result_sequence == Some(result_sequence)
-            {
-                transaction.commit()?;
-                return Ok(Admission::Existing(current));
-            }
-            return Err(StoreError::ToolResultConflict {
-                job_id: job_id.to_owned(),
-                call_id: call_id.to_owned(),
-            });
-        }
-        ensure_tool_call_owner_nonterminal(&transaction, &current)?;
-        update_tool_call_answer(&transaction, job_id, call_id, &result, result_sequence)?;
+        update_tool_call_answer(&transaction, job_id, call_id, &result)?;
         let updated = require_tool_call(&transaction, job_id, call_id)?;
         transaction.commit()?;
         Ok(Admission::Created(updated))
@@ -1320,71 +1373,44 @@ fn log_schema_from_row(row: &Row<'_>) -> rusqlite::Result<LogSchemaRecord> {
     })
 }
 
-fn append_log_in_transaction(
+fn append_harness_output_in_transaction(
     transaction: &Transaction<'_>,
-    new: &NewLogRecord,
-) -> Result<LogRecord> {
-    if let Some(attempt_id) = &new.attempt_id {
-        let attempt = require_attempt(transaction, attempt_id)?;
-        if attempt.job_id != new.job_id {
-            return Err(StoreError::AttemptJobMismatch {
-                job_id: new.job_id.clone(),
-                attempt_id: attempt_id.clone(),
-            });
-        }
-    }
+    new: &NewHarnessOutputRecord,
+) -> Result<HarnessOutputRecord> {
+    let attempt = require_attempt(transaction, &new.attempt_id)?;
     let sequence: i64 = transaction.query_row(
-        "UPDATE jobs
-         SET next_log_sequence = next_log_sequence + 1
-         WHERE id = ?1
-         RETURNING next_log_sequence - 1",
-        [&new.job_id],
+        "SELECT COALESCE(MAX(sequence), 0) + 1
+         FROM harness_output_records
+         WHERE attempt_id = ?1",
+        [&new.attempt_id],
         |row| row.get(0),
     )?;
-    let payload_digest = digest(&new.payload);
     transaction.execute(
-        "INSERT INTO log_records (
-            job_id, attempt_id, sequence, observed_at, emitted_at, stream,
-            schema_id, payload, payload_digest
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![
-            new.job_id,
-            new.attempt_id,
-            sequence,
-            new.observed_at,
-            new.emitted_at,
-            new.stream,
-            new.schema_id,
-            new.payload,
-            payload_digest.as_slice(),
-        ],
+        "INSERT INTO harness_output_records (
+            attempt_id, sequence, observed_at, payload
+         ) VALUES (?1, ?2, ?3, ?4)",
+        params![new.attempt_id, sequence, new.observed_at, new.payload,],
     )?;
-    Ok(LogRecord {
-        job_id: new.job_id.clone(),
+    Ok(HarnessOutputRecord {
+        job_id: attempt.job_id,
         attempt_id: new.attempt_id.clone(),
+        harness_version: attempt.harness_version,
         sequence: u64::try_from(sequence)
-            .map_err(|error| integer_conversion_store_error("log sequence", error))?,
+            .map_err(|error| integer_conversion_store_error("output sequence", error))?,
         observed_at: new.observed_at.clone(),
-        emitted_at: new.emitted_at.clone(),
-        stream: new.stream.clone(),
-        schema_id: new.schema_id.clone(),
         payload: new.payload.clone(),
-        payload_digest,
     })
 }
 
-fn log_from_row(row: &Row<'_>) -> rusqlite::Result<LogRecord> {
-    let sequence: i64 = row.get(2)?;
-    Ok(LogRecord {
+fn harness_output_from_row(row: &Row<'_>) -> rusqlite::Result<HarnessOutputRecord> {
+    let sequence: i64 = row.get(3)?;
+    Ok(HarnessOutputRecord {
         job_id: row.get(0)?,
         attempt_id: row.get(1)?,
-        sequence: u64::try_from(sequence).map_err(|error| integer_conversion_error(2, error))?,
-        observed_at: row.get(3)?,
-        emitted_at: row.get(4)?,
-        stream: row.get(5)?,
-        schema_id: row.get(6)?,
-        payload: row.get(7)?,
-        payload_digest: digest_from_row(row, 8)?,
+        harness_version: row.get(2)?,
+        sequence: u64::try_from(sequence).map_err(|error| integer_conversion_error(3, error))?,
+        observed_at: row.get(4)?,
+        payload: row.get(5)?,
     })
 }
 
@@ -1421,8 +1447,11 @@ fn toolset_from_row(row: &Row<'_>) -> rusqlite::Result<ToolsetRecord> {
     })
 }
 
-fn ensure_tool_call_log_matches(new: &NewPendingToolCall, log: &NewLogRecord) -> Result<()> {
-    if log.job_id == new.job_id && log.attempt_id.as_deref() == Some(new.attempt_id.as_str()) {
+fn ensure_tool_call_output_matches(
+    new: &NewPendingToolCall,
+    output: &NewHarnessOutputRecord,
+) -> Result<()> {
+    if output.attempt_id == new.attempt_id {
         Ok(())
     } else {
         Err(StoreError::ToolCallLogMismatch {
@@ -1485,7 +1514,6 @@ fn update_tool_call_answer(
     job_id: &str,
     call_id: &str,
     result: &NewToolResult,
-    result_sequence: u64,
 ) -> Result<()> {
     let result_digest = digest(&result.result_bytes);
     transaction.execute(
@@ -1495,8 +1523,7 @@ fn update_tool_call_answer(
              result_bytes = ?4,
              result_digest = ?5,
              result_is_error = ?6,
-             result_sequence = ?7,
-             answered_at = ?8
+             answered_at = ?7
          WHERE job_id = ?1 AND id = ?2 AND state = 'pending'",
         params![
             job_id,
@@ -1505,7 +1532,6 @@ fn update_tool_call_answer(
             result.result_bytes,
             result_digest.as_slice(),
             result.is_error,
-            u64_to_i64(result_sequence)?,
             result.answered_at,
         ],
     )?;
@@ -1523,7 +1549,7 @@ fn query_tool_call(
                 id, job_id, attempt_id, state, tool_name, arguments_schema_id,
                 arguments_bytes, arguments_digest, request_sequence,
                 result_schema_id, result_bytes, result_digest, result_is_error,
-                result_sequence, created_at, answered_at
+                created_at, answered_at
              FROM pending_tool_calls
              WHERE job_id = ?1 AND id = ?2",
             params![job_id, call_id],
@@ -1547,7 +1573,6 @@ fn require_tool_call(
 fn tool_call_from_row(row: &Row<'_>) -> rusqlite::Result<PendingToolCallRecord> {
     let request_sequence: i64 = row.get(8)?;
     let result_digest = optional_digest_from_row(row, 11)?;
-    let result_sequence: Option<i64> = row.get(13)?;
     Ok(PendingToolCallRecord {
         id: row.get(0)?,
         job_id: row.get(1)?,
@@ -1563,12 +1588,8 @@ fn tool_call_from_row(row: &Row<'_>) -> rusqlite::Result<PendingToolCallRecord> 
         result_bytes: row.get(10)?,
         result_digest,
         result_is_error: row.get(12)?,
-        result_sequence: result_sequence
-            .map(u64::try_from)
-            .transpose()
-            .map_err(|error| integer_conversion_error(13, error))?,
-        created_at: row.get(14)?,
-        answered_at: row.get(15)?,
+        created_at: row.get(13)?,
+        answered_at: row.get(14)?,
     })
 }
 
@@ -1644,6 +1665,7 @@ fn usize_to_i64(value: usize) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     const NOW: &str = "2026-08-26T12:00:00Z";
     const LATER: &str = "2026-08-26T12:01:00Z";
@@ -1709,6 +1731,117 @@ mod tests {
         store
     }
 
+    #[allow(clippy::too_many_lines)]
+    fn create_v1_fixture(path: &Path, pending: bool, payload_bytes: usize) -> Result<()> {
+        let connection = Connection::open(path)?;
+        connection.execute_batch(
+            "CREATE TABLE log_schemas (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, version TEXT NOT NULL,
+                media_type TEXT NOT NULL, producer TEXT NOT NULL, producer_version TEXT,
+                schema_bytes BLOB NOT NULL, schema_digest BLOB NOT NULL, created_at TEXT NOT NULL
+             );
+             CREATE TABLE jobs (
+                id TEXT PRIMARY KEY, label TEXT NOT NULL, requester_program TEXT NOT NULL,
+                requester_id TEXT NOT NULL, parent_job_id TEXT, request_schema_id TEXT NOT NULL,
+                request_bytes BLOB NOT NULL, request_digest BLOB NOT NULL, state TEXT NOT NULL,
+                current_attempt_id TEXT, cancellation_requested_at TEXT, created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL, completed_at TEXT, terminal_reason TEXT,
+                next_log_sequence INTEGER NOT NULL DEFAULT 1
+             );
+             CREATE TABLE attempts (
+                id TEXT PRIMARY KEY, job_id TEXT NOT NULL, ordinal INTEGER NOT NULL,
+                harness TEXT NOT NULL, harness_version TEXT NOT NULL,
+                adapter_version TEXT NOT NULL, state TEXT NOT NULL, process_id INTEGER,
+                process_group_id INTEGER, created_at TEXT NOT NULL, started_at TEXT,
+                completed_at TEXT, terminal_reason TEXT, terminal_message TEXT,
+                UNIQUE(job_id, ordinal), UNIQUE(job_id, id)
+             );
+             CREATE INDEX attempts_by_job ON attempts(job_id, ordinal);
+             CREATE TABLE toolsets (
+                provider TEXT NOT NULL, name TEXT NOT NULL, version INTEGER NOT NULL,
+                definitions_schema_id TEXT NOT NULL, definitions_bytes BLOB NOT NULL,
+                definitions_digest BLOB NOT NULL, created_at TEXT NOT NULL,
+                PRIMARY KEY(provider, name, version)
+             );
+             CREATE TABLE log_records (
+                job_id TEXT NOT NULL, attempt_id TEXT, sequence INTEGER NOT NULL,
+                observed_at TEXT NOT NULL, emitted_at TEXT, stream TEXT NOT NULL,
+                schema_id TEXT NOT NULL, payload BLOB NOT NULL, payload_digest BLOB NOT NULL,
+                PRIMARY KEY(job_id, sequence)
+             );
+             CREATE TABLE pending_tool_calls (
+                job_id TEXT NOT NULL, id TEXT NOT NULL, attempt_id TEXT NOT NULL,
+                state TEXT NOT NULL, tool_name TEXT NOT NULL, arguments_schema_id TEXT NOT NULL,
+                arguments_bytes BLOB NOT NULL, arguments_digest BLOB NOT NULL,
+                request_sequence INTEGER NOT NULL, result_schema_id TEXT, result_bytes BLOB,
+                result_digest BLOB, result_is_error INTEGER, result_sequence INTEGER,
+                created_at TEXT NOT NULL, answered_at TEXT, PRIMARY KEY(job_id, id)
+             );
+             CREATE INDEX pending_tool_calls_mailbox
+                ON pending_tool_calls(job_id, state, request_sequence);",
+        )?;
+        let zero_digest = [0_u8; 32];
+        for schema_id in ["request.v1", "tool.arguments.v1", "tool.result.v1"] {
+            connection.execute(
+                "INSERT INTO log_schemas VALUES (?1, ?1, '1', 'application/json',
+                    'test', NULL, x'7b7d', ?2, ?3)",
+                params![schema_id, zero_digest.as_slice(), NOW],
+            )?;
+        }
+        let state = if pending {
+            "waiting_on_requester"
+        } else {
+            "completed"
+        };
+        connection.execute(
+            "INSERT INTO jobs VALUES (
+                'job-v1', 'old job', 'test', 'request-1', NULL, 'request.v1', x'7b7d', ?1,
+                ?2, 'attempt-v1', NULL, ?3, ?3, ?3, 'completed', 3
+             )",
+            params![zero_digest.as_slice(), state, NOW],
+        )?;
+        connection.execute(
+            "INSERT INTO attempts VALUES (
+                'attempt-v1', 'job-v1', 1, 'codex', '1.2.3', '1', ?1,
+                NULL, NULL, ?2, ?2, ?2, 'completed', NULL
+             )",
+            params![state, NOW],
+        )?;
+        connection.execute(
+            "INSERT INTO toolsets VALUES (
+                'test', 'tools', 1, 'tool.arguments.v1', x'5b5d', ?1, ?2
+             )",
+            params![zero_digest.as_slice(), NOW],
+        )?;
+        connection.execute(
+            "INSERT INTO log_records VALUES (
+                'job-v1', 'attempt-v1', 1, ?1, NULL, 'harness.output',
+                'tool.arguments.v1', zeroblob(?2), ?3
+             )",
+            params![NOW, usize_to_i64(payload_bytes), zero_digest.as_slice()],
+        )?;
+        if pending {
+            connection.execute(
+                "INSERT INTO pending_tool_calls VALUES (
+                    'job-v1', 'call-v1', 'attempt-v1', 'pending', 'tool',
+                    'tool.arguments.v1', '{}', ?1, 1, NULL, NULL, NULL, NULL, NULL, ?2, NULL
+                 )",
+                params![zero_digest.as_slice(), NOW],
+            )?;
+        } else {
+            connection.execute(
+                "INSERT INTO pending_tool_calls VALUES (
+                    'job-v1', 'call-v1', 'attempt-v1', 'answered', 'tool',
+                    'tool.arguments.v1', '{}', ?1, 1, 'tool.result.v1', '{}', ?1,
+                    0, 2, ?2, ?2
+                 )",
+                params![zero_digest.as_slice(), NOW],
+            )?;
+        }
+        connection.pragma_update(None, "user_version", 1)?;
+        Ok(())
+    }
+
     #[test]
     fn job_admission_is_exactly_idempotent() {
         let mut store = prepared_store();
@@ -1742,26 +1875,171 @@ mod tests {
     }
 
     #[test]
-    fn raw_log_bytes_are_opaque_and_schema_bound() {
+    fn version_one_cutover_discards_history_preserves_authority_and_compacts() -> Result<()> {
+        let directory = tempdir().map_err(|error| {
+            StoreError::Sql(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+        })?;
+        let path = directory.path().join("nucleus.db");
+        create_v1_fixture(&path, false, 4 * 1024 * 1024)?;
+        let size_before = std::fs::metadata(&path)
+            .map_err(|error| {
+                StoreError::Sql(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+            })?
+            .len();
+
+        let store = Store::open(&path)?;
+
+        let size_after = std::fs::metadata(&path)
+            .map_err(|error| {
+                StoreError::Sql(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+            })?
+            .len();
+        assert!(size_after < size_before / 2);
+        let wal_path = std::path::PathBuf::from(format!("{}-wal", path.to_string_lossy()));
+        let wal_size = std::fs::metadata(wal_path).map_or(0, |metadata| metadata.len());
+        let page_size: i64 = store
+            .connection
+            .query_row("PRAGMA page_size", [], |row| row.get(0))?;
+        let page_size = u64::try_from(page_size)
+            .map_err(|error| integer_conversion_store_error("page size", error))?;
+        assert!(wal_size <= page_size + 128);
+
+        assert!(store.get_job("job-v1")?.is_some());
+        assert!(store.get_attempt("attempt-v1")?.is_some());
+        assert!(store.get_toolset("test", "tools", 1)?.is_some());
+        assert!(store.get_tool_call("job-v1", "call-v1")?.is_none());
+        assert!(store.list_harness_outputs("job-v1", 0, 100)?.is_empty());
+        let version: i64 = store
+            .connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        assert_eq!(version, SCHEMA_VERSION);
+        Ok(())
+    }
+
+    #[test]
+    fn failed_compaction_remains_pending_and_retries_on_reopen() -> Result<()> {
+        let directory = tempdir().map_err(|error| {
+            StoreError::Sql(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+        })?;
+        let path = directory.path().join("nucleus.db");
+        create_v1_fixture(&path, false, 4 * 1024 * 1024)?;
+        let size_before = std::fs::metadata(&path)
+            .map_err(|error| {
+                StoreError::Sql(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+            })?
+            .len();
+
+        let first_open = Store::open_with_compaction(&path, |_| {
+            Err(StoreError::PostMigrationCompaction(
+                rusqlite::Error::InvalidQuery,
+            ))
+        });
+        assert!(matches!(
+            first_open,
+            Err(StoreError::PostMigrationCompaction(
+                rusqlite::Error::InvalidQuery
+            ))
+        ));
+
+        let connection = Connection::open(&path)?;
+        let pending_version: i64 =
+            connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        assert_eq!(pending_version, SCHEMA_VERSION_2_COMPACTION_PENDING);
+        drop(connection);
+
+        let store = Store::open(&path)?;
+        let completed_version: i64 =
+            store
+                .connection
+                .query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        assert_eq!(completed_version, SCHEMA_VERSION);
+        let size_after = std::fs::metadata(&path)
+            .map_err(|error| {
+                StoreError::Sql(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+            })?
+            .len();
+        assert!(size_after < size_before / 2);
+        assert!(store.get_job("job-v1")?.is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn version_one_cutover_refuses_a_live_mailbox() -> Result<()> {
+        let directory = tempdir().map_err(|error| {
+            StoreError::Sql(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+        })?;
+        let path = directory.path().join("nucleus.db");
+        create_v1_fixture(&path, true, 1)?;
+
+        assert!(matches!(
+            Store::open(&path),
+            Err(StoreError::PendingToolCallsBlockMigration { count: 1 })
+        ));
+        let connection = Connection::open(path)?;
+        let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        assert_eq!(version, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn version_one_cutover_discards_a_terminal_owners_stale_pending_call() -> Result<()> {
+        let directory = tempdir().map_err(|error| {
+            StoreError::Sql(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+        })?;
+        let path = directory.path().join("nucleus.db");
+        create_v1_fixture(&path, true, 1)?;
+        let connection = Connection::open(&path)?;
+        connection.execute("UPDATE jobs SET state = 'completed'", [])?;
+        connection.execute("UPDATE attempts SET state = 'completed'", [])?;
+        drop(connection);
+
+        let store = Store::open(&path)?;
+
+        assert_eq!(
+            store
+                .connection
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))?,
+            SCHEMA_VERSION
+        );
+        assert!(store.get_tool_call("job-v1", "call-v1")?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn harness_output_ledger_is_exact_and_minimal() {
         let mut store = prepared_store();
         must_succeed(store.admit_job(job("job-1", "run-1")));
+        let attempt = must_succeed(store.create_attempt(attempt("job-1")));
         let raw = vec![b'{', b' ', 0xff, b'\n'];
 
-        let appended = must_succeed(store.append_log(NewLogRecord {
-            job_id: "job-1".to_owned(),
-            attempt_id: None,
+        let appended = must_succeed(store.append_harness_output(NewHarnessOutputRecord {
+            attempt_id: attempt.id,
             observed_at: NOW.to_owned(),
-            emitted_at: None,
-            stream: "harness.output".to_owned(),
-            schema_id: "harness.output.v1".to_owned(),
             payload: raw.clone(),
         }));
 
         assert_eq!(appended.sequence, 1);
-        assert_eq!(appended.schema_id, "harness.output.v1");
+        assert_eq!(appended.job_id, "job-1");
+        assert_eq!(appended.harness_version, "1.0.0");
         assert_eq!(appended.payload, raw);
-        assert_eq!(appended.payload_digest, digest(&raw));
-        assert_eq!(must_succeed(store.list_logs("job-1", 0, 10)), [appended]);
+        assert_eq!(
+            must_succeed(store.list_harness_outputs("job-1", 0, 10)),
+            [appended]
+        );
+
+        let columns = must_succeed((|| -> Result<Vec<String>> {
+            let mut statement = store
+                .connection
+                .prepare("PRAGMA table_info(harness_output_records)")?;
+            let columns = statement
+                .query_map([], |row| row.get(1))?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(columns)
+        })());
+        assert_eq!(
+            columns,
+            ["attempt_id", "sequence", "observed_at", "payload"]
+        );
     }
 
     #[test]
@@ -1785,7 +2063,7 @@ mod tests {
     }
 
     #[test]
-    fn tool_call_mailbox_and_raw_logs_commit_together() {
+    fn tool_call_mailbox_and_output_atom_commit_together() {
         let mut store = prepared_store();
         must_succeed(store.admit_job(job("job-1", "run-1")));
         let created_attempt = must_succeed(store.create_attempt(attempt("job-1")));
@@ -1805,13 +2083,9 @@ mod tests {
             arguments_bytes: b" {\"draft\":7}\n".to_vec(),
             created_at: NOW.to_owned(),
         };
-        let call_log = NewLogRecord {
-            job_id: "job-1".to_owned(),
-            attempt_id: Some(created_attempt.id.clone()),
+        let call_log = NewHarnessOutputRecord {
+            attempt_id: created_attempt.id.clone(),
             observed_at: NOW.to_owned(),
-            emitted_at: None,
-            stream: "harness.output".to_owned(),
-            schema_id: "harness.output.v1".to_owned(),
             payload: b"{\"method\":\"item/tool/call\"}\n".to_vec(),
         };
         let pending = must_succeed(store.record_pending_tool_call(call.clone(), call_log));
@@ -1830,33 +2104,20 @@ mod tests {
             is_error: false,
             answered_at: NOW.to_owned(),
         };
-        let result_log = NewLogRecord {
-            job_id: "job-1".to_owned(),
-            attempt_id: Some(created_attempt.id),
-            observed_at: NOW.to_owned(),
-            emitted_at: None,
-            stream: "requester".to_owned(),
-            schema_id: "tool.result.v1".to_owned(),
-            payload: result.result_bytes.clone(),
-        };
-        let answered = must_succeed(store.answer_tool_call_with_log(
-            "job-1",
-            "call-1",
-            result.clone(),
-            result_log.clone(),
-        ));
+        let answered = must_succeed(store.answer_tool_call("job-1", "call-1", result.clone()));
         assert!(answered.was_created());
         let answered = answered.into_inner();
         assert_eq!(answered.state, ToolCallState::Answered);
-        assert_eq!(answered.result_sequence, Some(2));
         assert_eq!(answered.result_bytes, Some(result.result_bytes.clone()));
         assert_eq!(answered.result_is_error, Some(false));
         assert!(must_succeed(store.list_pending_tool_calls("job-1", 0, 10)).is_empty());
 
-        let retry =
-            must_succeed(store.answer_tool_call_with_log("job-1", "call-1", result, result_log));
+        let retry = must_succeed(store.answer_tool_call("job-1", "call-1", result));
         assert!(!retry.was_created());
-        assert_eq!(must_succeed(store.list_logs("job-1", 0, 10)).len(), 2);
+        assert_eq!(
+            must_succeed(store.list_harness_outputs("job-1", 0, 10)).len(),
+            1
+        );
     }
 
     #[test]
@@ -1876,13 +2137,9 @@ mod tests {
         };
         must_succeed(store.record_pending_tool_call(
             call,
-            NewLogRecord {
-                job_id: "job-1".to_owned(),
-                attempt_id: Some(attempt.id.clone()),
+            NewHarnessOutputRecord {
+                attempt_id: attempt.id.clone(),
                 observed_at: NOW.to_owned(),
-                emitted_at: None,
-                stream: "harness.output".to_owned(),
-                schema_id: "harness.output.v1".to_owned(),
                 payload: b"tool call".to_vec(),
             },
         ));
@@ -1900,27 +2157,14 @@ mod tests {
             LATER,
             Some("requested"),
         ));
-        let logs_before = must_succeed(store.list_logs("job-1", 0, 10));
+        let outputs_before = must_succeed(store.list_harness_outputs("job-1", 0, 10));
         let result = NewToolResult {
             schema_id: "tool.result.v1".to_owned(),
             result_bytes: br#"{"ok":true}"#.to_vec(),
             is_error: false,
             answered_at: LATER.to_owned(),
         };
-        let answer = store.answer_tool_call_with_log(
-            "job-1",
-            "call-1",
-            result.clone(),
-            NewLogRecord {
-                job_id: "job-1".to_owned(),
-                attempt_id: Some(attempt.id.clone()),
-                observed_at: LATER.to_owned(),
-                emitted_at: None,
-                stream: "requester".to_owned(),
-                schema_id: result.schema_id,
-                payload: result.result_bytes,
-            },
-        );
+        let answer = store.answer_tool_call("job-1", "call-1", result);
 
         assert!(matches!(
             answer,
@@ -1933,11 +2177,14 @@ mod tests {
         let stored = must_exist(must_succeed(store.get_tool_call("job-1", "call-1")));
         assert_eq!(stored.state, ToolCallState::Pending);
         assert!(stored.result_bytes.is_none());
-        assert_eq!(must_succeed(store.list_logs("job-1", 0, 10)), logs_before);
+        assert_eq!(
+            must_succeed(store.list_harness_outputs("job-1", 0, 10)),
+            outputs_before
+        );
     }
 
     #[test]
-    fn lifecycle_projection_and_recovery_are_explicit() {
+    fn operational_state_and_recovery_fields_are_explicit() {
         let mut store = prepared_store();
         must_succeed(store.admit_job(job("job-1", "run-1")));
         let attempt = must_succeed(store.create_attempt(attempt("job-1")));
@@ -1963,5 +2210,20 @@ mod tests {
         assert_eq!(job.cancellation_requested_at.as_deref(), Some(NOW));
         assert_eq!(job.updated_at, LATER);
         assert!(must_succeed(store.running_attempts()).is_empty());
+    }
+
+    #[test]
+    fn version_one_job_accepts_exactly_one_attempt() {
+        let mut store = prepared_store();
+        must_succeed(store.admit_job(job("job-1", "run-1")));
+        must_succeed(store.create_attempt(attempt("job-1")));
+
+        let mut second = attempt("job-1");
+        second.id = "attempt-job-1-second".to_owned();
+        second.ordinal = 2;
+        assert!(matches!(
+            store.create_attempt(second),
+            Err(StoreError::AttemptAlreadyExists(job_id)) if job_id == "job-1"
+        ));
     }
 }

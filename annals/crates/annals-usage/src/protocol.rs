@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -111,15 +111,6 @@ pub(crate) struct AccountSnapshot {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ProtocolEvent {
-    ThreadStarted {
-        thread_id: String,
-        model: Option<String>,
-    },
-    TurnStarted {
-        thread_id: String,
-        turn_id: String,
-        effort: Option<String>,
-    },
     TokenUsageUpdated {
         thread_id: String,
         turn_id: String,
@@ -131,9 +122,6 @@ pub(crate) enum ProtocolEvent {
         response_id: String,
         usage: Option<TokenUsageBreakdown>,
     },
-    RateLimitsUpdated {
-        rate_limits: Box<RateLimitSnapshot>,
-    },
     TurnCompleted {
         thread_id: String,
         turn_id: String,
@@ -141,140 +129,50 @@ pub(crate) enum ProtocolEvent {
     },
 }
 
-#[derive(Debug)]
-enum PendingRequest {
-    ThreadStart {
-        id: Value,
-        model: Option<String>,
-    },
-    TurnStart {
-        id: Value,
-        thread_id: String,
-        effort: Option<String>,
-    },
-}
-
-impl PendingRequest {
-    fn id(&self) -> &Value {
-        match self {
-            Self::ThreadStart { id, .. } | Self::TurnStart { id, .. } => id,
+/// Decode one exact Codex output record retained by Nucleus.
+pub(crate) fn decode_output(message: &Value) -> Option<ProtocolEvent> {
+    match message.get("method").and_then(Value::as_str) {
+        Some("thread/tokenUsage/updated") => {
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Params {
+                thread_id: String,
+                turn_id: String,
+                token_usage: ThreadTokenUsage,
+            }
+            parse_params::<Params>(message).map(|params| ProtocolEvent::TokenUsageUpdated {
+                thread_id: params.thread_id,
+                turn_id: params.turn_id,
+                usage: params.token_usage,
+            })
         }
-    }
-}
-
-/// Stateful decoder for the exact Codex input/output records retained by Nucleus.
-#[derive(Debug, Default)]
-pub(crate) struct ProtocolState {
-    pending_requests: VecDeque<PendingRequest>,
-}
-
-impl ProtocolState {
-    pub(crate) fn observe_client_message(&mut self, message: &Value) {
-        let Some(id) = message.get("id").cloned() else {
-            return;
-        };
-        let pending = match message.get("method").and_then(Value::as_str) {
-            Some("thread/start") => Some(PendingRequest::ThreadStart {
-                id,
-                model: string_at(message, "/params/model"),
-            }),
-            Some("turn/start") => {
-                string_at(message, "/params/threadId").map(|thread_id| PendingRequest::TurnStart {
-                    id,
-                    thread_id,
-                    effort: string_at(message, "/params/effort"),
-                })
+        Some("rawResponse/completed") => {
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Params {
+                thread_id: String,
+                turn_id: String,
+                response_id: String,
+                usage: Option<TokenUsageBreakdown>,
             }
-            _ => None,
-        };
-        if let Some(pending) = pending {
-            self.pending_requests
-                .retain(|request| request.id() != pending.id());
-            self.pending_requests.push_back(pending);
+            parse_params::<Params>(message).map(|params| ProtocolEvent::RawResponseCompleted {
+                thread_id: params.thread_id,
+                turn_id: params.turn_id,
+                response_id: params.response_id,
+                usage: params.usage,
+            })
         }
-    }
-
-    pub(crate) fn observe_server_message(&mut self, message: &Value) -> Option<ProtocolEvent> {
-        if let Some(id) = message.get("id")
-            && let Some(index) = self
-                .pending_requests
-                .iter()
-                .position(|request| request.id() == id)
-        {
-            let pending = self.pending_requests.remove(index)?;
-            if message.get("error").is_some() {
-                return None;
-            }
-            return match pending {
-                PendingRequest::ThreadStart { model, .. } => {
-                    string_at(message, "/result/thread/id")
-                        .map(|thread_id| ProtocolEvent::ThreadStarted { thread_id, model })
-                }
-                PendingRequest::TurnStart {
-                    thread_id, effort, ..
-                } => string_at(message, "/result/turn/id").map(|turn_id| {
-                    ProtocolEvent::TurnStarted {
-                        thread_id,
-                        turn_id,
-                        effort,
-                    }
-                }),
-            };
+        Some("turn/completed") => {
+            let thread_id = string_at(message, "/params/threadId")?;
+            let turn_id = string_at(message, "/params/turn/id")?;
+            let status = string_at(message, "/params/turn/status")?;
+            Some(ProtocolEvent::TurnCompleted {
+                thread_id,
+                turn_id,
+                status,
+            })
         }
-
-        match message.get("method").and_then(Value::as_str) {
-            Some("thread/tokenUsage/updated") => {
-                #[derive(Deserialize)]
-                #[serde(rename_all = "camelCase")]
-                struct Params {
-                    thread_id: String,
-                    turn_id: String,
-                    token_usage: ThreadTokenUsage,
-                }
-                parse_params::<Params>(message).map(|params| ProtocolEvent::TokenUsageUpdated {
-                    thread_id: params.thread_id,
-                    turn_id: params.turn_id,
-                    usage: params.token_usage,
-                })
-            }
-            Some("rawResponse/completed") => {
-                #[derive(Deserialize)]
-                #[serde(rename_all = "camelCase")]
-                struct Params {
-                    thread_id: String,
-                    turn_id: String,
-                    response_id: String,
-                    usage: Option<TokenUsageBreakdown>,
-                }
-                parse_params::<Params>(message).map(|params| ProtocolEvent::RawResponseCompleted {
-                    thread_id: params.thread_id,
-                    turn_id: params.turn_id,
-                    response_id: params.response_id,
-                    usage: params.usage,
-                })
-            }
-            Some("account/rateLimits/updated") => {
-                #[derive(Deserialize)]
-                #[serde(rename_all = "camelCase")]
-                struct Params {
-                    rate_limits: RateLimitSnapshot,
-                }
-                parse_params::<Params>(message).map(|params| ProtocolEvent::RateLimitsUpdated {
-                    rate_limits: Box::new(params.rate_limits),
-                })
-            }
-            Some("turn/completed") => {
-                let thread_id = string_at(message, "/params/threadId")?;
-                let turn_id = string_at(message, "/params/turn/id")?;
-                let status = string_at(message, "/params/turn/status")?;
-                Some(ProtocolEvent::TurnCompleted {
-                    thread_id,
-                    turn_id,
-                    status,
-                })
-            }
-            _ => None,
-        }
+        _ => None,
     }
 }
 
@@ -290,22 +188,20 @@ fn string_at(value: &Value, pointer: &str) -> Option<String> {
 mod tests {
     use serde_json::json;
 
-    use super::{ProtocolEvent, ProtocolState};
+    use super::{ProtocolEvent, decode_output};
 
     #[test]
-    fn decoder_correlates_thread_and_turn_responses() {
-        let mut state = ProtocolState::default();
-        state.observe_client_message(&json!({
-            "id": 2,
-            "method": "thread/start",
-            "params": { "model": "gpt-5.6-sol" }
-        }));
+    fn decoder_reads_output_notifications_without_harness_input() {
         assert!(matches!(
-            state.observe_server_message(&json!({
-                "id": 2,
-                "result": { "thread": { "id": "thread-1" } }
+            decode_output(&json!({
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turn": { "id": "turn-1", "status": "completed" }
+                }
             })),
-            Some(ProtocolEvent::ThreadStarted { thread_id, .. }) if thread_id == "thread-1"
+            Some(ProtocolEvent::TurnCompleted { thread_id, turn_id, status })
+                if thread_id == "thread-1" && turn_id == "turn-1" && status == "completed"
         ));
     }
 }

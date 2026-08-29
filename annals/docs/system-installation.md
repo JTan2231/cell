@@ -8,9 +8,10 @@ paused activation still registers settled files and leaves them queued. Annals
 is not a resident daemon, contains no internal scheduler, and does not require
 a separate database server.
 
-The default installation also runs liaison traffic through the separate
-`annals-usage` CLI. Its companion SQLite ledger records token consumption and
-account-limit snapshots without becoming part of the Annals library or corpus.
+The default installation connects both Annals and the separate `annals-usage`
+CLI to Nucleus. Annals Usage calculates token consumption and reads account
+limits live; it stores no companion database and never becomes part of the
+Annals library or corpus.
 
 ## Operational model
 
@@ -255,41 +256,27 @@ settle_seconds = 60
 
 [liaison]
 quality = "high"
-codex = "/usr/local/bin/annals-usage"
+nucleus_socket = "/var/lib/annals/Library/Application Support/Nucleus/nucleus.sock"
 # model = "gpt-5.6-sol"
 ```
 
-The proxy has its own companion configuration. The packaged Linux example is
+The companion has its own configuration. The packaged Linux example is
 [`packaging/systemd/usage.toml`](../packaging/systemd/usage.toml), installed as
 `/etc/annals/usage.toml`; macOS keeps `usage.toml` beside the Annals config:
 
 ```toml
-codex = "/usr/local/bin/codex"
-database = "/var/lib/annals/usage.db"
+nucleus = "/usr/local/bin/nucleus"
+nucleus_socket = "/var/lib/annals/Library/Application Support/Nucleus/nucleus.sock"
 library = "/var/lib/annals/annals.db"
 spool = "/var/spool/annals"
-codex_home = "/var/lib/annals/codex-home"
 ```
 
-Here `codex` means the real Codex executable, while `[liaison].codex` in the
-Annals config means the proxy. The two paths must not point to the same
-executable.
-
-`annals-usage` owns one exclusive credential lease for the `codex_home` named
-by this configuration and gives that persistent path to every real-Codex child.
-Codex login and refresh update the same state-local `auth.json` in place; Annals
-does not copy credentials into a temporary liaison home. Keep `codex_home`
-private, and give its private `config.toml` exactly one setting:
-
-```toml
-cli_auth_credentials_store = "file"
-```
-
-Additional Codex configuration is rejected so persistent authentication does
-not import ambient tools or providers into the constrained liaison. A custom
-`[liaison].codex` bypasses this wrapper-owned lease and must serialize its own
-credentials, although Annals still performs the generic authenticated account
-preflight through that executable before queued dispatch.
+Both configurations must select the same reachable Nucleus socket. The
+`nucleus` executable in `usage.toml` is used only when `annals-usage login`
+delegates to `nucleus auth login`; report, budget, doctor, and examinations use
+the socket. Nucleus owns the Codex executable, persistent credential home, and
+exclusive authentication lease. Annals and Annals Usage do not read or set
+`CODEX_HOME`.
 
 The core executable selects a configuration only from `--config`, then a
 nonempty `ANNALS_CONFIG`. The library resolves from `--library`, then a
@@ -299,7 +286,7 @@ directory or fall back to `./annals.db`.
 
 The macOS frontend described below supplies its per-user config path when no
 explicit config or library selection is present. The Linux units continue to
-pass `/etc/annals/config.toml` explicitly and select the proxy config with
+pass `/etc/annals/config.toml` explicitly and select the companion config with
 `ANNALS_USAGE_CONFIG=/etc/annals/usage.toml`. Inbox-run options override their
 corresponding config values. A relative `library` or `inbox.root` value is
 resolved from the config file's directory. A manual Linux run can therefore
@@ -316,9 +303,8 @@ Unknown config keys are rejected.
 The usage config resolves from an explicit `annals-usage --config`, then
 `ANNALS_USAGE_CONFIG`, then `usage.toml` beside `ANNALS_CONFIG`, then the macOS
 user-state default. Its relative paths are resolved from its own directory and
-unknown keys are rejected. The Annals library and `usage.db` are ordinary
-state for the same installation and service user; no separate telemetry
-service or database account is involved. See [Consumption
+unknown keys are rejected. It has no `database` key: reports are calculated
+from live Nucleus output plus the Annals library and spool. See [Consumption
 telemetry](telemetry.md) for the reporting and accounting contract.
 
 Use `model` only when an exact model override is wanted. Otherwise `quality`
@@ -341,15 +327,13 @@ The packaged units use this layout:
 ```text
 /usr/local/bin/annals
 /usr/local/bin/annals-usage
+/usr/local/bin/nucleus
 /etc/annals/config.toml
 /etc/annals/usage.toml
 /var/lib/annals/
 |-- annals.db
-|-- usage.db
-`-- codex-home/
-    |-- config.toml
-    |-- auth.json
-    `-- .annals-auth.lock
+`-- Library/Application Support/Nucleus/
+    `-- nucleus.sock          # supplied by the separately deployed Nucleus service
 /var/spool/annals/
 |-- .queue.json
 |-- .run.lock
@@ -366,7 +350,11 @@ The packaged units use this layout:
 ```
 
 The state directory must be writable by the service account because SQLite may
-create WAL and shared-memory sidecars next to both databases.
+create WAL and shared-memory sidecars next to the Annals library. The Nucleus
+socket must be reachable by the `annals` service account; deploy and validate
+that service separately before enabling the inbox timer. The packaged paths
+assume Nucleus also runs as `annals` with `HOME=/var/lib/annals`, so its
+standard socket and the credential home selected by delegated login agree.
 
 Build Annals, create a non-login service account, and install the files:
 
@@ -381,8 +369,7 @@ sudo install -m 0755 ../target/release/annals-usage \
   /usr/local/bin/annals-usage
 
 sudo install -d -o root -g annals -m 0750 /etc/annals
-sudo install -d -o annals -g annals -m 0700 \
-  /var/lib/annals /var/lib/annals/codex-home
+sudo install -d -o annals -g annals -m 0700 /var/lib/annals
 sudo install -d -o annals -g annals -m 0710 /var/spool/annals
 sudo install -d -o annals -g annals -m 0770 \
   /var/spool/annals/incoming
@@ -391,15 +378,13 @@ sudo install -d -o annals -g annals -m 0700 \
   /var/spool/annals/processing \
   /var/spool/annals/done \
   /var/spool/annals/duplicates \
-  /var/spool/annals/failed
+  /var/spool/annals/failed \
+  /var/spool/annals/skipped
 
 sudo install -o root -g annals -m 0640 \
   packaging/systemd/annals.toml /etc/annals/config.toml
 sudo install -o root -g annals -m 0640 \
   packaging/systemd/usage.toml /etc/annals/usage.toml
-printf '%s\n' 'cli_auth_credentials_store = "file"' | \
-  sudo install -o annals -g annals -m 0600 /dev/stdin \
-  /var/lib/annals/codex-home/config.toml
 sudo install -o root -g root -m 0644 \
   packaging/systemd/annals-inbox.service \
   /etc/systemd/system/annals-inbox.service
@@ -408,9 +393,9 @@ sudo install -o root -g root -m 0644 \
   /etc/systemd/system/annals-inbox.timer
 ```
 
-Adjust the executable paths in the configs and service if Codex, Annals, or the
-proxy is installed elsewhere. Authenticate real Codex into the service-owned
-`CODEX_HOME` through the proxy so the login uses its credential lease:
+Adjust the executable and socket paths in the configs and service if Nucleus
+or Annals is installed elsewhere. Authenticate through the Nucleus service so
+login, account reads, and model jobs share its credential lease:
 
 ```sh
 sudo -u annals env HOME=/var/lib/annals \
@@ -418,10 +403,8 @@ sudo -u annals env HOME=/var/lib/annals \
   /usr/local/bin/annals-usage login --device-auth
 ```
 
-Keep this credential directory private. The service does not use an
-administrator's personal Codex home. Real Codex refreshes `auth.json` in this
-persistent directory while the proxy holds its exclusive lease. Do not invoke
-real Codex directly against the same home while the service may run.
+The configured Nucleus service owns its private credential directory. Do not
+give Annals a second Codex home or invoke Codex directly as a fallback.
 
 Initialize the library and enable the timer:
 
@@ -447,8 +430,8 @@ unexpected processing failure still ends that activation nonzero after the
 failed job is archived.
 
 The packaged service sets
-`ANNALS_USAGE_CONFIG=/etc/annals/usage.toml`, so the Annals process and every
-proxy child use the same companion ledger without command-line intervention.
+`ANNALS_USAGE_CONFIG=/etc/annals/usage.toml`. Both configs select the same
+Nucleus socket, and no companion ledger is opened.
 
 Inspect or trigger it with:
 
@@ -546,8 +529,8 @@ Annals records that job as failed rather than silently changing the label.
 ## macOS user LaunchAgent
 
 The macOS installation belongs entirely to the logged-in user. This is the
-important maintenance boundary: Annals, its telemetry ledger, Nucleus, its
-scheduler definitions, and all release files have exactly that user's
+important maintenance boundary: Annals, Nucleus, their scheduler definitions,
+and all release files have exactly that user's
 authority. Updating the complete application therefore needs no stored
 administrator credential, privileged helper, or passwordless `sudo` rule.
 
@@ -561,7 +544,6 @@ $HOME/Library/Application Support/Annals/
 |-- config.toml
 |-- usage.toml
 |-- annals.db
-|-- usage.db
 |-- log/
 |-- backups/
 |-- install/
@@ -688,8 +670,7 @@ candidate and installed frontends before reloading launchd and waking the
 worker. The operator-owned pause marker is retained, so that wake-up does not
 dispatch queued jobs when the installation was paused. A failure restores the
 old selectors, configs, plist, and service.
-The Annals library, telemetry ledger, spool, logs, pause state,
-and archives are retained.
+The Annals library, spool, logs, pause state, and archives are retained.
 
 Every successful update from an existing release also writes a durable
 `rollback_snapshot` path into `install/last-update.json`. That private directory
@@ -698,11 +679,8 @@ contains the pre-cutover `config.toml`, `usage.toml`, LaunchAgent plist, and a
 post-commit rollback must restore those files together with the previous
 release selector while the inbox is under maintenance; switching only
 `install/current` is not sufficient when configuration schemas changed. The
-deployment snapshot deliberately contains no credentials. Nucleus refreshes
-only its owned home, so the former Annals Codex home may be stale. Reverting to
-the old invocation system therefore also requires stopping Nucleus and either
-securely transferring the current credential back under private directory and
-file modes or completing an attended login before Annals resumes. Pre-commit
+deployment snapshot deliberately contains no credentials or reporting data.
+Nucleus state is outside this rollback and remains forward-only. Pre-commit
 failures continue to restore the configuration artifacts automatically from
 the live transaction.
 
@@ -739,9 +717,11 @@ operation after `ci.sh` is green:
 `--fresh-state` cannot be combined with `--no-start`. It stages and validates
 an empty library and paused spool, disables launchd, requests a graceful pause,
 waits for the current delivery, and registers all remaining arrivals. Under
-maintenance it moves the old library, WAL sidecars, usage ledger, and whole
-spool into one directory under `backups/generations/` and switches in the fresh
-state.
+maintenance it moves the old library, WAL sidecars, and whole spool into one
+directory under `backups/generations/` and switches in the fresh state. An
+obsolete `usage.db` and its sidecars are held only inside the in-flight deploy
+transaction for automatic rollback, then discarded when the deployment
+commits; they are not part of the rollback generation.
 
 Only after candidate and installed validation does the deployer import queued
 and last-moment incoming sources from that generation. An attempted processing
@@ -813,8 +793,8 @@ register settled arrivals, but the next job remains queued until `resume` and
 a later activation. Run `annals inbox run` after `resume` when immediate
 dispatch is wanted.
 
-To retire the user installation while retaining its library, telemetry, and
-operational state, boot out the LaunchAgent and remove only the scheduler,
+To retire the user installation while retaining its library and operational
+state, boot out the LaunchAgent and remove only the scheduler,
 command links, and versioned program directory:
 
 ```sh
@@ -826,8 +806,8 @@ rm -rf "$HOME/Library/Application Support/Annals/install"
 ```
 
 Back up and explicitly remove the remaining state only when the library,
-telemetry ledger, credentials, queued material, logs, and archives are no
-longer needed.
+queued material, logs, and archives are no longer needed. Nucleus credentials
+and raw model output belong to Nucleus's separate retention boundary.
 
 ## Failure recovery and maintenance
 

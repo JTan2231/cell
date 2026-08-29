@@ -2,9 +2,10 @@
 
 Todo is synchronous and owns no daemon, root-owned files, or log service. Its
 user installation includes a LaunchAgent that runs the synchronous email
-command once per day. `todo new` uses the same user's separately installed
-Nucleus service, which owns Codex execution and authentication; email delivery
-does not use Nucleus.
+command once per day. Routing, assessment, design, and `todo new` research use
+the same user's separately installed Nucleus service, which owns Codex
+execution and authentication; deterministic reads, decisions, migration, and
+email delivery do not use Nucleus.
 
 ## Deploy
 
@@ -66,14 +67,21 @@ quality. Its `[email]` section contains the deployment-specific `from` and `to`
 values. Nucleus is resolved through `NUCLEUS_SOCKET` when set, or its standard
 per-user socket otherwise.
 
-Deployment first verifies the installed Nucleus service is healthy, stages a
-complete content-addressed release, writes or preserves configuration, switches
-`current`, initializes the database on a fresh install, validates the installed
-CLI, installs the LaunchAgent, and bootstraps `org.todo.daily-email`. An update
-retains the prior release through `previous`. If installation or service
-validation fails, the deployer restores the prior release selector, frontend,
-configuration, plist, and loaded-service state. It never deletes the user's
-existing database.
+Deployment first verifies the installed Nucleus service is healthy and stages a
+complete content-addressed release. Before an update can change database state,
+it records whether the email LaunchAgent is loaded and quiesces it. It creates a
+private transaction directory, asks the candidate binary to run `todo migrate
+--backup` with a nonexistent absolute path inside that directory, switches the
+release selector, and validates the installed CLI. Only then does it install
+and bootstrap the final `org.todo.daily-email` definition.
+
+The candidate migrator writes a complete pre-migration SQLite backup before
+the version-2 transaction begins. If migration, selector switching, smoke
+testing, plist installation, or bootstrap later fails, the deployer restores
+the prior database, release selector, frontend, configuration, plist, and
+loaded-service state. An update retains the prior release through `previous`.
+The transaction-local backup is removed only after the update has succeeded;
+it is not a user backup policy.
 
 Running the same deploy command with a new release binary performs an update.
 An identical package reuses its release directory. A fresh install requires
@@ -82,6 +90,24 @@ the existing `config.toml` byte-for-byte when it already has an `[email]`
 section; an old config without that section requires both flags once. Providing
 both regenerates the standard installed config with the supplied values, and
 supplying only one is an error.
+
+## Manual database migration
+
+Ordinary commands never migrate a database implicitly. To upgrade a database
+outside the deployer, first stop callers and choose an absolute backup path
+that does not exist:
+
+```sh
+launchctl bootout "gui/$(id -u)/org.todo.daily-email" 2>/dev/null || true
+todo --database "/absolute/path/to/todo.db" migrate \
+  --backup "/absolute/path/to/retained/todo-v1.db.backup"
+```
+
+For a version-1 database, Todo creates the complete backup and retains it after
+a successful transactional migration. It refuses a relative or existing
+backup path. Verify the migrated database before reloading the LaunchAgent.
+When the selected database is already current, `migrate` succeeds as a no-op
+without creating, reading, or modifying the supplied backup path.
 
 ## Schedule and validation
 

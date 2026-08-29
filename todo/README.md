@@ -1,28 +1,61 @@
 # Todo
 
-Todo is a local Rust CLI for turning a short directional need and the file
-where that need arose into one researched, actionable todo. It also supports a
-deterministic lifecycle and an optional daily email containing the current open
-todos. It is designed for Codex and people with terminal access.
+Todo is a local Rust CLI for retaining an actionable concern from the place
+where it arose, deciding which durable todo it belongs to, assessing the
+current situation, and reconciling a design. It is designed for Codex and
+people with terminal access.
 
-`todo new` invokes a read-only research liaison. The liaison starts with the
-source, follows relevant local or external leads, and creates exactly one todo
-through a managed tool. The model's prose response is not the result; the
-validated tool call is. The source path is retained as provenance, but source
-contents are not stored in Todo's database. Nucleus separately retains the raw
-agent protocol, which can include content Codex reads during research; its
-state therefore belongs inside the same local security and retention boundary.
+Todo keeps its durable layers separate:
 
-Todo is deliberately small: SQLite has one table for immutable todo content
-and current status, and one append-only table for working notes. There are no
-JSON database columns, services, projects, tags, priorities, or status
-vocabulary beyond `open` and `done`. The optional macOS schedule is a launchd
-timer that invokes the synchronous CLI, not a Todo daemon or queue.
+- a `cN` concern preserves the caller's direction and source provenance;
+- a pending `rN` routing proposal says whether that concern should attach to,
+  create, revise, unify, dismiss, or defer a todo identity;
+- a `tN` todo is the stable umbrella for an enduring actionable concern, whose
+  current title and direction come from its latest direction revision;
+- an `aN` situation assessment describes dated observed state and authority,
+  while a `dN` design describes a proposed or explicitly accepted desired
+  state.
+
+Those layers are deliberately not an implementation workflow. Todo does not
+model plans, work items, implementation execution, or a general project graph.
+Nucleus jobs used to research routing, assessments, and designs are runtime
+provenance, not execution of the todo. Existing `done` and `reopen` commands
+continue to maintain an umbrella's small `open`/`done` lifecycle.
+
+`todo new` is a convenience for `concern add` followed by `concern assess`.
+The concern is committed before research begins. The routing liaison reads the
+source and a bounded snapshot of candidate todos, then records one pending
+proposal. It cannot apply the proposal. `routing accept --source PATH` is a
+separate, provenance-bearing authorization command.
+
+Situation and design research have the same boundary. `todo assess tN` records
+an immutable dated assessment whose jurisdictions can name one owner plus
+participants and consumers. Bounded source reads use stable source IDs, and
+the assessment persists the exact `source_ref` mapping behind every source
+citation. A newer assessment makes every older `aN` non-current.
+
+`todo design propose tN` resolves and rechecks the latest current ready
+assessment, then records a draft bound to that exact `aN`. The draft explicitly
+keeps, moves, adds, or retires each jurisdiction and may cite only its closed
+direction, assessment, predecessor, and correction basis catalog. Ready means
+all nine desired-state clause kinds and the full direction and predecessor are
+covered, not merely that no choices remain. Correction feedback is immutable;
+correction leaves the named design unchanged and produces a successor. A
+liaison that stops with an open draft leaves an inspectable `abandoned` draft
+that can be corrected. Only `design accept --source PATH` can authorize a ready
+design, and only while its umbrella remains open and canonical and its
+assessment current. Acceptance does not plan or execute implementation.
+
+Todo stores source paths, decision-source paths, and evidence references, not
+the contents of those files. Nucleus separately retains the model's raw JSONL
+output, which can include content Codex reads during research; its state
+therefore belongs inside the same local security and retention boundary.
 
 ## Requirements
 
 - macOS or Linux and Rust/Cargo 1.97.1 to build;
-- a healthy, authenticated per-user Nucleus service for `todo new`;
+- a healthy, authenticated per-user Nucleus service for routing, assessment,
+  design, and `todo new` research;
 - no separate Todo daemon or database server;
 - for email sending only, a Resend API key and a Resend-verified sender domain.
 
@@ -38,20 +71,24 @@ cd /Users/joey/rust/cell/todo
 cargo build --manifest-path ../Cargo.toml --package todo --release
 
 /Users/joey/rust/cell/target/release/todo --database ./todo.db init
-/Users/joey/rust/cell/target/release/todo --database ./todo.db new \
+/Users/joey/rust/cell/target/release/todo --database ./todo.db concern add \
   "Need to report token consumption statistics" \
   --source /absolute/path/to/the-originating-conversation.jsonl
-/Users/joey/rust/cell/target/release/todo --database ./todo.db list
+/Users/joey/rust/cell/target/release/todo --database ./todo.db concern assess c1
+/Users/joey/rust/cell/target/release/todo --database ./todo.db routing show r1
+/Users/joey/rust/cell/target/release/todo --database ./todo.db routing accept r1 \
+  --source /absolute/path/to/the-authorizing-conversation.jsonl
 /Users/joey/rust/cell/target/release/todo --database ./todo.db show t1
-/Users/joey/rust/cell/target/release/todo --database ./todo.db note add t1 \
-  "Confirmed that the account allowance has no exposed token denominator."
-/Users/joey/rust/cell/target/release/todo --database ./todo.db done t1
-/Users/joey/rust/cell/target/release/todo --config ./config.toml email preview
+/Users/joey/rust/cell/target/release/todo --database ./todo.db assess t1
+/Users/joey/rust/cell/target/release/todo --database ./todo.db design propose t1
+/Users/joey/rust/cell/target/release/todo --database ./todo.db design accept d1 \
+  --source /absolute/path/to/the-authorizing-conversation.jsonl
 ```
 
-The source is usually a Codex conversation transcript, and the command help
-says so for agent callers, but it may be any readable UTF-8 file. The direction
-is a research lens, not a title or complete specification.
+The source is usually a Codex conversation transcript, but it may be any
+readable UTF-8 file. A source path says where a statement or decision came
+from; Todo does not treat the source contents as instructions and does not
+reopen them on ordinary reads.
 
 Select the SQLite database explicitly with `--database` or `TODO_DATABASE`, or
 select a strict TOML config with `--config` or `TODO_CONFIG`. The development
@@ -94,13 +131,14 @@ universal Todo defaults.
 This installs `~/.local/bin/todo`, initializes
 `~/Library/Application Support/Todo/todo.db`, and stores complete,
 content-addressed releases under
-`~/Library/Application Support/Todo/install/releases`. Updates switch
-`current` and `previous` atomically and restore the prior selector and config
-if the installed smoke test fails. The deployer also restores the frontend,
-LaunchAgent plist, and loaded-service state. The installation owns
-`org.todo.daily-email`, a launchd timer that invokes Todo at 09:00
-machine-local time. Email delivery talks directly to Resend; model execution
-and authentication remain with the separately installed Nucleus service.
-Fresh deployment requires the paired email-address flags shown above; see the
-[installation guide](docs/system-installation.md) for the `~/.zshrc` API-key
-prerequisite and update behavior.
+`~/Library/Application Support/Todo/install/releases`. During an update the
+deployer quiesces the email LaunchAgent, retains a transaction-local database
+backup, explicitly migrates the database, and runs the installed smoke test.
+If a later step fails, it restores both database and installed release state.
+
+The installation owns `org.todo.daily-email`, a launchd timer that invokes
+Todo at 09:00 machine-local time. Email delivery talks directly to Resend;
+model execution and authentication remain with the separately installed
+Nucleus service. Fresh deployment requires the paired email-address flags
+shown above; see the [installation guide](docs/system-installation.md) for the
+`~/.zshrc` API-key prerequisite and update behavior.

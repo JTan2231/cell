@@ -155,16 +155,17 @@ annals-usage doctor [--config PATH]
 annals-usage login --device-auth
 ```
 
-`report` imports previously unseen terminal Annals jobs from Nucleus and
+`report` reads current Annals jobs and ordered model output from Nucleus and
 attributes their observed model-run attempts to recent source deliveries. Its
 coverage field distinguishes exact per-response totals,
 cumulative fallbacks, known zero-use deliveries, pending work, reused
-examinations, and unobserved history. `budget` records and displays a live,
+examinations, and output gaps. `budget` displays a live,
 account-global Codex allowance snapshot and labels the account's lifetime and
 daily token activity as contextual rather than allowance units. The backend
 exposes neither a token denominator for that allowance nor a per-delivery
-subscription share. `doctor` checks the companion configuration and ledger,
-the Annals paths, Nucleus and authenticated account-telemetry access. `budget`
+subscription share. Neither command retains a reporting database or account
+snapshot. `doctor` checks the companion configuration, the Annals paths,
+Nucleus, and authenticated account-telemetry access. `budget`
 and `doctor` report that authentication is busy instead of waiting when another
 Nucleus operation owns the credential lease. `login` delegates to `nucleus auth
 login`, so Annals never owns credential files.

@@ -883,6 +883,7 @@ dependencies = [
  "nucleus-client",
  "nucleus-codex",
  "nucleus-core",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",
@@ -1574,7 +1575,6 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 name = "todo"
 version = "0.2.0"
 dependencies = [
- "base64",
  "clap",
  "nucleus-client",
  "nucleus-core",
@@ -1582,6 +1582,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror",
  "time",

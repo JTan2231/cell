@@ -12,7 +12,6 @@ const CONFIG_NAME: &str = "usage.toml";
 pub(crate) struct UsageConfig {
     pub(crate) nucleus: PathBuf,
     pub(crate) nucleus_socket: Option<PathBuf>,
-    pub(crate) database: PathBuf,
     pub(crate) library: PathBuf,
     pub(crate) spool: PathBuf,
     #[serde(skip)]
@@ -24,7 +23,6 @@ impl Default for UsageConfig {
         Self {
             nucleus: PathBuf::from("nucleus"),
             nucleus_socket: None,
-            database: PathBuf::from("usage.db"),
             library: PathBuf::from("annals.db"),
             spool: PathBuf::from("spool"),
             path: PathBuf::new(),
@@ -52,7 +50,6 @@ impl UsageConfig {
         if let Some(socket) = &mut config.nucleus_socket {
             resolve_relative(socket, directory);
         }
-        resolve_relative(&mut config.database, directory);
         resolve_relative(&mut config.library, directory);
         resolve_relative(&mut config.spool, directory);
         config.path = path;
@@ -62,7 +59,6 @@ impl UsageConfig {
     fn validate(&self) -> Result<(), ConfigError> {
         for (name, path) in [
             ("nucleus", &self.nucleus),
-            ("database", &self.database),
             ("library", &self.library),
             ("spool", &self.spool),
         ] {
@@ -144,7 +140,7 @@ mod tests {
         fs::write(
             &path,
             "nucleus = \"bin/nucleus\"\nnucleus_socket = \"run/nucleus.sock\"\n\
-             database = \"usage.db\"\nlibrary = \"annals.db\"\nspool = \"spool\"\n",
+             library = \"annals.db\"\nspool = \"spool\"\n",
         )?;
 
         let config = UsageConfig::load(Some(&path))?;
@@ -153,7 +149,6 @@ mod tests {
             config.nucleus_socket,
             Some(directory.path().join("run/nucleus.sock"))
         );
-        assert_eq!(config.database, directory.path().join("usage.db"));
         assert_eq!(config.library, directory.path().join("annals.db"));
         assert_eq!(config.spool, directory.path().join("spool"));
         Ok(())

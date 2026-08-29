@@ -7,6 +7,8 @@ mod error;
 mod liaison;
 mod model;
 mod model_runner;
+mod reconciliation;
+mod reconciliation_store;
 mod render;
 mod todo_store;
 mod tool_server;
