@@ -15,7 +15,7 @@ resolver = "3"
 [workspace.package]
 # The six Nucleus crates share this release version. Annals, Annals Usage, and
 # Todo declare their independent product versions in their package manifests.
-version = "0.2.2"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT"
