@@ -4,20 +4,22 @@ Cell is the source monorepo for the local Nucleus ecosystem. It coordinates
 changes across the shared execution substrate and its first-party requesters
 without combining their runtime or domain authorities.
 
-The repository contains four independently versioned release units in three
+The repository contains five independently versioned release units in four
 product directories:
 
 - `nucleus/`: the Nucleus CLI, daemon, typed client, portable contract, store,
   and exact Codex adapter;
 - `annals/`: Annals and the independently versioned Annals Usage reporting
-  projection; and
-- `todo/`: the synchronous Todo CLI and its database.
+  projection;
+- `todo/`: the synchronous Todo CLI and its database; and
+- `weaver/`: the durable five-stage public-facing narrative requester.
 
 Nucleus owns agent admission, execution, authentication, job history, and the
-durable requester-tool mailbox. Annals and Todo continue to own their domain
-state and success rules. Codex remains an external harness rather than source
-vendored into Cell. Start with [`nucleus/docs/operator-manual.md`](nucleus/docs/operator-manual.md)
-for shared topology, compatibility, and safe change ordering.
+durable requester-tool mailbox. Annals, Todo, and Weaver continue to own their
+domain state and success rules. Codex remains an external harness rather than
+source vendored into Cell. Start with
+[`nucleus/docs/operator-manual.md`](nucleus/docs/operator-manual.md) for shared
+topology, compatibility, and safe change ordering.
 
 ## Build and check
 
@@ -35,18 +37,19 @@ dispatcher has no ecosystem-wide 60-second deadline:
 ./ci.sh nucleus
 ./ci.sh annals
 ./ci.sh todo
+./ci.sh weaver
 ```
 
-Running `./ci.sh` without selectors runs the three product gates sequentially.
-A shared Nucleus contract or client change must pass all three gates. A purely
+Running `./ci.sh` without selectors runs the four product gates sequentially.
+A shared Nucleus contract or client change must pass all four gates. A purely
 domain-local change may use its product gate while iterating, but the complete
 root gate is the final repository check.
 
 ## Versions and releases
 
-Nucleus's six crates share one Nucleus version. Annals, Annals Usage, and Todo
-keep independent versions and release scripts. Source colocation does not imply
-lockstep release or deployment, a shared state directory, or a shared database.
-New releases use product-qualified tags (`nucleus-v*`, `annals-v*`,
-`annals-usage-v*`, and `todo-v*`). Pre-Cell release tags remain available in
-the original product repositories.
+Nucleus's six crates share one Nucleus version. Annals, Annals Usage, Todo, and
+Weaver keep independent versions and release scripts. Source colocation does
+not imply lockstep release or deployment, a shared state directory, or a shared
+database. New releases use product-qualified tags (`nucleus-v*`, `annals-v*`,
+`annals-usage-v*`, `todo-v*`, and `weaver-v*`). Pre-Cell release tags remain
+available in the original product repositories.

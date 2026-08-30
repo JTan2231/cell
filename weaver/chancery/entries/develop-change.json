@@ -1,0 +1,96 @@
+{
+  "id": "weaver.develop.change",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "routable": true,
+  "title": "Change Weaver",
+  "summary": "Change Weaver implementation or contracts while preserving its narrative, requester, interactive-file-access, current-state, recovery, and deployment boundaries.",
+  "routing": {
+    "triggers": [
+      "change Weaver source code",
+      "develop a Weaver feature",
+      "change the Weaver CLI or workflow",
+      "change Weaver's Nucleus integration",
+      "change Weaver state, recovery, or deployment"
+    ],
+    "exclusions": [
+      "operate an installed Weaver run",
+      "build a narrative with Weaver",
+      "add job search or application automation",
+      "publish a Weaver release without explicit intent"
+    ]
+  },
+  "use_when": [
+    "Weaver code, tests, CLI, repository contract, five-stage pipeline, validation, Nucleus requester boundary, private state, activation, maintenance, packaging, or documentation is being changed."
+  ],
+  "do_not_use_when": [
+    "The request is ordinary narrative building or operation of the installed Weaver product.",
+    "The proposed feature is live job search, browser automation, application submission, publication, public-profile editing, or another workflow Weaver does not currently implement.",
+    "Release publication or installed deployment has not been separately authorized."
+  ],
+  "outcome": "A minimal tested Weaver change whose product and operational documentation match the implementation and whose repository, Nucleus, recovery, privacy, and installation authorities remain explicit.",
+  "effects": [
+    "Modifies Weaver source, tests, authored contracts, documentation, or packaging.",
+    "Requester-boundary changes may alter retained prompt content, permissions, correlations, compatibility, recovery, or deployment ordering and require corresponding Nucleus contract work.",
+    "Release and deployment remain separate actions that can commit, tag, push, replace installed selectors, or affect an active workflow."
+  ],
+  "authority": [
+    "Weaver owns its current workflow, stage order, repository I/O, validation, cancellation intent, recovery, and installation behavior.",
+    "The narrative repository owns authored inputs and generated-output validity; Nucleus owns shared execution, authentication, and raw job history.",
+    "Weaver must not acquire publication, job-application, public-profile, or browser-workflow authority through an implementation shortcut."
+  ],
+  "success": [
+    "The smallest owning Weaver component and every affected exact document agree.",
+    "`./ci.sh` completes within Weaver's 60-second product deadline.",
+    "Requester, state, activation, cancellation, validation, maintenance, packaging, rollback, and privacy proofs are updated in proportion to the changed boundary."
+  ],
+  "failure_and_recovery": [
+    "Preserve a successfully written stage output even if a later stage or Nucleus runtime operation fails.",
+    "Do not add a direct-Codex fallback or a second repository-I/O process lineage to work around readiness or macOS file access.",
+    "Persistent or deployment changes require atomic replacement, tamper detection, rollback proof, and an explicit post-commit maintenance recovery path."
+  ],
+  "privacy": [
+    "Tests, current state, Nucleus jobs, and diagnostics may contain complete narrative inputs, prompts, or generated outputs and must remain inside their private boundaries.",
+    "Release bundles contain only program, deployment, and Chancery documentation bytes, never narrative repository inputs."
+  ],
+  "dependencies": [
+    {"id": "weaver.workflow.operate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read Weaver's `AGENTS.md` and the exact architecture, CLI, installation, and narrative-repository contracts for the affected behavior.",
+    "Before changing the Nucleus requester contract, persistent operational state, service lifecycle, deployment, or compatibility boundary, run `/Users/joey/.local/bin/nucleus manual` and identify the owning authority.",
+    "Implement the smallest change and update Weaver's operator-facing documentation in the same change whenever an operational fact changes.",
+    "Run `./ci.sh` and the exact deployment, recovery, or requester proofs affected by the change.",
+    "Treat release publication and installed deployment as separate actions requiring explicit authorization."
+  ],
+  "checkpoints": [
+    "The change remains a narrative workflow feature rather than an unsupported job-application or public-service workflow.",
+    "The detached interactive-lineage worker remains the sole repository reader and writer, and Codex still receives only explicitly embedded inputs under its documented permissions.",
+    "Current-state and terminal-run semantics remain recoverable without automatic replacement model attempts.",
+    "CI passes, and release or deployment has not occurred without separate authorization."
+  ],
+  "adaptation": [
+    "Use the current version-matched Nucleus manual for shared requester and compatibility facts rather than assuming source or installed releases move in lockstep.",
+    "Scale tests and canaries to the actual change; repository validation, requester execution, worker activation, and installer rollback prove different authorities."
+  ],
+  "stop_when": [
+    "A proposed change requires browser, computer-use, publication, or job-application behavior outside Weaver's current contract.",
+    "An incompatible requester or persistent-state change lacks migration, rollback, and recovery decisions.",
+    "The macOS repository-access boundary cannot be preserved with the interactive caller's process lineage."
+  ],
+  "does_not_authorize": [
+    "Running `release.sh`, which commits, tags, and pushes.",
+    "Deploying Weaver or cancelling an active installed workflow.",
+    "Adding live job search, application submission, publication, profile editing, or volatile UI automation."
+  ],
+  "manual": "manuals/develop-change.md"
+}

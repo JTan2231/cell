@@ -1,0 +1,79 @@
+{
+  "id": "weaver.workflow.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "routable": true,
+  "title": "Operate Weaver workflows",
+  "summary": "Inspect, wait for, recover, cancel, validate, diagnose, or deploy Weaver without expanding its narrative-build boundary.",
+  "routing": {
+    "triggers": [
+      "check Weaver status",
+      "wait for or recover a Weaver run",
+      "cancel a Weaver run",
+      "validate Weaver narrative outputs",
+      "diagnose Weaver",
+      "install or update Weaver"
+    ],
+    "exclusions": [
+      "build a new Weaver narrative",
+      "change Weaver source code",
+      "search for or apply to jobs",
+      "publish generated narrative output"
+    ]
+  },
+  "use_when": [
+    "The sole current Weaver workflow or its exact run ID must be observed, resumed through a new worker process, or cancelled.",
+    "Persisted narrative outputs need deterministic validation without a model call.",
+    "Weaver private state, Nucleus readiness, installation, or deployment maintenance must be checked or changed."
+  ],
+  "do_not_use_when": [
+    "The desired outcome is a new five-stage narrative build; use `weaver.narrative.build`.",
+    "The request changes Weaver implementation or contracts rather than operating the installed product.",
+    "The request asks for live web interaction, publication, profile editing, or job-application work."
+  ],
+  "outcome": "The selected Weaver run, output tree, readiness condition, or user-owned installation is observed or changed through its supported interface with the exact current record preserved.",
+  "effects": [
+    "`status` and `check` are read-only; `check` invokes no model and does not establish editorial freshness.",
+    "`wait` may start a detached replacement worker for a nonterminal run, and `cancel` durably records intent before asking Nucleus to cancel the current stage.",
+    "`doctor` may initialize Weaver's private state directory and locks while changing no narrative or current workflow record.",
+    "Deployment stages a content-addressed release, coordinates maintenance, changes Weaver's current command and release selectors, and removes only the superseded prototype LaunchAgent when present."
+  ],
+  "authority": [
+    "`current.json` is Weaver's sole current operational workflow record; generated files in the narrative repository are the current output authority.",
+    "The interactive caller owns the file-access context used by detached Weaver workers, while Nucleus owns the correlated job and authentication state.",
+    "Weaver owns its installation and only the installed `providers/weaver` Chancery selector."
+  ],
+  "success": [
+    "The selected supported command reports the requested current state and, when an explicit run ID is supplied, does not follow a replacement run.",
+    "A recovered worker reuses the exact persisted request and deterministic stage job ID rather than creating another attempt.",
+    "A successful deployment validates the installed binary and Nucleus readiness, proves a worker stops under maintenance, removes the exact prototype service when present, publishes Weaver's version-matched Chancery bundle, and ends maintenance."
+  ],
+  "failure_and_recovery": [
+    "A Nucleus daemon restart makes an unfinished attempt lost; do not restart Nucleus to recover a Weaver worker.",
+    "If deployment fails before commit, the prior Weaver release, command, provider selector, prototype plist, and loaded-service state are restored.",
+    "If deployment commits but cannot end maintenance, keep the new release authoritative and end that exact gate through the installed Weaver CLI."
+  ],
+  "privacy": [
+    "Weaver private state can contain a complete active stage request and every embedded private input byte; Nucleus retains complete requests and raw protocol output.",
+    "Deployment and diagnosis must preserve both state roots and must not expose their contents through Chancery, logs, or public output."
+  ],
+  "interfaces": [
+    {"label": "Readiness", "invocation": "/Users/joey/.local/bin/weaver --repo <NARRATIVE_REPOSITORY> doctor"},
+    {"label": "Current status", "invocation": "/Users/joey/.local/bin/weaver --repo <NARRATIVE_REPOSITORY> status [RUN_ID]"},
+    {"label": "Wait or recover", "invocation": "/Users/joey/.local/bin/weaver --repo <NARRATIVE_REPOSITORY> wait [RUN_ID]"},
+    {"label": "Cancel", "invocation": "/Users/joey/.local/bin/weaver --repo <NARRATIVE_REPOSITORY> cancel [RUN_ID]"},
+    {"label": "Validate outputs", "invocation": "/Users/joey/.local/bin/weaver --repo <NARRATIVE_REPOSITORY> check <NARRATIVE>"},
+    {"label": "Deploy candidate", "invocation": "/Users/joey/rust/cell/weaver/packaging/macos/deploy-user.sh --binary <ABSOLUTE_WEAVER_BINARY>"}
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Cancelling a run, deploying a release, or removing a prototype service merely because it was inspected.",
+    "Deleting `current.json`, generated outputs, Nucleus history, retained release directories, or private logs.",
+    "Publication, public-service interaction, or a new terminal-run attempt."
+  ],
+  "manual": "manuals/workflow-operate.md"
+}

@@ -1,0 +1,75 @@
+{
+  "id": "weaver.narrative.build",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "routable": true,
+  "title": "Build a public-facing narrative",
+  "summary": "Run Weaver's durable five-stage narrative workflow from authored repository inputs and retain the mechanically validated current outputs.",
+  "routing": {
+    "triggers": [
+      "build a public-facing narrative with Weaver",
+      "generate the five Weaver narrative outputs",
+      "rebuild this Weaver narrative",
+      "run the Weaver narrative workflow"
+    ],
+    "exclusions": [
+      "search for jobs",
+      "apply for a job",
+      "fill out an application",
+      "publish or upload a narrative",
+      "edit a public profile"
+    ]
+  },
+  "use_when": [
+    "A selected narrative repository has Weaver's complete authored basis, brief, source, and five-stage prompt contract and its current generated outputs should be replaced.",
+    "The user wants the durable Weaver workflow rather than an ad hoc narrative written only in the current conversation."
+  ],
+  "do_not_use_when": [
+    "The request is to search the web, choose a job, complete an application, submit material, or edit a public service.",
+    "The repository does not satisfy Weaver's authored input contract.",
+    "The user wants only status, cancellation, mechanical validation, recovery, installation work, or an explanation."
+  ],
+  "outcome": "The selected narrative contains five current nonempty stage outputs whose anchors, links, review verdict, and final consistency pass Weaver's mechanical check.",
+  "effects": [
+    "Records one current Weaver run and starts a detached one-shot worker in the interactive caller's process lineage.",
+    "After strict Nucleus readiness, removes the prior five generated outputs and writes each new stage output atomically as its job succeeds.",
+    "Submits five independent Nucleus jobs using Codex and may consume account allowance; a failed later stage leaves earlier outputs from the new run in place.",
+    "Does not publish, upload, send, apply for a job, or edit a public profile."
+  ],
+  "authority": [
+    "The narrative repository owns its authored basis, brief, sources, prompts, current generated outputs, and mechanical validity.",
+    "Weaver owns current-run admission, stage order, input snapshots, output writes, cancellation intent, recovery, and Nucleus correlations.",
+    "Nucleus owns execution, authentication, job state, and raw protocol history; its completion alone is not a successful narrative build."
+  ],
+  "success": [
+    "`weaver wait RUN_ID` reports a successful terminal run.",
+    "`weaver check NARRATIVE` mechanically validates all five persisted outputs and reports `PASS` or `REVISE` with exit status zero.",
+    "A `BLOCKED` verdict remains a valid diagnostic but is not publishable output and exits with status 3."
+  ],
+  "failure_and_recovery": [
+    "Use `weaver status RUN_ID` and the correlated Nucleus job to identify the failed stage without inferring success from model prose.",
+    "A nonterminal `weaver wait RUN_ID` starts a replacement one-shot worker and rediscovers the exact persisted Nucleus request after a worker crash, logout, or machine restart.",
+    "A lost Nucleus attempt, timeout, cancellation, malformed output, or failed mechanical check is terminal for the run; Weaver does not invent another model attempt."
+  ],
+  "privacy": [
+    "Weaver current state and Nucleus state can retain complete private basis, brief, source, prompt, and generated-input bytes while a stage is active or in raw protocol history.",
+    "The detached Weaver worker performs repository I/O; the Nucleus-launched Codex process receives embedded contents and no repository filesystem capability."
+  ],
+  "interfaces": [
+    {"label": "Submit narrative", "invocation": "/Users/joey/.local/bin/weaver --repo <NARRATIVE_REPOSITORY> submit <NARRATIVE>"},
+    {"label": "Wait for run", "invocation": "/Users/joey/.local/bin/weaver --repo <NARRATIVE_REPOSITORY> wait <RUN_ID>"},
+    {"label": "Inspect run", "invocation": "/Users/joey/.local/bin/weaver --repo <NARRATIVE_REPOSITORY> status <RUN_ID>"},
+    {"label": "Check outputs", "invocation": "/Users/joey/.local/bin/weaver --repo <NARRATIVE_REPOSITORY> check <NARRATIVE>"}
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Publication, upload, public-profile editing, job search, or job-application submission.",
+    "Treating generated narrative text as factual authority.",
+    "Automatically retrying a terminal Weaver run or lost Nucleus attempt."
+  ],
+  "manual": "manuals/narrative-build.md"
+}

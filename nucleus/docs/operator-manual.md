@@ -31,6 +31,7 @@ than one outcome, use each relevant system.
 | --- | --- | --- | --- |
 | Todo | An actionable concern or follow-up should be researched and retained for later. | Concern provenance, routing and its explicit decisions, stable todo identities, dated situation assessments, proposed or accepted designs, open/done state, and working notes. | Work requested for immediate completion, general knowledge, implementation execution, or shared runtime policy. |
 | Annals | Immutable source material should be retained or reconciled with an evidence-grounded conceptual corpus, or that corpus should be searched or explored. | Retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, or account telemetry. |
+| Weaver | Authored repository inputs should become the current five-stage public-facing narrative outputs. | Current-run admission, stage order and input snapshots, repository output writes, validation, cancellation intent, and recovery. | Publishing, editing a public profile, treating generated text as factual authority, or general job orchestration. |
 | Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, harness validation and supervision, credential serialization, cancellation, exact harness-stdout observations, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, requester retry policy, or reporting materializations. |
 | Annals Usage | Annals-attributed model consumption, account allowance, login, or the Annals-to-Nucleus execution path must be inspected. | Live calculation over Annals attribution and Nucleus output atoms, plus Annals-facing budget and diagnostic commands. | Nucleus runtime authority, durable reporting projections, Codex credential storage, Annals corpus success, or general job orchestration. |
 | Codex | Nucleus needs an inspected harness and account protocol implementation. | Its executable and app-server behavior. | Requester domain policy or a second credential authority for Nucleus jobs. |
@@ -40,6 +41,7 @@ Typical routing examples:
 - “Leave this concern for later” is Todo work.
 - “Incorporate this report into what we know” is Annals work.
 - “What does the corpus say about predicate locking?” is an Annals query.
+- “Build the current public-facing narrative” is Weaver work.
 - “Could this new local project use an agent?” starts with the new-requester
   checklist in this manual.
 - “Fix this now” is ordinary immediate work, not automatically a Todo.
@@ -59,6 +61,7 @@ nucleus service status
 annals --version
 annals-usage --version
 todo --version
+weaver --version
 ```
 
 `nucleus health` is strict. It prints the readiness document but exits nonzero
@@ -77,8 +80,8 @@ reason.
 
 ```text
 Todo research --\
-                 \
-Annals ----------> Nucleus ----------> Codex app-server ----------> account
+Annals ----------+--> Nucleus ----------> Codex app-server ----------> account
+Weaver ----------/
    |                  |                        |
    |                  |                        `-- isolated job process
    |                  |
@@ -90,6 +93,7 @@ Annals ----------> Nucleus ----------> Codex app-server ----------> account
 
 Annals Usage <------ Nucleus output atoms and account reads
 Todo SQLite <------- Todo's validated stage tools and explicit decisions
+Weaver outputs <---- Weaver's detached repository worker
 ```
 
 Todo's concern-routing, situation-assessment, and design-reconciliation
@@ -100,14 +104,20 @@ cannot be invoked by a model, and the optional daily email path calls Resend
 without creating a Nucleus job, using Nucleus authentication, or depending on
 Nucleus health.
 
+Weaver submits five content-only jobs in order. Its detached interactive-lineage
+worker owns repository reads and atomic Markdown output writes; Nucleus and the
+Codex process never receive repository filesystem authority. Weaver success
+requires its persisted outputs and mechanical validation, not merely completed
+Nucleus jobs.
+
 Nucleus is a per-user execution coordinator, not a project registry or workflow
 engine. A requester submits one closed, versioned invocation. Nucleus validates
 it, starts one harness attempt, retains exact harness stdout, and coordinates
 dynamic tool calls. The requester continues to own the work that motivated the
 job.
 
-Nucleus, Annals, Annals Usage, and Todo share the Cell source repository, Cargo
-workspace, and lockfile. That source layout does not merge their release,
+Nucleus, Annals, Annals Usage, Todo, and Weaver share the Cell source repository,
+Cargo workspace, and lockfile. That source layout does not merge their release,
 installation, state, backup, recovery, or domain-success boundaries.
 
 The following distinctions are operationally important:
@@ -115,8 +125,9 @@ The following distinctions are operationally important:
 1. **Nucleus completion is not domain success.** Todo succeeds when its
    stage-specific proposal, assessment, or design operation is durably
    recorded; authorization is a separate Todo decision. Annals succeeds
-   according to its retained reconciliation and delivery state. A model's
-   final prose is diagnostic.
+   according to its retained reconciliation and delivery state. Weaver succeeds
+   only after it persists and validates the required narrative outputs. A
+   model's final prose is diagnostic.
 2. **A domain commit can outlive a runtime failure.** If Todo records its
    validated stage result or Annals records its reconciliation and Codex later
    fails, the durable domain result remains authoritative.
@@ -157,7 +168,7 @@ Unix socket has no application-level authentication; local user ownership and
 filesystem permissions are the trust boundary. There is no TCP listener in
 protocol version 1.
 
-Annals and Todo have their own state, installation, backup, and recovery
+Annals, Todo, and Weaver have their own state, installation, backup, and recovery
 boundaries. Do not infer their state from Nucleus or copy their detailed
 procedures into this manual. Todo's optional
 `~/Library/LaunchAgents/org.todo.daily-email.plist` is a separate user service:
@@ -223,24 +234,28 @@ currently owns the lease; it does not by itself mean the credential is invalid.
 
 Nucleus has no global drain mode. Quiescence is established at its requesters:
 
-1. Do not start a synchronous Todo creation or another manual requester job.
-2. Pause Annals and wait for its active delivery to settle:
+1. Do not start a synchronous Todo creation, a new Weaver submission, or
+   another manual requester job.
+2. If Weaver has a nonterminal current run, select its exact run ID and let it
+   settle through `weaver wait RUN_ID`.
+3. Pause Annals and wait for its active delivery to settle:
 
    ```sh
    annals inbox pause
    annals inbox status
    ```
 
-3. Inspect Nucleus `accepted`, `running`, and `waiting-on-requester` jobs.
-4. Wait for them to become terminal. Cancel a job only when abandoning that
+4. Inspect Nucleus `accepted`, `running`, and `waiting-on-requester` jobs.
+5. Wait for them to become terminal. Cancel a job only when abandoning that
    exact runtime attempt is intended:
 
    ```sh
    nucleus jobs cancel JOB_ID
    ```
 
-5. Perform the service, storage, or harness operation.
-6. Verify Nucleus and requester canaries before resuming Annals.
+6. Perform the service, storage, or harness operation.
+7. Verify Nucleus and requester canaries before resuming Annals or admitting
+   new Weaver work.
 
 Stopping or replacing `nucleusd` while a job is active makes that attempt
 `lost`. The requester—not Nucleus—decides whether a new domain attempt is safe.
@@ -531,6 +546,7 @@ Keep detailed CLI and domain procedures in its own product tree.
 | Todo concerns, routing and explicit decisions, identities, assessments, designs, lifecycle, provenance, database, email delivery, or deployment | Todo | Preserve its Nucleus adapter contract when affected; the direct Resend path does not become a Nucleus job, and Nucleus does not gain Todo fields. |
 | Annals works, concepts, evidence, reconciliation, inbox, retry, or corpus migration | Annals | Preserve job correlation and adapter behavior when affected; Nucleus does not gain Annals workflow state. |
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
+| Weaver workflow state, stage prompts, repository inputs or outputs, validation, cancellation, recovery, or deployment | Weaver | Preserve its Nucleus invocation and correlation contract; Nucleus does not gain narrative repository authority or retry policy. |
 | New portable invocation meaning or HTTP behavior | Nucleus core/client/daemon | Version the public contract, update examples/tests/docs, then update affected requesters in compatible order. |
 | Codex executable or app-server semantics | Nucleus Codex adapter | Prove the exact version, deploy Nucleus, then run generic and requester canaries. |
 | Nucleus database schema or retention | Nucleus store | Quiesce, back up, migrate and validate, and define database-aware rollback before deployment. |
@@ -719,7 +735,9 @@ record even without `--apply`; choose the work deliberately and inspect the
 result. A Todo canary creates a real todo; choose a real source and direction or
 use an isolated Todo database. Do not leave unexplained canary domain records.
 Sending or previewing Todo's email digest does not exercise Nucleus and is not
-a requester canary.
+a requester canary. A Weaver canary replaces the selected narrative's current
+outputs; use a deliberate fixture or repository and validate the five persisted
+files rather than relying on Nucleus completion.
 
 ## Where facts and changes belong
 
@@ -784,3 +802,10 @@ directory.
 - [Architecture](/Users/joey/rust/cell/todo/docs/architecture.md)
 - [CLI contract](/Users/joey/rust/cell/todo/docs/cli.md)
 - [User-owned installation](/Users/joey/rust/cell/todo/docs/system-installation.md)
+
+### Weaver
+
+- [Documentation index](/Users/joey/rust/cell/weaver/docs/README.md)
+- [Architecture](/Users/joey/rust/cell/weaver/docs/architecture.md)
+- [CLI contract](/Users/joey/rust/cell/weaver/docs/cli.md)
+- [User-owned installation](/Users/joey/rust/cell/weaver/docs/system-installation.md)

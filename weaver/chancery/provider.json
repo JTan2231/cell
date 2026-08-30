@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "provider": {
+    "id": "weaver",
+    "name": "Weaver",
+    "release": "0.1.0"
+  },
+  "entries": [
+    "entries/narrative-build.json",
+    "entries/workflow-operate.json",
+    "entries/develop-change.json"
+  ]
+}

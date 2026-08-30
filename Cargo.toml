@@ -9,12 +9,14 @@ members = [
     "annals/crates/annals",
     "annals/crates/annals-usage",
     "todo/crates/todo",
+    "weaver/crates/weaver",
 ]
 resolver = "3"
 
 [workspace.package]
 # The six Nucleus crates share this release version. Annals, Annals Usage, and
-# Todo declare their independent product versions in their package manifests.
+# Todo and Weaver declare their independent product versions in their package
+# manifests.
 version = "0.3.0"
 edition = "2024"
 rust-version = "1.89"
@@ -34,6 +36,7 @@ nucleus-client = { path = "nucleus/crates/nucleus-client" }
 nucleus-core = { path = "nucleus/crates/nucleus-core" }
 nucleus-daemon = { path = "nucleus/crates/nucleus-daemon" }
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "stream"] }
+regex = "1.11"
 rusqlite = { version = "0.40.0", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["raw_value"] }
