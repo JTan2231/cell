@@ -1,0 +1,11 @@
+{
+  "schema_version": 2,
+  "provider": {
+    "id": "email",
+    "name": "Email",
+    "release": "0.1.0"
+  },
+  "entries": [
+    "entries/message-send.json"
+  ]
+}

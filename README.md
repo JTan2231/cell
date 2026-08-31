@@ -4,7 +4,7 @@ Cell is the source monorepo for the local Nucleus ecosystem. It coordinates
 changes across the shared execution substrate and its first-party requesters
 without combining their runtime or domain authorities.
 
-The repository contains six independently versioned release units in five
+The repository contains seven independently versioned release units in six
 product directories:
 
 - `nucleus/`: the Nucleus CLI, daemon, typed client, portable contract, store,
@@ -13,13 +13,15 @@ product directories:
   projection;
 - `todo/`: the synchronous Todo CLI and its database;
 - `chancery/`: the read-only installed capability catalog and contract reader;
-  and
-- `weaver/`: the durable five-stage public-facing narrative requester.
+- `weaver/`: the durable five-stage public-facing narrative requester; and
+- `email/`: the synchronous fixed-recipient plain-text Email CLI, which sends
+  directly through Resend.
 
 Nucleus owns agent admission, execution, authentication, job history, and the
 durable requester-tool mailbox. Annals, Todo, and Weaver continue to own their
-domain state and success rules. Codex remains an external harness rather than
-source vendored into Cell. Start with
+domain state and success rules. Email is independent of Nucleus and calls
+Resend directly. Codex remains an external harness rather than source vendored
+into Cell. Start with
 [`nucleus/docs/operator-manual.md`](nucleus/docs/operator-manual.md) for shared
 topology, compatibility, and safe change ordering.
 
@@ -41,21 +43,22 @@ dispatcher has no ecosystem-wide 60-second deadline:
 ./ci.sh todo
 ./ci.sh chancery
 ./ci.sh weaver
+./ci.sh email
 ```
 
-Running `./ci.sh` without selectors runs the five product gates sequentially.
-A shared Nucleus contract or client change must pass all five gates. A purely
+Running `./ci.sh` without selectors runs the six product gates sequentially.
+A shared Nucleus contract or client change must pass all six gates. A purely
 domain-local change may use its product gate while iterating, but the complete
-root gate is the final repository check. A complete run also assembles all six
+root gate is the final repository check. A complete run also assembles all seven
 source provider bundles and requires Chancery doctor and list to accept their
 combined dependency graph.
 
 ## Versions and releases
 
 Nucleus's six crates share one Nucleus version. Annals, Annals Usage, Todo,
-Chancery, and Weaver keep independent versions and release scripts. Source
+Chancery, Weaver, and Email keep independent versions and release scripts. Source
 colocation does not imply lockstep release or deployment, a shared state
 directory, or a shared database. New releases use product-qualified tags
 (`nucleus-v*`, `annals-v*`, `annals-usage-v*`, `todo-v*`, `chancery-v*`, and
-`weaver-v*`). Pre-Cell release tags remain available in the original product
-repositories.
+`weaver-v*`, and `email-v*`). Pre-Cell release tags remain available in the
+original product repositories.

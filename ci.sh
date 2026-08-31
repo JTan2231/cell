@@ -5,11 +5,12 @@ set -eu
 ROOT=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 
 usage() {
-    printf '%s\n' 'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver]...'
+    printf '%s\n' \
+        'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver|email]...'
 }
 
 if [ "$#" -eq 0 ]; then
-    set -- nucleus annals todo chancery weaver
+    set -- nucleus annals todo chancery weaver email
 fi
 
 nucleus_selected=0
@@ -17,6 +18,7 @@ annals_selected=0
 todo_selected=0
 chancery_selected=0
 weaver_selected=0
+email_selected=0
 for project in "$@"; do
     case "$project" in
         nucleus) nucleus_selected=1 ;;
@@ -24,6 +26,7 @@ for project in "$@"; do
         todo) todo_selected=1 ;;
         chancery) chancery_selected=1 ;;
         weaver) weaver_selected=1 ;;
+        email) email_selected=1 ;;
         *)
             usage >&2
             exit 2
@@ -36,8 +39,8 @@ for project in "$@"; do
     "$ROOT/$project/ci.sh"
 done
 
-if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected" = \
-    11111 ]
+if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected" = \
+    111111 ]
 then
     printf '%s\n' '==> integrated Chancery source catalog'
     (
@@ -56,6 +59,7 @@ then
             "$catalog_registry/annals-usage"
         ln -s "$ROOT/todo/chancery" "$catalog_registry/todo"
         ln -s "$ROOT/weaver/chancery" "$catalog_registry/weaver"
+        ln -s "$ROOT/email/chancery" "$catalog_registry/email"
 
         chancery_candidate="$ROOT/target/release/chancery"
         [ -f "$chancery_candidate" ] && [ -x "$chancery_candidate" ] || {

@@ -1,0 +1,19 @@
+#!/bin/zsh
+
+unsetopt VERBOSE XTRACE
+if [[ -f "${HOME:?}/.zshrc" ]]; then
+    source "$HOME/.zshrc" >/dev/null 2>&1
+fi
+unsetopt VERBOSE XTRACE
+
+exec 3<&0
+print -r -- "${RESEND_API_KEY-}" | /usr/bin/env -i \
+    HOME="$HOME" \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    /bin/zsh -c '
+IFS= read -r RESEND_API_KEY
+export RESEND_API_KEY
+exec 0<&3
+exec 3<&-
+exec "$HOME/Library/Application Support/Email/install/current/libexec/email" "$@"
+' email "$@"

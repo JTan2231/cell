@@ -11,13 +11,14 @@ members = [
     "todo/crates/todo",
     "chancery/crates/chancery",
     "weaver/crates/weaver",
+    "email/crates/email",
 ]
 resolver = "3"
 
 [workspace.package]
 # The six Nucleus crates share this release version. Annals, Annals Usage,
-# Todo, Chancery, and Weaver declare independent product versions in their
-# manifests.
+# Todo, Chancery, Weaver, and Email declare independent product versions in
+# their manifests.
 version = "0.3.0"
 edition = "2024"
 rust-version = "1.89"
