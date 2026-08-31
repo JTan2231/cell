@@ -540,6 +540,9 @@ The layout is:
 $HOME/.local/bin/annals                 # frontend -> current release
 $HOME/.local/bin/annals-usage           # companion CLI -> current release
 $HOME/Library/LaunchAgents/org.annals.inbox.plist
+$HOME/Library/Application Support/Chancery/providers/
+|-- annals -> Annals current release share/chancery/annals
+`-- annals-usage -> Annals current release share/chancery/annals-usage
 $HOME/Library/Application Support/Annals/
 |-- config.toml
 |-- usage.toml
@@ -548,6 +551,9 @@ $HOME/Library/Application Support/Annals/
 |-- backups/
 |-- install/
 |   |-- releases/RELEASE_ID/
+|   |   `-- share/chancery/
+|   |       |-- annals/
+|   |       `-- annals-usage/
 |   |-- current -> releases/RELEASE_ID
 |   `-- previous -> releases/RELEASE_ID
 `-- spool/
@@ -656,7 +662,18 @@ under the Cell root target directory:
 That same command is the normal unattended update operation. It preflights the
 candidate binaries, configuration, and library before cutover.
 Complete program releases contain Annals, the telemetry companion, frontend,
-updater, rendered LaunchAgent, and a hash manifest. During an update the
+updater, rendered LaunchAgent, both product-owned Chancery provider bundles,
+and a hash manifest. Both bundle hashes participate in the release identity.
+The `annals` and `annals-usage` provider selectors point through the one Annals
+`current` release selector, so the two contracts cut over and roll back
+together with their executables. The deployer owns only those two provider
+selectors and preserves every other provider. It publishes them even when
+Chancery is not installed; neither Annals runtime depends on Chancery.
+Annals CI validates each bundle and requires its declared release to equal the
+corresponding Annals or Annals Usage package version. `release.sh` bumps the
+selected package and provider manifest together.
+
+During an update the
 deployer acquires its update lock and immediately writes the maintenance
 marker, establishing the no-new-claim boundary before candidate preparation.
 It then disables new activations. An active worker is allowed to finish its
@@ -794,15 +811,35 @@ a later activation. Run `annals inbox run` after `resume` when immediate
 dispatch is wanted.
 
 To retire the user installation while retaining its library and operational
-state, boot out the LaunchAgent and remove only the scheduler,
-command links, and versioned program directory:
+state, boot out the LaunchAgent and remove only the two Annals-owned Chancery
+provider selectors, scheduler, command links, and versioned program directory.
+Refuse to remove a provider selector whose target is not the exact Annals
+installation target:
 
 ```sh
 launchctl bootout "gui/$(id -u)/org.annals.inbox" 2>/dev/null || true
+annals_install="$HOME/Library/Application Support/Annals/install"
+chancery_providers="$HOME/Library/Application Support/Chancery/providers"
+for provider in annals annals-usage; do
+  selector="$chancery_providers/$provider"
+  expected="$annals_install/current/share/chancery/$provider"
+  if [ -L "$selector" ] && [ "$(readlink "$selector")" != "$expected" ]; then
+    printf 'refusing foreign Chancery provider selector: %s\n' "$selector" >&2
+    exit 1
+  elif [ -e "$selector" ] && [ ! -L "$selector" ]; then
+    printf 'refusing non-symlink Chancery provider selector: %s\n' \
+      "$selector" >&2
+    exit 1
+  fi
+done
+for provider in annals annals-usage; do
+  selector="$chancery_providers/$provider"
+  [ ! -L "$selector" ] || rm -f "$selector"
+done
 rm -f "$HOME/Library/LaunchAgents/org.annals.inbox.plist"
 rm -f "$HOME/.local/bin/annals"
 rm -f "$HOME/.local/bin/annals-usage"
-rm -rf "$HOME/Library/Application Support/Annals/install"
+rm -rf "$annals_install"
 ```
 
 Back up and explicitly remove the remaining state only when the library,

@@ -1,0 +1,59 @@
+{
+  "id": "todo.design.reconcile",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Propose or decide a Todo desired-state design",
+  "summary": "Create, correct, inspect, accept, or reject a desired-state design for a todo whose latest situation assessment is ready.",
+  "use_when": [
+    "An established todo has a latest current ready `aN` and needs a normative desired-state reconciliation.",
+    "A ready, rejected, or abandoned design needs provenance-bearing correction or explicit decision."
+  ],
+  "do_not_use_when": [
+    "The current situation is unknown, stale, inconclusive, or still needs a material user choice.",
+    "The requested artifact is a task list, sequence, estimate, file edit, command, deployment, or implementation record.",
+    "The owning umbrella is completed, superseded, or otherwise not open and canonical."
+  ],
+  "outcome": "One basis-complete `dN` proposal or durable return for more assessment, followed only when explicitly requested by a deterministic provenance-bearing accept or reject decision.",
+  "effects": [
+    "Propose and correct submit constrained Nucleus jobs and may consume Codex allowance.",
+    "A proposal records desired ownership, boundaries, state, interfaces, lifecycle, failure, compatibility, acceptance, non-goals, and jurisdiction transitions against one exact assessment.",
+    "Correction preserves the named predecessor and feedback and creates a successor rather than editing history.",
+    "Accept/reject bypasses Nucleus and records an explicit decision with readable UTF-8 provenance."
+  ],
+  "authority": [
+    "Todo owns assessment selection, design grammar, basis validation, draft lifecycle, decisions, currentness, and domain success.",
+    "The liaison may propose or return for assessment but cannot accept, reject, plan, or execute implementation."
+  ],
+  "success": [
+    "A ready design has no active choices, includes all nine clause kinds, covers every direction boundary, and covers every active predecessor operation.",
+    "Correction creates a traceable successor and leaves the predecessor unchanged.",
+    "Acceptance succeeds only while the exact assessment and umbrella bases remain current and stores the decision-source path."
+  ],
+  "failure_and_recovery": [
+    "When evidence is insufficient or stale, the liaison records a durable assessment return instead of inventing desired state.",
+    "A run ending with an open draft marks it abandoned; inspect and correct it explicitly rather than treating it as ready.",
+    "A newer assessment blocks acceptance and correction against the older basis; reassess and reconcile again."
+  ],
+  "privacy": [
+    "Designs and assessments may contain detailed current state, ownership, constraints, and desired interfaces.",
+    "Nucleus output retains model-side source and proposal traffic; decision sources are stored by canonical path in Todo."
+  ],
+  "interfaces": [
+    {"label": "Propose design", "invocation": "/Users/joey/.local/bin/todo design propose <TODO_ID>"},
+    {"label": "Show design", "invocation": "/Users/joey/.local/bin/todo design show <DESIGN_ID>"},
+    {"label": "Correct design", "invocation": "/Users/joey/.local/bin/todo design correct <DESIGN_ID> <FEEDBACK>"},
+    {"label": "Accept design", "invocation": "/Users/joey/.local/bin/todo design accept <DESIGN_ID> --source <READABLE_UTF8_PATH>"},
+    {"label": "Reject design", "invocation": "/Users/joey/.local/bin/todo design reject <DESIGN_ID> --reason <TEXT> --source <READABLE_UTF8_PATH>"}
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Implementation planning, task creation, file edits, deployment, or execution.",
+    "Design acceptance based on model prose or job completion.",
+    "Using a stale assessment or changing external-system ownership without explicit accepted desired state."
+  ],
+  "manual": "manuals/design-reconcile.md"
+}

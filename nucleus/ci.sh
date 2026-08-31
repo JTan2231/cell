@@ -131,6 +131,28 @@ do
 done
 packaging/macos/test-deploy-user.sh
 
+printf '%s\n' '==> Chancery provider bundle'
+workspace_version=$(awk '
+    $0 == "[workspace.package]" { in_package = 1; next }
+    in_package && /^\[/ { exit }
+    in_package && /^[[:space:]]*version[[:space:]]*=/ {
+        value = $0
+        sub(/^[^=]*=[[:space:]]*"/, "", value)
+        sub(/"[[:space:]]*$/, "", value)
+        print value
+        exit
+    }
+' "$WORKSPACE_MANIFEST")
+provider_release=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' \
+    "$SCRIPT_DIR/chancery/provider.json")
+[ -n "$workspace_version" ] && [ "$provider_release" = "$workspace_version" ] || {
+    printf 'ci.sh: Nucleus provider release %s does not match workspace version %s\n' \
+        "$provider_release" "$workspace_version" >&2
+    exit 1
+}
+cargo run --manifest-path "$WORKSPACE_MANIFEST" \
+    --package chancery --locked --quiet -- validate "$SCRIPT_DIR/chancery"
+
 printf '%s\n' '==> rustfmt'
 cargo fmt --manifest-path "$WORKSPACE_MANIFEST" \
     --package nucleus-cli \

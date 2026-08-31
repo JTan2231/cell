@@ -1,0 +1,59 @@
+{
+  "id": "annals.corpus.explore",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Search and read the Annals knowledge library",
+  "summary": "Search the evidence-backed map of ideas, read supporting quotations or retained documents, and inspect source activity and revision history.",
+  "use_when": [
+    "Concept labels, ancestor context, graph neighborhoods, exact supporting quotations, corpus revisions, or delivery metadata should be inspected.",
+    "A retained work's complete unchanged text should be retrieved by known label."
+  ],
+  "do_not_use_when": [
+    "New material should be retained or reconciled.",
+    "Semantic similarity, web research, truth adjudication, or source-content topic search is expected.",
+    "The request concerns account usage rather than corpus knowledge."
+  ],
+  "outcome": "A bounded local read from an explicitly resolved immutable corpus revision or from Annals delivery and work history, with the query's limits made visible.",
+  "effects": [
+    "Reads the selected Annals library without invoking Nucleus, a model, or the network.",
+    "Search performs lexical matching over normalized concept labels and ancestor-label context only.",
+    "Graph responses are bounded and report a frontier when depth or node limits truncate the neighborhood."
+  ],
+  "authority": [
+    "The Annals library is authoritative for retained works, concepts, parent edges, evidence links, reconciliations, commits, revisions, and delivery records.",
+    "An evidence link proves exact source support for a concept; it does not establish objective truth."
+  ],
+  "success": [
+    "The response identifies the resolved revision, selected concept IDs or works, evidence, pagination, and any graph frontier required to interpret the result.",
+    "A lexical search is described as lexical and does not imply semantic recall.",
+    "Historical reads leave HEAD and all library state unchanged."
+  ],
+  "failure_and_recovery": [
+    "Use public `cN` IDs rather than labels or paths to select existing concepts.",
+    "Opaque cursors are bound to the same library, command, query, scope, and revision; restart the read if that context changes.",
+    "Choose another `lately --by` basis when a delivery lacks the timestamp needed for the requested window."
+  ],
+  "privacy": [
+    "Concept labels, exact quotations, retained source text, and delivery metadata are read from the local private library.",
+    "This capability sends no content to a model or network service."
+  ],
+  "interfaces": [
+    {"label": "Corpus overview", "invocation": "/Users/joey/.local/bin/annals overview"},
+    {"label": "Lexical concept search", "invocation": "/Users/joey/.local/bin/annals search <QUERY>"},
+    {"label": "Concept detail", "invocation": "/Users/joey/.local/bin/annals concept show <CONCEPT_ID>"},
+    {"label": "Bounded graph", "invocation": "/Users/joey/.local/bin/annals graph <CONCEPT_ID>"},
+    {"label": "Supporting evidence", "invocation": "/Users/joey/.local/bin/annals concept evidence <CONCEPT_ID>"},
+    {"label": "Show retained work", "invocation": "/Users/joey/.local/bin/annals work show <LABEL>"},
+    {"label": "Recent source activity", "invocation": "/Users/joey/.local/bin/annals lately"},
+    {"label": "Commit history", "invocation": "/Users/joey/.local/bin/annals log"},
+    {"label": "Revision difference", "invocation": "/Users/joey/.local/bin/annals diff <FROM_REVISION> <TO_REVISION>"}
+  ],
+  "does_not_authorize": [
+    "Any corpus mutation or reconciliation application.",
+    "A truth claim beyond the exact retained evidence.",
+    "External disclosure of private library content."
+  ],
+  "manual": "manuals/corpus-explore.md"
+}

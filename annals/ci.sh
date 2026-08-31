@@ -169,6 +169,43 @@ if [ "$(uname -s)" = Darwin ] && command -v plutil >/dev/null 2>&1; then
     done
 fi
 
+printf '%s\n' '==> Chancery provider bundles'
+package_version() {
+    awk '
+        $0 == "[package]" { in_package = 1; next }
+        in_package && /^\[/ { exit }
+        in_package && /^[[:space:]]*version[[:space:]]*=/ {
+            value = $0
+            sub(/^[^=]*=[[:space:]]*"/, "", value)
+            sub(/"[[:space:]]*$/, "", value)
+            print value
+            exit
+        }
+    ' "$1"
+}
+provider_release() {
+    awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' "$1"
+}
+annals_version=$(package_version "$SCRIPT_DIR/crates/annals/Cargo.toml")
+annals_provider_release=$(provider_release "$SCRIPT_DIR/chancery/annals/provider.json")
+[ -n "$annals_version" ] && [ "$annals_provider_release" = "$annals_version" ] || {
+    printf 'ci.sh: Annals provider release %s does not match package version %s\n' \
+        "$annals_provider_release" "$annals_version" >&2
+    exit 1
+}
+usage_version=$(package_version "$SCRIPT_DIR/crates/annals-usage/Cargo.toml")
+usage_provider_release=$(provider_release \
+    "$SCRIPT_DIR/chancery/annals-usage/provider.json")
+[ -n "$usage_version" ] && [ "$usage_provider_release" = "$usage_version" ] || {
+    printf 'ci.sh: Annals Usage provider release %s does not match package version %s\n' \
+        "$usage_provider_release" "$usage_version" >&2
+    exit 1
+}
+cargo run --manifest-path "$WORKSPACE_MANIFEST" \
+    --package chancery --locked --quiet -- validate "$SCRIPT_DIR/chancery/annals"
+cargo run --manifest-path "$WORKSPACE_MANIFEST" \
+    --package chancery --locked --quiet -- validate "$SCRIPT_DIR/chancery/annals-usage"
+
 printf '%s\n' '==> rustfmt'
 cargo fmt \
     --manifest-path "$WORKSPACE_MANIFEST" \

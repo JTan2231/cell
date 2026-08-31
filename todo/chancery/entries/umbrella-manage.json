@@ -1,0 +1,58 @@
+{
+  "id": "todo.umbrella.manage",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Read and manage existing todos",
+  "summary": "List, search, or inspect Todo records; decide pending concern-routing proposals; add notes; and mark a todo done or reopen it.",
+  "use_when": [
+    "An existing concern, routing proposal, durable umbrella, direction history, note, lifecycle state, assessment, or design projection should be read.",
+    "A person has explicitly authorized a routing decision or an umbrella note/open-done transition."
+  ],
+  "do_not_use_when": [
+    "A new concern should be captured and researched.",
+    "The task is to implement, plan, or prove completion of the underlying work.",
+    "A routing proposal's frozen basis is stale or authorization provenance is unavailable."
+  ],
+  "outcome": "An exact Todo read or deterministic provenance-bearing identity, note, or lifecycle transition, without model authority or implementation claims.",
+  "effects": [
+    "List, search, and show commands read Todo state without invoking Nucleus.",
+    "Routing accept/reject records an explicit decision using a readable UTF-8 source as authorization provenance.",
+    "Note add appends an immutable working note; done and reopen perform idempotent umbrella lifecycle transitions."
+  ],
+  "authority": [
+    "Todo owns concern and umbrella identities, direction revisions, notes, routing decisions, lifecycle, assessments, and design projections.",
+    "Only deterministic CLI decision commands, not a model job or final prose, authorize routing."
+  ],
+  "success": [
+    "Reads identify the exact public ID and current or historical state selected.",
+    "Routing acceptance applies a still-pending proposal whose complete frozen basis remains current.",
+    "Lifecycle and note writes are durably visible without being misrepresented as implementation execution."
+  ],
+  "failure_and_recovery": [
+    "There is no force option for stale routing; reassess the original concern.",
+    "An attachment does not revise direction, a revision does not merge identities, and unification preserves superseded history.",
+    "Done/reopen does not prove that any particular plan ran; inspect external state separately."
+  ],
+  "privacy": [
+    "Todo reads can expose source paths, directions, notes, assessment evidence references, and design content.",
+    "Decision sources must be readable UTF-8 at decision time; Todo stores their canonical paths, not contents."
+  ],
+  "interfaces": [
+    {"label": "List open todos", "invocation": "/Users/joey/.local/bin/todo list"},
+    {"label": "Search todos", "invocation": "/Users/joey/.local/bin/todo search <QUERY>"},
+    {"label": "Show todo", "invocation": "/Users/joey/.local/bin/todo show <TODO_ID>"},
+    {"label": "Accept routing", "invocation": "/Users/joey/.local/bin/todo routing accept <ROUTING_ID> --source <READABLE_UTF8_PATH>"},
+    {"label": "Reject routing", "invocation": "/Users/joey/.local/bin/todo routing reject <ROUTING_ID> --reason <TEXT> --source <READABLE_UTF8_PATH>"},
+    {"label": "Append note", "invocation": "/Users/joey/.local/bin/todo note add <TODO_ID> <TEXT>"},
+    {"label": "Mark done", "invocation": "/Users/joey/.local/bin/todo done <TODO_ID>"},
+    {"label": "Reopen", "invocation": "/Users/joey/.local/bin/todo reopen <TODO_ID>"}
+  ],
+  "does_not_authorize": [
+    "Implementation or execution of the todo direction.",
+    "Inferring completion evidence from an open/done marker.",
+    "A routing decision without explicit readable decision-source provenance."
+  ],
+  "manual": "manuals/umbrella-manage.md"
+}

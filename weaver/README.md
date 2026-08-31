@@ -94,7 +94,7 @@ working artifacts, not retained run history or factual authority.
 
 ```sh
 cd /Users/joey/rust/cell/weaver
-CHANCERY=/absolute/path/to/chancery ./ci.sh
+./ci.sh
 cargo build --manifest-path ../Cargo.toml --package weaver --release
 
 /Users/joey/rust/cell/target/release/weaver \
@@ -107,9 +107,8 @@ cargo build --manifest-path ../Cargo.toml --package weaver --release
   check how-i-work
 ```
 
-CI uses `/Users/joey/.local/bin/chancery` when installed. `CHANCERY` selects a
-different absolute validator path; when neither is available, schema validation
-is skipped unless `CHANCERY_REQUIRED=1`. Release checks always require it.
+CI builds and uses the Chancery candidate from the Cell workspace to validate
+Weaver's provider bundle. Weaver has no runtime dependency on Chancery.
 
 `submit` prints the run ID after atomically recording the request, wakes the
 detached worker, and exits. A nonterminal `wait` periodically ensures a worker

@@ -132,6 +132,78 @@ done
 packaging/macos/test-frontend.sh
 packaging/macos/test-deploy-user.sh
 
+printf '%s\n' '==> Chancery provider bundle'
+package_version=$(awk '
+    $0 == "[package]" { in_package = 1; next }
+    in_package && /^\[/ { exit }
+    in_package && /^[[:space:]]*version[[:space:]]*=/ {
+        value = $0
+        sub(/^[^=]*=[[:space:]]*"/, "", value)
+        sub(/"[[:space:]]*$/, "", value)
+        print value
+        exit
+    }
+' "$SCRIPT_DIR/crates/todo/Cargo.toml")
+provider_release=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' \
+    "$SCRIPT_DIR/chancery/provider.json")
+[ -n "$package_version" ] && [ "$provider_release" = "$package_version" ] || {
+    printf 'ci.sh: Todo provider release %s does not match package version %s\n' \
+        "$provider_release" "$package_version" >&2
+    exit 1
+}
+cargo run --manifest-path "$WORKSPACE_MANIFEST" \
+    --package chancery --locked --quiet -- validate "$SCRIPT_DIR/chancery"
+
+catalog_registry=$(mktemp -d)
+cleanup_catalog_registry() {
+    rm -rf "$catalog_registry"
+}
+trap cleanup_catalog_registry EXIT HUP INT TERM
+ln -s "$SCRIPT_DIR/chancery" "$catalog_registry/todo"
+ln -s "$WORKSPACE_DIR/nucleus/chancery" "$catalog_registry/nucleus"
+
+catalog_result=$(cargo run --manifest-path "$WORKSPACE_MANIFEST" \
+    --package chancery --locked --quiet -- \
+    --registry "$catalog_registry" --json list)
+case "$catalog_result" in
+    *'"id":"todo.concern.capture-and-route"'*) ;;
+    *)
+        printf 'ci.sh: Todo catalog does not contain concern capture: %s\n' \
+            "$catalog_result" >&2
+        exit 1
+        ;;
+esac
+case "$catalog_result" in
+    *'"title":"Save and research a concern for later"'*) ;;
+    *)
+        printf 'ci.sh: Todo catalog omits the concern-capture title: %s\n' \
+            "$catalog_result" >&2
+        exit 1
+        ;;
+esac
+case "$catalog_result" in
+    *'"summary":"Save one actionable concern with its source, then research a pending proposal to attach it, create or revise a todo, unify duplicates, defer it, or dismiss it."'*) ;;
+    *)
+        printf 'ci.sh: Todo catalog omits the concern-capture summary: %s\n' \
+            "$catalog_result" >&2
+        exit 1
+        ;;
+esac
+
+show_result=$(cargo run --manifest-path "$WORKSPACE_MANIFEST" \
+    --package chancery --locked --quiet -- \
+    --registry "$catalog_registry" --json \
+    show todo.concern.capture-and-route)
+case "$show_result" in
+    *'"id":"todo.concern.capture-and-route"'*) ;;
+    *)
+        printf 'ci.sh: Todo concern-capture contract cannot be shown: %s\n' \
+            "$show_result" >&2
+        exit 1
+        ;;
+esac
+printf '%s\n' 'Todo catalog regression passed'
+
 printf '%s\n' '==> rustfmt'
 cargo fmt --manifest-path "$WORKSPACE_MANIFEST" --package todo -- --check
 

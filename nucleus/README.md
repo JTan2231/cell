@@ -38,11 +38,15 @@ the same directory. For an isolated foreground instance:
   --codex-home /tmp/nucleus-codex-home
 ```
 
-Install it as the current user's always-on LaunchAgent:
+Install it as the current user's always-on LaunchAgent through the packaged
+deployer so the executable release and its Chancery provider bundle are staged
+together:
 
 ```sh
-/Users/joey/rust/cell/target/release/nucleus service install \
+/Users/joey/rust/cell/nucleus/packaging/macos/deploy-user.sh \
+  --binary /Users/joey/rust/cell/target/release/nucleus \
   --daemon /Users/joey/rust/cell/target/release/nucleusd \
+  --codex /opt/homebrew/bin/codex \
   --codex-home "$HOME/path/to/current-signed-in-codex-home"
 /Users/joey/rust/cell/target/release/nucleus service status
 /Users/joey/rust/cell/target/release/nucleus health
@@ -50,7 +54,15 @@ Install it as the current user's always-on LaunchAgent:
 
 Installation copies the binaries to `~/.local`, writes
 `~/Library/LaunchAgents/org.nucleus.daemon.plist`, and loads it with
-`launchctl bootstrap`. The daemon remains in the foreground under launchd.
+`launchctl bootstrap`. The packaging layer first stages an immutable release
+containing the exact CLI, daemon, deployer, and Nucleus-owned Chancery bundle
+under `~/Library/Application Support/Nucleus/install/releases/`. Its `current`
+selector and `~/Library/Application Support/Chancery/providers/nucleus` are
+rollback-protected around the existing service transaction. Chancery is not a
+Nucleus runtime dependency, and Chancery upgrades do not change that
+product-owned provider selector. The daemon remains in the foreground under
+launchd. Nucleus CI validates the bundle and requires its provider release to
+equal the workspace Nucleus version; `release.sh` bumps both together.
 The installer copies `auth.json` from `--codex-home` into
 `~/Library/Application Support/Nucleus/codex-home`, writes a minimal private
 `config.toml` that selects the file credential store, and configures the

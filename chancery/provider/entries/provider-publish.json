@@ -1,0 +1,91 @@
+{
+  "id": "chancery.provider.publish",
+  "contract_version": 2,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Publish a product capability to Chancery",
+  "summary": "Add or change a product-owned capability contract, stage it with the matching product release, and expose it through the installed directory without adding a runtime dependency.",
+  "use_when": [
+    "A product gains or changes a user-facing capability or adaptive operation that should be globally discoverable.",
+    "An installed provider contract, manual, dependency, or selector must change."
+  ],
+  "do_not_use_when": [
+    "Only product implementation changes while the published contract remains exact.",
+    "The proposed document is an unsupported aspiration, backlog item, brittle UI script, or internal primitive that users should not route to."
+  ],
+  "outcome": "The owning product release contains a validated, version-matched bundle and owns one atomic installed provider selector that Chancery can read.",
+  "effects": [
+    "Changes product-owned capability JSON, detailed manuals, packaging, and deployment tests.",
+    "A product deployment may atomically change that product's provider selector.",
+    "Does not change the product runtime's behavior or introduce a product-to-Chancery call."
+  ],
+  "authority": [
+    "The product owns and reviews its supported outcomes, effects, commands, privacy, and recovery contract.",
+    "Chancery owns the bundle schema, validation rules, directory behavior, and cross-provider dependency presentation.",
+    "Global agent instructions own only the bootstrap that says when and how to query Chancery."
+  ],
+  "success": [
+    "The source bundle passes chancery validate.",
+    "The product CI proves the bundle is staged and its provider selector follows current across install, update, and rollback.",
+    "After deployment, chancery doctor is valid and list/show expose the intended contract.",
+    "The product still runs when Chancery and its registry are absent."
+  ],
+  "failure_and_recovery": [
+    "Reject the change before deployment if schema validation or product CI fails.",
+    "If deployment fails, restore the product release and provider selector together.",
+    "If one installed bundle later becomes invalid, leave other providers available and repair or redeploy only the owning product."
+  ],
+  "privacy": [
+    "Contracts are installed local documentation and must not embed secrets, credentials, private source material, or transient runtime output.",
+    "A documented capability must separately state what its real invocation may retain or disclose."
+  ],
+  "interfaces": [
+    {
+      "label": "Validate a source bundle",
+      "invocation": "/Users/joey/.local/bin/chancery validate <ABSOLUTE_BUNDLE_PATH>"
+    },
+    {
+      "label": "Validate the installed directory",
+      "invocation": "/Users/joey/.local/bin/chancery doctor"
+    }
+  ],
+  "dependencies": [],
+  "session_surfaces": [
+    "product source tree",
+    "product deployment environment"
+  ],
+  "does_not_authorize": [
+    "Publishing a claimed capability that the product does not currently support.",
+    "Executing the represented capability or operation.",
+    "Changing another product's provider selector."
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Identify the durable user outcome and owning product before choosing an entry ID or mode.",
+    "Author a discriminative title and summary plus a self-contained manual from current product contracts, with semantic request boundaries, effects, authority, success, failure recovery, privacy, interfaces, and dependencies.",
+    "Validate the source bundle with the candidate Chancery reader before changing installed selectors.",
+    "Stage the unchanged bundle inside the owning product's content-addressed release and make its installer own exactly one registry selector.",
+    "Exercise product CI and deployment rollback, then deploy the product release.",
+    "Run Chancery doctor and confirm that list and show expose the installed contract with its full meaning and status."
+  ],
+  "checkpoints": [
+    "The product owner confirms the capability describes supported current behavior rather than an aspiration.",
+    "Schema validation succeeds before installation state changes.",
+    "The staged bundle bytes and provider release metadata match the product release.",
+    "Installed discovery succeeds before any global bootstrap depends on the new entry."
+  ],
+  "adaptation": [
+    "Use the product's own release layout and maintenance protocol; Chancery requires only a fixed bundle and atomic selector.",
+    "Describe volatile UI work semantically with checkpoints and stop conditions instead of selectors or coordinate scripts.",
+    "Split materially different outcomes or authority boundaries into separate entries so an agent can form a reliable semantic shortlist."
+  ],
+  "stop_when": [
+    "The owning product does not yet support the claimed outcome.",
+    "The contract would need secret material or live state to be useful.",
+    "A dependency or authority owner cannot be identified.",
+    "The installer cannot update and roll back the product release and provider selector coherently."
+  ],
+  "manual": "manuals/provider-publish.md"
+}

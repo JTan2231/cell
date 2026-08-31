@@ -1,0 +1,58 @@
+{
+  "id": "todo.concern.capture-and-route",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Save and research a concern for later",
+  "summary": "Save one actionable concern with its source, then research a pending proposal to attach it, create or revise a todo, unify duplicates, defer it, or dismiss it.",
+  "use_when": [
+    "The user wants an actionable concern or follow-up durably retained for later rather than completed now.",
+    "The concern should be researched against existing durable todo identities while preserving its source provenance."
+  ],
+  "do_not_use_when": [
+    "The user wants the work completed in the current request.",
+    "The desired durable outcome is a casual note, preference, source archive, implementation plan, or general project graph.",
+    "No readable UTF-8 source file can identify where the direction arose."
+  ],
+  "outcome": "One durable `cN` concern is committed first and one pending `rN` routing proposal is researched; no routing decision or `tN` creation is implied.",
+  "effects": [
+    "Validates and stores the absolute source path plus the caller's direction, then commits one concern before model work begins.",
+    "Submits a constrained Nucleus routing job that reads the source and a frozen bounded candidate snapshot and may consume Codex allowance.",
+    "Records one pending proposal to attach, create, revise, unify, dismiss, or defer; it never applies that proposal."
+  ],
+  "authority": [
+    "Todo owns concern provenance, candidate snapshots, routing proposals, explicit routing decisions, and durable todo identities.",
+    "Nucleus owns only execution, authentication, job state, and raw model output; final prose is not routing authority."
+  ],
+  "success": [
+    "The command reports a committed `cN` concern and a pending `rN` proposal, or reports the committed concern together with a later research failure.",
+    "The original caller direction and resolved source path are inspectable through Todo.",
+    "No `tN` is claimed until a still-current routing proposal is explicitly accepted in a later command."
+  ],
+  "failure_and_recovery": [
+    "The concern commit survives Nucleus, model, or routing-research failure; inspect the reported concern before attempting anything again.",
+    "A stale or rejected proposal is not forced; reassess the existing concern when new research is needed.",
+    "Do not create a Markdown checkbox or an unrelated source file as a substitute for Todo provenance."
+  ],
+  "privacy": [
+    "Todo stores the absolute source path and evidence references, not the source file's bytes.",
+    "The routing liaison may read selected source content, and Nucleus raw output can retain that content within its private operational state."
+  ],
+  "interfaces": [
+    {"label": "Capture and research", "invocation": "/Users/joey/.local/bin/todo new --source <READABLE_UTF8_PATH> <DIRECTION>"},
+    {"label": "Capture only", "invocation": "/Users/joey/.local/bin/todo concern add <DIRECTION> --source <READABLE_UTF8_PATH>"},
+    {"label": "Research existing concern", "invocation": "/Users/joey/.local/bin/todo concern assess <CONCERN_ID>"},
+    {"label": "Inspect concern", "invocation": "/Users/joey/.local/bin/todo concern show <CONCERN_ID>"},
+    {"label": "Inspect proposal", "invocation": "/Users/joey/.local/bin/todo routing show <ROUTING_ID>"}
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Accepting or rejecting the routing proposal.",
+    "Creating, revising, attaching, or unifying a durable `tN` identity.",
+    "Planning, implementing, or completing the retained concern."
+  ],
+  "manual": "manuals/concern-capture-and-route.md"
+}

@@ -1,0 +1,60 @@
+{
+  "id": "nucleus.execution.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Manage Nucleus agent jobs and service",
+  "summary": "Check readiness and account access, submit or inspect agent jobs, read their output, cancel work, or operate the per-user Nucleus service.",
+  "use_when": [
+    "Nucleus readiness, authentication, job state, exact harness output, cancellation, or service state must be inspected or changed.",
+    "An exact version-one invocation must be submitted directly for technical diagnosis or a deliberate runtime task."
+  ],
+  "do_not_use_when": [
+    "The request is ordinary immediate work that the current interactive agent can perform directly.",
+    "A requester-owned domain result or retry decision is the actual authority being sought.",
+    "The goal is to create a project registry or workflow graph."
+  ],
+  "outcome": "A clearly observed or deliberately changed Nucleus runtime condition, identified through Nucleus job, account, service, or health state rather than requester domain inference.",
+  "effects": [
+    "Read commands expose daemon, account, job, request, and exact harness-output state.",
+    "Job submission creates one durable Nucleus job and may invoke Codex and consume account allowance.",
+    "Cancellation records intent for one exact job attempt; authentication login changes the Nucleus-owned credential.",
+    "Service restart makes every unfinished attempt lost, while uninstall removes installed programs but retains state and logs."
+  ],
+  "authority": [
+    "Nucleus owns admission, one harness attempt per job, job lifecycle, cancellation, the credential lease, exact harness stdout, and the durable requester-tool mailbox.",
+    "The requester remains authoritative for the domain result, idempotency, and whether a new attempt is safe."
+  ],
+  "success": [
+    "The requested Nucleus state is confirmed through the corresponding supported CLI response.",
+    "For direct submission, the exact request is admitted under its job ID and the required runtime observation is obtained.",
+    "Requester domain success is verified separately whenever the job belongs to an application."
+  ],
+  "failure_and_recovery": [
+    "If health cannot connect, inspect `nucleus service status` and the user-service logs; do not create a hidden direct-Codex fallback.",
+    "If authentication is unavailable, quiesce requesters before attended device login and run a deliberate requester canary afterward.",
+    "If an attempt is lost or fails after a domain commit, inspect requester state before considering any new job."
+  ],
+  "privacy": [
+    "Nucleus state may contain complete prompts, tool arguments and results, source content, exact app-server stdout, and authentication material.",
+    "The per-user socket relies on local filesystem ownership rather than application-level authentication."
+  ],
+  "interfaces": [
+    {"label": "Installed manual", "invocation": "/Users/joey/.local/bin/nucleus manual"},
+    {"label": "Strict readiness", "invocation": "/Users/joey/.local/bin/nucleus health"},
+    {"label": "Account probe", "invocation": "/Users/joey/.local/bin/nucleus account --wait 0"},
+    {"label": "Submit exact request", "invocation": "/Users/joey/.local/bin/nucleus jobs submit <REQUEST_JSON>"},
+    {"label": "Inspect job", "invocation": "/Users/joey/.local/bin/nucleus jobs show <JOB_ID>"},
+    {"label": "Read job output", "invocation": "/Users/joey/.local/bin/nucleus jobs logs <JOB_ID>"},
+    {"label": "Cancel job", "invocation": "/Users/joey/.local/bin/nucleus jobs cancel <JOB_ID>"},
+    {"label": "Attended login", "invocation": "/Users/joey/.local/bin/nucleus auth login --device-auth"},
+    {"label": "Service status", "invocation": "/Users/joey/.local/bin/nucleus service status"}
+  ],
+  "does_not_authorize": [
+    "A new requester attempt after failure or loss.",
+    "Acceptance of any Todo, Annals, Weaver, or other requester-owned domain result.",
+    "Restarting or uninstalling the service while active attempts matter."
+  ],
+  "manual": "manuals/execution-operate.md"
+}

@@ -185,7 +185,7 @@ cargo metadata --manifest-path "$workspace_manifest" \
     --locked --offline --no-deps --format-version 1 >/dev/null \
     || fail 'the bumped manifest and lockfile are not synchronized'
 
-CHANCERY_REQUIRED=1 "$ci_path"
+"$ci_path"
 
 reported_version=$(target/release/weaver --version) \
     || fail 'unable to read the release binary version'

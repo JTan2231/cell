@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "provider": {
+    "id": "todo",
+    "name": "Todo",
+    "release": "0.3.0"
+  },
+  "entries": [
+    "entries/concern-capture-and-route.json",
+    "entries/umbrella-manage.json",
+    "entries/situation-assess.json",
+    "entries/design-reconcile.json",
+    "entries/digest-email.json",
+    "entries/install-operate.json",
+    "entries/develop-change.json"
+  ]
+}

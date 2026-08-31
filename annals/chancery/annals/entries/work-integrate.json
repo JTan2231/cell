@@ -1,0 +1,59 @@
+{
+  "id": "annals.work.integrate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Incorporate a source into Annals knowledge",
+  "summary": "Have Annals' AI reader compare one retained source with the current evidence-backed idea map, then retain the proposed result or apply it when authorized.",
+  "use_when": [
+    "Immutable source material should be examined against the evidence-backed conceptual corpus.",
+    "An already retained work should be deliberately integrated or reexamined at current HEAD."
+  ],
+  "do_not_use_when": [
+    "Only unchanged source retention is wanted.",
+    "The requested result is a summary, truth judgment, action backlog, or generic semantic search.",
+    "The user has not authorized immediate application of a material proposed corpus change."
+  ],
+  "outcome": "A durable examination and reconciliation for one work at one frozen base revision, left pending, applied by explicit request, or recorded with no corpus change.",
+  "effects": [
+    "May retain a new immutable work and always creates or reuses model-run and reconciliation provenance for the selected context.",
+    "Submits a constrained Nucleus job and may consume Codex account allowance.",
+    "Without `--apply`, a material projected change remains pending; with `--apply`, it atomically creates a commit and advances HEAD.",
+    "A mechanically equal projected state is recorded without a commit or revision advance."
+  ],
+  "authority": [
+    "Annals owns works, the frozen base revision, draft validation, reconciliation records, projected corpus state, application, and domain success.",
+    "Nucleus owns only execution, authentication, job state, and raw protocol history; final model prose is diagnostic."
+  ],
+  "success": [
+    "Annals records exactly one valid reconciliation or an exact-context reusable reconciliation is selected.",
+    "When application is requested, Annals reports an applied revision and its invariants remain valid.",
+    "When no material change results, the interpretation is durably recorded with no corpus revision change."
+  ],
+  "failure_and_recovery": [
+    "The liaison may revise named draft operations until the complete request resolves; independently valid operations remain staged.",
+    "A pending reconciliation applies only while HEAD still equals its base revision.",
+    "If Nucleus fails after Annals records the domain result, preserve that result and do not infer failure from the runtime alone."
+  ],
+  "privacy": [
+    "The complete selected source and relevant frozen corpus context may be included in the Nucleus request and retained in Nucleus operational state.",
+    "Annals and Nucleus state belong inside the same private retention boundary for this operation."
+  ],
+  "interfaces": [
+    {"label": "Integrate file without applying", "invocation": "/Users/joey/.local/bin/annals integrate <UTF8_INPUT> --name <LABEL>"},
+    {"label": "Integrate retained work", "invocation": "/Users/joey/.local/bin/annals integrate --work <LABEL>"},
+    {"label": "Integrate and apply", "invocation": "/Users/joey/.local/bin/annals integrate <UTF8_INPUT> --name <LABEL> --apply"},
+    {"label": "Force fresh examination", "invocation": "/Users/joey/.local/bin/annals integrate --work <LABEL> --reexamine"},
+    {"label": "Inspect reconciliation", "invocation": "/Users/joey/.local/bin/annals change show --work <LABEL>"}
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Applying a material reconciliation unless `--apply` or a separate explicit apply request is authorized.",
+    "Treating the provisional concept decomposition as uniquely correct or objectively true.",
+    "Publishing or disclosing the source or corpus."
+  ],
+  "manual": "manuals/work-integrate.md"
+}

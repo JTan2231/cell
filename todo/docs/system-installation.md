@@ -41,6 +41,8 @@ The layout is:
 ```text
 ~/.local/bin/todo
 ~/Library/LaunchAgents/org.todo.daily-email.plist
+~/Library/Application Support/Chancery/providers/
+  todo -> Todo's current release share/chancery/todo
 ~/Library/Application Support/Todo/
   config.toml
   todo.db
@@ -53,6 +55,10 @@ The layout is:
       package/todo-daily-email
       package/deploy-user.sh
       package/org.todo.daily-email.plist
+      share/chancery/todo/
+        provider.json
+        entries/
+        manuals/
       manifest.txt
     current -> releases/<content-hash>
     previous -> releases/<content-hash>
@@ -68,7 +74,16 @@ values. Nucleus is resolved through `NUCLEUS_SOCKET` when set, or its standard
 per-user socket otherwise.
 
 Deployment first verifies the installed Nucleus service is healthy and stages a
-complete content-addressed release. Before an update can change database state,
+complete content-addressed release, including Todo's Chancery provider bundle.
+The bundle hash participates in the release identity and integrity manifest.
+The Todo-owned `providers/todo` selector points through Todo's atomic `current`
+release selector, so documentation and executable rollback together. Todo
+creates that one selector even when Chancery is not yet installed, never changes
+another provider's selector, and does not depend on Chancery at runtime.
+Todo CI validates the bundle and requires its declared provider release to equal
+the Todo package version; `release.sh` bumps and commits both versions together.
+
+Before an update can change database state,
 it records whether the email LaunchAgent is loaded and quiesces it. It creates a
 private transaction directory, asks the candidate binary to run `todo migrate
 --backup` with a nonexistent absolute path inside that directory, switches the

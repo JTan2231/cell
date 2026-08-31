@@ -3,8 +3,8 @@
 This manual is the starting point for operating Nucleus, changing a boundary
 shared by Nucleus and its requesters, or adding a new requester. It describes
 current operational truth and safe change ordering. It is not a backlog,
-changelog, protocol specification, or substitute for a requester's domain
-documentation.
+changelog, protocol specification, global capability directory, or substitute
+for a requester's domain documentation.
 
 The checked-in file is canonical. An installed, version-matched Nucleus CLI
 prints the same Markdown without contacting the daemon:
@@ -26,6 +26,22 @@ Do not route by isolated words such as “save”, “remember”, “job”, or
 First identify the durable outcome the user wants. If no durable outcome below
 is intended, perform the work normally. If the user explicitly requests more
 than one outcome, use each relevant system.
+
+The installed Chancery directory is the global entry point for this decision.
+List its complete installed catalog, compare the intended outcome semantically
+with the entries' titles and summaries, then read every plausible
+version-matched contract before choosing or invoking an interface:
+
+```sh
+chancery list
+chancery show ENTRY_ID
+```
+
+Chancery is a read-only documentation and discovery authority. It does not run
+the capability, choose an entry, probe readiness, authorize an effect, or
+determine domain success. The interactive agent owns semantic selection. The
+table below remains a compact explanation of Nucleus ecosystem authority, not a
+separately maintained discovery catalog.
 
 | System | Use it when | It owns | Do not use it for |
 | --- | --- | --- | --- |
@@ -61,6 +77,8 @@ nucleus service status
 annals --version
 annals-usage --version
 todo --version
+chancery --version
+chancery doctor
 weaver --version
 ```
 
@@ -94,6 +112,9 @@ Weaver ----------/
 Annals Usage <------ Nucleus output atoms and account reads
 Todo SQLite <------- Todo's validated stage tools and explicit decisions
 Weaver outputs <---- Weaver's detached repository worker
+
+installed product releases -- publish --> Chancery provider bundles
+interactive agent ----------- reads ----> Chancery
 ```
 
 Todo's concern-routing, situation-assessment, and design-reconciliation
@@ -111,14 +132,16 @@ requires its persisted outputs and mechanical validation, not merely completed
 Nucleus jobs.
 
 Nucleus is a per-user execution coordinator, not a project registry or workflow
-engine. A requester submits one closed, versioned invocation. Nucleus validates
-it, starts one harness attempt, retains exact harness stdout, and coordinates
-dynamic tool calls. The requester continues to own the work that motivated the
-job.
+engine, capability directory, or documentation service. A requester submits one
+closed, versioned invocation. Nucleus validates it, starts one harness attempt,
+retains exact harness stdout, and coordinates dynamic tool calls. The requester
+continues to own the work that motivated the job.
 
-Nucleus, Annals, Annals Usage, Todo, and Weaver share the Cell source repository,
-Cargo workspace, and lockfile. That source layout does not merge their release,
-installation, state, backup, recovery, or domain-success boundaries.
+Nucleus, Annals, Annals Usage, Todo, Chancery, and Weaver share the Cell source
+repository, Cargo workspace, and lockfile. That source layout does not merge
+their release, installation, state, backup, recovery, or domain-success
+boundaries. Product runtimes do not call Chancery. Their installers only
+co-stage owned documentation and publish one provider selector.
 
 The following distinctions are operationally important:
 
@@ -148,7 +171,17 @@ The following distinctions are operationally important:
 ~/.local/libexec/nucleusd
 ~/Library/LaunchAgents/org.nucleus.daemon.plist
 
+~/Library/Application Support/Chancery/providers/
+  nucleus -> Nucleus's current release share/chancery/nucleus
+
 ~/Library/Application Support/Nucleus/
+  install/
+    releases/RELEASE_ID/
+      bin/nucleus
+      libexec/nucleusd
+      share/chancery/nucleus/
+    current -> releases/RELEASE_ID
+    previous -> releases/RELEASE_ID
   nucleus.sock
   nucleus.db
   nucleus.db-wal
@@ -534,10 +567,18 @@ ordering, rollback boundary, and operator documentation before production use.
 
 ### 9. Add its capability relationship
 
-If the requester exposes a distinct user-facing durable outcome, add one short
-capability card to this manual and the global routing instructions. State its
-positive triggers, explicit non-triggers, authority, and Nucleus relationship.
-Keep detailed CLI and domain procedures in its own product tree.
+If the requester exposes a distinct user-facing durable outcome, publish a
+product-owned Chancery entry and detailed manual with its release. Give it a
+plain-language title and outcome-discriminative summary, then state when it
+does and does not apply, its effects, authority, success, recovery, privacy,
+interfaces, dependencies, and Nucleus relationship. Make the product installer
+own its one Chancery provider selector. Validate the source bundle in product
+CI and prove installed list/show discovery during deployment.
+
+Do not copy the card into this manual or global discovery instructions. Global
+instructions contain only the Chancery bootstrap; exact behavior stays in the
+version-matched product bundle. Nucleus remains runtime authority and gains no
+provider registry or documentation storage.
 
 ## Route changes by their authority
 
@@ -554,6 +595,8 @@ Keep detailed CLI and domain procedures in its own product tree.
 | Requester prompt, model, timeout, or permission profile | Requester | Use new job IDs for new attempts, verify health capabilities, and rerun domain acceptance tests. |
 | Credential or credential-lease behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and canary every requester. |
 | Nucleus service layout or installer | Nucleus CLI/packaging | Preserve state/log ownership, rollback, launchd behavior, and requester configuration. |
+| Chancery bundle schema, catalog, contract reader, or directory installation | Chancery | Preserve read-only behavior, failure isolation, complete installed inventory, and provider-owned selectors; do not introduce a product runtime dependency. |
+| A product's published capability or operation | Owning product | Stage the version-matched bundle with its release, validate it in product CI, require the complete root CI to accept the six-provider source dependency graph, and update only that product's Chancery selector. |
 
 ## Guarded change playbooks
 
@@ -591,7 +634,10 @@ Keep detailed CLI and domain procedures in its own product tree.
    minutes for first-start migration, compaction, and health. A failed cutover
    restores captured binaries and service configuration only when the database
    schema did not change. It refuses an unsafe binary-only rollback after a
-   schema cutover. Authentication is deliberately excluded from rollback.
+   schema cutover. Authentication is deliberately excluded from rollback. The
+   packaging wrapper also switches the immutable Nucleus release and its
+   product-owned Chancery provider selector; a failed service install restores
+   those selectors, and Chancery itself is never part of runtime readiness.
 7. Verify strict health, a fresh generic job, and each affected requester
    canary before resuming dispatch.
 
@@ -732,8 +778,9 @@ Use layered proof after a shared change:
 
 An Annals integration canary creates a real examination and reconciliation
 record even without `--apply`; choose the work deliberately and inspect the
-result. A Todo canary creates a real todo; choose a real source and direction or
-use an isolated Todo database. Do not leave unexplained canary domain records.
+result. A `todo new` canary creates a real concern and pending routing proposal,
+not an accepted `tN`; choose a real source and direction or use an isolated Todo
+database. Do not leave unexplained canary domain records.
 Sending or previewing Todo's email digest does not exercise Nucleus and is not
 a requester canary. A Weaver canary replaces the selected narrative's current
 outputs; use a deliberate fixture or repository and validate the five persisted
@@ -753,6 +800,10 @@ Use these placement rules to keep the manual current and small:
   editable runbook.
 - **Component documentation:** exact Nucleus protocol, Todo creation behavior,
   Annals corpus and inbox behavior, or Annals Usage accounting.
+- **Chancery provider bundle:** current, version-matched user capability cards,
+  detailed capability manuals, and adaptive cross-system operation manuals.
+  The owning product controls its claims; Chancery controls schema and
+  discovery. An operation describes choreography but does not execute it.
 - **Code, schema, migration, and tests:** behavior the software must enforce.
   Documentation does not enforce idempotency, compatibility, or rollback.
 - **Code comment:** a narrow, non-obvious local invariant or race, paired with a
@@ -809,3 +860,10 @@ directory.
 - [Architecture](/Users/joey/rust/cell/weaver/docs/architecture.md)
 - [CLI contract](/Users/joey/rust/cell/weaver/docs/cli.md)
 - [User-owned installation](/Users/joey/rust/cell/weaver/docs/system-installation.md)
+
+### Chancery
+
+- [Documentation index](/Users/joey/rust/cell/chancery/docs/README.md)
+- [Architecture](/Users/joey/rust/cell/chancery/docs/architecture.md)
+- [Provider manifest](/Users/joey/rust/cell/chancery/docs/manifest.md)
+- [User-owned installation](/Users/joey/rust/cell/chancery/docs/system-installation.md)

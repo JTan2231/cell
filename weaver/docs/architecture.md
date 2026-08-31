@@ -20,12 +20,13 @@ source and never publishes it.
 
 ## Capability publication
 
-The product-owned `chancery/` bundle describes the requests Weaver can actually
+The product-owned `chancery/` bundle catalogs the outcomes Weaver can actually
 serve: building the five-stage narrative, operating its durable workflow, and
 changing the implementation under the repository's development contracts. Its
-manuals name effects, authorities, recovery paths, dependencies, and explicit
-non-capabilities. In particular, they do not turn narrative generation into job
-search, application submission, publication, upload, or public-profile editing.
+titles and summaries support semantic selection; its manuals name effects,
+authorities, recovery paths, dependencies, and explicit non-capabilities. In
+particular, they do not turn narrative generation into job search, application
+submission, publication, upload, or public-profile editing.
 
 The macOS release contains an immutable copy of this bundle and publishes it
 through Weaver's provider selector. Chancery can validate and discover those

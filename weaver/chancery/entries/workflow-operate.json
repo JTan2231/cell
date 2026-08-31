@@ -4,25 +4,8 @@
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
-  "routable": true,
-  "title": "Operate Weaver workflows",
-  "summary": "Inspect, wait for, recover, cancel, validate, diagnose, or deploy Weaver without expanding its narrative-build boundary.",
-  "routing": {
-    "triggers": [
-      "check Weaver status",
-      "wait for or recover a Weaver run",
-      "cancel a Weaver run",
-      "validate Weaver narrative outputs",
-      "diagnose Weaver",
-      "install or update Weaver"
-    ],
-    "exclusions": [
-      "build a new Weaver narrative",
-      "change Weaver source code",
-      "search for or apply to jobs",
-      "publish generated narrative output"
-    ]
-  },
+  "title": "Manage Weaver runs and installation",
+  "summary": "Inspect, wait for, recover, or cancel a Weaver run; validate generated narrative files; diagnose readiness; or deploy Weaver.",
   "use_when": [
     "The sole current Weaver workflow or its exact run ID must be observed, resumed through a new worker process, or cancelled.",
     "Persisted narrative outputs need deterministic validation without a model call.",

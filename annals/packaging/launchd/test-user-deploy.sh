@@ -11,28 +11,74 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 package="$temporary/package"
+package_share="$temporary/share/chancery"
 home="$temporary/Operator Home"
 candidate="$temporary/annals-candidate"
 usage_candidate="$temporary/annals-usage-candidate"
+candidate_template="$temporary/annals-candidate.template"
+usage_candidate_template="$temporary/annals-usage-candidate.template"
 nucleus="$temporary/nucleus"
 nucleus_socket="$temporary/nucleus.sock"
 launchctl="$temporary/launchctl"
 launchctl_log="$temporary/launchctl.log"
-mkdir -p "$package" "$home/Library/Application Support/Annals/codex-home"
+
+read_package_version() {
+    awk '
+        $0 == "[package]" { in_package = 1; next }
+        in_package && /^\[/ { exit }
+        in_package && /^[[:space:]]*version[[:space:]]*=/ {
+            value = $0
+            sub(/^[^=]*=[[:space:]]*"/, "", value)
+            sub(/"[[:space:]]*$/, "", value)
+            print value
+            exit
+        }
+    ' "$1"
+}
+
+annals_version=$(read_package_version \
+    "$SCRIPT_DIR/../../crates/annals/Cargo.toml")
+usage_version=$(read_package_version \
+    "$SCRIPT_DIR/../../crates/annals-usage/Cargo.toml")
+annals_provider_version=$(awk -F '"' \
+    '/"release"[[:space:]]*:/ { print $4; exit }' \
+    "$SCRIPT_DIR/../../chancery/annals/provider.json")
+usage_provider_version=$(awk -F '"' \
+    '/"release"[[:space:]]*:/ { print $4; exit }' \
+    "$SCRIPT_DIR/../../chancery/annals-usage/provider.json")
+[ -n "$annals_version" ] \
+    && [ "$annals_provider_version" = "$annals_version" ] || {
+    printf 'test: Annals package version %s does not match provider release %s\n' \
+        "$annals_version" "$annals_provider_version" >&2
+    exit 1
+}
+[ -n "$usage_version" ] \
+    && [ "$usage_provider_version" = "$usage_version" ] || {
+    printf 'test: Annals Usage package version %s does not match provider release %s\n' \
+        "$usage_version" "$usage_provider_version" >&2
+    exit 1
+}
+annals_mismatch_version="$annals_version-provider-mismatch"
+usage_mismatch_version="$usage_version-provider-mismatch"
+
+mkdir -p "$package" "$package_share" \
+    "$home/Library/Application Support/Annals/codex-home"
 cp "$SCRIPT_DIR/deploy-user.sh" "$package/deploy-user.sh"
 cp "$SCRIPT_DIR/annals-user" "$package/annals-user"
 cp "$SCRIPT_DIR/org.annals.inbox.agent.plist" \
     "$package/org.annals.inbox.agent.plist"
+cp -R "$SCRIPT_DIR/../../chancery/annals" "$package_share/annals"
+cp -R "$SCRIPT_DIR/../../chancery/annals-usage" "$package_share/annals-usage"
 chmod 0755 "$package/deploy-user.sh" "$package/annals-user"
 
-cat >"$candidate" <<'EOF'
+cat >"$candidate_template" <<'EOF'
 #!/bin/sh
 set -eu
 config=
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --version)
-            printf '%s\n' 'annals test-candidate'
+            printf '%s\n' 'annals __ANNALS_VERSION__'
             exit 0
             ;;
         --config)
@@ -143,9 +189,11 @@ case "$command" in
         ;;
 esac
 EOF
+sed "s/__ANNALS_VERSION__/$annals_version/g" \
+    "$candidate_template" >"$candidate"
 chmod 0755 "$candidate"
 
-cat >"$usage_candidate" <<'EOF'
+cat >"$usage_candidate_template" <<'EOF'
 #!/bin/sh
 set -eu
 fail() {
@@ -154,7 +202,7 @@ fail() {
 }
 case "${1:-}" in
     --version)
-        printf '%s\n' 'annals-usage test-candidate'
+        printf '%s\n' 'annals-usage __ANNALS_USAGE_VERSION__'
         ;;
     doctor)
         [ "$#" -eq 3 ] || fail 'doctor argument count'
@@ -188,10 +236,11 @@ case "${1:-}" in
     *) exit 1 ;;
 esac
 EOF
-sed -i '' \
+sed \
+    -e "s/__ANNALS_USAGE_VERSION__/$usage_version/g" \
     -e "s|__NUCLEUS__|$nucleus|g" \
     -e "s|__NUCLEUS_SOCKET__|$nucleus_socket|g" \
-    "$usage_candidate"
+    "$usage_candidate_template" >"$usage_candidate"
 chmod 0755 "$usage_candidate"
 
 cat >"$nucleus" <<'EOF'
@@ -220,9 +269,11 @@ chmod 0755 "$launchctl"
 
 deploy() {
     selected_nucleus=${ANNALS_TEST_NUCLEUS:-$nucleus}
+    selected_candidate=${ANNALS_TEST_BINARY:-$candidate}
+    selected_usage_candidate=${ANNALS_TEST_USAGE_BINARY:-$usage_candidate}
     HOME="$home" "$package/deploy-user.sh" \
-        --binary "$candidate" \
-        --usage-binary "$usage_candidate" \
+        --binary "$selected_candidate" \
+        --usage-binary "$selected_usage_candidate" \
         --nucleus "$selected_nucleus" \
         --nucleus-socket "$nucleus_socket" \
         --home "$home" \
@@ -233,16 +284,61 @@ deploy() {
 deploy --no-start >/dev/null
 [ ! -e "$launchctl_log" ]
 
+mismatched_candidate="$temporary/annals-mismatched-provider"
+sed "s/__ANNALS_VERSION__/$annals_mismatch_version/g" \
+    "$candidate_template" \
+    >"$mismatched_candidate"
+chmod 0755 "$mismatched_candidate"
+if (ANNALS_TEST_BINARY="$mismatched_candidate" deploy --no-start) \
+    >"$temporary/provider-mismatch.out" 2>"$temporary/provider-mismatch.err"
+then
+    printf '%s\n' 'deployment unexpectedly accepted an Annals provider/candidate mismatch' >&2
+    exit 1
+fi
+grep -F "provider release $annals_provider_version does not match candidate $annals_mismatch_version" \
+    "$temporary/provider-mismatch.err" >/dev/null
+
+mismatched_usage="$temporary/annals-usage-mismatched-provider"
+sed \
+    -e "s/__ANNALS_USAGE_VERSION__/$usage_mismatch_version/g" \
+    -e "s|__NUCLEUS__|$nucleus|g" \
+    -e "s|__NUCLEUS_SOCKET__|$nucleus_socket|g" \
+    "$usage_candidate_template" \
+    >"$mismatched_usage"
+chmod 0755 "$mismatched_usage"
+if (ANNALS_TEST_USAGE_BINARY="$mismatched_usage" deploy --no-start) \
+    >"$temporary/usage-provider-mismatch.out" \
+    2>"$temporary/usage-provider-mismatch.err"
+then
+    printf '%s\n' 'deployment unexpectedly accepted an Annals Usage provider/candidate mismatch' >&2
+    exit 1
+fi
+grep -F "provider release $usage_provider_version does not match candidate $usage_mismatch_version" \
+    "$temporary/usage-provider-mismatch.err" >/dev/null
+
 state="$home/Library/Application Support/Annals"
 cli="$home/.local/bin/annals"
 usage_cli="$home/.local/bin/annals-usage"
 plist="$home/Library/LaunchAgents/org.annals.inbox.plist"
+chancery_providers="$home/Library/Application Support/Chancery/providers"
+annals_provider="$chancery_providers/annals"
+usage_provider="$chancery_providers/annals-usage"
 [ -L "$cli" ]
 [ -L "$usage_cli" ]
 [ -L "$state/install/current" ]
 [ -f "$state/install/current/manifest.json" ]
 [ -x "$state/install/current/libexec/annals" ]
 [ -x "$state/install/current/libexec/annals-usage" ]
+[ -f "$state/install/current/share/chancery/annals/provider.json" ]
+[ -f "$state/install/current/share/chancery/annals-usage/provider.json" ]
+[ -L "$annals_provider" ]
+[ -L "$usage_provider" ]
+[ "$(readlink "$annals_provider")" = \
+    "$state/install/current/share/chancery/annals" ]
+[ "$(readlink "$usage_provider")" = \
+    "$state/install/current/share/chancery/annals-usage" ]
+[ -f "$annals_provider/provider.json" ]
+[ -f "$usage_provider/provider.json" ]
 [ "$(sed -n 's/^  "format": \([0-9][0-9]*\),$/\1/p' \
     "$state/install/current/manifest.json")" -eq 2 ]
 [ -f "$state/annals.db" ]
@@ -311,6 +407,7 @@ fi
 HOME="$home" "$cli" validate >/dev/null
 
 first_release=$(readlink "$state/install/current")
+ln -s /preserved/provider "$chancery_providers/preserved"
 first_candidate_hash=$(shasum -a 256 "$candidate" | awk '{print $1}')
 printf '%s\n' 'ambient_setting = true' >>"$state/codex-home/config.toml"
 codex_config_with_ambient_setting=$(cat "$state/codex-home/config.toml")
@@ -348,6 +445,9 @@ fi
 [ "$(tail -n 1 "$state/usage-doctor.log")" = \
     "doctor current=$first_release" ]
 [ "$(readlink "$state/install/previous")" = "$first_release" ]
+[ -f "$annals_provider/provider.json" ]
+[ -f "$usage_provider/provider.json" ]
+[ "$(readlink "$chancery_providers/preserved")" = /preserved/provider ]
 [ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" != "$legacy_config_hash" ]
 grep -Fx "nucleus_socket = \"$nucleus_socket\"" "$state/config.toml" >/dev/null
 grep -Fx '# retained operator setting' "$state/config.toml" >/dev/null
@@ -378,6 +478,9 @@ grep -Fx skipped "$state/spool/skipped/preserved" >/dev/null
 deploy --no-start >/dev/null
 [ "$(readlink "$state/install/current")" = "$second_release" ]
 [ "$(readlink "$state/install/previous")" = "$first_release" ]
+[ -f "$annals_provider/provider.json" ]
+[ -f "$usage_provider/provider.json" ]
+[ "$(readlink "$chancery_providers/preserved")" = /preserved/provider ]
 [ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" = "$config_hash" ]
 [ "$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')" = "$usage_config_hash" ]
 backup_count=$(find "$state/backups" -type f -maxdepth 1 | wc -l | tr -d ' ')
@@ -390,6 +493,16 @@ if deploy --no-start >"$temporary/tampered.out" 2>"$temporary/tampered.err"; the
 fi
 install -m 0755 "$package/deploy-user.sh" \
     "$state/install/current/package/deploy-user.sh"
+
+printf '%s\n' ' ' >>"$state/install/current/share/chancery/annals/provider.json"
+if deploy --no-start >"$temporary/tampered-provider.out" \
+    2>"$temporary/tampered-provider.err"
+then
+    printf '%s\n' 'deployment unexpectedly accepted a tampered Chancery bundle' >&2
+    exit 1
+fi
+install -m 0600 "$package_share/annals/provider.json" \
+    "$state/install/current/share/chancery/annals/provider.json"
 
 loaded="$state/service-loaded"
 fail_bootstrap="$temporary/fail-next-bootstrap"
@@ -476,6 +589,8 @@ then
 fi
 [ "$(readlink "$state/install/current")" = "$running_release" ]
 [ "$(readlink "$state/install/previous")" = "$second_release" ]
+[ -f "$annals_provider/provider.json" ]
+[ -f "$usage_provider/provider.json" ]
 [ -f "$loaded" ]
 [ ! -e "$state/spool/.maintenance" ]
 [ -f "$state/spool/.paused" ]
@@ -521,6 +636,8 @@ if deploy --fresh-state >"$temporary/fresh-failure.out" 2>"$temporary/fresh-fail
 fi
 [ "$(cat "$state/annals.db")" = old-library ]
 [ "$(readlink "$state/install/current")" = "$current_before_fresh" ]
+[ -f "$annals_provider/provider.json" ]
+[ -f "$usage_provider/provider.json" ]
 [ -f "$state/spool/processing/j00000000000000000090/material/first.txt" ]
 [ -f "$state/spool/queued/j00000000000000000091/material/second.txt" ]
 [ -f "$state/spool/.paused" ]
@@ -555,5 +672,17 @@ generation=$(sed -n 's/^  "rollback_generation": "\([^"]*\)",$/\1/p' \
 [ -f "$state/backups/generations/$generation/spool/processing/j00000000000000000090/material/first.txt" ]
 [ -f "$state/backups/generations/$generation/spool/queued/j00000000000000000091/material/second.txt" ]
 printf '%s\n' "$fresh_output" | grep -F 'Imported backlog: 3' >/dev/null
+
+rm -f "$annals_provider"
+ln -s /foreign/annals-provider "$annals_provider"
+if deploy --no-start >"$temporary/foreign-provider.out" \
+    2>"$temporary/foreign-provider.err"
+then
+    printf '%s\n' 'deployment unexpectedly took over a foreign provider selector' >&2
+    exit 1
+fi
+[ "$(readlink "$annals_provider")" = /foreign/annals-provider ]
+rm -f "$annals_provider"
+ln -s "$state/install/current/share/chancery/annals" "$annals_provider"
 
 printf '%s\n' 'user deploy test passed'

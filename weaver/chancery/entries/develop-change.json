@@ -4,24 +4,8 @@
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
-  "routable": true,
-  "title": "Change Weaver",
-  "summary": "Change Weaver implementation or contracts while preserving its narrative, requester, interactive-file-access, current-state, recovery, and deployment boundaries.",
-  "routing": {
-    "triggers": [
-      "change Weaver source code",
-      "develop a Weaver feature",
-      "change the Weaver CLI or workflow",
-      "change Weaver's Nucleus integration",
-      "change Weaver state, recovery, or deployment"
-    ],
-    "exclusions": [
-      "operate an installed Weaver run",
-      "build a narrative with Weaver",
-      "add job search or application automation",
-      "publish a Weaver release without explicit intent"
-    ]
-  },
+  "title": "Change Weaver software and contracts",
+  "summary": "Modify Weaver code, five-stage narrative workflow, Nucleus integration, state, recovery, installation, or public behavior.",
   "use_when": [
     "Weaver code, tests, CLI, repository contract, five-stage pipeline, validation, Nucleus requester boundary, private state, activation, maintenance, packaging, or documentation is being changed."
   ],

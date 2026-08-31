@@ -4,14 +4,16 @@ Cell is the source monorepo for the local Nucleus ecosystem. It coordinates
 changes across the shared execution substrate and its first-party requesters
 without combining their runtime or domain authorities.
 
-The repository contains five independently versioned release units in four
+The repository contains six independently versioned release units in five
 product directories:
 
 - `nucleus/`: the Nucleus CLI, daemon, typed client, portable contract, store,
   and exact Codex adapter;
 - `annals/`: Annals and the independently versioned Annals Usage reporting
   projection;
-- `todo/`: the synchronous Todo CLI and its database; and
+- `todo/`: the synchronous Todo CLI and its database;
+- `chancery/`: the read-only installed capability catalog and contract reader;
+  and
 - `weaver/`: the durable five-stage public-facing narrative requester.
 
 Nucleus owns agent admission, execution, authentication, job history, and the
@@ -37,19 +39,23 @@ dispatcher has no ecosystem-wide 60-second deadline:
 ./ci.sh nucleus
 ./ci.sh annals
 ./ci.sh todo
+./ci.sh chancery
 ./ci.sh weaver
 ```
 
-Running `./ci.sh` without selectors runs the four product gates sequentially.
-A shared Nucleus contract or client change must pass all four gates. A purely
+Running `./ci.sh` without selectors runs the five product gates sequentially.
+A shared Nucleus contract or client change must pass all five gates. A purely
 domain-local change may use its product gate while iterating, but the complete
-root gate is the final repository check.
+root gate is the final repository check. A complete run also assembles all six
+source provider bundles and requires Chancery doctor and list to accept their
+combined dependency graph.
 
 ## Versions and releases
 
-Nucleus's six crates share one Nucleus version. Annals, Annals Usage, Todo, and
-Weaver keep independent versions and release scripts. Source colocation does
-not imply lockstep release or deployment, a shared state directory, or a shared
-database. New releases use product-qualified tags (`nucleus-v*`, `annals-v*`,
-`annals-usage-v*`, `todo-v*`, and `weaver-v*`). Pre-Cell release tags remain
-available in the original product repositories.
+Nucleus's six crates share one Nucleus version. Annals, Annals Usage, Todo,
+Chancery, and Weaver keep independent versions and release scripts. Source
+colocation does not imply lockstep release or deployment, a shared state
+directory, or a shared database. New releases use product-qualified tags
+(`nucleus-v*`, `annals-v*`, `annals-usage-v*`, `todo-v*`, `chancery-v*`, and
+`weaver-v*`). Pre-Cell release tags remain available in the original product
+repositories.

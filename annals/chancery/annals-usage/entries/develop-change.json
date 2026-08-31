@@ -1,0 +1,74 @@
+{
+  "id": "annals-usage.develop.change",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change Annals Usage reporting",
+  "summary": "Modify how Annals Usage calculates, reports, diagnoses, or authenticates access to Annals-attributed model usage.",
+  "use_when": [
+    "The Annals Usage package, projection semantics, rate-card comparison, configuration, diagnostics, or delegated login surface is changing."
+  ],
+  "do_not_use_when": [
+    "The task is to run a current report, budget read, doctor, or login.",
+    "The required change belongs to Nucleus output or account authority or to Annals domain state.",
+    "A retained reporting database is being proposed without a new explicit product boundary."
+  ],
+  "outcome": "A tested versioned projection change that continues to derive live results from Annals and Nucleus authorities and states every accounting limit explicitly.",
+  "effects": [
+    "Modifies the separately versioned `annals-usage` package, tests, configuration, or telemetry documentation.",
+    "May require coordinated Annals attribution or Nucleus output-contract changes when an upstream atomic record changes.",
+    "Publication and joint Annals deployment remain separately authorized actions."
+  ],
+  "authority": [
+    "Annals Usage owns projection interpretation only.",
+    "Annals owns delivery and model-run attribution; Nucleus owns jobs, attempts, exact output atoms, account access, and credentials."
+  ],
+  "success": [
+    "Coverage, overlapping token categories, unattributed runs, rate-card limits, and account-global allowance scope remain explicit and tested.",
+    "No telemetry database, account snapshot, credential copy, UI scrape, or offline estimate is introduced.",
+    "The Annals product CI passes within its 60-second deadline."
+  ],
+  "failure_and_recovery": [
+    "Fail when an underlying authority is unreadable instead of returning a stale cached answer.",
+    "Version projection interpretation when derived semantics change and retain atomic authorities needed for historical recalculation.",
+    "Coordinate upstream changes through the owning Annals or Nucleus contract rather than duplicating their state."
+  ],
+  "privacy": [
+    "Tests and live reports can expose private delivery attribution, model output metadata, account plan, and activity.",
+    "Annals Usage must never read or retain Nucleus credential files."
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read the complete Annals vocabulary and telemetry contract, then identify whether Annals Usage actually owns the requested meaning.",
+    "Run `nucleus manual` before changing shared output, account, authentication, compatibility, or deployment behavior.",
+    "Implement the smallest projection change and update telemetry documentation and exact coverage tests.",
+    "Run `./annals/ci.sh`; perform separately authorized live report, budget, doctor, and requester canaries when affected."
+  ],
+  "checkpoints": [
+    "Atomic source authorities remain Annals and Nucleus records rather than a new reporting store.",
+    "Every usage total is coverage-qualified and overlapping categories are not double-counted.",
+    "Allowance output remains account-global and is not misrepresented as a delivery denominator.",
+    "Release or deployment has not occurred without separate authorization."
+  ],
+  "adaptation": [
+    "Update projection decoding according to the exact supported Nucleus harness records while preserving explicit gaps for unknown forms.",
+    "Update rate-card comparisons only from the current authoritative pricing source and keep them distinct from invoices."
+  ],
+  "stop_when": [
+    "The desired fact cannot be derived from supported Annals and Nucleus authorities.",
+    "The change would require Annals Usage to own credentials or runtime state.",
+    "An upstream contract change has not been accepted by its owning product."
+  ],
+  "does_not_authorize": [
+    "Running the Annals release publication command.",
+    "Deploying Annals or Annals Usage.",
+    "Changing upstream Annals or Nucleus meaning without their owning changes."
+  ],
+  "manual": "manuals/develop-change.md"
+}

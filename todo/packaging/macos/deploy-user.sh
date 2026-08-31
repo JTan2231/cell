@@ -12,6 +12,11 @@ SOURCE_FRONTEND="$SCRIPT_DIR/todo"
 SOURCE_DEPLOYER="$SCRIPT_DIR/deploy-user.sh"
 SOURCE_PLIST="$SCRIPT_DIR/$SERVICE_LABEL.plist"
 SOURCE_EMAIL_RUNNER="$SCRIPT_DIR/todo-daily-email"
+if [ -d "$SCRIPT_DIR/../share/chancery/todo" ]; then
+    SOURCE_CHANCERY="$SCRIPT_DIR/../share/chancery/todo"
+else
+    SOURCE_CHANCERY="$SCRIPT_DIR/../../chancery"
+fi
 
 binary_path=
 install_home=${HOME:-}
@@ -37,6 +42,31 @@ EOF
 fail() {
     printf 'todo user deploy: %s\n' "$*" >&2
     exit 1
+}
+
+validate_chancery_bundle() {
+    bundle=$1
+    [ -d "$bundle" ] && [ ! -L "$bundle" ] \
+        || fail "Chancery bundle is not a regular directory: $bundle"
+    [ -f "$bundle/provider.json" ] && [ ! -L "$bundle/provider.json" ] \
+        || fail "Chancery bundle has no regular provider.json: $bundle"
+    if find "$bundle" -type l -print | grep -q .; then
+        fail "Chancery bundle contains a symbolic link: $bundle"
+    fi
+    if find "$bundle" ! -type d ! -type f -print | grep -q .; then
+        fail "Chancery bundle contains a non-file entry: $bundle"
+    fi
+}
+
+chancery_bundle_hash() {
+    bundle=$1
+    (
+        cd "$bundle"
+        find . -type f -print | LC_ALL=C sort | while IFS= read -r file; do
+            printf 'path=%s\n' "$file"
+            shasum -a 256 "$file"
+        done
+    ) | shasum -a 256 | awk '{print $1}'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -116,10 +146,11 @@ do
     [ -f "$source" ] && [ ! -L "$source" ] \
         || fail "missing packaged file: $source"
 done
-for command in awk grep id install mktemp mv plutil readlink shasum; do
+for command in awk cp find grep id install mktemp mv plutil readlink shasum sort; do
     command -v "$command" >/dev/null 2>&1 \
         || fail "required command not found: $command"
 done
+validate_chancery_bundle "$SOURCE_CHANCERY"
 
 STATE_DIR="$install_home/Library/Application Support/Todo"
 CONFIG_PATH="$STATE_DIR/config.toml"
@@ -134,6 +165,10 @@ CLI_PATH="$CLI_DIR/todo"
 AGENT_DIR="$install_home/Library/LaunchAgents"
 AGENT_PLIST="$AGENT_DIR/$SERVICE_LABEL.plist"
 LOG_DIR="$install_home/Library/Logs/Todo"
+CHANCERY_STATE_DIR="$install_home/Library/Application Support/Chancery"
+CHANCERY_PROVIDERS_DIR="$CHANCERY_STATE_DIR/providers"
+CHANCERY_PROVIDER_LINK="$CHANCERY_PROVIDERS_DIR/todo"
+CHANCERY_PROVIDER_TARGET="$INSTALL_DIR/current/share/chancery/todo"
 SERVICE_DOMAIN="gui/$(id -u)"
 SERVICE_TARGET="$SERVICE_DOMAIN/$SERVICE_LABEL"
 
@@ -144,9 +179,11 @@ transaction_dir=
 old_current=
 old_previous=
 old_cli=
+old_chancery_provider=
 old_config=0
 old_plist=0
 switched=0
+chancery_provider_switched=0
 config_changed=0
 plist_changed=0
 was_loaded=0
@@ -194,6 +231,13 @@ cleanup() {
                 rm -f "$CLI_PATH"
             fi
         fi
+        if [ "$chancery_provider_switched" -eq 1 ]; then
+            if [ -n "$old_chancery_provider" ]; then
+                atomic_symlink "$old_chancery_provider" "$CHANCERY_PROVIDER_LINK"
+            else
+                rm -f "$CHANCERY_PROVIDER_LINK"
+            fi
+        fi
         if [ "$config_changed" -eq 1 ]; then
             if [ "$old_config" -eq 1 ]; then
                 install -m 0600 "$transaction_dir/config.toml" "$CONFIG_PATH"
@@ -229,7 +273,17 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
-"$binary_path" --version >/dev/null
+candidate_version=$("$binary_path" --version) \
+    || fail 'unable to read the Todo candidate version'
+case "$candidate_version" in
+    'todo '*) version=${candidate_version#todo } ;;
+    *) fail "Todo candidate reported an unexpected version: $candidate_version" ;;
+esac
+[ -n "$version" ] || fail 'Todo candidate reported an empty version'
+provider_release=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' \
+    "$SOURCE_CHANCERY/provider.json")
+[ "$provider_release" = "$version" ] \
+    || fail "Todo provider release $provider_release does not match candidate $version"
 nucleus_health=$(HOME="$install_home" "$nucleus_cli" --compact health) \
     || fail 'could not read the user-owned Nucleus service health'
 case "$nucleus_health" in
@@ -262,6 +316,13 @@ plutil -lint "$SOURCE_PLIST" >/dev/null
 install -d -m 0700 "$STATE_DIR" "$INSTALL_DIR" "$RELEASES_DIR"
 install -d -m 0700 "$LOG_DIR"
 install -d -m 0755 "$CLI_DIR" "$AGENT_DIR"
+for path in "$CHANCERY_STATE_DIR" "$CHANCERY_PROVIDERS_DIR"; do
+    [ ! -L "$path" ] \
+        || fail "refusing symbolic-link directory: $path"
+    [ ! -e "$path" ] || [ -d "$path" ] \
+        || fail "directory path is occupied by a non-directory: $path"
+    install -d -m 0700 "$path"
+done
 if ! mkdir "$UPDATE_LOCK" 2>/dev/null; then
     fail "another update holds $UPDATE_LOCK"
 fi
@@ -314,6 +375,16 @@ if [ -L "$CLI_PATH" ]; then
 elif [ -e "$CLI_PATH" ]; then
     fail "$CLI_PATH exists and is not a symbolic link"
 fi
+if [ -L "$CHANCERY_PROVIDER_LINK" ]; then
+    old_chancery_provider=$(readlink "$CHANCERY_PROVIDER_LINK")
+elif [ -e "$CHANCERY_PROVIDER_LINK" ]; then
+    fail "$CHANCERY_PROVIDER_LINK exists and is not a symbolic link"
+fi
+if [ -n "$old_chancery_provider" ] \
+    && [ "$old_chancery_provider" != "$CHANCERY_PROVIDER_TARGET" ]
+then
+    fail "Chancery provider selector is not owned by this Todo installation: $CHANCERY_PROVIDER_LINK"
+fi
 
 temporary_plist=$(mktemp "$AGENT_DIR/.$SERVICE_LABEL.XXXXXX")
 install -m 0600 "$SOURCE_PLIST" "$temporary_plist"
@@ -336,8 +407,10 @@ frontend_hash=$(shasum -a 256 "$SOURCE_FRONTEND" | awk '{print $1}')
 deployer_hash=$(shasum -a 256 "$SOURCE_DEPLOYER" | awk '{print $1}')
 plist_hash=$(shasum -a 256 "$SOURCE_PLIST" | awk '{print $1}')
 email_runner_hash=$(shasum -a 256 "$SOURCE_EMAIL_RUNNER" | awk '{print $1}')
+chancery_hash=$(chancery_bundle_hash "$SOURCE_CHANCERY")
 release_id=$(printf '%s\n' \
-    "$binary_hash" "$frontend_hash" "$deployer_hash" "$plist_hash" "$email_runner_hash" \
+    "$binary_hash" "$frontend_hash" "$deployer_hash" "$plist_hash" \
+    "$email_runner_hash" "$chancery_hash" \
     | shasum -a 256 | awk '{print $1}')
 release_path="$RELEASES_DIR/$release_id"
 
@@ -363,6 +436,7 @@ if [ -d "$release_path" ]; then
     [ -f "$release_path/package/$SERVICE_LABEL.plist" ] \
         && [ ! -L "$release_path/package/$SERVICE_LABEL.plist" ] \
         || fail "existing release contains an invalid service template: $release_id"
+    validate_chancery_bundle "$release_path/share/chancery/todo"
     [ "$(shasum -a 256 "$release_path/bin/todo" | awk '{print $1}')" = \
         "$frontend_hash" ] \
         || fail "existing release frontend hash is invalid: $release_id"
@@ -384,6 +458,9 @@ if [ -d "$release_path" ]; then
     [ "$(shasum -a 256 "$release_path/package/todo-daily-email" | awk '{print $1}')" = \
         "$email_runner_hash" ] \
         || fail "existing release packaged email runner is invalid: $release_id"
+    [ "$(chancery_bundle_hash "$release_path/share/chancery/todo")" = \
+        "$chancery_hash" ] \
+        || fail "existing release Chancery bundle is invalid: $release_id"
     grep -Fx 'format=1' "$release_path/manifest.txt" >/dev/null \
         || fail "existing release manifest is invalid: $release_id"
     grep -Fx "release_id=$release_id" "$release_path/manifest.txt" >/dev/null \
@@ -398,12 +475,15 @@ if [ -d "$release_path" ]; then
         || fail "existing release is invalid: $release_id"
     grep -Fx "email_runner_sha256=$email_runner_hash" "$release_path/manifest.txt" >/dev/null \
         || fail "existing release is invalid: $release_id"
+    grep -Fx "chancery_bundle_sha256=$chancery_hash" "$release_path/manifest.txt" >/dev/null \
+        || fail "existing release is invalid: $release_id"
 else
     temporary_release=$(mktemp -d "$RELEASES_DIR/.stage.XXXXXX")
     install -d -m 0755 \
         "$temporary_release/bin" \
         "$temporary_release/libexec" \
-        "$temporary_release/package"
+        "$temporary_release/package" \
+        "$temporary_release/share/chancery"
     install -m 0755 "$SOURCE_FRONTEND" "$temporary_release/bin/todo"
     install -m 0755 "$SOURCE_EMAIL_RUNNER" \
         "$temporary_release/bin/todo-daily-email"
@@ -415,6 +495,7 @@ else
         "$temporary_release/package/deploy-user.sh"
     install -m 0644 "$SOURCE_PLIST" \
         "$temporary_release/package/$SERVICE_LABEL.plist"
+    cp -R "$SOURCE_CHANCERY" "$temporary_release/share/chancery/todo"
     {
         printf '%s\n' 'format=1'
         printf 'release_id=%s\n' "$release_id"
@@ -423,6 +504,7 @@ else
         printf 'deployer_sha256=%s\n' "$deployer_hash"
         printf 'plist_sha256=%s\n' "$plist_hash"
         printf 'email_runner_sha256=%s\n' "$email_runner_hash"
+        printf 'chancery_bundle_sha256=%s\n' "$chancery_hash"
     } >"$temporary_release/manifest.txt"
     chmod 0444 "$temporary_release/manifest.txt"
     mv "$temporary_release" "$release_path"
@@ -461,6 +543,8 @@ if [ -n "$old_current" ] && [ "$old_current" != "releases/$release_id" ]; then
 fi
 atomic_symlink "releases/$release_id" "$CURRENT_LINK"
 atomic_symlink "$INSTALL_DIR/current/bin/todo" "$CLI_PATH"
+chancery_provider_switched=1
+atomic_symlink "$CHANCERY_PROVIDER_TARGET" "$CHANCERY_PROVIDER_LINK"
 
 if [ "$database_was_absent" -eq 1 ]; then
     TODO_STATE_DIR="$STATE_DIR" HOME="$install_home" \

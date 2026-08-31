@@ -32,6 +32,7 @@ cd "$WORKSPACE_DIR"
 workspace_manifest=Cargo.toml
 lockfile_path=Cargo.lock
 manifest_path=todo/crates/todo/Cargo.toml
+provider_path=todo/chancery/provider.json
 ci_path=todo/ci.sh
 
 for tool in awk git grep; do
@@ -53,6 +54,7 @@ command -v cargo >/dev/null 2>&1 || fail 'required tool not found: cargo'
 [ -f "$workspace_manifest" ] || fail 'root workspace Cargo.toml not found'
 [ -f "$lockfile_path" ] || fail 'root Cargo.lock not found'
 [ -f "$manifest_path" ] || fail "package manifest not found: $manifest_path"
+[ -f "$provider_path" ] || fail "Todo Chancery provider manifest not found: $provider_path"
 
 [ -z "$(git status --porcelain --untracked-files=all)" ] \
     || fail 'the worktree must be completely clean'
@@ -125,16 +127,18 @@ else
 fi
 
 manifest_tmp="$manifest_path.release.$$"
+provider_tmp="$provider_path.release.$$"
 rollback_version_files=false
 cleanup() {
     status=$?
     trap - 0 1 2 15
     set +e
-    rm -f "$manifest_tmp"
+    rm -f "$manifest_tmp" "$provider_tmp"
     if [ "$rollback_version_files" = true ]; then
-        git restore --staged --worktree -- "$manifest_path" "$lockfile_path"
-        printf 'release.sh: restored %s and %s after failure\n' \
-            "$manifest_path" "$lockfile_path" >&2
+        git restore --staged --worktree -- \
+            "$manifest_path" "$lockfile_path" "$provider_path"
+        printf 'release.sh: restored %s, %s, and %s after failure\n' \
+            "$manifest_path" "$lockfile_path" "$provider_path" >&2
     fi
     exit "$status"
 }
@@ -159,6 +163,18 @@ awk -v old="$current_version" -v new="$new_version" '
     || fail "unable to update the package version in $manifest_path"
 mv "$manifest_tmp" "$manifest_path"
 
+awk -v old="$current_version" -v new="$new_version" '
+    BEGIN { changed = 0 }
+    index($0, "\"release\": \"" old "\"") {
+        sub("\"release\": \"" old "\"", "\"release\": \"" new "\"")
+        changed++
+    }
+    { print }
+    END { if (changed != 1) exit 1 }
+' "$provider_path" >"$provider_tmp" \
+    || fail "unable to update the provider release in $provider_path"
+mv "$provider_tmp" "$provider_path"
+
 cargo metadata --manifest-path "$workspace_manifest" \
     --offline --format-version 1 >/dev/null \
     || fail 'unable to refresh root Cargo.lock'
@@ -178,12 +194,12 @@ reported_version=$(target/release/todo --version) \
 [ -z "$(git ls-files --others --exclude-standard)" ] \
     || fail 'untracked files appeared while running release checks'
 changed_files=$(git diff --name-only)
-expected_files=$(printf '%s\n' "$lockfile_path" "$manifest_path")
+expected_files=$(printf '%s\n' "$lockfile_path" "$provider_path" "$manifest_path")
 [ "$changed_files" = "$expected_files" ] \
-    || fail "files other than $manifest_path and $lockfile_path changed during release checks"
+    || fail "files other than $manifest_path, $lockfile_path, and $provider_path changed during release checks"
 git diff --check
 
-git add -- "$manifest_path" "$lockfile_path"
+git add -- "$manifest_path" "$lockfile_path" "$provider_path"
 git diff --cached --check
 git commit -m "Release $tag"
 

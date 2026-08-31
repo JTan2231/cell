@@ -1,0 +1,56 @@
+{
+  "id": "annals-usage.consumption.inspect",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Report Annals model usage",
+  "summary": "Show recent Annals source deliveries with their attributable model-token use, coverage gaps, and calculable rate-card equivalent.",
+  "use_when": [
+    "Recent Annals source deliveries should be correlated with their observed Nucleus model attempts and token records.",
+    "Coverage gaps, exact response totals, cumulative fallbacks, no-model deliveries, or examination reuse must be distinguished."
+  ],
+  "do_not_use_when": [
+    "The request concerns all account activity or arbitrary Nucleus requesters rather than Annals attribution.",
+    "A hidden subscription denominator, invoice, or reliable per-delivery allowance percentage is expected.",
+    "A retained offline report is required."
+  ],
+  "outcome": "A current in-memory projection of recent Annals delivery attempts, token categories, coverage, and calculable rate-card equivalent, qualified by explicit gaps and attribution limits.",
+  "effects": [
+    "Reads Annals delivery records and inbox receipts plus Nucleus job, attempt, and ordered output records.",
+    "Calculates the projection in memory and stores no telemetry database, aggregate, or account snapshot.",
+    "Makes no model call and changes no Annals or Nucleus domain state."
+  ],
+  "authority": [
+    "Nucleus exact output atoms and job state, Annals model-run attribution, delivery records, and job receipts are the durable authorities.",
+    "Annals Usage owns only the disposable live interpretation and its projection version."
+  ],
+  "success": [
+    "Every reported delivery and attempt carries a coverage value explaining whether its total is exact, cumulative, incomplete, pending, no-model, or reused.",
+    "Overlapping token categories are not added twice.",
+    "Unattributed runs and output gaps remain visible rather than being silently reassigned or estimated."
+  ],
+  "failure_and_recovery": [
+    "If an Annals or Nucleus authority is unavailable, the command fails rather than returning a stale stored projection.",
+    "A `gap` result means no authoritative complete delivery total exists; inspect underlying output and attribution rather than inventing one.",
+    "Use the Annals retry-event report, not usage projection, to pair original and child delivery outcomes."
+  ],
+  "privacy": [
+    "The report reads private Annals attribution and Nucleus output records, though it does not copy them into a new database.",
+    "Retain and back up the underlying authorities when historical recalculation must remain possible."
+  ],
+  "interfaces": [
+    {"label": "Recent delivery report", "invocation": "/Users/joey/.local/bin/annals-usage report"},
+    {"label": "Bounded JSON report", "invocation": "/Users/joey/.local/bin/annals-usage report --json --limit <COUNT>"}
+  ],
+  "dependencies": [
+    {"id": "annals.corpus.explore", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Any Annals corpus or inbox mutation.",
+    "Any Nucleus job, authentication, or service mutation.",
+    "A claim that a rate-card equivalent is an invoice or subscription share."
+  ],
+  "manual": "manuals/consumption-inspect.md"
+}

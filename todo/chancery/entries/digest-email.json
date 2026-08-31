@@ -1,0 +1,53 @@
+{
+  "id": "todo.digest.email",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Preview or send the Todo digest",
+  "summary": "Preview the email listing all open todo IDs and titles, or send it now through the configured Resend account.",
+  "use_when": [
+    "The exact currently configured outstanding-todo email should be previewed locally.",
+    "The user explicitly wants that digest sent now through Resend."
+  ],
+  "do_not_use_when": [
+    "A local Todo list is sufficient.",
+    "External disclosure of every open todo title has not been authorized.",
+    "The request is to test Nucleus, a model liaison, or future remote scheduling."
+  ],
+  "outcome": "An exact local preview or one idempotent immediate Resend submission containing the current open canonical todo IDs and titles.",
+  "effects": [
+    "Preview reads Todo state and renders headers plus plain text and HTML without reading the API key or using the network.",
+    "Send freezes the digest, reads `RESEND_API_KEY`, and submits it immediately to Resend with a stable invocation-specific key.",
+    "Scheduled mode changes the idempotency key to the most recent local 09:00 occurrence; it does not submit a remote scheduled-at value."
+  ],
+  "authority": [
+    "Todo owns the current digest projection and installed sender/recipient configuration.",
+    "Resend owns external submission and delivery records; the recipient provider owns final receipt."
+  ],
+  "success": [
+    "Preview exactly identifies configured sender, recipient, subject, count, and current body without network access.",
+    "Send reports Resend acceptance under the frozen idempotency key.",
+    "External receipt is confirmed separately when delivery rather than submission is the required outcome."
+  ],
+  "failure_and_recovery": [
+    "Transport, rate-limit, and server failures are retried only within the command's bounded three-attempt policy using the same frozen body and key.",
+    "There is no Todo delivery table or background retry queue; inspect Resend and installed logs after command failure.",
+    "A manual send does not consume the scheduled occurrence's key."
+  ],
+  "privacy": [
+    "Sending discloses every open canonical todo ID and current title to Resend and the configured recipient's email provider.",
+    "The API key remains environment-only and must not be stored in Todo configuration, command arguments, or launchd plist."
+  ],
+  "interfaces": [
+    {"label": "Preview", "invocation": "/Users/joey/.local/bin/todo email preview"},
+    {"label": "Send now", "invocation": "/Users/joey/.local/bin/todo email send"},
+    {"label": "Run scheduled occurrence", "invocation": "/Users/joey/.local/bin/todo email send --scheduled"}
+  ],
+  "does_not_authorize": [
+    "External sending when only preview was requested.",
+    "Changing configured sender, recipient, or Resend account.",
+    "Treating email preview or delivery as a Nucleus requester canary."
+  ],
+  "manual": "manuals/digest-email.md"
+}

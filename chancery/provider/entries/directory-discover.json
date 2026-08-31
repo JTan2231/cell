@@ -1,0 +1,53 @@
+{
+  "id": "chancery.directory.discover",
+  "contract_version": 2,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Discover installed capabilities and operations",
+  "summary": "List every installed capability and operation with enough meaning for an agent to select plausible contracts, then read their full operating boundaries.",
+  "use_when": [
+    "A request may map to an installed local capability or adaptive operation.",
+    "The exact supported outcome, effects, authority, recovery, privacy, or invocation must be understood without inspecting source code."
+  ],
+  "do_not_use_when": [
+    "The correct capability is already known and its current contract has already been read in this session.",
+    "The task is ordinary work with no plausible installed-system catalog need."
+  ],
+  "outcome": "The caller receives a complete semantic catalog or one complete installed contract; no represented action is performed.",
+  "effects": [
+    "Reads explicitly indexed JSON and Markdown from installed provider bundles.",
+    "Writes no provider state and performs no readiness probe."
+  ],
+  "authority": [
+    "Provider bundles are authoritative for documented support and semantics.",
+    "Chancery is authoritative only for structural validation, installed catalog discovery, and presentation.",
+    "The represented product remains authoritative for runtime readiness and domain success."
+  ],
+  "success": [
+    "List reports every structurally valid installed entry, including deprecated or dependency-unavailable entries, with visible registry issues.",
+    "Show returns the complete version-matched contract and manual for an installed entry.",
+    "No documented invocation is executed as a side effect of discovery."
+  ],
+  "failure_and_recovery": [
+    "A malformed provider is excluded and reported without hiding structurally valid providers.",
+    "A missing or incompatible dependency makes the affected entry unavailable until the owning provider is installed or updated.",
+    "Use doctor to inspect registry structure; use the provider's own operating contract for live readiness."
+  ],
+  "privacy": [
+    "Installed documentation is processed locally and is not retained by Chancery.",
+    "Chancery has no network or model integration."
+  ],
+  "interfaces": [
+    {
+      "label": "Read a contract",
+      "invocation": "/Users/joey/.local/bin/chancery show <ENTRY_ID>"
+    },
+    {
+      "label": "List installed contracts",
+      "invocation": "/Users/joey/.local/bin/chancery list"
+    }
+  ],
+  "dependencies": [],
+  "manual": "manuals/directory-discover.md"
+}

@@ -10,20 +10,44 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 package="$temporary/package"
+package_share="$temporary/share/chancery"
 home="$temporary/Operator Home"
 candidate="$temporary/todo-candidate"
+candidate_template="$temporary/todo-candidate.template"
 launchctl="$temporary/launchctl"
 launchctl_log="$temporary/launchctl.log"
 launchctl_state="$temporary/launchctl.loaded"
 launchctl_fail_bootstrap="$temporary/launchctl.fail-bootstrap"
-mkdir -p "$package" "$home"
+
+package_version=$(awk '
+    $0 == "[package]" { in_package = 1; next }
+    in_package && /^\[/ { exit }
+    in_package && /^[[:space:]]*version[[:space:]]*=/ {
+        value = $0
+        sub(/^[^=]*=[[:space:]]*"/, "", value)
+        sub(/"[[:space:]]*$/, "", value)
+        print value
+        exit
+    }
+' "$SCRIPT_DIR/../../crates/todo/Cargo.toml")
+provider_version=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' \
+    "$SCRIPT_DIR/../../chancery/provider.json")
+[ -n "$package_version" ] && [ "$provider_version" = "$package_version" ] || {
+    printf 'test: package version %s does not match provider release %s\n' \
+        "$package_version" "$provider_version" >&2
+    exit 1
+}
+mismatch_version="$package_version-provider-mismatch"
+
+mkdir -p "$package" "$package_share" "$home"
 cp "$SCRIPT_DIR/deploy-user.sh" "$package/deploy-user.sh"
 cp "$SCRIPT_DIR/todo" "$package/todo"
 cp "$SCRIPT_DIR/todo-daily-email" "$package/todo-daily-email"
 cp "$SCRIPT_DIR/org.todo.daily-email.plist" "$package/org.todo.daily-email.plist"
+cp -R "$SCRIPT_DIR/../../chancery" "$package_share/todo"
 chmod 0755 "$package/deploy-user.sh" "$package/todo" "$package/todo-daily-email"
 
-cat >"$candidate" <<'EOF'
+cat >"$candidate_template" <<'EOF'
 #!/bin/sh
 set -eu
 config=
@@ -31,7 +55,7 @@ json=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --version)
-            printf '%s\n' 'todo 0.0.0-test'
+            printf '%s\n' 'todo __TODO_VERSION__'
             exit 0
             ;;
         --config)
@@ -91,6 +115,8 @@ case "$command" in
     *) exit 1 ;;
 esac
 EOF
+sed "s/__TODO_VERSION__/$package_version/g" \
+    "$candidate_template" >"$candidate"
 chmod 0755 "$candidate"
 
 mkdir -p "$home/.local/bin"
@@ -155,6 +181,8 @@ deploy "$candidate" \
 state="$home/Library/Application Support/Todo"
 cli="$home/.local/bin/todo"
 agent_plist="$home/Library/LaunchAgents/org.todo.daily-email.plist"
+chancery_providers="$home/Library/Application Support/Chancery/providers"
+todo_provider="$chancery_providers/todo"
 [ -L "$cli" ]
 [ -L "$state/install/current" ]
 [ ! -e "$state/install/previous" ]
@@ -166,6 +194,11 @@ agent_plist="$home/Library/LaunchAgents/org.todo.daily-email.plist"
 [ -f "$state/install/current/package/deploy-user.sh" ]
 [ -f "$state/install/current/package/org.todo.daily-email.plist" ]
 [ -f "$state/install/current/manifest.txt" ]
+[ -f "$state/install/current/share/chancery/todo/provider.json" ]
+[ -L "$todo_provider" ]
+[ "$(readlink "$todo_provider")" = \
+    "$state/install/current/share/chancery/todo" ]
+[ -f "$todo_provider/provider.json" ]
 [ -f "$state/todo.db" ]
 [ -f "$agent_plist" ]
 [ -f "$launchctl_state" ]
@@ -191,6 +224,19 @@ plutil -lint "$agent_plist" >/dev/null
 [ "$(tail -n 2 "$state/commands.log" | tr '\n' ' ')" = 'init list ' ]
 HOME="$home" "$cli" --json list --limit 1 >/dev/null
 
+mismatched_candidate="$temporary/todo-mismatched-provider"
+sed "s/__TODO_VERSION__/$mismatch_version/g" \
+    "$candidate_template" >"$mismatched_candidate"
+chmod 0755 "$mismatched_candidate"
+if deploy "$mismatched_candidate" >"$temporary/provider-mismatch.out" \
+    2>"$temporary/provider-mismatch.err"
+then
+    printf '%s\n' 'deployment unexpectedly accepted a provider/candidate mismatch' >&2
+    exit 1
+fi
+grep -F "provider release $provider_version does not match candidate $mismatch_version" \
+    "$temporary/provider-mismatch.err" >/dev/null
+
 cat >"$home/.zshrc" <<'EOF'
 setopt XTRACE
 export RESEND_API_KEY='resend-test-secret'
@@ -209,6 +255,7 @@ grep -Fx "TODO_CONFIG=$state/config.toml" "$state/email-environment.log" >/dev/n
     "$temporary/email-runner.err" >/dev/null
 
 first_release=$(readlink "$state/install/current")
+ln -s /preserved/provider "$chancery_providers/preserved"
 printf '%s\n' '# preserve-email-config-on-update' >>"$state/config.toml"
 HOME="$home" "$state/install/current/package/deploy-user.sh" \
     --binary "$state/install/current/libexec/todo" \
@@ -216,6 +263,7 @@ HOME="$home" "$state/install/current/package/deploy-user.sh" \
     --launchctl "$launchctl" >/dev/null
 [ "$(readlink "$state/install/current")" = "$first_release" ]
 [ ! -e "$state/install/previous" ]
+[ "$(readlink "$chancery_providers/preserved")" = /preserved/provider ]
 [ "$(grep -c '^init$' "$state/commands.log")" -eq 1 ]
 grep -Fx '# preserve-email-config-on-update' "$state/config.toml" >/dev/null
 [ -f "$launchctl_state" ]
@@ -225,6 +273,10 @@ deploy "$candidate" >/dev/null
 second_release=$(readlink "$state/install/current")
 [ "$second_release" != "$first_release" ]
 [ "$(readlink "$state/install/previous")" = "$first_release" ]
+[ "$(readlink "$todo_provider")" = \
+    "$state/install/current/share/chancery/todo" ]
+[ -f "$todo_provider/provider.json" ]
+[ "$(readlink "$chancery_providers/preserved")" = /preserved/provider ]
 [ "$(grep -c '^init$' "$state/commands.log")" -eq 1 ]
 grep -Fx '# preserve-email-config-on-update' "$state/config.toml" >/dev/null
 [ -f "$launchctl_state" ]
@@ -242,6 +294,7 @@ if deploy "$candidate" >"$temporary/degraded.out" 2>"$temporary/degraded.err"; t
 fi
 [ "$(readlink "$state/install/current")" = "$second_release" ]
 [ "$(readlink "$state/install/previous")" = "$first_release" ]
+[ -f "$todo_provider/provider.json" ]
 [ -f "$launchctl_state" ]
 install -m 0755 "$temporary/nucleus-healthy" "$nucleus_cli"
 
@@ -252,6 +305,7 @@ if deploy "$candidate" >"$temporary/tampered.out" 2>"$temporary/tampered.err"; t
 fi
 [ "$(readlink "$state/install/current")" = "$second_release" ]
 [ "$(readlink "$state/install/previous")" = "$first_release" ]
+[ -f "$todo_provider/provider.json" ]
 [ ! -e "$state/install/.update-lock" ]
 [ -f "$launchctl_state" ]
 install -m 0755 "$candidate" "$state/install/current/libexec/todo"
@@ -265,6 +319,7 @@ if deploy "$candidate" >"$temporary/bootstrap.out" 2>"$temporary/bootstrap.err";
 fi
 [ "$(readlink "$state/install/current")" = "$second_release" ]
 [ "$(readlink "$state/install/previous")" = "$first_release" ]
+[ -f "$todo_provider/provider.json" ]
 [ -f "$launchctl_state" ]
 grep -Fx '<!-- rollback-sentinel -->' "$agent_plist" >/dev/null
 
@@ -286,12 +341,13 @@ deploy "$candidate" >/dev/null
 printf '%s\n' '<!-- rollback-sentinel -->' >>"$agent_plist"
 plutil -lint "$agent_plist" >/dev/null
 failed="$temporary/todo-failed-candidate"
-cat >"$failed" <<'EOF'
+failed_template="$temporary/todo-failed-candidate.template"
+cat >"$failed_template" <<'EOF'
 #!/bin/sh
 set -eu
 for argument in "$@"; do
     [ "$argument" != --version ] || {
-        printf '%s\n' 'todo 0.0.0-failed'
+        printf '%s\n' 'todo __TODO_VERSION__'
         exit 0
     }
 done
@@ -300,6 +356,8 @@ case " $* " in
     *) exit 1 ;;
 esac
 EOF
+sed "s/__TODO_VERSION__/$package_version/g" \
+    "$failed_template" >"$failed"
 chmod 0755 "$failed"
 if deploy "$failed" >"$temporary/failed.out" 2>"$temporary/failed.err"; then
     printf '%s\n' 'deployment unexpectedly accepted a failed smoke test' >&2
@@ -310,5 +368,17 @@ fi
 [ ! -e "$state/install/.update-lock" ]
 [ -f "$launchctl_state" ]
 grep -Fx '<!-- rollback-sentinel -->' "$agent_plist" >/dev/null
+
+rm -f "$todo_provider"
+ln -s /foreign/todo-provider "$todo_provider"
+if deploy "$candidate" >"$temporary/foreign-provider.out" \
+    2>"$temporary/foreign-provider.err"
+then
+    printf '%s\n' 'deployment unexpectedly took over a foreign provider selector' >&2
+    exit 1
+fi
+[ "$(readlink "$todo_provider")" = /foreign/todo-provider ]
+rm -f "$todo_provider"
+ln -s "$state/install/current/share/chancery/todo" "$todo_provider"
 
 printf '%s\n' 'deploy test passed'

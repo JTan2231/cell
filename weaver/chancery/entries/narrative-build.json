@@ -4,24 +4,8 @@
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "routable": true,
-  "title": "Build a public-facing narrative",
-  "summary": "Run Weaver's durable five-stage narrative workflow from authored repository inputs and retain the mechanically validated current outputs.",
-  "routing": {
-    "triggers": [
-      "build a public-facing narrative with Weaver",
-      "generate the five Weaver narrative outputs",
-      "rebuild this Weaver narrative",
-      "run the Weaver narrative workflow"
-    ],
-    "exclusions": [
-      "search for jobs",
-      "apply for a job",
-      "fill out an application",
-      "publish or upload a narrative",
-      "edit a public profile"
-    ]
-  },
+  "title": "Build a five-stage public-facing narrative",
+  "summary": "Use Weaver to replace and validate the five generated narrative files from the authored inputs in a selected narrative repository.",
   "use_when": [
     "A selected narrative repository has Weaver's complete authored basis, brief, source, and five-stage prompt contract and its current generated outputs should be replaced.",
     "The user wants the durable Weaver workflow rather than an ad hoc narrative written only in the current conversation."

@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "provider": {
+    "id": "nucleus",
+    "name": "Nucleus",
+    "release": "0.3.0"
+  },
+  "entries": [
+    "entries/execution-operate.json",
+    "entries/requester-integrate.json",
+    "entries/develop-change.json"
+  ]
+}

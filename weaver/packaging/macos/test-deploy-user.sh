@@ -13,23 +13,45 @@ trap cleanup EXIT HUP INT TERM
 package="$temporary/package"
 home="$temporary/Operator Home"
 candidate="$temporary/weaver-candidate"
+candidate_template="$temporary/weaver-candidate.template"
 launchctl="$temporary/launchctl"
 launchctl_log="$temporary/launchctl.log"
 launchctl_state="$temporary/launchctl.loaded"
 launchctl_fail_bootout="$temporary/launchctl.fail-bootout"
+
+package_version=$(awk '
+    $0 == "[package]" { in_package = 1; next }
+    in_package && /^\[/ { exit }
+    in_package && /^[[:space:]]*version[[:space:]]*=/ {
+        value = $0
+        sub(/^[^=]*=[[:space:]]*"/, "", value)
+        sub(/"[[:space:]]*$/, "", value)
+        print value
+        exit
+    }
+' "$SCRIPT_DIR/../../crates/weaver/Cargo.toml")
+provider_version=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' \
+    "$SCRIPT_DIR/../../chancery/provider.json")
+[ -n "$package_version" ] && [ "$provider_version" = "$package_version" ] || {
+    printf 'test: package version %s does not match provider release %s\n' \
+        "$package_version" "$provider_version" >&2
+    exit 1
+}
+mismatch_version="$package_version-provider-mismatch"
+
 mkdir -p "$package" "$home"
 cp "$SCRIPT_DIR/deploy-user.sh" "$package/deploy-user.sh"
 chmod 0755 "$package/deploy-user.sh"
 mkdir -p "$temporary/share/chancery"
 cp -R "$SCRIPT_DIR/../../chancery" "$temporary/share/chancery/weaver"
 
-cat >"$candidate" <<'EOF'
+cat >"$candidate_template" <<'EOF'
 #!/bin/sh
 set -eu
 
 case "${1:-}" in
     --version)
-        printf '%s\n' 'weaver 0.1.0'
+        printf '%s\n' 'weaver __WEAVER_VERSION__'
         exit 0
         ;;
     --help)
@@ -71,6 +93,8 @@ case "${1:-}" in
     *) exit 64 ;;
 esac
 EOF
+sed "s/__WEAVER_VERSION__/$package_version/g" \
+    "$candidate_template" >"$candidate"
 chmod 0755 "$candidate"
 
 uid=$(id -u)
@@ -126,6 +150,19 @@ deploy() {
         "$@"
 }
 
+mismatched_candidate="$temporary/weaver-mismatched-provider"
+sed "s/__WEAVER_VERSION__/$mismatch_version/g" \
+    "$candidate_template" >"$mismatched_candidate"
+chmod 0755 "$mismatched_candidate"
+if deploy "$mismatched_candidate" >"$temporary/provider-mismatch.out" \
+    2>"$temporary/provider-mismatch.err"
+then
+    printf '%s\n' 'deployment unexpectedly accepted a provider/candidate mismatch' >&2
+    exit 1
+fi
+grep -F "Chancery provider release $provider_version does not match Weaver $mismatch_version" \
+    "$temporary/provider-mismatch.err" >/dev/null
+
 deploy "$candidate" >"$temporary/first.out"
 state="$home/Library/Application Support/Weaver"
 cli="$home/.local/bin/weaver"
@@ -146,7 +183,8 @@ agent_plist="$home/Library/LaunchAgents/org.weaver.worker.plist"
 [ ! -e "$launchctl_state" ]
 [ ! -e "$state/.maintenance" ]
 grep -Fx 'format=3' "$state/install/current/manifest.txt" >/dev/null
-grep -Fx 'version=0.1.0' "$state/install/current/manifest.txt" >/dev/null
+grep -Fx "version=$package_version" \
+    "$state/install/current/manifest.txt" >/dev/null
 grep -E '^chancery_sha256=[0-9a-f]{64}$' \
     "$state/install/current/manifest.txt" >/dev/null
 grep -F "Chancery provider: $weaver_provider" "$temporary/first.out" >/dev/null

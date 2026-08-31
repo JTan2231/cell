@@ -12,6 +12,15 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 SOURCE_FRONTEND="$SCRIPT_DIR/annals-user"
 SOURCE_PLIST="$SCRIPT_DIR/org.annals.inbox.agent.plist"
 SOURCE_UPDATER="$SCRIPT_DIR/deploy-user.sh"
+if [ -d "$SCRIPT_DIR/../share/chancery/annals" ] \
+    && [ -d "$SCRIPT_DIR/../share/chancery/annals-usage" ]
+then
+    SOURCE_CHANCERY_ANNALS="$SCRIPT_DIR/../share/chancery/annals"
+    SOURCE_CHANCERY_USAGE="$SCRIPT_DIR/../share/chancery/annals-usage"
+else
+    SOURCE_CHANCERY_ANNALS="$SCRIPT_DIR/../../chancery/annals"
+    SOURCE_CHANCERY_USAGE="$SCRIPT_DIR/../../chancery/annals-usage"
+fi
 
 binary_path=
 usage_binary_path=
@@ -41,6 +50,31 @@ EOF
 fail() {
     printf 'annals user deploy: %s\n' "$*" >&2
     exit 1
+}
+
+validate_chancery_bundle() {
+    bundle=$1
+    [ -d "$bundle" ] && [ ! -L "$bundle" ] \
+        || fail "Chancery bundle is not a regular directory: $bundle"
+    [ -f "$bundle/provider.json" ] && [ ! -L "$bundle/provider.json" ] \
+        || fail "Chancery bundle has no regular provider.json: $bundle"
+    if find "$bundle" -type l -print | grep -q .; then
+        fail "Chancery bundle contains a symbolic link: $bundle"
+    fi
+    if find "$bundle" ! -type d ! -type f -print | grep -q .; then
+        fail "Chancery bundle contains a non-file entry: $bundle"
+    fi
+}
+
+chancery_bundle_hash() {
+    bundle=$1
+    (
+        cd "$bundle"
+        find . -type f -print | LC_ALL=C sort | while IFS= read -r file; do
+            printf 'path=%s\n' "$file"
+            shasum -a 256 "$file"
+        done
+    ) | shasum -a 256 | awk '{print $1}'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -128,9 +162,11 @@ for source in "$SOURCE_FRONTEND" "$SOURCE_PLIST" "$SOURCE_UPDATER"; do
     [ -f "$source" ] && [ ! -L "$source" ] \
         || fail "missing packaged file: $source"
 done
-for command in awk date grep install mv plutil readlink sed shasum stat; do
+for command in awk cp date find grep install mv plutil readlink sed shasum sort stat; do
     command -v "$command" >/dev/null 2>&1 || fail "required command not found: $command"
 done
+validate_chancery_bundle "$SOURCE_CHANCERY_ANNALS"
+validate_chancery_bundle "$SOURCE_CHANCERY_USAGE"
 
 for config_value in "$nucleus_path" "$nucleus_socket"; do
     value_lines=$(printf '%s\n' "$config_value" | wc -l | tr -d ' ')
@@ -159,6 +195,12 @@ CLI_PATH="$CLI_DIR/annals"
 USAGE_CLI_PATH="$CLI_DIR/annals-usage"
 AGENT_DIR="$install_home/Library/LaunchAgents"
 AGENT_PLIST="$AGENT_DIR/$SERVICE_LABEL.plist"
+CHANCERY_STATE_DIR="$install_home/Library/Application Support/Chancery"
+CHANCERY_PROVIDERS_DIR="$CHANCERY_STATE_DIR/providers"
+CHANCERY_ANNALS_LINK="$CHANCERY_PROVIDERS_DIR/annals"
+CHANCERY_USAGE_LINK="$CHANCERY_PROVIDERS_DIR/annals-usage"
+CHANCERY_ANNALS_TARGET="$INSTALL_DIR/current/share/chancery/annals"
+CHANCERY_USAGE_TARGET="$INSTALL_DIR/current/share/chancery/annals-usage"
 SERVICE_TARGET="gui/$operator_uid/$SERVICE_LABEL"
 
 temporary_release=
@@ -170,6 +212,8 @@ fresh_stage=
 generation_dir=
 old_current=
 old_previous=
+old_chancery_annals=
+old_chancery_usage=
 old_cli=0
 old_usage_cli=0
 old_plist=0
@@ -180,6 +224,7 @@ service_stopped=0
 launchd_changed=0
 marker_created=0
 switched=0
+chancery_providers_switched=0
 config_changed=0
 usage_config_changed=0
 committed=0
@@ -294,6 +339,18 @@ cleanup() {
                 rm -f "$AGENT_PLIST"
             fi
         fi
+        if [ "$chancery_providers_switched" -eq 1 ]; then
+            if [ -n "$old_chancery_annals" ]; then
+                atomic_symlink "$old_chancery_annals" "$CHANCERY_ANNALS_LINK"
+            else
+                rm -f "$CHANCERY_ANNALS_LINK"
+            fi
+            if [ -n "$old_chancery_usage" ]; then
+                atomic_symlink "$old_chancery_usage" "$CHANCERY_USAGE_LINK"
+            else
+                rm -f "$CHANCERY_USAGE_LINK"
+            fi
+        fi
         if [ "$config_changed" -eq 1 ]; then
             if [ "$old_config" -eq 1 ]; then
                 install -m 0600 "$transaction_dir/config.toml" "$CONFIG_PATH"
@@ -351,8 +408,28 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
-"$binary_path" --version >/dev/null
-"$usage_binary_path" --version >/dev/null
+candidate_version=$("$binary_path" --version) \
+    || fail 'unable to read the Annals candidate version'
+case "$candidate_version" in
+    'annals '*) annals_version=${candidate_version#annals } ;;
+    *) fail "Annals candidate reported an unexpected version: $candidate_version" ;;
+esac
+usage_candidate_version=$("$usage_binary_path" --version) \
+    || fail 'unable to read the Annals Usage candidate version'
+case "$usage_candidate_version" in
+    'annals-usage '*) usage_version=${usage_candidate_version#annals-usage } ;;
+    *) fail "Annals Usage candidate reported an unexpected version: $usage_candidate_version" ;;
+esac
+annals_provider_release=$(awk -F '"' \
+    '/"release"[[:space:]]*:/ { print $4; exit }' \
+    "$SOURCE_CHANCERY_ANNALS/provider.json")
+usage_provider_release=$(awk -F '"' \
+    '/"release"[[:space:]]*:/ { print $4; exit }' \
+    "$SOURCE_CHANCERY_USAGE/provider.json")
+[ "$annals_provider_release" = "$annals_version" ] \
+    || fail "Annals provider release $annals_provider_release does not match candidate $annals_version"
+[ "$usage_provider_release" = "$usage_version" ] \
+    || fail "Annals Usage provider release $usage_provider_release does not match candidate $usage_version"
 sh -n "$SOURCE_FRONTEND"
 sh -n "$SOURCE_UPDATER"
 plutil -lint "$SOURCE_PLIST" >/dev/null
@@ -376,6 +453,13 @@ do
     if [ -L "$path" ]; then
         fail "refusing symlink at directory path: $path"
     fi
+    install -d -m 0700 "$path"
+done
+
+for path in "$CHANCERY_STATE_DIR" "$CHANCERY_PROVIDERS_DIR"; do
+    [ ! -L "$path" ] || fail "refusing symlink at directory path: $path"
+    [ ! -e "$path" ] || [ -d "$path" ] \
+        || fail "Chancery registry path is not a directory: $path"
     install -d -m 0700 "$path"
 done
 
@@ -518,6 +602,8 @@ usage_binary_hash=$(shasum -a 256 "$usage_binary_path" | awk '{print $1}')
 frontend_hash=$(shasum -a 256 "$SOURCE_FRONTEND" | awk '{print $1}')
 plist_hash=$(shasum -a 256 "$SOURCE_PLIST" | awk '{print $1}')
 updater_hash=$(shasum -a 256 "$SOURCE_UPDATER" | awk '{print $1}')
+chancery_annals_hash=$(chancery_bundle_hash "$SOURCE_CHANCERY_ANNALS")
+chancery_usage_hash=$(chancery_bundle_hash "$SOURCE_CHANCERY_USAGE")
 
 temporary_plist="$INSTALL_DIR/.org.annals.inbox.plist.$$"
 install -m 0600 "$SOURCE_PLIST" "$temporary_plist"
@@ -532,7 +618,8 @@ rendered_plist_hash=$(shasum -a 256 "$temporary_plist" | awk '{print $1}')
 
 release_id=$(printf '%s\n' \
     "$binary_hash" "$usage_binary_hash" "$frontend_hash" "$plist_hash" \
-    "$updater_hash" "$rendered_plist_hash" \
+    "$updater_hash" "$rendered_plist_hash" "$chancery_annals_hash" \
+    "$chancery_usage_hash" \
     | shasum -a 256 | awk '{print $1}')
 release_dir="$RELEASES_DIR/$release_id"
 
@@ -541,7 +628,8 @@ if [ ! -e "$release_dir" ]; then
     install -d -m 0700 \
         "$temporary_release/bin" \
         "$temporary_release/libexec" \
-        "$temporary_release/package"
+        "$temporary_release/package" \
+        "$temporary_release/share/chancery"
     install -m 0755 "$SOURCE_FRONTEND" "$temporary_release/bin/annals"
     install -m 0755 "$binary_path" "$temporary_release/libexec/annals"
     install -m 0755 "$usage_binary_path" "$temporary_release/libexec/annals-usage"
@@ -549,6 +637,10 @@ if [ ! -e "$release_dir" ]; then
     install -m 0755 "$SOURCE_FRONTEND" "$temporary_release/package/annals-user"
     install -m 0600 "$SOURCE_PLIST" \
         "$temporary_release/package/org.annals.inbox.agent.plist"
+    cp -R "$SOURCE_CHANCERY_ANNALS" \
+        "$temporary_release/share/chancery/annals"
+    cp -R "$SOURCE_CHANCERY_USAGE" \
+        "$temporary_release/share/chancery/annals-usage"
 
     install -m 0600 "$temporary_plist" \
         "$temporary_release/org.annals.inbox.plist"
@@ -572,6 +664,8 @@ if [ ! -e "$release_dir" ]; then
         printf '  "plist_template_sha256": "%s",\n' "$plist_hash"
         printf '  "rendered_plist_sha256": "%s",\n' "$rendered_plist_hash"
         printf '  "updater_sha256": "%s",\n' "$updater_hash"
+        printf '  "chancery_annals_sha256": "%s",\n' "$chancery_annals_hash"
+        printf '  "chancery_usage_sha256": "%s",\n' "$chancery_usage_hash"
         printf '  "source_revision": "%s",\n' "$source_revision"
         printf '  "source_dirty": %s\n' "$source_dirty"
         printf '}\n'
@@ -596,6 +690,14 @@ else
         || fail "existing release plist template does not match $release_id"
     [ "$(shasum -a 256 "$release_dir/org.annals.inbox.plist" | awk '{print $1}')" = "$rendered_plist_hash" ] \
         || fail "existing release plist does not match $release_id"
+    validate_chancery_bundle "$release_dir/share/chancery/annals"
+    validate_chancery_bundle "$release_dir/share/chancery/annals-usage"
+    [ "$(chancery_bundle_hash "$release_dir/share/chancery/annals")" = \
+        "$chancery_annals_hash" ] \
+        || fail "existing release Annals Chancery bundle does not match $release_id"
+    [ "$(chancery_bundle_hash "$release_dir/share/chancery/annals-usage")" = \
+        "$chancery_usage_hash" ] \
+        || fail "existing release Annals Usage Chancery bundle does not match $release_id"
 fi
 
 if [ -L "$CURRENT_LINK" ]; then
@@ -626,6 +728,26 @@ if [ -f "$AGENT_PLIST" ] && [ ! -L "$AGENT_PLIST" ]; then
     old_plist=1
 elif [ -e "$AGENT_PLIST" ]; then
     fail "invalid LaunchAgent path: $AGENT_PLIST"
+fi
+if [ -L "$CHANCERY_ANNALS_LINK" ]; then
+    old_chancery_annals=$(readlink "$CHANCERY_ANNALS_LINK")
+elif [ -e "$CHANCERY_ANNALS_LINK" ]; then
+    fail "installed Annals Chancery provider is not a symlink: $CHANCERY_ANNALS_LINK"
+fi
+if [ -n "$old_chancery_annals" ] \
+    && [ "$old_chancery_annals" != "$CHANCERY_ANNALS_TARGET" ]
+then
+    fail "Chancery provider selector is not owned by this Annals installation: $CHANCERY_ANNALS_LINK"
+fi
+if [ -L "$CHANCERY_USAGE_LINK" ]; then
+    old_chancery_usage=$(readlink "$CHANCERY_USAGE_LINK")
+elif [ -e "$CHANCERY_USAGE_LINK" ]; then
+    fail "installed Annals Usage Chancery provider is not a symlink: $CHANCERY_USAGE_LINK"
+fi
+if [ -n "$old_chancery_usage" ] \
+    && [ "$old_chancery_usage" != "$CHANCERY_USAGE_TARGET" ]
+then
+    fail "Chancery provider selector is not owned by this Annals installation: $CHANCERY_USAGE_LINK"
 fi
 
 transaction_dir="$INSTALL_DIR/transaction.$$"
@@ -822,6 +944,9 @@ if [ "$old_current" != "$new_current" ]; then
 fi
 atomic_symlink "$INSTALL_DIR/current/bin/annals" "$CLI_PATH"
 atomic_symlink "$INSTALL_DIR/current/libexec/annals-usage" "$USAGE_CLI_PATH"
+chancery_providers_switched=1
+atomic_symlink "$CHANCERY_ANNALS_TARGET" "$CHANCERY_ANNALS_LINK"
+atomic_symlink "$CHANCERY_USAGE_TARGET" "$CHANCERY_USAGE_LINK"
 install -m 0600 "$temporary_config" "$transaction_dir/config.next.toml"
 config_changed=1
 mv -f "$transaction_dir/config.next.toml" "$CONFIG_PATH"

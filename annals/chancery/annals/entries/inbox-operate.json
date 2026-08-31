@@ -1,0 +1,65 @@
+{
+  "id": "annals.inbox.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Manage scheduled Annals source imports",
+  "summary": "Queue, prioritize, dispatch, pause, inspect, interrupt, or recover bounded sets of source imports handled through the Annals inbox.",
+  "use_when": [
+    "The configured filesystem inbox, its one-attempt job envelopes, dispatch controls, or bounded retry events must be observed or operated.",
+    "A scheduled delivery failure must be diagnosed across Annals domain state and its correlated Nucleus job."
+  ],
+  "do_not_use_when": [
+    "One explicitly selected source should be integrated manually.",
+    "The proposed recovery edits receipts or archive directories directly.",
+    "The desired retry window is omitted, open-ended, or based on future failures."
+  ],
+  "outcome": "A durable and inspectable inbox state transition or report that preserves immutable attempts, archive history, explicit priority, and bounded retry provenance.",
+  "effects": [
+    "Registration moves settled incoming files into durable queued envelopes; direct enqueue copies explicit files and leaves originals unchanged.",
+    "Dispatch starts source deliveries and may invoke Nucleus, apply corpus reconciliations, and consume Codex allowance.",
+    "Pause blocks new dispatch but permits registration; interruption archives one exact processing job as failed or skipped.",
+    "A retry event preserves originals and creates fresh linked child jobs for one frozen inclusive failed-delivery interval."
+  ],
+  "authority": [
+    "Annals owns spool envelopes, queue order, priority lanes, source-delivery records, retry events, reconciliation application, and recovery policy.",
+    "Nucleus owns only each liaison attempt and its raw runtime records; Nucleus never chooses an Annals retry."
+  ],
+  "success": [
+    "Status or event reports identify queue, active job, pause, maintenance, archive, and outcome state without relying on process inspection.",
+    "A run or retry report, not process exit alone, accounts for every attempted item and durable result.",
+    "Original failed jobs and deliveries remain unchanged after retry."
+  ],
+  "failure_and_recovery": [
+    "Every inbox job has at most one processing attempt; never move a terminal envelope back to queued.",
+    "Unexpected model or runtime failure archives the current job and halts the activation or retry event; continue only through the supported command.",
+    "Pause before interruption when the next ordinary job must remain queued, and require paused quiescence before starting or continuing a retry event."
+  ],
+  "privacy": [
+    "Inbox envelopes retain unchanged source material and receipts; Annals and Nucleus operational state may retain complete source and model context.",
+    "Spool, database, logs, and retry archives belong to the user's private application boundary."
+  ],
+  "interfaces": [
+    {"label": "Inbox status", "invocation": "/Users/joey/.local/bin/annals inbox status"},
+    {"label": "Register settled arrivals", "invocation": "/Users/joey/.local/bin/annals inbox register"},
+    {"label": "Enqueue explicit files", "invocation": "/Users/joey/.local/bin/annals inbox enqueue <FILE>"},
+    {"label": "Run dispatch", "invocation": "/Users/joey/.local/bin/annals inbox run"},
+    {"label": "Pause dispatch", "invocation": "/Users/joey/.local/bin/annals inbox pause"},
+    {"label": "Resume dispatch", "invocation": "/Users/joey/.local/bin/annals inbox resume"},
+    {"label": "Interrupt exact job", "invocation": "/Users/joey/.local/bin/annals inbox interrupt <JOB_ID> --as <failed-or-skipped>"},
+    {"label": "Preview bounded retry", "invocation": "/Users/joey/.local/bin/annals inbox retry preview --from <FAILED_JOB_ID> --through <FAILED_JOB_ID>"},
+    {"label": "Start bounded retry", "invocation": "/Users/joey/.local/bin/annals inbox retry start --from <FAILED_JOB_ID> --through <FAILED_JOB_ID>"},
+    {"label": "Inspect retry event", "invocation": "/Users/joey/.local/bin/annals inbox retry status <EVENT_ID>"},
+    {"label": "Continue halted event", "invocation": "/Users/joey/.local/bin/annals inbox retry continue <EVENT_ID>"}
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Editing spool receipts or moving archived envelopes manually.",
+    "An unbounded retry or a second attempt for the same job.",
+    "Restarting Nucleus while an Annals attempt is active."
+  ],
+  "manual": "manuals/inbox-operate.md"
+}

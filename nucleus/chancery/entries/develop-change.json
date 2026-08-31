@@ -1,0 +1,77 @@
+{
+  "id": "nucleus.develop.change",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change Nucleus software and contracts",
+  "summary": "Modify Nucleus code, protocol, storage, Codex compatibility, authentication, service lifecycle, or deployment using the required guarded procedure.",
+  "use_when": [
+    "Nucleus implementation, public protocol, persistent state, harness compatibility, authentication, service lifecycle, or deployment behavior is being changed."
+  ],
+  "do_not_use_when": [
+    "The request is only to inspect or recover the installed runtime.",
+    "The change belongs entirely to Todo, Annals, Weaver, or another requester domain.",
+    "The user has not authorized release publication or deployment."
+  ],
+  "outcome": "A minimal Nucleus change with the correct compatibility, migration, requester, documentation, CI, canary, and recovery obligations satisfied.",
+  "effects": [
+    "Modifies Nucleus source, tests, contracts, or operator documentation.",
+    "Depending on the selected playbook, may require coordinated requester changes, database migration, exact Codex inspection, or service cutover.",
+    "Release and deployment remain separate externally consequential actions."
+  ],
+  "authority": [
+    "Nucleus owns its protocol, store, adapter, authentication lease, service packaging, and operator manual.",
+    "Requesters continue to own their domain contracts and must be changed only when the shared boundary requires it."
+  ],
+  "success": [
+    "`./nucleus/ci.sh` completes within its 60-second product budget.",
+    "Every changed public or operational fact is reflected in the canonical operator manual and exact contract documentation.",
+    "The relevant generic and requester canaries prove the changed boundary after any deployment."
+  ],
+  "failure_and_recovery": [
+    "Do not attempt binary-only rollback after an incompatible store migration.",
+    "Do not replace the proved Codex executable without adapter inspection and compatibility tests.",
+    "Preserve forward-only authentication separately from program or database rollback."
+  ],
+  "privacy": [
+    "Development fixtures, logs, and backups may contain complete prompts, model output, tool traffic, or credentials and must remain private.",
+    "Canaries create real runtime and sometimes requester-domain records; choose and account for them deliberately."
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Run `nucleus manual` and classify the change as a routine patch, protocol/client change, store migration, exact Codex upgrade, requester contract change, or authentication/service change.",
+    "Apply the smallest change in the owning Nucleus component and update all exact contracts and operator facts affected by it.",
+    "Run the Nucleus product CI and any affected requester CI suites.",
+    "If deployment is authorized, quiesce the required requesters, preserve the required recovery material, deploy in compatible order, and run layered canaries."
+  ],
+  "checkpoints": [
+    "The primary authority and every cross-system obligation are identified.",
+    "Public compatibility and persistent-state consequences are explicit.",
+    "The product CI passes within its deadline.",
+    "Deployment and publication have not occurred without separate authorization."
+  ],
+  "adaptation": [
+    "Follow the exact playbook in the installed version-matched manual because store, harness, and requester compatibility facts evolve.",
+    "Use daemon-first or coordinated cutover ordering according to the compatibility shape actually introduced."
+  ],
+  "stop_when": [
+    "A required migration or credential decision lacks safe recovery authority.",
+    "An affected requester cannot be quiesced for an incompatible operation.",
+    "The exact candidate Codex behavior has not been inspected and proved."
+  ],
+  "does_not_authorize": [
+    "Running `release.sh`, which commits, tags, and pushes.",
+    "Deploying to the installed service.",
+    "Changing requester-owned domain meaning merely for runtime convenience."
+  ],
+  "manual": "manuals/develop-change.md"
+}

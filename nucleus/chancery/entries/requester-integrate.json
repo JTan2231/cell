@@ -1,0 +1,79 @@
+{
+  "id": "nucleus.requester.integrate",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Connect an application to Nucleus",
+  "summary": "Design and verify an application integration that uses Nucleus for constrained agent execution while keeping application data and success authority in the application.",
+  "use_when": [
+    "A local application needs durable constrained agent execution through the shared Nucleus service.",
+    "An existing requester changes its invocation policy, immutable schemas, dynamic tools, identity, recovery, or compatibility boundary."
+  ],
+  "do_not_use_when": [
+    "The current interactive agent can simply perform the requested work.",
+    "The proposed design requires Nucleus to understand requester domain rows or workflow state.",
+    "Only ordinary application code unrelated to the requester boundary is changing."
+  ],
+  "outcome": "A requester with a defined external domain authority, one closed versioned invocation per job, durable correlation, idempotent tool handling, explicit failure policy, and proven operational recovery.",
+  "effects": [
+    "Changes requester implementation, contracts, tests, and operator documentation.",
+    "May register new immutable decoder schemas or requester-owned toolset versions.",
+    "May change prompts, models, permissions, timeouts, deployment ordering, and retained job provenance."
+  ],
+  "authority": [
+    "Nucleus owns portable invocation admission, harness supervision, authentication, job records, output atoms, and the tool mailbox.",
+    "The requester owns every domain mutation, domain success criterion, duplicate handling, and retry decision."
+  ],
+  "success": [
+    "The requester proves strict health, admission, domain completion, duplicate handling, mailbox recovery, cancellation, timeout, daemon loss, and domain-success/runtime-failure distinctions.",
+    "No direct-runner fallback exists and retained historical jobs remain decodable.",
+    "The requester canary verifies the requester-owned authority rather than only Nucleus completion."
+  ],
+  "failure_and_recovery": [
+    "Ambiguous admission retries only the byte-equivalent request under the same job ID.",
+    "A genuinely new attempt uses a new job ID and is allowed only by requester policy.",
+    "A requester restart may recover a durable pending call; a Nucleus restart cannot resume the Codex process and marks the attempt lost."
+  ],
+  "privacy": [
+    "Treat both requester state and Nucleus output atoms according to all source, prompt, and tool-result content they may retain.",
+    "Document the working directory, workspace access, local execution, web search, launch context, and tool permissions explicitly."
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Run the installed Nucleus manual and define the requester-owned durable success condition before specifying a runtime request.",
+    "Choose the typed client or HTTP boundary, stable requester identity, job idempotency key, correlations, and complete invocation policy.",
+    "Version immutable schemas and tools, implement durable mailbox servicing, and separate domain success from terminal model prose.",
+    "Define failure and new-attempt policy, then add observability, security, backup, deployment, and canary coverage.",
+    "Update the requester and shared operator documentation whenever the integration boundary changes."
+  ],
+  "checkpoints": [
+    "The requester domain authority and success proof are named and remain outside Nucleus.",
+    "Every invocation permission and immutable registration identity is explicit.",
+    "Duplicate admission and tool results are idempotent, and historical decoding is retained.",
+    "Requester and Nucleus restart semantics have separate tested recovery paths."
+  ],
+  "adaptation": [
+    "Use the current installed manual and exact supported protocol rather than assuming source-workspace lockstep.",
+    "Change deployment order according to whether a public change is additive or incompatible."
+  ],
+  "stop_when": [
+    "The domain result cannot be defined without making Nucleus understand application-specific state.",
+    "The required Nucleus protocol or harness capability is unsupported.",
+    "A destructive migration, credential move, or incompatible cutover lacks an explicit backup and recovery decision."
+  ],
+  "does_not_authorize": [
+    "Domain changes outside the requester integration being developed.",
+    "Publishing a release or performing a production cutover.",
+    "Retrying a failed domain operation."
+  ],
+  "manual": "manuals/requester-integrate.md"
+}

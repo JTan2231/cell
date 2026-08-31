@@ -1,0 +1,56 @@
+{
+  "id": "todo.situation.assess",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Research a Todo's current situation",
+  "summary": "Create a dated, evidence-backed account of what is true now, who owns each area, what constraints and gaps exist, and whether the todo is ready for desired-state design.",
+  "use_when": [
+    "An open canonical `tN` needs a dated evidence-grounded description of current state before design reconciliation.",
+    "Each relevant jurisdiction should identify exactly one owner plus any participants and consumers."
+  ],
+  "do_not_use_when": [
+    "The request is to choose desired architecture, revise direction, authorize a decision, or execute work.",
+    "The subject is not an established open canonical todo umbrella.",
+    "Runtime or tool failure would be misrepresented as a domain evidence gap."
+  ],
+  "outcome": "One immutable dated `aN` bound to exact todo and source bases, with current findings, jurisdictions, direction coverage, unresolved items, and a ready, needs-user-choice, or inconclusive disposition.",
+  "effects": [
+    "Freezes current direction, concerns, note cursor, accepted design, Todo projection, and a catalog of admitted evidence sources.",
+    "Submits one constrained Nucleus job with source-specific read/search tools and may consume Codex allowance.",
+    "Records one immutable assessment; any newer assessment for the umbrella makes every older one non-current."
+  ],
+  "authority": [
+    "Todo owns assessment bases, source references, findings, jurisdictions, disposition, currentness, and domain success.",
+    "The liaison can describe current state only; it cannot revise direction, choose design, route concerns, or authorize changes."
+  ],
+  "success": [
+    "Todo records a complete `aN` whose material findings cite admitted exact basis references.",
+    "Every jurisdiction has concrete responsibilities and exactly one owner.",
+    "The disposition truthfully distinguishes adequate evidence, required user choice, and material evidence gaps."
+  ],
+  "failure_and_recovery": [
+    "A runtime or missing-tool failure is reported as infrastructure failure rather than an inconclusive domain fact.",
+    "If direction, attachments, notes, accepted design, or source bases change, retain the historical assessment but treat it as stale and reassess.",
+    "Creating a newer assessment intentionally makes the older assessment non-current."
+  ],
+  "privacy": [
+    "Todo retains source locators, frozen revisions, observation times, and evidence references rather than copying ordinary decision-source contents.",
+    "Nucleus raw output may retain source content read by the assessment liaison."
+  ],
+  "interfaces": [
+    {"label": "Assess current situation", "invocation": "/Users/joey/.local/bin/todo assess <TODO_ID>"},
+    {"label": "Show historical assessment", "invocation": "/Users/joey/.local/bin/todo situation show <ASSESSMENT_ID>"},
+    {"label": "Show current projection", "invocation": "/Users/joey/.local/bin/todo show <TODO_ID>"}
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Revising the todo direction or routing concerns.",
+    "Choosing or accepting a desired design.",
+    "Implementing any identified gap or responsibility."
+  ],
+  "manual": "manuals/situation-assess.md"
+}

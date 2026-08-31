@@ -1,0 +1,54 @@
+{
+  "id": "annals.work.retain",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Preserve a source document in Annals",
+  "summary": "Store one unchanged text source in the knowledge library without interpreting it or changing the idea map.",
+  "use_when": [
+    "Immutable source bytes should enter the Annals library while interpretation is intentionally deferred.",
+    "A retained work must be listed or inspected by its work label."
+  ],
+  "do_not_use_when": [
+    "The source should be reconciled with the evidence-backed idea map now.",
+    "The desired result is an action backlog, casual note, preference, or summary.",
+    "The material is not nonblank UTF-8 source text."
+  ],
+  "outcome": "One content-addressed immutable work is retained or recognized, with a completed manual source delivery and no corpus revision change.",
+  "effects": [
+    "Reads a UTF-8 file or standard input and records a source delivery.",
+    "Retains previously unseen exact bytes under one normalized-unique work label, or selects the existing work when the bytes are already present.",
+    "Does not invoke a model and does not change concepts, evidence, commits, or HEAD."
+  ],
+  "authority": [
+    "The Annals library owns retained work bytes, content identity, work labels, and delivery history.",
+    "Source filesystem timestamps are captured metadata, not authorship, publication, or document-content dates."
+  ],
+  "success": [
+    "`annals work add` reports the retained or recognized canonical work label.",
+    "`annals work show <LABEL>` returns the complete unchanged text and first-retained metadata.",
+    "The corpus revision is unchanged."
+  ],
+  "failure_and_recovery": [
+    "An existing label attached to different bytes is a conflict and no replacement occurs.",
+    "When exact bytes already exist, use the canonical retained work rather than assuming the requested alternate label was created.",
+    "Use an explicit configured library; Annals never falls back to `./annals.db`."
+  ],
+  "privacy": [
+    "The complete unchanged source is retained in the selected local Annals library.",
+    "No source content is sent to Nucleus or a model by this capability."
+  ],
+  "interfaces": [
+    {"label": "Retain file", "invocation": "/Users/joey/.local/bin/annals work add <UTF8_INPUT> --name <LABEL>"},
+    {"label": "Retain standard input", "invocation": "/Users/joey/.local/bin/annals work add - --name <LABEL>"},
+    {"label": "List works", "invocation": "/Users/joey/.local/bin/annals work list"},
+    {"label": "Show work", "invocation": "/Users/joey/.local/bin/annals work show <LABEL>"}
+  ],
+  "does_not_authorize": [
+    "Model-assisted examination or reconciliation.",
+    "Application of any pending corpus change.",
+    "Deletion or replacement of retained source bytes."
+  ],
+  "manual": "manuals/work-retain.md"
+}

@@ -1,0 +1,74 @@
+{
+  "id": "annals.develop.change",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change Annals software and contracts",
+  "summary": "Modify Annals code, CLI, storage, AI-reader, inbox, installation, or public behavior.",
+  "use_when": [
+    "Annals code, tests, terminology, public CLI, storage, reconciliation, inbox, liaison, installation, or release behavior is being changed."
+  ],
+  "do_not_use_when": [
+    "The request is ordinary use or operation of an installed library.",
+    "The change belongs to Nucleus shared execution rather than Annals domain behavior.",
+    "Publication or deployment has not been separately authorized."
+  ],
+  "outcome": "A minimal, tested Annals change using canonical vocabulary and preserving exact domain, execution, migration, installation, and documentation boundaries.",
+  "effects": [
+    "Modifies Annals source, tests, fixtures, or documentation.",
+    "May require coordinated Nucleus contract work when the requester boundary changes.",
+    "Release and installation actions remain separate and may mutate Git, installed binaries, database state, scheduler state, or configuration."
+  ],
+  "authority": [
+    "Annals owns works, corpus meaning, reconciliation, history, inbox policy, domain recovery, and its installation.",
+    "Nucleus owns shared model execution and authentication but never Annals domain success or retry policy."
+  ],
+  "success": [
+    "Canonical terminology matches `annals/docs/vocabulary.md` and affected contracts are updated.",
+    "`./annals/ci.sh` completes within its 60-second product budget.",
+    "Affected installation, migration, inbox, and live requester canaries are run when the change crosses those boundaries."
+  ],
+  "failure_and_recovery": [
+    "Do not infer compatibility from the shared workspace alone; product release, schema, and Nucleus protocol remain separate axes.",
+    "Use guarded installed fresh-state or schema migration procedures rather than ad hoc database edits.",
+    "Preserve Annals domain results when later Nucleus runtime failure occurs."
+  ],
+  "privacy": [
+    "Tests, experiments, source fixtures, libraries, spools, backups, and Nucleus output may contain retained source and model context.",
+    "Do not add contributor instructions or vocabulary documentation to the constrained liaison runtime prompt."
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read `annals/docs/vocabulary.md` completely and identify the Annals-owned contract being changed.",
+    "If the change crosses Nucleus execution, authentication, compatibility, persistent state, deployment, or requester integration, run `nucleus manual` before design.",
+    "Implement the smallest change and update the owning CLI, architecture, data, installation, telemetry, or vocabulary documentation in the same change.",
+    "Run `./annals/ci.sh` within its product deadline and perform separately authorized live canaries when required."
+  ],
+  "checkpoints": [
+    "Current technical and plain-language terms follow the vocabulary authority.",
+    "Annals domain state remains authoritative over model prose and Nucleus terminal state.",
+    "Migration, rollback, and historical decoding are explicit when persistent meaning changes.",
+    "Release or deployment has not occurred without separate authorization."
+  ],
+  "adaptation": [
+    "Select only the contract documents relevant to the changed domain while always reading the complete vocabulary first.",
+    "Use the installed Nucleus manual and current Annals installation guide for cross-system or deployment facts that may evolve."
+  ],
+  "stop_when": [
+    "A source or corpus semantic cannot be expressed consistently with the canonical model.",
+    "A destructive migration or installed fresh-state cutover lacks explicit authority and recovery material.",
+    "An affected shared execution change has not been reconciled with Nucleus's owning contract."
+  ],
+  "does_not_authorize": [
+    "Running `annals/release.sh`, which commits, tags, and pushes.",
+    "Deploying or replacing the installed Annals library.",
+    "Changing Nucleus shared policy solely from the requester side."
+  ],
+  "manual": "manuals/develop-change.md"
+}

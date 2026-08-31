@@ -1,0 +1,59 @@
+{
+  "id": "todo.install.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install, recover, or migrate Todo",
+  "summary": "Initialize or migrate Todo's database, or deploy, validate, diagnose, and recover the user-owned macOS installation and daily email service.",
+  "use_when": [
+    "Todo storage must be initialized or upgraded through its supported backup-bearing migrator.",
+    "The installed CLI, content-addressed release, configuration, database, or daily email LaunchAgent must be deployed or diagnosed."
+  ],
+  "do_not_use_when": [
+    "The task is normal Todo domain use.",
+    "A database backup destination already exists or is relative for a required version-one migration.",
+    "The user has not authorized an installed-state or service change."
+  ],
+  "outcome": "A validated current Todo database and user-owned installation with explicit backup, rollback, configuration, Nucleus, email, and service state.",
+  "effects": [
+    "Initialization creates a new empty database and refuses to replace an existing path.",
+    "Migration creates a retained complete backup before the version-two transaction; current databases are true no-ops.",
+    "Deployment stages and switches content-addressed releases, may migrate the database, rewrites installed configuration when requested, and installs or updates the daily email LaunchAgent.",
+    "Deployment rollback can restore captured database, release, configuration, plist, and loaded-service state before commit."
+  ],
+  "authority": [
+    "Todo owns its SQLite schema, migration, installation, configuration, and email LaunchAgent.",
+    "Nucleus remains separately authoritative for research execution and authentication; Resend remains authoritative for email submission."
+  ],
+  "success": [
+    "The selected database is current and inspectable, and any required pre-migration backup remains at the explicit caller-owned path.",
+    "The installed CLI smoke test, Nucleus readiness, email preview/send validation, and LaunchAgent status are checked as applicable.",
+    "A failed pre-commit update restores the exact captured installed state."
+  ],
+  "failure_and_recovery": [
+    "Ordinary commands never migrate implicitly; stop callers and use the supported migrator.",
+    "On interrupted deployment, inspect the deployer's rollback result, selected release, database, configuration, plist, and loaded service before retrying.",
+    "Do not infer 09:00 delivery while the Mac is off or the user is logged out; a user LaunchAgent cannot guarantee it."
+  ],
+  "privacy": [
+    "The Todo database, migration backups, configuration, and logs can expose directions, notes, paths, design state, and email metadata.",
+    "`RESEND_API_KEY` remains in the process environment and `~/.zshrc`; Nucleus credentials remain outside Todo."
+  ],
+  "interfaces": [
+    {"label": "Initialize database", "invocation": "/Users/joey/.local/bin/todo --database <DATABASE_PATH> init"},
+    {"label": "Migrate with backup", "invocation": "/Users/joey/.local/bin/todo --database <DATABASE_PATH> migrate --backup <ABSENT_ABSOLUTE_BACKUP_PATH>"},
+    {"label": "Deploy candidate", "invocation": "/Users/joey/rust/cell/todo/packaging/macos/deploy-user.sh --binary <ABSOLUTE_TODO_BINARY> --email-from <SENDER> --email-to <RECIPIENT>"},
+    {"label": "Preview installed email", "invocation": "/Users/joey/.local/bin/todo email preview"},
+    {"label": "Inspect LaunchAgent", "invocation": "launchctl print gui/<UID>/org.todo.daily-email"}
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Deleting retained Todo database, backups, logs, or releases.",
+    "Publishing a Todo release.",
+    "Changing the Resend account or exposing its API key."
+  ],
+  "manual": "manuals/install-operate.md"
+}

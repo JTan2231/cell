@@ -1,0 +1,74 @@
+{
+  "id": "todo.develop.change",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change Todo software and contracts",
+  "summary": "Modify Todo code, CLI, database, research stages, decisions, email, installation, or public behavior.",
+  "use_when": [
+    "Todo code, tests, public CLI, database, liaisons, authorization, email, installation, or release behavior is being changed."
+  ],
+  "do_not_use_when": [
+    "The request is ordinary use or operation of installed Todo.",
+    "The change belongs to Nucleus shared execution rather than Todo domain behavior.",
+    "Release publication or deployment has not been separately authorized."
+  ],
+  "outcome": "A minimal tested Todo change that preserves durable provenance and the separation between research proposals, explicit decisions, desired design, and implementation execution.",
+  "effects": [
+    "Modifies Todo source, tests, migrations, documentation, or packaging.",
+    "May change requester toolsets, prompts, state schema, email disclosure, or installed service behavior with corresponding compatibility and recovery obligations.",
+    "Release and deployment remain separate actions with Git, database, service, email, and external-state effects."
+  ],
+  "authority": [
+    "Todo owns concerns, routing, decisions, identities, directions, assessments, designs, lifecycle, notes, email projection, database, and installation.",
+    "Nucleus owns execution and authentication but cannot authorize Todo decisions or implementation."
+  ],
+  "success": [
+    "All changed public and operational contracts are documented and immutable historical records remain meaningful.",
+    "`./todo/ci.sh` completes within its 60-second product budget.",
+    "Affected Nucleus requester, database migration, email, and deployment canaries are run when their boundaries change."
+  ],
+  "failure_and_recovery": [
+    "Preserve a committed Todo domain result when a later Nucleus error occurs.",
+    "Version immutable Nucleus schemas and toolsets rather than editing historical registrations.",
+    "Use backup-bearing migrations and deployment rollback rather than ad hoc database repair."
+  ],
+  "privacy": [
+    "Todo fixtures, databases, backups, decision sources, Nucleus output, email content, API configuration, and logs may contain private directions and system state.",
+    "Model stages receive only frozen bounded sources through managed tools and must not gain shell, workspace, or web access accidentally."
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Identify the Todo-owned layer being changed and preserve the distinctions among `cN`, `rN`, `tN`, `aN`, `dN`, notes, lifecycle, and external implementation.",
+    "Run `nucleus manual` before changing requester tools, shared execution, authentication, compatibility, job records, persistent cross-system state, or deployment.",
+    "Implement the smallest change and update CLI, liaison, architecture, data, or installation documentation in the same change.",
+    "Run `./todo/ci.sh` within its product deadline and perform separately authorized live canaries when required."
+  ],
+  "checkpoints": [
+    "Model text remains non-authoritative and explicit accept/reject commands remain outside liaison tools.",
+    "Todo does not become an implementation workflow, project graph, or evidence that work ran.",
+    "Persistent changes have migration, backup, rollback, and historical compatibility proof.",
+    "Release or deployment has not occurred without separate authorization."
+  ],
+  "adaptation": [
+    "Select the exact domain documentation for the changed layer and use the current installed Nucleus manual for shared runtime facts.",
+    "Scale live canaries to the effects: routing, assessment, design, email, migration, and installation exercise different authorities."
+  ],
+  "stop_when": [
+    "A proposed shortcut would let a model accept a decision or treat execution as Todo state.",
+    "A destructive migration or external email change lacks explicit authority and recovery.",
+    "The shared Nucleus boundary is changing without the corresponding owning contract work."
+  ],
+  "does_not_authorize": [
+    "Running `todo/release.sh`, which commits, tags, and pushes.",
+    "Deploying Todo or migrating the installed database.",
+    "Sending email or changing external Resend state."
+  ],
+  "manual": "manuals/develop-change.md"
+}

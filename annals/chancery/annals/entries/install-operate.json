@@ -1,0 +1,60 @@
+{
+  "id": "annals.install.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install or recover Annals",
+  "summary": "Install, update, validate, or recover the user-owned Annals and Annals Usage deployment, including an explicitly authorized fresh-state cutover.",
+  "use_when": [
+    "The user-owned macOS Annals and Annals Usage binaries, configuration, content-addressed release, LaunchAgent, library, or spool must be installed, updated, or recovered.",
+    "An explicitly authorized fresh-state replacement must preserve uncompleted backlog and rollback as one generation."
+  ],
+  "do_not_use_when": [
+    "The task is ordinary use or administration of an already installed library or inbox.",
+    "Source development or Git release publication is the intended outcome.",
+    "A destructive fresh-state cutover has not been explicitly authorized."
+  ],
+  "outcome": "A validated complete installed Annals and Annals Usage release with matching configuration, scheduler, library/spool generation, Nucleus boundary, and rollback state.",
+  "effects": [
+    "Stages and atomically selects a complete content-addressed release containing Annals, Annals Usage, runners, configuration, and provider documentation.",
+    "May quiesce the LaunchAgent, establish maintenance, migrate the library, replace launchd configuration, and restart scheduled inbox processing.",
+    "With `--fresh-state`, replaces the library and spool together, imports uncompleted backlog in lane order, and retains the prior generation for rollback.",
+    "A failed pre-commit cutover restores captured program, service, configuration, library, and spool state according to the supported procedure."
+  ],
+  "authority": [
+    "Annals owns its installed programs, library, spool, scheduler, configuration, migration, maintenance, and recovery.",
+    "Nucleus remains separately authoritative for Codex execution and authentication and is not stopped or replaced by an Annals deployment."
+  ],
+  "success": [
+    "Installed Annals and Annals Usage versions and help surfaces match the selected release.",
+    "Library validation, spool status, LaunchAgent state, Nucleus readiness, and deliberate Annals and usage canaries pass as applicable.",
+    "Maintenance is cleared only after the complete cutover commits and backlog processing is intentionally resumed."
+  ],
+  "failure_and_recovery": [
+    "Do not remove maintenance, edit spool receipts, or replace library files manually after interrupted deployment; inspect and use the documented recovery procedure.",
+    "A failed ordinary update restores the previous captured generation before work resumes.",
+    "A fresh-state cutover is destructive to the active generation and requires explicit retained rollback material and backlog verification."
+  ],
+  "privacy": [
+    "Installed library, spool, backups, configuration, logs, and Nucleus output may contain complete private sources and model context.",
+    "Deployment must preserve private user ownership and permissions across both current and rollback generations."
+  ],
+  "interfaces": [
+    {"label": "Deploy or update", "invocation": "/Users/joey/rust/cell/annals/packaging/launchd/deploy-user.sh --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET>"},
+    {"label": "Fresh-state cutover", "invocation": "/Users/joey/rust/cell/annals/packaging/launchd/deploy-user.sh --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --fresh-state"},
+    {"label": "Installed Annals version", "invocation": "/Users/joey/.local/bin/annals --version"},
+    {"label": "Installed Usage version", "invocation": "/Users/joey/.local/bin/annals-usage --version"},
+    {"label": "Inbox status", "invocation": "/Users/joey/.local/bin/annals inbox status"},
+    {"label": "Usage doctor", "invocation": "/Users/joey/.local/bin/annals-usage doctor"}
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Running `annals/release.sh`, which commits, tags, and pushes.",
+    "A fresh-state replacement without explicit destructive-operation authority.",
+    "Deleting prior generations, backups, logs, or retained failed envelopes."
+  ],
+  "manual": "manuals/install-operate.md"
+}

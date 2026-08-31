@@ -1,0 +1,57 @@
+{
+  "id": "annals-usage.execution.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Check Annals account access and allowance",
+  "summary": "Show the current Codex account allowance used by Annals, diagnose Annals Usage access, or perform an attended Nucleus login.",
+  "use_when": [
+    "A live account-global Codex allowance snapshot is wanted in Annals-facing terms.",
+    "Annals Usage configuration, library/spool paths, Nucleus readiness, account telemetry access, or attended login must be checked."
+  ],
+  "do_not_use_when": [
+    "The request is for exact Annals delivery consumption rather than current allowance.",
+    "The issue is an Annals domain reconciliation or inbox outcome.",
+    "General Nucleus service administration is the primary task."
+  ],
+  "outcome": "A live, explicitly scoped allowance or diagnostic result, or a completed attended login delegated to Nucleus's credential authority.",
+  "effects": [
+    "`budget` performs live Nucleus account reads and retains no snapshot.",
+    "`doctor` reads configuration, Annals paths, Nucleus readiness, versions, and account telemetry without creating state.",
+    "`login --device-auth` delegates to Nucleus and changes the Nucleus-owned Codex credential."
+  ],
+  "authority": [
+    "Nucleus owns Codex authentication, account reads, credential serialization, and runtime state.",
+    "Annals Usage owns only the Annals-facing live diagnostic and allowance projection."
+  ],
+  "success": [
+    "Budget identifies observation time, account-global scope, plan, available windows, percent used, resets, and credit fields without inventing token denominators.",
+    "Doctor confirms configuration and required authority access or reports the exact failed boundary.",
+    "After login, account access and a deliberate Annals requester canary are verified before resuming paused dispatch."
+  ],
+  "failure_and_recovery": [
+    "Authentication busy is reported nonblockingly; wait for the current credential user rather than replacing credentials.",
+    "If login is needed, quiesce requesters, perform attended device authentication, verify account and strict Nucleus health, then canary Annals.",
+    "A missing allowance denominator or per-delivery share is an upstream limit, not a value to estimate."
+  ],
+  "privacy": [
+    "Annals Usage never reads, copies, or stores Nucleus credential files.",
+    "Account and activity responses are live private account information and are not retained by the companion CLI."
+  ],
+  "interfaces": [
+    {"label": "Live allowance", "invocation": "/Users/joey/.local/bin/annals-usage budget"},
+    {"label": "Diagnostic", "invocation": "/Users/joey/.local/bin/annals-usage doctor"},
+    {"label": "Attended login", "invocation": "/Users/joey/.local/bin/annals-usage login --device-auth"}
+  ],
+  "dependencies": [
+    {"id": "annals.corpus.explore", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Replacing or copying Nucleus credentials.",
+    "Resuming requesters before account and requester canaries are understood.",
+    "Treating global account activity as exact Annals delivery consumption."
+  ],
+  "manual": "manuals/execution-operate.md"
+}

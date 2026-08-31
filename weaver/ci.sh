@@ -153,41 +153,8 @@ provider_release=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' \
     exit 1
 }
 
-case "${CHANCERY_REQUIRED:-0}" in
-    0|1) ;;
-    *)
-        printf '%s\n' 'ci.sh: CHANCERY_REQUIRED must be 0 or 1' >&2
-        exit 1
-        ;;
-esac
-chancery_command=${CHANCERY:-}
-if [ -n "$chancery_command" ]; then
-    case "$chancery_command" in
-        /*) ;;
-        *)
-            printf '%s\n' 'ci.sh: CHANCERY must be an absolute path' >&2
-            exit 1
-            ;;
-    esac
-    [ -f "$chancery_command" ] && [ -x "$chancery_command" ] || {
-        printf 'ci.sh: CHANCERY is not an executable file: %s\n' \
-            "$chancery_command" >&2
-        exit 1
-    }
-elif [ -x /Users/joey/.local/bin/chancery ]; then
-    chancery_command=/Users/joey/.local/bin/chancery
-fi
-
-if [ -n "$chancery_command" ]; then
-    "$chancery_command" validate "$SCRIPT_DIR/chancery"
-elif [ "${CHANCERY_REQUIRED:-0}" = 1 ]; then
-    printf '%s\n' \
-        'ci.sh: Chancery validation is required; set CHANCERY to its absolute executable path' >&2
-    exit 1
-else
-    printf '%s\n' \
-        'ci.sh: Chancery is not installed; skipping schema validation (set CHANCERY=/absolute/path or CHANCERY_REQUIRED=1)'
-fi
+cargo run --manifest-path "$WORKSPACE_MANIFEST" \
+    --package chancery --locked --quiet -- validate "$SCRIPT_DIR/chancery"
 
 printf '%s\n' '==> rustfmt'
 cargo fmt --manifest-path "$WORKSPACE_MANIFEST" --package weaver -- --check

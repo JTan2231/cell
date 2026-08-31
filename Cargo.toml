@@ -9,13 +9,14 @@ members = [
     "annals/crates/annals",
     "annals/crates/annals-usage",
     "todo/crates/todo",
+    "chancery/crates/chancery",
     "weaver/crates/weaver",
 ]
 resolver = "3"
 
 [workspace.package]
-# The six Nucleus crates share this release version. Annals, Annals Usage, and
-# Todo and Weaver declare their independent product versions in their package
+# The six Nucleus crates share this release version. Annals, Annals Usage,
+# Todo, Chancery, and Weaver declare independent product versions in their
 # manifests.
 version = "0.3.0"
 edition = "2024"

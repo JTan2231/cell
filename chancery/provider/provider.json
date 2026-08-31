@@ -1,0 +1,12 @@
+{
+  "schema_version": 2,
+  "provider": {
+    "id": "chancery",
+    "name": "Chancery",
+    "release": "0.2.0"
+  },
+  "entries": [
+    "entries/directory-discover.json",
+    "entries/provider-publish.json"
+  ]
+}
