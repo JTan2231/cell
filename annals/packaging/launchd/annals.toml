@@ -3,6 +3,7 @@ library = "/Library/Application Support/Annals/annals.db"
 [inbox]
 root = "/Library/Application Support/Annals/spool"
 settle_seconds = 60
+minimum_available_bytes = 7_000_000_000
 
 [liaison]
 quality = "high"

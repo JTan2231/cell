@@ -17,8 +17,9 @@ terminal envelopes back to the queue, or infer delivery state from processes.
 Registration moves settled top-level files from `incoming/` into complete
 queued envelopes. It creates no database source-delivery record. Direct
 enqueue copies explicit regular files into complete envelopes and leaves the
-originals unchanged. Priority is a binary lane; it does not renumber jobs and
-does not preempt a processing job.
+originals unchanged, but rejects a copy that would cross the configured spool
+storage reserve. Priority is a binary lane; it does not renumber jobs and does
+not preempt a processing job.
 
 Dispatch is explicit or externally scheduled:
 
@@ -26,7 +27,13 @@ Dispatch is explicit or externally scheduled:
 /Users/joey/.local/bin/annals inbox run
 ```
 
-Before the first claim, Annals performs an authenticated Nucleus account
+Before every new claim, Annals checks the configured available-byte reserve on
+both the library and spool filesystems. Low storage leaves the next job queued
+with attempts zero and no delivery record; the ordinary activation exits and a
+later scheduled or explicit run checks again without requiring `resume`. A
+storage probe failure also leaves the job unattempted but exits nonzero.
+
+When storage is ready, Annals performs an authenticated Nucleus account
 preflight. Failure leaves the next job queued with attempts zero and no
 delivery record. A claimed job moves to processing, increments from zero to
 one attempt, and begins its source delivery. New work enters integration with
@@ -44,7 +51,8 @@ a new examination.
 ```
 
 Pause prevents a new dispatch claim after any active job finishes, but
-registration and explicit enqueue continue. Resume removes only the
+registration continues and explicit enqueue remains subject to the storage
+reserve. Resume removes only the
 operator-owned pause and does not start a worker or clear deployment
 maintenance. Prioritize/deprioritize accept queued ordinary jobs only.
 
@@ -78,6 +86,8 @@ eligible; correct a pre-retention source error and deliver it as new input.
 An unexpected model/runtime failure or interruption halts the event. Continue
 advances only unattempted items and never retries a failed child. The durable
 event report, rather than process exit alone, is the accounting authority.
+Insufficient or unreadable storage also halts an attended retry before claiming
+the next child; correct the condition and continue that event explicitly.
 
 Spool archives retain unchanged source material. Nucleus state may retain the
 complete model request and output. Treat both as private. A Nucleus restart

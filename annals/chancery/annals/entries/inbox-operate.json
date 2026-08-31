@@ -19,6 +19,7 @@
   "effects": [
     "Registration moves settled incoming files into durable queued envelopes; direct enqueue copies explicit files and leaves originals unchanged.",
     "Dispatch starts source deliveries and may invoke Nucleus, apply corpus reconciliations, and consume Codex allowance.",
+    "The storage gate defers an ordinary claim until the configured reserve is available on both Annals filesystems; direct enqueue rejects a copy that would cross the spool reserve.",
     "Pause blocks new dispatch but permits registration; interruption archives one exact processing job as failed or skipped.",
     "A retry event preserves originals and creates fresh linked child jobs for one frozen inclusive failed-delivery interval."
   ],
@@ -28,11 +29,13 @@
   ],
   "success": [
     "Status or event reports identify queue, active job, pause, maintenance, archive, and outcome state without relying on process inspection.",
+    "A storage-gated ordinary job remains queued with attempts zero and resumes automatically on a later activation once the condition clears.",
     "A run or retry report, not process exit alone, accounts for every attempted item and durable result.",
     "Original failed jobs and deliveries remain unchanged after retry."
   ],
   "failure_and_recovery": [
     "Every inbox job has at most one processing attempt; never move a terminal envelope back to queued.",
+    "A storage probe failure prevents a claim and exits nonzero; insufficient storage halts an attended retry until the operator continues it.",
     "Unexpected model or runtime failure archives the current job and halts the activation or retry event; continue only through the supported command.",
     "Pause before interruption when the next ordinary job must remain queued, and require paused quiescence before starting or continuing a retry event."
   ],

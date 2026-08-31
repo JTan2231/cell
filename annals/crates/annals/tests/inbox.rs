@@ -45,6 +45,7 @@ const LEGACY_PROCESSING_RECEIPT: &[u8] = br#"{
     "message": "predecessor retry"
   }
 }"#;
+const BLOCKING_MINIMUM_AVAILABLE_BYTES: u64 = 9_000_000_000_000_000_000;
 
 struct Installation {
     directory: TempDir,
@@ -71,6 +72,13 @@ struct Material {
 
 impl Installation {
     fn new(settle_seconds: u64) -> TestResult<Self> {
+        Self::new_with_minimum_available_bytes(settle_seconds, 0)
+    }
+
+    fn new_with_minimum_available_bytes(
+        settle_seconds: u64,
+        minimum_available_bytes: u64,
+    ) -> TestResult<Self> {
         let directory = tempfile::tempdir()?;
         let config = directory.path().join("annals.toml");
         let library = directory.path().join("state/annals.db");
@@ -92,6 +100,7 @@ impl Installation {
                     "[inbox]\n",
                     "root = {}\n",
                     "settle_seconds = {settle_seconds}\n",
+                    "minimum_available_bytes = {minimum_available_bytes}\n",
                     "\n",
                     "[liaison]\n",
                     "quality = \"medium\"\n",
@@ -102,6 +111,7 @@ impl Installation {
                 toml_string(&inbox),
                 toml_string(&socket),
                 settle_seconds = settle_seconds,
+                minimum_available_bytes = minimum_available_bytes,
             ),
         )?;
         Ok(Self {
@@ -113,6 +123,17 @@ impl Installation {
             codex,
             controls,
         })
+    }
+
+    fn set_minimum_available_bytes(&self, value: u64) -> TestResult {
+        let current = fs::read_to_string(&self.config)?;
+        let line = current
+            .lines()
+            .find(|line| line.starts_with("minimum_available_bytes = "))
+            .ok_or("config had no minimum_available_bytes setting")?;
+        let updated = current.replacen(line, &format!("minimum_available_bytes = {value}"), 1);
+        fs::write(&self.config, updated)?;
+        Ok(())
     }
 
     fn command(&self) -> InstallationCommand {
@@ -806,6 +827,87 @@ fn register_pause_and_resume_control_the_durable_queue() -> TestResult {
     assert_eq!(fs::read_to_string(&installation.counter)?, "3\n");
     let already_resumed = installation.json_ok(["inbox", "resume"])?;
     assert_eq!(already_resumed["changed"], false);
+    Ok(())
+}
+
+#[test]
+fn low_storage_defers_dispatch_and_a_later_activation_resumes_automatically() -> TestResult {
+    let installation =
+        Installation::new_with_minimum_available_bytes(0, BLOCKING_MINIMUM_AVAILABLE_BYTES)?;
+    installation.init()?;
+    installation.incoming(
+        "storage-gated.md",
+        b"Shared inbox claim.\nThis source waits for storage headroom.\n",
+        0o600,
+    )?;
+
+    let stopped = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(stopped["registered"], 1);
+    assert_eq!(stopped["attempted"], 0);
+    assert_eq!(stopped["remaining"], 1);
+    assert_eq!(stopped["queue_drained"], false);
+    assert_eq!(stopped["stopped_for_low_space"], true);
+    assert_eq!(stopped["storage"]["enabled"], true);
+    assert_eq!(stopped["storage"]["ready"], false);
+    assert_eq!(
+        stopped["storage"]["minimum_available_bytes"],
+        BLOCKING_MINIMUM_AVAILABLE_BYTES
+    );
+    assert!(!installation.counter.exists());
+
+    let job = "j00000000000000000001";
+    let receipt = archived_receipt(&installation.inbox, "queued", job)?;
+    assert_eq!(receipt["state"], "queued");
+    assert_eq!(receipt["attempts"], 0);
+    assert!(receipt["ingestion_id"].is_null());
+
+    let status = installation.json_ok(["inbox", "status"])?;
+    assert_eq!(status["paused"], false);
+    assert_eq!(status["storage"]["ready"], false);
+
+    installation.set_minimum_available_bytes(0)?;
+    let resumed = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(resumed["attempted"], 1);
+    assert_eq!(resumed["remaining"], 0);
+    assert_eq!(resumed["stopped_for_low_space"], false);
+    assert_eq!(resumed["storage"]["enabled"], false);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
+    assert!(archived_material(&installation.inbox, "queued")?.is_empty());
+    assert_eq!(archived_material(&installation.inbox, "done")?.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn enqueue_rejects_a_copy_that_would_cross_the_storage_reserve() -> TestResult {
+    let installation =
+        Installation::new_with_minimum_available_bytes(0, BLOCKING_MINIMUM_AVAILABLE_BYTES)?;
+    installation.init()?;
+    let input = installation.directory.path().join("explicit-source.md");
+    fs::write(&input, "Shared inbox claim.\nExplicit source.\n")?;
+
+    let output = installation
+        .command()
+        .args([
+            OsStr::new("inbox"),
+            OsStr::new("enqueue"),
+            input.as_os_str(),
+        ])
+        .output()?;
+    failed_json(&output, "insufficient_storage")?;
+
+    assert_eq!(
+        fs::read_to_string(&input)?,
+        "Shared inbox claim.\nExplicit source.\n"
+    );
+    assert!(archived_material(&installation.inbox, "queued")?.is_empty());
+    assert!(
+        fs::read_dir(installation.directory.path())?
+            .filter_map(Result::ok)
+            .all(|entry| !entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".annals-enqueue-"))
+    );
     Ok(())
 }
 
@@ -2944,6 +3046,50 @@ fn retry_auth_preflight_halts_before_any_child_attempt() -> TestResult {
     assert!(receipt["model_run_token"].is_null());
     assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
 
+    let completed = installation.json_ok(["inbox", "retry", "continue", "1"])?;
+    assert_eq!(completed["event"]["state"], "completed");
+    assert_eq!(completed["summary"]["applied"], 1);
+    assert_eq!(completed["summary"]["remaining"], 0);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "2\n");
+    Ok(())
+}
+
+#[test]
+fn retry_low_storage_halts_before_any_child_attempt() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "storage.md",
+        b"Shared inbox claim.\nOriginal failed source.\n",
+        0o600,
+    )?;
+    fail_next_inbox_job(&installation)?;
+    installation.json_ok(["inbox", "pause"])?;
+    installation.set_minimum_available_bytes(BLOCKING_MINIMUM_AVAILABLE_BYTES)?;
+
+    let job = "j00000000000000000001";
+    let output = installation
+        .command()
+        .args(["inbox", "retry", "start", "--from", job, "--through", job])
+        .output()?;
+    failed_json(&output, "insufficient_storage")?;
+
+    let halted = installation.json_ok(["inbox", "retry", "status", "1"])?;
+    assert_eq!(halted["event"]["state"], "halted");
+    assert_eq!(halted["event"]["last_halt"]["code"], "insufficient_storage");
+    assert_eq!(halted["summary"]["attempted"], 0);
+    assert_eq!(halted["summary"]["remaining"], 1);
+    assert_eq!(halted["items"][0]["outcome"], "not_attempted");
+    assert!(halted["items"][0]["child_delivery_id"].is_null());
+    let child_job = halted["items"][0]["child_job_id"]
+        .as_str()
+        .ok_or("retry child had no job ID")?;
+    let receipt = archived_receipt(&installation.inbox, "queued", child_job)?;
+    assert_eq!(receipt["attempts"], 0);
+    assert!(receipt["ingestion_id"].is_null());
+    assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
+
+    installation.set_minimum_available_bytes(0)?;
     let completed = installation.json_ok(["inbox", "retry", "continue", "1"])?;
     assert_eq!(completed["event"]["state"], "completed");
     assert_eq!(completed["summary"]["applied"], 1);

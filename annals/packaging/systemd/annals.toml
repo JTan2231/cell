@@ -3,6 +3,7 @@ library = "/var/lib/annals/annals.db"
 [inbox]
 root = "/var/spool/annals"
 settle_seconds = 60
+minimum_available_bytes = 7_000_000_000
 
 [liaison]
 quality = "high"

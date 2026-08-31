@@ -90,6 +90,11 @@ job and to prevent other spool mutation during cutover. These operational
 files are not retained works. Do not create, remove, or edit their contents
 directly.
 
+The inbox storage gate is separate from those marker files. Before a queued
+claim it requires `minimum_available_bytes` on both the library and spool
+filesystems. It is derived from current filesystem state, creates no marker,
+and therefore needs no `resume` when storage recovers.
+
 One ordinary `inbox run` invocation:
 
 1. takes the inbox lock;
@@ -98,16 +103,19 @@ One ordinary `inbox run` invocation:
 3. recovers queued and previously dispatched jobs;
 4. registers every eligible visible top-level regular file as a queued job;
 5. stops before attempting or dispatching a job when paused;
-6. performs one authenticated account preflight before the first queued
+6. checks the library and spool storage reserve before every queued claim,
+   leaving the job unattempted and exiting successfully when either filesystem
+   is below it;
+7. performs one authenticated account preflight before the first queued
    dispatch, leaving every job queued and unattempted if authentication is
    unavailable;
-7. dispatches the lowest-sequence priority job, or the lowest-sequence normal
+8. dispatches the lowest-sequence priority job, or the lowest-sequence normal
    job when the priority lane is empty, for its only attempt, then archives a
    fresh duplicate or integrates and applies a new work;
-8. rescans and registers newly eligible arrivals between jobs; and
-9. continues until the queue is empty, pause or maintenance closes the gate,
-   or an unexpected processing failure is terminalized and ends the activation
-   nonzero.
+9. rescans and registers newly eligible arrivals between jobs; and
+10. continues until the queue is empty, pause, maintenance, or low storage
+    closes a gate, or an unexpected processing failure is terminalized and ends
+    the activation nonzero.
 
 There is no item or activation-lifetime limit. A continuing stream of eligible
 arrivals can therefore keep one worker active indefinitely. Processing is
@@ -121,6 +129,10 @@ draining continue. An unexpected model, runner, or runtime processing failure
 instead ends the activation nonzero after archival; successors remain queued
 for the next activation. A failed job is never retried automatically; bounded
 operator retry is a separate event described below.
+Low storage differs from a failed job: no claim, attempt, delivery, or model run
+starts. The one-shot worker exits and the next scheduled activation checks
+again. A storage probe error fails closed with `storage_probe_failed` rather
+than assuming that capacity is safe.
 
 `annals inbox register` exposes the same admission phase without starting a
 delivery. It can register arrivals while a different worker is processing a
@@ -134,7 +146,8 @@ place. The files receive immutable sequences in argument order and use the
 normal lane unless `--priority` selects the priority lane. Enqueue bypasses
 `incoming/` and settling; Annals completes each material copy and job receipt
 before publishing the envelope for dispatch, avoiding a partial-copy admission
-race. It starts no source delivery.
+race. It rejects a copy whose projected result would cross the configured spool
+reserve. It starts no source delivery.
 
 `annals inbox prioritize JOB_ID...` changes named queued jobs to priority;
 `annals inbox deprioritize JOB_ID...` changes them to normal. Both commands are
@@ -188,6 +201,12 @@ Start and continue run one authenticated account preflight before their first
 zero-attempt child claim. A failed preflight halts the event while every
 remaining child stays queued at attempts zero with no child delivery or model
 run.
+
+They also check the storage gate before each child claim. Insufficient storage
+halts the event with `insufficient_storage`; inability to measure it halts with
+`storage_probe_failed`. The child remains queued and unattempted. Retry is
+attended, so correct the condition and use `retry continue`; the ordinary timer
+does not continue the event.
 
 A known item-local failure is recorded in the event and does not stop later
 members. An unexpected model, runner, or runtime failure halts the event and
@@ -253,6 +272,7 @@ library = "/var/lib/annals/annals.db"
 [inbox]
 root = "/var/spool/annals"
 settle_seconds = 60
+minimum_available_bytes = 7_000_000_000
 
 [liaison]
 quality = "high"
@@ -298,6 +318,11 @@ ANNALS_USAGE_CONFIG=/etc/annals/usage.toml \
 ```
 
 `settle_seconds = 0` makes every accepted regular file immediately eligible.
+`minimum_available_bytes` defaults to 7,000,000,000 bytes and requires that
+many bytes to remain available to the Annals user on both the library and spool
+filesystems before a queued claim. Set it to zero to disable the gate. The
+check is a reserve at each safe claim boundary, not a filesystem quota: an
+active job or another process can still consume space afterward.
 Unknown config keys are rejected.
 
 The usage config resolves from an explicit `annals-usage --config`, then
@@ -447,18 +472,22 @@ Human status output reports incoming files split into ready and settling,
 the total queued count and its priority subset, processing, done, duplicate,
 failed, and skipped envelopes; identifies the next and active jobs and their
 priorities; and reports whether a worker is active and whether pause or
-maintenance is requested. `--json` exposes the subset as `priority_queued` and
+maintenance is requested. It also reports whether the live storage gate is
+ready and its library and inbox measurements. `--json` exposes the subset as
+`priority_queued` and
 `priority` under `next_job` and `active_job`, plus `attempts`, `started_at`, and
 `interrupt_requested` under `active_job`; it uses `duplicates` and `skipped`
 for their archive counts and additionally reports the ignored-entry count. A
 successful run reports
 registered, attempted, applied, recorded, duplicates, failed, and skipped
 counts; ready, queued, or processing work remaining; settling arrivals;
-whether the runnable queue was drained; and whether pause or maintenance
-stopped dispatch. A paused queue is valid remaining work, so `queue_drained`
-stays false. The spool root,
+whether the runnable queue was drained; and whether pause, maintenance, or low
+storage stopped dispatch. A paused or storage-gated queue is valid remaining
+work, so `queue_drained` stays false. The spool root,
 recovered-job count, effective settling interval, elapsed seconds, and ignored
-count are also available with `--json`.
+count are also available with `--json`. A low-space scheduled run exits zero
+but writes a concise diagnostic even under `--quiet`; probe failure exits
+nonzero.
 
 Control the worker without changing the external timer:
 
@@ -809,6 +838,9 @@ The LaunchAgent may remain loaded while paused. It continues to wake and
 register settled arrivals, but the next job remains queued until `resume` and
 a later activation. Run `annals inbox run` after `resume` when immediate
 dispatch is wanted.
+When only the storage gate is closed, no resume is needed: each five-minute
+wake-up rechecks capacity and dispatches automatically once the reserve is
+available.
 
 To retire the user installation while retaining its library and operational
 state, boot out the LaunchAgent and remove only the two Annals-owned Chancery
@@ -861,6 +893,12 @@ attempt; Annals then continues draining. Unexpected model, runner, and runtime
 processing failures are also terminalized in `failed/` on the first attempt,
 but the current activation exits nonzero and leaves successors queued for the
 next activation.
+
+Low storage is reported without terminalizing the next job. Its receipt stays
+queued with attempts zero and no database delivery record. Free space on both
+reported locations, then wait for the next scheduled activation or run
+`annals inbox run` explicitly. If the report is `storage_probe_failed`, correct
+the path or permission failure; do not bypass the check by editing spool state.
 
 Do not move failed envelopes back into `queued/` or edit their receipts. For a
 recoverable stretch, use the bounded retry sequence above. `retry preview`

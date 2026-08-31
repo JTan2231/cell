@@ -543,7 +543,8 @@ if [ -e "$CONFIG_PATH" ]; then
 else
     {
         printf '%s\n' 'library = "annals.db"'
-        printf '%s\n' '' '[inbox]' 'root = "spool"' 'settle_seconds = 60'
+        printf '%s\n' '' '[inbox]' 'root = "spool"' 'settle_seconds = 60' \
+            'minimum_available_bytes = 7_000_000_000'
         printf '%s\n' '' '[liaison]' 'quality = "high"'
         printf 'nucleus_socket = "%s"\n' "$nucleus_socket"
     } >"$temporary_config"

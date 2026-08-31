@@ -109,7 +109,7 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
                     inbox::retry_continue(path, config, args, !cli.json)
                 }
             },
-            InboxCommand::Status => inbox::status(config),
+            InboxCommand::Status => inbox::status(path, config),
         },
         Command::Change(command) => match command {
             ChangeCommand::Submit(args) => submit_change(path, &args.input, &args.work, args.base),

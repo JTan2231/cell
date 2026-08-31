@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
+use std::io;
 use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::{
     DirBuilderExt as _, MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _,
@@ -201,6 +202,153 @@ fn marker_requested(
     }
 }
 
+fn storage_status(
+    library: &Path,
+    spool: &Spool,
+    minimum_available_bytes: u64,
+) -> Result<StorageStatus, AppError> {
+    storage_status_with(library, spool, minimum_available_bytes, &|path| {
+        fs2::available_space(path)
+    })
+}
+
+fn storage_status_with(
+    library: &Path,
+    spool: &Spool,
+    minimum_available_bytes: u64,
+    available_space: &impl Fn(&Path) -> io::Result<u64>,
+) -> Result<StorageStatus, AppError> {
+    if minimum_available_bytes == 0 {
+        return Ok(StorageStatus {
+            enabled: false,
+            minimum_available_bytes,
+            ready: true,
+            locations: Vec::new(),
+        });
+    }
+    let locations = vec![
+        storage_location_status_with("library", library, available_space)?,
+        storage_location_status_with("inbox", &spool.root, available_space)?,
+    ];
+    Ok(StorageStatus {
+        enabled: true,
+        minimum_available_bytes,
+        ready: storage_locations_ready(minimum_available_bytes, &locations),
+        locations,
+    })
+}
+
+fn storage_location_status(
+    role: &'static str,
+    path: &Path,
+) -> Result<StorageLocationStatus, AppError> {
+    storage_location_status_with(role, path, &|path| fs2::available_space(path))
+}
+
+fn storage_location_status_with(
+    role: &'static str,
+    path: &Path,
+    available_space: &impl Fn(&Path) -> io::Result<u64>,
+) -> Result<StorageLocationStatus, AppError> {
+    let probe = existing_storage_path(path)?;
+    let available_bytes = available_space(probe).map_err(|error| {
+        AppError::unexpected(
+            "storage_probe_failed",
+            format!(
+                "unable to inspect available storage for {role} at {}: {error}",
+                path.display()
+            ),
+        )
+    })?;
+    Ok(StorageLocationStatus {
+        role,
+        path: path.display().to_string(),
+        available_bytes,
+    })
+}
+
+fn existing_storage_path(path: &Path) -> Result<&Path, AppError> {
+    let mut candidate = if path.as_os_str().is_empty() {
+        Some(Path::new("."))
+    } else {
+        Some(path)
+    };
+    while let Some(current) = candidate {
+        match current.try_exists() {
+            Ok(true) => return Ok(current),
+            Ok(false) => candidate = current.parent(),
+            Err(error) => {
+                return Err(AppError::unexpected(
+                    "storage_probe_failed",
+                    format!(
+                        "unable to locate an existing storage path for {}: {error}",
+                        path.display()
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(Path::new("."))
+}
+
+fn storage_locations_ready(
+    minimum_available_bytes: u64,
+    locations: &[StorageLocationStatus],
+) -> bool {
+    locations
+        .iter()
+        .all(|location| location.available_bytes >= minimum_available_bytes)
+}
+
+fn insufficient_storage_message(status: &StorageStatus) -> String {
+    let blocked = status
+        .locations
+        .iter()
+        .filter(|location| location.available_bytes < status.minimum_available_bytes)
+        .map(|location| {
+            format!(
+                "{} storage at {} has {} bytes available",
+                location.role, location.path, location.available_bytes
+            )
+        })
+        .collect::<Vec<_>>();
+    format!(
+        "{}; at least {} bytes are required before another inbox job can start",
+        if blocked.is_empty() {
+            "available storage is below the configured reserve".to_owned()
+        } else {
+            blocked.join("; ")
+        },
+        status.minimum_available_bytes
+    )
+}
+
+fn insufficient_storage_error(status: &StorageStatus) -> AppError {
+    AppError::conflict("insufficient_storage", insufficient_storage_message(status))
+}
+
+fn ensure_enqueue_headroom(
+    spool: &Spool,
+    minimum_available_bytes: u64,
+    source_bytes: u64,
+) -> Result<(), AppError> {
+    if minimum_available_bytes == 0 {
+        return Ok(());
+    }
+    let location = storage_location_status("inbox", &spool.root)?;
+    let projected_available_bytes = location.available_bytes.saturating_sub(source_bytes);
+    if projected_available_bytes >= minimum_available_bytes {
+        return Ok(());
+    }
+    Err(AppError::conflict(
+        "insufficient_storage",
+        format!(
+            "copying {source_bytes} bytes into the inbox would leave {projected_available_bytes} bytes available at {}; at least {minimum_available_bytes} bytes must remain",
+            location.path
+        ),
+    ))
+}
+
 fn create_pause_marker(spool: &Spool) -> Result<bool, AppError> {
     if spool.pause_requested()? {
         return Ok(false);
@@ -245,6 +393,21 @@ fn remove_pause_marker(spool: &Spool) -> Result<bool, AppError> {
     }
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct StorageLocationStatus {
+    role: &'static str,
+    path: String,
+    available_bytes: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct StorageStatus {
+    enabled: bool,
+    minimum_available_bytes: u64,
+    ready: bool,
+    locations: Vec<StorageLocationStatus>,
+}
+
 #[derive(Debug, Serialize)]
 struct InboxStatus {
     root: String,
@@ -264,9 +427,12 @@ struct InboxStatus {
     locked: bool,
     paused: bool,
     maintenance: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    storage: Option<StorageStatus>,
 }
 
 #[derive(Debug, Serialize)]
+#[allow(clippy::struct_excessive_bools)]
 struct RunSummary {
     root: String,
     settle_seconds: u64,
@@ -285,6 +451,9 @@ struct RunSummary {
     queue_drained: bool,
     stopped_for_pause: bool,
     stopped_for_maintenance: bool,
+    stopped_for_low_space: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    storage: Option<StorageStatus>,
 }
 
 #[derive(Debug, Serialize)]
@@ -753,6 +922,8 @@ pub(crate) fn run(
         queue_drained: false,
         stopped_for_pause: false,
         stopped_for_maintenance: false,
+        stopped_for_low_space: false,
+        storage: None,
     };
 
     loop {
@@ -784,11 +955,19 @@ pub(crate) fn run(
             summary.stopped_for_pause = true;
             break;
         }
-        if !auth_preflight_complete
-            && queue
-                .first_key_value()
-                .is_some_and(|(_, envelope)| envelope.receipt.state == "queued")
-        {
+        let next_is_queued = queue
+            .first_key_value()
+            .is_some_and(|(_, envelope)| envelope.receipt.state == "queued");
+        if next_is_queued {
+            let current_storage = storage_status(library, &spool, inbox.minimum_available_bytes)?;
+            let storage_ready = current_storage.ready;
+            summary.storage = Some(current_storage);
+            if !storage_ready {
+                summary.stopped_for_low_space = true;
+                break;
+            }
+        }
+        if !auth_preflight_complete && next_is_queued {
             drop(control);
             runner.preflight_auth()?;
             auth_preflight_complete = true;
@@ -823,7 +1002,7 @@ pub(crate) fn run(
     summary.elapsed_seconds = started.elapsed().as_secs_f64();
     summary.queue_drained = summary.remaining == 0;
     let human = format!(
-        "Inbox run: {} registered, {} attempted, {} applied, {} recorded, {} duplicates, {} failed, {} skipped\nRemaining work: {} ready, queued, or processing; settling: {}\nQueue drained: {}; stopped for pause: {}; stopped for maintenance: {}",
+        "Inbox run: {} registered, {} attempted, {} applied, {} recorded, {} duplicates, {} failed, {} skipped\nRemaining work: {} ready, queued, or processing; settling: {}\nQueue drained: {}; stopped for pause: {}; stopped for maintenance: {}; stopped for low space: {}",
         summary.registered,
         summary.attempted,
         summary.applied,
@@ -836,8 +1015,25 @@ pub(crate) fn run(
         summary.queue_drained,
         summary.stopped_for_pause,
         summary.stopped_for_maintenance,
+        summary.stopped_for_low_space,
     );
-    Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
+    let diagnostics = if summary.stopped_for_low_space && forward_progress {
+        summary
+            .storage
+            .as_ref()
+            .map(|storage| {
+                format!(
+                    "annals: inbox dispatch deferred: {}",
+                    insufficient_storage_message(storage)
+                )
+            })
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let mut output = CommandOutput::new(serde_json::to_value(summary)?, human).mutation();
+    output.diagnostics = diagnostics;
+    Ok(output)
 }
 
 pub(crate) fn register(config: &Config, args: &InboxRunArgs) -> Result<CommandOutput, AppError> {
@@ -905,7 +1101,7 @@ pub(crate) fn enqueue(config: &Config, args: &InboxEnqueueArgs) -> Result<Comman
 
     let mut staged = Vec::with_capacity(args.inputs.len());
     for (ordinal, input) in args.inputs.iter().enumerate() {
-        match stage_enqueue_source(&spool, input, ordinal) {
+        match stage_enqueue_source(&spool, input, ordinal, inbox.minimum_available_bytes) {
             Ok(source) => staged.push(source),
             Err(error) => {
                 cleanup_staged_enqueue(&staged);
@@ -1350,6 +1546,7 @@ fn publish_retry_child(
         usize::try_from(ordinal).map_err(|_| {
             AppError::unexpected("invalid_inbox_retry_item", "retry ordinal is invalid")
         })?,
+        0,
     )?;
     let result = (|| {
         let _control = spool.acquire_control_lock()?;
@@ -1518,6 +1715,14 @@ fn run_retry_event(
         }
 
         let mut envelope = retry_child_envelope(spool, event_id, &initial_item)?;
+        if envelope.receipt.state == "queued" {
+            require_retry_storage(
+                library,
+                spool,
+                config.inbox()?.minimum_available_bytes,
+                event_id,
+            )?;
+        }
         if envelope.receipt.attempts == 0 && !auth_preflight_complete {
             if let Err(error) = runner.preflight_auth() {
                 inbox_retry_store::halt(
@@ -1538,6 +1743,12 @@ fn run_retry_event(
                     "retry event stopped because the inbox control boundary changed",
                 ));
             }
+            require_retry_storage(
+                library,
+                spool,
+                config.inbox()?.minimum_available_bytes,
+                event_id,
+            )?;
             envelope = dispatch(spool, envelope)?;
         }
         if let Err(error) = process_one(
@@ -1601,6 +1812,37 @@ fn run_retry_event(
     retry_report_output(report, true)
 }
 
+fn require_retry_storage(
+    library: &Path,
+    spool: &Spool,
+    minimum_available_bytes: u64,
+    event_id: i64,
+) -> Result<(), AppError> {
+    let status = match storage_status(library, spool, minimum_available_bytes) {
+        Ok(status) => status,
+        Err(error) => {
+            inbox_retry_store::halt(
+                &db::open_write(library)?,
+                event_id,
+                error.code(),
+                &error.to_string(),
+            )?;
+            return Err(error);
+        }
+    };
+    if status.ready {
+        return Ok(());
+    }
+    let error = insufficient_storage_error(&status);
+    inbox_retry_store::halt(
+        &db::open_write(library)?,
+        event_id,
+        error.code(),
+        &error.to_string(),
+    )?;
+    Err(error)
+}
+
 fn retry_child_envelope(
     spool: &Spool,
     event_id: i64,
@@ -1655,6 +1897,8 @@ fn empty_run_summary(spool: &Spool) -> RunSummary {
         queue_drained: false,
         stopped_for_pause: false,
         stopped_for_maintenance: false,
+        stopped_for_low_space: false,
+        storage: None,
     }
 }
 
@@ -1833,6 +2077,7 @@ fn stage_enqueue_source(
     spool: &Spool,
     input: &Path,
     ordinal: usize,
+    minimum_available_bytes: u64,
 ) -> Result<StagedEnqueue, AppError> {
     let before = fs::symlink_metadata(input).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
@@ -1850,6 +2095,7 @@ fn stage_enqueue_source(
             format!("enqueue source is not a regular file: {}", input.display()),
         ));
     }
+    ensure_enqueue_headroom(spool, minimum_available_bytes, before.len())?;
     let name = input
         .file_name()
         .filter(|name| !name.is_empty())
@@ -2374,7 +2620,7 @@ pub(crate) fn interrupt(
     Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
 }
 
-pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
+pub(crate) fn status(library: &Path, config: &Config) -> Result<CommandOutput, AppError> {
     let inbox = config.inbox()?;
     let spool = Spool::new(&inbox.root);
     let _control = spool
@@ -2382,7 +2628,19 @@ pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
         .exists()
         .then(|| spool.acquire_control_lock())
         .transpose()?;
-    let value = inspect(&spool, inbox.settle_seconds)?;
+    let mut value = inspect(&spool, inbox.settle_seconds)?;
+    let storage = storage_status(library, &spool, inbox.minimum_available_bytes)?;
+    let storage_human = if !storage.enabled {
+        "disabled".to_owned()
+    } else if storage.ready {
+        format!(
+            "ready; at least {} bytes must remain available",
+            storage.minimum_available_bytes
+        )
+    } else {
+        insufficient_storage_message(&storage)
+    };
+    value.storage = Some(storage);
     let next = value.next_job.as_ref().map_or_else(
         || "none".to_owned(),
         |job| format!("{} ({}, {})", job.id, job.source_name, job.priority),
@@ -2392,7 +2650,7 @@ pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
         |job| format!("{} ({}, {})", job.id, job.source_name, job.priority),
     );
     let human = format!(
-        "Inbox: {}\nIncoming: {} ({} ready, {} settling)\nQueued: {} ({} priority)\nNext queued: {}\nProcessing: {}\nActive: {}\nDone: {}\nDuplicates: {}\nFailed: {}\nSkipped: {}\nLocked: {}\nPaused: {}\nMaintenance: {}",
+        "Inbox: {}\nIncoming: {} ({} ready, {} settling)\nQueued: {} ({} priority)\nNext queued: {}\nProcessing: {}\nActive: {}\nDone: {}\nDuplicates: {}\nFailed: {}\nSkipped: {}\nLocked: {}\nPaused: {}\nMaintenance: {}\nStorage gate: {}",
         value.root,
         value.incoming,
         value.ready,
@@ -2409,6 +2667,7 @@ pub(crate) fn status(config: &Config) -> Result<CommandOutput, AppError> {
         value.locked,
         value.paused,
         value.maintenance,
+        storage_human,
     );
     Ok(CommandOutput::new(serde_json::to_value(value)?, human))
 }
@@ -4645,6 +4904,7 @@ fn inspect(spool: &Spool, settle_seconds: u64) -> Result<InboxStatus, AppError> 
         locked: inbox_locked(&spool.lock),
         paused: spool.pause_requested()?,
         maintenance: spool.maintenance_requested()?,
+        storage: None,
     })
 }
 
@@ -4727,14 +4987,72 @@ fn inbox_locked(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::io;
     use std::os::unix::fs::symlink;
 
     use super::{
         FileIdentity, JobPriority, QUEUE_VERSION, QueueIndex, Spool, backlog_sources,
         cleanup_staged_enqueue, import_backlog_source, path_has_identity, publish_enqueued_sources,
         read_index, register_settled_locked, scan_envelopes_at, scan_incoming,
-        stage_enqueue_source, write_index, write_receipt,
+        stage_enqueue_source, storage_status_with, write_index, write_receipt,
     };
+
+    #[test]
+    fn storage_gate_accepts_equality_and_checks_both_locations()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let library = directory.path().join("annals.db");
+        fs::write(&library, b"")?;
+        let spool = Spool::new(&directory.path().join("spool"));
+        spool.create()?;
+        let available_space = |path: &std::path::Path| {
+            if path == library {
+                Ok(7)
+            } else if path == spool.root {
+                Ok(8)
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "unexpected probe path",
+                ))
+            }
+        };
+
+        let ready = storage_status_with(&library, &spool, 7, &available_space)?;
+        assert!(ready.ready);
+        assert_eq!(ready.locations.len(), 2);
+        assert_eq!(ready.locations[0].available_bytes, 7);
+        assert_eq!(ready.locations[1].available_bytes, 8);
+
+        let blocked = storage_status_with(&library, &spool, 8, &available_space)?;
+        assert!(!blocked.ready);
+        Ok(())
+    }
+
+    #[test]
+    fn storage_gate_disables_probes_at_zero_and_reports_probe_failure()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let library = directory.path().join("annals.db");
+        fs::write(&library, b"")?;
+        let spool = Spool::new(&directory.path().join("spool"));
+        spool.create()?;
+
+        let disabled = storage_status_with(&library, &spool, 0, &|_| -> io::Result<u64> {
+            panic!("disabled storage gate unexpectedly probed the filesystem")
+        })?;
+        assert!(!disabled.enabled);
+        assert!(disabled.ready);
+        assert!(disabled.locations.is_empty());
+
+        let Err(error) = storage_status_with(&library, &spool, 1, &|_| {
+            Err(io::Error::new(io::ErrorKind::PermissionDenied, "denied"))
+        }) else {
+            return Err("storage probe unexpectedly succeeded".into());
+        };
+        assert_eq!(error.code(), "storage_probe_failed");
+        Ok(())
+    }
 
     #[test]
     fn multi_file_enqueue_rolls_back_an_earlier_publication_when_a_later_one_fails()
@@ -4747,8 +5065,8 @@ mod tests {
         fs::write(&first_input, "first")?;
         fs::write(&second_input, "second")?;
 
-        let first = stage_enqueue_source(&spool, &first_input, 0)?;
-        let mut second = stage_enqueue_source(&spool, &second_input, 1)?;
+        let first = stage_enqueue_source(&spool, &first_input, 0, 0)?;
+        let mut second = stage_enqueue_source(&spool, &second_input, 1, 0)?;
         let nested = first.directory.join("later-staging");
         fs::rename(&second.directory, &nested)?;
         second.directory = nested;

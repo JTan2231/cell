@@ -8,6 +8,7 @@ use crate::error::AppError;
 use crate::model_runner::ModelQuality;
 
 const DEFAULT_SETTLE_SECONDS: u64 = 60;
+const DEFAULT_MINIMUM_AVAILABLE_BYTES: u64 = 7_000_000_000;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -24,6 +25,8 @@ pub(crate) struct InboxConfig {
     pub root: PathBuf,
     #[serde(default = "default_settle_seconds")]
     pub settle_seconds: u64,
+    #[serde(default = "default_minimum_available_bytes")]
+    pub minimum_available_bytes: u64,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -146,6 +149,10 @@ const fn default_settle_seconds() -> u64 {
     DEFAULT_SETTLE_SECONDS
 }
 
+const fn default_minimum_available_bytes() -> u64 {
+    DEFAULT_MINIMUM_AVAILABLE_BYTES
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::OsStr;
@@ -166,6 +173,7 @@ mod tests {
         let config = Config::read(&path)?;
         let inbox = config.inbox()?;
         assert_eq!(inbox.settle_seconds, 60);
+        assert_eq!(inbox.minimum_available_bytes, 7_000_000_000);
         assert_eq!(inbox.root, directory.path().join("spool"));
         assert_eq!(config.library, Some(directory.path().join("library.db")));
         assert_eq!(config.liaison.quality, ModelQuality::Medium);

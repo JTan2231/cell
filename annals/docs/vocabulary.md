@@ -166,6 +166,17 @@ manual integration, including an input whose bytes are already retained and
   failure also fails and archives the job, then ends the activation nonzero;
   later queued jobs wait for the next activation.
 
+**Inbox storage gate**
+: An automatic, non-durable dispatch condition that requires the configured
+  minimum available bytes on both the library and spool filesystems before a
+  queued job can be claimed. A closed storage gate leaves the next job queued
+  with zero attempts and no delivery record, then is checked again by the next
+  activation; it is not an operator pause and needs no `resume`. Registration
+  may continue because it moves material already on the spool filesystem.
+  Direct enqueue rejects a copy that would cross the reserve. A storage probe
+  failure also prevents a claim but is an operational error rather than a
+  low-space result.
+
 **Inbox pause / maintenance**
 : A pause is an operator-owned control state that prevents dispatch without
   preventing registration. A job already processing is allowed to finish, and
@@ -202,9 +213,10 @@ manual integration, including an input whose bytes are already retained and
 **Retry event state / retry item outcome**
 : A retry event is `preparing` while its frozen items are being published as
   retry children, `running` while those children are being processed, `halted`
-  after a failed authenticated preflight or an unexpected model, runner, or
-  runtime failure, or when an operator interrupts the active retry child, and
-  `completed` after every frozen item reaches a terminal outcome. A retry item
+  after a failed authenticated preflight, a closed or unreadable storage gate,
+  an unexpected model, runner, or runtime failure, or when an operator
+  interrupts the active retry child, and `completed` after every frozen item
+  reaches a terminal outcome. A retry item
   is `not_attempted`, `processing`, `applied`, `recorded`, `failed`, or
   `skipped`.
   `not_attempted` covers an item whose child is not yet published or is still
@@ -468,6 +480,7 @@ details. These expressions simplify the language without changing the model.
 | source delivery | source arrival or import attempt |
 | delivery record | source history entry |
 | priority inbox job | queued source to run before normal queued sources |
+| inbox storage gate | automatic disk-space check before another queued source starts |
 | inbox retry event | bounded recovery run for a named stretch of failed sources |
 | retry child | new linked attempt for one failed source |
 | corpus | evidence-backed map of ideas |
@@ -521,6 +534,9 @@ and grounded in exact source language.
 - Distinguish a *queued inbox job* from a *processing source delivery*;
   registration or direct enqueue creates the former and dispatch starts the
   latter.
+- Distinguish the automatic inbox storage gate from an operator pause: storage
+  recovery is rechecked without `resume`, while a pause persists until the
+  operator clears it.
 - Distinguish a job's immutable sequence from its binary inbox priority lane.
   Priority dispatch does not preempt a processing delivery.
 - Describe a retry event by both inclusive failed-job anchors. Do not call a

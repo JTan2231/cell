@@ -293,7 +293,11 @@ lane. Named queued jobs can move between lanes with `prioritize` and
 `deprioritize` without changing their sequences. An activation performs the
 same registration, dispatches priority jobs before normal jobs in sequence
 order within each lane, and drains the queue until it is empty; it has no
-item-count or lifetime cap. New arrivals are rescanned between jobs. New works
+item-count or lifetime cap. Before each new claim, Annals requires the
+configured available-space reserve on both its library and spool filesystems.
+If either is low, the job remains queued and a later wake-up checks again
+without requiring an operator pause or `resume`. New arrivals are rescanned
+between jobs. New works
 enter the liaison flow, while fresh exact-byte duplicates complete at
 retention and move to `duplicates/`; each individual liaison is limited to 60
 minutes.

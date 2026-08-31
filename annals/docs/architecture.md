@@ -61,7 +61,9 @@ settled source into `queued/JOB_ID/material`, assigns an immutable monotonic
 sequence, and writes an unstarted normal-lane job receipt. Direct enqueue
 copies explicitly selected files into complete unstarted envelopes, leaves the
 originals unchanged, and can select the priority lane without passing through
-settling admission. Dispatch finishes any active job, then moves the
+settling admission. Before copying, enqueue verifies that the copy would leave
+the configured storage reserve available on the spool filesystem. Dispatch
+finishes any active job, then moves the
 lowest-sequence priority envelope, or the lowest-sequence normal envelope when
 the priority lane is empty, to `processing`. It creates or recovers the
 database receipt and starts the delivery's only processing attempt. A
@@ -70,6 +72,15 @@ fails the delivery and archives the envelope. Known item-local source errors
 allow draining to continue; an unexpected model, runner, or runtime processing
 failure ends the activation nonzero, leaving later jobs queued for the next
 activation.
+
+Before each zero-attempt claim, the inbox storage gate checks bytes available
+to the Annals user on both the library and spool filesystems. A closed gate
+leaves the next envelope queued with attempts zero and no delivery record, and
+the ordinary activation exits successfully. It creates no pause marker: the
+next scheduled or explicit activation measures again and resumes automatically
+when both locations satisfy the reserve. A probe failure also prevents the
+claim but ends the activation nonzero with `storage_probe_failed`. Recovery of
+an already processing envelope precedes this new-claim gate.
 
 After recovery and registration, Annals performs one authenticated account
 preflight before the activation's first queued dispatch. The preflight does not
@@ -125,6 +136,11 @@ arrivals from interleaving with its corpus transitions. Start and continue
 perform one authenticated account preflight before their first zero-attempt
 child claim. A failed preflight halts the event without incrementing a child
 attempt or starting a child delivery or model run.
+The same storage gate is checked before each queued retry child claim. A closed
+gate halts the attended event with `insufficient_storage`; an unreadable gate
+halts it with `storage_probe_failed`. In either case the child remains queued
+and unattempted, and the operator uses `retry continue` after correcting the
+condition.
 
 SQLite owns event identity and frozen membership while the spool owns child
 envelopes, so their publication cannot be one atomic transaction. A

@@ -197,6 +197,8 @@ All commands except `inbox retry status` require an `[inbox]` config section
 with `root`; retry-event reports are durable library reads and can be selected
 with `--library` alone. The optional config key `settle_seconds` defaults to 60;
 the `register` and `run` flags override it. A zero settling interval is allowed.
+`minimum_available_bytes` defaults to `7_000_000_000` and sets the storage
+reserve required before a new inbox claim; zero disables that gate.
 `inbox status`, `inbox retry preview`, and `inbox retry status` are read-only.
 
 `inbox register` moves every settled file into a durable queued job without
@@ -213,6 +215,8 @@ durable queued envelope and leaves the original file unchanged. It bypasses
 after its material and receipt are complete, so admission cannot race a
 partial copy. Files receive immutable monotonic sequences in argument order
 and enter the normal lane unless `--priority` selects the priority lane. The
+copy is rejected with `insufficient_storage` when its size would leave less
+than `minimum_available_bytes` available on the spool filesystem. The
 result reports the spool root, selected priority, registered count, each job's
 ID, sequence, and priority, the total queued and priority-queued counts, and
 the next job. Like registration, enqueue starts no source delivery.
@@ -231,7 +235,16 @@ its retry event and cannot be prioritized or deprioritized independently.
 
 `inbox run` takes the activation-long spool lock, performs the same
 registration phase, and drains jobs sequentially while processing is allowed.
-After recovery and registration, it performs one authenticated account
+After recovery and registration, it checks available storage on the library
+and spool filesystems before each queued claim. If either location is below the
+configured reserve, the job stays queued with attempts zero and no delivery
+record, `stopped_for_low_space` is true, and the activation exits zero. No pause
+is created; a later scheduled or explicit activation measures again and
+continues automatically once both locations are ready. Failure to measure
+storage exits nonzero with `storage_probe_failed` and also leaves the job
+unattempted. An already processing job is recovered before this gate.
+
+When storage is ready, `inbox run` performs one authenticated account
 preflight before its first queued dispatch. The preflight does not claim a job,
 increment attempts, or start a source delivery. If it fails, `inbox run` exits
 nonzero while the next envelope remains under `queued/` with attempts zero and
@@ -377,7 +390,11 @@ processed. Before the first zero-attempt child claim in each start or continue
 invocation, Annals performs the same authenticated account preflight as
 ordinary dispatch. A failed preflight changes the event to `halted` but leaves
 every remaining child queued with attempts zero and creates no child delivery
-or model-run row. A known item-local failure terminalizes its child and
+or model-run row. The storage gate is also checked before every queued child:
+insufficient space or a failed probe halts the event without starting that
+child. After correcting the condition, use `inbox retry continue`; attended
+retry events do not resume from the ordinary scheduler. A known item-local
+failure terminalizes its child and
 advances to the next frozen item. An unexpected model, runner, or runtime
 failure terminalizes the current child, changes the event to `halted`, exits
 nonzero, and leaves later members `not_attempted`. Interrupting an active retry
@@ -427,15 +444,23 @@ skipped jobs, whether a worker is active, and the independent paused and
 maintenance states. JSON exposes the subset as `priority_queued` and each next
 or active job's `priority`; `attempts`, `started_at`, and
 `interrupt_requested` remain specific to `active_job`. It also reports ignored
-entries.
+entries. Both forms include the live storage gate. JSON `storage` contains
+`enabled`, `minimum_available_bytes`, `ready`, and library/inbox `locations`
+with their measured `available_bytes`.
 Human `inbox run` reports registered, attempted, applied, recorded, duplicates,
 failed, skipped, remaining, settling, whether the runnable queue was drained,
-and whether pause or maintenance stopped dispatch. `queue_drained` is false
+and whether pause, maintenance, or low storage stopped dispatch.
+`queue_drained` is false
 whenever `queued/` or `processing/` is nonempty, including a healthy paused
-queue. JSON uses `duplicates` and `skipped` for their archive counts and adds
+or storage-gated queue. JSON uses `duplicates` and `skipped` for their archive
+counts and adds `stopped_for_low_space` plus the most recent `storage` check
+when a queued claim was considered. It also includes
 the spool root, effective settling interval, elapsed time, recovery count, and
 ignored count. The external launchd or systemd schedule remains the wake-up
 and recovery mechanism; Annals has no resident daemon or internal scheduler.
+Human low-space deferral emits one diagnostic even under `--quiet`; JSON keeps
+that condition in its success document without writing a success diagnostic to
+standard error.
 See the [system installation guide](system-installation.md) for the complete
 spool, recovery, control, and scheduler contract.
 

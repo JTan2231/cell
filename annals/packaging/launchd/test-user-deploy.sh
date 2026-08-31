@@ -352,6 +352,8 @@ usage_provider="$chancery_providers/annals-usage"
 [ "$(tail -n 1 "$state/usage-doctor.log")" = 'doctor current=none' ]
 grep -Fx 'library = "annals.db"' "$state/config.toml" >/dev/null
 grep -Fx 'root = "spool"' "$state/config.toml" >/dev/null
+grep -Fx 'minimum_available_bytes = 7_000_000_000' \
+    "$state/config.toml" >/dev/null
 grep -Fx "nucleus_socket = \"$nucleus_socket\"" "$state/config.toml" >/dev/null
 grep -Fx "nucleus = \"$nucleus\"" "$state/usage.toml" >/dev/null
 grep -Fx "nucleus_socket = \"$nucleus_socket\"" "$state/usage.toml" >/dev/null
