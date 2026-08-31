@@ -3,7 +3,7 @@
   "provider": {
     "id": "email",
     "name": "Email",
-    "release": "0.1.0"
+    "release": "0.1.1"
   },
   "entries": [
     "entries/message-send.json"
