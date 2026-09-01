@@ -264,12 +264,16 @@ migration before its smoke test, and restores both the prior database and
 release state if a later update step fails. A manually selected backup remains
 caller-owned retained recovery material.
 
-## Outstanding-todo email
+## Daily attention digest
 
 `email preview` renders the exact current digest without reading
 `RESEND_API_KEY` or making a network request. Human output contains `From`,
 `To`, and `Subject` headers followed by the plain-text body. JSON data contains
-`from`, `to`, `todo_count`, `subject`, `text`, and `html`.
+`from`, `to`, `attention_count`, `pending_concern_count`, `todo_count`,
+`subject`, `text`, and `html`. `todo_count` remains the number of open canonical
+todos. `pending_concern_count` counts unresolved captured concerns, and
+`attention_count` counts the items in **Needs your decision** and **Needs
+follow-up**.
 
 `email send` sends that digest immediately through Resend. It requires a
 nonblank `RESEND_API_KEY` with no surrounding whitespace in the process
@@ -280,9 +284,20 @@ occurrence. Neither mode submits a Resend `scheduled_at` value. One invocation
 freezes the body and key for up to three total attempts on transport failures,
 `429`, or `5xx` responses.
 
-The digest contains all open canonical todo umbrellas, newest first, as ID and
-current title only. Its subject is `Todo: N outstanding`. Email commands
-require `[email]` configuration; other commands do not.
+The digest contains unresolved captured concerns and all open canonical todos.
+Its body uses **Needs your decision**, **Needs follow-up**, and **Other open
+todos**, omitting empty sections. Each entry leads with a current title or
+plain-language label, followed by a plain-language status. A `Reference:` line
+uses descriptive typed references such as `Todo tN`, `Situation assessment
+aN`, and `Desired-state design dN`; one or more `Inspect:` lines give read-only
+CLI commands. Raw stored state tokens are not part of the email interface.
+
+The subject reports the attention and open-todo counts with singular-aware
+wording, for example `Todo daily: 3 need attention · 6 open todos`. With no
+open todos or unresolved captured concerns it is `Todo daily: all clear`, and
+the body says that nothing needs attention. The body summary also reports the
+unresolved-concern count. Email commands require `[email]` configuration;
+other commands do not.
 
 ## Database and configuration selection
 

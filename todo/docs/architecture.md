@@ -230,16 +230,34 @@ current view:
 Staleness is derived comparison data, not another mutable status vocabulary.
 The underlying accepted or rejected decision remains historical truth.
 
-## Outstanding-todo email
+## Daily attention digest
 
 The email commands are deterministic read projections and do not invoke a
-liaison. They read every currently open canonical umbrella and render one
-subject plus plain text and HTML bodies. Entries are newest-first and contain
-only public `tN` and current title; concerns, notes, directions, sources,
-assessments, designs, timestamps, and completed or superseded todos are
-excluded.
+liaison. The projection includes unresolved captured concerns and every open
+canonical todo, with enough derived assessment and design state to identify
+what kind of attention is next. Completed and superseded todos remain
+excluded. The projection is rendered as the same subject and content in plain
+text and HTML; no digest or delivery state is added to SQLite.
+
+The body groups items under **Needs your decision**, **Needs follow-up**, and
+**Other open todos**. A current title or plain-language label comes first,
+followed by a plain-language status, secondary typed references, and safe
+inspection commands. Stored state tokens are translated rather than exposed.
+The decision section covers routing proposals, situation choices, and
+desired-state designs awaiting an explicit user decision. Follow-up covers
+unresolved concerns without a pending routing decision and open todos that need
+assessment, reassessment, more evidence, or desired-state design work. Other
+open todos have no immediate
+research or decision request; an accepted desired state does not imply that
+implementation ran or that the todo is complete.
+
+The digest discloses only aggregate counts, current todo titles, generic
+plain-language stage labels, typed references, and inspection commands. It
+excludes concern bodies, directions, notes, source paths, assessment and design
+summaries, unresolved-choice text, and evidence. Assessment and design state
+is used to classify entries without copying that richer content into email.
 
 `email preview` makes no external call. `email send` posts immediately to
 Resend using the existing retry and idempotency contract. Email sending does
-not use Nucleus or Codex authentication. Todo titles leave the local security
-boundary in both the email and Resend's service.
+not use Nucleus or Codex authentication. The rendered digest leaves the local
+security boundary in both the email and Resend's service.

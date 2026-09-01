@@ -142,3 +142,10 @@ model execution and authentication remain with the separately installed
 Nucleus service. Fresh deployment requires the paired email-address flags
 shown above; see the [installation guide](docs/system-installation.md) for the
 `~/.zshrc` API-key prerequisite and update behavior.
+
+The message is a daily attention digest. It groups pending concerns and open
+canonical todos under **Needs your decision**, **Needs follow-up**, and **Other
+open todos**. Entries lead with a title or plain-language label and status;
+typed references such as `Todo tN` and their safe inspection commands are
+secondary. The digest does not include concern bodies, directions, notes,
+source paths, assessment or design summaries, unresolved choices, or evidence.

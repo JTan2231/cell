@@ -255,7 +255,10 @@ keys use restrictive semantics; Todo does not expose deletion commands.
 
 Email configuration, API credentials, rendered digests, Resend identifiers,
 send attempts, and delivery status are not stored in SQLite. A digest is a
-current read projection over open canonical umbrellas. The installed
-configuration owns the sender and recipient, the process environment owns
-`RESEND_API_KEY`, and Resend owns its external delivery and short-lived
+current read projection over unresolved captured concerns and open canonical
+umbrellas. Assessment currency, design state, and assessment returns are
+derived only to place each item under a plain-language attention label; the
+projection does not add an email status or mutate its source records. The
+installed configuration owns the sender and recipient, the process environment
+owns `RESEND_API_KEY`, and Resend owns its external delivery and short-lived
 idempotency records.

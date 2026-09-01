@@ -21,7 +21,7 @@ use crate::reconciliation_store::{
     AssessmentBase, DecisionSource, DesignView, RoutingProposalView, SituationAssessmentView,
 };
 use crate::render::{CommandOutput, terminal_text};
-use crate::{db, email, reconciliation, reconciliation_store, todo_store};
+use crate::{db, digest, email, reconciliation, reconciliation_store, todo_store};
 
 const MAX_PAGE_LIMIT: u32 = 1_000;
 
@@ -434,8 +434,8 @@ fn send_email(database: &Path, config: &Config, args: &EmailSendArgs) -> AppResu
     let preview = build_email(database, config)?;
     let result = email::send(&preview, args.scheduled)?;
     let human = format!(
-        "Sent {} outstanding todos to {} ({})",
-        preview.todo_count, preview.to, result.email_id
+        "Sent the Todo daily digest with {} items needing attention and {} open todos to {} ({})",
+        preview.attention_count, preview.todo_count, preview.to, result.email_id
     );
     Ok(CommandOutput::new(
         json!({
@@ -443,6 +443,8 @@ fn send_email(database: &Path, config: &Config, args: &EmailSendArgs) -> AppResu
             "idempotency_key": result.idempotency_key,
             "scheduled": args.scheduled,
             "to": preview.to,
+            "attention_count": preview.attention_count,
+            "pending_concern_count": preview.pending_concern_count,
             "todo_count": preview.todo_count,
         }),
         human,
@@ -457,9 +459,9 @@ fn build_email(database: &Path, config: &Config) -> AppResult<EmailPreview> {
             "email is not configured; add an [email] section with from and to",
         )
     })?;
-    let connection = db::open_read(database)?;
-    let todos = todo_store::list_open(&connection)?;
-    Ok(EmailPreview::new(email_config, &todos))
+    let mut connection = db::open_read(database)?;
+    let digest = digest::load(&mut connection)?;
+    Ok(EmailPreview::new(email_config, &digest))
 }
 
 fn render_email_preview(preview: &EmailPreview) -> String {

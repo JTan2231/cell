@@ -1,21 +1,21 @@
 {
   "id": "todo.digest.email",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Preview or send the Todo digest",
-  "summary": "Preview the email listing all open todo IDs and titles, or send it now through the configured Resend account.",
+  "title": "Preview or send the Todo daily attention digest",
+  "summary": "Preview the email grouping pending concerns and open todos by the attention they need, or send it now through the configured Resend account.",
   "use_when": [
-    "The exact currently configured outstanding-todo email should be previewed locally.",
-    "The user explicitly wants that digest sent now through Resend."
+    "The exact currently configured daily attention digest should be previewed locally.",
+    "The user explicitly wants the current daily attention digest sent now through Resend."
   ],
   "do_not_use_when": [
-    "A local Todo list is sufficient.",
-    "External disclosure of every open todo title has not been authorized.",
+    "A local Todo list or stage-specific inspection is sufficient.",
+    "External disclosure of the digest's titles, attention labels, typed references, and counts has not been authorized.",
     "The request is to test Nucleus, a model liaison, or future remote scheduling."
   ],
-  "outcome": "An exact local preview or one idempotent immediate Resend submission containing the current open canonical todo IDs and titles.",
+  "outcome": "An exact local preview or one idempotent immediate Resend submission of the current Todo daily attention digest.",
   "effects": [
     "Preview reads Todo state and renders headers plus plain text and HTML without reading the API key or using the network.",
     "Send freezes the digest, reads `RESEND_API_KEY`, and submits it immediately to Resend with a stable invocation-specific key.",
@@ -26,7 +26,7 @@
     "Resend owns external submission and delivery records; the recipient provider owns final receipt."
   ],
   "success": [
-    "Preview exactly identifies configured sender, recipient, subject, count, and current body without network access.",
+    "Preview exactly identifies the configured sender, recipient, subject, attention count, pending-concern count, open-todo count, and current body without network access.",
     "Send reports Resend acceptance under the frozen idempotency key.",
     "External receipt is confirmed separately when delivery rather than submission is the required outcome."
   ],
@@ -36,7 +36,8 @@
     "A manual send does not consume the scheduled occurrence's key."
   ],
   "privacy": [
-    "Sending discloses every open canonical todo ID and current title to Resend and the configured recipient's email provider.",
+    "Sending discloses aggregate counts, every open canonical todo's current title, generic plain-language stage labels, applicable typed references, and read-only inspection commands to Resend and the configured recipient's email provider.",
+    "The digest excludes concern bodies, directions, notes, source paths, assessment and design summaries, unresolved-choice text, and evidence.",
     "The API key remains environment-only and must not be stored in Todo configuration, command arguments, or launchd plist."
   ],
   "interfaces": [

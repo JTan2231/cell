@@ -155,11 +155,16 @@ For later launchd failures, read
 adjacent `email.stdout.log`. There is no Todo delivery table or background
 retry queue.
 
-The digest sends todo titles to Resend and the recipient's email provider.
-Resend documents
+The digest sends aggregate counts, every open canonical todo's current title,
+generic plain-language stage labels, typed concern, routing, todo, assessment,
+and design references when applicable, and read-only inspection commands to
+Resend and the recipient's email provider. It excludes concern bodies,
+directions, notes, source paths, assessment and design summaries,
+unresolved-choice text, and evidence. Resend documents
 [30-day retention](https://resend.com/docs/knowledge-base/account-quotas-and-limits)
 of email content and metadata. Treat the digest as an external disclosure of
-every open todo title and avoid the feature if that retention is inappropriate.
+the included Todo state and avoid the feature if that retention is
+inappropriate.
 
 ## Explicit targets
 

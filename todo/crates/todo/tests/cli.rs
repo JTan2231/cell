@@ -162,6 +162,7 @@ fn email_preview_is_offline_and_send_requires_the_resend_key() -> TestResult {
     let config = directory.path().join("todo.toml");
     assert!(run(&database, &["init"])?.status.success());
     seed_todos(&database)?;
+    seed_pending_concern(&database)?;
     fs::write(
         &config,
         concat!(
@@ -181,14 +182,24 @@ fn email_preview_is_offline_and_send_requires_the_resend_key() -> TestResult {
     assert_eq!(value["data"]["from"], "Todo <todo@example.com>");
     assert_eq!(value["data"]["to"], "person@example.com");
     assert_eq!(value["data"]["todo_count"], 1);
-    assert_eq!(value["data"]["subject"], "Todo: 1 outstanding");
-    assert!(
-        value["data"]["text"]
-            .as_str()
-            .is_some_and(|text| text.contains("t1") && text.contains("Research usage reporting"))
+    assert_eq!(value["data"]["pending_concern_count"], 1);
+    assert_eq!(value["data"]["attention_count"], 2);
+    assert_eq!(
+        value["data"]["subject"],
+        "Todo daily: 2 need attention · 1 open todo"
     );
+    assert!(value["data"]["text"].as_str().is_some_and(|text| {
+        text.contains("Research usage reporting")
+            && text.contains("Reference: Todo t1")
+            && text.contains("Captured concern")
+            && text.contains("Reference: Concern c3")
+            && !text.contains("private concern body")
+    }));
     assert!(value["data"]["html"].as_str().is_some_and(|html| {
-        html.contains("<strong>t1</strong>") && !html.contains("Determine how usage")
+        html.contains("<strong>Research usage reporting</strong>")
+            && !html.contains("<strong>t1</strong>")
+            && !html.contains("Determine how usage")
+            && !html.contains("private concern body")
     }));
 
     let send = run_without_resend_key(
@@ -295,5 +306,15 @@ fn seed_todos(database: &Path) -> TestResult {
         )?;
     }
     transaction.commit()?;
+    Ok(())
+}
+
+fn seed_pending_concern(database: &Path) -> TestResult {
+    let connection = Connection::open(database)?;
+    connection.pragma_update(None, "foreign_keys", true)?;
+    connection.execute(
+        "INSERT INTO concerns(id, body, source_path) VALUES(3, ?1, ?2)",
+        params!["private concern body", "/tmp/private-concern.md"],
+    )?;
     Ok(())
 }

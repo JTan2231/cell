@@ -2,6 +2,7 @@ mod app;
 mod cli;
 mod config;
 mod db;
+mod digest;
 mod email;
 mod error;
 mod liaison;

@@ -8,8 +8,8 @@ use tokio::runtime::Builder;
 use uuid::Uuid;
 
 use crate::config::EmailConfig;
+use crate::digest::{DailyDigest, DigestItem};
 use crate::error::{AppError, AppResult};
-use crate::model::TodoSummary;
 use crate::render::terminal_text;
 
 const RESEND_ENDPOINT: &str = "https://api.resend.com/emails";
@@ -20,6 +20,8 @@ const RETRY_DELAYS: [Duration; 2] = [Duration::from_millis(100), Duration::from_
 pub(crate) struct EmailPreview {
     pub(crate) from: String,
     pub(crate) to: String,
+    pub(crate) attention_count: usize,
+    pub(crate) pending_concern_count: usize,
     pub(crate) todo_count: usize,
     pub(crate) subject: String,
     pub(crate) text: String,
@@ -48,13 +50,17 @@ struct ResendResponse {
 
 impl EmailPreview {
     #[must_use]
-    pub(crate) fn new(config: &EmailConfig, todos: &[TodoSummary]) -> Self {
-        let todo_count = todos.len();
-        let subject = format!("Todo: {todo_count} outstanding");
-        let (text, html) = render_bodies(todos);
+    pub(crate) fn new(config: &EmailConfig, digest: &DailyDigest) -> Self {
+        let attention_count = digest.attention_count();
+        let pending_concern_count = digest.pending_concern_count;
+        let todo_count = digest.open_todo_count;
+        let subject = render_subject(digest);
+        let (text, html) = render_bodies(digest);
         Self {
             from: config.from.clone(),
             to: config.to.clone(),
+            attention_count,
+            pending_concern_count,
             todo_count,
             subject,
             text,
@@ -219,28 +225,115 @@ fn send_to(
     })
 }
 
-fn render_bodies(todos: &[TodoSummary]) -> (String, String) {
-    if todos.is_empty() {
+fn render_subject(digest: &DailyDigest) -> String {
+    if digest.open_todo_count == 0 && digest.pending_concern_count == 0 {
+        return "Todo daily: all clear".to_owned();
+    }
+    format!(
+        "Todo daily: {} · {}",
+        attention_phrase(digest.attention_count()),
+        open_todo_phrase(digest.open_todo_count),
+    )
+}
+
+fn render_bodies(digest: &DailyDigest) -> (String, String) {
+    if digest.open_todo_count == 0 && digest.pending_concern_count == 0 {
         return (
-            "No outstanding todos.".to_owned(),
-            "<h1>Outstanding todos: 0</h1><p>No outstanding todos.</p>".to_owned(),
+            "Todo daily\n\nNothing needs attention. There are no open todos or unresolved concerns."
+                .to_owned(),
+            concat!(
+                "<h1>Todo daily</h1>",
+                "<p>Nothing needs attention. There are no open todos or unresolved concerns.</p>"
+            )
+            .to_owned(),
         );
     }
 
-    let mut text = format!("Outstanding todos: {}\n", todos.len());
-    let mut html = format!("<h1>Outstanding todos: {}</h1><ul>", todos.len());
-    for todo in todos {
-        let title = terminal_text(&todo.title, false);
-        let _ = write!(text, "\n- {} — {title}", todo.id);
+    let summary = format!(
+        "{} · {} · {}",
+        attention_phrase(digest.attention_count()),
+        open_todo_phrase(digest.open_todo_count),
+        unresolved_concern_phrase(digest.pending_concern_count),
+    );
+    let mut text = format!("Todo daily\n{summary}");
+    let mut html = format!("<h1>Todo daily</h1><p>{}</p>", html_text(&summary));
+    render_section(
+        &mut text,
+        &mut html,
+        "Needs your decision",
+        &digest.decisions,
+    );
+    render_section(&mut text, &mut html, "Needs follow-up", &digest.followups);
+    render_section(&mut text, &mut html, "Other open todos", &digest.other_open);
+    (text, html)
+}
+
+fn render_section(text: &mut String, html: &mut String, heading: &str, items: &[DigestItem]) {
+    if items.is_empty() {
+        return;
+    }
+    let _ = write!(text, "\n\n{heading}");
+    let _ = write!(html, "<h2>{}</h2><ul>", html_text(heading));
+    for item in items {
+        let title = terminal_text(&item.title, false);
+        let message = terminal_text(&item.message, false);
+        let references = item
+            .references
+            .iter()
+            .map(|reference| terminal_text(reference, false))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        let _ = write!(text, "\n\n{title}\n{message}");
         let _ = write!(
             html,
-            "<li><strong>{}</strong> — {}</li>",
-            todo.id,
-            html_text(&title)
+            "<li><strong>{}</strong><br>{}",
+            html_text(&title),
+            html_text(&message)
         );
+        if !references.is_empty() {
+            let _ = write!(text, "\nReference: {references}");
+            let _ = write!(
+                html,
+                "<br><small>Reference: {}</small>",
+                html_text(&references)
+            );
+        }
+        for command in &item.inspect_commands {
+            let command = terminal_text(command, false);
+            let _ = write!(text, "\nInspect: {command}");
+            let _ = write!(
+                html,
+                "<br><small>Inspect: <code>{}</code></small>",
+                html_text(&command)
+            );
+        }
+        html.push_str("</li>");
     }
     html.push_str("</ul>");
-    (text, html)
+}
+
+fn attention_phrase(count: usize) -> String {
+    match count {
+        0 => "none need attention".to_owned(),
+        1 => "1 needs attention".to_owned(),
+        _ => format!("{count} need attention"),
+    }
+}
+
+fn open_todo_phrase(count: usize) -> String {
+    if count == 1 {
+        "1 open todo".to_owned()
+    } else {
+        format!("{count} open todos")
+    }
+}
+
+fn unresolved_concern_phrase(count: usize) -> String {
+    if count == 1 {
+        "1 unresolved concern".to_owned()
+    } else {
+        format!("{count} unresolved concerns")
+    }
 }
 
 fn html_text(value: &str) -> String {
@@ -274,7 +367,7 @@ mod tests {
         send_to,
     };
     use crate::config::EmailConfig;
-    use crate::model::{TodoId, TodoStatus, TodoSummary};
+    use crate::digest::{DailyDigest, DigestItem};
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
     type TestServer = (
@@ -290,46 +383,130 @@ mod tests {
     }
 
     #[test]
-    fn renders_summary_only_text_and_html() {
+    fn renders_plain_language_sections_with_secondary_references() {
         let config = EmailConfig {
             from: "Todo <todo@example.com>".to_owned(),
             to: "person@example.com".to_owned(),
         };
-        let todos = vec![
-            summary(2, "Review <this> & that\u{1b}"),
-            summary(1, "First"),
-        ];
-        let preview = EmailPreview::new(&config, &todos);
+        let digest = DailyDigest {
+            decisions: vec![item(
+                "Review <this> & \"that's\"\u{1b}",
+                "A proposed desired state is ready for your review.",
+                &["Todo t2", "Desired-state design d3"],
+                &["todo design show d3"],
+            )],
+            followups: vec![item(
+                "Captured concern",
+                "This captured concern remains unresolved.",
+                &["Concern c4"],
+                &["todo concern show c4"],
+            )],
+            other_open: vec![item(
+                "First",
+                "The desired state is accepted; this todo remains open.",
+                &["Todo t1", "Desired-state design d1"],
+                &["todo show t1"],
+            )],
+            open_todo_count: 2,
+            pending_concern_count: 1,
+        };
+        let preview = EmailPreview::new(&config, &digest);
 
         assert_eq!(preview.todo_count, 2);
-        assert_eq!(preview.subject, "Todo: 2 outstanding");
+        assert_eq!(preview.pending_concern_count, 1);
+        assert_eq!(preview.attention_count, 2);
         assert_eq!(
-            preview.text,
-            "Outstanding todos: 2\n\n- t2 — Review <this> & that\\u{1b}\n- t1 — First"
+            preview.subject,
+            "Todo daily: 2 need attention · 2 open todos"
         );
-        assert_eq!(
-            preview.html,
-            concat!(
-                "<h1>Outstanding todos: 2</h1><ul>",
-                "<li><strong>t2</strong> — Review &lt;this&gt; &amp; that\\u{1b}</li>",
-                "<li><strong>t1</strong> — First</li></ul>",
+        assert!(preview.text.starts_with(concat!(
+            "Todo daily\n",
+            "2 need attention · 2 open todos · 1 unresolved concern\n\n",
+            "Needs your decision\n\n",
+            "Review <this> & \"that's\"\\u{1b}\n",
+        )));
+        assert!(
+            preview
+                .text
+                .contains("Reference: Todo t2 · Desired-state design d3")
+        );
+        assert!(preview.text.contains("Needs follow-up\n\nCaptured concern"));
+        assert!(preview.text.contains("Other open todos\n\nFirst"));
+        assert!(
+            preview.html.contains(
+                "<strong>Review &lt;this&gt; &amp; &quot;that&#39;s&quot;\\u{1b}</strong>"
             )
         );
-        assert!(!preview.text.contains("original note"));
+        assert!(
+            preview
+                .html
+                .contains("<small>Reference: Todo t2 · Desired-state design d3</small>")
+        );
+        assert!(!preview.html.contains("<strong>t2</strong>"));
     }
 
     #[test]
     fn empty_digest_is_an_explicit_all_clear() {
+        let digest = empty_digest();
         let preview = EmailPreview::new(
             &EmailConfig {
                 from: "sender@example.com".to_owned(),
                 to: "person@example.com".to_owned(),
             },
-            &[],
+            &digest,
         );
-        assert_eq!(preview.subject, "Todo: 0 outstanding");
-        assert_eq!(preview.text, "No outstanding todos.");
-        assert!(preview.html.contains("No outstanding todos."));
+        assert_eq!(preview.subject, "Todo daily: all clear");
+        assert!(
+            preview
+                .text
+                .contains("no open todos or unresolved concerns")
+        );
+        assert!(
+            preview
+                .html
+                .contains("no open todos or unresolved concerns")
+        );
+    }
+
+    #[test]
+    fn subject_distinguishes_attention_from_open_state() {
+        let config = EmailConfig {
+            from: "sender@example.com".to_owned(),
+            to: "person@example.com".to_owned(),
+        };
+        let concern_only = DailyDigest {
+            decisions: Vec::new(),
+            followups: vec![item(
+                "Captured concern",
+                "This captured concern remains unresolved.",
+                &["Concern c1"],
+                &["todo concern show c1"],
+            )],
+            other_open: Vec::new(),
+            open_todo_count: 0,
+            pending_concern_count: 1,
+        };
+        assert_eq!(
+            EmailPreview::new(&config, &concern_only).subject,
+            "Todo daily: 1 needs attention · 0 open todos"
+        );
+
+        let open_without_attention = DailyDigest {
+            decisions: Vec::new(),
+            followups: Vec::new(),
+            other_open: vec![item(
+                "Open todo",
+                "The desired state is accepted; this todo remains open.",
+                &["Todo t1"],
+                &["todo show t1"],
+            )],
+            open_todo_count: 1,
+            pending_concern_count: 0,
+        };
+        assert_eq!(
+            EmailPreview::new(&config, &open_without_attention).subject,
+            "Todo daily: none need attention · 1 open todo"
+        );
     }
 
     #[test]
@@ -365,12 +542,13 @@ mod tests {
     fn resend_request_has_exact_payload_and_headers() -> TestResult {
         let body = r#"{"id":"email_123"}"#;
         let (endpoint, requests, server) = serve_once(200, "OK", body)?;
+        let digest = one_open_digest("First");
         let preview = EmailPreview::new(
             &EmailConfig {
                 from: "Todo <todo@example.com>".to_owned(),
                 to: "person@example.com".to_owned(),
             },
-            &[summary(1, "First")],
+            &digest,
         );
         let email_id = send_to(&endpoint, "test-secret", "todo-email/fixture", &preview)?;
         assert_eq!(email_id, "email_123");
@@ -387,7 +565,10 @@ mod tests {
         let body: Value = serde_json::from_str(body)?;
         assert_eq!(body["from"], "Todo <todo@example.com>");
         assert_eq!(body["to"][0], "person@example.com");
-        assert_eq!(body["subject"], "Todo: 1 outstanding");
+        assert_eq!(
+            body["subject"],
+            "Todo daily: 1 needs attention · 1 open todo"
+        );
         assert!(body.get("text").is_some());
         assert!(body.get("html").is_some());
         assert!(body.get("scheduled_at").is_none());
@@ -410,12 +591,13 @@ mod tests {
                 body: r#"{"id":"email_after_retry"}"#.to_owned(),
             },
         ])?;
+        let digest = one_open_digest("First");
         let preview = EmailPreview::new(
             &EmailConfig {
                 from: "sender@example.com".to_owned(),
                 to: "person@example.com".to_owned(),
             },
-            &[summary(1, "First")],
+            &digest,
         );
         let idempotency_key = "todo-daily-email/2026-08-27";
         let email_id = send_to(&endpoint, "test-secret", idempotency_key, &preview)?;
@@ -449,12 +631,13 @@ mod tests {
     fn resend_errors_are_stable_and_do_not_expose_the_key() -> TestResult {
         let (endpoint, _request, server) =
             serve_once(422, "Unprocessable Entity", r#"{"message":"test-secret"}"#)?;
+        let digest = empty_digest();
         let preview = EmailPreview::new(
             &EmailConfig {
                 from: "sender@example.com".to_owned(),
                 to: "person@example.com".to_owned(),
             },
-            &[],
+            &digest,
         );
         let error = send_to(&endpoint, "test-secret", "manual-key", &preview)
             .err()
@@ -465,14 +648,37 @@ mod tests {
         Ok(())
     }
 
-    fn summary(id: i64, title: &str) -> TodoSummary {
-        TodoSummary {
-            id: TodoId::from_storage(id)
-                .unwrap_or_else(|error| panic!("invalid test todo ID: {error}")),
+    fn empty_digest() -> DailyDigest {
+        DailyDigest {
+            decisions: Vec::new(),
+            followups: Vec::new(),
+            other_open: Vec::new(),
+            open_todo_count: 0,
+            pending_concern_count: 0,
+        }
+    }
+
+    fn one_open_digest(title: &str) -> DailyDigest {
+        DailyDigest {
+            decisions: Vec::new(),
+            followups: vec![item(
+                title,
+                "The current situation has not been assessed.",
+                &["Todo t1"],
+                &["todo show t1"],
+            )],
+            other_open: Vec::new(),
+            open_todo_count: 1,
+            pending_concern_count: 0,
+        }
+    }
+
+    fn item(title: &str, message: &str, references: &[&str], commands: &[&str]) -> DigestItem {
+        DigestItem {
             title: title.to_owned(),
-            status: TodoStatus::Open,
-            created_at: "2026-08-27T12:00:00.000Z".to_owned(),
-            completed_at: None,
+            message: message.to_owned(),
+            references: references.iter().map(|value| (*value).to_owned()).collect(),
+            inspect_commands: commands.iter().map(|value| (*value).to_owned()).collect(),
         }
     }
 

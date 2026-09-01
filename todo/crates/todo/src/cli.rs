@@ -71,7 +71,7 @@ pub(crate) enum Command {
     /// Append working notes to a todo.
     #[command(subcommand)]
     Note(NoteCommand),
-    /// Preview or send the outstanding-todo email.
+    /// Preview or send the daily Todo attention digest.
     #[command(subcommand)]
     Email(EmailCommand),
     /// Mark a todo done.
@@ -349,9 +349,9 @@ pub(crate) enum NoteCommand {
 
 #[derive(Debug, Clone, Subcommand)]
 pub(crate) enum EmailCommand {
-    /// Preview the exact email without sending it.
+    /// Preview the exact daily digest without sending it.
     Preview,
-    /// Send the current outstanding todos through Resend.
+    /// Send the current daily attention digest through Resend.
     Send(EmailSendArgs),
 }
 
