@@ -3,7 +3,7 @@
   "provider": {
     "id": "annals",
     "name": "Annals",
-    "release": "0.13.0"
+    "release": "0.13.1"
   },
   "entries": [
     "entries/work-retain.json",
