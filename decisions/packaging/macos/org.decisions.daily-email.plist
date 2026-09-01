@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>org.decisions.daily-email</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>__DECISIONS_RUNNER__</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__DECISIONS_STATE_DIR__</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>Umask</key>
+  <string>077</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>__DECISIONS_HOME__</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__DECISIONS_STDOUT__</string>
+  <key>StandardErrorPath</key>
+  <string>__DECISIONS_STDERR__</string>
+</dict>
+</plist>

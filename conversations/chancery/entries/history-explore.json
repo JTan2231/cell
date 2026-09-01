@@ -1,0 +1,67 @@
+{
+  "id": "conversations.history.explore",
+  "contract_version": 3,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Explore local Codex conversation history",
+  "summary": "List, show, search, export, resolve exact persisted task metadata, or inspect content-free completed-turn activity for local Codex tasks through the documented App Server interface.",
+  "use_when": [
+    "The user wants to inspect, query, search, or export Codex tasks stored on this machine.",
+    "Another local product needs typed user/assistant conversation history with stable source references.",
+    "Another local product needs exact persisted task metadata, including the recorded working directory, for one canonical machine-local thread reference.",
+    "A local product needs exact completed-turn message scope and content-free evidence of completed Codex file changes, including recovery from a missed hook event."
+  ],
+  "do_not_use_when": [
+    "The request is to continue, mutate, archive, delete, or send a message to a live Codex task.",
+    "The request requires reasoning traces, tool payloads, approvals, or raw Codex storage.",
+    "The user wants a model to interpret the conversations rather than retrieve them."
+  ],
+  "outcome": "A complete requested App Server view normalized to user and assistant text, an exact persisted task summary for a canonical machine-local thread reference, or an explicit completed-turn activity view containing message counts and stable completed-file-change references without paths or diffs.",
+  "effects": [
+    "List, show, search, export, activity, and doctor launch a short-lived local Codex App Server in a private process group, read its state-database view, and terminate that launch's inherited descendants on exit.",
+    "An exact-summary library call returns persisted task metadata, including the recorded working directory, only to its local caller and does not change CLI or activity output.",
+    "Show, search, and export can write sensitive user and assistant transcript text to the caller's terminal or redirected output; activity writes only counts, timing/status, and stable references.",
+    "The explicit refresh command allows App Server to scan its own logs and repair its own metadata; no other command enables that behavior."
+  ],
+  "authority": [
+    "Codex App Server owns task discovery, persisted-storage compatibility, pagination, metadata, and full-history availability.",
+    "Conversations owns filters, normalized user/assistant output, stable references, copied-item deduplication, and failure-on-incomplete behavior.",
+    "Observed runtime status belongs to the newly launched App Server process and is not machine-wide liveness authority."
+  ],
+  "success": [
+    "Every requested active and archived page completes through App Server.",
+    "Full-history operations complete through turn pagination or the explicit legacy fallback without raw-storage access.",
+    "An exact summary lookup requires a matching stable host identity, finds the thread exactly once across active and archived state-database metadata, and returns its recorded working directory without loading turns.",
+    "JSON output excludes reasoning, tool, approval, command, file-path, diff, and internal item payloads.",
+    "Activity accepts only a completed turn with a completion timestamp, validates every counted file-change entry, and fails when a session hint resolves the turn in multiple lineage members.",
+    "The short-lived launch and its inherited descendants do not remain running after the operation."
+  ],
+  "failure_and_recovery": [
+    "A protocol error, timeout, unreadable page, or unsupported full-history record fails the operation instead of returning an incomplete normal result.",
+    "Use `conversations doctor` to inspect the selected CLI and recorded-version mismatch before changing installations.",
+    "Run `conversations refresh` only when App Server metadata repair is intended."
+  ],
+  "privacy": [
+    "Task titles, working directories, normalized transcript text, stable activity references, and activity counts can be private.",
+    "The default macOS host reference is a one-way platform-identity hash; the raw hardware UUID is never exposed or retained, and an identity read failure stops the operation.",
+    "Conversations sends no transcript to a model or network service of its own, but redirected stdout becomes caller-owned retained data.",
+    "Interactive CLI calls inherit App Server stderr by default; privacy-sensitive embedded or scheduled callers must select the suppression policy when their logs cannot retain Codex diagnostics."
+  ],
+  "interfaces": [
+    {"label": "Check readiness", "invocation": "/Users/joey/.local/bin/conversations doctor"},
+    {"label": "List root tasks", "invocation": "/Users/joey/.local/bin/conversations list"},
+    {"label": "Resolve exact task metadata from Rust", "invocation": "AppServerClient::read_thread_summary(&ThreadRef)"},
+    {"label": "Show a task", "invocation": "/Users/joey/.local/bin/conversations show THREAD_ID"},
+    {"label": "Inspect completed turn activity", "invocation": "/Users/joey/.local/bin/conversations activity SESSION_OR_THREAD_ID TURN_ID --json"},
+    {"label": "Search tasks", "invocation": "/Users/joey/.local/bin/conversations search QUERY"},
+    {"label": "Export normalized corpus", "invocation": "/Users/joey/.local/bin/conversations export --json"},
+    {"label": "Repair App Server metadata", "invocation": "/Users/joey/.local/bin/conversations refresh"}
+  ],
+  "does_not_authorize": [
+    "Reading Codex JSONL or SQLite storage directly.",
+    "Continuing, mutating, archiving, deleting, or messaging any Codex task.",
+    "Sending or publishing exported transcript text, or interpreting it with a model."
+  ],
+  "manual": "manuals/history-explore.md"
+}

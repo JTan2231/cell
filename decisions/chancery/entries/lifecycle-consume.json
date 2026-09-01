@@ -1,0 +1,59 @@
+{
+  "id": "decisions.lifecycle.consume",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Consume the durable decision lifecycle stream",
+  "summary": "Snapshot and incrementally read immutable version-one decision-admission and review envelopes from Decisions through opaque, replay-safe cursors.",
+  "use_when": [
+    "Another local product needs an ordered durable feed of admitted Decisions candidates and later confirm or dismiss reviews.",
+    "A consumer needs a current activation watermark before it begins participating.",
+    "A consumer needs to resume after its own failure without reading Decisions SQLite directly."
+  ],
+  "do_not_use_when": [
+    "A raw conversation, file path, diff, command, tool result, or working directory is required.",
+    "Historical decision replay is requested; version-one consumers activate at the current watermark.",
+    "The consumer wants to acknowledge, mutate, confirm, dismiss, or delete Decisions state through the stream.",
+    "A candidate should be treated as effective without the consumer defining how confidence and review state affect its own domain."
+  ],
+  "outcome": "A current opaque watermark or one bounded, ordered, replayable page of immutable decision lifecycle envelopes with a cursor for each item.",
+  "effects": [
+    "Watermark and read are local read-only SQLite operations and perform no classification, review, delivery, network request, or consumer acknowledgement.",
+    "Schema migration to version 3 transactionally backfills one admission envelope for each retained candidate and one review envelope for each retained append-only review.",
+    "New admission envelopes commit in the same SQLite transaction as their candidate and source anchors; new review envelopes commit in the same transaction as their review row and candidate review-state update."
+  ],
+  "authority": [
+    "Decisions SQLite is authoritative for event order, candidate lifecycle, review history, and source anchors.",
+    "A decision_admitted envelope means Decisions durably admitted a validated candidate; only its cited user authority made the decision, while file activity merely selected the enacted turn.",
+    "A decision_reviewed envelope means the append-only CLI review committed; the consuming product remains responsible for its own effective-event policy, durable cursor, retry, and domain success.",
+    "Event cursors are transport positions, not decision identity or authority."
+  ],
+  "success": [
+    "Watermark returns the current stream end as a valid opaque cursor, including on an empty stream.",
+    "Read returns only events strictly after the supplied cursor in append order, up to the validated limit, and includes an opaque cursor beside every event plus next_cursor, watermark_cursor, and has_more.",
+    "Reusing the same valid cursor returns the same already-committed prefix; an event appears only after its owning Decisions transaction commits."
+  ],
+  "failure_and_recovery": [
+    "Persist each event and its item cursor atomically in consumer state, then resume strictly after the last durably copied cursor; do not infer or manufacture cursors.",
+    "event_cursor_invalid means the cursor is malformed, noncanonical, or checksum-invalid; event_cursor_ahead means it names a position beyond the current database; event_limit_invalid means the limit is outside 1 through 1000.",
+    "The stream has no consumer acknowledgement or pruning policy. A consumer outage does not block Decisions, and rereading after an uncertain consumer commit is expected to be idempotent.",
+    "Every new version-one consumer records events watermark as its activation cursor before polling. Historical replay is not exposed by this contract; schema-3 backfill preserves complete stream state for future compatibility without making old events an implicit import path."
+  ],
+  "privacy": [
+    "Envelopes contain normalized statement and optional rationale, disposition, confidence, review state, authority span, and machine-local source anchors.",
+    "Envelopes contain no transcript text, working directory, file path, diff, command, reasoning, approval payload, tool output, hook body, prompt, or Email data.",
+    "Source anchors and normalized decision text remain sensitive local state; consumers must not copy them into body-bearing logs or unrelated services."
+  ],
+  "interfaces": [
+    {"label": "Current watermark", "invocation": "/Users/joey/.local/bin/decisions events watermark --json"},
+    {"label": "Read after cursor", "invocation": "/Users/joey/.local/bin/decisions events read --after OPAQUE_CURSOR --json"},
+    {"label": "Read bounded page", "invocation": "/Users/joey/.local/bin/decisions events read --after OPAQUE_CURSOR --limit 1000 --json"}
+  ],
+  "does_not_authorize": [
+    "Reading Decisions SQLite directly or parsing the cursor format.",
+    "Changing candidate or review state, invoking Nucleus or Email, or treating a consumer write as Decisions truth.",
+    "Treating source anchors as file attribution or disclosing normalized decision data outside the local consumer boundary."
+  ],
+  "manual": "manuals/lifecycle-consume.md"
+}

@@ -21,9 +21,11 @@ immutable work + corpus revision
    recorded        pending -- apply --> revision
 ```
 
-Use the [project vocabulary](vocabulary.md) for shared contributor and
-conversational terminology. It is documentation guidance, not liaison runtime
-input or an implemented contract.
+Use the registered Semantics repository `annals` for shared contributor and
+conversational terminology. Discover its read contract through
+`semantics.repository.explore`, then query it with `semantics repository show
+annals`. The documents below remain authoritative for implemented behavior,
+and Semantics repository output is never liaison runtime input.
 
 The implemented contracts are:
 

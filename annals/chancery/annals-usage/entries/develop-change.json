@@ -1,6 +1,6 @@
 {
   "id": "annals-usage.develop.change",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -36,7 +36,11 @@
   ],
   "privacy": [
     "Tests and live reports can expose private delivery attribution, model output metadata, account plan, and activity.",
-    "Annals Usage must never read or retain Nucleus credential files."
+    "Annals Usage must never read or retain Nucleus credential files.",
+    "Do not add Semantics repository output to an Annals liaison prompt."
+  ],
+  "dependencies": [
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": [
     "local_filesystem",
@@ -45,7 +49,7 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read the complete Annals vocabulary and telemetry contract, then identify whether Annals Usage actually owns the requested meaning.",
+    "Read `semantics.repository.explore`, query `semantics repository show annals`, read the telemetry contract, and identify whether Annals Usage actually owns the requested meaning.",
     "Run `nucleus manual` before changing shared output, account, authentication, compatibility, or deployment behavior.",
     "Implement the smallest projection change and update telemetry documentation and exact coverage tests.",
     "Run `./annals/ci.sh`; perform separately authorized live report, budget, doctor, and requester canaries when affected."

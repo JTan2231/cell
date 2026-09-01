@@ -1,16 +1,18 @@
 # Change Annals
 
-Annals development begins with its canonical vocabulary, which defines both
-technical and conversational terms:
+Annals development begins with its canonical Semantics repository, which
+defines both technical and conversational terms:
 
 ```sh
-cd /Users/joey/rust/cell/annals
-less docs/vocabulary.md
+/Users/joey/.local/bin/chancery show semantics.repository.explore
+/Users/joey/.local/bin/semantics repository show annals
 ```
 
-Read that file completely before analyzing or changing Annals code, tests,
-documentation, or interfaces. It is contributor guidance and must never be
-added to the constrained liaison's prompt or runtime context.
+Read the repository before analyzing or changing Annals code, tests,
+documentation, or interfaces. Code, tests, and component documentation remain
+authoritative for actual behavior. Semantics repository output is contributor
+guidance and must never be added to the constrained liaison's prompt or runtime
+context.
 
 ## Ownership
 
@@ -31,7 +33,8 @@ cross-system integration, read:
 ## Development workflow
 
 1. Identify the owning Annals contract: CLI, architecture, data model, search,
-   telemetry, installation, vocabulary, or preserved historical experiment.
+   telemetry, installation, Semantics terminology, or preserved historical
+   experiment.
 2. Make the smallest change without collapsing work, delivery, examination,
    reconciliation, commit, and revision lifecycles.
 3. Update the owning documentation when public or operational meaning changes.
@@ -46,7 +49,7 @@ cross-system integration, read:
 5. Run separately authorized deployment, migration, and live requester
    canaries only when the changed boundary requires them.
 
-Keep current vocabulary out of the preserved experiment archive, whose older
+Keep current Semantics terminology out of the preserved experiment archive, whose older
 tree, path, placement, proposal, and uncertainty terms are deliberately
 historical. Conversely, do not revive historical terms in current contracts.
 

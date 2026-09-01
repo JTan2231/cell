@@ -1,0 +1,26 @@
+#!/bin/zsh
+
+unsetopt VERBOSE XTRACE
+umask 077
+
+if [[ -x /opt/homebrew/bin/codex ]]; then
+    codex_path=/opt/homebrew/bin/codex
+elif [[ -x "$HOME/.local/bin/codex" ]]; then
+    codex_path="$HOME/.local/bin/codex"
+else
+    print -u2 -- 'semantics worker: Codex executable is unavailable'
+    exit 1
+fi
+
+if [[ ! -x "$HOME/.local/bin/decisions" ]]; then
+    print -u2 -- 'semantics worker: Decisions executable is unavailable'
+    exit 1
+fi
+
+exec /usr/bin/env -i \
+    HOME="$HOME" \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    CONVERSATIONS_CODEX="$codex_path" \
+    SEMANTICS_DECISIONS="$HOME/.local/bin/decisions" \
+    SEMANTICS_DATABASE="$HOME/Library/Application Support/Semantics/semantics.db" \
+    "$HOME/.local/bin/semantics" --json intake run

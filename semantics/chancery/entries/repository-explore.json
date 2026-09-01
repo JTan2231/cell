@@ -1,0 +1,57 @@
+{
+  "id": "semantics.repository.explore",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Explore a project's authoritative semantic repository",
+  "summary": "Read, search, replay, or compare one registered project's append-only terminology and grounding history without inspecting Semantics SQLite directly.",
+  "use_when": [
+    "A participating project's maintained meaning of a term is needed before analysis, review, documentation, or implementation.",
+    "A concept's stable identity, current meaning, distinctions, groundings, or retirement state must be inspected.",
+    "Two repository revisions or the immutable revision log should be compared."
+  ],
+  "do_not_use_when": [
+    "Runtime behavior, code facts, test results, or current product operation are required; consult the owning project sources and operational contracts.",
+    "A project should be registered, moved, paused, seeded, repaired, or automated.",
+    "The caller intends to read or mutate Semantics SQLite directly."
+  ],
+  "outcome": "A JSON repository snapshot, search result, immutable revision log, or revision-range diff for one exact project and optional historical revision.",
+  "effects": [
+    "Repository show, search, log, and diff are local read-only operations.",
+    "Snapshots are rebuilt from immutable typed effects; no mutable concept projection is consulted.",
+    "This capability does not call Decisions, Conversations, Nucleus, Chancery, or a network service."
+  ],
+  "authority": [
+    "Semantics SQLite is authoritative for maintained project terminology, stable concept identity, grounding history, and semantic revision order.",
+    "The participating project's source, tests, and product documentation remain authoritative for runtime behavior and implementation facts.",
+    "Decision and seed groundings are provenance, not permission to ignore newer project evidence."
+  ],
+  "success": [
+    "The command selects one registered project and returns the requested HEAD or existing revision.",
+    "Search matches canonical labels or meanings without changing repository state.",
+    "Historical reads replay only revisions through the selected number and preserve retired concepts and withdrawn groundings."
+  ],
+  "failure_and_recovery": [
+    "project_not_found or revision_not_found means the selected identity or revision is unavailable; list projects or inspect HEAD before retrying.",
+    "A replay validation failure indicates authoritative state corruption or an incompatible binary; stop and operate Semantics rather than bypassing the repository.",
+    "If required Chancery discovery is unavailable, report that discovery failure instead of guessing a local route; Semantics repository reads themselves do not call Chancery at runtime."
+  ],
+  "privacy": [
+    "Repository meanings, normalized decision provenance, source anchors, and project identities remain sensitive local state.",
+    "Do not copy repository output into service logs or unrelated external systems.",
+    "Repository output contains no transcript, diff, command, tool result, prompt, credential, or raw project file content."
+  ],
+  "interfaces": [
+    {"label": "Show HEAD", "invocation": "/Users/joey/.local/bin/semantics repository show PROJECT"},
+    {"label": "Search", "invocation": "/Users/joey/.local/bin/semantics repository search PROJECT QUERY"},
+    {"label": "Revision log", "invocation": "/Users/joey/.local/bin/semantics repository log PROJECT"},
+    {"label": "Diff", "invocation": "/Users/joey/.local/bin/semantics repository diff PROJECT FROM TO"}
+  ],
+  "does_not_authorize": [
+    "Registering or changing a project, seeding or committing a revision, assigning or retrying intake, or invoking the worker.",
+    "Reading Semantics SQLite directly or treating a current snapshot as runtime implementation authority.",
+    "Disclosing repository output outside the local project boundary."
+  ],
+  "manual": "manuals/repository-explore.md"
+}

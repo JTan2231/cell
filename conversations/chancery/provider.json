@@ -1,0 +1,12 @@
+{
+  "schema_version": 2,
+  "provider": {
+    "id": "conversations",
+    "name": "Conversations",
+    "release": "0.3.0"
+  },
+  "entries": [
+    "entries/history-explore.json",
+    "entries/develop-change.json"
+  ]
+}

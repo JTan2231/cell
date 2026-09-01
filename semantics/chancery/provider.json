@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "provider": {
+    "id": "semantics",
+    "name": "Semantics",
+    "release": "0.1.0"
+  },
+  "entries": [
+    "entries/repository-explore.json",
+    "entries/project-operate.json",
+    "entries/develop-change.json"
+  ]
+}

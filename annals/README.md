@@ -14,9 +14,12 @@ Source byte ranges and non-concept SQLite identifiers remain implementation
 details. Evidence belongs to a concept as a whole rather than to one of its
 parent edges, and every derived leaf must remain evidence-grounded.
 
-The [project vocabulary](docs/vocabulary.md) defines the shared terms used by
-contributors and in conversations about Annals. It is documentation guidance,
-not content supplied to the liaison or part of the runtime contract.
+The registered Semantics repository `annals` defines the shared terms used by
+contributors and in conversations about Annals. Discover its read contract
+through `semantics.repository.explore`, then query it with `semantics
+repository show annals`. Code, tests, and these component documents remain
+authoritative for actual behavior. Semantics repository output is not content
+supplied to the liaison or part of the runtime contract.
 
 ## Requirements
 

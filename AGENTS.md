@@ -1,6 +1,15 @@
 # Agent instructions
 
+Semantics-Project: cell
+
 - Keep changes simple; do not overcomplicate or overarchitect.
+- This root participates in the installed Semantics service. The `cell`
+  semantic repository is authoritative for cross-product terminology and its
+  history when work is rooted here; a deeper registered product repository is
+  authoritative for that product's terminology. Before analysis, review, or
+  change work, read `semantics.repository.explore` through Chancery and query
+  the applicable Semantics repository. Code, tests, and product documentation
+  remain authoritative for behavior. Do not edit Semantics state directly.
 - When a user request may map to an installed local capability or adaptive
   operation and the relevant contract is not already established in the
   current session, run `/Users/joey/.local/bin/chancery list`, compare the

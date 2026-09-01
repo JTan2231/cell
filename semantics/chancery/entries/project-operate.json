@@ -1,0 +1,93 @@
+{
+  "id": "semantics.project.operate",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Maintain a project's semantic repository service",
+  "summary": "Install, register, seed, pause, resume, route, recover, or uninstall the project-scoped Semantics registry, repository, and serial 60-second worker.",
+  "use_when": [
+    "Semantics should be installed, updated, diagnosed, or uninstalled for this macOS user.",
+    "A folder should join, move within, pause, resume, or retire from the project registry.",
+    "Existing vocabulary should be seeded, intake should be inspected or manually routed, or a failed reconciliation should be recovered."
+  ],
+  "do_not_use_when": [
+    "Only repository terminology should be read; use semantics.repository.explore.",
+    "A project folder lacks an exact root AGENTS.md participation marker.",
+    "Retained state should be deleted; uninstall intentionally retains it."
+  ],
+  "outcome": "A validated content-addressed installation and explicit project registry whose immutable semantic repositories are maintained from post-activation Decisions lifecycle events.",
+  "effects": [
+    "Deployment writes a content-addressed user release, CLI and Chancery selectors, one LaunchAgent plist, and may initialize or migrate retained SQLite after a private backup.",
+    "Registration stores the canonical folder and current Decisions watermark; it intentionally excludes earlier events.",
+    "The worker reads Decisions and Conversations, may submit one restricted Nucleus job, and commits at most one valid semantic revision per invocation.",
+    "Uninstall removes only the owned service and public selectors while retaining the database, releases, and body-free logs."
+  ],
+  "authority": [
+    "Semantics owns project identity, routing, cursor persistence, intake transitions, stable concept IDs, typed-effect validation, and the SQLite commit.",
+    "Decisions owns lifecycle order and decision/review facts; Conversations owns exact thread cwd metadata; Nucleus owns execution and mailbox transport but not semantic truth.",
+    "A participating project's source and tests remain runtime authority; its root AGENTS.md owns participation instructions."
+  ],
+  "success": [
+    "Doctor proves schema 1, exact markers, Decisions lifecycle access, Conversations exact-cwd readiness, and Nucleus health, capabilities, schemas, and immutable toolset.",
+    "The worker LaunchAgent is key-free, has StartInterval 60 and no RunAtLoad, and overlapping runs are serialized by the product lock.",
+    "Each registered root is canonical and uniquely owned, and every committed effective admission or confirmation includes an exact Decisions event/decision grounding."
+  ],
+  "failure_and_recovery": [
+    "Pause the affected project before semantic maintenance; paused state prevents a late Nucleus proposal from committing.",
+    "A failed deployment restores prior selectors, plist, quiescent database plus sidecars, and prior service state; before releasing the worker flock, an unprovable rollback removes current/public selectors and the installed plist so a still-loaded job has no executable current runner, and retains its private recovery backup.",
+    "Unassigned and awaiting-review intake remain explicit. Retry refuses an active or ambiguous prior Nucleus job and creates a new attempt only after positive terminal evidence.",
+    "Never manufacture Decisions cursors, edit SQLite, or clear a Nucleus correlation to force replay."
+  ],
+  "privacy": [
+    "SQLite can contain normalized decision text, rationale, source anchors, project paths, and repository meanings; keep it local and mode 0600.",
+    "The worker sends only a minimized semantic projection of one lifecycle event and the complete selected repository snapshot to Nucleus; lossless anchors, cursor, and routing metadata stay in Semantics SQLite.",
+    "Nucleus uses workspace none, no shell, no web, and a neutral temporary cwd.",
+    "Service logs are body-free and must not contain decision statements, conversation text, project content, prompts, credentials, diffs, commands, or tool payloads."
+  ],
+  "dependencies": [
+    {"id": "decisions.lifecycle.consume", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "session_surfaces": ["local_filesystem", "local_shell"],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read the Semantics system installation manual and inspect Decisions, Conversations, Nucleus, launchd, retained state, and Chancery publication readiness.",
+    "For deployment, build a green candidate and run the content-addressed deployer; verify doctor and all owned selectors before registering projects.",
+    "Add the exact Semantics-Project marker to the project's root AGENTS.md, register the canonical folder at the current watermark, and seed only existing authoritative vocabulary when needed; after verifying HEAD, the source file may be separately removed under normal project authority.",
+    "Inspect repository HEAD, intake state, the one-shot worker report, launchd state, and body-free logs before relying on periodic maintenance.",
+    "Pause before maintenance; resume only after markers and dependencies are healthy. Uninstall only with the retained-state boundary understood."
+  ],
+  "checkpoints": [
+    "Registration and moves require an exact line in a regular root AGENTS.md; nested or approximate markers do not participate.",
+    "Every new registration captures the current Decisions watermark, moves preserve activation and scan cursors, and a review follows its existing non-retired decision-to-project binding before cwd routing.",
+    "Deploy and uninstall share one update lock; deployment stops the worker, suspends the CLI, holds the exact worker flock, and proves SQLite quiescent before database-plus-sidecars backup and scrubbed candidate doctor.",
+    "Nucleus receives no project workspace, shell, web, transcript, diff, command, tool output, or fallback authority; Semantics owns the commit transaction.",
+    "Retirement is allowed only from paused and only after all assigned nonterminal or failed intake is resolved."
+  ],
+  "adaptation": [
+    "Use manual intake assignment only when exact cwd routing is unavailable or wrong; the assignment is append-only audited state.",
+    "Seed one project-local definition-list document only at revision 0; after verifying HEAD, the source may be removed because replay uses committed effects while retaining its relative label and SHA-256 digest.",
+    "For an alternate test home, pass explicit --home and --launchctl only within an isolated synthetic boundary."
+  ],
+  "stop_when": [
+    "Decisions lifecycle contract 1, Conversations contract 3 exact cwd, or Nucleus execution contract 1 is unavailable or doctor is not fully green.",
+    "A selector, release, plist, database, sidecar, marker, or registered root is foreign, symbolic where a regular path is required, ambiguous, or cannot be safely rolled back.",
+    "The requested action would delete retained state, manufacture a cursor, expose repository bodies in logs, or let Nucleus bypass Semantics validation."
+  ],
+  "interfaces": [
+    {"label": "Deploy", "invocation": "semantics/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH"},
+    {"label": "Doctor", "invocation": "/Users/joey/.local/bin/semantics --json doctor"},
+    {"label": "Register project", "invocation": "/Users/joey/.local/bin/semantics project register ID ABSOLUTE_ROOT"},
+    {"label": "Intake status", "invocation": "/Users/joey/.local/bin/semantics intake status"},
+    {"label": "Uninstall and retain state", "invocation": "semantics/packaging/macos/uninstall-user.sh"}
+  ],
+  "does_not_authorize": [
+    "Deleting retained database, releases, logs, or project files.",
+    "Reading upstream or Semantics SQLite directly, parsing cursors, or mutating Decisions, Conversations, Nucleus, Codex, or project runtime state.",
+    "Treating model output or Nucleus completion as a semantic commit."
+  ],
+  "manual": "manuals/project-operate.md"
+}

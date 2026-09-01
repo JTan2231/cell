@@ -1,0 +1,87 @@
+{
+  "id": "decisions.install.operate",
+  "contract_version": 3,
+  "kind": "operation",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install or operate the continuous Decisions services",
+  "summary": "Deploy, inspect, recover, or uninstall the user-owned Decisions CLI, schema-3 lifecycle stream, write-once observer baseline, exact Codex Stop hook, 60-second observer, retained SQLite state, Chancery selector, and local 09:00 digest service.",
+  "use_when": [
+    "Decisions should be installed or updated for this macOS user.",
+    "The observer, daily service, Codex hook, activation baseline, logs, database, release selector, or recovery state should be inspected."
+  ],
+  "do_not_use_when": [
+    "Only one manual build, preview, review, or send is requested.",
+    "A foreign user hooks.json should be merged or replaced automatically.",
+    "Retained state should be destroyed without a separate explicit destructive decision."
+  ],
+  "outcome": "A validated content-addressed user installation with post-activation continuous enacted-decision observation, or an evidence-backed operational diagnosis.",
+  "effects": [
+    "Deployment writes user application support, CLI and Chancery symlinks, two LaunchAgent plists, and an exact Decisions-owned ~/.codex/hooks.json, records the observer baseline once, and may restart both Decisions services.",
+    "Candidate doctor may transactionally migrate the Decisions database from schema version 1 or 2 to 3 after both existing services are quiesced, the public command is suspended, and a private database-plus-sidecars backup exists; version 3 preserves old rows and backfills lifecycle events.",
+    "The operator separately reviews and trusts the exact non-managed Stop hook through Codex; deployment never bypasses hook trust.",
+    "Uninstall removes both loaded services, the exact owned hook, and public selectors but retains database, baseline, logs, and releases."
+  ],
+  "authority": [
+    "The deployer owns content-addressed release switching, hook/service file ownership, baseline cutover ordering, and rollback.",
+    "Codex owns hook discovery, exact-definition trust, and Stop delivery on each client surface.",
+    "launchd owns observer and daily service loading and invocation.",
+    "Decisions SQLite remains observation and projection authority."
+  ],
+  "success": [
+    "The candidate version matches its provider bundle, doctor proves schema version 3 plus Conversations, Nucleus, and Email contract v2 readiness, selectors resolve inside the current release, and launchd accepts both plists only after baseline activation.",
+    "The exact user Stop hook is visible and trusted in /hooks and one deliberate post-baseline effectful turn appears in decisions observe status on the actual Codex surface in use.",
+    "The routine 09:00 path projects already-observed results without model work; only missed-observation catch-up invokes Nucleus."
+  ],
+  "failure_and_recovery": [
+    "A failed update restores prior selectors, both plists, exact hook bytes, quiescent database and sidecars, and both prior service states.",
+    "The baseline is stored once in SQLite, survives redeploy/uninstall/reinstall, and is removed only with separately authorized retained-state deletion.",
+    "Foreign or ambiguous selectors, plists, loaded labels, hooks, or modified owned hooks are refused rather than replaced or removed.",
+    "A missed hook is recovered with decisions observe reconcile, which enqueues content-free turn correlations without classifying; decisions observe process remains serial.",
+    "Inspect body-free observer/daily stderr logs, decisions doctor, decisions observe status, launchd state, and Codex hook trust before retrying."
+  ],
+  "privacy": [
+    "State can contain normalized decision text and source identifiers, but hook bodies, transcripts, paths, diffs, and tool output are not stored.",
+    "Observer and daily logs must not contain email bodies, conversation text, hook bodies, or credentials.",
+    "Both LaunchAgent runners use scrubbed environments and contain no Email credential key."
+  ],
+  "session_surfaces": ["local_filesystem", "local_shell"],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read the matching installation document and inspect Decisions, Conversations, Nucleus, Email, Codex hooks, and Chancery readiness.",
+    "Build a green candidate, then run the content-addressed deployer with the exact user home and candidate path.",
+    "Verify doctor, observer status and baseline, current release/provider selectors, both loaded LaunchAgents, and body-free logs.",
+    "Open /hooks, review and trust the exact user Stop hook, then canary one new post-baseline effectful turn on the actual Codex surface in use.",
+    "For uninstall, remove only the two services, exact owned hook, and public selectors and report that database, baseline, releases, and logs remain."
+  ],
+  "checkpoints": [
+    "Existing releases pass canonical content-manifest and hash checks before reuse.",
+    "Both services are stopped and the public hook command is suspended for its bounded timeout before the migration backup and schema-3 outbox backfill; default activation stores the next whole Unix second after release/selector staging and before either plist, the hook, or the command is published or observer bootstraps, so the cutover second and all pre-baseline authority are excluded.",
+    "Foreign hook files are never merged, overwritten, or removed; failed activation restores every prior selector, file, database, and service state, while an unprovable rollback leaves both services stopped, disables the public command, and retains the private transaction backup.",
+    "Both plists are key-free and lack RunAtLoad; the observer uses StartInterval 60, while the digest service schedules local 09:00 with separate private body-free logs."
+  ],
+  "adaptation": [
+    "Use explicit home and launchctl overrides only for a deliberate alternate-user test boundary.",
+    "Canary Desktop or another client directly; do not infer cross-surface Stop delivery from the installed file or CLI alone.",
+    "Diagnose dependency readiness at its owning product instead of adding a fallback inside Decisions."
+  ],
+  "stop_when": [
+    "The candidate, provider release, Nucleus requester contract, Codex source/hooks surface, Conversations activity contract, or Email CLI is incompatible or unavailable.",
+    "A selector, hook, service, or state path is foreign, symbolic where a regular path is required, or cannot be safely rolled back.",
+    "The baseline is missing after attempted activation or an observer service could run before it.",
+    "The requested action would delete retained state without separate explicit authorization."
+  ],
+  "interfaces": [
+    {"label": "Deploy", "invocation": "decisions/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH"},
+    {"label": "Doctor", "invocation": "/Users/joey/.local/bin/decisions doctor"},
+    {"label": "Observer status", "invocation": "/Users/joey/.local/bin/decisions observe status"},
+    {"label": "Uninstall and retain state", "invocation": "decisions/packaging/macos/uninstall-user.sh"}
+  ],
+  "does_not_authorize": [
+    "Deleting retained state or logs.",
+    "Replacing or merging a foreign Codex hooks file.",
+    "Bypassing Codex hook trust, resetting the observer baseline, or changing Nucleus, Codex, Email, or Gmail configuration."
+  ],
+  "manual": "manuals/install-operate.md"
+}

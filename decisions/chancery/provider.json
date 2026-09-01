@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "provider": {
+    "id": "decisions",
+    "name": "Decisions",
+    "release": "0.3.0"
+  },
+  "entries": [
+    "entries/daily-digest.json",
+    "entries/lifecycle-consume.json",
+    "entries/install-operate.json",
+    "entries/develop-change.json"
+  ]
+}

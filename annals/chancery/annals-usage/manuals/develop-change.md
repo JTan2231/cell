@@ -5,14 +5,19 @@ and model-run attribution, while Nucleus owns jobs, attempts, exact model
 output, account access, and credentials. Annals Usage must not create a second
 telemetry authority.
 
-Before development, read the complete canonical vocabulary and telemetry
-contract:
+Before development, read the complete canonical Semantics repository and
+telemetry contract:
 
 ```sh
+/Users/joey/.local/bin/chancery show semantics.repository.explore
+/Users/joey/.local/bin/semantics repository show annals
 cd /Users/joey/rust/cell/annals
-less docs/vocabulary.md
 less docs/telemetry.md
 ```
+
+Semantics owns contributor terminology; telemetry documentation, code, and
+tests remain authoritative for reporting behavior. Never put Semantics
+repository output in an Annals liaison prompt.
 
 Run the installed Nucleus manual before changing output decoding, account or
 authentication behavior, compatibility, deployment, or any other shared

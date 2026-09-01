@@ -1,0 +1,69 @@
+{
+  "id": "semantics.develop.change",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change the Semantics product safely",
+  "summary": "Develop Semantics while preserving project-scoped authority, append-only replay, exact upstream adapters, restricted Nucleus reconciliation, crash recovery, packaging rollback, privacy, and the offline 60-second CI gate.",
+  "use_when": ["Semantics source, schema, effects, worker policy, toolset, prompts, CLI, packaging, service lifecycle, or documentation should change."],
+  "do_not_use_when": ["The installed repository should only be explored or operated."],
+  "outcome": "A synchronized product change whose standalone offline CI is green and whose persistent, requester, service, and published discovery contracts remain valid.",
+  "effects": ["May change source, tests, docs, SQLite migrations, immutable schemas/toolsets, packaging, or Chancery contracts; deployment and release remain separate explicit actions."],
+  "authority": [
+    "Semantics source and docs own project routing and semantic-domain behavior.",
+    "Decisions, Conversations, and Nucleus contracts own their respective upstream and requester boundaries.",
+    "The shared Nucleus operator manual owns cross-product requester and service-maintenance procedures."
+  ],
+  "success": [
+    "semantics/ci.sh finishes green offline within 60 seconds without contacting live Nucleus, Decisions, Conversations, launchd, or Chancery state.",
+    "Schema and effect changes retain historical replay or add explicit migration and rollback proofs.",
+    "Changed registered tool meaning uses a new immutable schema ID or toolset version and old correlations remain recoverable."
+  ],
+  "failure_and_recovery": [
+    "Do not deploy a failing candidate or change persistent bytes without a quiescent backup and tested rollback.",
+    "Use synthetic upstreams, fake Nucleus mailbox transport, fake binaries, and fake launchctl in tests.",
+    "Preserve the same job and requester identity across ambiguous submission or result transport."
+  ],
+  "privacy": ["Fixtures must not contain real decisions, conversation text, project content, credentials, personal paths, prompts, diffs, commands, or tool payloads in logs."],
+  "dependencies": [
+    {"id": "decisions.lifecycle.consume", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "session_surfaces": ["local_filesystem", "local_shell"],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read Semantics AGENTS.md, architecture, data model, affected upstream contracts, and the current Nucleus requester/operator manuals.",
+    "Map changes across registry identity, cursor durability, intake state, replay invariants, immutable tool schemas, mailbox idempotency, service privacy, and rollback.",
+    "Implement the smallest change with synthetic adapters and synchronized code, tests, docs, packaging, and Chancery contracts.",
+    "Run semantics/ci.sh offline; deployment and publication remain separate explicit operations."
+  ],
+  "checkpoints": [
+    "Repository meaning is always derived by replaying immutable contiguous revisions and typed effects; v1 has no mutable concept projection.",
+    "Project moves preserve stable ID and activation/scan cursors; exact root markers and deepest-root routing remain mandatory.",
+    "Effective admissions and confirmations ground the exact current event and decision; dismissals append unground effects instead of deleting history.",
+    "Nucleus has a neutral cwd, workspace none, no shell/web, one immutable managed tool, and no authority outside Semantics validation and transaction.",
+    "Mailbox commit/receipt is atomic, redelivery is idempotent, conflicting replay is rejected, and unsafe retry is refused.",
+    "CI and packaging tests are offline, use fakes, finish within 60 seconds, and produce body-free logs."
+  ],
+  "adaptation": [
+    "Publish a new immutable schema or toolset version whenever registered meaning changes.",
+    "Add a versioned SQLite migration and full database-plus-sidecars rollback proof for schema changes.",
+    "Scale event fixtures across admission confidence, confirmations, dismissals, moves, pauses, transport ambiguity, and duplicate delivery when those boundaries change."
+  ],
+  "stop_when": [
+    "An upstream fact cannot be obtained through its published read-only contract.",
+    "A persistent migration, mailbox change, or deploy transition lacks a deterministic recovery boundary.",
+    "A change would expose project workspace or body-bearing logs, make model output authoritative, or require Chancery at runtime."
+  ],
+  "interfaces": [
+    {"label": "CI", "invocation": "semantics/ci.sh"},
+    {"label": "Architecture", "invocation": "semantics/docs/architecture.md"},
+    {"label": "Installation", "invocation": "semantics/docs/system-installation.md"}
+  ],
+  "does_not_authorize": ["Deploying, deleting retained state, mutating upstream products, or publishing a release as a side effect of development."],
+  "manual": "manuals/develop-change.md"
+}

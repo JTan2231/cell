@@ -1,0 +1,19 @@
+#!/bin/zsh
+
+unsetopt VERBOSE XTRACE
+
+if [[ -x /opt/homebrew/bin/codex ]]; then
+    codex_path=/opt/homebrew/bin/codex
+elif [[ -x "$HOME/.local/bin/codex" ]]; then
+    codex_path="$HOME/.local/bin/codex"
+else
+    print -u2 -- 'decisions daily: Codex executable is unavailable'
+    exit 1
+fi
+
+exec /usr/bin/env -i \
+    HOME="$HOME" \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    CONVERSATIONS_CODEX="$codex_path" \
+    DECISIONS_DATABASE="$HOME/Library/Application Support/Decisions/decisions.db" \
+    "$HOME/.local/bin/decisions" daily run --scheduled

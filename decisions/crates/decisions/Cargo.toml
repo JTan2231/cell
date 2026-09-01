@@ -1,0 +1,23 @@
+[package]
+name = "decisions"
+version = "0.3.0"
+edition.workspace = true
+
+[dependencies]
+clap.workspace = true
+conversations = { path = "../../../conversations/crates/conversations" }
+fs2.workspace = true
+libc.workspace = true
+nucleus-client.workspace = true
+nucleus-core.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+time = { workspace = true, features = ["local-offset"] }
+tokio.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,0 +1,16 @@
+{
+  "description": "Decisions records completed Codex turns for incremental enacted-decision observation.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.local/bin/decisions\" observe ingest",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

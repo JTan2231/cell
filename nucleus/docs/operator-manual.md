@@ -49,6 +49,9 @@ separately maintained discovery catalog.
 | Annals | Immutable source material should be retained or reconciled with an evidence-grounded conceptual corpus, or that corpus should be searched or explored. | Retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, or account telemetry. |
 | Weaver | Authored repository inputs should become the current five-stage public-facing narrative outputs. | Current-run admission, stage order and input snapshots, repository output writes, validation, cancellation intent, and recovery. | Publishing, editing a public profile, treating generated text as factual authority, or general job orchestration. |
 | Email | A plain-text email should be sent to the single fixed recipient. | The synchronous Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, or agent execution. |
+| Conversations | Codex tasks on this Mac should be listed, inspected, or searched. | A read-only normalized view over the normal user's Codex App Server. | Decision classification, durable projections, live-process supervision, or Nucleus's isolated job history. |
+| Decisions | Post-activation explicit user settlements enacted by a same-turn completed file change should be retained, reviewed, or delivered as a daily digest. | The observer baseline, completed-turn coverage, decision candidates, source anchors, review state, cutoff-bounded daily projections, frozen digest renders, and delivery attempts. | Raw transcript export, decisions without same-turn effects, treating file activity or assistant behavior as authority, arbitrary email, or Nucleus execution history. |
+| Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from Decisions lifecycle events. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, intake policy, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, transcript storage, or replacing Decisions review authority. |
 | Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, harness validation and supervision, credential serialization, cancellation, exact harness-stdout observations, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, requester retry policy, or reporting materializations. |
 | Annals Usage | Annals-attributed model consumption, account allowance, login, or the Annals-to-Nucleus execution path must be inspected. | Live calculation over Annals attribution and Nucleus output atoms, plus Annals-facing budget and diagnostic commands. | Nucleus runtime authority, durable reporting projections, Codex credential storage, Annals corpus success, or general job orchestration. |
 | Codex | Nucleus needs an inspected harness and account protocol implementation. | Its executable and app-server behavior. | Requester domain policy or a second credential authority for Nucleus jobs. |
@@ -60,6 +63,8 @@ Typical routing examples:
 - “What does the corpus say about predicate locking?” is an Annals query.
 - “Build the current public-facing narrative” is Weaver work.
 - “Email me this update” is Email work.
+- “What does this project mean by grounding?” is a Semantics query when that
+  folder is registered.
 - “Could this new local project use an agent?” starts with the new-requester
   checklist in this manual.
 - “Fix this now” is ordinary immediate work, not automatically a Todo.
@@ -80,6 +85,9 @@ annals --version
 annals-usage --version
 todo --version
 email --version
+conversations --version
+decisions --version
+semantics --version
 chancery --version
 chancery doctor
 weaver --version
@@ -100,9 +108,11 @@ reason.
 ## Topology and authority
 
 ```text
-Todo research --\
-Annals ----------+--> Nucleus ----------> Codex app-server ----------> account
-Weaver ----------/
+Todo research -----\
+Annals -------------+
+Weaver -------------+--> Nucleus ----------> isolated Codex app-server --> account
+Decisions observer -+
+Semantics worker ---/
    |                  |                        |
    |                  |                        `-- isolated job process
    |                  |
@@ -110,12 +120,18 @@ Weaver ----------/
    |                  |-- Nucleus-owned Codex authentication
    |                  `-- durable requester-tool mailbox
    |
-   `-- Annals corpus, inbox, reconciliation, and recovery authority
+   `-- requester-owned domain state, receipts, and recovery authority
 
 Annals Usage <------ Nucleus output atoms and account reads
 Todo SQLite <------- Todo's validated stage tools and explicit decisions
 Weaver outputs <---- Weaver's detached repository worker
 Email -------------> Resend
+Conversations ------> normal-user Codex app-server
+Codex Stop hook ----> Decisions SQLite observation queue
+Decisions observer -> Conversations
+Decisions daily ----> Decisions SQLite ----> Email ----> Resend
+Decisions lifecycle --> Semantics --> Conversations exact cwd
+Semantics -----------> registered project semantic repositories
 
 installed product releases -- publish --> Chancery provider bundles
 interactive agent ----------- reads ----> Chancery
@@ -139,14 +155,51 @@ Email is a synchronous CLI that sends plain-text messages directly to Resend.
 It creates no Nucleus job, uses no Nucleus authentication, owns no daemon or
 domain database, and does not depend on Nucleus health.
 
+Conversations is a stateless read-only adapter over the normal user's Codex App
+Server. It is deliberately separate from Nucleus's isolated per-job Codex home
+and does not infer process liveness from persisted task status. Each invocation
+owns and terminates a private process group for its selected Codex command and
+inherited App Server descendants; unrelated Codex processes remain outside
+that cleanup scope. Decisions' synchronous Codex `Stop` hook persists only a
+session/turn correlation. Its single-worker LaunchAgent resolves one completed
+root turn at a time through Conversations and uses Nucleus only for bounded
+candidate classification. A successfully completed nonempty file change makes
+the turn eligible, but only an explicit user settlement is authority. Initial
+classification sees a bounded slice containing all eligible current-turn user
+authorities, the immediately preceding assistant proposal needed to interpret
+them when one exists, and at most the final assistant result—not the whole turn
+or thread. Prior normalized context is disclosed only for one validated
+expansion. Decisions makes observation and projection success authoritative in
+its own SQLite database. Its 09:00 sender normally projects already-observed
+results with no model work, invoking Email only after complete post-baseline
+coverage as of a durable turn-completion cutoff and a frozen render. A turn
+completing later can enter a manual rebuild of its authority day, but does not
+auto-amend an accepted scheduled delivery or carry into another day.
+Exceptional missed-hook catch-up can still invoke Nucleus serially. The
+schedule and recurring-disclosure policy remain Decisions concerns.
+
+Semantics is a project registry and one serial decision-reconciliation worker.
+Registration starts at a captured Decisions lifecycle watermark and requires an
+exact `Semantics-Project: ID` line in the registered root's `AGENTS.md`. The
+worker resolves the event's authority task through Conversations, routes its
+exact cwd to the deepest registered root, and retains only participating or
+genuinely unattributable intake. High-confidence admissions reconcile
+immediately; medium-confidence admissions wait for Decisions review. Semantics
+submits only normalized decision data and the selected repository snapshot to
+Nucleus, with workspace access `none`, no shell, and no web. Its SQLite commit,
+not Nucleus completion or generated prose, is semantic authority. Chancery
+documents how agents discover and query that repository but is not a runtime
+dependency.
+
 Nucleus is a per-user execution coordinator, not a project registry or workflow
 engine, capability directory, or documentation service. A requester submits one
 closed, versioned invocation. Nucleus validates it, starts one harness attempt,
 retains exact harness stdout, and coordinates dynamic tool calls. The requester
 continues to own the work that motivated the job.
 
-Nucleus, Annals, Annals Usage, Todo, Chancery, Weaver, and Email share the Cell
-source repository, Cargo workspace, and lockfile. That source layout does not
+Nucleus, Annals, Annals Usage, Todo, Chancery, Weaver, Email, Conversations,
+Decisions, and Semantics share the Cell source repository, Cargo workspace, and
+lockfile. That source layout does not
 merge their release, installation, state, backup, recovery, or domain-success
 boundaries. Product runtimes do not call Chancery. Their installers only
 co-stage owned documentation and publish one provider selector.
@@ -157,11 +210,13 @@ The following distinctions are operationally important:
    stage-specific proposal, assessment, or design operation is durably
    recorded; authorization is a separate Todo decision. Annals succeeds
    according to its retained reconciliation and delivery state. Weaver succeeds
-   only after it persists and validates the required narrative outputs. A
-   model's final prose is diagnostic.
+   only after it persists and validates the required narrative outputs.
+   Semantics succeeds when its validated revision and intake receipt are
+   durable. A model's final prose is diagnostic.
 2. **A domain commit can outlive a runtime failure.** If Todo records its
-   validated stage result or Annals records its reconciliation and Codex later
-   fails, the durable domain result remains authoritative.
+   validated stage result, Annals records its reconciliation, or Semantics
+   appends its revision and Codex later fails, the durable domain result remains
+   authoritative.
 3. **A requester restart differs from a daemon restart.** A requester can
    rediscover a durable pending tool call. A Nucleus restart cannot resume a
    Codex process; startup marks unfinished attempts `lost` and their jobs failed.
@@ -178,11 +233,21 @@ The following distinctions are operationally important:
 ~/.local/bin/nucleus
 ~/.local/libexec/nucleusd
 ~/.local/bin/email
+~/.local/bin/conversations
+~/.local/bin/decisions
+~/.local/bin/semantics
+~/.codex/hooks.json
 ~/Library/LaunchAgents/org.nucleus.daemon.plist
+~/Library/LaunchAgents/org.decisions.daily-email.plist
+~/Library/LaunchAgents/org.decisions.observer.plist
+~/Library/LaunchAgents/org.semantics.worker.plist
 
 ~/Library/Application Support/Chancery/providers/
   nucleus -> Nucleus's current release share/chancery/nucleus
   email -> Email's current release share/chancery/email
+  conversations -> Conversations's current release share/chancery/conversations
+  decisions -> Decisions's current release share/chancery/decisions
+  semantics -> Semantics's current release share/chancery/semantics
 
 ~/Library/Application Support/Nucleus/
   install/
@@ -201,6 +266,24 @@ The following distinctions are operationally important:
 ~/Library/Logs/Nucleus/
   nucleusd.stdout.log
   nucleusd.stderr.log
+
+~/Library/Application Support/Decisions/
+  decisions.db
+  install/
+
+~/Library/Logs/Decisions/
+  daily-email.stdout.log
+  daily-email.stderr.log
+  observer.stdout.log
+  observer.stderr.log
+
+~/Library/Application Support/Semantics/
+  semantics.db
+  install/
+
+~/Library/Logs/Semantics/
+  worker.stdout.log
+  worker.stderr.log
 ```
 
 The complete Nucleus state directory is sensitive. The database can contain
@@ -225,6 +308,34 @@ launchd invokes Todo at 09:00 machine-local time, its zsh runner sources
 `RESEND_API_KEY` from `~/.zshrc`, and its logs live under
 `~/Library/Logs/Todo/`. It is not part of `org.nucleus.daemon` or Nucleus's
 credential lease.
+
+Conversations has a content-addressed installation but no application database.
+Decisions owns its schema-version-3 database, write-once activation baseline,
+installed releases, provider selector, exact user `Stop` hook, 60-second
+observer LaunchAgent, 09:00 daily-email LaunchAgent, and body-free logs. The
+deployer refuses any pre-existing foreign `~/.codex/hooks.json`; it never merges,
+overwrites, removes, or trusts one. Codex owns exact-definition review through
+`/hooks`, and the actual client surface must be canaried after trust. Both
+LaunchAgents can become Nucleus requesters—the observer routinely and the daily
+service only during exceptional missed-observation catch-up—so quiesce both for
+Nucleus maintenance. A Decisions schema cutover additionally suspends its public
+hook command and drains the three-second hook timeout before the SQLite backup.
+Default write-once activation stores the next whole Unix second, excluding the
+cutover second; only after that durable boundary does deployment publish the
+live hook, command, plists, and services. Missed events are reconciled
+afterward. If rollback cannot prove database quiescence or restore every
+artifact, it leaves both services stopped and the public command disabled while
+retaining the private transaction backup. Email still owns the Resend
+credential and immediate transport.
+
+Semantics owns its content-addressed installation, provider selector,
+schema-version-1 database, body-free worker logs, and 60-second worker
+LaunchAgent. The worker is the only automatic reconciler and admits at most one
+Nucleus job at a time. Deployment stops that worker, proves database
+quiescence, preserves the database and sidecars for rollback, validates the
+candidate against installed Decisions, Conversations, and Nucleus, then
+publishes and restarts it. Project folders contain only the participation
+marker; they do not contain or own Semantics database state.
 
 ## Compatibility model
 
@@ -283,8 +394,8 @@ currently owns the lease; it does not by itself mean the credential is invalid.
 
 Nucleus has no global drain mode. Quiescence is established at its requesters:
 
-1. Do not start a synchronous Todo creation, a new Weaver submission, or
-   another manual requester job.
+1. Do not start a synchronous Todo creation, a new Weaver submission,
+   `decisions observe process`, or another manual requester job.
 2. If Weaver has a nonterminal current run, select its exact run ID and let it
    settle through `weaver wait RUN_ID`.
 3. Pause Annals and wait for its active delivery to settle:
@@ -294,22 +405,37 @@ Nucleus has no global drain mode. Quiescence is established at its requesters:
    annals inbox status
    ```
 
-4. Inspect Nucleus `accepted`, `running`, and `waiting-on-requester` jobs.
-5. Wait for them to become terminal. Cancel a job only when abandoning that
+4. Boot out both Decisions services and the Semantics worker so their periodic
+   work cannot admit new jobs. The `Stop` hook may still enqueue a content-free
+   correlation, which is safe to process after maintenance:
+
+   ```sh
+   launchctl bootout "gui/$(id -u)/org.decisions.observer"
+   launchctl bootout "gui/$(id -u)/org.decisions.daily-email"
+   launchctl bootout "gui/$(id -u)/org.semantics.worker"
+   ```
+
+5. Inspect Nucleus `accepted`, `running`, and `waiting-on-requester` jobs.
+6. Wait for them to become terminal. Cancel a job only when abandoning that
    exact runtime attempt is intended:
 
    ```sh
    nucleus jobs cancel JOB_ID
    ```
 
-6. Perform the service, storage, or harness operation.
-7. Verify Nucleus and requester canaries before resuming Annals or admitting
-   new Weaver work.
+7. Perform the service, storage, or harness operation.
+8. Verify Nucleus and requester canaries before resuming Annals, both Decisions
+   services, the Semantics worker, or new Weaver work.
 
 Stopping or replacing `nucleusd` while a job is active makes that attempt
 `lost`. The requester—not Nucleus—decides whether a new domain attempt is safe.
 The Todo daily-email LaunchAgent is not a Nucleus requester and does not need
-to be paused to establish Nucleus quiescence.
+to be paused to establish Nucleus quiescence. Decisions' observer can start a
+classification job every 60 seconds; its daily service can do so when
+reconciling a missed observation. Semantics can start one reconciliation job
+every 60 seconds. Restore all three product-owned services only after Nucleus is
+ready. Do not disable or reset the Decisions baseline or Semantics scan cursors:
+their durable queues are the intended recovery path.
 
 ### Authentication recovery
 
@@ -517,6 +643,18 @@ Todo's current immutable requester toolsets are
 execute implementation. The historical Todo `create_todo` schema and toolset
 remain immutable for compatibility; current `todo new` does not use them.
 
+Decisions' current immutable requester toolset is
+`decisions/turn-classification/1`. It returns complete per-authority decision or
+no-decision verdicts for one serial observation scope. The historical
+`decisions/daily-classification/1` registration and decoder remain available
+for retained `legacy_scan` recovery; new daily projections do not submit that
+whole-thread job.
+
+Semantics' current immutable requester toolset is
+`semantics/semantic-reconciliation/1`. Its one managed call validates and
+atomically appends a project semantic revision; it cannot read the project
+filesystem, use shell or web tools, or change Decisions review state.
+
 ### 6. Implement the lifecycle
 
 A normal requester flow is:
@@ -605,6 +743,9 @@ provider registry or documentation storage.
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
 | Weaver workflow state, stage prompts, repository inputs or outputs, validation, cancellation, recovery, or deployment | Weaver | Preserve its Nucleus invocation and correlation contract; Nucleus does not gain narrative repository authority or retry policy. |
 | Email content, delivery, Resend access, fixed addresses, or deployment | Email | Keep the direct Resend path independent of Nucleus; Nucleus gains no email fields, credential, or delivery authority. |
+| Codex task enumeration, normalized transcript reads, App Server compatibility, or Conversations deployment | Conversations | Keep it read-only and separate from Nucleus's private Codex home; consumers must not treat persisted status as live-process proof. |
+| Decision semantics, candidates, reviews, daily completeness, digest rendering, schedule, or Decisions deployment | Decisions | Preserve source anchors and Nucleus job correlation; Nucleus gains no decision fields, and Email gains no schedule or digest state. |
+| Project registration, semantic concepts, grounding, revision history, decision intake, reconciliation policy, or Semantics deployment | Semantics | Preserve Decisions event identity, exact Conversations cwd routing, and Nucleus job correlation; no upstream gains Semantics state or success authority. |
 | New portable invocation meaning or HTTP behavior | Nucleus core/client/daemon | Version the public contract, update examples/tests/docs, then update affected requesters in compatible order. |
 | Codex executable or app-server semantics | Nucleus Codex adapter | Prove the exact version, deploy Nucleus, then run generic and requester canaries. |
 | Nucleus database schema or retention | Nucleus store | Quiesce, back up, migrate and validate, and define database-aware rollback before deployment. |
@@ -613,7 +754,7 @@ provider registry or documentation storage.
 | Credential or credential-lease behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and canary every requester. |
 | Nucleus service layout or installer | Nucleus CLI/packaging | Preserve state/log ownership, rollback, launchd behavior, and requester configuration. |
 | Chancery bundle schema, catalog, contract reader, or directory installation | Chancery | Preserve read-only behavior, failure isolation, complete installed inventory, and provider-owned selectors; do not introduce a product runtime dependency. |
-| A product's published capability or operation | Owning product | Stage the version-matched bundle with its release, validate it in product CI, require the complete root CI to accept the seven-provider source dependency graph, and update only that product's Chancery selector. |
+| A product's published capability or operation | Owning product | Stage the version-matched bundle with its release, validate it in product CI, require the complete root CI to accept the ten-provider source dependency graph, and update only that product's Chancery selector. |
 
 ## Guarded change playbooks
 
@@ -802,6 +943,20 @@ Sending or previewing Todo's email digest does not exercise Nucleus and is not
 a requester canary. A Weaver canary replaces the selected narrative's current
 outputs; use a deliberate fixture or repository and validate the five persisted
 files rather than relying on Nucleus completion.
+For Decisions, canary only after its write-once baseline exists. Create one
+deliberate effectful root turn whose user message explicitly settles a choice,
+then verify the completed observation, source span, candidate, and correlated
+`decisions/turn-classification/1` job. A routine morning build over already
+observed coverage creates no Nucleus job and is not a requester canary. Use an
+isolated Decisions database when a durable canary record would be misleading.
+Conversations inspection alone is read-only and is not a Nucleus canary.
+For Semantics, register only an intended folder at the current Decisions
+watermark. A seed proves repository replay without creating a Nucleus job. A
+requester canary requires a new qualifying decision after activation: verify
+the intake receipt and committed semantic revision, not merely a terminal
+Nucleus job. Do not fabricate a durable decision or semantic revision solely to
+make a canary green; use an isolated database when no real project decision is
+available.
 
 ## Where facts and changes belong
 
@@ -883,6 +1038,29 @@ directory.
 - [README](/Users/joey/rust/cell/email/README.md)
 - [CLI contract](/Users/joey/rust/cell/email/docs/cli.md)
 - [User-owned installation](/Users/joey/rust/cell/email/docs/system-installation.md)
+
+### Conversations
+
+- [Documentation index](/Users/joey/rust/cell/conversations/docs/README.md)
+- [Architecture](/Users/joey/rust/cell/conversations/docs/architecture.md)
+- [CLI contract](/Users/joey/rust/cell/conversations/docs/cli.md)
+- [User-owned installation](/Users/joey/rust/cell/conversations/docs/system-installation.md)
+
+### Decisions
+
+- [Documentation index](/Users/joey/rust/cell/decisions/docs/README.md)
+- [Architecture](/Users/joey/rust/cell/decisions/docs/architecture.md)
+- [CLI contract](/Users/joey/rust/cell/decisions/docs/cli.md)
+- [Data model](/Users/joey/rust/cell/decisions/docs/data-model.md)
+- [User-owned installation](/Users/joey/rust/cell/decisions/docs/system-installation.md)
+
+### Semantics
+
+- [Documentation index](/Users/joey/rust/cell/semantics/docs/README.md)
+- [Architecture](/Users/joey/rust/cell/semantics/docs/architecture.md)
+- [CLI contract](/Users/joey/rust/cell/semantics/docs/cli.md)
+- [Data model](/Users/joey/rust/cell/semantics/docs/data-model.md)
+- [User-owned installation](/Users/joey/rust/cell/semantics/docs/system-installation.md)
 
 ### Chancery
 
