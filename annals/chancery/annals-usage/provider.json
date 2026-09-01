@@ -3,7 +3,7 @@
   "provider": {
     "id": "annals-usage",
     "name": "Annals Usage",
-    "release": "0.4.0"
+    "release": "0.4.1"
   },
   "entries": [
     "entries/consumption-inspect.json",
