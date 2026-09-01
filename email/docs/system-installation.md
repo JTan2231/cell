@@ -3,6 +3,11 @@
 Email is synchronous. It owns no daemon, configuration, delivery database, or
 state beyond immutable install releases and their selectors.
 
+An upstream product may own scheduling, occurrence state, message rendering,
+and standing send authority. It can invoke Email with
+`--idempotency-key KEY`, but Email remains an immediate transport and does not
+acquire any of those responsibilities.
+
 ## Deploy
 
 Verify `joeytan.dev` in Resend, create a sending-capable API key, and keep the
@@ -44,6 +49,8 @@ payload with a scrubbed environment containing that key, `HOME`, a fixed
 system `PATH`, and ordinary shell bookkeeping variables. Other caller
 credentials are not forwarded. The wrapper preserves standard input, and the
 secret is not stored in Email files or passed in command arguments.
+Help and version probes bypass `.zshrc` and execute the release payload
+directly, so an upstream readiness check does not read transport credentials.
 
 The release identity covers the payload, wrapper, deployer, and Chancery
 provider bundle. The installer validates an existing release before reuse,
@@ -69,6 +76,13 @@ Use a harmless, uniquely identifiable message and then confirm it in Gmail:
 email 'Email CLI validation' 'The installed Email CLI can send through Resend.'
 ```
 
+For a product-owned occurrence, use the product's stable key with its frozen
+payload:
+
+```sh
+email --idempotency-key 'product/event/2026-09-01' 'Subject' - < body.txt
+```
+
 Command success proves Resend acceptance. Gmail receipt must be observed
 separately. Sending discloses the exact subject and body to Resend and Gmail;
-Email retains neither one locally.
+a caller key is also disclosed to Resend. Email retains none of them locally.

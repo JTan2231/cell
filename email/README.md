@@ -7,12 +7,15 @@ subject and plain-text body immediately through Resend from
 ```sh
 email 'Subject' 'Body'
 email 'Subject' - < body.txt
+email --idempotency-key 'decisions/daily/2026-09-01' 'Subject' - < body.txt
 ```
 
-The second form reads the body from standard input. There is no recipient
-option, draft store, HTML mode, attachment support, scheduler, daemon, or
-delivery database. A successful command means Resend accepted the submission;
-it does not prove final Gmail delivery.
+The second form reads the body from standard input. An authorized calling
+product can supply one stable idempotency key for one exact message; ordinary
+interactive calls receive a fresh `email/<UUIDv7>` key. Email still sends
+immediately. There is no recipient option, draft store, HTML mode, attachment
+support, scheduler, daemon, or delivery database. A successful command means
+Resend accepted the submission; it does not prove final Gmail delivery.
 
 ## Build, test, and install
 

@@ -110,6 +110,7 @@ grep -F "provider release $provider_version does not match candidate $mismatch_v
 cat >"$home/.zshrc" <<'EOF'
 export RESEND_API_KEY='resend-test-secret'
 export OTHER_CREDENTIAL='must-not-leak'
+: >"$HOME/email-zshrc-sourced"
 EOF
 
 deploy "$candidate_one" >/dev/null
@@ -133,8 +134,14 @@ provider="$providers/email"
 [ ! -e "$home/.local/bin/chancery" ]
 [ "$(HOME="$home" "$cli" marker)" = one ]
 
+rm -f "$home/email-zshrc-sourced"
+HOME="$home" "$cli" --help >"$temporary/help.out"
+grep -Fx 'fake Email help' "$temporary/help.out" >/dev/null
+[ ! -e "$home/email-zshrc-sourced" ]
+
 printf '%s' 'first line
-second line' | HOME="$home" "$cli" 'A subject' - \
+second line' | HOME="$home" "$cli" \
+    --idempotency-key 'product/event/2026-09-01' 'A subject' - \
     >"$temporary/send.out"
 grep -Fx 'Sent email_test' "$temporary/send.out" >/dev/null
 grep -Fx 'RESEND_API_KEY=resend-test-secret' "$home/email-environment.log" >/dev/null
@@ -144,8 +151,10 @@ if grep -F 'OTHER_CREDENTIAL=' "$home/email-environment.log" >/dev/null; then
     printf '%s\n' 'test: wrapper leaked an unrelated credential' >&2
     exit 1
 fi
-[ "$(sed -n '1p' "$home/email-arguments.log")" = 'A subject' ]
-[ "$(sed -n '2p' "$home/email-arguments.log")" = - ]
+[ "$(sed -n '1p' "$home/email-arguments.log")" = '--idempotency-key' ]
+[ "$(sed -n '2p' "$home/email-arguments.log")" = 'product/event/2026-09-01' ]
+[ "$(sed -n '3p' "$home/email-arguments.log")" = 'A subject' ]
+[ "$(sed -n '4p' "$home/email-arguments.log")" = - ]
 [ "$(cat "$home/email-stdin.log")" = 'first line
 second line' ]
 

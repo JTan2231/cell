@@ -20,6 +20,9 @@ const RETRY_DELAYS: [Duration; 2] = [Duration::from_millis(100), Duration::from_
     about = "Send a plain-text email to j.tan2231@gmail.com"
 )]
 struct Cli {
+    /// Stable caller-owned key used to deduplicate this exact request.
+    #[arg(long, value_name = "KEY", value_parser = parse_idempotency_key)]
+    idempotency_key: Option<String>,
     /// Email subject.
     subject: String,
     /// Plain-text body, or - to read UTF-8 text from stdin.
@@ -68,9 +71,9 @@ async fn main() {
 
 async fn run() -> AppResult<()> {
     let cli = Cli::parse();
+    let idempotency_key = cli.idempotency_key.unwrap_or_else(new_idempotency_key);
     let body = read_body(&cli.body, io::stdin().lock())?;
     let api_key = resend_api_key()?;
-    let idempotency_key = new_idempotency_key();
     let email_id = send_to(
         RESEND_ENDPOINT,
         &api_key,
@@ -112,6 +115,16 @@ fn validate_api_key(api_key: String) -> AppResult<String> {
 
 fn new_idempotency_key() -> String {
     format!("email/{}", Uuid::now_v7())
+}
+
+fn parse_idempotency_key(value: &str) -> Result<String, String> {
+    if value.is_empty() || value.len() > 256 {
+        return Err("must contain between 1 and 256 ASCII characters".to_owned());
+    }
+    if !value.bytes().all(|byte| byte.is_ascii_graphic()) {
+        return Err("must contain only visible ASCII characters without whitespace".to_owned());
+    }
+    Ok(value.to_owned())
 }
 
 async fn send_to(
@@ -201,7 +214,10 @@ mod tests {
     use serde_json::Value;
     use uuid::{Uuid, Version};
 
-    use super::{Cli, FROM, TO, new_idempotency_key, read_body, send_to, validate_api_key};
+    use super::{
+        Cli, FROM, TO, new_idempotency_key, parse_idempotency_key, read_body, send_to,
+        validate_api_key,
+    };
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
     type TestServer = (
@@ -222,6 +238,7 @@ mod tests {
         assert_eq!(
             cli,
             Cli {
+                idempotency_key: None,
                 subject: "A subject".to_owned(),
                 body: "A body".to_owned(),
             }
@@ -230,6 +247,31 @@ mod tests {
         assert!(Cli::try_parse_from(["email", "subject", "body", "extra"]).is_err());
         assert!(
             Cli::try_parse_from(["email", "subject", "body", "--to", "other@example.com"]).is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cli_accepts_a_caller_owned_idempotency_key() -> TestResult {
+        let cli = Cli::try_parse_from([
+            "email",
+            "--idempotency-key",
+            "decisions/daily/2026-09-01",
+            "A subject",
+            "A body",
+        ])?;
+        assert_eq!(
+            cli,
+            Cli {
+                idempotency_key: Some("decisions/daily/2026-09-01".to_owned()),
+                subject: "A subject".to_owned(),
+                body: "A body".to_owned(),
+            }
+        );
+        assert!(Cli::try_parse_from(["email", "--idempotency-key", "subject",]).is_err());
+        assert!(
+            Cli::try_parse_from(["email", "--idempotency-key", "", "A subject", "A body",])
+                .is_err()
         );
         Ok(())
     }
@@ -275,6 +317,31 @@ mod tests {
             Some(Version::SortRand)
         );
         Ok(())
+    }
+
+    #[test]
+    fn caller_idempotency_keys_are_strict_header_values() {
+        let longest = "a".repeat(256);
+        assert_eq!(
+            parse_idempotency_key("decisions/daily/2026-09-01"),
+            Ok("decisions/daily/2026-09-01".to_owned())
+        );
+        assert_eq!(parse_idempotency_key(&longest), Ok(longest));
+
+        for invalid in [
+            "",
+            "has space",
+            " leading",
+            "trailing\t",
+            "line\nbreak",
+            "café",
+        ] {
+            assert!(
+                parse_idempotency_key(invalid).is_err(),
+                "accepted invalid key: {invalid:?}"
+            );
+        }
+        assert!(parse_idempotency_key(&"a".repeat(257)).is_err());
     }
 
     #[tokio::test]

@@ -1,6 +1,6 @@
 {
   "id": "email.message.send",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -8,7 +8,8 @@
   "summary": "Send a caller-provided subject and plain-text body immediately to the fixed personal recipient through Resend.",
   "use_when": [
     "The user explicitly asks to send an email now to their fixed personal inbox and supplies or approves the subject and body.",
-    "A previously drafted message should now be sent exactly as approved."
+    "A previously drafted message should now be sent exactly as approved.",
+    "An installed local product has explicit standing authority for its defined immediate notification, owns the occurrence and exact frozen message, and supplies a stable idempotency key."
   ],
   "do_not_use_when": [
     "The user asks only to draft, revise, preview, or discuss an email.",
@@ -19,10 +20,12 @@
   "effects": [
     "Reads `RESEND_API_KEY` from the process environment and makes an authenticated network request to Resend.",
     "Discloses the supplied subject and body to Resend and the fixed recipient's Gmail provider.",
+    "Uses either a fresh generated idempotency key or a validated caller-supplied key in the Resend request.",
     "Uses product-fixed sender and recipient addresses; callers cannot override either address."
   ],
   "authority": [
     "Email owns the fixed addresses, request construction, and command result.",
+    "A calling product owns its send authorization, occurrence state, exact message, and caller-supplied idempotency key; invoking Email does not create that authority.",
     "Resend owns submission acceptance and its message record; Gmail owns final delivery and inbox receipt."
   ],
   "success": [
@@ -32,11 +35,12 @@
   "failure_and_recovery": [
     "An input, authentication, transport, or Resend rejection exits unsuccessfully and reports a secret-safe error.",
     "One invocation retries transport errors, rate limits, and server errors at most twice with the same frozen request and idempotency key.",
-    "Email has no delivery queue or retained message state; resolve the reported cause and issue a new explicit send request if retry is intended.",
+    "Email has no delivery queue or retained message state; resolve the reported cause and retry only under the user's explicit request or the calling product's existing send authority.",
     "After ambiguous transport failure, inspect Resend before retrying when avoiding a duplicate matters."
   ],
   "privacy": [
     "The exact subject and body leave the machine for Resend and Gmail when the command sends.",
+    "A caller-supplied idempotency key also leaves the machine for Resend and must not contain secrets or message content.",
     "Email does not retain the subject, body, API key, or a delivery history in local product state.",
     "The installed wrapper sources `~/.zshrc`, extracts only `RESEND_API_KEY`, and scrubs unrelated caller environment variables before starting the payload."
   ],
@@ -48,10 +52,15 @@
     {
       "label": "Send body from standard input",
       "invocation": "/Users/joey/.local/bin/email SUBJECT -"
+    },
+    {
+      "label": "Send one product-owned occurrence",
+      "invocation": "/Users/joey/.local/bin/email --idempotency-key KEY SUBJECT -"
     }
   ],
   "does_not_authorize": [
     "Sending when the user requested only a draft, preview, revision, or explanation.",
+    "Treating the presence of `--idempotency-key` as scheduling authority, standing send authority, or retained occurrence state.",
     "Changing the fixed sender, recipient, Resend account, or API key.",
     "Treating Resend acceptance as proof of final Gmail delivery."
   ],

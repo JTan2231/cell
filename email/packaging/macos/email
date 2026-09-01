@@ -1,6 +1,13 @@
 #!/bin/zsh
 
 unsetopt VERBOSE XTRACE
+
+case "${1-}" in
+    --help|-h|--version|-V)
+        exec "$HOME/Library/Application Support/Email/install/current/libexec/email" "$@"
+        ;;
+esac
+
 if [[ -f "${HOME:?}/.zshrc" ]]; then
     source "$HOME/.zshrc" >/dev/null 2>&1
 fi
