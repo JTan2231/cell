@@ -3,7 +3,7 @@
   "provider": {
     "id": "decisions",
     "name": "Decisions",
-    "release": "0.3.0"
+    "release": "0.3.1"
   },
   "entries": [
     "entries/daily-digest.json",
