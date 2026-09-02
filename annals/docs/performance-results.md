@@ -55,11 +55,12 @@ snapshots.
 
 ## Cost shape
 
-The selected revision's `CorpusState` is held in memory while resolving,
-validating, browsing, diffing, reverting, or planning a shake. It contains
-concepts, explicit edges, and evidence, so state size and whole-state invariant
-checks grow with all three. Reaching revision N also reduces the typed effects
-from revisions 1 through N; there is intentionally no trusted snapshot cache.
+The selected revision's `CorpusState` is held in memory while resolving or
+validating a reconciliation, browsing, diffing, reverting, or planning a shake.
+It contains concepts, explicit edges, and evidence, so state size and
+whole-state invariant checks grow with all three. Reaching revision N also
+reduces the typed effects from revisions 1 through N; there is intentionally no
+trusted snapshot cache.
 
 Applying a pending transition or confirmed shake validates the complete
 projected state, then stores only canonical typed differences. Mutation work

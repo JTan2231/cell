@@ -20,19 +20,19 @@ cd /Users/joey/rust/cell
   --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET>
 ```
 
-The deployer stages a complete content-addressed release, validates candidate
+The deployer stages a complete content-addressed release, checks candidate
 programs and the Nucleus boundary, establishes Annals maintenance, quiesces
 scheduled work, performs supported migration, switches the release and
-LaunchAgent configuration, and validates the installed commands. It does not
-stop, replace, or take ownership of Nucleus.
+LaunchAgent configuration, and checks the installed commands. It does not stop,
+replace, or take ownership of Nucleus.
 
 The inbox storage gate is not a deployment lock. A closed gate does not by
 itself reject an Annals deployment, globally stop the Nucleus service or
 independent Nucleus jobs, or block another product's deployment. The deployer
 still needs enough physical capacity to stage the release and write its backup,
-migration, validation, and rollback artifacts; any of those writes can fail
+migration, and rollback artifacts; any of those writes can fail
 when the shared filesystem is actually full. A probe error is distinct from a
-measured closed gate and can fail deployment status validation with
+measured closed gate and can fail deployment status inspection with
 `storage_probe_failed`. A deployment request authorizes only the deployer's
 documented effects. It does not authorize a model or agent to clear user data
 as separate storage remediation or to lower or disable the reserve. Either
@@ -60,11 +60,11 @@ boundary:
 
 It replaces the active library and spool as one rollback generation, imports
 the uncompleted backlog in preserved lane order, and resumes only after the new
-generation validates. Require explicit authority, retained prior state, and a
-verified backlog/recovery plan. It must not be inferred from a routine update
-request.
+generation passes its checks. Require explicit authority, retained prior state,
+and a verified backlog/recovery plan. It must not be inferred from a routine
+update request.
 
-## Validation
+## Verification
 
 After an authorized cutover, verify:
 
@@ -72,7 +72,7 @@ After an authorized cutover, verify:
 /Users/joey/.local/bin/annals --version
 /Users/joey/.local/bin/annals-usage --version
 /Users/joey/.local/bin/nucleus health
-/Users/joey/.local/bin/annals validate
+/Users/joey/.local/bin/annals stats
 /Users/joey/.local/bin/annals inbox status
 /Users/joey/.local/bin/annals-usage doctor
 ```

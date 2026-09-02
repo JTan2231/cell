@@ -242,7 +242,7 @@ configuration and keeps the companion `usage.toml` beside the Annals library.
 Running the same command again is the unattended update process. It drains the
 worker between jobs, takes a consistent Annals library backup, switches both
 binaries through one release selector, updates both configurations within a
-rollback-protected transaction, validates the result, and automatically
+rollback-protected transaction, verifies the result, and automatically
 restores the previous release if launchd cutover fails. Configuration,
 library data, logs, the operator pause state, and
 queued or archived sources are retained.
@@ -261,7 +261,7 @@ version-3 library to add bounded retry-event provenance while retaining its
 contents and spool. Version 3 remains the intentional fresh-state boundary;
 the one-time cutover from an older schema adds `--fresh-state` to the command
 above. That mode archives the old library, its sidecars, and the spool
-as one rollback generation, validates the empty replacement, imports the
+as one rollback generation, verifies the empty replacement, imports the
 uncompleted backlog while preserving priority choices and sequence order
 within each lane, explicitly resumes it, and only then wakes launchd. See the
 [system installation guide](docs/system-installation.md) for the guarded
@@ -273,7 +273,6 @@ library without `sudo`:
 
 ```sh
 annals stats
-annals validate
 annals inbox status
 annals inbox pause
 annals inbox register

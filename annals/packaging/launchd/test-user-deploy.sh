@@ -115,7 +115,7 @@ case "$command" in
     init)
         : >"$state/annals.db"
         ;;
-    validate)
+    stats)
         [ -f "$state/annals.db" ]
         ;;
     inbox)
@@ -406,7 +406,7 @@ if plutil -extract UserName raw -o - "$plist" >/dev/null 2>&1; then
     printf '%s\n' 'user LaunchAgent unexpectedly contains UserName' >&2
     exit 1
 fi
-HOME="$home" "$cli" validate >/dev/null
+HOME="$home" "$cli" stats >/dev/null
 
 first_release=$(readlink "$state/install/current")
 ln -s /preserved/provider "$chancery_providers/preserved"
@@ -475,7 +475,7 @@ grep -Fx preserved "$state/spool/duplicates/preserved" >/dev/null
 grep -Fx skipped "$state/spool/skipped/preserved" >/dev/null
 [ -f "$state/spool/.paused" ]
 [ "$(tail -n 6 "$state/candidate-commands.log" | tr '\n' ' ')" = \
-    'backup migrate validate inbox status validate inbox status ' ]
+    'inbox status backup migrate inbox status stats inbox status ' ]
 [ ! -e "$launchctl_log" ]
 deploy --no-start >/dev/null
 [ "$(readlink "$state/install/current")" = "$second_release" ]
@@ -569,8 +569,8 @@ running_release=$(readlink "$state/install/current")
 [ "$(stat -f '%Lp' "$state/codex-home/auth.json")" = 600 ]
 [ "$(tail -n 1 "$state/usage-doctor.log")" = \
     "doctor current=$second_release" ]
-[ "$(tail -n 10 "$state/candidate-commands.log" | tr '\n' ' ')" = \
-    'inbox status validate inbox status inbox run backup migrate validate inbox status validate inbox status ' ]
+[ "$(tail -n 8 "$state/candidate-commands.log" | tr '\n' ' ')" = \
+    'inbox status inbox status inbox run backup migrate inbox status stats inbox status ' ]
 
 printf '%s\n' '# rejected update' >>"$candidate"
 alternate_nucleus="$temporary/alternate-nucleus"

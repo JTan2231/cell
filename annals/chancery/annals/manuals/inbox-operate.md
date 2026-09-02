@@ -54,7 +54,7 @@ product's deployment; manual `annals integrate` is also outside this gate.
 Actual filesystem exhaustion can still make any operation sharing that storage
 fail when it needs to stage a release, create a backup, migrate a database, or
 write state or logs. An unreadable probe is distinct from measured low space
-and can make deployment status validation fail with `storage_probe_failed`.
+and can make deployment status inspection fail with `storage_probe_failed`.
 
 When storage is ready, Annals performs an authenticated Nucleus account
 preflight. Failure leaves the next job queued with attempts zero and no

@@ -33,7 +33,7 @@ use crate::model::{
 use crate::model_runner::{ModelSettings, Runner};
 use crate::render::{CommandOutput, render_terminal_text};
 use crate::resolver::{ResolvedEvidence, ResolvedOperation};
-use crate::{inbox, ingestion, liaison, resolver, validate};
+use crate::{inbox, ingestion, liaison, resolver};
 
 pub fn library_path(explicit: Option<&PathBuf>, config: &Config) -> Result<PathBuf, AppError> {
     let environment = std::env::var_os("ANNALS_LIBRARY");
@@ -83,7 +83,6 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
         },
         Command::Graph(args) => graph(path, args),
         Command::Shake(args) => shake(path, args, cli.json),
-        Command::Validate => validate_library(path),
         Command::Backup(args) => backup(path, &args.output),
         Command::Work(command) => match command {
             WorkCommand::Add(args) => add_work(path, args),
@@ -206,24 +205,6 @@ fn stats(path: &Path) -> Result<CommandOutput, AppError> {
         value.database_size_bytes
     );
     Ok(CommandOutput::new(to_value(&value)?, human))
-}
-
-fn validate_library(path: &Path) -> Result<CommandOutput, AppError> {
-    let connection = db::open_read(path)?;
-    let report = validate::validate(&connection)?;
-    if !report.valid {
-        let messages = report
-            .issues
-            .iter()
-            .map(|issue| format!("error [{}]: {}", issue.code, issue.message))
-            .collect::<Vec<_>>()
-            .join("\n");
-        return Err(AppError::database(
-            "validation_failed",
-            format!("Library is invalid\n{messages}"),
-        ));
-    }
-    Ok(CommandOutput::new(to_value(&report)?, "Library is valid"))
 }
 
 fn backup(path: &Path, output: &Path) -> Result<CommandOutput, AppError> {

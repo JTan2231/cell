@@ -1858,7 +1858,6 @@ mod tests {
             )?,
             "1,1,1"
         );
-        assert!(crate::validate::validate(&connection)?.valid);
         Ok(())
     }
 
@@ -2011,7 +2010,6 @@ mod tests {
             )?,
             "1,1,0,1,1"
         );
-        assert!(crate::validate::validate(&connection)?.valid);
         Ok(())
     }
 
@@ -2127,7 +2125,6 @@ mod tests {
             )?,
             "1,2,1"
         );
-        assert!(crate::validate::validate(&connection)?.valid);
         Ok(())
     }
 
@@ -2243,7 +2240,6 @@ mod tests {
             })?,
             1
         );
-        assert!(crate::validate::validate(&connection)?.valid);
         Ok(())
     }
 
@@ -2291,7 +2287,6 @@ mod tests {
             })?,
             0
         );
-        assert!(crate::validate::validate(&connection)?.valid);
         Ok(())
     }
 

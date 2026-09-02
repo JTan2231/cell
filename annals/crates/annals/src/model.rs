@@ -324,18 +324,6 @@ pub struct LibraryStats {
     pub database_size_bytes: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ValidationIssue {
-    pub code: String,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ValidationReport {
-    pub valid: bool,
-    pub issues: Vec<ValidationIssue>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::{ConceptId, ConceptReference, DiffEntry};

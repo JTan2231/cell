@@ -487,7 +487,7 @@ lock_created=1
 
 # Establish the no-new-claim boundary as soon as this deployment owns the update lock. The
 # currently active delivery may finish, but the worker observes maintenance before claiming its
-# successor while candidate preparation and validation continue.
+# successor while candidate preparation and checks continue.
 if [ "$no_start" -eq 0 ] && [ ! -e "$MAINTENANCE_MARKER" ]; then
     : >"$MAINTENANCE_MARKER"
     marker_created=1
@@ -593,7 +593,6 @@ if [ ! -e "$LIBRARY_PATH" ]; then
     library_existed=0
     if [ "$fresh_state" -eq 0 ]; then
         run_with_installation_environment "$binary_path" --config "$temporary_config" init >/dev/null
-        run_with_installation_environment "$binary_path" --config "$temporary_config" validate >/dev/null
     fi
 fi
 run_with_installation_environment "$binary_path" --config "$temporary_config" inbox status >/dev/null
@@ -810,8 +809,6 @@ if [ "$fresh_state" -eq 1 ]; then
     run_with_installation_environment "$binary_path" \
         --config "$fresh_config" init >/dev/null
     run_with_installation_environment "$binary_path" \
-        --config "$fresh_config" validate >/dev/null
-    run_with_installation_environment "$binary_path" \
         --config "$fresh_config" --quiet inbox pause
     [ -f "$fresh_stage/spool/.paused" ] && [ ! -L "$fresh_stage/spool/.paused" ] \
         || fail 'fresh inbox did not enter the paused state'
@@ -821,7 +818,6 @@ if [ "$fresh_state" -eq 1 ]; then
 fi
 
 if [ -n "$old_current" ]; then
-    run_with_installation_environment "$CLI_PATH" validate >/dev/null
     run_with_installation_environment "$CLI_PATH" inbox status >/dev/null
 fi
 
@@ -917,8 +913,6 @@ if [ "$fresh_state" -eq 1 ]; then
         pause_created=0
     fi
     run_with_installation_environment "$binary_path" \
-        --config "$temporary_config" validate >/dev/null
-    run_with_installation_environment "$binary_path" \
         --config "$temporary_config" inbox status >/dev/null
 elif [ "$library_existed" -eq 1 ]; then
     if [ "$old_current" != "$new_current" ]; then
@@ -930,8 +924,6 @@ elif [ "$library_existed" -eq 1 ]; then
     fi
     run_with_installation_environment "$binary_path" \
         --config "$temporary_config" --quiet migrate
-    run_with_installation_environment "$binary_path" \
-        --config "$temporary_config" validate >/dev/null
     run_with_installation_environment "$binary_path" \
         --config "$temporary_config" inbox status >/dev/null
 fi
@@ -959,7 +951,7 @@ mv -f "$AGENT_PLIST.tmp.$$" "$AGENT_PLIST"
 
 run_with_installation_environment "$CLI_PATH" --version >/dev/null
 run_with_installation_environment "$USAGE_CLI_PATH" --version >/dev/null
-run_with_installation_environment "$CLI_PATH" validate >/dev/null
+run_with_installation_environment "$CLI_PATH" stats >/dev/null
 run_with_installation_environment "$CLI_PATH" inbox status >/dev/null
 
 if [ "$fresh_state" -eq 1 ]; then
@@ -971,9 +963,8 @@ if [ "$fresh_state" -eq 1 ]; then
     case "$imported_backlog" in
         ''|*[!0-9]*) fail 'candidate returned an invalid backlog import receipt' ;;
     esac
-    run_with_installation_environment "$CLI_PATH" validate >/dev/null
     status_json=$(run_with_installation_environment "$CLI_PATH" --json inbox status) \
-        || fail 'unable to validate the imported inbox backlog'
+        || fail 'unable to inspect the imported inbox backlog'
     printf '%s\n' "$status_json" | grep -q "\"queued\":$imported_backlog" \
         || fail 'fresh inbox queued count does not match the imported backlog'
     printf '%s\n' "$status_json" | grep -q '"processing":0' \
@@ -984,7 +975,7 @@ if [ "$fresh_state" -eq 1 ]; then
         || fail 'fresh inbox lost maintenance during backlog import'
     run_with_installation_environment "$CLI_PATH" --quiet inbox resume
     status_json=$(run_with_installation_environment "$CLI_PATH" --json inbox status) \
-        || fail 'unable to validate the resumed inbox'
+        || fail 'unable to inspect the resumed inbox'
     printf '%s\n' "$status_json" | grep -q '"paused":false' \
         || fail 'fresh inbox did not resume'
     printf '%s\n' "$status_json" | grep -q '"maintenance":true' \
@@ -1084,7 +1075,7 @@ if [ "$no_start" -eq 0 ]; then
     fi
 fi
 
-printf '%s\n' 'Annals user installation is deployed and validated.'
+printf '%s\n' 'Annals user installation is deployed and verified.'
 printf 'Release: %s\n' "$release_id"
 printf 'Command: %s\n' "$CLI_PATH"
 printf 'Usage:   %s\n' "$USAGE_CLI_PATH"

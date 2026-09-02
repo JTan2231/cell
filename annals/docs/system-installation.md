@@ -707,15 +707,15 @@ deployer acquires its update lock and immediately writes the maintenance
 marker, establishing the no-new-claim boundary before candidate preparation.
 It then disables new activations. An active worker is allowed to finish its
 current delivery, then stops before claiming another; an idle worker stops
-immediately. The deployer then makes a consistent Annals library backup,
-verifies the current schema, and runs the candidate's authenticated doctor
-check after the old service is quiescent. Only then does it atomically switch
-the `current` selector. It updates both command links and both configs inside
-the same rollback-protected deployment transaction, then validates through the
-candidate and installed frontends before reloading launchd and waking the
-worker. The operator-owned pause marker is retained, so that wake-up does not
-dispatch queued jobs when the installation was paused. A failure restores the
-old selectors, configs, plist, and service.
+immediately. After the old service is quiescent, the deployer runs the
+candidate's authenticated doctor check, makes a consistent Annals library
+backup, and applies any supported schema migration. Only then does it
+atomically switch the `current` selector. It updates both command links and
+both configs inside the same rollback-protected deployment transaction, then
+checks the installed library statistics and inbox state before reloading
+launchd and waking the worker. The operator-owned pause marker is retained, so
+that wake-up does not dispatch queued jobs when the installation was paused. A
+failure restores the old selectors, configs, plist, and service.
 The Annals library, spool, logs, pause state, and archives are retained.
 
 Every successful update from an existing release also writes a durable
@@ -734,7 +734,7 @@ The version-4 deploy path invokes the candidate's additive `migrate` after the
 backup and while the service is quiescent. It adds retry-event provenance to a
 version-3 library without replacing its works, deliveries, reconciliations,
 commits, spool, or archives. The rollback transaction retains the pre-migration
-backup if candidate validation or cutover fails.
+backup if candidate migration or cutover fails.
 
 No operator timing or manual service stop is required. It is safe to run the
 same deployment command while a delivery is in progress; by default the
@@ -743,7 +743,7 @@ plus headroom. The cutover itself occurs only after the inbox lock becomes
 idle, so one delivery cannot straddle old and new Annals binaries.
 
 Set `ANNALS_UPDATE_WAIT_SECONDS` to another nonnegative number when a caller
-needs a shorter deadline. `--no-start` installs and validates without reading
+needs a shorter deadline. `--no-start` installs and verifies without reading
 or changing launchd state.
 
 Schema version 3 established the intentional boundary that cannot open an
@@ -760,16 +760,17 @@ operation after `ci.sh` is green:
   --fresh-state
 ```
 
-`--fresh-state` cannot be combined with `--no-start`. It stages and validates
-an empty library and paused spool, disables launchd, requests a graceful pause,
-waits for the current delivery, and registers all remaining arrivals. Under
+`--fresh-state` cannot be combined with `--no-start`. It stages an initialized
+empty library and paused spool, verifies the paused spool, disables launchd,
+requests a graceful pause, waits for the current delivery, and registers all
+remaining arrivals. Under
 maintenance it moves the old library, WAL sidecars, and whole spool into one
 directory under `backups/generations/` and switches in the fresh state. An
 obsolete `usage.db` and its sidecars are held only inside the in-flight deploy
 transaction for automatic rollback, then discarded when the deployment
 commits; they are not part of the rollback generation.
 
-Only after candidate and installed validation does the deployer import queued
+Only after candidate and installed checks does the deployer import queued
 and last-moment incoming sources from that generation. An attempted processing
 job is terminalized rather than imported for another liaison run. The importer
 preserves source bytes, priority choices, and lane sequence order while
@@ -801,7 +802,7 @@ state directory on one filesystem so the database and its WAL sidecars stay
 together, rewrites the two legacy absolute state paths, and performs the same
 version-3 fresh-state cutover described above. The old database and spool are
 kept as a rollback generation, while uncompleted sources enter the fresh inbox.
-It then removes the validated old program files. If deployment fails, it puts
+It then removes the superseded old program files. If deployment fails, it puts
 the original state and system service back. Do not run the old and new jobs
 together: launchd domains allow identical labels, while the inbox lock only
 prevents simultaneous workers.
@@ -812,7 +813,6 @@ Direct access and scheduler inspection need no elevation:
 
 ```sh
 annals stats
-annals validate
 annals inbox status
 annals inbox pause
 annals inbox register
@@ -923,7 +923,7 @@ underlying filesystem lacks enough real capacity for a build, release staging,
 backup, migration, database write, or log write. The Annals deployer therefore
 may proceed while the gate is closed, but it does not promise capacity or gain
 cleanup authority by doing so. An unreadable storage probe is different from a
-measured low-space result: the deployer's status validation can fail with
+measured low-space result: the deployer's status inspection can fail with
 `storage_probe_failed` until the path or permission problem is corrected.
 
 Do not move failed envelopes back into `queued/` or edit their receipts. For a
@@ -999,7 +999,7 @@ Use `inbox interrupt` for one active job; it remains independent of pause and
 maintenance.
 
 Use `annals backup` for a consistent SQLite backup rather than copying a live
-WAL database, and run `annals validate` periodically. Include the spool when a
+WAL database. Include the spool when a
 backup must preserve pending work, an unfinished retry event's child envelopes,
 priority choices, and sequence order.
 Keep the `done`, `duplicates`, `failed`, and `skipped` envelopes according to

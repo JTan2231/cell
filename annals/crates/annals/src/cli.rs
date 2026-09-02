@@ -57,8 +57,6 @@ pub enum Command {
     Graph(GraphArgs),
     /// Remove parent edges already implied by longer graph paths.
     Shake(ShakeArgs),
-    /// Check canonical, historical, and provenance invariants.
-    Validate,
     /// Create a consistent backup without replacing the destination.
     Backup(BackupArgs),
     /// Retain and inspect immutable source works.

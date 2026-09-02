@@ -1,11 +1,11 @@
 {
   "id": "annals.install.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Install or recover Annals",
-  "summary": "Install, update, validate, or recover the user-owned Annals and Annals Usage deployment, including an explicitly authorized fresh-state cutover.",
+  "summary": "Install, update, verify, or recover the user-owned Annals and Annals Usage deployment, including an explicitly authorized fresh-state cutover.",
   "use_when": [
     "The user-owned macOS Annals and Annals Usage binaries, configuration, content-addressed release, LaunchAgent, library, or spool must be installed, updated, or recovered.",
     "An explicitly authorized fresh-state replacement must preserve uncompleted backlog and rollback as one generation."
@@ -15,7 +15,7 @@
     "Source development or Git release publication is the intended outcome.",
     "A destructive fresh-state cutover has not been explicitly authorized."
   ],
-  "outcome": "A validated complete installed Annals and Annals Usage release with matching configuration, scheduler, library/spool generation, Nucleus boundary, and rollback state.",
+  "outcome": "A verified complete installed Annals and Annals Usage release with matching configuration, scheduler, library/spool generation, Nucleus boundary, and rollback state.",
   "effects": [
     "Stages and atomically selects a complete content-addressed release containing Annals, Annals Usage, runners, configuration, and provider documentation.",
     "May quiesce the LaunchAgent, establish maintenance, migrate the library, replace launchd configuration, and restart scheduled inbox processing.",
@@ -28,12 +28,12 @@
   ],
   "success": [
     "Installed Annals and Annals Usage versions and help surfaces match the selected release.",
-    "Library validation, spool status, LaunchAgent state, Nucleus readiness, and deliberate Annals and usage canaries pass as applicable.",
+    "Library migration and statistics checks, spool status, LaunchAgent state, Nucleus readiness, and deliberate Annals and usage canaries pass as applicable.",
     "Maintenance is cleared only after the complete cutover commits and backlog processing is intentionally resumed."
   ],
   "failure_and_recovery": [
     "Do not remove maintenance, edit spool receipts, or replace library files manually after interrupted deployment; inspect and use the documented recovery procedure.",
-    "A measured closed inbox storage gate does not itself reject a deployment, but `storage_probe_failed` can reject status validation and insufficient physical space can fail release staging, backup, migration, validation, or rollback writes.",
+    "A measured closed inbox storage gate does not itself reject a deployment, but `storage_probe_failed` can reject status inspection and insufficient physical space can fail release staging, backup, migration, or rollback writes.",
     "A failed ordinary update restores the previous captured generation before work resumes.",
     "A fresh-state cutover is destructive to the active generation and requires explicit retained rollback material and backlog verification."
   ],

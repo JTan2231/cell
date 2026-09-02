@@ -42,7 +42,6 @@ resolved library path on stderr in human mode.
 annals init
 annals migrate
 annals stats
-annals validate
 annals backup OUTPUT
 ```
 
@@ -58,11 +57,6 @@ installed library. The version-3-to-4 migration is one transaction; failure
 leaves the library at version 3 without partial retry tables.
 `stats` reports revision and corpus, graph, work, reconciliation, history,
 model-run, and database-size information.
-
-`validate` checks SQLite, foreign keys, the storage boundary, retained-work and
-audit-artifact hashes, normalized request and draft lifecycle, contiguous
-typed effects, every replayed corpus state, and change, shake, revert, and
-reconciliation provenance. It does not repair state.
 
 `backup` makes a consistent SQLite copy and refuses to replace its destination.
 

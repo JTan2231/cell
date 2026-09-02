@@ -35,8 +35,7 @@ Every behavior that needs corpus facts goes through this reducer:
 - reconciliation resolution and validation;
 - commit display and diff;
 - shake planning;
-- revert planning; and
-- full-library validation.
+- revert planning.
 
 This keeps historical and current behavior identical by construction. There
 is no cache whose agreement must be trusted.
@@ -47,8 +46,7 @@ Bounded graph and search operations benefit from SQL joins and indexes. After
 replaying the selected revision, Annals projects that in-memory state into
 connection-local temporary concept, edge, and evidence tables. Those tables
 exist only for the connection and revision being queried. They are disposable
-query acceleration, not library state, and validation never treats them as
-authority.
+query acceleration, not library state or authority.
 
 ## Source-delivery boundary
 
@@ -283,35 +281,23 @@ inverse to current HEAD. If a targeted fact has changed incompatibly since the
 original commit, the revert fails atomically. Successful reversion is a new
 commit and never removes the original.
 
-## Validation and tamper detection
-
-Validation begins with SQLite integrity, foreign keys, schema version, and the
-absence of forbidden materialized or JSON-authority storage. It verifies work
-digests and tool-artifact hashes, then replays every commit in order through
-the production reducer.
-
-For each transition it independently derives the canonical effect set from
-the before and after states and compares that set with storage. It reconstructs
-typed requests, resolves reconciliations at their recorded bases, and checks
-draft, reconciliation, ingestion, change, shake, and revert provenance. Any
-effect tampering, skipped revision, invalid transition, or disagreement in
-derived semantics fails validation.
-
 ## Fresh-state deployment boundary
 
 Normal user deployments quiesce the inbox, back up the supported library,
 apply the candidate's additive version-3-to-4 migration when needed, switch the
-complete release, validate, and restore the prior operator pause state. A
+complete release, check its commands, library statistics, and inbox state, and
+restore the prior operator pause state. A
 failed cutover restores the pre-migration backup with the prior release.
 
 The version-3 boundary uses `deploy-user.sh --fresh-state`. The deployer stages
-and validates a new empty library and paused spool before touching live state.
-It disables activation, pauses dispatch, lets the active delivery finish,
-registers all remaining arrivals, and applies maintenance. It then moves the
-old library, its sidecars, and whole spool into one rollback
-generation and switches in the staged state.
+an initialized empty library and verifies its paused spool before touching live
+state. It disables activation, pauses dispatch, lets the active delivery
+finish, registers all remaining arrivals, and applies maintenance. It then
+moves the old library, its sidecars, and whole spool into one rollback
+generation, switches in the staged state, and checks the installed library
+statistics.
 
-After candidate and installed validation, a dedicated import operation reads
+After candidate and installed checks, a dedicated import operation reads
 the archived queued envelopes in lane and immutable-sequence order, preserves
 their priority choices, copies their unchanged source bytes into new unstarted
 envelopes, and verifies the destination count. Attempted processing envelopes

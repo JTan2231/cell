@@ -18,7 +18,6 @@ mod render;
 mod resolver;
 mod revision_store;
 mod tool_server;
-mod validate;
 
 use std::ffi::OsStr;
 

@@ -171,9 +171,9 @@ At most one reconciliation per work is pending. A mechanically equal projected
 state is `recorded` and has no commit. A pending reconciliation is applied only
 while HEAD still equals its base revision.
 
-Validation, display, and application reconstruct the typed request and resolve
-it again against its original base `CorpusState`. No stored resolved operation
-list or projected state is trusted.
+Pending-reconciliation validation, display, and application reconstruct the
+typed request and resolve it again against its original base `CorpusState`. No
+stored resolved operation list or projected state is trusted.
 
 ## Examination audit
 
@@ -183,8 +183,8 @@ reasoning effort, and prompt version. Status is `running`, `submitted`,
 
 `tool_calls` records tool name, sequence, success, time, and immutable argument
 and result artifacts with SHA-256 digests. These text artifacts preserve an
-audit trail. Annals verifies their hashes but never decodes them to validate,
-replay, apply, search, diff, revert, or shake the corpus.
+audit trail. Their hashes record content identity, but Annals never decodes the
+artifacts to resolve, apply, search, diff, revert, or shake the corpus.
 
 ## Canonical commit effects
 
@@ -218,7 +218,7 @@ commit; it never erases history.
 
 ## Replay-backed reads
 
-`CorpusState` is the sole corpus model. HEAD, `--at`, diff, validation,
+`CorpusState` is the sole corpus model. HEAD, `--at`, diff,
 reconciliation resolution, apply, shake, and revert reduce the same ordered
 effects. Search and bounded graph queries load the selected replayed state into
 connection-local temporary query tables with indexes; those tables are an
@@ -227,25 +227,3 @@ ephemeral query implementation, not persisted state or authority.
 Commit display reconstructs its semantic narrative from typed request rows,
 provenance, effects, and replayed before/after states. A resolved operation in
 output is therefore derived information, never a stored JSON payload.
-
-## Validation
-
-`annals validate` checks SQLite integrity and foreign keys, the exact schema
-boundary, work and tool-artifact hashes, identity use, contiguous history,
-effect order and uniqueness, and every intermediate `CorpusState` invariant.
-It derives each revision's canonical effects from consecutive states and
-requires them to match storage exactly.
-
-It also reconstructs every reconciliation and terminal draft from normalized
-rows, resolves requests at their original bases, verifies pending/applied/
-recorded/superseded semantics, and checks change, shake, and revert provenance.
-Retry validation checks event bounds and frozen order, requires every original
-to be a failed, non-skipped inbox delivery, requires contiguous ordinals and
-coherent event state, and verifies that each linked child delivery belongs to
-the stored child job and differs from its original. A retry child cannot
-validate as an ordinary retained duplicate, and a completed event cannot retain
-a not-attempted or processing item. Job-receipt provenance is checked when its
-spool envelope is read; the SQLite-only `validate` command does not require
-terminal envelopes to remain under an operator's archive-retention policy.
-Forbidden materialized corpus tables and JSON authority columns are validation
-failures. Validation is read-only and does not repair state.

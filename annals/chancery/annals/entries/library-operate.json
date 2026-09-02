@@ -1,13 +1,13 @@
 {
   "id": "annals.library.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Maintain an Annals knowledge library",
-  "summary": "Initialize, migrate, inspect, validate, or back up the library, and explicitly apply, simplify, or revert its versioned idea map.",
+  "summary": "Initialize, migrate, inspect, or back up the library, and explicitly apply, simplify, or revert its versioned idea map.",
   "use_when": [
-    "Library schema, integrity, backup, statistics, explicit reconciliation application, graph normalization, history, or reversion must be operated.",
+    "Library schema, backup, statistics, explicit reconciliation application, graph normalization, history, or reversion must be operated.",
     "Strict reconciliation JSON should be submitted without a model run."
   ],
   "do_not_use_when": [
@@ -15,10 +15,9 @@
     "The proposed procedure overwrites a backup, edits internal rows, or assumes a stale pending reconciliation can be forced.",
     "A destructive installed fresh-state cutover has not been explicitly authorized."
   ],
-  "outcome": "A mechanically verified library read or atomic state transition whose revision, provenance, compatibility, and recovery consequences are explicit.",
+  "outcome": "A deterministic library read or atomic state transition whose revision, provenance, compatibility, and recovery consequences are explicit.",
   "effects": [
     "Initialization creates revision zero; migration upgrades only supported prior schemas; backup creates a consistent SQLite copy without replacing its destination.",
-    "Validation performs deep invariant checks but repairs nothing.",
     "Applying, shaking, or reverting creates an append-only commit and advances the corpus revision when it changes state.",
     "Direct reconciliation submission validates a projected state but does not apply it."
   ],
@@ -27,7 +26,7 @@
     "No model or Nucleus job is required for deterministic library operations."
   ],
   "success": [
-    "The selected command reports the exact library, revision, reconciliation, backup, validation, or migration result.",
+    "The selected command reports the exact library, revision, reconciliation, backup, statistics, or migration result.",
     "Every mutation is atomic and the resulting library passes its relevant invariants.",
     "A confirmed shake or revert records a new commit rather than rewriting history."
   ],
@@ -44,7 +43,6 @@
     {"label": "Initialize", "invocation": "/Users/joey/.local/bin/annals init"},
     {"label": "Migrate", "invocation": "/Users/joey/.local/bin/annals migrate"},
     {"label": "Statistics", "invocation": "/Users/joey/.local/bin/annals stats"},
-    {"label": "Validate", "invocation": "/Users/joey/.local/bin/annals validate"},
     {"label": "Backup", "invocation": "/Users/joey/.local/bin/annals backup <ABSENT_OUTPUT_PATH>"},
     {"label": "Submit strict reconciliation", "invocation": "/Users/joey/.local/bin/annals change submit <REQUEST_JSON> --work <LABEL> --base <REVISION>"},
     {"label": "Validate pending reconciliation", "invocation": "/Users/joey/.local/bin/annals change validate --work <LABEL>"},

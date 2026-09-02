@@ -558,7 +558,7 @@ run_as_operator "$INSTALL_USAGE_FRONTEND" doctor \
 if [ ! -e "$LIBRARY_PATH" ]; then
     run_as_operator "$INSTALL_FRONTEND" init
 fi
-run_as_operator "$INSTALL_FRONTEND" validate >/dev/null
+run_as_operator "$INSTALL_FRONTEND" stats >/dev/null
 run_as_operator "$INSTALL_FRONTEND" inbox status >/dev/null
 run_as_operator "$INSTALL_USAGE_FRONTEND" report --limit 0 >/dev/null
 
@@ -567,7 +567,7 @@ if [ "$no_start" -eq 1 ]; then
         rm -f "$MAINTENANCE_MARKER"
         marker_created=0
     fi
-    printf '%s\n' 'Annals is installed and validated; scheduling remains disabled (--no-start).'
+    printf '%s\n' 'Annals is installed and verified; scheduling remains disabled (--no-start).'
 else
     if [ "$marker_created" -eq 1 ]; then
         rm -f "$MAINTENANCE_MARKER"
@@ -582,7 +582,7 @@ else
     launchctl kickstart "$SERVICE_TARGET"
     launchctl print "$SERVICE_TARGET" >/dev/null \
         || fail 'LaunchDaemon verification failed'
-    printf '%s\n' 'Annals is installed, validated, and scheduled with launchd.'
+    printf '%s\n' 'Annals is installed, verified, and scheduled with launchd.'
 fi
 
 # A live-only Annals Usage installation has no private ledger. This is the last

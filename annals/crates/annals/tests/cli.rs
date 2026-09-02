@@ -827,7 +827,6 @@ fn repeated_evidence_quote_expands_to_exact_ranges_and_reverts() -> TestResult {
     let reverted = library.json_ok(["revert", "1"])?;
     assert_eq!(reverted["revision"], 2);
     assert_eq!(library.json_ok(["overview"])?["concept_count"], 0);
-    assert_eq!(library.json_ok(["validate"])?["valid"], true);
     Ok(())
 }
 
@@ -1109,7 +1108,6 @@ fn diamond_reconciliation_supports_local_browsing_edge_history_and_revert() -> T
     assert_eq!(recorded_revert["kind"], "revert");
     assert_eq!(recorded_revert["effects"], restored_diff["entries"]);
     assert_eq!(library.json_ok(["log"])?["head_revision"], 3);
-    assert_eq!(library.json_ok(["validate"])?["valid"], true);
     Ok(())
 }
 
@@ -1155,7 +1153,6 @@ fn an_equal_reconciliation_is_recorded_without_a_commit() -> TestResult {
     );
     let genesis_diff = library.json_ok(["diff", "0", "1"])?;
     assert_eq!(archived["effects"], genesis_diff["entries"]);
-    assert_eq!(library.json_ok(["validate"])?["valid"], true);
     Ok(())
 }
 
@@ -1208,7 +1205,6 @@ fn stale_reconciliation_is_rejected_without_partial_graph_or_history_writes() ->
     }
     assert_eq!(library.json_ok(["overview"])?, before_overview);
     assert_eq!(library.json_ok(["log"])?, before_log);
-    assert_eq!(library.json_ok(["validate"])?["valid"], true);
     Ok(())
 }
 
@@ -1344,7 +1340,6 @@ fn shake_reports_confirms_commits_preserves_ancestry_and_is_revertible() -> Test
     );
     let log = library.json_ok(["log"])?;
     assert_eq!(log["commits"][0]["kind"], "shake");
-    assert_eq!(library.json_ok(["validate"])?["valid"], true);
 
     let no_op = library.human_with_input(["shake"], "")?;
     assert!(no_op.status.success());
@@ -1359,7 +1354,6 @@ fn shake_reports_confirms_commits_preserves_ancestry_and_is_revertible() -> Test
 
     assert_eq!(library.json_ok(["revert", "2"])?["revision"], 3);
     assert_eq!(library.json_ok(["overview"])?["edge_count"], 6);
-    assert_eq!(library.json_ok(["validate"])?["valid"], true);
 
     let automatic = library.json_ok(["shake", "--yes"])?;
     assert_eq!(automatic["status"], "applied");
@@ -1367,7 +1361,6 @@ fn shake_reports_confirms_commits_preserves_ancestry_and_is_revertible() -> Test
     assert_eq!(automatic["revision"], 4);
     assert_eq!(automatic["removed_edge_count"], 3);
     assert_eq!(automatic["removed_edges"].as_array().map(Vec::len), Some(3));
-    assert_eq!(library.json_ok(["validate"])?["valid"], true);
 
     assert_eq!(library.json_ok(["revert", "4"])?["revision"], 5);
     let quiet = library.human_with_input(["shake", "--yes", "--quiet"], "")?;
@@ -1380,7 +1373,13 @@ fn shake_reports_confirms_commits_preserves_ancestry_and_is_revertible() -> Test
     assert!(quiet.stderr.is_empty());
     assert_eq!(library.json_ok(["overview"])?["revision"], 6);
     assert_eq!(library.json_ok(["overview"])?["edge_count"], 3);
-    assert_eq!(library.json_ok(["validate"])?["valid"], true);
+    Ok(())
+}
+
+#[test]
+fn top_level_validate_command_is_not_available() -> TestResult {
+    let library = Library::initialized()?;
+    library.json_error(["validate"], "invalid_command")?;
     Ok(())
 }
 
