@@ -1,0 +1,76 @@
+{
+  "id": "geste.develop.change",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change Geste software and contracts",
+  "summary": "Modify Geste's manual episode schema, CLI, deterministic retrieval and projections, packaging, tests, documentation, or published contracts while preserving source authority and immutable revisions.",
+  "use_when": [
+    "Geste code, tests, storage, public JSON or CLI behavior, Chancery bundle, packaging, release workflow, or documentation is being changed."
+  ],
+  "do_not_use_when": [
+    "The request is ordinary use or operation of the installed Geste CLI.",
+    "Release publication or installed deployment has not been separately authorized.",
+    "The proposed change is continuous ingestion, model-based inference, or a new source adapter without a new explicit contract review."
+  ],
+  "outcome": "A minimal tested Geste change whose code, schema, read-time projections, authority boundaries, installation behavior, and published contracts agree.",
+  "effects": [
+    "Modifies Geste source, tests, product documentation, packaging, release tooling, or product-owned Chancery contracts.",
+    "A schema or capture-contract change can affect persistent private state and existing manual producers.",
+    "Release and installed deployment remain separate effects."
+  ],
+  "authority": [
+    "Geste owns episode identity, immutable revision storage, authored interpretation, validation, retrieval, projections, and product packaging.",
+    "Cited products remain authoritative for upstream records; Geste changes may not copy their bodies or imply current verification.",
+    "A historical episode never becomes current procedure merely through implementation or retrieval behavior."
+  ],
+  "success": [
+    "The smallest owning code and exact architecture, CLI, data-model, installation, and Chancery contracts agree.",
+    "Tests preserve strict capture, atomic append, revision immutability, deterministic latest-head search, historical reads, report and graph derivation, privacy, content identity, and rollback as affected.",
+    "Schema changes include an explicit migration, quiescent backup boundary, old-state fixture, and database-aware rollback rather than implicit migration.",
+    "`geste/ci.sh` completes green."
+  ],
+  "failure_and_recovery": [
+    "Do not weaken validation, rewrite an old revision, infer causality from time, or elevate a locator-only anchor or unverified settlement to authority.",
+    "Keep automatic ingestion and source resolution out of manual v0.1 unless a later reviewed contract assigns exact ownership and recovery.",
+    "Packaging changes retain content identity, provider/version matching, foreign-state refusal, stable selectors, and post-switch rollback."
+  ],
+  "privacy": [
+    "Fixtures must be synthetic; source, provider, release, logs, and examples must contain no real episode database or private source body.",
+    "Diagnostics should avoid echoing capture prose, source labels, and machine-specific identities."
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read Geste's product instructions and exact architecture, CLI, data-model, installation, and Chancery contracts affected by the change.",
+    "Identify whether the change alters episode authority, storage, capture compatibility, retrieval ranking, privacy, recovery, or another product's boundary before editing.",
+    "Implement the smallest change with synthetic isolated fixtures and update every exact product-owned contract in the same change.",
+    "Run `geste/ci.sh`; run release or deployment only under separate authority."
+  ],
+  "checkpoints": [
+    "Manual v0.1 retains no runtime dependency on another Cell product, model, service, or network.",
+    "Create and revise remain complete immutable snapshots, with stale-base and verified-settlement validation fail-closed.",
+    "Search and read-time graph/report output remain deterministic and do not claim semantic analogy or current source truth.",
+    "Deployment never initializes or migrates the domain database."
+  ],
+  "adaptation": [
+    "Add source-specific runtime integration only after a new boundary review names source identity, cutoff, errors, privacy, and recovery.",
+    "Treat continuous ingestion as a later product contract, not an incremental shortcut inside manual capture."
+  ],
+  "stop_when": [
+    "The change would silently duplicate another product's authority or recast episode interpretation as verified truth.",
+    "A persistent-state change lacks explicit migration and rollback proof.",
+    "The requested behavior cannot be represented within Geste's reviewed manual v0.1 boundary."
+  ],
+  "does_not_authorize": [
+    "Running `release.sh`, which commits, tags, and pushes.",
+    "Deploying an installed Geste release or initializing a user database.",
+    "Changing, invoking, or reading another Cell product beyond separately selected installed contracts."
+  ],
+  "manual": "manuals/develop-change.md"
+}

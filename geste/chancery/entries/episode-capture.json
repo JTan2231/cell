@@ -1,0 +1,57 @@
+{
+  "id": "geste.episode.capture",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Record a manual process episode",
+  "summary": "Validate one strict JSON snapshot and transactionally create an episode or append an immutable revision with authored process interpretation, explicit gaps, and stable source anchors.",
+  "use_when": [
+    "A completed or meaningfully bounded case should become future precedent in the local Geste casebook.",
+    "A prior episode needs a corrected or newly understood complete snapshot while retaining every earlier revision.",
+    "The caller has inspected the relevant source products through their own public contracts and can provide their stable references."
+  ],
+  "do_not_use_when": [
+    "The desired episode boundary, outcome, applicability, or source basis is still too uncertain to state with explicit gaps.",
+    "A verified enacted settlement is claimed without a Decisions lifecycle-event authority anchor.",
+    "The task requires automatic transcript ingestion, source resolution, model inference, or continuous observation."
+  ],
+  "outcome": "One new public episode ID at revision one, or one contiguous immutable revision appended against an explicitly observed current base, with the exact input digest and normalized episode fields committed together.",
+  "effects": [
+    "Create and revise write private local Geste SQLite state in one foreign-key-checked transaction whose immutable revision seal is appended last.",
+    "The strict input stores authored episode prose, normalized source anchors and support links, but no extra input-file copy and no upstream source body.",
+    "The Rust process performs no model, network, Chancery, or source-product call and does not initialize a missing database implicitly."
+  ],
+  "authority": [
+    "The caller authors the episode boundary, shape, account, lessons, applicability, gaps, settlement status, and source-link interpretation.",
+    "Geste owns validation, identity allocation, immutable revision ordering, exact-input digesting, and transaction success.",
+    "Cited products retain authority for source existence, meaning, review state, effects, and current truth."
+  ],
+  "success": [
+    "The regular non-symbolic file or standard-input stream is bounded before allocation; its UTF-8 JSON is at most 256 KiB, has `schema_version: 1`, contains only documented fields and values, and passes every text, collection, identity, support-target, source-time, and relationship bound.",
+    "A verified settlement has a null gap and at least one supporting `decisions` / `lifecycle_event` authority source; an unverified settlement names an existing explicit gap.",
+    "A Git source with null digest uses only a full 40- or 64-character lowercase hexadecimal object ID as a non-null revision; mutable tag or branch names remain references.",
+    "A revision's `--base N` equals the current head at transaction time; otherwise `stale_revision` is returned without a write, and a sealed historical revision rejects later child inserts, updates, and deletes.",
+    "Every create or revise body is a complete snapshot; omitted prior members are absent only from the new immutable revision."
+  ],
+  "failure_and_recovery": [
+    "Validation, unsupported schema, missing related revision, duplicate identity, and stale-base failures do not commit a partial episode.",
+    "After `stale_revision`, inspect the current head, reconcile the complete snapshot deliberately, and retry with that observed base.",
+    "If a required Decisions record is not available, mark the settlement unverified with an explicit gap rather than fabricating authority."
+  ],
+  "privacy": [
+    "Capture input and the selected database may contain private process accounts, outcomes, source labels, and stable machine references.",
+    "Use a private input path and terminal; Geste does not copy the request file or transmit its contents."
+  ],
+  "interfaces": [
+    {"label": "Create an episode", "invocation": "/Users/joey/.local/bin/geste episode create INPUT.json"},
+    {"label": "Append a revision", "invocation": "/Users/joey/.local/bin/geste episode revise EPISODE INPUT.json --base N"},
+    {"label": "Select another database", "invocation": "/Users/joey/.local/bin/geste --database ABSOLUTE_PATH episode create INPUT.json"}
+  ],
+  "does_not_authorize": [
+    "Changing, resolving, or copying an upstream source record.",
+    "Presenting episode-authored interpretation or an unverified settlement as user-enacted authority.",
+    "Automatic ingestion, deleting an episode or revision, or silently initializing or migrating storage."
+  ],
+  "manual": "manuals/episode-capture.md"
+}

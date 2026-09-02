@@ -52,6 +52,7 @@ separately maintained discovery catalog.
 | Conversations | Codex tasks on this Mac should be listed, inspected, or searched. | A read-only normalized view over the normal user's Codex App Server. | Decision classification, durable projections, live-process supervision, or Nucleus's isolated job history. |
 | Decisions | Post-activation explicit user settlements enacted by a same-turn completed file change should be retained, reviewed, or delivered as a daily digest. | The observer baseline, completed-turn coverage, decision candidates, source anchors, review state, cutoff-bounded daily projections, frozen digest renders, and delivery attempts. | Raw transcript export, decisions without same-turn effects, treating file activity or assistant behavior as authority, arbitrary email, or Nucleus execution history. |
 | Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from Decisions lifecycle events. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, intake policy, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, transcript storage, or replacing Decisions review authority. |
+| Geste | A prior bounded work episode should be found by problem shape or manually recorded with its source basis. | Episode identity, immutable account revisions, authored interpretation, source anchors, coverage gaps, and read-time search, report, and graph projections. | Source-system truth, current policy, automatic episode ingestion, or deciding that a precedent applies. |
 | Pratica | A proposed entrant needs exact negotiated terms from several independently stewarded systems. | Integration and track identity, immutable offers, current assent, agreement seals, steward bases, bounded requester attempts, composition reviews, and conformance reviews. | Implementing or changing target systems, automatically discovering every concern, treating review prose as assent, or proving deployment readiness. |
 | Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, harness validation and supervision, credential serialization, cancellation, exact harness-stdout observations, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, requester retry policy, or reporting materializations. |
 | Annals Usage | Annals-attributed model consumption, account allowance, login, or the Annals-to-Nucleus execution path must be inspected. | Live calculation over Annals attribution and Nucleus output atoms, plus Annals-facing budget and diagnostic commands. | Nucleus runtime authority, durable reporting projections, Codex credential storage, Annals corpus success, or general job orchestration. |
@@ -66,6 +67,7 @@ Typical routing examples:
 - “Email me this update” is Email work.
 - “What does this project mean by grounding?” is a Semantics query when that
   folder is registered.
+- “Have we already solved something shaped like this?” is a Geste query.
 - “What contracts must this new CRM reach with the systems it crosses?” is a
   Pratica negotiation.
 - “Could this new local project use an agent?” starts with the new-requester
@@ -91,6 +93,7 @@ email --version
 conversations --version
 decisions --version
 semantics --version
+geste --version
 pratica --version
 chancery --version
 chancery doctor
@@ -138,6 +141,9 @@ Decisions daily ----> Decisions SQLite ----> Email ----> Resend
 Decisions lifecycle --> Semantics --> Conversations exact cwd
 Semantics -----------> registered project semantic repositories
 Pratica CLI ---------> Pratica SQLite offers, assent, seals, and reviews
+
+interactive agent -- manual source anchors --> Geste SQLite episode revisions
+Geste CLI ----------------------------------> Geste SQLite read projections
 
 installed product releases -- publish --> Chancery provider bundles
 interactive agent ----------- reads ----> Chancery
@@ -210,6 +216,15 @@ closed, versioned invocation. Nucleus validates it, starts one harness attempt,
 retains exact harness stdout, and coordinates dynamic tool calls. The requester
 continues to own the work that motivated the job.
 
+Geste is a short-lived manual casebook CLI. The interactive agent independently
+consults source products through their installed contracts and gives Geste
+stable locators, optional revisions or digests, and an authored complete
+episode account. The Geste process calls no source product, Chancery, Nucleus,
+or model. A verified settlement requires a Decisions lifecycle authority
+anchor, but Decisions remains settlement authority. Geste search returns
+lexical precedent candidates; the agent checks applicability and current
+contracts before reuse.
+
 Pratica is a short-lived integration-negotiation CLI and Nucleus requester. It
 stores exact opaque Markdown offers, fixed bilateral parties, current assent,
 immutable agreement seals, source bases, and independent composition and
@@ -221,8 +236,8 @@ it does not implement a target system, prove runtime behavior, discover every
 concern, or authorize deployment.
 
 Nucleus, Annals, Annals Usage, Todo, Chancery, Weaver, Email, Conversations,
-Decisions, Semantics, and Pratica share the Cell source repository, Cargo
-workspace, and lockfile. That source layout does not
+Decisions, Semantics, Geste, and Pratica share the Cell source repository,
+Cargo workspace, and lockfile. That source layout does not
 merge their release, installation, state, backup, recovery, or domain-success
 boundaries. Product runtimes do not call Chancery. Their installers only
 co-stage owned documentation and publish one provider selector.
@@ -249,7 +264,10 @@ The following distinctions are operationally important:
    Nucleus output atoms without retaining a second reporting database.
 6. **One Nucleus job has one attempt.** Nucleus does not automatically retry.
    A requester owns any new domain attempt and its provenance.
-7. **A Pratica agreement is not implementation proof.** It preserves exact
+7. **A Geste precedent is not policy.** An episode preserves one authored
+   account against one source cutoff. Similar shape does not establish current
+   applicability, authority, or procedure.
+8. **A Pratica agreement is not implementation proof.** It preserves exact
    party assent and basis. Composition is advisory, and conformance reviews one
    supplied candidate snapshot without testing, changing, or deploying it.
 
@@ -262,6 +280,7 @@ The following distinctions are operationally important:
 ~/.local/bin/conversations
 ~/.local/bin/decisions
 ~/.local/bin/semantics
+~/.local/bin/geste
 ~/.local/bin/pratica
 ~/.codex/hooks.json
 ~/Library/LaunchAgents/org.nucleus.daemon.plist
@@ -275,6 +294,7 @@ The following distinctions are operationally important:
   conversations -> Conversations's current release share/chancery/conversations
   decisions -> Decisions's current release share/chancery/decisions
   semantics -> Semantics's current release share/chancery/semantics
+  geste -> Geste's current release share/chancery/geste
   pratica -> Pratica's current release share/chancery/pratica
 
 ~/Library/Application Support/Nucleus/
@@ -307,6 +327,10 @@ The following distinctions are operationally important:
 
 ~/Library/Application Support/Semantics/
   semantics.db
+  install/
+
+~/Library/Application Support/Geste/
+  geste.db
   install/
 
 ~/Library/Application Support/Pratica/
@@ -368,6 +392,18 @@ quiescence, preserves the database and sidecars for rollback, validates the
 candidate against installed Decisions, Conversations, and Nucleus, then
 publishes and restarts it. Project folders contain only the participation
 marker; they do not contain or own Semantics database state.
+
+Geste owns its content-addressed CLI installation, provider selector, and
+schema-version-1 database. Deployment switches only immutable program and
+provider selectors; `geste init` is a separate visible domain-state operation.
+There is no daemon, LaunchAgent, automatic migration, source adapter, model
+request, or runtime Chancery dependency. Each episode revision is sealed last
+in its capture transaction; doctor requires the complete schema object set and
+refuses committed unsealed history. The database is retained separately from
+releases and has no automatic pruning or version-0.1 uninstaller. After a
+post-commit domain-canary failure, redeploy the exact binary with the packaged
+deployer selected by `install/previous`; do not rewrite selectors or episode
+state by hand.
 
 Pratica owns its content-addressed CLI installation, provider selector, and
 schema-version-1 negotiation database. Deployment switches only immutable
@@ -799,6 +835,7 @@ provider registry or documentation storage.
 | Codex task enumeration, normalized transcript reads, App Server compatibility, or Conversations deployment | Conversations | Keep it read-only and separate from Nucleus's private Codex home; consumers must not treat persisted status as live-process proof. |
 | Decision semantics, candidates, reviews, daily completeness, digest rendering, schedule, or Decisions deployment | Decisions | Preserve source anchors and Nucleus job correlation; Nucleus gains no decision fields, and Email gains no schedule or digest state. |
 | Project registration, semantic concepts, grounding, revision history, decision intake, reconciliation policy, or Semantics deployment | Semantics | Preserve Decisions event identity, exact Conversations cwd routing, and Nucleus job correlation; no upstream gains Semantics state or success authority. |
+| Geste episode identity, revisions, settlement grounding, search, report, graph, database, or deployment | Geste | Preserve source-system authority and immutable locators; no source gains episode state, and Geste gains no automatic source read or policy authority. |
 | Pratica steward scopes, offers, assent, agreement seals, bases, attempts, composition, conformance, database, or deployment | Pratica | Preserve exact opaque Markdown, target-system authority, frozen source disclosure, and Nucleus correlation; neither Nucleus nor a review gains party, implementation, or retry authority. |
 | New portable invocation meaning or HTTP behavior | Nucleus core/client/daemon | Version the public contract, update examples/tests/docs, then update affected requesters in compatible order. |
 | Codex executable or app-server semantics | Nucleus Codex adapter | Prove the exact version, deploy Nucleus, then run generic and requester canaries. |
@@ -808,7 +845,7 @@ provider registry or documentation storage.
 | Credential or credential-lease behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and canary every requester. |
 | Nucleus service layout or installer | Nucleus CLI/packaging | Preserve state/log ownership, rollback, launchd behavior, and requester configuration. |
 | Chancery bundle schema, catalog, contract reader, or directory installation | Chancery | Preserve read-only behavior, failure isolation, complete installed inventory, and provider-owned selectors; do not introduce a product runtime dependency. |
-| A product's published capability or operation | Owning product | Stage the version-matched bundle with its release, validate it in product CI, require the complete root CI to accept the eleven-provider source dependency graph, and update only that product's Chancery selector. |
+| A product's published capability or operation | Owning product | Stage the version-matched bundle with its release, validate it in product CI, require the complete root CI to accept the twelve-provider source dependency graph, and update only that product's Chancery selector. |
 
 ## Guarded change playbooks
 
@@ -1011,6 +1048,11 @@ the intake receipt and committed semantic revision, not merely a terminal
 Nucleus job. Do not fabricate a durable decision or semantic revision solely to
 make a canary green; use an isolated database when no real project decision is
 available.
+For Geste, initialize state explicitly after deployment, then create a real
+episode and prove search, historical show, report, and graph from the installed
+database. Do not fabricate a Decisions event merely to label a settlement
+verified. If the effectful turn's admission is not yet available, retain a
+provenance-bearing Todo for the later self-episode.
 For Pratica, use an isolated database and a deliberate integration whose source
 snapshots were obtained through their owning public contracts. The acceptance
 canary brokers only the CRM terms derived from “Review CRM data model concerns”:
@@ -1031,6 +1073,9 @@ Use these placement rules to keep the manual current and small:
 - **Annals:** retained source material and evidence-grounded conceptual
   knowledge. It may retain released documentation, but it is not the sole
   editable runbook.
+- **Geste:** bounded historical work episodes, their authored interpretation,
+  applicability, source basis, and precedent relations. It is not current
+  procedure, source truth, or a decision authority.
 - **Pratica:** exact integration offers, assent, steward bases, agreement seals,
   and separate composition/conformance reviews. It is not target implementation,
   exhaustive concern discovery, source truth, or deployment authorization.
@@ -1125,6 +1170,14 @@ directory.
 - [CLI contract](/Users/joey/rust/cell/semantics/docs/cli.md)
 - [Data model](/Users/joey/rust/cell/semantics/docs/data-model.md)
 - [User-owned installation](/Users/joey/rust/cell/semantics/docs/system-installation.md)
+
+### Geste
+
+- [Documentation index](/Users/joey/rust/cell/geste/docs/README.md)
+- [Architecture](/Users/joey/rust/cell/geste/docs/architecture.md)
+- [CLI contract](/Users/joey/rust/cell/geste/docs/cli.md)
+- [Data model](/Users/joey/rust/cell/geste/docs/data-model.md)
+- [User-owned installation](/Users/joey/rust/cell/geste/docs/system-installation.md)
 
 ### Pratica
 

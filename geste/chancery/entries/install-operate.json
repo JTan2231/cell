@@ -1,0 +1,85 @@
+{
+  "id": "geste.install.operate",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install or initialize Geste",
+  "summary": "Deploy, verify, or recover the user-owned content-addressed Geste CLI and Chancery selector, then separately initialize or diagnose its private local casebook database.",
+  "use_when": [
+    "Geste should be installed or updated for this macOS user.",
+    "The installed binary, provider selector, release identity, database schema, integrity, or private permissions should be checked.",
+    "A new empty Geste database should be explicitly initialized."
+  ],
+  "do_not_use_when": [
+    "The task is ordinary episode search, reading, or capture.",
+    "A foreign or tampered selector or release should be adopted, overwritten, or repaired without first restoring product ownership.",
+    "A database should be initialized, migrated, or deleted merely as a side effect of deploying the CLI."
+  ],
+  "outcome": "A version-matched, content-addressed local release whose command and sole `providers/geste` selector follow one current release, an explicitly initialized schema-one database, or an evidence-backed local diagnosis.",
+  "effects": [
+    "Deployment stages immutable binary, deployer, manifest, and Geste-owned Chancery bundle bytes under private application support, then changes the current release selected by both public surfaces.",
+    "Deployment writes `~/.local/bin/geste` and exactly one Chancery provider selector but starts no daemon and performs no domain database initialization or migration.",
+    "A separate `geste init` creates schema one at the selected database path; `doctor` reads schema, integrity, and privacy state without contacting another product or service."
+  ],
+  "authority": [
+    "Geste's deployer owns its content-addressed releases, current and previous selectors, command selector, and only `providers/geste`.",
+    "Geste owns schema-one initialization and database integrity and privacy checks.",
+    "The operator owns the choice to deploy and the separate choice of whether and where to initialize persistent domain state."
+  ],
+  "success": [
+    "The candidate reports the same version as its validated provider bundle, the exact release tree and manifest match all staged bytes, and the public command and provider resolve through the same current release.",
+    "Identical redeployment is idempotent; an update retains the prior valid selector and a failed post-switch smoke restores both binary and provider views together.",
+    "The deployer refuses symbolic, foreign, traversal, fabricated, or tampered owned selectors and releases instead of replacing them.",
+    "After a separate initialization, `geste doctor` proves the complete schema-one object set, revision seals, foreign-key integrity, SQLite integrity, mode-0600 database bytes, and a mode-0700 parent state directory."
+  ],
+  "failure_and_recovery": [
+    "A failed deployment before commit restores the previous current and previous release selectors plus both public selectors; inspect the reported owned paths before retrying.",
+    "If a domain canary fails after commit, preserve its evidence and redeploy the exact binary with the packaged deployer selected by `install/previous`; stop if that release is absent or invalid.",
+    "Do not bypass selector or manifest refusal. Restore the last known Geste-owned bytes or move the foreign path aside under separate authority.",
+    "An absent database after deployment is expected; run the explicit init command only when new persistent state is intended."
+  ],
+  "privacy": [
+    "Release and provider bytes contain no episode data; the private Geste state directory and database may contain sensitive process accounts and source identities.",
+    "Deployment must never package, print, inspect, or delete the domain database."
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Build and validate a green Geste candidate without changing installed state.",
+    "Run the product-owned deployer with the absolute release binary path and inspect its version, current release, command selector, provider selector, and manifest.",
+    "Run the installed version and help checks; initialize the selected database only as a separate explicit operation.",
+    "Run `geste doctor` against the initialized database and inspect permissions before domain use."
+  ],
+  "checkpoints": [
+    "The candidate binary and provider release are exactly version matched.",
+    "Existing current and previous releases pass selector, canonical manifest, and content-hash validation before reuse or update.",
+    "The stable command and provider selectors both target paths through the one atomic current-release selector.",
+    "No deployer command creates, opens, migrates, backs up, or deletes the Geste domain database."
+  ],
+  "adaptation": [
+    "Use `--home` only for an intentional alternate-user or isolated deployment boundary.",
+    "Use `--database` or `GESTE_DATABASE` when the default private application-support database is not the intended casebook."
+  ],
+  "stop_when": [
+    "The candidate version, provider release, help surface, release identity, selector ownership, or content integrity cannot be proved.",
+    "An owned path is foreign, symbolic where a regular path is required, or cannot be rolled back coherently.",
+    "Initializing storage is not separately intended or the target is an existing non-Geste or unsupported database."
+  ],
+  "interfaces": [
+    {"label": "Deploy candidate", "invocation": "geste/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH"},
+    {"label": "Redeploy previous release", "invocation": "\"/Users/joey/Library/Application Support/Geste/install/previous/package/deploy-user.sh\" --binary \"/Users/joey/Library/Application Support/Geste/install/previous/bin/geste\""},
+    {"label": "Initialize selected database", "invocation": "/Users/joey/.local/bin/geste init"},
+    {"label": "Diagnose selected database", "invocation": "/Users/joey/.local/bin/geste doctor"}
+  ],
+  "does_not_authorize": [
+    "Publishing a release, replacing a foreign selector, or deleting retained releases or episode state.",
+    "Silently initializing or migrating domain storage during deployment.",
+    "Changing Chancery, Semantics, or another Cell product."
+  ],
+  "manual": "manuals/install-operate.md"
+}

@@ -1,0 +1,59 @@
+{
+  "id": "geste.episode.explore",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Find and inspect prior process episodes",
+  "summary": "Search Geste's manually captured casebook by request-shape terms, then inspect exact immutable episode revisions, reports, source coverage, and bounded provenance graphs.",
+  "use_when": [
+    "A new request may have a previously solved structural precedent and the caller wants candidates before choosing a path.",
+    "An exact historical episode revision, its frozen source basis, its authored lessons, or its coverage gaps should be inspected.",
+    "A bounded report or provenance graph should be derived from one stored episode revision."
+  ],
+  "do_not_use_when": [
+    "The caller needs the current truth from Conversations, Decisions, Semantics, Annals, Git, Nucleus, Todo, Chancery, Weaver, or another cited source.",
+    "A prior episode should be treated as current policy, proof that an analogy applies, or an automatically inferred solution.",
+    "The task is to capture or revise an episode rather than read the casebook."
+  ],
+  "outcome": "Deterministically ranked precedent candidates from current episode heads, or an exact selected revision rendered as stored data, a read-time report, or a bounded provenance graph with interpretation and upstream anchors visibly distinct.",
+  "effects": [
+    "Search, list, show, report, and graph read only the selected Geste SQLite database and do not call a model, network, Chancery, or another Cell product.",
+    "Search considers only each episode's latest revision; an explicit `--at` read selects a frozen historical revision.",
+    "Human or JSON output may disclose private episode prose, source labels, stable references, and outcomes to the caller's terminal or redirected output."
+  ],
+  "authority": [
+    "Geste owns episode identity, immutable revision order, authored case interpretation, source-anchor links, retrieval rules, and read-time projections.",
+    "Each cited source product retains authority for its referenced record and current state.",
+    "The caller owns the judgment that a candidate is analogous, applicable, and compatible with current operating contracts."
+  ],
+  "success": [
+    "The database is an initialized supported schema-one Geste database and the requested read completes without an integrity or selection error.",
+    "Search normalizes 1 through 16 unique terms, requires every term to match, applies the documented field weights once per term including outcome status and summary, and orders ties by ascending numeric episode ID.",
+    "Reports label episode-authored interpretation, verified and unverified settlements, locator-only source warnings, and explicit gaps without elevating them into upstream truth.",
+    "Graphs are complete only for the selected revision and contain typed episode, claim, structured source, and related-episode nodes, explicit coverage-gap links, and the manual-source boundary rather than an unbounded traversal."
+  ],
+  "failure_and_recovery": [
+    "Run `geste doctor` against the same database when schema, integrity, or privacy readiness is uncertain.",
+    "A no-match result means only that the manually captured latest revisions did not satisfy every lexical term; refine the terms or inspect the coverage of the casebook.",
+    "Resolve current policy and mutable locator-only anchors through their owning installed contracts before reusing a precedent."
+  ],
+  "privacy": [
+    "Geste state is private local data and may expose episode-authored prose, source labels, paths embedded in source identities, decisions, and outcomes.",
+    "The CLI performs no model or network call, but redirected output becomes caller-owned retained data."
+  ],
+  "interfaces": [
+    {"label": "Check the selected database", "invocation": "/Users/joey/.local/bin/geste doctor"},
+    {"label": "Search precedent candidates", "invocation": "/Users/joey/.local/bin/geste search QUERY [--limit N]"},
+    {"label": "List current episodes", "invocation": "/Users/joey/.local/bin/geste episode list [--limit N]"},
+    {"label": "Show an exact revision", "invocation": "/Users/joey/.local/bin/geste episode show EPISODE [--at N]"},
+    {"label": "Render an episode report", "invocation": "/Users/joey/.local/bin/geste report EPISODE [--at N]"},
+    {"label": "Render an episode graph", "invocation": "/Users/joey/.local/bin/geste graph EPISODE [--at N]"}
+  ],
+  "does_not_authorize": [
+    "Treating a retrieved episode as current policy, procedure, evidence, or proof that its response applies now.",
+    "Reading, changing, or verifying any cited upstream record.",
+    "Publishing or sending private episode output."
+  ],
+  "manual": "manuals/episode-explore.md"
+}
