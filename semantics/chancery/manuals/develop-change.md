@@ -35,8 +35,8 @@ personal paths.
 semantics/ci.sh
 ```
 
-The complete gate is offline and has a 60-second deadline. It validates shell
-and plist syntax, runner/frontend behavior, content-addressed deployment,
+The complete gate is offline. It validates shell and plist syntax,
+runner/frontend behavior, content-addressed deployment,
 database quiescence and rollback, retained-state uninstall, Chancery provider
 and dependency contracts, rustfmt, clippy, tests, rustdoc, and a release build.
 

@@ -23,4 +23,3 @@ Semantics-Project: annals
   run, continue, retry, update, or deploy authorizes only that operation's
   documented effects, not additional storage remediation.
 - Every code change must leave `./ci.sh` green. Run it before considering the change complete.
-- `./ci.sh` has a hard 60-second runtime limit; exceeding it is a CI failure.

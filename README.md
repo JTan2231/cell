@@ -4,7 +4,7 @@ Cell is the source monorepo for the local Nucleus ecosystem. It coordinates
 changes across the shared execution substrate and its first-party requesters
 without combining their runtime or domain authorities.
 
-The repository contains ten independently versioned release units in nine
+The repository contains eleven independently versioned release units in ten
 product directories:
 
 - `nucleus/`: the Nucleus CLI, daemon, typed client, portable contract, store,
@@ -19,16 +19,18 @@ product directories:
 - `conversations/`: the read-only machine-wide Codex task-history CLI and
   reusable App Server adapter;
 - `decisions/`: the continuous enacted-decision observer, durable review
-  projection, and daily decision-email scheduler; and
+  projection, and daily decision-email scheduler;
 - `semantics/`: the registered-folder semantic repository service and
-  constrained decision-reconciliation requester.
+  constrained decision-reconciliation requester; and
+- `pratica/`: the durable system-integration terms negotiation and agreement
+  CLI.
 
 Nucleus owns agent admission, execution, authentication, job history, and the
-durable requester-tool mailbox. Annals, Todo, Weaver, Decisions, and Semantics
-continue to own their domain state and success rules. Conversations reads the
-normal-user Codex App Server and owns no projection state. Email is independent
-of Nucleus and calls Resend directly. Codex remains an external harness rather
-than source vendored into Cell. Start with
+durable requester-tool mailbox. Annals, Todo, Weaver, Decisions, Semantics, and
+Pratica continue to own their domain state and success rules. Conversations
+reads the normal-user Codex App Server and owns no projection state. Email is
+independent of Nucleus and calls Resend directly. Codex remains an external
+harness rather than source vendored into Cell. Start with
 [`nucleus/docs/operator-manual.md`](nucleus/docs/operator-manual.md) for shared
 topology, compatibility, and safe change ordering.
 
@@ -40,8 +42,8 @@ Cell is one Cargo workspace with one lockfile:
 cargo build --workspace --locked
 ```
 
-Each product retains its own complete CI gate and 60-second budget. The root
-dispatcher has no ecosystem-wide 60-second deadline:
+Each product retains its own complete CI gate. The root dispatcher invokes a
+selected product gate or the full ecosystem gate:
 
 ```sh
 ./ci.sh
@@ -54,22 +56,24 @@ dispatcher has no ecosystem-wide 60-second deadline:
 ./ci.sh conversations
 ./ci.sh decisions
 ./ci.sh semantics
+./ci.sh pratica
 ```
 
-Running `./ci.sh` without selectors runs the nine product gates sequentially.
-A shared Nucleus contract or client change must pass all nine gates. A purely
+Running `./ci.sh` without selectors runs the ten product gates sequentially.
+A shared Nucleus contract or client change must pass all ten gates. A purely
 domain-local change may use its product gate while iterating, but the complete
-root gate is the final repository check. A complete run also assembles all ten
-source provider bundles and requires Chancery doctor and list to accept their
-combined dependency graph.
+root gate is the final repository check. A complete run also assembles all
+eleven source provider bundles and requires Chancery doctor and list to accept
+their combined dependency graph.
 
 ## Versions and releases
 
 Nucleus's six crates share one Nucleus version. Annals, Annals Usage, Todo,
-Chancery, Weaver, Email, Conversations, Decisions, and Semantics keep independent
-versions and release scripts. Source colocation does not imply lockstep release
-or deployment, a shared state directory, or a shared database. New releases use
+Chancery, Weaver, Email, Conversations, Decisions, Semantics, and Pratica keep
+independent versions and release scripts. Source colocation does not imply
+lockstep release or deployment, a shared state directory, or a shared database.
+New releases use
 product-qualified tags (`nucleus-v*`, `annals-v*`, `annals-usage-v*`,
 `todo-v*`, `chancery-v*`, `weaver-v*`, `email-v*`, `conversations-v*`,
-`decisions-v*`, and `semantics-v*`). Pre-Cell release tags remain available in
-the original product repositories.
+`decisions-v*`, `semantics-v*`, and `pratica-v*`). Pre-Cell release tags remain
+available in the original product repositories.

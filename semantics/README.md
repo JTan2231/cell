@@ -25,8 +25,7 @@ Start with [the documentation map](docs/README.md), then see the
 ./ci.sh
 ```
 
-Product CI is offline, uses synthetic state and fake service boundaries, and
-must finish within 60 seconds.
+Product CI is offline and uses synthetic state and fake service boundaries.
 
 `./release.sh --patch|--minor|--major` is the separately authorized Git
 publication path. It requires clean synchronized `main`, runs product CI,

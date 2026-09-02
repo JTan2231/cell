@@ -31,7 +31,7 @@ and authentication or service-ownership changes.
    ./nucleus/ci.sh
    ```
 
-   The Nucleus gate has its own 60-second deadline.
+   Treat it as Nucleus's complete product gate.
 6. Run every affected requester quality gate and contract test.
 7. Treat release and deployment as separate actions requiring their own
    authority.

@@ -60,7 +60,7 @@ needed atomic fact is absent, expose a gap rather than synthesizing authority.
    ./annals/ci.sh
    ```
 
-   The Annals product gate has a hard 60-second deadline.
+   Treat that command as the complete Annals product gate.
 5. Run separately authorized live report, budget, doctor, login, and Annals
    requester canaries only when the changed boundary requires them.
 

@@ -1,0 +1,61 @@
+{
+  "id": "pratica.agreement.explore",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Inspect integration negotiations and agreements",
+  "summary": "Read Pratica integrations, steward scopes, negotiation history, attempts, exact offers, assent, immutable agreements, advisory reviews, reports, exports, and mechanical verification without invoking an agent or changing target systems.",
+  "use_when": [
+    "A caller needs the current state or complete immutable history of a Pratica integration or bilateral negotiation.",
+    "An exact sealed agreement, its terms bytes, party assent, steward basis, predecessor, attempt, composition review, or conformance review should be inspected or exported.",
+    "Stored agreement integrity should be mechanically verified before relying on its historical seal."
+  ],
+  "do_not_use_when": [
+    "New terms, assent, steward response, composition review, amendment, or conformance review should be created; use pratica.integration.negotiate.",
+    "The caller needs current target-system behavior rather than the exact basis and agreement Pratica retained.",
+    "Mechanical verification is being mistaken for implementation tests, deployment readiness, or continuing applicability after system change."
+  ],
+  "outcome": "A deterministic view or exact export of selected Pratica state with authored terms, protocol facts, source basis, reviews, and proof limitations visibly distinct.",
+  "effects": [
+    "Show, history, status, report, attempt inspection, and review inspection read only the selected Pratica database.",
+    "Agreement verification re-reads only the already-recorded local source paths and appends one fresh, stale, or unknown basis-verification observation without changing the historical agreement seal.",
+    "Agreement export writes exact stored Markdown bytes only when the caller explicitly selects an output path; standard output may disclose them to the terminal or redirection target.",
+    "These commands invoke no Nucleus job, model, target-system adapter, Chancery runtime, network, or general source crawl."
+  ],
+  "authority": [
+    "Pratica is authoritative for its identities, event order, exact stored terms, assent, seals, attempts, and reviews.",
+    "Target systems remain authoritative for present implementation and contracts; source locators and recorded bases do not become current through inspection.",
+    "The caller owns the decision that an agreement remains applicable to current work."
+  ],
+  "success": [
+    "The selected schema-one database passes the exact read and integrity requirements for the requested record.",
+    "Agreement output identifies the exact offer, digest, fixed parties, current-at-seal assent, steward basis, and any predecessor without rewriting terms.",
+    "Reports distinguish bilateral agreement, integration coverage, advisory composition findings, candidate conformance evidence, and unproven current applicability."
+  ],
+  "failure_and_recovery": [
+    "Run Pratica doctor against the same database when schema, integrity, content digest, seal, or privacy readiness is uncertain.",
+    "Resolve missing or stale current target evidence through the target system's own installed contract; do not edit Pratica history.",
+    "An existing, symbolic, relative, or unsafe export target is refused rather than overwritten."
+  ],
+  "privacy": [
+    "Read output can disclose complete private terms, source labels, reviews, citations, and stable system identities.",
+    "Redirected or exported output becomes caller-owned retained data even though Pratica makes no network call."
+  ],
+  "interfaces": [
+    {"label": "Integration status", "invocation": "/Users/joey/.local/bin/pratica integration status INTEGRATION"},
+    {"label": "Integration report", "invocation": "/Users/joey/.local/bin/pratica integration report INTEGRATION"},
+    {"label": "Negotiation history", "invocation": "/Users/joey/.local/bin/pratica negotiation history NEGOTIATION"},
+    {"label": "Show agreement", "invocation": "/Users/joey/.local/bin/pratica agreement show AGREEMENT"},
+    {"label": "Export exact terms", "invocation": "/Users/joey/.local/bin/pratica agreement export AGREEMENT [--output FILE]"},
+    {"label": "Verify stored seal", "invocation": "/Users/joey/.local/bin/pratica agreement verify AGREEMENT"},
+    {"label": "Show attempt", "invocation": "/Users/joey/.local/bin/pratica attempt show ATTEMPT"},
+    {"label": "Show conformance review", "invocation": "/Users/joey/.local/bin/pratica conformance show REVIEW"}
+  ],
+  "does_not_authorize": [
+    "Assenting, proposing terms, retrying work, changing an integration, or invoking a model.",
+    "Treating a historical seal as implementation proof, current target truth, exhaustive system coverage, or deployment authorization.",
+    "Publishing or sending private terms or reviews."
+  ],
+  "manual": "manuals/agreement-explore.md"
+}

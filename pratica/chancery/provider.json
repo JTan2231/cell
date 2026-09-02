@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "provider": {
+    "id": "pratica",
+    "name": "Pratica",
+    "release": "0.1.0"
+  },
+  "entries": [
+    "entries/integration-negotiate.json",
+    "entries/agreement-explore.json",
+    "entries/install-operate.json",
+    "entries/develop-change.json"
+  ]
+}

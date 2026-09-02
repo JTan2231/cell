@@ -6,11 +6,11 @@ ROOT=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 
 usage() {
     printf '%s\n' \
-        'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver|email|conversations|decisions|semantics]...'
+        'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver|email|conversations|decisions|semantics|pratica]...'
 }
 
 if [ "$#" -eq 0 ]; then
-    set -- nucleus annals todo chancery weaver email conversations decisions semantics
+    set -- nucleus annals todo chancery weaver email conversations decisions semantics pratica
 fi
 
 nucleus_selected=0
@@ -22,6 +22,7 @@ email_selected=0
 conversations_selected=0
 decisions_selected=0
 semantics_selected=0
+pratica_selected=0
 for project in "$@"; do
     case "$project" in
         nucleus) nucleus_selected=1 ;;
@@ -33,6 +34,7 @@ for project in "$@"; do
         conversations) conversations_selected=1 ;;
         decisions) decisions_selected=1 ;;
         semantics) semantics_selected=1 ;;
+        pratica) pratica_selected=1 ;;
         *)
             usage >&2
             exit 2
@@ -45,8 +47,8 @@ for project in "$@"; do
     "$ROOT/$project/ci.sh"
 done
 
-if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$decisions_selected$semantics_selected" = \
-    111111111 ]
+if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$decisions_selected$semantics_selected$pratica_selected" = \
+    1111111111 ]
 then
     printf '%s\n' '==> integrated Chancery source catalog'
     (
@@ -69,6 +71,7 @@ then
         ln -s "$ROOT/conversations/chancery" "$catalog_registry/conversations"
         ln -s "$ROOT/decisions/chancery" "$catalog_registry/decisions"
         ln -s "$ROOT/semantics/chancery" "$catalog_registry/semantics"
+        ln -s "$ROOT/pratica/chancery" "$catalog_registry/pratica"
 
         chancery_candidate="$ROOT/target/release/chancery"
         [ -f "$chancery_candidate" ] && [ -x "$chancery_candidate" ] || {

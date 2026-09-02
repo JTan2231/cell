@@ -26,7 +26,7 @@
   ],
   "success": [
     "All changed public and operational contracts are documented and immutable historical records remain meaningful.",
-    "`./todo/ci.sh` completes within its 60-second product budget.",
+    "`./todo/ci.sh` completes green.",
     "Affected Nucleus requester, database migration, email, and deployment canaries are run when their boundaries change."
   ],
   "failure_and_recovery": [
@@ -48,7 +48,7 @@
     "Identify the Todo-owned layer being changed and preserve the distinctions among `cN`, `rN`, `tN`, `aN`, `dN`, notes, lifecycle, and external implementation.",
     "Run `nucleus manual` before changing requester tools, shared execution, authentication, compatibility, job records, persistent cross-system state, or deployment.",
     "Implement the smallest change and update CLI, liaison, architecture, data, or installation documentation in the same change.",
-    "Run `./todo/ci.sh` within its product deadline and perform separately authorized live canaries when required."
+    "Run `./todo/ci.sh` and perform separately authorized live canaries when required."
   ],
   "checkpoints": [
     "Model text remains non-authoritative and explicit accept/reject commands remain outside liaison tools.",

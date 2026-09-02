@@ -14,4 +14,4 @@ Semantics-Project: decisions
 - Decisions owns its SQLite projection, review state, digest snapshots, and
   delivery records; Nucleus owns only bounded agent execution.
 - Never add a direct Codex fallback or let model output become domain authority.
-- Every code change must leave `./ci.sh` green within its 60-second deadline.
+- Every code change must leave `./ci.sh` green.

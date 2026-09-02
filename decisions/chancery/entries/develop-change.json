@@ -5,13 +5,13 @@
   "mode": "develop",
   "support": "supported",
   "title": "Change the Decisions product safely",
-  "summary": "Develop Decisions while preserving enacted-decision authority, narrow continuous observation, immutable classification and lifecycle-event contracts, activation and SQLite migrations, delivery idempotency, and the 60-second product CI gate.",
+  "summary": "Develop Decisions while preserving enacted-decision authority, narrow continuous observation, immutable classification and lifecycle-event contracts, activation and SQLite migrations, delivery idempotency, and the complete product CI gate.",
   "use_when": ["Decisions code, schemas, prompts, classifier tools, packaging, service lifecycle, or documentation should change."],
   "do_not_use_when": ["The installed Decisions capability should only be used or operated."],
   "outcome": "A reviewed product change whose standalone CI is green and whose operational contracts remain synchronized.",
   "effects": ["May change source, tests, docs, hook/service packaging, database migrations, or publish a new immutable schema/toolset identity."],
   "authority": ["Decisions source and docs own product semantics.", "The Nucleus operator manual owns shared requester constraints."],
-  "success": ["`decisions/ci.sh` finishes green within 60 seconds.", "Changed registered meanings use new immutable IDs or versions and retained decoders remain valid."],
+  "success": ["`decisions/ci.sh` finishes green.", "Changed registered meanings use new immutable IDs or versions and retained decoders remain valid."],
   "failure_and_recovery": ["Do not deploy or release a failing candidate.", "Restore or migrate requester state using the documented backup boundary."],
   "privacy": ["Fixtures must not contain real transcripts, credentials, email bodies, or personal paths."],
   "dependencies": [
@@ -33,7 +33,7 @@
     "The write-once activation baseline prevents pre-deployment reconciliation and is preserved across redeploy and rollback.",
     "Incomplete source or classification known by a run's durable completion cutoff cannot create a complete run, snapshot, or delivery.",
     "Nucleus retains no shell, workspace, web, launch-context, or direct-Codex fallback authority.",
-    "CI is green within 60 seconds without sending email, deploying, or publishing."
+    "CI is green without sending email, deploying, or publishing."
   ],
   "adaptation": [
     "Publish new immutable schema IDs or toolset versions for changed registered meaning.",

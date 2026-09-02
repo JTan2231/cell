@@ -1,0 +1,81 @@
+{
+  "id": "pratica.install.operate",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install or initialize Pratica",
+  "summary": "Deploy, verify, or recover the user-owned content-addressed Pratica CLI and Chancery selector, then separately initialize or diagnose its private negotiation database and Nucleus readiness.",
+  "use_when": [
+    "Pratica should be installed or updated for this macOS user.",
+    "The installed binary, provider selector, release identity, database schema, integrity, private permissions, Nucleus readiness, or immutable toolsets should be checked.",
+    "A new empty Pratica database should be explicitly initialized."
+  ],
+  "do_not_use_when": [
+    "The task is ordinary negotiation or agreement inspection.",
+    "A foreign or tampered selector or release should be overwritten, or storage should be initialized or deleted as a deployment side effect.",
+    "Deployment, initialization, or another installed-state change has not been explicitly authorized."
+  ],
+  "outcome": "A version-matched content-addressed local release whose command and sole providers/pratica selector follow one current release, an explicitly initialized schema-one database, or an evidence-backed readiness diagnosis.",
+  "effects": [
+    "Deployment stages immutable binary, deployer, manifest, and Pratica-owned Chancery bytes, then changes the current release selected by both public surfaces.",
+    "Deployment writes ~/.local/bin/pratica and one Chancery provider selector but starts no service, submits no Nucleus job, and never opens or changes the domain database.",
+    "A separate init creates schema one; doctor reads schema, integrity, permissions, Nucleus health, and immutable toolset readiness without negotiating terms."
+  ],
+  "authority": [
+    "Pratica owns its releases, current and previous selectors, command selector, providers/pratica selector, schema initialization, and database integrity checks.",
+    "Nucleus remains separately authoritative for execution and authentication; deployment does not restart or reconfigure it.",
+    "The operator separately chooses whether and where to initialize persistent negotiation state."
+  ],
+  "success": [
+    "The candidate and provider versions match, the exact staged release manifest matches every component, and both public selectors resolve through one current release.",
+    "Identical redeployment is idempotent, an update retains the prior valid release, and failed post-switch smoke restores binary and provider views together.",
+    "The deployer refuses foreign, symbolic, traversal, fabricated, incomplete, or tampered owned state and creates no database or sidecar.",
+    "After separate initialization, doctor proves schema-one integrity, content/seal invariants, private permissions, strict Nucleus readiness, and all three immutable Pratica toolsets."
+  ],
+  "failure_and_recovery": [
+    "A pre-commit deployment failure restores current, previous, command, and provider selectors; inspect the reported owned paths before retrying.",
+    "After a committed domain-canary failure, preserve its evidence and redeploy the exact previous packaged binary/deployer only when schema compatibility remains safe.",
+    "Do not bypass manifest or selector refusal, initialize missing state implicitly, rewrite database history, or restart Nucleus to recover a Pratica attempt."
+  ],
+  "privacy": [
+    "Release and provider bytes contain no negotiated terms or source snapshots; the private database and Nucleus records may contain both.",
+    "Deployment must never package, inspect, print, copy, migrate, or delete the Pratica database."
+  ],
+  "session_surfaces": ["local_filesystem", "local_shell"],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Build and validate a green Pratica candidate without changing installed state.",
+    "Run the product deployer with the absolute release binary and inspect version, current release, command selector, provider selector, and manifest.",
+    "Initialize storage only as a separate explicit action, then run doctor and installed Chancery discovery.",
+    "Use the documented contract-only CRM canary when a real domain canary is intended."
+  ],
+  "checkpoints": [
+    "Pratica installs no daemon, LaunchAgent, schedule, source crawler, or direct Codex path.",
+    "No deployer operation creates, opens, migrates, backs up, or deletes negotiation state.",
+    "All three toolset identities and meanings remain immutable and Nucleus-compatible."
+  ],
+  "adaptation": [
+    "Use --database or PRATICA_DATABASE when the default private application-support database is not intended.",
+    "Treat a future schema change as a separate quiescent backup, migration, and database-aware rollback project."
+  ],
+  "stop_when": [
+    "Candidate identity, provider version, exact tree, selector ownership, schema, Nucleus compatibility, or privacy cannot be proved.",
+    "An active model-assisted command or pending tool call makes the intended maintenance boundary unsafe.",
+    "Initialization, retry, release publication, or target-system change is being inferred from deployment authority."
+  ],
+  "interfaces": [
+    {"label": "Deploy candidate", "invocation": "pratica/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH"},
+    {"label": "Initialize selected database", "invocation": "/Users/joey/.local/bin/pratica init"},
+    {"label": "Diagnose selected database and runtime", "invocation": "/Users/joey/.local/bin/pratica doctor"}
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Publishing a release, replacing foreign state, retrying a negotiation attempt, or deleting retained releases or contracts.",
+    "Changing Nucleus, Chancery, CRM, a stewarded system, or Semantics state."
+  ],
+  "manual": "manuals/install-operate.md"
+}

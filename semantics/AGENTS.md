@@ -20,5 +20,4 @@ Semantics-Project: semantics
 - Decisions and Conversations are read-only upstreams behind adapters. Chancery
   is discovery documentation, never a runtime dependency.
 - Do not deploy or run `release.sh` as a side effect of development. The
-  release command commits, tags, and pushes. `./ci.sh` must finish green within
-  60 seconds.
+  release command commits, tags, and pushes. `./ci.sh` must finish green.

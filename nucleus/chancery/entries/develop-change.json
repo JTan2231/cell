@@ -25,7 +25,7 @@
     "Requesters continue to own their domain contracts and must be changed only when the shared boundary requires it."
   ],
   "success": [
-    "`./nucleus/ci.sh` completes within its 60-second product budget.",
+    "`./nucleus/ci.sh` completes green.",
     "Every changed public or operational fact is reflected in the canonical operator manual and exact contract documentation.",
     "The relevant generic and requester canaries prove the changed boundary after any deployment."
   ],
@@ -56,7 +56,7 @@
   "checkpoints": [
     "The primary authority and every cross-system obligation are identified.",
     "Public compatibility and persistent-state consequences are explicit.",
-    "The product CI passes within its deadline.",
+    "The product CI passes.",
     "Deployment and publication have not occurred without separate authorization."
   ],
   "adaptation": [

@@ -27,7 +27,7 @@
   ],
   "success": [
     "The smallest owning Weaver component and every affected exact document agree.",
-    "`./ci.sh` completes within Weaver's 60-second product deadline.",
+    "`./ci.sh` completes green.",
     "Requester, state, activation, cancellation, validation, maintenance, packaging, rollback, and privacy proofs are updated in proportion to the changed boundary."
   ],
   "failure_and_recovery": [

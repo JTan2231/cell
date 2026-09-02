@@ -27,4 +27,4 @@ and migrated database files.
 Registered schemas and toolsets are immutable. Publish a new schema ID or
 toolset version for changed meaning and keep legacy decoders. Keep Nucleus
 permissions at none/false/false unless a separately justified contract change
-is made. Finish with `decisions/ci.sh` green within 60 seconds.
+is made. Finish with `decisions/ci.sh` green.

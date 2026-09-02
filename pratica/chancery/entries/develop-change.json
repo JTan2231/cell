@@ -1,0 +1,77 @@
+{
+  "id": "pratica.develop.change",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change Pratica software and contracts",
+  "summary": "Modify Pratica's negotiation mechanics, steward requester, integration composition, conformance review, SQLite state, CLI, packaging, tests, documentation, or published contracts while preserving opaque terms and product authority boundaries.",
+  "use_when": [
+    "Pratica code, schema, tools, prompts, sources, CLI or JSON behavior, state, recovery, packaging, release workflow, documentation, or Chancery bundle is being changed."
+  ],
+  "do_not_use_when": [
+    "The request is ordinary use or operation of the installed Pratica CLI.",
+    "Release publication or installed deployment has not been separately authorized.",
+    "The proposed change would make Pratica interpret product-contract semantics, mutate target systems, or automatically discover scopes without a new reviewed contract."
+  ],
+  "outcome": "A minimal tested Pratica change whose four slices, exact protocol, opaque terms, requester lifecycle, persistent state, recovery, privacy, installation, and published contracts agree.",
+  "effects": [
+    "Modifies Pratica source, tests, schema, product documentation, packaging, release tooling, or product-owned Chancery contracts.",
+    "Requester changes can alter retained prompts, frozen source disclosure, immutable tool registrations, correlations, permissions, and recovery.",
+    "Schema changes can affect private persistent agreement history; release and deployment remain separate effects."
+  ],
+  "authority": [
+    "Pratica owns negotiation and review domain state; target products own their implementation and contracts; Nucleus owns shared agent execution.",
+    "The Nucleus requester contract and operator manual own shared invocation, mailbox, recovery, compatibility, and maintenance requirements.",
+    "Chancery owns provider schema and discovery while Pratica owns the truth of its published capability claims."
+  ],
+  "success": [
+    "Architecture, CLI, data model, installation, Nucleus operator facts, code, tests, and Chancery contracts agree on every affected behavior.",
+    "Tests preserve exact Markdown bytes, distinct offer identity, stale-base exclusion, assent staleness, immutable seals, basis guards, source bounds, tool-call idempotency, and runtime/domain-success separation as affected.",
+    "Packaging retains exact content identity, selector ownership, foreign-state refusal, database non-interference, and rollback.",
+    "pratica/ci.sh completes green offline with synthetic fixtures."
+  ],
+  "failure_and_recovery": [
+    "Do not weaken validation, interpret contract prose in the database, resurrect stale assent by digest, rewrite sealed history, or infer implementation success from a review.",
+    "Persistent change requires an explicit migration, old-state fixture, quiescent backup, and database-aware rollback.",
+    "Immutable tool meaning changes require new schema and toolset identities with retained historical decoding."
+  ],
+  "privacy": [
+    "Fixtures are synthetic and contain no real CRM terms, conversation body, target source, credentials, private paths, prompts, tool payloads, or negotiated state.",
+    "Diagnostics and packaging tests must remain body-free and release bundles must contain no Pratica database."
+  ],
+  "dependencies": [
+    {"id": "pratica.integration.negotiate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "pratica.agreement.explore", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "session_surfaces": ["local_filesystem", "local_shell"],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read Pratica instructions and exact architecture, CLI, data-model, installation, and Chancery contracts affected by the change.",
+    "Run the installed Nucleus manual before changing public behavior, state, requester, lifecycle, deployment, or compatibility.",
+    "Implement the smallest change with synthetic frozen sources and update every affected product and shared operator contract together.",
+    "Run pratica/ci.sh and then the complete Cell root gate; release and deployment remain separately authorized."
+  ],
+  "checkpoints": [
+    "Terms remain exact opaque Markdown and offers remain complete immutable snapshots.",
+    "pratica/steward-response/1, pratica/composition-review/1, and pratica/conformance-review/1 retain exact immutable meanings or receive successor identities.",
+    "Model jobs retain workspace none, no shell/web/launch context, closed frozen source tools, one attempt, and no direct fallback.",
+    "Composition cannot mutate agreements and conformance cannot change or implement the target system."
+  ],
+  "adaptation": [
+    "Add a logical steward scope by registering a versioned manifest rather than coupling the product to a target repository.",
+    "Add source kinds only with explicit identity, cutoff, bounds, privacy, and recovery semantics."
+  ],
+  "stop_when": [
+    "A target fact cannot be obtained through an authorized bounded source snapshot.",
+    "A state, toolset, or cutover change lacks deterministic compatibility and recovery.",
+    "The change would acquire target-system mutation, automatic scope discovery, policy enforcement, or release-gate authority."
+  ],
+  "does_not_authorize": [
+    "Running release.sh, which commits, tags, and pushes.",
+    "Deploying Pratica, initializing or deleting installed state, invoking a real Nucleus job, or changing CRM or another target system."
+  ],
+  "manual": "manuals/develop-change.md"
+}

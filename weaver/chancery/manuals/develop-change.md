@@ -61,7 +61,7 @@ never publishes it.
    ./ci.sh
    ```
 
-   Weaver's full quality gate has a hard 60-second deadline.
+   Treat that command as Weaver's complete quality gate.
 5. Run any separately authorized live requester or deployment canary required
    by the changed boundary and inspect Weaver's domain result, not only Nucleus.
 

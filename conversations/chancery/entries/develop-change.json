@@ -28,7 +28,7 @@
     "The smallest owning code and exact documents agree.",
     "Fake App Server tests cover every affected protocol and normalization boundary.",
     "Process-lifecycle tests prove descendant cleanup remains scoped to the private launch group when that boundary changes.",
-    "`./ci.sh` completes within 60 seconds."
+    "`./ci.sh` completes green."
   ],
   "failure_and_recovery": [
     "Do not turn incomplete App Server data into a successful partial corpus.",

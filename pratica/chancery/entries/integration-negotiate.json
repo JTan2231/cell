@@ -1,0 +1,66 @@
+{
+  "id": "pratica.integration.negotiate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Broker system-integration terms",
+  "summary": "Open a multi-system integration, negotiate exact opaque Markdown terms bilaterally with versioned steward scopes, seal current unanimous agreements, and review their composition or later implementation conformance without changing target systems.",
+  "use_when": [
+    "A proposed entrant has explicit expectations of one or more existing systems and each system steward should reconcile those expectations with its exact implementation and contracts.",
+    "Several independently owned systems of concern must reach visible bilateral terms before a design proceeds.",
+    "A sealed design agreement needs an explicit successor amendment or an evidence-only review against a supplied candidate implementation basis."
+  ],
+  "do_not_use_when": [
+    "The caller only needs to inspect or export an existing Pratica record; use pratica.agreement.explore.",
+    "The request is to discover every relevant system automatically, implement CRM or another product, mutate a stewarded system, deploy, release, or enforce terms at runtime.",
+    "The entrant cannot yet state complete Markdown expectations or the target basis cannot be supplied through an authorized source boundary."
+  ],
+  "outcome": "One or more immutable bilateral agreements in which every fixed party assents to the same exact current Markdown offer on the recorded steward basis, optionally accompanied by a separate immutable composition or conformance review.",
+  "effects": [
+    "Writes private Pratica SQLite integrations, tracks, negotiations, offers, assents, agreements, source snapshots, attempts, and reviews.",
+    "Steward response, composition review, and conformance review submit one-attempt Nucleus jobs using Codex and can consume account allowance.",
+    "Managed source tools disclose only the frozen bounded source snapshots selected for that attempt to Nucleus and Codex.",
+    "No command changes target-system source, contracts, database, service, deployment, release, or authorization state."
+  ],
+  "authority": [
+    "Entrant and steward parties author and assent to complete offers; Pratica owns offer order, currentness, assent, basis guards, seals, attempts, reviews, and domain success.",
+    "Each target system remains authoritative for its implementation and current behavioral contracts; a steward response is scoped to the exact recorded basis.",
+    "Nucleus owns admission, authentication, agent execution, job history, and its durable tool mailbox but never decides agreement, retry, or implementation success."
+  ],
+  "success": [
+    "Each agreement seals only while its negotiation head, complete required-party assent set, and exact steward basis remain current.",
+    "Every accepted model-assisted outcome is a validated immutable Pratica tool call committed to Pratica state; Nucleus completion or final prose alone is insufficient.",
+    "A composition review names the exact agreement set and remains advisory; a conformance review names one sealed agreement and one frozen candidate basis and remains evidence-only.",
+    "The integration report states selected coverage and unresolved findings without claiming exhaustive system discovery or implementation proof."
+  ],
+  "failure_and_recovery": [
+    "A stale offer or basis rejects the proposed transition without a partial write; inspect current state and open a deliberate successor offer or attempt.",
+    "Ambiguous Nucleus admission repeats only the exact persisted request under the same job ID; a new attempt requires explicit retry and a new job identity.",
+    "A committed Pratica domain result remains authoritative if the harness later fails; do not repeat it from terminal runtime state.",
+    "A Nucleus restart makes an unfinished Codex attempt lost and does not authorize automatic retry or direct-Codex fallback."
+  ],
+  "privacy": [
+    "Terms, source snapshots, prompts, citations, reviews, and exports can contain private implementation and product-design material in both Pratica and Nucleus state.",
+    "Use private input paths and isolated state where appropriate; release bundles, fixtures, Chancery, and logs must contain no real negotiated contract or source body."
+  ],
+  "interfaces": [
+    {"label": "Open integration", "invocation": "/Users/joey/.local/bin/pratica integration open --entrant ENTRANT --title TITLE [--context FILE]"},
+    {"label": "Register steward", "invocation": "/Users/joey/.local/bin/pratica steward register MANIFEST"},
+    {"label": "Open bilateral track", "invocation": "/Users/joey/.local/bin/pratica track open INTEGRATION --steward SCOPE [--steward-version VERSION] --terms FILE"},
+    {"label": "Submit complete offer", "invocation": "/Users/joey/.local/bin/pratica negotiation propose NEGOTIATION --base OFFER --terms FILE"},
+    {"label": "Assent unchanged offer", "invocation": "/Users/joey/.local/bin/pratica negotiation assent NEGOTIATION --offer OFFER"},
+    {"label": "Obtain steward response", "invocation": "/Users/joey/.local/bin/pratica steward respond NEGOTIATION"},
+    {"label": "Review integration composition", "invocation": "/Users/joey/.local/bin/pratica integration review INTEGRATION"},
+    {"label": "Review implementation conformance", "invocation": "/Users/joey/.local/bin/pratica conformance review AGREEMENT --candidate-basis MANIFEST"}
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "does_not_authorize": [
+    "Changing, implementing, testing, migrating, deploying, or releasing CRM or another target system.",
+    "Treating a steward response as authority beyond its selected scope and basis, or a review as party assent or integration approval.",
+    "Retrying a terminal attempt, publishing private terms, or accepting target-system changes without separate explicit authority."
+  ],
+  "manual": "manuals/integration-negotiate.md"
+}

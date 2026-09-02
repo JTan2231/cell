@@ -26,7 +26,7 @@
   ],
   "success": [
     "Canonical terminology matches the registered Semantics repository `annals` and affected behavior contracts are updated.",
-    "`./annals/ci.sh` completes within its 60-second product budget.",
+    "`./annals/ci.sh` completes green.",
     "Affected installation, migration, inbox, and live requester canaries are run when the change crosses those boundaries."
   ],
   "failure_and_recovery": [
@@ -51,7 +51,7 @@
     "Read `semantics.repository.explore`, query `semantics repository show annals`, and identify the Annals-owned contract being changed.",
     "If the change crosses Nucleus execution, authentication, compatibility, persistent state, deployment, or requester integration, run `nucleus manual` before design.",
     "Implement the smallest change and update the owning CLI, architecture, data, installation, telemetry, or Semantics terminology authority in the same change.",
-    "Run `./annals/ci.sh` within its product deadline and perform separately authorized live canaries when required."
+    "Run `./annals/ci.sh` and perform separately authorized live canaries when required."
   ],
   "checkpoints": [
     "Current technical and plain-language terms follow the registered Semantics repository while code, tests, and component documentation remain behavior authority.",

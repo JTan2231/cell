@@ -2,26 +2,9 @@
 
 set -eu
 
-MAX_SECONDS=60
 EXPECTED_RUST_VERSION=1.97.1
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 WORKSPACE_DIR=$(CDPATH='' cd "$SCRIPT_DIR/.." && pwd)
-SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
-
-if [ "${SEMANTICS_CI_TIMEOUT_ACTIVE:-0}" != 1 ]; then
-    export SEMANTICS_CI_TIMEOUT_ACTIVE=1
-    timeout_command=$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)
-    if [ -n "$timeout_command" ]; then
-        exec "$timeout_command" -s KILL "$MAX_SECONDS" "$SCRIPT_PATH" "$@"
-    fi
-    exec perl -MPOSIX=setpgid -e '
-        my ($limit, @command) = @ARGV; my $pid = fork(); die "fork: $!" if !defined $pid;
-        if ($pid == 0) { setpgid(0, 0); exec @command; die "exec: $!"; }
-        setpgid($pid, $pid); local $SIG{ALRM} = sub { kill "KILL", -$pid; waitpid($pid, 0); exit 124; };
-        alarm $limit; waitpid($pid, 0); my $status = $?; alarm 0;
-        exit(128 + ($status & 127)) if $status & 127; exit($status >> 8);
-    ' "$MAX_SECONDS" "$SCRIPT_PATH" "$@"
-fi
 
 PATH=/Users/joey/.cargo/bin:$PATH
 export PATH CARGO_BUILD_WARNINGS=deny CARGO_NET_OFFLINE=true

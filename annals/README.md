@@ -213,7 +213,7 @@ separately with:
 
 An empty `origin` is also accepted for the first publication. The script bumps
 only the selected package version, refreshes the Cell root `Cargo.lock`, runs
-the complete 60-second Annals `ci.sh` suite on the bumped tree, creates a
+the complete Annals `ci.sh` suite on the bumped tree, creates a
 release commit, tags that commit, and atomically pushes `main` and only that
 tag. Both package versions are independent of library schema versions, corpus
 revisions, and the exact content-addressed release IDs used by the macOS

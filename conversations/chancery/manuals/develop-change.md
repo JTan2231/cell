@@ -18,8 +18,7 @@ appropriate. An exact-summary seam must also prove canonical host matching,
 active-and-archived metadata lookup, and the absence of turn reads.
 Process-lifecycle changes must also prove that a wrapper's
 persistent descendant cannot outlive the short-lived client and that cleanup
-is scoped to the launch's private process group. Finish with `./ci.sh` inside
-the product's 60-second deadline.
+is scoped to the launch's private process group. Finish with `./ci.sh` green.
 
 `release.sh` commits, tags, and pushes. The macOS deployer changes the installed
 binary and Chancery provider selectors. Neither effect follows from this

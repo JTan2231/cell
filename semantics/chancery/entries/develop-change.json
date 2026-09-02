@@ -5,7 +5,7 @@
   "mode": "develop",
   "support": "supported",
   "title": "Change the Semantics product safely",
-  "summary": "Develop Semantics while preserving project-scoped authority, append-only replay, exact upstream adapters, restricted Nucleus reconciliation, crash recovery, packaging rollback, privacy, and the offline 60-second CI gate.",
+  "summary": "Develop Semantics while preserving project-scoped authority, append-only replay, exact upstream adapters, restricted Nucleus reconciliation, crash recovery, packaging rollback, privacy, and the offline CI gate.",
   "use_when": ["Semantics source, schema, effects, worker policy, toolset, prompts, CLI, packaging, service lifecycle, or documentation should change."],
   "do_not_use_when": ["The installed repository should only be explored or operated."],
   "outcome": "A synchronized product change whose standalone offline CI is green and whose persistent, requester, service, and published discovery contracts remain valid.",
@@ -16,7 +16,7 @@
     "The shared Nucleus operator manual owns cross-product requester and service-maintenance procedures."
   ],
   "success": [
-    "semantics/ci.sh finishes green offline within 60 seconds without contacting live Nucleus, Decisions, Conversations, launchd, or Chancery state.",
+    "semantics/ci.sh finishes green offline without contacting live Nucleus, Decisions, Conversations, launchd, or Chancery state.",
     "Schema and effect changes retain historical replay or add explicit migration and rollback proofs.",
     "Changed registered tool meaning uses a new immutable schema ID or toolset version and old correlations remain recoverable."
   ],
@@ -47,7 +47,7 @@
     "Effective admissions and confirmations ground the exact current event and decision; dismissals append unground effects instead of deleting history.",
     "Nucleus has a neutral cwd, workspace none, no shell/web, one immutable managed tool, and no authority outside Semantics validation and transaction.",
     "Mailbox commit/receipt is atomic, redelivery is idempotent, conflicting replay is rejected, and unsafe retry is refused.",
-    "CI and packaging tests are offline, use fakes, finish within 60 seconds, and produce body-free logs."
+    "CI and packaging tests are offline, use fakes, and produce body-free logs."
   ],
   "adaptation": [
     "Publish a new immutable schema or toolset version whenever registered meaning changes.",

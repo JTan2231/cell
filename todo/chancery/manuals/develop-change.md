@@ -46,7 +46,7 @@ changes; historical registrations and decoders remain intact.
    ./todo/ci.sh
    ```
 
-   The product gate has a hard 60-second deadline.
+   Treat it as the complete product gate.
 5. Run separately authorized routing, assessment, design, migration, email, or
    deployment canaries only when their exact boundary changed.
 

@@ -45,7 +45,7 @@ cross-system integration, read:
    ./annals/ci.sh
    ```
 
-   It has a hard 60-second deadline.
+   Treat it as the complete Annals product gate.
 5. Run separately authorized deployment, migration, and live requester
    canaries only when the changed boundary requires them.
 

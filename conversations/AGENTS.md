@@ -17,6 +17,6 @@ Semantics-Project: conversations
   reasoning, approval, and internal item payloads are outside the public corpus.
 - Update the CLI, architecture, installation, and Chancery contracts together
   when their shared behavior changes.
-- Every code change must leave `./ci.sh` green within its 60-second deadline.
+- Every code change must leave `./ci.sh` green.
 - `release.sh` publishes a release and the macOS deployer changes installed
   selectors; do not invoke either without the corresponding authorization.

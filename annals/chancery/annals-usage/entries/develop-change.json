@@ -27,7 +27,7 @@
   "success": [
     "Coverage, overlapping token categories, unattributed runs, rate-card limits, and account-global allowance scope remain explicit and tested.",
     "No telemetry database, account snapshot, credential copy, UI scrape, or offline estimate is introduced.",
-    "The Annals product CI passes within its 60-second deadline."
+    "The Annals product CI passes."
   ],
   "failure_and_recovery": [
     "Fail when an underlying authority is unreadable instead of returning a stale cached answer.",

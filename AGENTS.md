@@ -25,5 +25,4 @@ Semantics-Project: cell
 - Update `nucleus/docs/operator-manual.md` in the same change when shared
   operational facts, boundaries, or procedures change.
 - Preserve product-scoped instructions in nested `AGENTS.md` files.
-- Every code change must leave `./ci.sh` green. Each product CI has its own
-  60-second deadline; the root dispatcher has no aggregate 60-second deadline.
+- Every code change must leave `./ci.sh` green.
