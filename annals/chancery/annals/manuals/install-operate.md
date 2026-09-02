@@ -26,6 +26,19 @@ scheduled work, performs supported migration, switches the release and
 LaunchAgent configuration, and validates the installed commands. It does not
 stop, replace, or take ownership of Nucleus.
 
+The inbox storage gate is not a deployment lock. A closed gate does not by
+itself reject an Annals deployment, globally stop the Nucleus service or
+independent Nucleus jobs, or block another product's deployment. The deployer
+still needs enough physical capacity to stage the release and write its backup,
+migration, validation, and rollback artifacts; any of those writes can fail
+when the shared filesystem is actually full. A probe error is distinct from a
+measured closed gate and can fail deployment status validation with
+`storage_probe_failed`. A deployment request authorizes only the deployer's
+documented effects. It does not authorize a model or agent to clear user data
+as separate storage remediation or to lower or disable the reserve. Either
+action remains a user decision requiring explicit consent for the exact target
+and scope.
+
 An ordinary pre-commit failure restores the captured release, configuration,
 library, spool, and service state. Do not remove maintenance markers, edit
 receipts, or swap database files manually after interruption; inspect the

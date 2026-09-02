@@ -33,6 +33,7 @@
   ],
   "failure_and_recovery": [
     "Do not remove maintenance, edit spool receipts, or replace library files manually after interrupted deployment; inspect and use the documented recovery procedure.",
+    "A measured closed inbox storage gate does not itself reject a deployment, but `storage_probe_failed` can reject status validation and insufficient physical space can fail release staging, backup, migration, validation, or rollback writes.",
     "A failed ordinary update restores the previous captured generation before work resumes.",
     "A fresh-state cutover is destructive to the active generation and requires explicit retained rollback material and backlog verification."
   ],
@@ -54,6 +55,7 @@
   "does_not_authorize": [
     "Running `annals/release.sh`, which commits, tags, and pushes.",
     "A fresh-state replacement without explicit destructive-operation authority.",
+    "Clearing user data as storage remediation, or lowering or disabling the inbox storage reserve, without the user's explicit consent for the exact target and scope.",
     "Deleting prior generations, backups, logs, or retained failed envelopes."
   ],
   "manual": "manuals/install-operate.md"

@@ -36,6 +36,7 @@
   "failure_and_recovery": [
     "Every inbox job has at most one processing attempt; never move a terminal envelope back to queued.",
     "A storage probe failure prevents a claim and exits nonzero; insufficient storage halts an attended retry until the operator continues it.",
+    "When low storage closes the gate, preserve the queued work and leave storage remediation or a reserve change to the user under explicit target-scoped consent.",
     "Unexpected model or runtime failure archives the current job and halts the activation or retry event; continue only through the supported command.",
     "Pause before interruption when the next ordinary job must remain queued, and require paused quiescence before starting or continuing a retry event."
   ],
@@ -61,6 +62,7 @@
   ],
   "does_not_authorize": [
     "Editing spool receipts or moving archived envelopes manually.",
+    "Deleting, truncating, pruning, moving, compressing, or otherwise clearing user data as storage remediation, or lowering or disabling the storage reserve, without the user's explicit consent for the exact target and scope.",
     "An unbounded retry or a second attempt for the same job.",
     "Restarting Nucleus while an Annals attempt is active."
   ],

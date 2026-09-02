@@ -33,6 +33,29 @@ with attempts zero and no delivery record; the ordinary activation exits and a
 later scheduled or explicit run checks again without requiring `resume`. A
 storage probe failure also leaves the job unattempted but exits nonzero.
 
+## Storage recovery authority and scope
+
+Low storage is a safe stop, not cleanup authority. Preserve the queued work and
+report the affected paths and available bytes. Neither the Annals liaison nor
+an operating model or agent may, as storage remediation, delete, truncate,
+rotate, prune, move, compress, overwrite, or otherwise clear user data, or
+lower or disable the configured reserve, without the user's explicit consent
+for the exact target and scope. A request to run, continue, retry, update, or
+deploy Annals authorizes only that operation's documented effects, not
+additional cleanup. Scheduled rechecks only observe capacity and may resume
+ordinary queued work after the configured reserve becomes available.
+
+The gate applies to new ordinary and retry-child claims. The related
+direct-enqueue headroom check applies separately to an explicit spool copy. A
+gated inbox item does not submit its associated liaison job to Nucleus. The gate
+is not a host-wide lock and does not itself block an Annals deployment,
+globally stop the Nucleus service or independent Nucleus jobs, or block another
+product's deployment; manual `annals integrate` is also outside this gate.
+Actual filesystem exhaustion can still make any operation sharing that storage
+fail when it needs to stage a release, create a backup, migrate a database, or
+write state or logs. An unreadable probe is distinct from measured low space
+and can make deployment status validation fail with `storage_probe_failed`.
+
 When storage is ready, Annals performs an authenticated Nucleus account
 preflight. Failure leaves the next job queued with attempts zero and no
 delivery record. A claimed job moves to processing, increments from zero to

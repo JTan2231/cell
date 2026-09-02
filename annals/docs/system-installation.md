@@ -900,6 +900,32 @@ reported locations, then wait for the next scheduled activation or run
 `annals inbox run` explicitly. If the report is `storage_probe_failed`, correct
 the path or permission failure; do not bypass the check by editing spool state.
 
+Storage remediation is a user decision, not authority granted to Annals, its
+liaison, or another model or agent. They may report the affected paths and
+available bytes, preserve the queued work, and wait for direction. They must
+not, as storage remediation, delete, truncate, rotate, prune, move, compress,
+overwrite, or otherwise clear library, spool, archive, backup, log, Nucleus, or
+unrelated host data, or lower or disable `minimum_available_bytes`, without the
+user's explicit consent for the exact target and scope. A request to run,
+continue, retry, update, or deploy Annals authorizes only that operation's
+documented effects, not additional cleanup. Scheduled activations may keep
+performing their documented read-only capacity check and resume ordinary queued
+work once the configured reserve is available; they perform no cleanup.
+
+The storage gate is scoped to new ordinary and retry-child claims rather than
+being a host-wide deployment lock. The related direct-enqueue headroom check
+applies separately to an explicit spool copy. A gated inbox item does not
+submit its associated liaison job to Nucleus. The gate does not itself block an
+Annals deployment, globally stop the Nucleus service or independent Nucleus
+jobs, or block another product's deployment; manual `annals integrate` is also
+outside this gate. Those operations can still fail independently when the
+underlying filesystem lacks enough real capacity for a build, release staging,
+backup, migration, database write, or log write. The Annals deployer therefore
+may proceed while the gate is closed, but it does not promise capacity or gain
+cleanup authority by doing so. An unreadable storage probe is different from a
+measured low-space result: the deployer's status validation can fail with
+`storage_probe_failed` until the path or permission problem is corrected.
+
 Do not move failed envelopes back into `queued/` or edit their receipts. For a
 recoverable stretch, use the bounded retry sequence above. `retry preview`
 requires two failed-job anchors and reports the exact inclusive membership.
