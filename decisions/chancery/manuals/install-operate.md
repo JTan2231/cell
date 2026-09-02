@@ -44,6 +44,31 @@ launchctl print "gui/$(id -u)/org.decisions.observer"
 launchctl print "gui/$(id -u)/org.decisions.daily-email"
 ```
 
+Source deferral does not monopolize the worker. Observation processing resumes
+an existing processing row first, skips queued rows before their retry time, and
+orders ready queued work by retry-ready time. A nonzero queued count can
+therefore coexist with no currently ready observation.
+
+If diagnosis proves that one observer-deferred `TurnNotFound`-shape Stop-hook
+source is permanently unavailable, obtain explicit recovery authorization and
+run:
+
+```sh
+decisions observe abandon OBSERVATION_ID --source-unavailable
+```
+
+This waits for the serial observation-processing lock and accepts only a
+previously deferred pending level-0 row with a retry time, no not-completed
+marker, and no bound source, job, authority, verdict, or candidate. It records
+audited `complete` / `not_eligible` state with the fixed
+`conversation_source_abandoned` marker, stores no caller-provided reason,
+creates no lifecycle event, and leaves the observer baseline unchanged. The
+exact repeat is idempotent recovery from uncertain command completion. Never
+use it for a merely unfinished turn. A changed row is refused, and
+completed-root reconciliation fails closed if the abandoned source later
+appears. This is a supported serialized state repair, not a reason to edit
+SQLite directly or redeploy the services.
+
 Open `/hooks`, review and trust the exact non-managed user `Stop` hook, then
 create one deliberate post-baseline effectful turn on the actual Codex surface
 in use and verify its observation. An installed file or CLI canary does not by

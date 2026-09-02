@@ -76,6 +76,14 @@ observation once to a level-1 scope with normalized prior conversation context;
 authority remains restricted to the original turn. There is no further
 expansion and no parallel whole-thread fan out.
 
+Source resolution precedes classification. A turn that is not yet complete or
+visible remains queued with a future retry time. Both regular and projection
+selection resume an existing `processing` row first, skip queued work whose
+retry time has not arrived, and order ready queued work by retry-ready time. A
+deferral therefore yields to other ready observations while preserving one
+serial processor. A merely unfinished turn can later resolve and must never be
+treated as permanently unavailable.
+
 Jobs use `workspaceAccess=none`, no built-in local execution or web search, no
 launch context, and the immutable `decisions/turn-classification/1` toolset.
 Nucleus durably retains each exact request prompt and tool exchange in its
@@ -102,6 +110,19 @@ rejects a late success. A terminally failed observation is not automatically
 requeued and blocks its daily projection until deliberately repaired. Explicit
 `observe retry` increments that observation's attempt epoch while retaining
 every earlier job and receipt as audit history.
+
+An explicit source-unavailable recovery is narrower than retry. After the exact
+Stop-hook correlation has been proven permanently unavailable,
+`observe abandon OBSERVATION_ID --source-unavailable` waits for the same serial
+processing lock and can close only a previously observer-deferred pending
+level-0 row whose source remains entirely unbound and which has no job,
+authority, verdict, or candidate. The transaction records `complete` /
+`not_eligible` with the fixed `conversation_source_abandoned` marker, stores no
+free-form reason, emits no lifecycle event, and leaves the baseline unchanged.
+An exact repeat is idempotent recovery from uncertain command completion. Any
+bound, processing, failed, other completed, or merely unfinished source is
+refused; if later completed-root reconciliation discovers an abandoned
+correlation, it fails closed rather than changing that audited state.
 
 The managed tool may authorize candidates only from supplied user source IDs.
 Each candidate cites a unique exact authority span; stable IDs derive only from
@@ -185,8 +206,9 @@ admission remains resumable and never authorizes a concurrent job.
 source can no longer be reproduced. It fences new legacy work, resolves every
 correlated job before cancellation, requires observed terminality, and then
 marks the run failed. An admitted intent with no observable job is restored to
-`building` only when the exact stored snapshot is unchanged. Abandon never
-deletes, requeues, or supplies a verdict for a continuous observation.
+`building` only when the exact stored snapshot is unchanged. This legacy daily
+abandonment never deletes, requeues, or supplies a verdict for a continuous
+observation.
 
 ## Delivery
 

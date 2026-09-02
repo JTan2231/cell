@@ -15,6 +15,7 @@ decisions observe activate [--at UNIX_SECONDS]
 decisions observe process
 decisions observe status [--date YYYY-MM-DD]
 decisions observe reconcile [--date YYYY-MM-DD]
+decisions observe abandon OBSERVATION_ID --source-unavailable
 decisions observe retry OBSERVATION_ID
 decisions events watermark
 decisions events read --after OPAQUE_CURSOR [--limit 1..1000]
@@ -84,14 +85,22 @@ recovery. If a baseline already exists, the stored value is returned unchanged
 even when a different `--at` is given.
 
 `observe process` requires an activation baseline and processes at most one
-oldest queued or in-flight observation synchronously. It resumes in-flight
-Nucleus work with its durable correlation and receipt rather than starting a
-parallel attempt. The completed turn is resolved from the hook's session hint
-and exact turn ID through Conversations; zero or multiple matches fail closed.
-A turn is eligible only when it is a completed root interaction, contains an
-authoritative user message at or after the baseline, and has at least one
-completed nonempty App Server `fileChange` item. File activity only selects the
-scope—it never supplies decision authority.
+observation synchronously. It resumes an in-flight processing observation
+first. Otherwise it skips queued rows whose `next_attempt_at` has not arrived
+and orders ready work by its retry-ready time, so a deferred source yields to
+other ready observations instead of monopolizing the worker. It resumes
+in-flight Nucleus work with its durable correlation and receipt rather than
+starting a parallel attempt. The completed turn is resolved from the hook's
+session hint and exact turn ID through Conversations; zero or multiple matches
+fail closed. A turn is eligible only when it is a completed root interaction,
+contains an authoritative user message at or after the baseline, and has at
+least one completed nonempty App Server `fileChange` item. File activity only
+selects the scope—it never supplies decision authority.
+
+A source that is not yet complete or visible remains queued with a future retry
+time. This is source-resolution deferral, not a classifier attempt or terminal
+failure. A merely unfinished turn remains eligible for later resolution and
+must never be abandoned as unavailable.
 
 The first classifier invocation receives a bounded level-0 slice: every
 eligible current-turn user authority, the immediately preceding assistant
@@ -109,6 +118,21 @@ the cause, `observe retry OBSERVATION_ID` explicitly requeues one terminally
 failed observation, increments its attempt epoch, and retains its prior jobs
 and receipts as audit history.
 
+`observe abandon OBSERVATION_ID --source-unavailable` is a separate, explicitly
+confirmed recovery for one Stop-hook correlation that has been proven
+permanently unavailable. It waits for the serial observation-processing lock
+and accepts only a level-0 queued row previously deferred as a pending
+`TurnNotFound`-shape source: `next_attempt_at` is set,
+`source_not_completed_at` is unset, and no source, classification job,
+authority, verdict, or candidate has been bound. It atomically records
+`complete` / `not_eligible` with the fixed
+`conversation_source_abandoned` audit marker. It stores no caller-provided
+reason, creates no verdict, candidate, or lifecycle event, and does not change
+the observer baseline. Repeating the exact successful command is idempotent for
+uncertain command completion; every other state fails closed. If completed-root
+reconciliation later finds that exact correlation, reconciliation fails closed
+instead of silently overriding the explicit recovery.
+
 `observe reconcile` is the missed-hook safety net. It discovers completed
 effectful root turns in the selected date's post-baseline coverage, idempotently
 upserts their correlations, and performs no classification. `observe status`
@@ -116,7 +140,9 @@ reports `observer_baseline_at` and queued, processing, complete, and failed
 counts. With `--date`, it counts observations whose admitted authority falls in
 that local date and conservatively includes unresolved failures that are not yet
 scoped to an authority time. The observer LaunchAgent calls `observe process`
-every 60 seconds; these commands do not provide a parallel worker mode.
+every 60 seconds; these commands do not provide a parallel worker mode. Queued
+counts include source rows waiting for their retry time, so a nonzero queue can
+coexist with `No observation ready`.
 
 ## Lifecycle events
 

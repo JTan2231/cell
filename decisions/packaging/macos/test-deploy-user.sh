@@ -30,6 +30,10 @@ cp "$SCRIPT_DIR/decisions" "$SCRIPT_DIR/decisions-daily-email" "$SCRIPT_DIR/deci
     "$SCRIPT_DIR/org.decisions.daily-email.plist" "$SCRIPT_DIR/org.decisions.observer.plist" \
     "$SCRIPT_DIR/hooks.json" "$package/"
 cp -R "$SCRIPT_DIR/../../chancery" "$share/decisions"
+DECISIONS_TEST_VERSION=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' \
+    "$share/decisions/provider.json")
+[ -n "$DECISIONS_TEST_VERSION" ]
+export DECISIONS_TEST_VERSION
 chmod 0755 "$package/decisions" "$package/decisions-daily-email" "$package/decisions-observer" \
     "$package/deploy-user.sh" "$package/uninstall-user.sh"
 hook_plist="$temporary/hooks.plist"
@@ -40,7 +44,7 @@ plutil -convert xml1 -o "$hook_plist" -- "$package/hooks.json"
 ! plutil -extract hooks.Stop.0.hooks.0.async raw "$hook_plist" >/dev/null 2>&1
 cat >"$candidate" <<'EOF'
 #!/bin/sh
-if [ "${1:-}" = --version ]; then printf '%s\n' 'decisions 0.3.0'; exit 0; fi
+if [ "${1:-}" = --version ]; then printf 'decisions %s\n' "$DECISIONS_TEST_VERSION"; exit 0; fi
 case " $* " in
     *' doctor '*) printf '%s\n' '{"schema_version":3}' ;;
     *' events watermark '*) printf '%s\n' '{"stream":"decisions.lifecycle","envelope_version":1,"cursor":"opaque"}' ;;
@@ -96,7 +100,7 @@ mkdir -p "$bad_schema_home/.local/bin"
 chmod 0755 "$bad_schema_home/.local/bin/email" "$bad_schema_home/.local/bin/codex"
 cat >"$bad_schema_candidate" <<'EOF'
 #!/bin/sh
-if [ "${1:-}" = --version ]; then printf '%s\n' 'decisions 0.3.0'; exit 0; fi
+if [ "${1:-}" = --version ]; then printf 'decisions %s\n' "$DECISIONS_TEST_VERSION"; exit 0; fi
 case " $* " in
     *' doctor '*) printf '%s\n' '{"schema_version":2}' ;;
     *' events watermark '*) printf '%s\n' '{"stream":"decisions.lifecycle","envelope_version":1,"cursor":"opaque"}' ;;
@@ -166,7 +170,7 @@ holder=
 candidate_two="$temporary/decisions-two"
 cat >"$candidate_two" <<'EOF'
 #!/bin/sh
-if [ "${1:-}" = --version ]; then printf '%s\n' 'decisions 0.3.0'; exit 0; fi
+if [ "${1:-}" = --version ]; then printf 'decisions %s\n' "$DECISIONS_TEST_VERSION"; exit 0; fi
 database=
 previous=
 for argument in "$@"; do
@@ -309,7 +313,7 @@ printf '%s\n' '{}' >"$fabricated_release/share/chancery/decisions/provider.json"
 {
     printf '%s\n' 'format=2'
     printf 'release_id=%s\n' "$fabricated_id"
-    printf '%s\n' 'version=0.3.0'
+    printf 'version=%s\n' "$DECISIONS_TEST_VERSION"
     printf '%s\n' 'binary_sha256=0000000000000000000000000000000000000000000000000000000000000000'
     printf '%s\n' 'frontend_sha256=0000000000000000000000000000000000000000000000000000000000000000'
     printf '%s\n' 'daily_runner_sha256=0000000000000000000000000000000000000000000000000000000000000000'

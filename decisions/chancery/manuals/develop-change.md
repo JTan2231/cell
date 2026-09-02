@@ -17,12 +17,33 @@ needed to interpret them when one exists, and at most the final assistant
 result—not the whole turn or thread. Allow only one validated expansion to
 prior normalized context and keep processing serial.
 
+Keep source-resolution deferral fair without adding parallelism. Both regular
+and projection selection resume an existing processing row first, skip queued
+rows whose retry time has not arrived, and order ready queued work by
+retry-ready time so a deferred source yields to other ready observations.
+
+Unavailable-source abandonment is an explicit audited exception, not a queue
+cleanup primitive. `observe abandon OBSERVATION_ID --source-unavailable` may
+close only a previously observer-deferred pending level-0 correlation with a
+retry time, no not-completed marker, and no bound source, job, authority,
+verdict, or candidate. It records `complete` / `not_eligible` with the fixed
+`conversation_source_abandoned` marker, stores no caller-provided reason,
+creates no decision or lifecycle state, and preserves the observer baseline.
+The exact repeat is idempotent recovery from uncertain command completion.
+Refuse merely unfinished or changed rows, and fail completed-root reconciliation
+closed if an abandoned correlation later appears.
+
 The observer baseline is a write-once deployment cutover. Migration may open
 the candidate database only after both services are quiesced and its SQLite
 files are backed up; bootstrap the observer only after activation. Tests must
 prove no pre-baseline reconciliation, foreign-hook preservation, scrubbed
 key-free runners, and rollback of both service states, hook bytes, selectors,
 and migrated database files.
+
+Tests for observation scheduling or recovery must prove ready-time yielding for
+both selectors, processing-row resumption, the complete abandonment guard,
+idempotent exact repetition, unchanged baseline and decision/lifecycle tables,
+and the later-reconciliation conflict.
 
 Registered schemas and toolsets are immutable. Publish a new schema ID or
 toolset version for changed meaning and keep legacy decoders. Keep Nucleus

@@ -10,31 +10,36 @@
     "Post-activation enacted decisions across local Codex tasks should be observed or summarized.",
     "Observer coverage, a decision candidate, or its review state should be inspected.",
     "A terminal observation failure should be deliberately requeued after its cause is diagnosed and corrected.",
+    "One previously observer-deferred Stop-hook source has been proven permanently unavailable and should be explicitly closed as not eligible.",
     "The user explicitly requests a manual decision-digest email send."
   ],
   "do_not_use_when": [
     "A raw conversation lookup or full-text search is the intended outcome.",
     "The intended decision has no same-turn completed file change and therefore falls outside this enacted projection.",
     "A file write, plan, recommendation, question, status report, or assistant-only conclusion should be treated as decision authority.",
+    "The source is merely unfinished, or any source or classification state has already been bound.",
     "External sending has not been authorized and no installed recurring authorization applies."
   ],
-  "outcome": "Durable per-authority enacted-decision coverage, a daily projection complete as of its recorded turn-completion cutoff, a local frozen preview, one review event, or one idempotent Email submission.",
+  "outcome": "Durable per-authority enacted-decision coverage, one audited unavailable-source closure, a daily projection complete as of its recorded turn-completion cutoff, a local frozen preview, one review event, or one idempotent Email submission.",
   "effects": [
     "The synchronous Stop hook durably upserts only a session/turn correlation and performs no model work.",
     "One observer worker resolves a completed root turn through Conversations and may submit bounded serial Nucleus classification over all eligible current-turn authorities, the immediately preceding assistant proposal needed to interpret them when one exists, and at most the final assistant result; prior normalized context is added only after a validated needs-context result.",
     "Daily build records a durable completion cutoff, reconciles and drains to a fixed point, captures a SQLite-rowid observation-admission watermark, and projects only post-baseline observations completed by the cutoff and admitted through that watermark; the normal 09:00 path performs no model work, while exceptional catch-up may invoke Nucleus.",
     "An explicitly authorized observation retry increments that failed observation's attempt epoch and retains its prior jobs and receipts.",
+    "An explicitly confirmed unavailable-source abandonment waits for the serial observer lock and changes only a previously pending, entirely unbound queued correlation to complete and not eligible with a fixed audit marker.",
     "Review changes durable candidate state and invalidates the prior digest revision.",
     "Send discloses normalized decision statements and IDs to Email, Resend, and the fixed recipient provider."
   ],
   "authority": [
     "Only an explicit user settlement in an eligible completed root turn is decision authority; a completed file change selects scope but cannot authorize meaning.",
+    "Only explicit recovery authorization after source diagnosis can authorize unavailable-source abandonment; source absence and model output cannot.",
     "The Decisions SQLite database owns activation baseline, observation verdicts, candidates, projection, review, snapshot, and delivery state.",
     "Nucleus owns agent execution but not decision truth or digest success.",
     "Email owns Resend submission; the recipient provider owns receipt."
   ],
   "success": [
-    "Observation succeeds only after unique turn resolution, post-baseline authority, at least one completed nonempty fileChange, one validated decision or no-decision verdict per supplied user message, and the observation transaction complete.",
+    "A classified observation succeeds only after unique turn resolution, post-baseline authority, at least one completed nonempty fileChange, one validated decision or no-decision verdict per supplied user message, and the observation transaction complete.",
+    "Unavailable-source abandonment succeeds only for a previously observer-deferred pending level-0 row with a retry time but no not-completed marker, bound source, job, authority, verdict, or candidate; it records complete/not-eligible plus conversation_source_abandoned.",
     "Daily build succeeds only after complete reconciliation and terminal observation coverage for eligible turns completed by its durable cutoff in the exact post-baseline report window; any failed or unresolved observation known by that cutoff blocks normal and all-clear delivery.",
     "Preview exactly reports one frozen projection revision without network access.",
     "Send reports the Email message ID persisted under the frozen delivery key."
@@ -42,11 +47,13 @@
   "failure_and_recovery": [
     "Processing, reconciliation, and projection require the write-once observer baseline; default activation stores the next whole Unix second, pre-baseline and cutover-second authority is never backfilled, and redeploy never advances the baseline.",
     "The Stop hook is synchronous and idempotent so accepted ingest is durable before turn completion; a missed or untrusted hook is recovered by content-free reconciliation, which enqueues but never classifies.",
-    "Observe process handles at most one queued or in-flight observation and resumes the same deterministic Nucleus attempt and durable pre-acknowledgement receipt after uncertainty; it never creates parallel workers.",
+    "Observe process resumes one processing observation first, skips queued observations before their retry time, and orders ready queued work by retry-ready time so a deferred source yields without creating parallel workers.",
     "Only a positively observed terminal failure permits retry1 and retry2 within a scope. A terminally failed observation is not automatically requeued and blocks its daily projection; explicit observe retry is a separate recovery action after correction and preserves prior audit history.",
+    "Observe abandon requires --source-unavailable and proven permanent source unavailability, never a merely unfinished turn; it is idempotent only for the exact prior abandonment, stores no free-form reason, creates no verdict, candidate, or lifecycle event, and leaves the baseline unchanged.",
+    "Completed-root reconciliation fails closed if a source explicitly abandoned as unavailable later appears.",
     "The single allowed needs-context transition requeues the same observation with prior normalized conversation context; it does not widen decision authority beyond the original turn.",
     "A turn completing after a projection's cutoff can enter a later manual rebuild of its authority date, but an accepted scheduled delivery is not automatically amended and the late turn is not carried into another date.",
-    "Legacy interrupted scan runs retain their original retry and explicit daily-abandon recovery; abandonment never mutates continuous observations.",
+    "Legacy interrupted scan runs retain their original retry and explicit daily-abandon recovery; that legacy daily abandonment never mutates continuous observations.",
     "A repeated scheduled occurrence reuses the same frozen body and idempotency key.",
     "A manual retry for the same run revision reuses a pending or failed ad-hoc key; a new key is created only after acceptance, and manual delivery never consumes scheduled state."
   ],
@@ -55,6 +62,7 @@
     "The level-0 classifier receives all eligible current-turn user authorities, the immediately preceding assistant proposal needed to interpret them when one exists, at most the final assistant result, and only a completed-file-change count—never the whole turn/thread, paths, diffs, commands, reasoning, approvals, or tool output; prior message context is sent only for the single validated expansion.",
     "Nucleus durably retains each exact classifier request prompt and tool exchange in its private local database without automatic pruning: the bounded level-0 slice initially, or the normalized full thread prefix after level-1 expansion. Nucleus owns retention and recovery of those records.",
     "Conversation text is not copied into the Decisions database; only request digests, source anchors, verdicts, normalized candidates, and text-free validated receipt DTOs are retained.",
+    "Unavailable-source abandonment retains only a fixed product-owned marker and detail, never caller-provided text.",
     "Email statements pass deterministic fail-closed disclosure checks and exclude raw transcript excerpts, rationales, credentials, account/email identifiers, source IDs, tool output, and local paths.",
     "Observer and scheduled runners use scrubbed environments, body-free logs, and never store or forward Email credentials."
   ],
@@ -66,6 +74,7 @@
   "interfaces": [
     {"label": "Observer status", "invocation": "/Users/joey/.local/bin/decisions observe status"},
     {"label": "Reconcile missed observations", "invocation": "/Users/joey/.local/bin/decisions observe reconcile"},
+    {"label": "Abandon one proven-unavailable source", "invocation": "/Users/joey/.local/bin/decisions observe abandon OBSERVATION_ID --source-unavailable"},
     {"label": "Retry one failed observation", "invocation": "/Users/joey/.local/bin/decisions observe retry OBSERVATION_ID"},
     {"label": "Build yesterday", "invocation": "/Users/joey/.local/bin/decisions daily build"},
     {"label": "Preview yesterday", "invocation": "/Users/joey/.local/bin/decisions daily preview"},
@@ -75,6 +84,7 @@
   "does_not_authorize": [
     "Sending when only observation, reconciliation, build, preview, inspection, or review was requested.",
     "Changing the Email recipient, sender, or Resend account.",
+    "Abandoning a source without explicit recovery authorization, before permanent unavailability is proven, or after any source or classification state has been bound.",
     "Resetting the observer baseline, requeuing a terminal failure without explicit recovery authority, or treating model output, file activity, or delivery acceptance as source truth."
   ],
   "manual": "manuals/daily-digest.md"

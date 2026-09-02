@@ -8,7 +8,8 @@
   "summary": "Deploy, inspect, recover, or uninstall the user-owned Decisions CLI, schema-3 lifecycle stream, write-once observer baseline, exact Codex Stop hook, 60-second observer, retained SQLite state, Chancery selector, and local 09:00 digest service.",
   "use_when": [
     "Decisions should be installed or updated for this macOS user.",
-    "The observer, daily service, Codex hook, activation baseline, logs, database, release selector, or recovery state should be inspected."
+    "The observer, daily service, Codex hook, activation baseline, logs, database, release selector, or recovery state should be inspected.",
+    "One observer-deferred Stop-hook source has been proven permanently unavailable and needs explicit audited closure."
   ],
   "do_not_use_when": [
     "Only one manual build, preview, review, or send is requested.",
@@ -19,6 +20,7 @@
   "effects": [
     "Deployment writes user application support, CLI and Chancery symlinks, two LaunchAgent plists, and an exact Decisions-owned ~/.codex/hooks.json, records the observer baseline once, and may restart both Decisions services.",
     "Candidate doctor may transactionally migrate the Decisions database from schema version 1 or 2 to 3 after both existing services are quiesced, the public command is suspended, and a private database-plus-sidecars backup exists; version 3 preserves old rows and backfills lifecycle events.",
+    "Explicit unavailable-source recovery waits for the observer-processing lock and can change one previously pending, entirely unbound queued correlation to complete/not-eligible with a fixed audit marker.",
     "The operator separately reviews and trusts the exact non-managed Stop hook through Codex; deployment never bypasses hook trust.",
     "Uninstall removes both loaded services, the exact owned hook, and public selectors but retains database, baseline, logs, and releases."
   ],
@@ -31,6 +33,7 @@
   "success": [
     "The candidate version matches its provider bundle, doctor proves schema version 3 plus Conversations, Nucleus, and Email contract v2 readiness, selectors resolve inside the current release, and launchd accepts both plists only after baseline activation.",
     "The exact user Stop hook is visible and trusted in /hooks and one deliberate post-baseline effectful turn appears in decisions observe status on the actual Codex surface in use.",
+    "Unavailable-source abandonment is accepted only for a previously observer-deferred pending level-0 row with a retry time but no not-completed marker, source, job, authority, verdict, or candidate.",
     "The routine 09:00 path projects already-observed results without model work; only missed-observation catch-up invokes Nucleus."
   ],
   "failure_and_recovery": [
@@ -38,10 +41,13 @@
     "The baseline is stored once in SQLite, survives redeploy/uninstall/reinstall, and is removed only with separately authorized retained-state deletion.",
     "Foreign or ambiguous selectors, plists, loaded labels, hooks, or modified owned hooks are refused rather than replaced or removed.",
     "A missed hook is recovered with decisions observe reconcile, which enqueues content-free turn correlations without classifying; decisions observe process remains serial.",
+    "Processing resumes an in-flight row first, skips queued rows until their retry time, and orders ready queued work by retry-ready time so a deferred source yields to later ready work.",
+    "Only after explicit recovery authorization and proof that the exact source is permanently unavailable may decisions observe abandon OBSERVATION_ID --source-unavailable close its unbound pending correlation; a merely unfinished turn or changed row is refused, exact repetition is idempotent, and later completed-root reconciliation fails closed.",
     "Inspect body-free observer/daily stderr logs, decisions doctor, decisions observe status, launchd state, and Codex hook trust before retrying."
   ],
   "privacy": [
     "State can contain normalized decision text and source identifiers, but hook bodies, transcripts, paths, diffs, and tool output are not stored.",
+    "Unavailable-source abandonment stores no caller-provided reason and creates no verdict, candidate, classification receipt, or lifecycle event.",
     "Observer and daily logs must not contain email bodies, conversation text, hook bodies, or credentials.",
     "Both LaunchAgent runners use scrubbed environments and contain no Email credential key."
   ],
@@ -52,17 +58,20 @@
     "Read the matching installation document and inspect Decisions, Conversations, Nucleus, Email, Codex hooks, and Chancery readiness.",
     "Build a green candidate, then run the content-addressed deployer with the exact user home and candidate path.",
     "Verify doctor, observer status and baseline, current release/provider selectors, both loaded LaunchAgents, and body-free logs.",
+    "For one permanently unavailable deferred source, obtain explicit recovery authorization and invoke observe abandon with --source-unavailable; never edit SQLite or use it for a merely unfinished turn.",
     "Open /hooks, review and trust the exact user Stop hook, then canary one new post-baseline effectful turn on the actual Codex surface in use.",
     "For uninstall, remove only the two services, exact owned hook, and public selectors and report that database, baseline, releases, and logs remain."
   ],
   "checkpoints": [
     "Existing releases pass canonical content-manifest and hash checks before reuse.",
+    "Unavailable-source abandonment is serialized with observation processing, preserves the baseline, and is limited to a deferred pending correlation with no bound source or classification state.",
     "Both services are stopped and the public hook command is suspended for its bounded timeout before the migration backup and schema-3 outbox backfill; default activation stores the next whole Unix second after release/selector staging and before either plist, the hook, or the command is published or observer bootstraps, so the cutover second and all pre-baseline authority are excluded.",
     "Foreign hook files are never merged, overwritten, or removed; failed activation restores every prior selector, file, database, and service state, while an unprovable rollback leaves both services stopped, disables the public command, and retains the private transaction backup.",
     "Both plists are key-free and lack RunAtLoad; the observer uses StartInterval 60, while the digest service schedules local 09:00 with separate private body-free logs."
   ],
   "adaptation": [
     "Use explicit home and launchctl overrides only for a deliberate alternate-user test boundary.",
+    "A nonzero queued count can consist only of deferred rows not yet ready; inspect retry state and source evidence before considering explicit abandonment.",
     "Canary Desktop or another client directly; do not infer cross-surface Stop delivery from the installed file or CLI alone.",
     "Diagnose dependency readiness at its owning product instead of adding a fallback inside Decisions."
   ],
@@ -70,16 +79,19 @@
     "The candidate, provider release, Nucleus requester contract, Codex source/hooks surface, Conversations activity contract, or Email CLI is incompatible or unavailable.",
     "A selector, hook, service, or state path is foreign, symbolic where a regular path is required, or cannot be safely rolled back.",
     "The baseline is missing after attempted activation or an observer service could run before it.",
+    "Permanent source unavailability is not proven, the turn is merely unfinished, or any source or classification state has been bound to the proposed abandonment target.",
     "The requested action would delete retained state without separate explicit authorization."
   ],
   "interfaces": [
     {"label": "Deploy", "invocation": "decisions/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH"},
     {"label": "Doctor", "invocation": "/Users/joey/.local/bin/decisions doctor"},
     {"label": "Observer status", "invocation": "/Users/joey/.local/bin/decisions observe status"},
+    {"label": "Abandon one proven-unavailable source", "invocation": "/Users/joey/.local/bin/decisions observe abandon OBSERVATION_ID --source-unavailable"},
     {"label": "Uninstall and retain state", "invocation": "decisions/packaging/macos/uninstall-user.sh"}
   ],
   "does_not_authorize": [
     "Deleting retained state or logs.",
+    "Abandoning a source without explicit recovery authorization or bypassing the command's unbound pending-source guard.",
     "Replacing or merging a foreign Codex hooks file.",
     "Bypassing Codex hook trust, resetting the observer baseline, or changing Nucleus, Codex, Email, or Gmail configuration."
   ],

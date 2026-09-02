@@ -14,7 +14,14 @@ fail closed.
   the hook session/turn correlation. After exact Conversations resolution it
   binds the canonical host/thread, a source digest, content-free completed-file
   change count, authority time, narrow/expanded scope, outcome, and bounded
-  failure state. It never stores the hook body or a transcript.
+  failure state. Source resolution can set `next_attempt_at`; selectors resume
+  `processing` first, skip queued rows before that time, and order ready queued
+  work by `COALESCE(next_attempt_at, created_at)` so a deferred row yields. An
+  explicitly confirmed unavailable-source recovery can change only a previously
+  deferred pending level-0 row with no bound source, job, authority, verdict, or
+  candidate to `complete` / `not_eligible`, retaining the fixed
+  `conversation_source_abandoned` marker. It never stores the hook body, a
+  transcript, or a caller-provided abandonment reason.
 - `observation_jobs` persists each scope's Nucleus attempt, request digest,
   admission state, and bounded terminal-only retry identity. An explicitly
   retried terminal observation increments its attempt epoch and retains every
@@ -29,6 +36,10 @@ fail closed.
   durable coverage, not inferred silence.
 - `observation_candidates` associates validated stable candidates with the
   observation that established them.
+- Source abandonment creates no authority verdict, candidate, candidate source,
+  classification receipt, or lifecycle event and does not change the observer
+  baseline. An exact repeat is idempotent; later completed-root reconciliation
+  for the same correlation fails closed.
 - `runs` owns the local date window, durable `coverage_cutoff_at`, SQLite-rowid
   `observation_admission_watermark`, coverage manifest, terminal state, failure
   detail, review-driven content revision, and `run_kind`. The two frontiers bind

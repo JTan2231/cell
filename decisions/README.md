@@ -21,6 +21,7 @@ decisions daily abandon --date 2026-08-31
 decisions observe status
 decisions observe reconcile --date 2026-08-31
 decisions observe process
+decisions observe abandon OBSERVATION_ID --source-unavailable
 decisions observe retry OBSERVATION_ID
 decisions events watermark --json
 decisions events read --after OPAQUE_CURSOR --json
@@ -34,6 +35,12 @@ projecting the previous local day as of a durable completion cutoff. A turn
 completing later can enter a manual rebuild of its authority date, but does not
 automatically amend an accepted scheduled delivery. The write-once activation
 baseline prevents deployment from importing older messages.
+
+A temporarily incomplete or unavailable source is deferred so other ready
+observations can continue. After the exact Stop-hook source has been proven
+permanently unavailable, explicit `observe abandon --source-unavailable`
+recovery can close only that previously deferred, entirely unbound correlation
+as audited `not_eligible`; it must never be used for a merely unfinished turn.
 
 The append-only lifecycle stream exposes transactionally coupled candidate
 admissions and reviews to local consumers through opaque replay-safe cursors.

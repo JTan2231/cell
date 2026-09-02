@@ -176,11 +176,18 @@ authorities, the immediately preceding assistant proposal needed to interpret
 them when one exists, and at most the final assistant result—not the whole turn
 or thread. Prior normalized context is disclosed only for one validated
 expansion. Decisions makes observation and projection success authoritative in
-its own SQLite database. Its 09:00 sender normally projects already-observed
-results with no model work, invoking Email only after complete post-baseline
-coverage as of a durable turn-completion cutoff and a frozen render. A turn
-completing later can enter a manual rebuild of its authority day, but does not
-auto-amend an accepted scheduled delivery or carry into another day.
+its own SQLite database. Source-resolution deferrals yield to other ready work
+by requester-owned retry time while processing remains serial. After explicit
+recovery authorization and proof of permanent unavailability, Decisions alone
+may use `observe abandon OBSERVATION_ID --source-unavailable` to close one
+previously deferred, entirely unbound pending correlation as audited not
+eligible; merely unfinished or bound sources are refused, no Nucleus job or
+decision lifecycle event is created, and later completed-root reconciliation
+fails closed. Its 09:00 sender normally projects already-observed results with
+no model work, invoking Email only after complete post-baseline coverage as of a
+durable turn-completion cutoff and a frozen render. A turn completing later can
+enter a manual rebuild of its authority day, but does not auto-amend an accepted
+scheduled delivery or carry into another day.
 Exceptional missed-hook catch-up can still invoke Nucleus serially. The
 schedule and recurring-disclosure policy remain Decisions concerns.
 

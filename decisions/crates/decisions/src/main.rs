@@ -106,6 +106,13 @@ enum ObserveCommand {
     Status(ObserveDateArgs),
     /// Independently discover missed completed turns for one local date.
     Reconcile(ObserveDateArgs),
+    /// Mark one proven-unavailable, unbound queued source as not eligible.
+    Abandon {
+        observation_id: String,
+        /// Confirm that the exact Stop-hook source was proven permanently unavailable.
+        #[arg(long, required = true)]
+        source_unavailable: bool,
+    },
     /// Requeue one terminally failed observation without deleting its audit trail.
     Retry { observation_id: String },
 }
@@ -266,6 +273,28 @@ fn run(cli: Cli) -> AppResult<()> {
                             result.activities_scanned,
                             result.threads_scanned,
                             result.observations_enqueued
+                        );
+                        Ok(())
+                    }
+                }
+                ObserveCommand::Abandon {
+                    observation_id,
+                    source_unavailable,
+                } => {
+                    if !source_unavailable {
+                        return Err(AppError::new(
+                            "source_unavailable_confirmation_required",
+                            "observe abandon requires --source-unavailable",
+                        ));
+                    }
+                    let _processing_lock = store.wait_for_observation_processing()?;
+                    let observation = store.abandon_unavailable_observation(&observation_id)?;
+                    if cli.json {
+                        print_json(&observation)
+                    } else {
+                        println!(
+                            "Abandoned {} as not eligible: source unavailable",
+                            observation.id
                         );
                         Ok(())
                     }

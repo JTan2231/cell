@@ -32,14 +32,30 @@ decisions observe reconcile --date YYYY-MM-DD
 decisions observe process
 ```
 
-Reconcile only enqueues missed post-baseline effectful turns. Process resumes
-one queued or in-flight observation and can invoke Nucleus. Date-scoped status
+Reconcile only enqueues missed post-baseline effectful turns. Process resumes a
+processing observation first, skips queued rows before their retry time, and
+orders ready queued work by retry-ready time. A deferred source therefore yields
+to other ready work while processing remains serial and can invoke Nucleus.
+Queued status includes rows waiting for their retry time. Date-scoped status
 conservatively includes unresolved failures that do not yet have an authority
 time. A terminally failed observation is not automatically requeued and blocks
 its daily projection; do not manufacture a verdict or reset the baseline. Only
 after explicit recovery authorization and correction of the cause, `decisions
 observe retry OBSERVATION_ID` increments its attempt epoch and requeues it while
 retaining prior jobs and receipts.
+
+Abandonment is a different recovery. Use `decisions observe abandon
+OBSERVATION_ID --source-unavailable` only after diagnosis proves that the exact
+Stop-hook source is permanently unavailable. It waits for the serial processing
+lock and accepts only a previously observer-deferred pending level-0 row with a
+retry time, no not-completed marker, and no bound source, job, authority,
+verdict, or candidate. It records audited `complete` / `not_eligible` state with
+the fixed `conversation_source_abandoned` marker. It stores no caller-provided
+reason, creates no verdict, candidate, or lifecycle event, and leaves the
+baseline unchanged. A repeated exact command is idempotent recovery from
+uncertain command completion. Never abandon a merely unfinished turn; if
+completed-root reconciliation later discovers an abandoned source, it fails
+closed.
 
 `daily build` records a durable completion cutoff, reconciles and drains to a
 fixed point, then captures a SQLite-rowid observation-admission watermark. It
@@ -65,4 +81,5 @@ readable. A matching interrupted legacy build resumes its original deterministic
 attempt; only a positively observed terminal failure permits retry 1 or retry 2.
 If its exact source can no longer be reproduced, `decisions daily abandon` is
 the explicit recovery path. It requires observed Nucleus terminality and never
-mutates continuous observations.
+mutates continuous observations; it is separate from unavailable-source
+observation abandonment.

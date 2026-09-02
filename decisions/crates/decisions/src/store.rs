@@ -495,6 +495,14 @@ impl Store {
             ));
         }
         let existing = matching.into_iter().next();
+        if let Some(id) = existing.as_deref()
+            && observation_source_was_abandoned(&transaction, id)?
+        {
+            return Err(AppError::new(
+                "observation_source_abandoned_conflict",
+                "a source explicitly abandoned as unavailable later appeared in completed-turn reconciliation",
+            ));
+        }
         let inserted = existing.is_none();
         let id = existing.unwrap_or_else(|| {
             let identity = format!("{thread_id}\n{turn_id}");
@@ -642,6 +650,14 @@ impl Store {
         &self,
         created_cutoff: Option<i64>,
     ) -> AppResult<Option<Observation>> {
+        self.next_observation_before_at(created_cutoff, now_unix())
+    }
+
+    fn next_observation_before_at(
+        &self,
+        created_cutoff: Option<i64>,
+        ready_at: i64,
+    ) -> AppResult<Option<Observation>> {
         self.connection
             .query_row(
                 "SELECT id, session_id, turn_id, host_id, thread_id,
@@ -650,9 +666,10 @@ impl Store {
                  FROM observations
                  WHERE status IN ('queued', 'processing')
                    AND (?1 IS NULL OR COALESCE(source_completed_at, created_at)<=?1)
+                   AND (status='processing' OR next_attempt_at IS NULL OR next_attempt_at<=?2)
                  ORDER BY CASE status WHEN 'processing' THEN 0 ELSE 1 END,
-                          created_at, id LIMIT 1",
-                [created_cutoff],
+                          COALESCE(next_attempt_at, created_at), created_at, id LIMIT 1",
+                params![created_cutoff, ready_at],
                 decode_observation,
             )
             .optional()
@@ -669,6 +686,23 @@ impl Store {
         window_start: i64,
         window_end: i64,
     ) -> AppResult<Option<Observation>> {
+        self.next_observation_for_projection_at(
+            completion_cutoff,
+            admission_watermark,
+            window_start,
+            window_end,
+            now_unix(),
+        )
+    }
+
+    fn next_observation_for_projection_at(
+        &self,
+        completion_cutoff: i64,
+        admission_watermark: i64,
+        window_start: i64,
+        window_end: i64,
+        ready_at: i64,
+    ) -> AppResult<Option<Observation>> {
         self.connection
             .query_row(
                 "SELECT id, session_id, turn_id, host_id, thread_id,
@@ -677,7 +711,7 @@ impl Store {
                  FROM observations
                  WHERE status IN ('queued', 'processing')
                    AND rowid<=?2
-                   AND (next_attempt_at IS NULL OR next_attempt_at<=?3)
+                   AND (status='processing' OR next_attempt_at IS NULL OR next_attempt_at<=?3)
                    AND (
                        (source_completed_at IS NOT NULL AND source_completed_at<=?1)
                        OR (source_completed_at IS NULL
@@ -696,11 +730,11 @@ impl Store {
                        )
                    )
                  ORDER BY CASE status WHEN 'processing' THEN 0 ELSE 1 END,
-                          created_at, id LIMIT 1",
+                          COALESCE(next_attempt_at, created_at), created_at, id LIMIT 1",
                 params![
                     completion_cutoff,
                     admission_watermark,
-                    now_unix(),
+                    ready_at,
                     window_start,
                     window_end
                 ],
@@ -790,6 +824,81 @@ impl Store {
                 ),
             ));
         }
+        self.observation(id)
+    }
+
+    pub(crate) fn abandon_unavailable_observation(&mut self, id: &str) -> AppResult<Observation> {
+        let observation = self.observation(id)?;
+        if observation.status == "complete"
+            && observation.outcome.as_deref() == Some("not_eligible")
+            && observation.failure_code.as_deref() == Some("conversation_source_abandoned")
+        {
+            return Ok(observation);
+        }
+        if observation.status != "queued" {
+            return Err(AppError::new(
+                "observation_source_abandon_invalid",
+                format!(
+                    "observation {} is {}, not an unbound queued source",
+                    observation.id, observation.status
+                ),
+            ));
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .context(
+                "database_write_failed",
+                "unable to lock the unavailable observation recovery",
+            )?;
+        let now = now_unix();
+        let changed = transaction
+            .execute(
+                "UPDATE observations SET status='complete', outcome='not_eligible',
+                    next_attempt_at=NULL,
+                    failure_code='conversation_source_abandoned',
+                    failure_detail='operator confirmed the unresolved Stop-hook source is permanently unavailable',
+                    completed_at=?2, updated_at=?2
+                 WHERE id=?1 AND status='queued' AND scope_level=0
+                   AND outcome IS NULL
+                   AND host_id IS NULL AND thread_id IS NULL
+                   AND source_digest IS NULL AND source_completed_at IS NULL
+                   AND source_not_completed_at IS NULL
+                   AND next_attempt_at IS NOT NULL
+                   AND file_change_count=0 AND authority_occurred_at IS NULL
+                   AND failure_code IS NULL AND completed_at IS NULL
+                   AND NOT EXISTS (
+                       SELECT 1 FROM observation_jobs jobs
+                       WHERE jobs.observation_id=observations.id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM observation_authority_items items
+                       WHERE items.observation_id=observations.id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM observation_candidates candidates
+                       WHERE candidates.observation_id=observations.id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM authority_verdicts verdicts
+                       WHERE verdicts.observation_id=observations.id
+                   )",
+                params![id, now],
+            )
+            .context(
+                "database_write_failed",
+                "unable to abandon the unavailable observation source",
+            )?;
+        if changed != 1 {
+            return Err(AppError::new(
+                "observation_source_abandon_unsafe",
+                "only an observer-deferred pending source with no bound source, classification job, authority, verdict, or candidate can be abandoned",
+            ));
+        }
+        transaction.commit().context(
+            "database_write_failed",
+            "unable to commit the unavailable observation recovery",
+        )?;
         self.observation(id)
     }
 
@@ -3293,6 +3402,24 @@ fn database_sidecars(path: &Path) -> [PathBuf; 3] {
     })
 }
 
+fn observation_source_was_abandoned(
+    transaction: &rusqlite::Transaction<'_>,
+    id: &str,
+) -> AppResult<bool> {
+    transaction
+        .query_row(
+            "SELECT status='complete' AND outcome='not_eligible'
+                    AND failure_code='conversation_source_abandoned'
+             FROM observations WHERE id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .context(
+            "database_read_failed",
+            "unable to verify prior observation source recovery",
+        )
+}
+
 fn run_operation_lock_path(path: &Path) -> PathBuf {
     let mut value = OsString::from(path.as_os_str());
     value.push(".run.lock");
@@ -4444,6 +4571,258 @@ mod tests {
         let retried = store.retry_observation(&observation.id)?;
         assert_eq!(retried.status, "queued");
         assert_eq!(retried.attempt_epoch, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn deferred_observation_yields_to_ready_work_and_reenters_in_both_selectors()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let store = Store::open(&directory.path().join("decisions.db"))?;
+        let deferred = store.ingest_observation("session", "deferred")?;
+        store.connection.execute(
+            "UPDATE observations SET created_at=10 WHERE id=?1",
+            [&deferred.id],
+        )?;
+        store.defer_observation(&deferred.id, None, 30)?;
+        let ready = store.ingest_observation("session", "ready")?;
+        store.connection.execute(
+            "UPDATE observations SET created_at=20 WHERE id=?1",
+            [&ready.id],
+        )?;
+        let watermark = store.observation_admission_watermark()?;
+
+        assert_eq!(
+            store
+                .next_observation_before_at(None, 25)?
+                .map(|observation| observation.id),
+            Some(ready.id.clone())
+        );
+        assert_eq!(
+            store
+                .next_observation_for_projection_at(100, watermark, 0, 100, 25)?
+                .map(|observation| observation.id),
+            Some(ready.id.clone())
+        );
+        assert_eq!(
+            store
+                .next_observation_before_at(None, 40)?
+                .map(|observation| observation.id),
+            Some(ready.id.clone())
+        );
+        store.mark_observation_not_eligible(&ready.id, "host", "thread", 20, None)?;
+        assert!(
+            store
+                .next_observation_for_projection_at(100, watermark, 0, 100, 25)?
+                .is_none()
+        );
+        assert_eq!(
+            store
+                .next_observation_before_at(None, 40)?
+                .map(|observation| observation.id),
+            Some(deferred.id.clone())
+        );
+        assert_eq!(
+            store
+                .next_observation_for_projection_at(100, watermark, 0, 100, 40)?
+                .map(|observation| observation.id),
+            Some(deferred.id)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn processing_observation_precedes_ready_queue_work_in_both_selectors()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let mut store = Store::open(&directory.path().join("decisions.db"))?;
+        let queued = store.ingest_observation("session", "queued")?;
+        let processing = store.ingest_observation("session", "processing")?;
+        let source = authority("thread", "processing", "processing-user", 5);
+        store.bind_observation_source(
+            &processing.id,
+            "host",
+            "thread",
+            10,
+            "processing-digest",
+            1,
+            &[source],
+        )?;
+        store.connection.execute(
+            "UPDATE observations SET next_attempt_at=?2 WHERE id=?1",
+            rusqlite::params![&processing.id, i64::MAX],
+        )?;
+        let watermark = store.observation_admission_watermark()?;
+
+        assert_eq!(
+            store
+                .next_observation_before_at(None, 20)?
+                .map(|observation| observation.id),
+            Some(processing.id.clone())
+        );
+        assert_eq!(
+            store
+                .next_observation_for_projection_at(20, watermark, 0, 20, 20)?
+                .map(|observation| observation.id),
+            Some(processing.id)
+        );
+        assert_eq!(store.observation(&queued.id)?.status, "queued");
+        Ok(())
+    }
+
+    #[test]
+    fn unavailable_source_abandonment_is_guarded_audited_and_idempotent()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let mut store = Store::open(&directory.path().join("decisions.db"))?;
+        assert_eq!(store.activate_observer(7)?, 7);
+        let observation = store.ingest_observation("session", "unavailable")?;
+        let watermark = store.observation_admission_watermark()?;
+        store.defer_observation(&observation.id, None, i64::MAX)?;
+
+        let abandoned = store.abandon_unavailable_observation(&observation.id)?;
+        assert_eq!(abandoned.status, "complete");
+        assert_eq!(abandoned.outcome.as_deref(), Some("not_eligible"));
+        assert_eq!(
+            abandoned.failure_code.as_deref(),
+            Some("conversation_source_abandoned")
+        );
+        let completed_at: i64 = store.connection.query_row(
+            "SELECT completed_at FROM observations WHERE id=?1",
+            [&observation.id],
+            |row| row.get(0),
+        )?;
+        assert_eq!(
+            store
+                .abandon_unavailable_observation(&observation.id)?
+                .failure_code
+                .as_deref(),
+            Some("conversation_source_abandoned")
+        );
+        assert_eq!(
+            store.connection.query_row(
+                "SELECT completed_at FROM observations WHERE id=?1",
+                [&observation.id],
+                |row| row.get::<_, i64>(0),
+            )?,
+            completed_at
+        );
+        assert_eq!(store.observer_baseline_at()?, Some(7));
+        for table in [
+            "observation_jobs",
+            "observation_authority_items",
+            "authority_verdicts",
+            "observation_candidates",
+            "observation_classification_receipts",
+            "candidates",
+            "decision_events",
+        ] {
+            let count: i64 = store.connection.query_row(
+                &format!("SELECT COUNT(*) FROM {table}"),
+                [],
+                |row| row.get(0),
+            )?;
+            assert_eq!(count, 0, "{table} changed during source abandonment");
+        }
+        assert_eq!(
+            store
+                .ingest_reconciled_observation("host", "thread", "unavailable", 10)
+                .err()
+                .map(|error| error.code),
+            Some("observation_source_abandoned_conflict")
+        );
+        assert!(
+            store
+                .project_observations("1970-01-01", 0, 20, i64::MAX, watermark)
+                .is_ok()
+        );
+
+        let (bound, inserted) =
+            store.ingest_reconciled_observation("host", "thread", "bound", 10)?;
+        assert!(inserted);
+        assert_eq!(
+            store
+                .abandon_unavailable_observation(&bound.id)
+                .err()
+                .map(|error| error.code),
+            Some("observation_source_abandon_unsafe")
+        );
+        let incomplete = store.ingest_observation("session", "incomplete")?;
+        store.defer_observation(&incomplete.id, Some(11), i64::MAX)?;
+        assert_eq!(
+            store
+                .abandon_unavailable_observation(&incomplete.id)
+                .err()
+                .map(|error| error.code),
+            Some("observation_source_abandon_unsafe")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unavailable_source_abandonment_refuses_changed_or_classified_rows()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let mut store = Store::open(&directory.path().join("decisions.db"))?;
+        let processing = store.ingest_observation("session", "processing")?;
+        store.defer_observation(&processing.id, None, i64::MAX)?;
+        store.connection.execute(
+            "UPDATE observations SET status='processing' WHERE id=?1",
+            [&processing.id],
+        )?;
+        assert_eq!(
+            store
+                .abandon_unavailable_observation(&processing.id)
+                .err()
+                .map(|error| error.code),
+            Some("observation_source_abandon_invalid")
+        );
+
+        let expanded = store.ingest_observation("session", "expanded")?;
+        store.defer_observation(&expanded.id, None, i64::MAX)?;
+        store.connection.execute(
+            "UPDATE observations SET scope_level=1 WHERE id=?1",
+            [&expanded.id],
+        )?;
+        assert_eq!(
+            store
+                .abandon_unavailable_observation(&expanded.id)
+                .err()
+                .map(|error| error.code),
+            Some("observation_source_abandon_unsafe")
+        );
+
+        let classified = store.ingest_observation("session", "classified")?;
+        store.defer_observation(&classified.id, None, i64::MAX)?;
+        store.connection.execute(
+            "INSERT INTO observation_jobs(
+                observation_id, scope_level, attempt, nucleus_job_id, status
+             ) VALUES(?1, 0, 0, 'job-classified', 'planned')",
+            [&classified.id],
+        )?;
+        assert_eq!(
+            store
+                .abandon_unavailable_observation(&classified.id)
+                .err()
+                .map(|error| error.code),
+            Some("observation_source_abandon_unsafe")
+        );
+
+        let other_complete = store.ingest_observation("session", "other-complete")?;
+        store.mark_observation_not_eligible(
+            &other_complete.id,
+            "host",
+            "thread-other-complete",
+            12,
+            None,
+        )?;
+        assert_eq!(
+            store
+                .abandon_unavailable_observation(&other_complete.id)
+                .err()
+                .map(|error| error.code),
+            Some("observation_source_abandon_invalid")
+        );
         Ok(())
     }
 

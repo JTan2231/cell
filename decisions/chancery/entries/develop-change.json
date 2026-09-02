@@ -5,11 +5,11 @@
   "mode": "develop",
   "support": "supported",
   "title": "Change the Decisions product safely",
-  "summary": "Develop Decisions while preserving enacted-decision authority, narrow continuous observation, immutable classification and lifecycle-event contracts, activation and SQLite migrations, delivery idempotency, and the complete product CI gate.",
+  "summary": "Develop Decisions while preserving enacted-decision authority, fair narrow continuous observation, guarded unavailable-source recovery, immutable classification and lifecycle-event contracts, activation and SQLite migrations, delivery idempotency, and the complete product CI gate.",
   "use_when": ["Decisions code, schemas, prompts, classifier tools, packaging, service lifecycle, or documentation should change."],
   "do_not_use_when": ["The installed Decisions capability should only be used or operated."],
   "outcome": "A reviewed product change whose standalone CI is green and whose operational contracts remain synchronized.",
-  "effects": ["May change source, tests, docs, hook/service packaging, database migrations, or publish a new immutable schema/toolset identity."],
+  "effects": ["May change source, tests, docs, observation scheduling and recovery, hook/service packaging, database migrations, or publish a new immutable schema/toolset identity."],
   "authority": ["Decisions source and docs own product semantics.", "The Nucleus operator manual owns shared requester constraints."],
   "success": ["`decisions/ci.sh` finishes green.", "Changed registered meanings use new immutable IDs or versions and retained decoders remain valid."],
   "failure_and_recovery": ["Do not deploy or release a failing candidate.", "Restore or migrate requester state using the documented backup boundary."],
@@ -22,7 +22,7 @@
   "automation": "none",
   "steps": [
     "Read `AGENTS.md`, Decisions architecture and data model, and the current Nucleus requester manual.",
-    "Identify every affected source, hook/event correlation, activation baseline, observation queue, immutable schema/toolset/event envelope, consumer cursor, delivery, packaging, and privacy boundary.",
+    "Identify every affected source, hook/event correlation, activation baseline, observation scheduling and recovery path, immutable schema/toolset/event envelope, consumer cursor, delivery, packaging, and privacy boundary.",
     "Implement the smallest change with synthetic fixtures and synchronized operational documentation.",
     "Run `decisions/ci.sh` and focused requester or rollback proofs; release and deployment remain separate."
   ],
@@ -30,14 +30,17 @@
     "Decision identity remains host plus canonical item plus exact authority span, independent of fork provenance, effect metadata, and model wording.",
     "Completed file-change activity only selects an enacted turn; it never becomes authority or enters the prompt as paths, diffs, commands, or tool output.",
     "Level-0 classification contains all eligible current-turn authorities, the immediately preceding assistant proposal needed to interpret them when one exists, and at most the final assistant result; context expands at most once and processing remains serial.",
+    "Observation selection resumes processing first, skips queued rows before their retry time, and orders ready queued work by retry-ready time so one deferred source cannot monopolize the serial worker.",
     "The write-once activation baseline prevents pre-deployment reconciliation and is preserved across redeploy and rollback.",
-    "Incomplete source or classification known by a run's durable completion cutoff cannot create a complete run, snapshot, or delivery.",
+    "An unresolved incomplete source or classification known by a run's durable completion cutoff cannot create a complete run, snapshot, or delivery; the only source-unavailable exception is explicit audited closure of a previously deferred pending correlation that remains entirely unbound.",
+    "Unavailable-source abandonment requires explicit confirmation, refuses merely unfinished or bound rows, creates no verdict, candidate, or lifecycle event, preserves the baseline, is idempotent only for the exact prior closure, and makes later completed-root reconciliation fail closed.",
     "Nucleus retains no shell, workspace, web, launch-context, or direct-Codex fallback authority.",
     "CI is green without sending email, deploying, or publishing."
   ],
   "adaptation": [
     "Publish new immutable schema IDs or toolset versions for changed registered meaning.",
     "Scale tests to the changed boundary and retain historical decode and explicit migration behavior.",
+    "Prove regular and projection ready-time ordering plus guarded, audited, idempotent unavailable-source abandonment when observation scheduling or recovery changes.",
     "Prove Stop-hook output, foreign-hook refusal, scrubbed observer execution, serial processing, and both-service rollback when those boundaries change."
   ],
   "stop_when": [
@@ -46,6 +49,9 @@
     "A requested change would make model output, Nucleus completion, or Email acceptance the wrong domain authority."
   ],
   "interfaces": [{"label": "CI", "invocation": "decisions/ci.sh"}, {"label": "Release", "invocation": "decisions/release.sh --patch|--minor|--major"}],
-  "does_not_authorize": ["Deploying, sending email, or deleting retained state as a side effect of development."],
+  "does_not_authorize": [
+    "Deploying, sending email, or deleting retained state as a side effect of development.",
+    "Broad queue clearing, abandoning a merely unfinished source, or bypassing the explicit unbound pending-source recovery guard."
+  ],
   "manual": "manuals/develop-change.md"
 }

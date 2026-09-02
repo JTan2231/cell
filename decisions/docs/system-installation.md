@@ -96,8 +96,28 @@ separately as above.
 For a deliberate catch-up or diagnosis, `decisions observe reconcile` discovers
 and idempotently enqueues completed effectful turns after the activation
 baseline without classifying them. Repeated `decisions observe process` calls
-drain one observation at a time. These are operator interfaces, not parallel
-worker controls.
+drain one ready observation at a time. Processing rows resume first; queued
+sources with a future retry time are skipped and yield to other ready work.
+Queued status therefore can remain nonzero when no observation is currently
+ready. These are operator interfaces, not parallel worker controls.
+
+If diagnosis proves that one observer-deferred `TurnNotFound`-shape Stop-hook
+source is permanently unavailable, explicit recovery is:
+
+```sh
+decisions observe abandon OBSERVATION_ID --source-unavailable
+```
+
+The command waits for the observation-processing lock and transactionally
+closes only a queued level-0 correlation with a recorded retry time and no
+bound source, job, authority, verdict, or candidate. It records audited
+`complete` / `not_eligible` state, stores no caller-provided reason, emits no
+lifecycle event, and leaves the baseline unchanged. The exact repeat is
+idempotent. Never use it for a merely unfinished turn: those rows retain
+`source_not_completed_at` and must be allowed to resolve. A bound or otherwise
+changed row is refused, and later completed-root reconciliation for an
+abandoned correlation fails closed. This supported serialized state repair does
+not require a deployment or direct SQLite editing.
 
 Uninstall both services, the exact owned hook, and selectors while retaining
 releases, database, and logs:
