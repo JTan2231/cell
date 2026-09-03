@@ -30,7 +30,7 @@ The Codex `Stop` hook is a wake signal, not a transcript or decision boundary.
 It synchronously and idempotently records only `session_id` plus `turn_id` with
 a three-second timeout, then returns empty JSON to Codex. It discards the rest
 of the event, including transcript path, working directory, model, permission
-mode, and latest assistant message. A launchd worker processes one durable
+mode, and latest assistant message. A Clockwork-activated worker processes one durable
 observation at a time every 60 seconds. Background hook execution is not used:
 Codex may cancel background hooks at session end and permits them to finish out
 of order.
@@ -168,7 +168,8 @@ records the current watermark as its activation cursor.
 
 ## Reconciliation and daily projection
 
-The observer LaunchAgent invokes one `observe process` every 60 seconds. A
+The `decisions/observer` Clockwork binding invokes one pinned
+`observe process` runner every 60 seconds. A
 healthy day therefore classifies turns shortly after completion. `observe
 reconcile` is an idempotent safety net for a missed or untrusted hook: it scans
 post-baseline completed effectful root turns and enqueues them without model

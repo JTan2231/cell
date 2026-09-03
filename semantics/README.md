@@ -7,6 +7,10 @@ and asks Nucleus to propose one typed reconciliation when a decision is
 effective. Semantics—not the model and not Nucleus—validates and commits the
 result.
 
+On macOS, Clockwork owns the recurring process activation for the immutable
+`semantics/worker` definition. Semantics still owns worker serialization,
+intake state, recovery, validation, and every repository commit.
+
 Participation is explicit. A registered folder must contain an exact line in
 its root `AGENTS.md`:
 

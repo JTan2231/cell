@@ -17,13 +17,14 @@ members = [
     "semantics",
     "geste/crates/geste",
     "pratica/crates/pratica",
+    "clockwork/crates/clockwork",
 ]
 resolver = "3"
 
 [workspace.package]
 # The six Nucleus crates share this release version. Annals, Annals Usage,
-# Todo, Chancery, Weaver, Email, Conversations, Decisions, Semantics, Geste, and
-# Pratica declare independent product versions in their manifests.
+# Todo, Chancery, Weaver, Email, Conversations, Decisions, Semantics, Geste,
+# Pratica, and Clockwork declare independent product versions in their manifests.
 version = "0.3.2"
 edition = "2024"
 rust-version = "1.89"

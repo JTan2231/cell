@@ -48,11 +48,32 @@ positively terminal.
 
 ## Serial service
 
-`org.semantics.worker` invokes one hidden `intake run` every 60 seconds. A
-cross-process lock makes overlapping invocations a harmless no-op. Each run
+Clockwork key `semantics/worker` requests one hidden `intake run` every 60
+seconds, without run-at-load or an activation timeout. Its immutable definition
+records the exact release ID and root and pins `/bin/sh` plus the release-local
+runner by SHA-256. Semantics' release manifest and retention rules own the
+sibling payload and full release integrity. The definition uses a scrubbed
+environment and skips overlap. A
+cross-process Semantics lock remains the authoritative serialization boundary;
+an independently started overlapping invocation is a harmless no-op. Each run
 resumes one processing item first, scans bounded lifecycle pages, and applies
 at most one reconciliation. Pausing a project prevents a late proposal from
 committing.
+
+A release-independent, current-user-owned, mode-`0600`, non-hard-linked
+maintenance marker prevents any release-pinned runner from entering domain
+work during deployment, uninstall, or fail-closed recovery. Lifecycle tooling
+never truncates an existing marker and refuses any other shape. A successful
+deployment clears it only after binding and database state commit; uninstall
+and an unprovable rollback retain it. Existing product log files must likewise
+be current-user-owned regular non-hard-linked files; deployment makes their
+mode `0600` without truncating content before definition registration.
+
+Clockwork records only schedule, definition, binding, and process outcomes. It
+does not inspect Semantics domain state or ingest product log bodies. A zero
+process exit reports only that the one-shot invocation returned successfully;
+the Semantics database and worker report remain authoritative for intake and
+commit outcomes.
 
 Service stdout contains only counters and opaque identifiers; stderr contains
 operational failures. Decision statements, rationales, project content,

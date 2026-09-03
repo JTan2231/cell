@@ -450,7 +450,7 @@ or storage-gated queue. JSON uses `duplicates` and `skipped` for their archive
 counts and adds `stopped_for_low_space` plus the most recent `storage` check
 when a queued claim was considered. It also includes
 the spool root, effective settling interval, elapsed time, recovery count, and
-ignored count. The external launchd or systemd schedule remains the wake-up
+ignored count. The external Clockwork or systemd schedule remains the wake-up
 and recovery mechanism; Annals has no resident daemon or internal scheduler.
 Human low-space deferral emits one diagnostic even under `--quiet`; JSON keeps
 that condition in its success document without writing a success diagnostic to

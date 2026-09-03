@@ -3,14 +3,14 @@
   "provider": {
     "id": "semantics",
     "name": "Semantics",
-    "release": "0.1.2"
+    "release": "0.1.3"
   },
   "promise_scope": {
     "authoritative_for": [
       "Semantics owns project registration and routing, stable concept identity, append-only semantic revisions and typed effects, intake policy and cursors, reconciliation validation, and semantic commit success."
     ],
     "not_authoritative_for": [
-      "Participating products own runtime behavior; Decisions owns lifecycle facts, Conversations owns task metadata, and Nucleus owns bounded execution rather than semantic truth."
+      "Participating products own runtime behavior; Decisions owns lifecycle facts, Conversations owns task metadata, Nucleus owns bounded model execution, and Clockwork owns scheduled process activation rather than semantic truth."
     ],
     "inventory": {
       "covers": [
@@ -22,7 +22,7 @@
       ]
     },
     "shared_access_and_trust": [
-      "Repository reads and administrative writes use local-user interfaces; the worker receives only published upstream data and never grants Nucleus project workspace, shell, or web access."
+      "Repository reads and administrative writes use local-user interfaces; the worker receives only published upstream data and never grants Nucleus project workspace, shell, or web access. Clockwork receives only an exact release-local runner definition and retains no semantic bodies."
     ],
     "shared_privacy_and_retention": [
       "Semantics retains private normalized meanings and provenance but no raw transcript, diff, command, prompt, credential, or project-file body."

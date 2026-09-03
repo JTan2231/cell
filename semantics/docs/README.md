@@ -3,7 +3,7 @@
 - [Architecture](architecture.md): authority, event routing, and reconciliation.
 - [CLI](cli.md): project, repository, intake, and readiness commands.
 - [Data model](data-model.md): schema 1, revisions, effects, and recovery state.
-- [System installation](system-installation.md): macOS deployment, service
+- [System installation](system-installation.md): macOS deployment, Clockwork schedule
   operation, rollback, and uninstall.
 
 The [Semantics provider bundle](../chancery/provider.json) publishes the

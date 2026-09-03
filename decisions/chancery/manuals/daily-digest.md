@@ -67,8 +67,16 @@ that completes later can enter a manual rebuild of its authority date, but an
 accepted scheduled delivery is not automatically amended and the turn is not
 carried into another date. Preview freezes and displays the exact current
 revision. Manual send requires explicit authorization and uses an ad-hoc key.
-The installed recurring service may invoke `daily run --scheduled` under its
-separately established authorization.
+The installed `decisions/daily-email` Clockwork binding may invoke the exact
+release-owned `daily run --scheduled` runner under its separately established
+authorization. Clockwork runtime history proves only process supervision, not
+projection completeness, Email acceptance, or receipt.
+
+Both release-pinned runners first inspect the private, release-independent
+`~/Library/Application Support/Decisions/.clockwork-maintenance` marker. A
+current-user-owned mode-`0600`, non-hard-linked marker makes the scheduled activation a
+successful no-op before dependency resolution or domain work; a symbolic,
+non-file, foreign-owned, or non-private marker fails closed.
 
 Only explicit authoritative user settlements qualify. Inspect medium candidates
 with `decisions show`, then confirm or dismiss them before preview when desired.

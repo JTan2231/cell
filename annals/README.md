@@ -228,9 +228,11 @@ deployer.
 
 ## Scheduled macOS installation
 
-The macOS installation is deliberately user-owned. Deploy Nucleus first,
+The macOS installation is deliberately user-owned. Deploy Nucleus and
+Clockwork first,
 import or establish authentication through Nucleus, and verify that its daemon
-is healthy. Then deploy Annals with the Nucleus executable and socket:
+is healthy. Then deploy Annals with the Nucleus executable, socket, and
+Clockwork frontend:
 
 ```sh
 ./ci.sh
@@ -238,25 +240,34 @@ is healthy. Then deploy Annals with the Nucleus executable and socket:
   --binary "$PWD/../target/release/annals" \
   --usage-binary "$PWD/../target/release/annals-usage" \
   --nucleus "$HOME/.local/bin/nucleus" \
-  --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock"
+  --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock" \
+  --clockwork "$HOME/.local/bin/clockwork"
 ```
 
 The deployer installs `~/.local/bin/annals` and
 `~/.local/bin/annals-usage`, versioned complete releases under
-`~/Library/Application Support/Annals/install`, and a user LaunchAgent under
-`~/Library/LaunchAgents`. It selects the Nucleus socket in Annals'
+`~/Library/Application Support/Annals/install`, and an immutable Clockwork
+definition selected by binding key `annals/inbox`. It selects the Nucleus socket in Annals'
 configuration and keeps the companion `usage.toml` beside the Annals library.
 Running the same command again is the unattended update process. It drains the
 worker between jobs, takes a consistent Annals library backup, switches both
 binaries through one release selector, updates both configurations within a
 rollback-protected transaction, verifies the result, and automatically
-restores the previous release if launchd cutover fails. Configuration,
+restores the previous release and previously enabled binding if Clockwork
+cutover fails. Before any selected binding is disabled or replaced, its
+stored executable definition must match the complete current Annals release
+field for field; a same-key foreign selection is left untouched. A first
+handoff quiesces and removes the owned legacy `org.annals.inbox` LaunchAgent
+before selecting Clockwork, so both schedulers never intentionally coexist. Configuration,
 library data, logs, the operator pause state, and
 queued or archived sources are retained.
 For a later operator-requested rollback, `install/last-update.json` names a
-durable snapshot containing the prior configs and LaunchAgent; restore that
-snapshot together with the `previous` release selector. Credentials are not
-included, and Nucleus state remains outside the Annals rollback boundary.
+durable snapshot containing the prior configs and prior schedule record;
+restore that snapshot together with the `previous` release selector. If
+exclusive rollback cannot be proved, Annals keeps maintenance, mutates only
+attributable scheduler state, removes its public selectors, and retains the
+private recovery material. Credentials are not included, and Nucleus state
+remains outside the Annals rollback boundary.
 
 If Nucleus authentication expires, queued jobs remain unattempted behind the
 authenticated dispatch preflight. Pause Annals, run `annals-usage login
@@ -270,7 +281,7 @@ the one-time cutover from an older schema adds `--fresh-state` to the command
 above. That mode archives the old library, its sidecars, and the spool
 as one rollback generation, verifies the empty replacement, imports the
 uncompleted backlog while preserving priority choices and sequence order
-within each lane, explicitly resumes it, and only then wakes launchd. See the
+within each lane, explicitly resumes it, and only then selects the Clockwork binding. See the
 [system installation guide](docs/system-installation.md) for the guarded
 sequence and recovery receipt. Any obsolete `usage.db` and sidecars are
 discarded after a successful cutover rather than entering that generation.
@@ -293,7 +304,13 @@ annals inbox resume
 
 Drop complete UTF-8 files into
 `$HOME/Library/Application Support/Annals/spool/incoming`. The one-shot worker
-runs at login and then receives another wake-up every five minutes while idle.
+is requested at binding load and every 300 seconds by Clockwork. The immutable
+definition records the exact release ID and root, pins `/bin/sh` and the
+release-local runner by SHA-256, skips overlap, has no activation timeout, and
+inherits no ambient environment. Annals' release manifest and retention rules,
+not Clockwork's top-level launch-image check, own the sibling payload and full
+release integrity. The interval is not a wake-up deadline, and Annals makes no
+launchd availability promise.
 Registration moves each settled arrival into a durable normal-lane `queued/`
 job with an immutable sequence; `annals inbox register` exposes that admission
 step without starting a delivery. `annals inbox enqueue` copies explicitly
@@ -320,9 +337,11 @@ membership, preserves every original failure, and records the outcome of each
 fresh linked child; there is no retry-all command. `annals inbox resume` refuses
 an unfinished retry event, and otherwise reopens dispatch without starting a
 worker. Use `annals inbox run` for immediate processing or wait for the next
-LaunchAgent wake-up. The operator pause is independent of deployer maintenance
-and survives updates. The LaunchAgent runs only while that macOS user is logged
-in and wakes again at the next login. For retry, migration, status, removal,
+Clockwork activation. The operator pause is independent of deployer maintenance
+and survives updates. Clockwork process history reports invocation outcomes;
+Annals' durable run report remains the authority for queue and corpus success.
+Per-user scheduling remains available only while that macOS user is logged in.
+For retry, migration, status, removal,
 and Linux systemd instructions, see the [system installation
 guide](docs/system-installation.md).
 

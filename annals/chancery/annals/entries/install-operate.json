@@ -1,13 +1,13 @@
 {
   "id": "annals.install.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Install or recover Annals",
   "summary": "Install, update, verify, or recover the user-owned Annals and Annals Usage deployment, including an explicitly authorized fresh-state cutover.",
   "use_when": [
-    "The user-owned macOS Annals and Annals Usage binaries, configuration, content-addressed release, LaunchAgent, library, or spool must be installed, updated, or recovered.",
+    "The user-owned macOS Annals and Annals Usage binaries, configuration, content-addressed release, Clockwork binding, library, or spool must be installed, updated, or recovered.",
     "An explicitly authorized fresh-state replacement must preserve uncompleted backlog and rollback as one generation."
   ],
   "do_not_use_when": [
@@ -15,26 +15,30 @@
     "Source development or Git release publication is the intended outcome.",
     "A destructive fresh-state cutover has not been explicitly authorized."
   ],
-  "outcome": "A verified complete installed Annals and Annals Usage release with matching configuration, scheduler, library/spool generation, Nucleus boundary, and rollback state.",
+  "outcome": "A verified complete installed Annals and Annals Usage release with one exact Clockwork binding, matching configuration, library/spool generation, Nucleus boundary, and rollback state.",
   "effects": [
     "Stages and atomically selects a complete content-addressed release containing Annals, Annals Usage, runners, configuration, and provider documentation.",
-    "May quiesce the LaunchAgent, establish maintenance, migrate the library, replace launchd configuration, and restart scheduled inbox processing.",
+    "Registers an immutable Clockwork definition for `annals/inbox`, proves any selected prior digest resolves to the complete exact current Annals release definition before disabling or replacing it, establishes maintenance, migrates the library, and atomically switches the binding only after the exact release is ready.",
+    "During legacy system migration, the child deployer returns an inert rendered definition under maintenance; the outer migration durably commits the permanent user-state root before it registers or selects that definition.",
+    "Removes or restores a legacy LaunchDaemon or LaunchAgent only when its complete plist, owner, and mode match the exact Annals rendering; migration also proves the system service absent before removing its files or clearing maintenance, and additional launchd keys are foreign.",
     "With `--fresh-state`, replaces the library and spool together, imports uncompleted backlog in lane order, and retains the prior generation for rollback.",
     "A failed pre-commit cutover restores captured program, service, configuration, library, and spool state according to the supported procedure."
   ],
   "authority": [
-    "Annals owns its installed programs, library, spool, scheduler, configuration, migration, maintenance, and recovery.",
+    "Annals owns its installed programs, library, spool, schedule requirements, configuration, migration, maintenance, domain result, and recovery.",
+    "Clockwork owns the immutable executable definition, selected binding, non-overlap enforcement, launchd projection, and activation process history for `annals/inbox`; it never owns Annals job or corpus success.",
     "Nucleus remains separately authoritative for Codex execution and authentication and is not stopped or replaced by an Annals deployment."
   ],
   "success": [
     "Installed Annals and Annals Usage versions and help surfaces match the selected release.",
-    "Library migration and statistics checks, spool status, LaunchAgent state, Nucleus readiness, and deliberate Annals and usage canaries pass as applicable.",
+    "Library migration and statistics checks, spool status, the exact Clockwork binding, Nucleus readiness, and deliberate Annals and usage canaries pass as applicable.",
     "Maintenance is cleared only after the complete cutover commits and backlog processing is intentionally resumed."
   ],
   "failure_and_recovery": [
     "Do not remove maintenance, edit spool receipts, or replace library files manually after interrupted deployment; inspect and use the documented recovery procedure.",
     "A measured closed inbox storage gate does not itself reject a deployment, but `storage_probe_failed` can reject status inspection and insufficient physical space can fail release staging, backup, migration, or rollback writes.",
     "A failed ordinary update restores the previous captured generation before work resumes.",
+    "A legacy migration failure before the outer commit registers no definition and restores the system installation; a committed interruption or unproved system-service retirement retains maintenance and its handoff for idempotent completion.",
     "A fresh-state cutover is destructive to the active generation and requires explicit retained rollback material and backlog verification."
   ],
   "privacy": [
@@ -42,20 +46,24 @@
     "Deployment must preserve private user ownership and permissions across both current and rollback generations."
   ],
   "interfaces": [
-    {"label": "Deploy or update", "invocation": "/Users/joey/rust/cell/annals/packaging/launchd/deploy-user.sh --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET>"},
-    {"label": "Fresh-state cutover", "invocation": "/Users/joey/rust/cell/annals/packaging/launchd/deploy-user.sh --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --fresh-state"},
+    {"label": "Deploy or update", "invocation": "/Users/joey/rust/cell/annals/packaging/launchd/deploy-user.sh --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --clockwork <ABSOLUTE_CLOCKWORK_BINARY>"},
+    {"label": "Fresh-state cutover", "invocation": "/Users/joey/rust/cell/annals/packaging/launchd/deploy-user.sh --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --clockwork <ABSOLUTE_CLOCKWORK_BINARY> --fresh-state"},
+    {"label": "Legacy system migration", "invocation": "sudo /Users/joey/rust/cell/annals/packaging/launchd/migrate-to-user.sh --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --clockwork <ABSOLUTE_CLOCKWORK_BINARY>"},
     {"label": "Installed Annals version", "invocation": "/Users/joey/.local/bin/annals --version"},
     {"label": "Installed Usage version", "invocation": "/Users/joey/.local/bin/annals-usage --version"},
     {"label": "Inbox status", "invocation": "/Users/joey/.local/bin/annals inbox status"},
     {"label": "Usage doctor", "invocation": "/Users/joey/.local/bin/annals-usage doctor"}
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "does_not_authorize": [
     "Running `annals/release.sh`, which commits, tags, and pushes.",
     "A fresh-state replacement without explicit destructive-operation authority.",
     "Clearing user data as storage remediation, or lowering or disabling the inbox storage reserve, without the user's explicit consent for the exact target and scope.",
+    "Disabling a same-key Clockwork binding or removing a same-label plist or installed pathname without proving its exact Annals release or rendered-file identity.",
+    "Concurrent same-user direct Clockwork mutation of `annals/inbox` during deployment or migration; ownership inspection and binding mutation are not a compare-and-swap, and a detected change fails closed behind the maintenance recovery gate.",
     "Deleting prior generations, backups, logs, or retained failed envelopes."
   ],
   "promise": {
@@ -64,15 +72,16 @@
       {"status": "unsupported", "statement": "This operation is not source development, Git publication, routine library administration, implicit fresh-state replacement, or storage cleanup."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "Candidate Annals and Annals Usage binaries have passed the product gate, and the caller supplies absolute candidate binary, Nucleus binary, and Nucleus socket paths with enough physical capacity for staging and recovery writes."},
+      {"status": "declared", "statement": "Candidate Annals and Annals Usage binaries have passed the product gate, and the caller supplies absolute candidate binary, Nucleus binary, Nucleus socket, and compatible Clockwork paths with enough physical capacity for staging and recovery writes."},
+      {"status": "declared", "statement": "An ordinary update requires every selected `annals/inbox` definition to match the complete current Annals release and executable contract field for field; legacy system migration requires the binding to be absent or disabled with no selected digest before commit."},
       {"status": "declared", "statement": "Fresh-state replacement additionally requires explicit destructive authority, retained prior-generation rollback material, and a verified uncompleted-backlog import and recovery plan."}
     ],
     "inputs": [
-      {"status": "declared", "statement": "Deployment accepts absolute Annals, Annals Usage, Nucleus binary, and Nucleus socket paths plus an optional explicitly authorized --fresh-state mode."},
+      {"status": "declared", "statement": "Deployment accepts absolute Annals, Annals Usage, Nucleus binary, Nucleus socket, and Clockwork binary paths plus an optional explicitly authorized --fresh-state mode."},
       {"status": "unsupported", "statement": "The deployer does not accept release publication, arbitrary cleanup, manual receipt editing, implicit data deletion, or Nucleus replacement as installation inputs."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Success selects a complete content-addressed installed release containing both binaries, runners, configuration, provider bundles, LaunchAgent, and a verified compatible library and spool generation."},
+      {"status": "declared", "statement": "Success selects a complete content-addressed installed release containing both binaries, the release-local inbox runner, Clockwork template, legacy ownership-check template, configuration, provider bundles, and a verified compatible library and spool generation, then binds the exact definition digest."},
       {"status": "declared", "statement": "Verification exposes installed versions, Nucleus health, Annals statistics and inbox status, and Annals Usage diagnostics; deliberate execution and usage canaries remain boundary-dependent checks."}
     ],
     "data_semantics": [
@@ -81,7 +90,7 @@
       {"status": "declared", "statement": "A measured closed storage gate does not itself reject deployment, while an unreadable probe or insufficient physical capacity can fail required inspection or writes."}
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Product versions, provider releases, content-addressed release identity, current selector, LaunchAgent label, library schema, and library/spool rollback generation are distinct identities."},
+      {"status": "declared", "statement": "Product versions, provider releases, content-addressed release identity, current selector, Clockwork key `annals/inbox`, immutable definition digest, library schema, and library/spool rollback generation are distinct identities."},
       {"status": "declared", "statement": "Storage checks and reserve comparisons use filesystem bytes; freshness and service checks are observations made during the selected deployment."}
     ],
     "completeness_and_freshness": [
@@ -90,16 +99,18 @@
       {"status": "unspecified", "statement": "No deployment-duration, service-availability, rollback-retention duration, or disk-capacity service-level objective is promised."}
     ],
     "access": [
-      {"status": "declared", "statement": "The supported boundary is the repository-owned launchd deployer operating the current user's private Annals installation, LaunchAgent, library, spool, configuration, and provider selectors."},
+      {"status": "declared", "statement": "The supported boundary is the repository-owned macOS deployer operating the current user's private Annals installation, Clockwork key `annals/inbox`, library, spool, configuration, and provider selectors."},
       {"status": "unsupported", "statement": "The operation does not own or replace Nucleus, publish Git state, delete recovery material, or grant direct library and spool editing."}
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Deployment stages and checks a complete release, establishes maintenance, quiesces scheduled work, captures recovery state, performs supported migration or authorized replacement, switches selectors and service configuration, verifies, then clears maintenance."},
+      {"status": "declared", "statement": "Deployment stages and registers an inactive exact-release definition, establishes maintenance, proves and disables only an exact current-release Clockwork selection and quiesces any owned legacy LaunchAgent, captures recovery state, performs supported migration or authorized replacement, switches selectors and exactly one Clockwork binding, verifies, then clears maintenance."},
+      {"status": "declared", "statement": "The former-system migration is the exception to pre-commit definition registration: its child renders an inert definition under maintenance, and the outer migration durably records the target state as permanent before registering and selecting it. RunAtLoad remains maintenance-gated until the system service is proved absent and exact legacy retirement completes."},
+      {"status": "declared", "statement": "Rollback restores the exact prior definition only when that binding was enabled, or restores the prior owned legacy LaunchAgent, never both. A previously absent or disabled binding remains disabled without transient activation; its inactive selected digest may remain the candidate digest. If exclusive restoration cannot be proved, Annals leaves unproved scheduler state untouched, keeps maintenance, removes its public selectors, and retains private recovery material."},
       {"status": "declared", "statement": "An ordinary pre-commit failure restores the captured program, service, configuration, library, and spool generation before work resumes."},
       {"status": "declared", "statement": "Fresh state treats library and spool plus uncompleted backlog as one rollback generation; credentials remain forward-only and outside binary or database rollback."}
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "The supported deployer is a per-user macOS LaunchAgent installation, requires absolute inputs, stages one complete generation, and needs enough physical capacity for release, backup, migration, and rollback artifacts."},
+      {"status": "declared", "statement": "The supported deployer is a per-user macOS Clockwork installation, requires absolute inputs, stages one complete generation, and needs enough physical capacity for release, backup, migration, and rollback artifacts."},
       {"status": "unsupported", "statement": "Deployment authority never implies fresh state, data cleanup, reserve reduction, prior-generation deletion, or service work outside Annals."},
       {"status": "unspecified", "statement": "No maximum installed-state size, deployment time, retained-generation count, or service downtime bound is promised here."}
     ],
@@ -118,10 +129,12 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment and unattended inbox processing rely on per-user launchd supervision, but no dedicated installed Chancery contract describes launchd readiness.",
-        "target": "launchd",
-        "kind": "readiness"
-      }
+        "statement": "Deployment and unattended inbox processing rely on Clockwork schedule contract 1 for immutable definition registration, one selected binding, non-overlap, activation history, and its launchd projection.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      },
+      {"status": "unspecified", "statement": "Annals promises no launchd availability or wake-up latency beyond the observations exposed by Clockwork."}
     ]
   },
   "manual": "manuals/install-operate.md"

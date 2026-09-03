@@ -1,0 +1,121 @@
+{
+  "id": "clockwork.develop.change",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change Clockwork software and contracts",
+  "summary": "Modify Clockwork's strict definition boundary, binding lifecycle, direct supervision, storage, CLI, packaging, tests, documentation, or public contracts without absorbing product-domain scheduling authority.",
+  "use_when": [
+    "Clockwork code, schema, manifest, CLI or JSON behavior, generated plist, process supervision, packaging, tests, documentation, release workflow, or Chancery bundle is being changed."
+  ],
+  "do_not_use_when": [
+    "The request is ordinary installed schedule operation or diagnosis.",
+    "Release publication, deployment, Semantics registration or seed, or a product binding change has not been separately authorized.",
+    "The proposed feature is an agent runner, arbitrary command surface, workflow, retry engine, secret store, output capture system, or product-domain scheduler without a new boundary review."
+  ],
+  "outcome": "A minimal tested Clockwork change whose executable contract, immutable definitions, binding cutover, supervision, persistence, packaging, and published promises remain synchronized and product authority remains outside Clockwork.",
+  "effects": [
+    "Modifies Clockwork source, tests, documentation, packaging, release tooling, or product-owned Chancery contracts.",
+    "Manifest, storage, cutover, or process-supervision changes can affect existing product integrations and private persistent state.",
+    "Release, deployment, validation against a real binding, and Semantics operations remain separate effects."
+  ],
+  "authority": [
+    "Clockwork owns only definition identity, stable selection, generated Clockwork LaunchAgents, overlap admission, direct-child supervision, and runtime history.",
+    "Products retain release, durable-work, retry, secret, logging, recovery, and domain-success authority; launchd retains trigger-delivery authority.",
+    "Until project `clockwork` is explicitly registered and seeded, Cell is the maintained shared-terminology authority; implementation and product contracts remain behavior authority."
+  ],
+  "success": [
+    "The smallest owning code and exact architecture, CLI, data-model, installation, semantic-seed, packaging, and Chancery contracts agree.",
+    "Tests preserve strict manifest rejection, immutable registration, product-artifact containment, exact separately hashed interpreter admission, stable-key-only runtime invocation, artifact verification, per-key overlap, process-group supervision, terminal history, transactional cutover and compensation, privacy, and content-addressed packaging as affected.",
+    "A persistent-state change includes explicit migration, quiescent backup, old-state fixtures, and database-aware rollback rather than implicit deployment migration.",
+    "Packaging tests prove an explicit candidate Chancery reader validates the exact staged provider before any public selector mutation.",
+    "`clockwork/ci.sh` completes green before release or deployment."
+  ],
+  "failure_and_recovery": [
+    "Do not broaden runtime input into caller-controlled argv, weaken artifact checks, infer domain success, capture product output, or add automatic retry.",
+    "Keep binding state, plist bytes, and launchd loaded state coherent through staged transition and compensation; when an incomplete projection remains attributable to Clockwork, durably attempt fail-disabled recovery, and otherwise retain and recovery-gate unattributable state without destructive mutation.",
+    "Packaging changes retain exact content identity, version/provider matching, candidate-reader validation of the exact staged provider before selector mutation, foreign-state refusal, stable selectors, and rollback without touching product bindings or runtime state."
+  ],
+  "privacy": [
+    "Fixtures must be synthetic and contain no credential, real product output, private user path, production definition, or activation history.",
+    "Diagnostics and errors should identify fields and stable IDs without echoing complete environment values or product output."
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read Clockwork's instructions and the exact architecture, CLI, data-model, installation, semantic-seed, and Chancery contracts affected by the change.",
+    "Identify whether the change alters executable meaning, product authority, persistent state, cutover consistency, process containment, privacy, recovery, or another system reliance.",
+    "Implement the smallest change with isolated synthetic releases, state roots, plists, launchd doubles, and child processes and update every affected product-owned contract.",
+    "Run `clockwork/ci.sh`; run release, deployment, Semantics, or product-binding operations only under separate authority."
+  ],
+  "checkpoints": [
+    "Runtime and the private launchd entry accept only a stable key and never caller-supplied executable, arguments, environment, cwd, schedule, timeout, or policy.",
+    "Executable verification remains limited to registered top-level launch images and never claims transitive or product-domain attestation.",
+    "Each activation remains one direct child with no retry submodel, and each binding transition remains serialized and compensating across database, plist, and launchd state.",
+    "Clockwork remains a short-lived current-user broker with no daemon, HTTP server, agent execution, or product-domain scheduler."
+  ],
+  "adaptation": [
+    "Introduce a new manifest or storage schema when existing immutable meaning cannot represent the change, retaining historical decoding and explicit migration.",
+    "Add a new product integration only after its complete public runner, secret, output, deployment, rollback, and domain-success boundary has been agreed separately."
+  ],
+  "stop_when": [
+    "The change transfers product retries, secrets, logs, durable work, or domain-success policy into Clockwork.",
+    "A public, persistent, or launchd change lacks synchronized contracts, isolated tests, migration or rollback evidence, or an explicit external-system agreement.",
+    "The requested behavior cannot be represented within Clockwork's reviewed short-lived v0.1 boundary."
+  ],
+  "dependencies": [
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "chancery.provider.publish", "min_contract": 3, "max_contract_exclusive": 4}
+  ],
+  "does_not_authorize": [
+    "Running `release.sh`, deploying an installed Clockwork release, switching a product binding, or invoking a product job.",
+    "Registering or seeding the Clockwork Semantics project or changing another product.",
+    "Using real credentials, private output, production definitions, or retained user state as development fixtures."
+  ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "An interactive contributor may change Clockwork within its reviewed short-lived scheduled-activation boundary while keeping implementation, tests, packaging, documentation, and public promises synchronized."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The contributor has read Clockwork instructions and affected contracts, queried the applicable Semantics authority, identified every changed system boundary, and has separate authority before release, deployment, or real binding effects."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are the scoped request, current Clockwork source and public contracts, isolated synthetic release and state fixtures including a candidate Chancery reader, and any explicitly selected installed documentation contracts."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The output is the smallest synchronized source, test, schema, documentation, packaging, provider, or release-tooling change with a green Clockwork CI result."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Development preserves the distinction among immutable definition, stable binding, one-child activation, runtime evidence, product-domain success, and launchd trigger delivery."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Existing binding keys, immutable definition IDs, activation IDs, product release IDs, artifact digests, manifest and database schema versions, contract versions, and provider releases retain their documented meanings unless an explicit successor is introduced."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Completion covers every affected Clockwork code, test, architecture, CLI, data-model, installation, semantic-seed, packaging, and Chancery contract and the current CI run."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "Development uses the local repository filesystem and shell with isolated state; another product or live launchd operation requires its separately selected contract and authority."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Persistent changes require explicit migration, quiescent backup, old-state proof, and database-aware rollback; binding changes preserve three-part database/plist/launchd coherence; release and deployment remain later transitions."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Development remains bounded to a current-user local broker with supported interval or daily triggers, stable-key runtime selection, direct-child supervision, skip-overlap, and no automatic retry."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Incompatible executable, manifest, storage, scheduling, or packaging meaning receives a successor schema or contract with historical decoding and explicit integration migration."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Clockwork development relies on Semantics for maintained terminology: Cell until project `clockwork` is registered and seeded, then that project repository; source, tests, and product documentation remain authoritative for behavior.", "target": "semantics", "kind": "authority", "contract": "semantics.repository.explore"},
+      {"status": "declared", "statement": "Clockwork provider-publication changes rely on Chancery's candidate-reader validation contract; packaging must invoke that reader on the exact staged provider before selector mutation.", "target": "chancery", "kind": "control", "contract": "chancery.provider.publish"},
+      {"status": "unsupported", "statement": "This terminology authority does not create a represented-product runtime reliance for the Clockwork broker."}
+    ]
+  },
+  "manual": "manuals/develop-change.md"
+}

@@ -4,7 +4,7 @@
 
 Before installation or maintenance, verify Decisions lifecycle contract 1,
 Conversations history contract 3 with exact cwd metadata, and Nucleus execution
-contract 1. Chancery documents these boundaries but is not called by the
+contract 1, plus Clockwork schedule contract 1. Chancery documents these boundaries but is not called by the
 Semantics worker.
 
 Build and deploy only a green candidate:
@@ -13,27 +13,54 @@ Build and deploy only a green candidate:
 semantics/ci.sh
 cargo build --release --locked --package semantics
 semantics/packaging/macos/deploy-user.sh \
-  --binary /absolute/path/to/target/release/semantics
+  --binary /absolute/path/to/target/release/semantics \
+  --clockwork /absolute/path/to/clockwork
 ```
 
 The deployer owns one transaction across service quiescence, database and
 sidecar backup, candidate doctor, content-addressed release selection, public
-CLI/provider selectors, and the LaunchAgent. It refuses foreign or tampered
+CLI/provider selectors, and the `semantics/worker` Clockwork binding. It
+hashes the unrendered template into the release, renders exact absolute paths
+only after that identity exists, proves any selected definition is the exact
+current release-owned runner and schedule. That point-in-time proof is not a
+Clockwork compare-and-swap; Semantics serializes its own lifecycle tools, and
+concurrent direct same-user binding mutation is unsupported and may force
+maintenance-gated recovery. It registers the candidate definition inactive,
+disables the prior binding,
+quiesces any owned legacy LaunchAgent, and refuses foreign or tampered
 artifacts. Deploy and uninstall share an update lock. Deployment also holds the
 worker's exact cross-process flock, so a manual long-running reconciliation
 cannot hide between point-in-time SQLite checks, and runs candidate doctor in a
-scrubbed environment. If rollback cannot prove service/database quiescence,
-the deployer fails closed before releasing that flock: current/public selectors
-and the installed plist are removed, so even a still-loaded job has no
-executable current runner. Use the retained private transaction backup,
-including the database, prior plist, and selector record, for explicit
+scrubbed environment. Rollback restores the exact prior Clockwork selection
+and enabled state, or the prior owned legacy LaunchAgent, never both. A
+previously absent or disabled-null binding becomes a disabled tombstone that
+may retain the candidate digest because Clockwork has no clear-selection
+operation; a previously disabled selected definition is restored without
+transient activation. If
+rollback cannot prove scheduler/database quiescence, the deployer retains the
+release-independent maintenance gate before releasing that flock, attempts
+both scheduler cleanups, and removes public selectors. When a newly selected
+candidate cannot be cleared back to a prior null selection, its exact private
+`current` release selector is retained as ownership evidence; other
+unprovable paths remove it. Semantics retains exact release bytes for
+registered definitions. Use
+the retained private transaction backup, including the database,
+prior schedule state, and selector record, for explicit
 recovery.
+
+The release-independent maintenance marker must be a current-user-owned,
+mode-`0600`, non-hard-linked regular file. An existing marker is validated and
+never truncated. Before definition registration, the deployer likewise
+validates any existing worker stdout/stderr file as a current-user-owned,
+non-hard-linked regular file and restricts its mode to `0600` without changing
+its contents.
 
 Verify:
 
 ```sh
 /Users/joey/.local/bin/semantics --json doctor
-launchctl print "gui/$(id -u)/org.semantics.worker"
+/Users/joey/.local/bin/clockwork --json binding show semantics/worker
+/Users/joey/.local/bin/clockwork --json history semantics/worker --limit 20
 /Users/joey/.local/bin/chancery show semantics.repository.explore
 ```
 
@@ -69,7 +96,9 @@ not reopen the source.
 
 ## Routine operation
 
-The service calls the private one-shot worker every 60 seconds. It serially
+Clockwork requests the private one-shot worker every 60 seconds with no
+run-at-load, overlap skipped, no timeout, and exact release-local interpreter
+and runner hashes. It serially
 resumes, scans, routes, and processes at most one reconciliation. Inspect:
 
 ```sh
@@ -112,13 +141,17 @@ temporary cwd with workspace `none`, no shell, and no web. Logs may contain
 counters, opaque IDs, and operational failures.
 They must not contain decision statements, rationales, conversation or project
 content, prompts, credentials, diffs, commands, or tool payloads.
+Clockwork retains only definition, binding, schedule, and process metadata and
+does not ingest those product-owned log bodies.
 
 ## Uninstall
 
 ```sh
-semantics/packaging/macos/uninstall-user.sh
+semantics/packaging/macos/uninstall-user.sh \
+  --clockwork /absolute/path/to/clockwork
 ```
 
-This stops and removes the owned worker plist and CLI/provider selectors. It
-retains the database, releases, and logs. Removing retained state requires a
+This disables the owned Clockwork binding, removes any owned legacy LaunchAgent
+and CLI/provider selectors, and retains the database, releases, immutable
+definitions, activation history, and product logs. Removing retained state requires a
 separate explicit destructive decision.

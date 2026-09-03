@@ -1,0 +1,42 @@
+{
+  "schema_version": 3,
+  "provider": {
+    "id": "clockwork",
+    "name": "Clockwork",
+    "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Clockwork owns immutable scheduled-activation definitions, stable binding selection, generated Clockwork LaunchAgents, overlap admission, direct-child supervision, and runtime activation history."
+    ],
+    "not_authoritative_for": [
+      "Each product owns artifact publication, durable work, locks, retries, idempotency, secrets, logs, recovery, and domain success; launchd owns timer delivery under the current macOS user session."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Clockwork CLI outcomes for definition and binding operation, manual activation, inspection, installation and diagnosis, and product development in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, the private launchd entry point, direct SQLite access, product job behavior, launchd internals, deployment of product bindings, release publication, and current runtime readiness are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Clockwork is a current-user local CLI and short-lived broker; runtime callers select only a stable key and cannot supply a launch image or process context."
+    ],
+    "shared_privacy_and_retention": [
+      "Private Clockwork state retains paths, digests, schedules, scrubbed environment, and runtime metadata but no product secret or output body; product output and retention remain product-owned."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release, entry contract versions, definition-manifest schema, database schema, and product definition identities are separate compatibility axes."
+    ],
+    "operational_limits": [
+      "Clockwork v0.1 is a short-lived current-user scheduled-activation broker with interval and daily local-calendar triggers; it has no daemon, HTTP surface, workflow graph, retry engine, shell language, secret store, or domain-success rule."
+    ]
+  },
+  "entries": [
+    "entries/schedule-operate.json",
+    "entries/install-operate.json",
+    "entries/develop-change.json"
+  ]
+}

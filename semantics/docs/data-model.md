@@ -56,14 +56,27 @@ transaction before the result is acknowledged to Nucleus.
 
 ## Backup and migration
 
-The deployment boundary stops the worker, suspends the public command, proves
-the exact worker flock is exclusively held, proves the database is not open,
+The deployment boundary registers the candidate Clockwork definition without
+selecting it, disables the prior binding and any owned legacy LaunchAgent,
+suspends the public command, proves the exact worker flock is exclusively held,
+proves the database is not open,
 and privately copies the database plus any `-wal`, `-shm`, or `-journal`
 sidecars before candidate doctor can initialize or migrate it. A failed
 deployment restores those bytes and all public selectors before restarting the
-prior owned service. A rollback that cannot prove service/database quiescence
-fails closed before releasing the worker flock: current/public selectors and
-the installed plist are removed, so a still-loaded job has no executable
-current runner, while the prior plist, selector record, releases, and database
-backup are retained. Schema changes must preserve this boundary and add
+prior scheduler state. Rollback restores the exact prior immutable definition
+only when its binding was enabled, or the prior owned legacy LaunchAgent, never
+both. A previously absent or disabled binding stays disabled without transient
+activation. A prior non-null disabled selection is restored exactly; only a
+previously absent or disabled-null binding may retain the candidate digest in
+its inactive tombstone because Clockwork has no clear-selection operation. A
+rollback that cannot prove scheduler/database quiescence fails closed before releasing
+the worker flock: the release-independent maintenance gate remains, scheduler
+cleanup is attempted, public selectors are removed, and the prior schedule
+record, releases, and database backup are retained. If a newly selected
+candidate cannot be cleared back to a prior null selection, its exact private
+`current` release selector is retained as ownership evidence; other
+unprovable paths remove it.
+Semantics retains the exact release bytes referenced by every registered
+immutable definition; pruning is a separate explicit lifecycle operation.
+Schema changes must preserve this boundary and add
 explicit migration and rollback tests.

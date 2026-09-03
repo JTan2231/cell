@@ -61,7 +61,8 @@ the date remains blocked for safe retry. An admitted intent with no observable
 job is restored to `building` only when its exact snapshot is unchanged. This
 command never deletes, requeues, or overrides continuous observations.
 
-`daily run --scheduled` is the LaunchAgent entry point. At or after 09:00 it
+`daily run --scheduled` is the product entry point pinned by the
+`decisions/daily-email` Clockwork definition. At or after 09:00 it
 uses today's occurrence and yesterday's report date; before 09:00 it uses the
 previous occurrence. A repeated invocation returns an already accepted
 delivery or retries the same frozen body under the same key.
@@ -139,7 +140,8 @@ upserts their correlations, and performs no classification. `observe status`
 reports `observer_baseline_at` and queued, processing, complete, and failed
 counts. With `--date`, it counts observations whose admitted authority falls in
 that local date and conservatively includes unresolved failures that are not yet
-scoped to an authority time. The observer LaunchAgent calls `observe process`
+scoped to an authority time. The `decisions/observer` Clockwork binding calls
+`observe process`
 every 60 seconds; these commands do not provide a parallel worker mode. Queued
 counts include source rows waiting for their retry time, so a nonzero queue can
 coexist with `No observation ready`.

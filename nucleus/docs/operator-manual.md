@@ -197,7 +197,10 @@ authorities, the immediately preceding assistant proposal needed to interpret
 them when one exists, and at most the final assistant result—not the whole turn
 or thread. Prior normalized context is disclosed only for one validated
 expansion. Decisions makes observation and projection success authoritative in
-its own SQLite database. Source-resolution deferrals yield to other ready work
+its own SQLite database. The observer's one-shot release runner is activated by
+the `decisions/observer` Clockwork binding after the separately authorized
+schedule cutover; pre-cutover installations still use the legacy Decisions
+LaunchAgent. Source-resolution deferrals yield to other ready work
 by requester-owned retry time while processing remains serial. After explicit
 recovery authorization and proof of permanent unavailability, Decisions alone
 may use `observe abandon OBSERVATION_ID --source-unavailable` to close one
@@ -297,11 +300,13 @@ The following distinctions are operationally important:
 ~/.local/bin/semantics
 ~/.local/bin/geste
 ~/.local/bin/pratica
+~/.local/bin/clockwork
 ~/.codex/hooks.json
 ~/Library/LaunchAgents/org.nucleus.daemon.plist
-~/Library/LaunchAgents/org.decisions.daily-email.plist
-~/Library/LaunchAgents/org.decisions.observer.plist
-~/Library/LaunchAgents/org.semantics.worker.plist
+~/Library/LaunchAgents/org.clockwork.annals.inbox.plist
+~/Library/LaunchAgents/org.clockwork.decisions.daily-email.plist
+~/Library/LaunchAgents/org.clockwork.decisions.observer.plist
+~/Library/LaunchAgents/org.clockwork.semantics.worker.plist
 
 ~/Library/Application Support/Chancery/providers/
   PROVIDER_ID -> owning product's current release share/chancery/PROVIDER_ID
@@ -353,7 +358,19 @@ Annals Usage do.
 ~/Library/Logs/Semantics/
   worker.stdout.log
   worker.stderr.log
+
+~/Library/Application Support/Clockwork/
+  clockwork.db
+  install/
 ```
+
+The four `org.clockwork.*` paths above are the successor state after a
+separately authorized Clockwork and product deployment. This source change does
+not install Clockwork or perform that cutover. Until then, the existing
+Annals inbox scheduler plus `org.decisions.daily-email`,
+`org.decisions.observer`, and `org.semantics.worker` LaunchAgents remain the
+installed runtime truth. Never load a legacy product scheduler and its
+Clockwork successor together.
 
 The complete Nucleus state directory is sensitive. The database can contain
 prompts, tool arguments and results, source content emitted by an agent, and
@@ -371,7 +388,13 @@ Chancery readiness.
 
 Annals, Todo, and Weaver have their own state, installation, backup, and recovery
 boundaries. Do not infer their state from Nucleus or copy their detailed
-procedures into this manual. Todo's optional
+procedures into this manual. Clockwork owns Annals' successor 300-second,
+run-at-load `annals/inbox` activation binding and runtime history, while Annals
+continues to own its durable spool, locks, retries, maintenance/pause gates,
+logs, and domain outcomes; the pre-cutover Annals scheduler remains installed
+truth until a separately authorized handoff. `annals inbox pause` remains the
+Nucleus-quiescence gate because it prevents Annals domain admission regardless
+of which scheduler delivers a wake. Todo's optional
 `~/Library/LaunchAgents/org.todo.daily-email.plist` is a separate user service:
 launchd invokes Todo at 09:00 machine-local time, its zsh runner sources
 `RESEND_API_KEY` from `~/.zshrc`, and its logs live under
@@ -380,31 +403,45 @@ credential lease.
 
 Conversations has a content-addressed installation but no application database.
 Decisions owns its schema-version-3 database, write-once activation baseline,
-installed releases, provider selector, exact user `Stop` hook, 60-second
-observer LaunchAgent, 09:00 daily-email LaunchAgent, and body-free logs. The
+installed releases, provider selector, exact user `Stop` hook, release-local
+observer and daily runners, and body-free logs. Clockwork owns their successor
+60-second `decisions/observer` and local-09:00 `decisions/daily-email` schedule
+bindings and process history; a pre-cutover Decisions release still owns the
+two legacy LaunchAgents. The
 deployer refuses any pre-existing foreign `~/.codex/hooks.json`; it never merges,
 overwrites, removes, or trusts one. Codex owns exact-definition review through
 `/hooks`, and the actual client surface must be canaried after trust. Both
-LaunchAgents can become Nucleus requesters—the observer routinely and the daily
-service only during exceptional missed-observation catch-up—so quiesce both for
+scheduled runners can become Nucleus requesters—the observer routinely and the daily
+runner only during exceptional missed-observation catch-up—so quiesce both for
 Nucleus maintenance. A Decisions schema cutover additionally suspends its public
 hook command and drains the three-second hook timeout before the SQLite backup.
 Default write-once activation stores the next whole Unix second, excluding the
 cutover second; only after that durable boundary does deployment publish the
-live hook, command, plists, and services. Missed events are reconciled
+live hook, command, bindings, and services. Missed events are reconciled
 afterward. If rollback cannot prove database quiescence or restore every
-artifact, it leaves both services stopped and the public command disabled while
-retaining the private transaction backup. Email still owns the Resend
+artifact, its release-independent maintenance gate remains, scheduler cleanup
+is attempted, and the public command is removed when that can be proved while
+the private transaction backup is retained. Email still owns the Resend
 credential and immediate transport.
 
 Semantics owns its content-addressed installation, provider selector,
-schema-version-1 database, body-free worker logs, and 60-second worker
-LaunchAgent. The worker is the only automatic reconciler and admits at most one
+schema-version-1 database, body-free worker logs, and release-local worker
+runner. Clockwork owns the successor 60-second `semantics/worker` schedule
+binding and process history; a pre-cutover Semantics release still owns its
+legacy LaunchAgent. The worker is the only automatic reconciler and admits at most one
 Nucleus job at a time. Deployment stops that worker, proves database
 quiescence, preserves the database and sidecars for rollback, validates the
 candidate against installed Decisions, Conversations, and Nucleus, then
-publishes and restarts it. Project folders contain only the participation
+publishes its selectors and schedule binding. Project folders contain only the participation
 marker; they do not contain or own Semantics database state.
+
+Clockwork is a separate non-agent scheduling product, not a Nucleus job mode.
+It records immutable launch definitions, binding state, and direct process
+outcomes only. Decisions and Semantics retain their domain queues, locks,
+retry/idempotency rules, secrets, logs, and meanings of success; Nucleus remains
+the agent-execution dependency those products may call. Clockwork program
+deployment requires a separately supplied candidate Chancery reader to
+validate its exact staged provider before either public selector changes.
 
 Geste owns its content-addressed CLI installation, provider selector, and
 schema-version-1 database. Deployment switches only immutable program and
@@ -496,9 +533,24 @@ Nucleus has no global drain mode. Quiescence is established at its requesters:
    annals inbox status
    ```
 
-4. Boot out both Decisions services and the Semantics worker so their periodic
-   work cannot admit new jobs. The `Stop` hook may still enqueue a content-free
-   correlation, which is safe to process after maintenance:
+4. Stop both Decisions schedules and the Semantics worker so periodic work
+   cannot admit new jobs. On a Clockwork-cut-over installation, first capture
+   each selected digest **and enabled state** with `binding show`, then disable
+   only keys that were enabled. Leave an already disabled or absent key
+   unchanged. On a legacy installation, boot out the three product labels instead.
+   Never operate both scheduler forms for one runner. The `Stop` hook may still
+   enqueue a content-free correlation, which is safe to process after
+   maintenance:
+
+   ```sh
+   clockwork binding show decisions/observer
+   clockwork binding show decisions/daily-email
+   clockwork binding show semantics/worker
+   # Repeat only for each key whose show result says enabled=true:
+   clockwork binding disable OWNER/NAME
+   ```
+
+   Legacy alternative:
 
    ```sh
    launchctl bootout "gui/$(id -u)/org.decisions.observer"
@@ -516,15 +568,18 @@ Nucleus has no global drain mode. Quiescence is established at its requesters:
 
 7. Perform the service, storage, or harness operation.
 8. Verify Nucleus and requester canaries before resuming Annals, both Decisions
-   services, the Semantics worker, or new Weaver work.
+   schedules, the Semantics worker, or new Weaver work. For Clockwork, switch
+   only a key that step 4 recorded as enabled back to its exact captured digest;
+   leave every originally disabled or absent key unchanged. For a legacy
+   install, bootstrap only the exact previously loaded owned product plists.
 
 Stopping or replacing `nucleusd` while a job is active makes that attempt
 `lost`. The requester—not Nucleus—decides whether a new domain attempt is safe.
 The Todo daily-email LaunchAgent is not a Nucleus requester and does not need
 to be paused to establish Nucleus quiescence. Decisions' observer can start a
-classification job every 60 seconds; its daily service can do so when
+classification job every 60 seconds; its daily runner can do so when
 reconciling a missed observation. Semantics can start one reconciliation job
-every 60 seconds. Restore all three product-owned services only after Nucleus is
+every 60 seconds. Restore all three schedule bindings or legacy services only after Nucleus is
 ready. Do not disable or reset the Decisions baseline or Semantics scan cursors:
 their durable queues are the intended recovery path.
 

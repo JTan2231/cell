@@ -73,10 +73,12 @@ for script in \
     packaging/launchd/annals \
     packaging/launchd/annals-usage \
     packaging/launchd/annals-user \
+    packaging/launchd/annals-inbox \
     packaging/launchd/deploy-user.sh \
     packaging/launchd/install.sh \
     packaging/launchd/migrate-to-user.sh \
     packaging/launchd/test-frontend.sh \
+    packaging/launchd/test-inbox-runner.sh \
     packaging/launchd/test-migrate-to-user.sh \
     packaging/launchd/test-user-deploy.sh \
     packaging/launchd/test-user-frontend.sh \
@@ -90,6 +92,7 @@ do
 done
 
 packaging/launchd/test-frontend.sh
+packaging/launchd/test-inbox-runner.sh
 
 if [ "$(uname -s)" = Darwin ]; then
     packaging/launchd/test-user-frontend.sh

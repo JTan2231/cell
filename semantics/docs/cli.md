@@ -68,8 +68,10 @@ Statuses are `unassigned`, `pending`, `awaiting_review`, `paused`,
 manual routing correction and revalidates the target marker. Retry applies to
 failed intake and refuses an active or ambiguous prior Nucleus job.
 
-`semantics --json intake run` is the private one-shot worker interface used by
-launchd. It is intentionally hidden from normal help.
+`semantics --json intake run` is the private one-shot worker interface selected
+by the installed Clockwork `semantics/worker` definition. It is intentionally
+hidden from normal help. Clockwork owns activation and process history only;
+this report and durable Semantics state own the domain result.
 
 ## Readiness
 

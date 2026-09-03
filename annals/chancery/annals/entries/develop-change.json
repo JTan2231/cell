@@ -1,6 +1,6 @@
 {
   "id": "annals.develop.change",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -17,12 +17,13 @@
   "outcome": "A minimal, tested Annals change using canonical vocabulary and preserving exact domain, execution, migration, installation, and documentation boundaries.",
   "effects": [
     "Modifies Annals source, tests, fixtures, or documentation.",
-    "May require coordinated Nucleus contract work when the requester boundary changes.",
+    "May require coordinated Nucleus or Clockwork contract work when requester or scheduling boundaries change.",
     "Release and installation actions remain separate and may mutate Git, installed binaries, database state, scheduler state, or configuration."
   ],
   "authority": [
     "Annals owns works, corpus meaning, reconciliation, history, inbox policy, domain recovery, and its installation.",
-    "Nucleus owns shared model execution and authentication but never Annals domain success or retry policy."
+    "Nucleus owns shared model execution and authentication but never Annals domain success or retry policy.",
+    "Clockwork owns immutable scheduled activation, binding, non-overlap, and process history but never Annals queue or corpus success."
   ],
   "success": [
     "Canonical terminology matches the registered Semantics repository `annals` and affected behavior contracts are updated.",
@@ -39,7 +40,8 @@
     "Do not add contributor instructions or Semantics repository output to the constrained liaison runtime prompt."
   ],
   "dependencies": [
-    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": [
     "local_filesystem",
@@ -49,7 +51,7 @@
   "automation": "none",
   "steps": [
     "Read `semantics.repository.explore`, query `semantics repository show annals`, and identify the Annals-owned contract being changed.",
-    "If the change crosses Nucleus execution, authentication, compatibility, persistent state, deployment, or requester integration, run `nucleus manual` before design.",
+    "If the change crosses Nucleus execution, authentication, compatibility, persistent state, deployment, or requester integration, run `nucleus manual` before design; read Clockwork schedule contract 1 for scheduled-executable or binding changes.",
     "Implement the smallest change and update the owning CLI, architecture, data, installation, telemetry, or Semantics terminology authority in the same change.",
     "Run `./annals/ci.sh` and perform separately authorized live canaries when required."
   ],
@@ -96,7 +98,7 @@
       {"status": "declared", "statement": "Nucleus terminal state and model prose remain execution evidence rather than Annals domain success."}
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Semantics concept IDs and revisions, Annals provider release and entry contract versions, package versions, library schema, and Nucleus protocol identify separate change and compatibility domains."},
+      {"status": "declared", "statement": "Semantics concept IDs and revisions, Annals provider release and entry contract versions, package versions, library schema, Nucleus protocol, Clockwork definition digest, and product release identity identify separate change and compatibility domains."},
       {"status": "not_applicable", "statement": "This development operation promises no domain measurement, usage, price, or accounting unit."}
     ],
     "completeness_and_freshness": [
@@ -118,7 +120,7 @@
       {"status": "unspecified", "statement": "No maximum change size, completion time, or automatic availability of live canaries is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Product release, library schema, Nucleus public protocol, immutable tool registrations, installed packaging, provider schema, and entry contract version are evaluated separately."},
+      {"status": "declared", "statement": "Product release, library schema, Nucleus public protocol, Clockwork definition and binding identity, immutable tool registrations, installed packaging, provider schema, and entry contract version are evaluated separately."},
       {"status": "declared", "statement": "A public or persistent semantic change updates its owning documentation, migration, rollback, and historical decoder in the same coherent change."},
       {"status": "unspecified", "statement": "No release cadence, compatibility window, or deprecation period is promised by the development operation."}
     ],
@@ -130,6 +132,7 @@
         "kind": "authority",
         "contract": "semantics.repository.explore"
       },
+      {"status": "declared", "statement": "Annals scheduling and packaging development relies on Clockwork schedule contract 1 for the strict executable definition, binding lifecycle, overlap, history, and launchd projection boundary.", "target": "clockwork", "kind": "control", "contract": "clockwork.schedule.operate"},
       {"status": "unsupported", "statement": "A documentation dependency or conditional requirement to consult Nucleus must not be interpreted as unconditional Nucleus runtime authority over an Annals change."}
     ]
   },

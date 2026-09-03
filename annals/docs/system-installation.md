@@ -165,7 +165,7 @@ activations continue registering arrivals while paused and exit successfully.
 `annals inbox resume` clears only `.paused`; it does not start a worker and
 never clears `.maintenance`. It also refuses while a retry event is preparing,
 running, or halted. Use an explicit `inbox run` for immediate ordinary work or
-wait for the next launchd or systemd activation. Both commands are idempotent
+wait for the next Clockwork or systemd activation. Both commands are idempotent
 when no retry event blocks resume, and an operator pause survives deployment.
 
 Bounded retry is an attended, quiescent operation:
@@ -555,10 +555,10 @@ Do not overwrite an existing inbox pathname. Reusing a basename with different
 bytes may also conflict with the immutable work label derived from that name;
 Annals records that job as failed rather than silently changing the label.
 
-## macOS user LaunchAgent
+## macOS user Clockwork binding
 
 The macOS installation belongs entirely to the logged-in user. This is the
-important maintenance boundary: Annals, Nucleus, their scheduler definitions,
+important maintenance boundary: Annals, Nucleus, Clockwork, their definitions,
 and all release files have exactly that user's
 authority. Updating the complete application therefore needs no stored
 administrator credential, privileged helper, or passwordless `sudo` rule.
@@ -568,7 +568,7 @@ The layout is:
 ```text
 $HOME/.local/bin/annals                 # frontend -> current release
 $HOME/.local/bin/annals-usage           # companion CLI -> current release
-$HOME/Library/LaunchAgents/org.annals.inbox.plist
+$HOME/Library/Application Support/Clockwork/ # definition, binding, history
 $HOME/Library/Application Support/Chancery/providers/
 |-- annals -> Annals current release share/chancery/annals
 `-- annals-usage -> Annals current release share/chancery/annals-usage
@@ -602,12 +602,21 @@ $HOME/Library/Application Support/Annals/
 
 The Annals frontend supplies the state-local config only when no explicit
 config or library was selected. Both `config.toml` and `usage.toml` select the
-already deployed Nucleus socket. The LaunchAgent runs `annals --quiet inbox
-run` with the user's real `HOME`; it does not set `CODEX_HOME`. Add
-`$HOME/.local/bin` to `PATH` for interactive use; launchd uses the absolute
-Annals frontend path.
+already deployed Nucleus socket. Clockwork key `annals/inbox` runs an explicit
+`/bin/sh` interpreter and release-local runner, both pinned by SHA-256; that
+runner executes the sibling release payload as `annals --quiet inbox run`.
+The runner establishes umask `077` before that exec so any child-created file
+defaults remain private.
+Its environment is scrubbed and explicitly contains only `HOME`, `USER`,
+`LOGNAME`, and `ANNALS_CONFIG`. It does not set `CODEX_HOME` or resolve the
+product through `current`, `PATH`, or `~/.local/bin`.
+The definition requests run-at-load plus a 300-second interval, skips overlap,
+and has no activation timeout. These are wake-up requests rather than launch
+or queue-drain deadlines. Clockwork records the selected definition and process
+outcome, while Annals status and run reports remain authoritative for inbox,
+delivery, and corpus success; Clockwork does not ingest Annals log bodies.
 
-This LaunchAgent is available only while the user is logged in. It resumes at
+The underlying per-user launchd projection is available only while the user is logged in. It resumes at
 the next login after a logout or restart. A service that must run at the login
 window needs a system LaunchDaemon and cannot also be fully maintained by an
 unprivileged user.
@@ -654,7 +663,7 @@ examination is not reused:
 ```sh
 annals integrate --work KNOWN_WORK_LABEL --reexamine
 annals inbox resume
-annals inbox run # optional: dispatch immediately instead of waiting for launchd
+annals inbox run # optional: dispatch immediately instead of waiting for Clockwork
 ```
 
 The canary creates a new examination and reconciliation record, so choose its
@@ -685,14 +694,19 @@ under the Cell root target directory:
   --binary "$PWD/../target/release/annals" \
   --usage-binary "$PWD/../target/release/annals-usage" \
   --nucleus "$HOME/.local/bin/nucleus" \
-  --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock"
+  --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock" \
+  --clockwork "$HOME/.local/bin/clockwork"
 ```
 
 That same command is the normal unattended update operation. It preflights the
 candidate binaries, configuration, and library before cutover.
 Complete program releases contain Annals, the telemetry companion, frontend,
-updater, rendered LaunchAgent, both product-owned Chancery provider bundles,
-and a hash manifest. Both bundle hashes participate in the release identity.
+release-local inbox runner, unrendered Clockwork definition template, the
+former LaunchAgent template retained only for exact ownership checks, updater,
+both product-owned Chancery provider bundles, and a hash manifest. The runner,
+templates, and both bundle hashes participate in release identity. Only after
+that identity exists does the deployer render absolute release paths and exact
+interpreter/runner hashes and register the definition inactive.
 The `annals` and `annals-usage` provider selectors point through the one Annals
 `current` release selector, so the two contracts cut over and roll back
 together with their executables. The deployer owns only those two provider
@@ -705,22 +719,39 @@ selected package and provider manifest together.
 During an update the
 deployer acquires its update lock and immediately writes the maintenance
 marker, establishing the no-new-claim boundary before candidate preparation.
-It then disables new activations. An active worker is allowed to finish its
+If `annals/inbox` has a selected definition, the deployer verifies the complete
+current Annals release and compares every stored executable-definition field
+with that release before disabling or replacing it. A same-key foreign
+definition is left untouched. During first handoff it likewise disables and
+removes only the exactly owned legacy LaunchAgent before any Clockwork switch.
+Clockwork inspection and binding mutation are separate operations, not a
+compare-and-swap. Concurrent same-user direct mutation of `annals/inbox`
+during deployment or migration is unsupported; a detected change makes the
+handoff fail closed and may retain the maintenance recovery gate.
+An active worker is allowed to finish its
 current delivery, then stops before claiming another; an idle worker stops
 immediately. After the old service is quiescent, the deployer runs the
 candidate's authenticated doctor check, makes a consistent Annals library
 backup, and applies any supported schema migration. Only then does it
 atomically switch the `current` selector. It updates both command links and
 both configs inside the same rollback-protected deployment transaction, then
-checks the installed library statistics and inbox state before reloading
-launchd and waking the worker. The operator-owned pause marker is retained, so
-that wake-up does not dispatch queued jobs when the installation was paused. A
-failure restores the old selectors, configs, plist, and service.
+checks the installed library statistics and inbox state before switching the
+Clockwork binding to the candidate definition. The operator-owned pause marker
+is retained, so run-at-load does not dispatch queued jobs when the installation
+was paused. A failure restores the old selectors and configs, then the exact
+prior Clockwork definition only when its binding was enabled, or the legacy
+LaunchAgent, never both. A prior absent or disabled binding stays disabled
+without transient activation; its inactive selected digest may remain the
+candidate digest. If that cannot be proved, Annals does not blindly mutate
+scheduler state: it keeps maintenance in place, attempts cleanup only for
+attributable scheduler state, removes its public selectors, and retains the
+private rollback transaction.
 The Annals library, spool, logs, pause state, and archives are retained.
 
 Every successful update from an existing release also writes a durable
 `rollback_snapshot` path into `install/last-update.json`. That private directory
-contains the pre-cutover `config.toml`, `usage.toml`, LaunchAgent plist, and a
+contains the pre-cutover `config.toml`, `usage.toml`, prior schedule record,
+any migration-era legacy LaunchAgent plist, and a
 `rollback.json` naming the previous and replacement release selectors. A
 post-commit rollback must restore those files together with the previous
 release selector while the inbox is under maintenance; switching only
@@ -742,9 +773,13 @@ deployer waits up to 3,900 seconds for the current liaison's 60-minute limit
 plus headroom. The cutover itself occurs only after the inbox lock becomes
 idle, so one delivery cannot straddle old and new Annals binaries.
 
-Set `ANNALS_UPDATE_WAIT_SECONDS` to another nonnegative number when a caller
-needs a shorter deadline. `--no-start` installs and verifies without reading
-or changing launchd state.
+Set `ANNALS_UPDATE_WAIT_SECONDS` to another nonnegative number to bound the
+Annals lock poll after new schedule admission has stopped. It is not an
+end-to-end deployment timeout: disabling a no-timeout Clockwork activation
+waits for its child to finish naturally. `--no-start` is a synthetic packaging
+option that installs and verifies without changing the selected Clockwork
+binding or legacy launchd state; it is not the complete scheduled-installation
+outcome.
 
 Schema version 3 established the intentional boundary that cannot open an
 older library. Version 4 migrates version 3 additively; it does not change the
@@ -757,11 +792,13 @@ operation after `ci.sh` is green:
   --usage-binary "$PWD/../target/release/annals-usage" \
   --nucleus "$HOME/.local/bin/nucleus" \
   --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock" \
+  --clockwork "$HOME/.local/bin/clockwork" \
   --fresh-state
 ```
 
 `--fresh-state` cannot be combined with `--no-start`. It stages an initialized
-empty library and paused spool, verifies the paused spool, disables launchd,
+empty library and paused spool, verifies the paused spool, disables Clockwork
+and any owned legacy LaunchAgent,
 requests a graceful pause, waits for the current delivery, and registers all
 remaining arrivals. Under
 maintenance it moves the old library, WAL sidecars, and whole spool into one
@@ -794,7 +831,8 @@ sudo ./packaging/launchd/migrate-to-user.sh \
   --binary "$PWD/../target/release/annals" \
   --usage-binary "$PWD/../target/release/annals-usage" \
   --nucleus "$HOME/.local/bin/nucleus" \
-  --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock"
+  --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock" \
+  --clockwork "$HOME/.local/bin/clockwork"
 ```
 
 The migration disables and drains `system/org.annals.inbox`, moves the whole
@@ -802,10 +840,30 @@ state directory on one filesystem so the database and its WAL sidecars stay
 together, rewrites the two legacy absolute state paths, and performs the same
 version-3 fresh-state cutover described above. The old database and spool are
 kept as a rollback generation, while uncompleted sources enter the fresh inbox.
-It then removes the superseded old program files. If deployment fails, it puts
-the original state and system service back. Do not run the old and new jobs
-together: launchd domains allow identical labels, while the inbox lock only
-prevents simultaneous workers.
+The child deployer keeps maintenance in place and returns a rendered Clockwork
+definition without registering or selecting it. After verifying that inert
+handoff, the outer migration durably records its committed phase, making the
+user state and its content-addressed release permanent. Only then does it register the
+definition, record its digest, and select `annals/inbox`; any immediate
+RunAtLoad activation still observes maintenance. The migration next requires
+`system/org.annals.inbox` to be absent, removes the superseded system files,
+and only then clears maintenance. If a loaded service cannot be booted out or
+remains visible, retirement fails closed with the files, transaction, and
+maintenance marker retained.
+
+A failure before the outer commit registers no definition and puts the
+original state and system service back. A failure after that commit retains the
+transaction, handoff, and maintenance marker; rerunning the migration
+idempotently finishes registration and selection before clearing maintenance.
+The system job and the Clockwork binding are never intentionally active
+together; the inbox lock is a secondary guard, not scheduler coordination. The
+migration accepts only an absent `annals/inbox` binding or a disabled tombstone
+with no selected definition. Any selected digest, enabled or disabled, belongs
+to another installation lifecycle and is left untouched. It also removes or
+restores a legacy LaunchDaemon or LaunchAgent
+only when the complete plist matches Annals' rendered template and its expected
+owner and mode; matching only the label or executable is insufficient, and any
+extra launchd key makes the file foreign.
 
 ### Operation and removal
 
@@ -823,7 +881,8 @@ annals inbox retry status
 annals-usage report
 annals-usage budget
 annals-usage doctor
-launchctl print "gui/$(id -u)/org.annals.inbox"
+clockwork --json binding show annals/inbox
+clockwork --json history annals/inbox --limit 20
 tail -f "$HOME/Library/Application Support/Annals/log/inbox.stdout.log"
 ```
 
@@ -834,45 +893,28 @@ install -m 0600 README.md \
   "$HOME/Library/Application Support/Annals/spool/incoming/annals-readme.md"
 ```
 
-The LaunchAgent may remain loaded while paused. It continues to wake and
+The Clockwork binding may remain enabled while paused. It continues to wake and
 register settled arrivals, but the next job remains queued until `resume` and
 a later activation. Run `annals inbox run` after `resume` when immediate
 dispatch is wanted.
-When only the storage gate is closed, no resume is needed: each five-minute
+When only the storage gate is closed, no resume is needed: each 300-second
 wake-up rechecks capacity and dispatches automatically once the reserve is
 available.
 
-To retire the user installation while retaining its library and operational
-state, boot out the LaunchAgent and remove only the two Annals-owned Chancery
-provider selectors, scheduler, command links, and versioned program directory.
-Refuse to remove a provider selector whose target is not the exact Annals
-installation target:
+Retiring the user installation requires the same fail-closed ownership checks
+as deployment: a selected `annals/inbox` definition must exactly match the
+current Annals release, a legacy LaunchAgent must exactly match Annals' fully
+rendered plist, and every command or provider selector must have its exact
+Annals target before it is disabled or removed. A same key, label, or pathname
+is not ownership proof.
 
-```sh
-launchctl bootout "gui/$(id -u)/org.annals.inbox" 2>/dev/null || true
-annals_install="$HOME/Library/Application Support/Annals/install"
-chancery_providers="$HOME/Library/Application Support/Chancery/providers"
-for provider in annals annals-usage; do
-  selector="$chancery_providers/$provider"
-  expected="$annals_install/current/share/chancery/$provider"
-  if [ -L "$selector" ] && [ "$(readlink "$selector")" != "$expected" ]; then
-    printf 'refusing foreign Chancery provider selector: %s\n' "$selector" >&2
-    exit 1
-  elif [ -e "$selector" ] && [ ! -L "$selector" ]; then
-    printf 'refusing non-symlink Chancery provider selector: %s\n' \
-      "$selector" >&2
-    exit 1
-  fi
-done
-for provider in annals annals-usage; do
-  selector="$chancery_providers/$provider"
-  [ ! -L "$selector" ] || rm -f "$selector"
-done
-rm -f "$HOME/Library/LaunchAgents/org.annals.inbox.plist"
-rm -f "$HOME/.local/bin/annals"
-rm -f "$HOME/.local/bin/annals-usage"
-rm -rf "$annals_install"
-```
+There is no supported raw path-only removal sequence. In particular, do not
+run `clockwork binding disable annals/inbox`, `launchctl bootout` for the legacy
+label, or `rm` against the installed selectors merely because those names are
+present. Leave the installation intact until a product-owned retirement
+operation has proved all of those identities. Such an operation must retain
+the exact versioned release bytes alongside Clockwork definitions and
+activation history; pruning either is a separate explicit lifecycle action.
 
 Back up and explicitly remove the remaining state only when the library,
 queued material, logs, and archives are no longer needed. Nucleus credentials

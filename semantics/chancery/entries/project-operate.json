@@ -1,11 +1,11 @@
 {
   "id": "semantics.project.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Maintain a project's semantic repository service",
-  "summary": "Install, register, seed, pause, resume, route, recover, or uninstall the project-scoped Semantics registry, repository, and serial 60-second worker.",
+  "summary": "Install, register, seed, pause, resume, route, recover, or uninstall the project-scoped Semantics registry, repository, and Clockwork-bound serial 60-second worker.",
   "use_when": [
     "Semantics should be installed, updated, diagnosed, or uninstalled for this macOS user.",
     "A folder should join, move within, pause, resume, or retire from the project registry.",
@@ -18,52 +18,55 @@
   ],
   "outcome": "A validated content-addressed installation and explicit project registry whose immutable semantic repositories are maintained from post-activation Decisions lifecycle events.",
   "effects": [
-    "Deployment writes a content-addressed user release, CLI and Chancery selectors, one LaunchAgent plist, and may initialize or migrate retained SQLite after a private backup.",
+    "Deployment writes a content-addressed user release whose identity covers the runner and unrendered Clockwork template, renders absolute paths and hashes only after that identity exists, publishes CLI and Chancery selectors, registers an immutable `semantics/worker` definition, and may initialize or migrate retained SQLite after a private backup.",
     "Registration stores the canonical folder and current Decisions watermark; it intentionally excludes earlier events.",
     "The worker reads Decisions and Conversations, may submit one restricted Nucleus job, and commits at most one valid semantic revision per invocation.",
     "Uninstall removes only the owned service and public selectors while retaining the database, releases, and body-free logs."
   ],
   "authority": [
     "Semantics owns project identity, routing, cursor persistence, intake transitions, stable concept IDs, typed-effect validation, and the SQLite commit.",
-    "Decisions owns lifecycle order and decision/review facts; Conversations owns exact thread cwd metadata; Nucleus owns execution and mailbox transport but not semantic truth.",
+    "Decisions owns lifecycle order and decision/review facts; Conversations owns exact thread cwd metadata; Nucleus owns model execution and mailbox transport; Clockwork owns scheduled activation metadata and process lifecycle; neither owns semantic truth.",
     "A participating project's source and tests remain runtime authority; its root AGENTS.md owns participation instructions."
   ],
   "success": [
     "Doctor proves schema 1, exact markers, Decisions lifecycle access, Conversations exact-cwd readiness, and Nucleus health, capabilities, schemas, and immutable toolset.",
-    "The worker LaunchAgent is key-free, has StartInterval 60 and no RunAtLoad, and overlapping runs are serialized by the product lock.",
+    "The `semantics/worker` binding selects one immutable definition with a 60-second interval, no run-at-load, overlap skip, no timeout, exact release-local runner and hashes, and a scrubbed key-free environment; deployment and uninstall prove that exact current-release identity before mutating a selected binding, the release-independent marker is current-user-owned mode 0600 and non-hard-linked, and the product worker lock remains the domain serialization boundary.",
     "Each registered root is canonical and uniquely owned, and every committed effective admission or confirmation includes an exact Decisions event/decision grounding."
   ],
   "failure_and_recovery": [
     "Pause the affected project before semantic maintenance; paused state prevents a late Nucleus proposal from committing.",
-    "A failed deployment restores prior selectors, plist, quiescent database plus sidecars, and prior service state; before releasing the worker flock, an unprovable rollback removes current/public selectors and the installed plist so a still-loaded job has no executable current runner, and retains its private recovery backup.",
+    "A failed deployment restores prior selectors and the quiescent database plus sidecars. It restores the exact prior non-null Clockwork selection and enabled state, or restores the prior owned legacy LaunchAgent, never both. A previously absent or disabled-null binding becomes a disabled tombstone that may retain the candidate digest because Clockwork has no clear-selection operation; a previously disabled selected definition is restored without transient activation. Semantics retains exact release bytes for every registered immutable definition. Before releasing the worker flock, an unprovable rollback retains the release-independent maintenance gate, attempts both scheduler cleanups, removes public selectors, and retains its private recovery backup; when a candidate selection cannot be cleared back to null, its exact private current-release selector is retained as ownership evidence, while other unprovable paths remove it.",
+    "Clockwork definition ownership is a point-in-time inspection rather than a compare-and-swap; Semantics serializes its own deploy and uninstall, while concurrent direct same-user mutation of `semantics/worker` is unsupported and may require maintenance-gated recovery.",
     "Unassigned and awaiting-review intake remain explicit. Retry refuses an active or ambiguous prior Nucleus job and creates a new attempt only after positive terminal evidence.",
     "Never manufacture Decisions cursors, edit SQLite, or clear a Nucleus correlation to force replay."
   ],
   "privacy": [
     "SQLite can contain normalized decision text, rationale, source anchors, project paths, and repository meanings; keep it local and mode 0600.",
     "The worker sends only a minimized semantic projection of one lifecycle event and the complete selected repository snapshot to Nucleus; lossless anchors, cursor, and routing metadata stay in Semantics SQLite.",
+    "Clockwork receives executable paths, hashes, schedule, working directory, scrubbed environment, product log paths, and process outcomes only; it does not read or retain Semantics log bodies or semantic content.",
     "Nucleus uses workspace none, no shell, no web, and a neutral temporary cwd.",
     "Service logs are body-free and must not contain decision statements, conversation text, project content, prompts, credentials, diffs, commands, or tool payloads."
   ],
   "dependencies": [
     {"id": "decisions.lifecycle.consume", "min_contract": 1, "max_contract_exclusive": 2},
     {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read the Semantics system installation manual and inspect Decisions, Conversations, Nucleus, launchd, retained state, and Chancery publication readiness.",
+    "Read the Semantics system installation manual and inspect Decisions, Conversations, Nucleus, Clockwork, retained state, and Chancery publication readiness.",
     "For deployment, build a green candidate and run the content-addressed deployer; verify doctor and all owned selectors before registering projects.",
     "Add the exact Semantics-Project marker to the project's root AGENTS.md, register the canonical folder at the current watermark, and seed only existing authoritative vocabulary when needed; after verifying HEAD, the source file may be separately removed under normal project authority.",
-    "Inspect repository HEAD, intake state, the one-shot worker report, launchd state, and body-free logs before relying on periodic maintenance.",
+    "Inspect repository HEAD, intake state, the one-shot worker report, Clockwork binding and activation history, and body-free product logs before relying on periodic maintenance.",
     "Pause before maintenance; resume only after markers and dependencies are healthy. Uninstall only with the retained-state boundary understood."
   ],
   "checkpoints": [
     "Registration and moves require an exact line in a regular root AGENTS.md; nested or approximate markers do not participate.",
     "Every new registration captures the current Decisions watermark, moves preserve activation and scan cursors, and a review follows its existing non-retired decision-to-project binding before cwd routing.",
-    "Deploy and uninstall share one update lock; deployment stops the worker, suspends the CLI, holds the exact worker flock, and proves SQLite quiescent before database-plus-sidecars backup and scrubbed candidate doctor.",
+    "Deploy and uninstall share one update lock and the release-independent maintenance gate; an existing gate is validated and never truncated, existing product logs are accepted only as current-user-owned non-hard-linked regular files and restricted to mode 0600 without truncation, and deployment registers the inactive candidate definition, disables the prior binding and any owned legacy LaunchAgent, suspends the CLI, holds the exact worker flock, and proves SQLite quiescent before database-plus-sidecars backup and scrubbed candidate doctor.",
     "Nucleus receives no project workspace, shell, web, transcript, diff, command, tool output, or fallback authority; Semantics owns the commit transaction.",
     "Retirement is allowed only from paused and only after all assigned nonterminal or failed intake is resolved."
   ],
@@ -78,11 +81,11 @@
     "The requested action would delete retained state, manufacture a cursor, expose repository bodies in logs, or let Nucleus bypass Semantics validation."
   ],
   "interfaces": [
-    {"label": "Deploy", "invocation": "semantics/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH"},
+    {"label": "Deploy", "invocation": "semantics/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH --clockwork ABSOLUTE_CLOCKWORK_PATH"},
     {"label": "Doctor", "invocation": "/Users/joey/.local/bin/semantics --json doctor"},
     {"label": "Register project", "invocation": "/Users/joey/.local/bin/semantics project register ID ABSOLUTE_ROOT"},
     {"label": "Intake status", "invocation": "/Users/joey/.local/bin/semantics intake status"},
-    {"label": "Uninstall and retain state", "invocation": "semantics/packaging/macos/uninstall-user.sh"}
+    {"label": "Uninstall and retain state", "invocation": "semantics/packaging/macos/uninstall-user.sh --clockwork ABSOLUTE_CLOCKWORK_PATH"}
   ],
   "does_not_authorize": [
     "Deleting retained database, releases, logs, or project files.",
@@ -118,19 +121,20 @@
     ],
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "Registration and intake transitions are durable, one worker is cross-process serial, repository revisions are atomic and append-only, and identical mailbox redelivery is idempotent while conflicts fail."},
-      {"status": "declared", "statement": "Deployment quiesces the worker and database, backs up database plus sidecars, and restores or fails closed before releasing the worker lock when rollback cannot be proved."}
+      {"status": "declared", "statement": "Deployment quiesces the worker and database, backs up database plus sidecars, restores at most one prior active scheduler, and keeps prior absent or disabled state disabled. When rollback cannot be proved, it retains the release-independent maintenance gate before releasing the worker lock, attempts both scheduler cleanups, and removes public selectors; the gate is the domain-admission guarantee even when scheduler cleanup cannot be proved."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "Each worker invocation processes at most one reconciliation and one Nucleus job, with one immutable managed tool, neutral cwd, workspace none, no shell, and no web."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Operation contract version 1 requires Decisions lifecycle contract 1, Conversations history contract 3, and Nucleus execution contract 1; immutable schema or tool meaning changes receive successor identities."}
+      {"status": "declared", "statement": "Operation contract version 2 requires Decisions lifecycle contract 1, Conversations history contract 3, Nucleus execution contract 1, and Clockwork schedule contract 1; immutable schema or tool meaning changes receive successor identities."}
     ],
     "reliances": [
       {"status": "declared", "statement": "Semantics consumes ordered decision lifecycle events and opaque cursors from Decisions.", "target": "decisions", "kind": "data", "contract": "decisions.lifecycle.consume"},
       {"status": "declared", "statement": "Semantics reads exact persisted task working-directory metadata from Conversations for deepest-root project routing.", "target": "conversations", "kind": "data", "contract": "conversations.history.explore"},
       {"status": "declared", "statement": "Semantics uses Nucleus for one restricted reconciliation attempt while retaining all semantic commit authority.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"},
-      {"status": "declared", "statement": "Deployment and recurring intake or reconciliation service lifecycle rely on per-user launchd supervision, but no dedicated installed Chancery contract describes launchd readiness.", "target": "launchd", "kind": "readiness"}
+      {"status": "declared", "statement": "Deployment and recurring intake rely on Clockwork for immutable definition registration, one selected binding, overlap suppression, process history, and launchd projection; Semantics retains all intake and commit authority.", "target": "clockwork", "kind": "control", "contract": "clockwork.schedule.operate"},
+      {"status": "unspecified", "statement": "Semantics promises no launchd availability or worker wake-up latency beyond observations exposed by Clockwork."}
     ]
   },
   "manual": "manuals/project-operate.md"

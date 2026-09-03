@@ -197,7 +197,7 @@ Annals and Annals Usage together, and pin both configurations to the deployed
 Nucleus socket. An obsolete `usage.db` and its SQLite sidecars are discarded
 after a successful deployment; they are retained only temporarily when needed
 to roll back an uncommitted cutover. See [System installation and scheduled
-inbox](system-installation.md#macos-user-launchagent).
+inbox](system-installation.md#macos-user-clockwork-binding).
 
 ## Authority and limits
 

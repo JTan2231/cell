@@ -1,0 +1,121 @@
+{
+  "id": "clockwork.schedule.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Register and operate scheduled activations",
+  "summary": "Register one strict immutable activation definition, select it through a stable current-user binding and generated LaunchAgent, run it manually, or inspect Clockwork-owned runtime history.",
+  "use_when": [
+    "A product-owned non-agent runner should be invoked on a supported interval or daily local-calendar schedule through a centralized current-user broker.",
+    "An exact immutable definition should be registered before cutover, a stable binding should switch or disable transactionally, or one selected activation should be run manually.",
+    "Recorded binding, definition, overlap, direct-child, or runtime-history evidence should be inspected; generated LaunchAgent ownership and loaded state are transition-time checks rather than public inspection fields."
+  ],
+  "do_not_use_when": [
+    "A caller needs arbitrary argv execution, a shell command, an agent, a workflow, dependency fan-out, retries, secret storage, output capture, a system/root service, or a product-domain scheduler.",
+    "The executable or script is selected through PATH, a mutable selector, an implicit shebang, or bytes outside an exact immutable release.",
+    "A process exit should be treated as proof that the product completed its domain work."
+  ],
+  "outcome": "One immutable registered definition, one coherent stable binding selection or disabled state, one directly supervised activation, or a current Clockwork-owned operational report without claiming timer or product-domain success.",
+  "effects": [
+    "Definition registration validates and stores private immutable schedule and launch metadata, the product-supplied exact release identity, top-level artifact digests, literal process context, output paths, timeout, and overlap policy.",
+    "Binding switch or disable changes the private database selection, one generated `org.clockwork.owner.name` plist, and its current-user launchd loaded state under per-key management and transition locks; switching or compensating a run-at-load definition may cause launchd to request an activation after the gate opens.",
+    "Manual and scheduled activation may start one blocked Clockwork exec gate, durably record its process-group PID, then replace it in place with one product-owned launch image after a parent handshake; Clockwork writes runtime metadata and routes product output to the product-selected files without capturing it.",
+    "No operation retries a child, submits to Nucleus, stores a secret, interprets product output, or changes product durable state except through the child process itself."
+  ],
+  "authority": [
+    "Clockwork owns definition and activation identity, stable binding selection, generated Clockwork LaunchAgents, overlap admission, direct-process supervision, and runtime history.",
+    "The registering product owns the exact release and runner, durable work, locks, retries, idempotency, secrets, output files, recovery, and domain-success interpretation.",
+    "launchd owns trigger delivery in the current user's login domain; the operator or product deployer owns authorization to register and switch a binding."
+  ],
+  "success": [
+    "Registration succeeds only after the complete strict manifest, release root and ID, top-level launch images, hashes, permissions, literal process context, schedule, and supported policies validate without a partial write.",
+    "A binding transition succeeds only when the database selection, atomically installed plist, and launchd loaded state agree; on failure Clockwork restores the prior coherent state or, while the projection remains attributable, durably attempts a disabled state. An unattributable projection is retained and recovery-gated without mutation.",
+    "An activation report truthfully records whether the direct child failed to start, ran and exited, was signaled, timed out, was skipped for overlap, or was proven lost.",
+    "Every overlap records `skipped_overlap` without starting a child; a scheduled overlap returns success to launchd, while a manual overlap reports `activation_busy` and returns 1.",
+    "Once a child starts and Clockwork durably records `exited`, `signaled`, or `timed_out`, the broker returns a successful Clockwork envelope and process exit even when the child's exit code is nonzero; that remains runtime evidence only."
+  ],
+  "failure_and_recovery": [
+    "A stale or changed artifact hash, unsafe ancestor, symbolic or writable artifact, mutable release selector, invalid manifest, unsupported policy, active binding switch, foreign plist, or launchd transition failure rejects the requested transition without silently broadening authority. Disable prevents new admission and normally waits for an existing broker/child to finish naturally; if the broker disappeared while its recorded child remains live or cannot be proved absent, disable rejects, restores the prior coherent binding, and requires retry after demonstrable child exit.",
+    "Before mutating an existing binding or launchd projection, Clockwork fsyncs the operation, target, captured prior database selection/plist/loaded state, and any exact candidate definition/plist in a private transition journal; disabling a wholly absent coherent key is only one atomic SQLite tombstone write. On reported transition failure it restores the prior state; after abrupt broker loss, the next switch restores a switch journal before proceeding, while disable first durably replaces either journal with its requested disable intent and consumes that journal without loading a schedule. Fail-disabled cleanup is attempted only while the current projection remains attributable to recorded prior or candidate state; an unrecognized projection is retained, recovery-gated, and reported without mutation.",
+    "There is no automatic retry. Diagnose the product and runtime record, then invoke a product-owned recovery or a separately authorized new Clockwork activation.",
+    "A `running` row becomes `lost` only after its recorded broker and any recorded child are both demonstrably absent; elapsed time or a restarted observer alone is insufficient."
+  ],
+  "privacy": [
+    "Definitions retain local paths, hashes, literal arguments, schedule, output paths, and a scrubbed exact environment in private current-user state; secret-looking environment names are rejected and no secret belongs in any manifest field.",
+    "Activation history retains times, source, definition identity, direct PID, and terminal process result, but no stdout, stderr, product record body, or domain-success field; product child output goes only to its exact private product-owned destination files."
+  ],
+  "interfaces": [
+    {"label": "Register immutable definition", "invocation": "/Users/joey/.local/bin/clockwork definition register FILE"},
+    {"label": "Switch stable binding", "invocation": "/Users/joey/.local/bin/clockwork binding switch OWNER/NAME DEFINITION_DIGEST"},
+    {"label": "Disable stable binding", "invocation": "/Users/joey/.local/bin/clockwork binding disable OWNER/NAME"},
+    {"label": "Restore exact inactive selection", "invocation": "/Users/joey/.local/bin/clockwork binding disable OWNER/NAME --select DEFINITION_DIGEST"},
+    {"label": "Run selected definition once", "invocation": "/Users/joey/.local/bin/clockwork run OWNER/NAME"},
+    {"label": "List definitions", "invocation": "/Users/joey/.local/bin/clockwork definition list"},
+    {"label": "Inspect definition", "invocation": "/Users/joey/.local/bin/clockwork definition show DEFINITION_DIGEST"},
+    {"label": "List bindings", "invocation": "/Users/joey/.local/bin/clockwork binding list"},
+    {"label": "Inspect binding", "invocation": "/Users/joey/.local/bin/clockwork binding show OWNER/NAME"},
+    {"label": "Inspect runtime history", "invocation": "/Users/joey/.local/bin/clockwork history [OWNER/NAME] --limit N"},
+    {"label": "Diagnose local state", "invocation": "/Users/joey/.local/bin/clockwork doctor"}
+  ],
+  "does_not_authorize": [
+    "Deploying Clockwork or a product, publishing a release, deleting retained state or releases, or replacing a foreign plist or selector.",
+    "Putting credentials in a definition, capturing product output, adding retries, or treating Clockwork runtime completion as product-domain success.",
+    "Invoking the private `__launchd` entry point directly as a general integration surface or supplying caller-controlled process context at runtime."
+  ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A local operator or authorized product deployer may register an immutable non-agent definition, select or disable it through one stable current-user binding, run the selected definition once, and inspect Clockwork runtime evidence."},
+      {"status": "unsupported", "statement": "Arbitrary commands, agents, workflows, retries, secrets, output capture, distributed scheduling, system services, and product-domain scheduling are outside this capability."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Registration requires a current-user-owned non-group/world-writable regular non-symbolic schema-one TOML manifest of at most 1 MiB, a stable lowercase `owner/name` key, an absolute current-user-owned non-symbolic immutable release root whose final path component is the product's exact caller-supplied 64-lowercase-hex content identity, valid pinned product artifacts beneath it, and for interpreted launches the exact separately hashed root-owned `/bin/sh` profile; every path ancestor is root- or current-user-owned and not group- or world-writable."},
+      {"status": "declared", "statement": "Binding switch requires an existing same-key definition, an inactive binding, current-user filesystem authority, and an available launchd GUI domain; disable first prevents new admission and waits for the key lock, while activation requires one enabled binding and unchanged admitted artifacts."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "A definition provides one interval or daily local-calendar schedule, a current-user-owned non-hard-linked direct program with recognized Mach-O/fat magic under the release or the exact root-owned `/bin/sh` profile plus a current-user-owned non-hard-linked executable script under the release, literal arguments, absolute current-user-owned cwd, distinct absolute private product-owned stdout and stderr paths outside product release and Clockwork-owned trees, exact scrubbed non-secret environment, current-user-background authority, an optional bounded timeout, and skip-overlap policy. Output parents are owner-writable/searchable; existing output files are private, owner-writable, non-hard-linked, and their opened device/inode identities must differ. The magic check is not a complete host-loader preflight; spawn may still fail."},
+      {"status": "unsupported", "statement": "PATH lookup, relative or symbolic launch paths, mutable release selectors, shell strings, `-c`, globbing, interpolation, inherited environment, implicit shebang selection, secret-looking environment names, and caller-supplied runtime argv are rejected."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Registration returns an immutable definition digest computed as SHA-256 over canonical JSON of the fully concrete normalized manifest; binding operations return coherent selected or disabled state; inspection returns definition, binding, and activation metadata; run returns the one direct child's recorded runtime outcome."},
+      {"status": "unsupported", "statement": "Clockwork returns no captured output body, product-domain result, retry plan, timer-delivery receipt, or transitive executable attestation."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "An executable is the registered top-level launch image directly verified and spawned by Clockwork, not a command string and not the full transitive process tree."},
+      {"status": "declared", "statement": "One activation pins one immutable definition and represents at most one direct child; a durable child terminal state produces Clockwork `ok:true` regardless of child exit code, and remains runtime evidence rather than product-domain success."},
+      {"status": "declared", "statement": "A binding is a stable key with one nullable selected definition and internal exact generated-plist digest, while a generated plist contains the manifest-checked content-addressed installed Clockwork binary and stable key but no product executable or secret."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Binding keys are collision-free `owner/name` identities with two at-most-63-byte lowercase components mapped to `org.clockwork.owner.name`; definition identity is the 64-lowercase-hex SHA-256 digest of canonical JSON for one concrete normalized manifest, and activation identity names one admission occasion."},
+      {"status": "declared", "statement": "Artifact and release identities are 64 lowercase hexadecimal SHA-256 values, timestamps are whole Unix seconds, process identities are local PIDs, interval schedules and optional timeouts use 1 through 31,536,000 whole seconds, and local-calendar schedules use local hour 0 through 23 and minute 0 through 59."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Registration validates the complete manifest and direct launch images at registration; each activation re-resolves the selected definition and re-verifies its pinned images immediately before spawn."},
+      {"status": "declared", "statement": "Definition and binding list/show, history, and doctor report current local Clockwork state at invocation; doctor may first recover demonstrably stale running rows to `lost` and reports but does not repair pending binding-transition journals; none claims a future timer delivery or current product-domain condition."},
+      {"status": "unspecified", "statement": "No maximum launch delay, timer catch-up count, fairness, availability percentage, history retention period, or product completion latency is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported boundary is the local current-user Clockwork CLI, private application-support state, per-key locks, product-selected output files, and Clockwork-owned user LaunchAgents."},
+      {"status": "unsupported", "statement": "Direct SQLite mutation, plist editing, root or system-domain execution, remote access, and private-entry use as an arbitrary command surface are unsupported."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Definitions are immutable and idempotently registered by normalized content; binding changes share a per-key management lock and exclusive transition gate, and multi-view changes fsync the exact prior state in a per-key journal. Switch aligns database, atomically written and digest-attributed plist, and loaded launchd state with compensation or next-operation recovery. Disable prevents new admission, waits through a live broker's transition gate, then removes the loaded schedule and owned plist; a retained live child whose broker disappeared makes disable restore/reject until a later retry, and a wholly absent coherent key needs only an atomic disabled tombstone."},
+      {"status": "declared", "statement": "Each admitted broker holds the shared side of the transition gate and an exclusive per-key activation lock, refuses a pending binding journal, starts a blocked internal exec gate as process-group leader, commits its PID before releasing product execution, forwards termination, applies the optional timeout, and commits one terminal activation state. Parent loss before release closes the pipe without product work; loss after release leaves a durable child PID that prevents duplicate admission."},
+      {"status": "declared", "statement": "A disabled binding retains its definitions and activation history, and no failure authorizes dual old-and-new schedules or automatic child retry."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Version 1 supports current-user LaunchAgents, one interval or daily local-calendar trigger per definition, one direct child per activation, skip-on-overlap, an optional timeout, exact product output files, separate Clockwork broker logs, and bounded local history queries."},
+      {"status": "unsupported", "statement": "There is no daemon, HTTP API, queue, workflow edge, dependency trigger, fan-out, retry/backoff engine, distributed lock, secret store, output capture, log rotation, cron expression, system service, or compare-and-swap binding precondition for a product's earlier ownership inspection; stable keys are not authentication between same-user processes."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1, schema-one TOML definition format, SQLite schema one, provider release, product release identity, and each immutable definition remain separate compatibility axes."},
+      {"status": "declared", "statement": "Changed registered meaning creates a new definition identity and explicit binding switch; incompatible storage or manifest meaning requires a successor schema and migration while historical activation decoding remains available."},
+      {"status": "unspecified", "statement": "No universal retention horizon, deprecation interval, cross-release migration window, or release cadence is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Scheduled invocation and binding loaded-state changes rely on per-user macOS launchd, login-domain availability, timer semantics, sleep/wake behavior, filesystem access, and TCC, but no dedicated installed Chancery contract describes that boundary.", "target": "launchd", "kind": "control"},
+      {"status": "declared", "statement": "Each activation relies on the registering product's exact immutable release and direct runner contract, while that product remains authoritative for its work, recovery, secrets, and domain success; the concrete product contract is selected with that definition.", "target": "product", "kind": "data"}
+    ]
+  },
+  "manual": "manuals/schedule-operate.md"
+}

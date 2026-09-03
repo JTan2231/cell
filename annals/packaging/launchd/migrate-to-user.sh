@@ -8,11 +8,14 @@ umask 077
 
 SERVICE_LABEL=org.annals.inbox
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
+SOURCE_LEGACY_DAEMON_PLIST="$SCRIPT_DIR/org.annals.inbox.plist"
+SOURCE_LEGACY_AGENT_PLIST="$SCRIPT_DIR/org.annals.inbox.agent.plist"
 
 binary_path=
 usage_binary_path=
 nucleus_path=
 nucleus_socket=
+clockwork_path=
 legacy_prefix=${ANNALS_MIGRATION_LEGACY_PREFIX:-}
 legacy_state_override=${ANNALS_MIGRATION_LEGACY_STATE:-}
 launchctl_path=${ANNALS_MIGRATION_LAUNCHCTL:-/bin/launchctl}
@@ -23,7 +26,8 @@ deploy_path=${ANNALS_MIGRATION_DEPLOY:-$SCRIPT_DIR/deploy-user.sh}
 usage() {
     cat <<'EOF'
 Usage: migrate-to-user.sh --binary ABSOLUTE_PATH --usage-binary ABSOLUTE_PATH \
-  --nucleus ABSOLUTE_PATH --nucleus-socket ABSOLUTE_PATH [OPTIONS]
+  --nucleus ABSOLUTE_PATH --nucleus-socket ABSOLUTE_PATH \
+  --clockwork ABSOLUTE_PATH [OPTIONS]
 
 Move the legacy system Annals installation into the selected operator's home
 and deploy the complete user-owned installation. Run this command as root.
@@ -43,12 +47,76 @@ fail() {
     exit 1
 }
 
+# Full rendered comparisons make any extra launchd behavior foreign even when
+# the visible label and executable tuple still look like Annals.
+legacy_daemon_plist_matches_expected() {
+    ownership_candidate=$1
+    [ -f "$ownership_candidate" ] && [ ! -L "$ownership_candidate" ] \
+        && [ "$(stat -f '%u' "$ownership_candidate")" -eq "$invoking_uid" ] \
+        && [ "$(stat -f '%Lp' "$ownership_candidate")" = 644 ] \
+        && [ -f "$SOURCE_LEGACY_DAEMON_PLIST" ] \
+        && [ ! -L "$SOURCE_LEGACY_DAEMON_PLIST" ] \
+        || return 1
+
+    ownership_expected_dir=$(mktemp -d /tmp/annals-legacy-daemon.XXXXXX) \
+        || return 1
+    ownership_expected="$ownership_expected_dir/$SERVICE_LABEL.plist"
+    if install -m 0600 "$SOURCE_LEGACY_DAEMON_PLIST" "$ownership_expected" \
+        && plutil -replace UserName -string "$operator" "$ownership_expected" \
+        && plutil -replace GroupName -string "$operator_group" "$ownership_expected" \
+        && cmp -s "$ownership_expected" "$ownership_candidate"
+    then
+        ownership_matched=0
+    else
+        ownership_matched=1
+    fi
+    rm -f "$ownership_expected" >/dev/null 2>&1 || true
+    rmdir "$ownership_expected_dir" >/dev/null 2>&1 || true
+    return "$ownership_matched"
+}
+
+legacy_agent_plist_matches_expected() {
+    ownership_candidate=$1
+    [ -f "$ownership_candidate" ] && [ ! -L "$ownership_candidate" ] \
+        && [ "$(stat -f '%u' "$ownership_candidate")" -eq "$operator_uid" ] \
+        && [ "$(stat -f '%Lp' "$ownership_candidate")" = 600 ] \
+        && [ -f "$SOURCE_LEGACY_AGENT_PLIST" ] \
+        && [ ! -L "$SOURCE_LEGACY_AGENT_PLIST" ] \
+        || return 1
+
+    ownership_expected_dir=$(mktemp -d /tmp/annals-legacy-agent.XXXXXX) \
+        || return 1
+    ownership_expected="$ownership_expected_dir/$SERVICE_LABEL.plist"
+    if install -m 0600 "$SOURCE_LEGACY_AGENT_PLIST" "$ownership_expected" \
+        && plutil -remove ProgramArguments.0 "$ownership_expected" \
+        && plutil -insert ProgramArguments.0 -string "$USER_CLI" \
+            "$ownership_expected" \
+        && plutil -replace WorkingDirectory -string "$TARGET_STATE" \
+            "$ownership_expected" \
+        && plutil -replace EnvironmentVariables.HOME -string "$operator_home" \
+            "$ownership_expected" \
+        && plutil -replace StandardOutPath \
+            -string "$TARGET_STATE/log/inbox.stdout.log" "$ownership_expected" \
+        && plutil -replace StandardErrorPath \
+            -string "$TARGET_STATE/log/inbox.stderr.log" "$ownership_expected" \
+        && cmp -s "$ownership_expected" "$ownership_candidate"
+    then
+        ownership_matched=0
+    else
+        ownership_matched=1
+    fi
+    rm -f "$ownership_expected" >/dev/null 2>&1 || true
+    rmdir "$ownership_expected_dir" >/dev/null 2>&1 || true
+    return "$ownership_matched"
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --binary) binary_path=${2:?}; shift 2 ;;
         --usage-binary) usage_binary_path=${2:?}; shift 2 ;;
         --nucleus) nucleus_path=${2:?}; shift 2 ;;
         --nucleus-socket) nucleus_socket=${2:?}; shift 2 ;;
+        --clockwork) clockwork_path=${2:?}; shift 2 ;;
         --legacy-prefix) legacy_prefix=${2:?}; shift 2 ;;
         --legacy-state) legacy_state_override=${2:?}; shift 2 ;;
         --launchctl) launchctl_path=${2:?}; shift 2 ;;
@@ -65,13 +133,15 @@ case "$legacy_prefix" in
     /*) [ "$legacy_prefix" != / ] || fail '--legacy-prefix must not be /' ;;
     *) fail '--legacy-prefix must be absolute' ;;
 esac
-if [ "$(id -u)" -ne 0 ] && [ -z "$legacy_prefix" ]; then
+invoking_uid=$(id -u)
+if [ "$invoking_uid" -ne 0 ] && [ -z "$legacy_prefix" ]; then
     fail 'run this migration with sudo'
 fi
 
 [ -n "$usage_binary_path" ] || fail '--usage-binary is required'
 for value_name in \
-    binary_path usage_binary_path nucleus_path nucleus_socket launchctl_path dscl_path operator_runner deploy_path
+    binary_path usage_binary_path nucleus_path nucleus_socket clockwork_path \
+    launchctl_path dscl_path operator_runner deploy_path
 do
     eval "value=\${$value_name}"
     [ -n "$value" ] || fail "$value_name is required"
@@ -83,6 +153,11 @@ do
     [ -f "$executable" ] && [ -x "$executable" ] && [ ! -L "$executable" ] \
         || fail "required executable is unavailable: $executable"
 done
+if [ ! -x "$clockwork_path" ] \
+    || { [ ! -f "$clockwork_path" ] && [ ! -L "$clockwork_path" ]; }
+then
+    fail "Clockwork executable is unavailable: $clockwork_path"
+fi
 if [ ! -x "$nucleus_path" ] || { [ ! -f "$nucleus_path" ] && [ ! -L "$nucleus_path" ]; }; then
     fail "Nucleus executable is unavailable: $nucleus_path"
 fi
@@ -112,19 +187,21 @@ else
     done
     [ -d "$LEGACY_STATE" ] && [ ! -L "$LEGACY_STATE" ] \
         || { [ -d "$TRANSACTION_DIR" ] || fail "invalid legacy state: $LEGACY_STATE"; }
-    [ "$(plutil -extract Label raw -o - "$LEGACY_PLIST")" = "$SERVICE_LABEL" ] \
-        || fail "legacy plist label is not $SERVICE_LABEL"
     operator=$(plutil -extract UserName raw -o - "$LEGACY_PLIST") \
         || fail 'unable to read the legacy operator'
-    home_record=$($dscl_path . -read "/Users/$operator" NFSHomeDirectory) \
-        || fail "unable to resolve the home for $operator"
-    operator_home=${home_record#*:}
-    operator_home=$(printf '%s\n' "$operator_home" | sed 's/^[[:space:]]*//')
 fi
 case "$operator" in *[!A-Za-z0-9._-]*|'') fail 'invalid legacy operator' ;; esac
 operator_uid=$(id -u "$operator") || fail "operator does not exist: $operator"
 [ "$operator_uid" -ne 0 ] || fail 'legacy operator must not be root'
 operator_group=$(id -gn "$operator")
+if [ "$recovery_phase" != committed ]; then
+    legacy_daemon_plist_matches_expected "$LEGACY_PLIST" \
+        || fail "legacy LaunchDaemon is not the exact Annals-owned plist: $LEGACY_PLIST"
+    home_record=$($dscl_path . -read "/Users/$operator" NFSHomeDirectory) \
+        || fail "unable to resolve the home for $operator"
+    operator_home=${home_record#*:}
+    operator_home=$(printf '%s\n' "$operator_home" | sed 's/^[[:space:]]*//')
+fi
 case "$operator_home" in /*) ;; *) fail "invalid operator home: $operator_home" ;; esac
 [ -d "$operator_home" ] && [ ! -L "$operator_home" ] \
     || fail "operator home is unavailable: $operator_home"
@@ -138,6 +215,7 @@ USER_USAGE_CLI="$operator_home/.local/bin/annals-usage"
 USER_TARGET="gui/$operator_uid/$SERVICE_LABEL"
 MAINTENANCE_MARKER="$TARGET_STATE/spool/.maintenance"
 LEGACY_PAUSED_MARKER="$LEGACY_STATE/spool/.paused"
+CLOCKWORK_HANDOFF="$TARGET_STATE/install/.migration-annals-inbox.clockwork.toml"
 
 run_as_operator() {
     "$operator_runner" -u "$operator" /usr/bin/env -i \
@@ -151,13 +229,151 @@ write_phase() {
     mv -f "$TRANSACTION_DIR/phase.tmp" "$TRANSACTION_DIR/phase"
 }
 
+inspect_legacy_system_service() {
+    legacy_system_service_loaded=0
+    if legacy_system_service_result=$("$launchctl_path" print \
+        "$SYSTEM_TARGET" 2>&1)
+    then
+        legacy_system_service_loaded=1
+        return 0
+    fi
+    printf '%s\n' "$legacy_system_service_result" \
+        | grep -F 'Could not find service' >/dev/null
+}
+
+inspect_clockwork_binding() {
+    inspected_clockwork_present=0
+    inspected_clockwork_enabled=0
+    inspected_clockwork_digest=
+    if inspected_clockwork_result=$(run_as_operator "$clockwork_path" --json \
+        binding show annals/inbox 2>&1)
+    then
+        inspected_clockwork_present=1
+        inspected_clockwork_compact=$(printf '%s' "$inspected_clockwork_result" \
+            | tr -d '[:space:]')
+        case "$inspected_clockwork_compact" in
+            *'"key":"annals/inbox"'*) ;;
+            *) return 1 ;;
+        esac
+        case "$inspected_clockwork_compact" in
+            *'"definition_digest":null'*) ;;
+            *'"definition_digest":"'*)
+                inspected_clockwork_digest=$(printf '%s\n' \
+                    "$inspected_clockwork_compact" | sed -n \
+                    's/.*"definition_digest":"\([0-9a-f]\{64\}\)".*/\1/p')
+                [ -n "$inspected_clockwork_digest" ] || return 1
+                ;;
+            *) return 1 ;;
+        esac
+        case "$inspected_clockwork_compact" in
+            *'"enabled":true'*) inspected_clockwork_enabled=1 ;;
+            *'"enabled":false'*) inspected_clockwork_enabled=0 ;;
+            *) return 1 ;;
+        esac
+        [ "$inspected_clockwork_enabled" -eq 0 ] \
+            || [ -n "$inspected_clockwork_digest" ] \
+            || return 1
+        return 0
+    fi
+    printf '%s\n' "$inspected_clockwork_result" \
+        | grep -F '"code":"binding_not_found"' >/dev/null
+}
+
+clockwork_binding_is_empty_and_disabled() {
+    [ "$inspected_clockwork_present" -eq 0 ] \
+        || { [ "$inspected_clockwork_enabled" -eq 0 ] \
+            && [ -z "$inspected_clockwork_digest" ]; }
+}
+
+ensure_clockwork_disabled() {
+    if inspect_clockwork_binding && clockwork_binding_is_empty_and_disabled; then
+        return 0
+    fi
+    printf '%s\n' \
+        'annals migration: cannot prove annals/inbox is unselected and disabled; legacy schedule remains stopped' \
+        >&2
+    return 1
+}
+
+finish_clockwork_handoff() {
+    [ -f "$CLOCKWORK_HANDOFF" ] && [ ! -L "$CLOCKWORK_HANDOFF" ] \
+        || fail "committed migration has no Clockwork definition handoff: $CLOCKWORK_HANDOFF"
+
+    definition_output=$(run_as_operator "$clockwork_path" --json \
+        definition register "$CLOCKWORK_HANDOFF") \
+        || fail 'Clockwork rejected the committed inbox definition'
+    definition_compact=$(printf '%s' "$definition_output" | tr -d '[:space:]')
+    definition_digest=$(printf '%s\n' "$definition_compact" | sed -n \
+        's/.*"digest":"\([0-9a-f]\{64\}\)".*/\1/p')
+    [ -n "$definition_digest" ] \
+        || fail 'Clockwork returned no committed definition digest'
+
+    receipt="$TARGET_STATE/install/last-update.json"
+    [ -f "$receipt" ] && [ ! -L "$receipt" ] \
+        || fail "committed migration has no Annals deployment receipt: $receipt"
+    recorded_definition=$(sed -n \
+        's/^  "clockwork_definition": \(.*\),$/\1/p' "$receipt")
+    case "$recorded_definition" in
+        null)
+            temporary_receipt="$receipt.migration.$$"
+            awk -v digest="$definition_digest" '
+                $0 == "  \"clockwork_definition\": null," {
+                    print "  \"clockwork_definition\": \"" digest "\","; replaced++; next
+                }
+                { print }
+                END { if (replaced != 1) exit 1 }
+            ' "$receipt" >"$temporary_receipt" \
+                || fail 'unable to record the committed Clockwork definition'
+            chmod 0600 "$temporary_receipt"
+            chown "$operator:$operator_group" "$temporary_receipt"
+            mv -f "$temporary_receipt" "$receipt"
+            ;;
+        "\"$definition_digest\"") ;;
+        *) fail 'Annals deployment receipt selects another Clockwork definition' ;;
+    esac
+
+    inspect_clockwork_binding \
+        || fail 'unable to inspect the committed annals/inbox binding'
+    if [ -n "$inspected_clockwork_digest" ] \
+        && [ "$inspected_clockwork_digest" != "$definition_digest" ]
+    then
+        fail 'annals/inbox selects another definition during committed migration'
+    fi
+    if [ "$inspected_clockwork_enabled" -eq 1 ]; then
+        [ "$inspected_clockwork_digest" = "$definition_digest" ] \
+            || fail 'enabled annals/inbox has no exact committed Annals definition'
+        return 0
+    fi
+
+    run_as_operator "$clockwork_path" --json binding switch \
+        annals/inbox "$definition_digest" >/dev/null \
+        || fail 'Clockwork rejected the committed inbox binding switch'
+}
+
 restore_legacy() {
+    ensure_clockwork_disabled || return 1
+    if { [ -e "$USER_PLIST" ] || [ -L "$USER_PLIST" ]; } \
+        && ! legacy_agent_plist_matches_expected "$USER_PLIST"
+    then
+        printf 'annals migration: refusing non-owned user LaunchAgent during rollback: %s\n' \
+            "$USER_PLIST" >&2
+        return 1
+    fi
     "$launchctl_path" bootout "$USER_TARGET" >/dev/null 2>&1 || true
-    rm -f "$USER_PLIST" "$USER_CLI" "$USER_USAGE_CLI"
+    if [ -e "$USER_PLIST" ] || [ -L "$USER_PLIST" ]; then
+        legacy_agent_plist_matches_expected "$USER_PLIST" || {
+            printf 'annals migration: refusing non-owned user LaunchAgent during rollback: %s\n' \
+                "$USER_PLIST" >&2
+            return 1
+        }
+        rm -f "$USER_PLIST" || return 1
+    fi
+    rm -f "$USER_CLI" "$USER_USAGE_CLI"
     if [ ! -d "$LEGACY_STATE" ] && [ -d "$TARGET_STATE" ]; then
         mv "$TARGET_STATE" "$LEGACY_STATE"
     fi
     if [ -d "$LEGACY_STATE" ]; then
+        rm -f "$LEGACY_STATE/install/.migration-annals-inbox.clockwork.toml"
         install -m 0600 "$TRANSACTION_DIR/config.toml" "$LEGACY_STATE/config.toml"
         chown "$operator:$operator_group" "$LEGACY_STATE/config.toml"
         rm -f "$LEGACY_STATE/spool/.maintenance"
@@ -169,6 +385,11 @@ restore_legacy() {
         fi
     fi
     if [ "$(sed -n '1p' "$TRANSACTION_DIR/was-loaded")" = 1 ]; then
+        legacy_daemon_plist_matches_expected "$LEGACY_PLIST" || {
+            printf 'annals migration: refusing non-owned legacy LaunchDaemon during rollback: %s\n' \
+                "$LEGACY_PLIST" >&2
+            return 1
+        }
         "$launchctl_path" enable "$SYSTEM_TARGET" >/dev/null 2>&1 || true
         if ! "$launchctl_path" print "$SYSTEM_TARGET" >/dev/null 2>&1; then
             "$launchctl_path" bootstrap system "$LEGACY_PLIST" >/dev/null
@@ -179,8 +400,27 @@ restore_legacy() {
 }
 
 retire_legacy() {
-    "$launchctl_path" bootout "$SYSTEM_TARGET" >/dev/null 2>&1 || true
-    rm -f "$LEGACY_PLIST" "$LEGACY_FRONTEND" "$LEGACY_PAYLOAD"
+    if { [ -e "$LEGACY_PLIST" ] || [ -L "$LEGACY_PLIST" ]; } \
+        && ! legacy_daemon_plist_matches_expected "$LEGACY_PLIST"
+    then
+        fail "refusing to retire a non-owned legacy LaunchDaemon: $LEGACY_PLIST"
+    fi
+    inspect_legacy_system_service \
+        || fail "unable to inspect the legacy service: $SYSTEM_TARGET"
+    if [ "$legacy_system_service_loaded" -eq 1 ]; then
+        "$launchctl_path" bootout "$SYSTEM_TARGET" >/dev/null 2>&1 \
+            || fail "unable to boot out the legacy service: $SYSTEM_TARGET"
+    fi
+    inspect_legacy_system_service \
+        || fail "unable to prove the legacy service absent: $SYSTEM_TARGET"
+    [ "$legacy_system_service_loaded" -eq 0 ] \
+        || fail "legacy service is still loaded: $SYSTEM_TARGET"
+    if [ -e "$LEGACY_PLIST" ] || [ -L "$LEGACY_PLIST" ]; then
+        legacy_daemon_plist_matches_expected "$LEGACY_PLIST" \
+            || fail "refusing to remove a non-owned legacy LaunchDaemon: $LEGACY_PLIST"
+        rm -f "$LEGACY_PLIST"
+    fi
+    rm -f "$LEGACY_FRONTEND" "$LEGACY_PAYLOAD"
     rmdir "$(dirname "$LEGACY_PAYLOAD")" >/dev/null 2>&1 || true
 }
 
@@ -190,9 +430,12 @@ cleanup() {
     trap - EXIT HUP INT TERM
     if [ "$status" -ne 0 ] && [ "$committed" -eq 0 ] \
         && [ -d "$TRANSACTION_DIR" ]; then
-        set +e
-        restore_legacy
-        set -e
+        phase_at_failure=$(sed -n '1p' "$TRANSACTION_DIR/phase" 2>/dev/null || true)
+        if [ "$phase_at_failure" != committed ]; then
+            set +e
+            restore_legacy
+            set -e
+        fi
     fi
     exit "$status"
 }
@@ -204,10 +447,11 @@ if [ -d "$TRANSACTION_DIR" ]; then
         committed)
             committed=1
             [ -d "$TARGET_STATE" ] || fail 'committed migration has no user state'
-            rm -f "$MAINTENANCE_MARKER"
-            "$launchctl_path" kickstart "$USER_TARGET" >/dev/null 2>&1 || true
+            finish_clockwork_handoff
             retire_legacy
+            rm -f "$MAINTENANCE_MARKER"
             rm -rf "$TRANSACTION_DIR"
+            rm -f "$CLOCKWORK_HANDOFF"
             printf '%s\n' 'Annals migration recovery completed.'
             exit 0
             ;;
@@ -217,6 +461,15 @@ if [ -d "$TRANSACTION_DIR" ]; then
         *) fail "invalid migration transaction: $TRANSACTION_DIR" ;;
     esac
 fi
+
+# The system job is the only schedule this migration knows how to recover.
+# Accept only no binding or Clockwork's unselected disabled tombstone before
+# touching the legacy service or state. A selected digest belongs to some
+# installation lifecycle that this migration has no authority to replace.
+inspect_clockwork_binding \
+    || fail 'unable to inspect the annals/inbox Clockwork binding'
+clockwork_binding_is_empty_and_disabled \
+    || fail 'annals/inbox already selects a Clockwork definition'
 
 [ "$(stat -f '%u' "$LEGACY_STATE")" -eq "$operator_uid" ] \
     || fail "legacy state is not owned by $operator"
@@ -327,25 +580,35 @@ if [ "${ANNALS_MIGRATION_TEST_CRASH_AFTER_MOVE:-0}" = 1 ] \
     exit 99
 fi
 
+# The child may commit its user-state cutover, but it must return an inert
+# definition while this outer transaction can still move that state back.
 run_as_operator "$deploy_path" \
     --binary "$binary_path" \
     --usage-binary "$usage_binary_path" \
     --nucleus "$nucleus_path" \
     --nucleus-socket "$nucleus_socket" \
+    --clockwork "$clockwork_path" \
     --home "$operator_home" \
     --launchctl "$launchctl_path" \
-    --fresh-state
+    --fresh-state \
+    --migration-clockwork-handoff
 
+[ -f "$CLOCKWORK_HANDOFF" ] && [ ! -L "$CLOCKWORK_HANDOFF" ] \
+    || fail 'Annals deployer returned no Clockwork definition handoff'
+# From this phase onward TARGET_STATE is permanent. Registration and the
+# RunAtLoad-capable binding switch are now recoverable, and maintenance stays
+# in place until the legacy artifacts are retired and the binding is selected.
 write_phase committed
 committed=1
-rm -f "$MAINTENANCE_MARKER"
-"$launchctl_path" kickstart "$USER_TARGET" >/dev/null
+finish_clockwork_handoff
 retire_legacy
+rm -f "$MAINTENANCE_MARKER"
 rm -rf "$TRANSACTION_DIR"
+rm -f "$CLOCKWORK_HANDOFF"
 
 printf '%s\n' 'Annals was migrated to the user-owned installation.'
 printf 'Operator: %s\n' "$operator"
 printf 'State:    %s\n' "$TARGET_STATE"
 printf 'Command:  %s\n' "$USER_CLI"
 printf 'Usage:    %s\n' "$USER_USAGE_CLI"
-printf 'Service:  %s\n' "$USER_TARGET"
+printf 'Schedule: %s\n' 'annals/inbox'

@@ -1,6 +1,6 @@
 {
   "id": "decisions.daily.digest",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -55,7 +55,8 @@
     "A turn completing after a projection's cutoff can enter a later manual rebuild of its authority date, but an accepted scheduled delivery is not automatically amended and the late turn is not carried into another date.",
     "Legacy interrupted scan runs retain their original retry and explicit daily-abandon recovery; that legacy daily abandonment never mutates continuous observations.",
     "A repeated scheduled occurrence reuses the same frozen body and idempotency key.",
-    "A manual retry for the same run revision reuses a pending or failed ad-hoc key; a new key is created only after acceptance, and manual delivery never consumes scheduled state."
+    "A manual retry for the same run revision reuses a pending or failed ad-hoc key; a new key is created only after acceptance, and manual delivery never consumes scheduled state.",
+    "Before resolving release dependencies or doing domain work, each scheduled runner checks the private current-user mode-0600 non-hard-linked release-independent maintenance marker; an invocation that observes it exits successfully, while an invalid or non-private marker fails closed."
   ],
   "privacy": [
     "Hook ingest persists only session and turn correlation; it discards transcript path, working directory, model, permission mode, latest assistant message, and other event fields.",
@@ -64,12 +65,13 @@
     "Conversation text is not copied into the Decisions database; only request digests, source anchors, verdicts, normalized candidates, and text-free validated receipt DTOs are retained.",
     "Unavailable-source abandonment retains only a fixed product-owned marker and detail, never caller-provided text.",
     "Email statements pass deterministic fail-closed disclosure checks and exclude raw transcript excerpts, rationales, credentials, account/email identifiers, source IDs, tool output, and local paths.",
-    "Observer and scheduled runners use scrubbed environments, body-free logs, and never store or forward Email credentials."
+    "Clockwork definitions carry only literal non-secret environment and no output body; the pinned observer and scheduled runners use scrubbed environments, body-free Decisions logs, and never store or forward Email credentials."
   ],
   "dependencies": [
     {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
     {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "email.message.send", "min_contract": 2, "max_contract_exclusive": 3}
+    {"id": "email.message.send", "min_contract": 2, "max_contract_exclusive": 3},
+    {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "interfaces": [
     {"label": "Observer status", "invocation": "/Users/joey/.local/bin/decisions observe status"},
@@ -189,7 +191,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Supported access is through the current-user Decisions CLI, its exact user Stop hook, and its two installed local LaunchAgent runners; direct SQLite mutation is unsupported."
+        "statement": "Supported access is through the current-user Decisions CLI, its exact user Stop hook, and the two release-pinned runners selected by `decisions/observer` and `decisions/daily-email` Clockwork bindings; direct SQLite mutation is unsupported."
       },
       {
         "status": "declared",
@@ -212,12 +214,16 @@
       {
         "status": "declared",
         "statement": "Review and lifecycle history append atomically, snapshot bodies freeze by run revision, and duplicate scheduled or unresolved manual delivery uses the same stable idempotency key and exact body."
+      },
+      {
+        "status": "declared",
+        "statement": "Both release-pinned scheduled runners check the private release-independent maintenance marker before release resolution or domain work; a valid marker makes an activation a successful no-op, while invalid marker state fails closed."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Observation processing is serial, source context expands at most once, each scope has one initial Nucleus attempt plus at most two retries after positively observed terminal failure, and the scheduled service runs at local 09:00."
+        "statement": "Observation processing is serial, source context expands at most once, each scope has one initial Nucleus attempt plus at most two retries after positively observed terminal failure, and Clockwork requests the scheduled service at local 09:00 without guaranteeing wall-clock delivery."
       },
       {
         "status": "declared",
@@ -231,7 +237,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Provider release, capability contract version, Decisions SQLite schema, immutable classification schema and toolset, lifecycle envelope, Email contract, Conversations contract, and Nucleus protocol remain distinct compatibility axes."
+        "statement": "Provider release, capability contract version, Clockwork definition digest and binding key, Decisions SQLite schema, immutable classification schema and toolset, lifecycle envelope, Email contract, Conversations contract, and Nucleus protocol remain distinct compatibility axes."
       },
       {
         "status": "declared",
@@ -272,7 +278,14 @@
       },
       {
         "status": "declared",
-        "statement": "Periodic observer and daily-digest invocation rely on per-user launchd supervision, but no dedicated installed Chancery contract describes launchd readiness.",
+        "statement": "Periodic observer and daily-digest invocation relies on Clockwork's immutable-definition, stable-binding, same-key admission, direct-supervision, and runtime-history contract without transferring Decisions domain authority.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Clockwork timer delivery ultimately relies on per-user launchd, but no installed Chancery contract describes launchd readiness or timing.",
         "target": "launchd",
         "kind": "readiness"
       }

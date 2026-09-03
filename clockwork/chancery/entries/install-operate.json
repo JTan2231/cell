@@ -1,0 +1,135 @@
+{
+  "id": "clockwork.install.operate",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install or diagnose Clockwork",
+  "summary": "Deploy, verify, roll back, or detach the current user's content-addressed Clockwork CLI and Chancery selector without creating, changing, or deleting product bindings or retained runtime state.",
+  "use_when": [
+    "Clockwork program and public-contract bytes should be installed or updated for this macOS user.",
+    "The installed release identity, stable command and provider selectors, private database invariants, generated plist shape, or local readiness should be diagnosed.",
+    "The public command and provider selectors should be detached after every Clockwork binding has been disabled and quiescence has been checked."
+  ],
+  "do_not_use_when": [
+    "A product definition or binding should be registered, switched, disabled, or executed; use clockwork.schedule.operate.",
+    "A deployment should discover or migrate product schedules automatically.",
+    "Retained Clockwork state, content-addressed releases, product logs, or product artifacts should be deleted."
+  ],
+  "outcome": "A version-matched content-addressed Clockwork release selected for the stable command and provider, an evidence-backed local diagnosis, a validated previous-program rollback, or safely detached public selectors with private runtime state retained.",
+  "effects": [
+    "Deployment stages immutable binary, deployer, uninstaller, manifest, and Clockwork-owned Chancery bytes under private application support, invokes an explicitly supplied candidate Chancery reader on the exact staged provider, and atomically switches the current stable release selector only after that validation succeeds.",
+    "Deployment may create missing current-user shared parent directories without changing the modes of existing parents; it writes only `~/.local/bin/clockwork`, `providers/clockwork`, and Clockwork's installation tree, does not create or open the runtime database, and does not touch `org.clockwork.*` product plists.",
+    "Doctor initializes only an empty unversioned private schema-one Clockwork store, refuses foreign or unsupported schemas, runs SQLite `quick_check`, resolves the current executable, checks `/bin/launchctl`, and marks a retained `running` activation `lost` only after its recorded broker and any child are demonstrably absent.",
+    "Uninstall detaches only owned command, provider, current, and previous selectors after refusing remaining Clockwork plists; when needed it may create an empty private Clockwork state root solely to share the deployment lock path, but it creates no runtime database and retains releases, database, runtime locks, logs, history, and product artifacts."
+  ],
+  "authority": [
+    "Clockwork's packaging owns its content-addressed releases, current and previous selectors, stable command selector, and only `providers/clockwork`.",
+    "Chancery owns provider-schema validation; the Clockwork deployer owns selecting the explicit candidate reader, presenting the exact staged bundle, and ordering successful validation before selector mutation.",
+    "The operator owns the choice to deploy, diagnose, roll back, or detach selectors and separately owns any destructive retained-state operation.",
+    "Product deployers own their definition and binding changes through the schedule contract; program deployment has no implied authority over them."
+  ],
+  "success": [
+    "The candidate reports the exact same version as the provider release, every staged byte matches the canonical manifest and content identity, the explicit candidate Chancery reader accepts the exact staged provider before selector mutation and discovers all three entries through the installed registry before commit, and command and provider selectors pass through one current release.",
+    "Identical deployment is idempotent, update retains the prior valid release, and a failed pre-commit or installed smoke restores the exact prior selector view or detaches all public selectors when coherent restoration cannot be completed.",
+    "Doctor initializes only an empty unversioned Clockwork store, refuses a foreign or unsupported schema, and reports current state path, SQLite quick-check result, exact current executable, launchctl path, and the number of demonstrably stale activations marked lost, without claiming future timer delivery or product-domain success.",
+    "Uninstall refuses any remaining Clockwork plist and removes no retained release or runtime data."
+  ],
+  "failure_and_recovery": [
+    "A symbolic, foreign, traversal, fabricated, version-mismatched, or tampered candidate, release, or selector, or a staged provider rejected by the supplied candidate Chancery reader, is refused rather than adopted or overwritten.",
+    "If deployment fails before commit, inspect the evidence and preserved prior selectors; do not bypass ownership or content checks.",
+    "If a later canary fails, preserve its evidence and redeploy the exact validated previous release through its packaged deployer; program rollback does not roll back a product binding.",
+    "Before detach, disable every binding and prove quiescence; the uninstaller's plist refusal does not prove that no manual child is already running."
+  ],
+  "privacy": [
+    "Release and provider bytes contain no definitions, product output, secrets, or activation history.",
+    "The retained private database and operational directories contain local paths, hashes, schedule metadata, process history, and possibly product-identifying information; packaging must neither copy nor print them."
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Build and validate a Clockwork candidate without changing installed state.",
+    "Run the product-owned deployer with one absolute candidate binary path and one absolute candidate Chancery-reader path, then inspect the reported version, content identity, selectors, and retained previous release.",
+    "Run installed version and help checks; run doctor only when its schema initialization and bounded lost-activation recovery are intended, then inspect the selected Chancery entry before any product registers or switches a definition.",
+    "For rollback, redeploy the exact prior release through its packaged deployer; for detach, first disable all bindings and verify no Clockwork plist remains."
+  ],
+  "checkpoints": [
+    "Candidate binary version and provider release match exactly, the entire staged release is content-addressed, and the explicit candidate Chancery reader validates its exact provider copy before either public selector changes.",
+    "Stable command and provider selectors both resolve through the one current Clockwork release, and the supplied reader discovers every indexed Clockwork entry through that installed provider selector before commit.",
+    "Deployment and uninstall never register, switch, disable, execute, migrate, or delete a product binding.",
+    "Retained runtime database, activation/binding state, history, and releases remain outside uninstall and deployment effects; an otherwise absent empty private state root may be created solely for installation-lock serialization."
+  ],
+  "adaptation": [
+    "Use `--home` only for an intentional alternate-user or isolated packaging boundary.",
+    "Use the hidden isolated-state option only for tests or controlled diagnosis, never to create a second production authority accidentally."
+  ],
+  "stop_when": [
+    "Candidate identity, provider version, candidate Chancery-reader availability, staged provider validity, exact release tree, selector ownership, or rollback cannot be proved.",
+    "A stable selector or owned release is foreign, symbolic where a regular path is required, or tampered.",
+    "Uninstall finds a Clockwork LaunchAgent plist, product-binding quiescence is unknown, or the requested action includes retained-state deletion without separate exact authority."
+  ],
+  "dependencies": [
+    {"id": "chancery.provider.publish", "min_contract": 3, "max_contract_exclusive": 4}
+  ],
+  "interfaces": [
+    {"label": "Deploy candidate", "invocation": "clockwork/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH --chancery ABSOLUTE_PATH"},
+    {"label": "Redeploy previous release", "invocation": "\"/Users/joey/Library/Application Support/Clockwork/install/previous/package/deploy-user.sh\" --binary \"/Users/joey/Library/Application Support/Clockwork/install/previous/bin/clockwork\" --chancery /absolute/path/to/chancery"},
+    {"label": "Diagnose installed state", "invocation": "/Users/joey/.local/bin/clockwork doctor"},
+    {"label": "Detach owned public selectors", "invocation": "clockwork/packaging/macos/uninstall-user.sh"}
+  ],
+  "does_not_authorize": [
+    "Publishing a release, overwriting a foreign path, deleting retained Clockwork or product state, or pruning a release referenced by a generated plist or running activation.",
+    "Creating, migrating, switching, disabling, executing, or deleting a product binding as a side effect of Clockwork program deployment.",
+    "Treating doctor, launchctl state, or installed version evidence as a product-domain canary."
+  ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "The local operator may install, update, diagnose, roll back, or detach Clockwork's owned program and provider selectors while product schedules and retained runtime state remain separate."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Deployment has separate authority, one regular absolute Clockwork executable candidate, one separately supplied regular absolute executable candidate Chancery reader, a packaged regular deployer and uninstaller, a version-matched complete provider bundle, and absent or valid Clockwork-owned selectors."},
+      {"status": "declared", "statement": "Uninstall requires every product binding disabled and quiescent and refuses if any `org.clockwork.*` plist remains."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Deployment consumes one absolute Clockwork candidate binary, one absolute candidate Chancery reader, and the source or packaged Clockwork deployer, uninstaller, and provider bundle; doctor consumes the selected local state root and recorded activation process identities; uninstall consumes only an optional absolute operator home."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Deployment publishes one content-addressed release through stable command and provider selectors, doctor returns bounded local evidence plus a lost-recovery count, and uninstall removes only validated Clockwork-owned public selectors."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Current and previous select validated immutable program releases; they are independent of stable product bindings and their selected immutable product definitions."},
+      {"status": "declared", "statement": "An absent runtime database after program deployment is expected, while retained runtime state after selector detach is deliberate and is not an uninstall failure."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Installed release identity is a 64-hex SHA-256 content digest over the exact staged binary, packaging scripts, and provider bytes; provider release equals binary semantic version."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A successful deployment validates the complete exact owned release, has the explicit candidate Chancery reader accept the exact staged provider before switching either public selector, and proves every indexed Clockwork entry is discoverable through the installed registry before commit; doctor reports current local state only at invocation and mutates only demonstrably stale `running` rows to `lost`."},
+      {"status": "unspecified", "statement": "No future launchd delivery, product readiness, release retention duration, or program availability percentage is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The operation uses local filesystem and shell authority over Clockwork-owned current-user installation paths and refuses foreign or tampered paths."},
+      {"status": "unsupported", "statement": "Remote installation, root or system-wide installation, direct retained-state deletion, and takeover of another provider or command selector are unsupported."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Identical deployment is idempotent, update retains a validated previous generation, candidate-reader rejection occurs before selector mutation, and later failure before commit restores command and provider selection together or detaches all public selectors if coherent restoration cannot be completed."},
+      {"status": "declared", "statement": "Program deployment and rollback never mutate product definitions or bindings; doctor may initialize only an empty unversioned schema-one store and recover only demonstrably stale running rows; uninstall detaches selectors only after plist absence and retains program releases and runtime state."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Installation manages one current-user command selector, one provider selector, and one private content-addressed program-release tree; it starts no daemon and deploys no product binding."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Binary version and provider release must match exactly; program release, definition manifest, database schema, product release, and binding identity remain separate compatibility axes."},
+      {"status": "unspecified", "statement": "No automatic release pruning, retention horizon, cross-version state migration window, or deprecation period is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Deployment relies on the explicitly supplied candidate Chancery reader only for structural validation of the exact staged provider before selector mutation; Chancery does not determine Clockwork readiness or domain success.", "target": "chancery", "kind": "control", "contract": "chancery.provider.publish"},
+      {"status": "not_applicable", "statement": "Deployment, diagnosis, rollback, and selector detach invoke no model, network service, Nucleus job, or product runner."}
+    ]
+  },
+  "manual": "manuals/install-operate.md"
+}

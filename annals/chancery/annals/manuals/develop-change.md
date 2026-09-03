@@ -19,8 +19,8 @@ context.
 Annals owns retained works, source deliveries, concepts, evidence,
 reconciliations, revisions, inbox policy, retries, domain recovery, and its
 installed state. Nucleus owns shared Codex execution and authentication.
-Nucleus completion is not Annals success, and Nucleus must not acquire Annals
-workflow fields or retry policy.
+Clockwork owns immutable scheduled activation, binding, overlap admission, and
+process history. Neither service owns Annals queue, retry, or corpus success.
 
 Before changing the requester contract, shared execution, authentication, job
 records, compatibility, persistent cross-system state, deployment, or another
@@ -28,6 +28,7 @@ cross-system integration, read:
 
 ```sh
 /Users/joey/.local/bin/nucleus manual
+/Users/joey/.local/bin/chancery show clockwork.schedule.operate
 ```
 
 ## Development workflow
@@ -45,7 +46,8 @@ cross-system integration, read:
    ./annals/ci.sh
    ```
 
-   Treat it as the complete Annals product gate.
+   Treat it as the complete Annals product gate. Packaging coverage uses fake
+   Clockwork and launchctl surfaces in an isolated home, never live bindings.
 5. Run separately authorized deployment, migration, and live requester
    canaries only when the changed boundary requires them.
 
@@ -55,9 +57,10 @@ historical. Conversely, do not revive historical terms in current contracts.
 
 ## Compatibility and recovery
 
-The Annals release, library schema, Nucleus public protocol, immutable
-tool/schema registrations, and installed packaging are separate compatibility
-axes. Define migration and rollback whenever persistent meaning changes.
+The Annals release, library schema, Nucleus public protocol, Clockwork
+definition/binding identity, immutable tool/schema registrations, and installed
+packaging are separate compatibility axes. Define migration and rollback
+whenever persistent meaning changes.
 Preserve exact domain results after later runtime failure and retain historical
 decoders where Nucleus records require them.
 

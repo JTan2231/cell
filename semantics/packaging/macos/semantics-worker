@@ -1,19 +1,37 @@
-#!/bin/zsh
+#!/bin/sh
 
-unsetopt VERBOSE XTRACE
+set -eu
 umask 077
 
-if [[ -x /opt/homebrew/bin/codex ]]; then
+runner_dir=${0%/*}
+maintenance="$HOME/Library/Application Support/Semantics/.clockwork-maintenance"
+
+if [ -L "$maintenance" ] || { [ -e "$maintenance" ] && [ ! -f "$maintenance" ]; }; then
+    printf '%s\n' 'semantics worker: maintenance gate is invalid' >&2
+    exit 1
+fi
+if [ -f "$maintenance" ]; then
+    if [ "$(/usr/bin/stat -f '%u' "$maintenance")" -ne "$(/usr/bin/id -u)" ] \
+        || [ "$(/usr/bin/stat -f '%Lp' "$maintenance")" != 600 ] \
+        || [ "$(/usr/bin/stat -f '%l' "$maintenance")" -ne 1 ]; then
+        printf '%s\n' 'semantics worker: maintenance gate is not private' >&2
+        exit 1
+    fi
+    printf '%s\n' 'semantics worker: maintenance gate is active' >&2
+    exit 0
+fi
+
+if [ -x /opt/homebrew/bin/codex ]; then
     codex_path=/opt/homebrew/bin/codex
-elif [[ -x "$HOME/.local/bin/codex" ]]; then
+elif [ -x "$HOME/.local/bin/codex" ]; then
     codex_path="$HOME/.local/bin/codex"
 else
-    print -u2 -- 'semantics worker: Codex executable is unavailable'
+    printf '%s\n' 'semantics worker: Codex executable is unavailable' >&2
     exit 1
 fi
 
-if [[ ! -x "$HOME/.local/bin/decisions" ]]; then
-    print -u2 -- 'semantics worker: Decisions executable is unavailable'
+if [ ! -x "$HOME/.local/bin/decisions" ]; then
+    printf '%s\n' 'semantics worker: Decisions executable is unavailable' >&2
     exit 1
 fi
 
@@ -23,4 +41,4 @@ exec /usr/bin/env -i \
     CONVERSATIONS_CODEX="$codex_path" \
     SEMANTICS_DECISIONS="$HOME/.local/bin/decisions" \
     SEMANTICS_DATABASE="$HOME/Library/Application Support/Semantics/semantics.db" \
-    "$HOME/.local/bin/semantics" --json intake run
+    "$runner_dir/../libexec/semantics" --json intake run

@@ -8,9 +8,10 @@ umask 077
 
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 LABEL=org.semantics.worker
+CLOCKWORK_KEY=semantics/worker
 SOURCE_FRONTEND="$SCRIPT_DIR/semantics"
 SOURCE_RUNNER="$SCRIPT_DIR/semantics-worker"
-SOURCE_PLIST="$SCRIPT_DIR/$LABEL.plist"
+SOURCE_DEFINITION="$SCRIPT_DIR/semantics-worker.clockwork.toml.in"
 SOURCE_UNINSTALLER="$SCRIPT_DIR/uninstall-user.sh"
 if [ -d "$SCRIPT_DIR/../share/chancery/semantics" ]; then
     SOURCE_CHANCERY="$SCRIPT_DIR/../share/chancery/semantics"
@@ -19,6 +20,7 @@ else
 fi
 
 binary_path=
+clockwork_path=
 install_home=${HOME:-}
 launchctl_path=/bin/launchctl
 
@@ -28,12 +30,13 @@ fail() {
 }
 
 usage() {
-    printf '%s\n' 'Usage: deploy-user.sh --binary ABSOLUTE_PATH [--home ABSOLUTE_PATH] [--launchctl ABSOLUTE_PATH]'
+    printf '%s\n' 'Usage: deploy-user.sh --binary ABSOLUTE_PATH --clockwork ABSOLUTE_PATH [--home ABSOLUTE_PATH] [--launchctl ABSOLUTE_PATH]'
 }
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --binary) [ "$#" -ge 2 ] || fail '--binary requires a path'; binary_path=$2; shift 2 ;;
+        --clockwork) [ "$#" -ge 2 ] || fail '--clockwork requires a path'; clockwork_path=$2; shift 2 ;;
         --home) [ "$#" -ge 2 ] || fail '--home requires a path'; install_home=$2; shift 2 ;;
         --launchctl) [ "$#" -ge 2 ] || fail '--launchctl requires a path'; launchctl_path=$2; shift 2 ;;
         -h|--help) usage; exit 0 ;;
@@ -42,18 +45,26 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$binary_path" ] || fail '--binary is required'
+[ -n "$clockwork_path" ] || fail '--clockwork is required'
 case "$binary_path" in /*) ;; *) fail 'binary must be absolute' ;; esac
+case "$clockwork_path" in /*) ;; *) fail 'clockwork must be absolute' ;; esac
 case "$install_home" in /*) ;; *) fail 'home must be absolute' ;; esac
 case "$launchctl_path" in /*) ;; *) fail 'launchctl must be absolute' ;; esac
-case "$install_home" in *'&'*|*'<'*|*'>'*|*'|'*|*'
-'*) fail 'home contains unsupported plist characters' ;; esac
+case "$install_home" in *'&'*|*'<'*|*'>'*|*'|'*|*'"'*|*'\'*|*'
+'*) fail 'home contains characters unsupported by schedule rendering' ;; esac
 [ -d "$install_home" ] && [ ! -L "$install_home" ] || fail 'home is not a regular directory'
+operator_uid=$(id -u)
+[ "$operator_uid" -ne 0 ] || fail 'run as the Semantics operator, not root'
+[ "$(stat -f '%u' "$install_home")" -eq "$operator_uid" ] \
+    || fail 'home is not owned by the Semantics operator'
 [ -f "$binary_path" ] && [ ! -L "$binary_path" ] && [ -x "$binary_path" ] \
     || fail 'candidate is not an executable regular file'
+[ -e "$clockwork_path" ] && [ -x "$clockwork_path" ] \
+    || fail 'Clockwork executable is unavailable'
 [ -x "$launchctl_path" ] && [ ! -L "$launchctl_path" ] || fail 'launchctl is unavailable'
 [ -x /usr/sbin/lsof ] || fail 'lsof is unavailable'
 [ -x /usr/bin/perl ] || fail 'perl is unavailable'
-for source in "$SOURCE_FRONTEND" "$SOURCE_RUNNER" "$SOURCE_PLIST" "$SOURCE_UNINSTALLER"; do
+for source in "$SOURCE_FRONTEND" "$SOURCE_RUNNER" "$SOURCE_DEFINITION" "$SOURCE_UNINSTALLER"; do
     [ -f "$source" ] && [ ! -L "$source" ] || fail "missing packaged file: $source"
 done
 
@@ -127,6 +138,43 @@ atomic_symlink() {
     mv -fT "$temporary_link" "$path"
 }
 
+maintenance_marker_is_owned() {
+    [ -f "$MAINTENANCE_MARKER" ] && [ ! -L "$MAINTENANCE_MARKER" ] \
+        && [ "$(stat -f '%u' "$MAINTENANCE_MARKER")" -eq "$operator_uid" ] \
+        && [ "$(stat -f '%Lp' "$MAINTENANCE_MARKER")" = 600 ] \
+        && [ "$(stat -f '%l' "$MAINTENANCE_MARKER")" -eq 1 ]
+}
+
+engage_maintenance() {
+    if [ -L "$MAINTENANCE_MARKER" ] \
+        || { [ -e "$MAINTENANCE_MARKER" ] && [ ! -f "$MAINTENANCE_MARKER" ]; }
+    then
+        return 1
+    fi
+    if [ -e "$MAINTENANCE_MARKER" ]; then
+        maintenance_marker_is_owned
+        return
+    fi
+    (set -C; : >"$MAINTENANCE_MARKER") || return 1
+    maintenance_created=1
+    chmod 0600 "$MAINTENANCE_MARKER" || return 1
+    maintenance_marker_is_owned
+}
+
+prepare_private_log() {
+    log_path=$1
+    if [ -L "$log_path" ] || { [ -e "$log_path" ] && [ ! -f "$log_path" ]; }; then
+        fail "Semantics log path is not a regular file: $log_path"
+    fi
+    [ -e "$log_path" ] || return 0
+    [ "$(stat -f '%u' "$log_path")" -eq "$operator_uid" ] \
+        || fail "Semantics log is not owned by the operator: $log_path"
+    [ "$(stat -f '%l' "$log_path")" -eq 1 ] \
+        || fail "Semantics log must not be hard-linked: $log_path"
+    chmod 0600 "$log_path" \
+        || fail "unable to make the Semantics log private: $log_path"
+}
+
 validate_bundle "$SOURCE_CHANCERY" source
 candidate_version=$("$binary_path" --version) || fail 'unable to read candidate version'
 case "$candidate_version" in
@@ -145,20 +193,25 @@ RELEASES_DIR="$INSTALL_DIR/releases"
 CURRENT_LINK="$INSTALL_DIR/current"
 PREVIOUS_LINK="$INSTALL_DIR/previous"
 LOCK_DIR="$INSTALL_DIR/.update-lock"
+DEPLOYMENT_BACKUPS_DIR="$STATE_DIR/backups/deployments"
+LAST_UPDATE_PATH="$INSTALL_DIR/last-update.txt"
 CLI_DIR="$install_home/.local/bin"
 CLI_PATH="$CLI_DIR/semantics"
 AGENT_DIR="$install_home/Library/LaunchAgents"
 PLIST_PATH="$AGENT_DIR/$LABEL.plist"
 LOG_DIR="$install_home/Library/Logs/Semantics"
 DATABASE_PATH="$STATE_DIR/semantics.db"
+MAINTENANCE_MARKER="$STATE_DIR/.clockwork-maintenance"
 PROVIDERS_DIR="$install_home/Library/Application Support/Chancery/providers"
 PROVIDER_LINK="$PROVIDERS_DIR/semantics"
-SERVICE_DOMAIN="gui/$(id -u)"
+SERVICE_DOMAIN="gui/$operator_uid"
 SERVICE_TARGET="$SERVICE_DOMAIN/$LABEL"
 EXPECTED_CLI="$INSTALL_DIR/current/bin/semantics"
 EXPECTED_PROVIDER="$INSTALL_DIR/current/share/chancery/semantics"
 
-for directory in "$STATE_DIR" "$INSTALL_DIR" "$RELEASES_DIR" "$LOG_DIR"; do
+for directory in "$STATE_DIR" "$INSTALL_DIR" "$RELEASES_DIR" "$LOG_DIR" \
+    "$STATE_DIR/backups" "$DEPLOYMENT_BACKUPS_DIR"
+do
     [ ! -L "$directory" ] || fail "refusing symbolic-link directory: $directory"
     [ ! -e "$directory" ] || [ -d "$directory" ] || fail "directory path is occupied: $directory"
     [ -d "$directory" ] || install -d -m 0700 "$directory"
@@ -168,11 +221,14 @@ for directory in "$CLI_DIR" "$AGENT_DIR" "$PROVIDERS_DIR"; do
     [ ! -e "$directory" ] || [ -d "$directory" ] || fail "directory path is occupied: $directory"
     [ -d "$directory" ] || install -d -m 0755 "$directory"
 done
+# Defer catchable termination across the atomic mkdir until the full cleanup
+# trap owns the newly acquired directory lock.
+trap '' HUP INT TERM
 mkdir "$LOCK_DIR" 2>/dev/null || fail 'another Semantics deployment is active'
 
-temporary=$(mktemp -d "$INSTALL_DIR/.candidate.XXXXXX")
-temporary_plist=$(mktemp "$INSTALL_DIR/.worker-plist.XXXXXX")
-transaction_dir=$(mktemp -d "$INSTALL_DIR/.transaction.XXXXXX")
+temporary=
+temporary_definition=
+transaction_dir=
 worker_lock_ready="$INSTALL_DIR/.worker-lock-ready.$$"
 worker_lock_stop="$INSTALL_DIR/.worker-lock-stop.$$"
 old_current=
@@ -180,19 +236,28 @@ old_previous=
 old_cli=
 old_provider=
 old_plist=
+prior_clockwork_digest=
+prior_clockwork_enabled=0
+clockwork_disabled=0
+clockwork_switched=0
+candidate_definition_digest=
 release=
-release_created=0
 switched=0
 committed=0
 service_was_loaded=0
 service_stopped=0
-new_service_loaded=0
-plist_changed=0
+legacy_plist_removed=0
 cli_suspended=0
 database_touched=0
 database_was_absent=0
 retain_transaction=0
+retain_current_for_recovery=0
+rollback_snapshot=
+rollback_snapshot_created=0
+old_last_update=0
+receipt_changed=0
 worker_lock_pid=
+maintenance_created=0
 
 release_worker_lock() {
     [ -n "$worker_lock_pid" ] || return 0
@@ -209,16 +274,20 @@ cleanup() {
     set +e
     rollback_ready=1
     if [ "$status" -ne 0 ] && [ "$committed" -eq 0 ]; then
-        rollback_service_loaded=0
-        if [ "$new_service_loaded" -eq 1 ]; then
-            rollback_service_loaded=1
-        elif [ "$plist_changed" -eq 1 ] \
-            && "$launchctl_path" print "$SERVICE_TARGET" >/dev/null 2>&1; then
-            rollback_service_loaded=1
+        # Clockwork is the only scheduler allowed after handoff. Disable the
+        # candidate before restoring product state so no new activation can
+        # enter the rollback window.
+        if [ "$clockwork_disabled" -eq 1 ] || [ "$clockwork_switched" -eq 1 ]; then
+            HOME="$install_home" "$clockwork_path" --json binding disable \
+                "$CLOCKWORK_KEY" >/dev/null 2>&1 || rollback_ready=0
         fi
-        if [ "$rollback_service_loaded" -eq 1 ]; then
-            "$launchctl_path" bootout "$SERVICE_TARGET" >/dev/null 2>&1 \
-                || rollback_ready=0
+        # Clockwork cannot clear a selected definition back to null. Once a
+        # formerly unselected binding may have selected the candidate, retain
+        # maintenance plus its private release selector as recovery evidence
+        # instead of claiming a complete rollback to the old release.
+        if [ "$clockwork_switched" -eq 1 ] && [ -z "$prior_clockwork_digest" ]; then
+            rollback_ready=0
+            retain_current_for_recovery=1
         fi
         public_cli_was_present=0
         if [ "$switched" -eq 1 ] && { [ -e "$CLI_PATH" ] || [ -L "$CLI_PATH" ]; }; then
@@ -246,7 +315,7 @@ cleanup() {
                 done
             fi
         fi
-        if [ "$plist_changed" -eq 1 ] && [ "$rollback_ready" -eq 1 ]; then
+        if [ "$legacy_plist_removed" -eq 1 ] && [ "$rollback_ready" -eq 1 ]; then
             if [ -n "$old_plist" ]; then
                 cp -p "$old_plist" "$PLIST_PATH" || rollback_ready=0
             else
@@ -277,7 +346,24 @@ cleanup() {
                 rm -f "$CLI_PATH" || rollback_ready=0
             fi
         fi
-        if [ "$rollback_ready" -eq 1 ] && [ "$service_stopped" -eq 1 ] \
+        if [ "$rollback_ready" -eq 1 ] \
+            && { [ "$clockwork_disabled" -eq 1 ] || [ "$clockwork_switched" -eq 1 ]; }
+        then
+            if [ "$prior_clockwork_enabled" -eq 1 ]; then
+                HOME="$install_home" "$clockwork_path" --json binding switch \
+                    "$CLOCKWORK_KEY" "$prior_clockwork_digest" >/dev/null 2>&1 \
+                    || rollback_ready=0
+            elif [ -n "$prior_clockwork_digest" ]; then
+                HOME="$install_home" "$clockwork_path" --json binding disable \
+                    "$CLOCKWORK_KEY" --select "$prior_clockwork_digest" >/dev/null 2>&1 \
+                    || rollback_ready=0
+            else
+                HOME="$install_home" "$clockwork_path" --json binding disable \
+                    "$CLOCKWORK_KEY" >/dev/null 2>&1 || rollback_ready=0
+            fi
+        fi
+        if [ "$rollback_ready" -eq 1 ] && [ "$prior_clockwork_enabled" -eq 0 ] \
+            && [ "$service_stopped" -eq 1 ] \
             && [ "$service_was_loaded" -eq 1 ] && [ -n "$old_plist" ]; then
             "$launchctl_path" bootstrap "$SERVICE_DOMAIN" "$PLIST_PATH" >/dev/null 2>&1 \
                 || rollback_ready=0
@@ -285,35 +371,67 @@ cleanup() {
         if [ "$rollback_ready" -eq 1 ] && ! release_worker_lock; then
             rollback_ready=0
         fi
+        if [ "$rollback_ready" -eq 1 ] && [ "$maintenance_created" -eq 1 ]; then
+            maintenance_marker_is_owned && rm -f "$MAINTENANCE_MARKER" \
+                && [ ! -e "$MAINTENANCE_MARKER" ] && [ ! -L "$MAINTENANCE_MARKER" ] \
+                || rollback_ready=0
+            [ "$rollback_ready" -eq 0 ] || maintenance_created=0
+        fi
         if [ "$rollback_ready" -eq 0 ]; then
-            # Fail closed while the deployment still holds the worker flock.
-            # A loaded but unquiescent launchd job then has no executable
-            # current runner path, even after the flock holder exits.
-            rm -f "$CLI_PATH" "$PROVIDER_LINK" "$CURRENT_LINK" "$PREVIOUS_LINK" "$PLIST_PATH"
+            # The release-independent maintenance marker remains after the
+            # worker flock is released, so even an unproven loaded Clockwork
+            # projection cannot enter Semantics domain work.
+            HOME="$install_home" "$clockwork_path" --json binding disable \
+                "$CLOCKWORK_KEY" >/dev/null 2>&1 || true
+            "$launchctl_path" bootout "$SERVICE_TARGET" >/dev/null 2>&1 || true
+            rm -f "$CLI_PATH" "$PROVIDER_LINK" "$PREVIOUS_LINK" "$PLIST_PATH"
+            [ "$retain_current_for_recovery" -eq 1 ] || rm -f "$CURRENT_LINK"
             retain_transaction=1
-            printf '%s\n' 'semantics user deploy: rollback could not prove service/database quiescence or restore every owned artifact; current runner, plist, and public selectors are disabled' >&2
+            printf '%s\n' 'semantics user deploy: rollback could not prove scheduler/database quiescence or restore every owned artifact; domain admission is maintenance-gated, scheduler cleanup was attempted, and public selectors were removed' >&2
             printf 'semantics user deploy: private rollback backup retained at %s\n' "$transaction_dir" >&2
             release_worker_lock >/dev/null 2>&1 || true
-        elif [ "$release_created" -eq 1 ] && [ -n "$release" ]; then
-            rm -rf "$release"
+        fi
+        if [ "$rollback_snapshot_created" -eq 1 ]; then
+            rm -rf "$rollback_snapshot"
+        fi
+        if [ "$receipt_changed" -eq 1 ]; then
+            if [ "$old_last_update" -eq 1 ]; then
+                install -m 0600 "$transaction_dir/last-update.txt" "$LAST_UPDATE_PATH"
+            else
+                rm -f "$LAST_UPDATE_PATH"
+            fi
         fi
     fi
-    rm -rf "$temporary"
-    rm -f "$temporary_plist"
+    [ -z "$temporary" ] || rm -rf "$temporary"
+    [ -z "$temporary_definition" ] || rm -f "$temporary_definition"
     release_worker_lock >/dev/null 2>&1 || true
     rm -f "$worker_lock_ready" "$worker_lock_stop"
     [ -z "$old_plist" ] || rm -f "$old_plist"
-    [ "$retain_transaction" -eq 1 ] || rm -rf "$transaction_dir"
+    [ "$retain_transaction" -eq 1 ] || [ -z "$transaction_dir" ] || rm -rf "$transaction_dir"
     rmdir "$LOCK_DIR" >/dev/null 2>&1 || true
     exit "$status"
 }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
+temporary=$(mktemp -d "$INSTALL_DIR/.candidate.XXXXXX") \
+    || fail 'unable to create the Semantics release staging directory'
+temporary_definition=$(mktemp "$INSTALL_DIR/.worker-definition.XXXXXX") \
+    || fail 'unable to create the Clockwork definition staging file'
+transaction_dir=$(mktemp -d "$INSTALL_DIR/.transaction.XXXXXX") \
+    || fail 'unable to create the Semantics transaction directory'
+
 if [ -L "$CURRENT_LINK" ]; then old_current=$(readlink "$CURRENT_LINK"); elif [ -e "$CURRENT_LINK" ]; then fail "$CURRENT_LINK must be a symbolic link"; fi
 if [ -L "$PREVIOUS_LINK" ]; then old_previous=$(readlink "$PREVIOUS_LINK"); elif [ -e "$PREVIOUS_LINK" ]; then fail "$PREVIOUS_LINK must be a symbolic link"; fi
 if [ -L "$CLI_PATH" ]; then old_cli=$(readlink "$CLI_PATH"); elif [ -e "$CLI_PATH" ]; then fail "$CLI_PATH exists and is not a symbolic link"; fi
 if [ -L "$PROVIDER_LINK" ]; then old_provider=$(readlink "$PROVIDER_LINK"); elif [ -e "$PROVIDER_LINK" ]; then fail "$PROVIDER_LINK exists and is not a symbolic link"; fi
+if [ -L "$LAST_UPDATE_PATH" ] || { [ -e "$LAST_UPDATE_PATH" ] && [ ! -f "$LAST_UPDATE_PATH" ]; }; then
+    fail 'last-update receipt is not a regular file'
+fi
+if [ -f "$LAST_UPDATE_PATH" ]; then
+    old_last_update=1
+    install -m 0600 "$LAST_UPDATE_PATH" "$transaction_dir/last-update.txt"
+fi
 
 validate_release_selector() {
     selector=$1
@@ -328,19 +446,26 @@ validate_release_selector() {
         || fail "selected Semantics release has no owned manifest: $selector"
     [ "$(awk 'END { print NR }' "$selected_manifest")" -eq 10 ] \
         || fail "selected Semantics release manifest is not canonical: $selector"
-    [ "$(sed -n '1p' "$selected_manifest")" = 'format=1' ] \
-        || fail "selected Semantics release manifest format is unsupported: $selector"
+    selected_format=$(sed -n '1s/^format=//p' "$selected_manifest")
+    case "$selected_format" in
+        1|2) ;;
+        *) fail "selected Semantics release manifest format is unsupported: $selector" ;;
+    esac
     selected_manifest_id=$(sed -n '2s/^release_id=//p' "$selected_manifest")
     selected_version=$(sed -n '3s/^version=//p' "$selected_manifest")
     selected_binary_hash=$(sed -n '4s/^binary_sha256=//p' "$selected_manifest")
     selected_frontend_hash=$(sed -n '5s/^frontend_sha256=//p' "$selected_manifest")
     selected_runner_hash=$(sed -n '6s/^runner_sha256=//p' "$selected_manifest")
-    selected_plist_hash=$(sed -n '7s/^plist_sha256=//p' "$selected_manifest")
+    if [ "$selected_format" -eq 1 ]; then
+        selected_schedule_hash=$(sed -n '7s/^plist_sha256=//p' "$selected_manifest")
+    else
+        selected_schedule_hash=$(sed -n '7s/^clockwork_template_sha256=//p' "$selected_manifest")
+    fi
     selected_deployer_hash=$(sed -n '8s/^deployer_sha256=//p' "$selected_manifest")
     selected_uninstaller_hash=$(sed -n '9s/^uninstaller_sha256=//p' "$selected_manifest")
     selected_chancery_hash=$(sed -n '10s/^chancery_sha256=//p' "$selected_manifest")
     printf '%s\n' "$selected_manifest_id" "$selected_binary_hash" "$selected_frontend_hash" \
-        "$selected_runner_hash" "$selected_plist_hash" "$selected_deployer_hash" \
+        "$selected_runner_hash" "$selected_schedule_hash" "$selected_deployer_hash" \
         "$selected_uninstaller_hash" "$selected_chancery_hash" \
         | grep -Eqv '^[0-9a-f]{64}$' \
         && fail "selected Semantics release manifest hashes are invalid: $selector"
@@ -355,17 +480,23 @@ validate_release_selector() {
         "$selected_release/package/semantics" \
         "$selected_release/package/semantics-worker" \
         "$selected_release/package/deploy-user.sh" \
-        "$selected_release/package/uninstall-user.sh" \
-        "$selected_release/package/$LABEL.plist"
+        "$selected_release/package/uninstall-user.sh"
     do
         [ -f "$owned_file" ] && [ ! -L "$owned_file" ] \
             || fail "selected Semantics release is incomplete: $selector"
     done
+    if [ "$selected_format" -eq 1 ]; then
+        selected_schedule_file="$selected_release/package/$LABEL.plist"
+    else
+        selected_schedule_file="$selected_release/package/semantics-worker.clockwork.toml.in"
+    fi
+    [ -f "$selected_schedule_file" ] && [ ! -L "$selected_schedule_file" ] \
+        || fail "selected Semantics release has no owned schedule template: $selector"
     validate_bundle "$selected_release/share/chancery/semantics" installed
     actual_binary_hash=$(shasum -a 256 "$selected_release/libexec/semantics" | awk '{print $1}')
     actual_frontend_hash=$(shasum -a 256 "$selected_release/bin/semantics" | awk '{print $1}')
     actual_runner_hash=$(shasum -a 256 "$selected_release/bin/semantics-worker" | awk '{print $1}')
-    actual_plist_hash=$(shasum -a 256 "$selected_release/package/$LABEL.plist" | awk '{print $1}')
+    actual_schedule_hash=$(shasum -a 256 "$selected_schedule_file" | awk '{print $1}')
     actual_deployer_hash=$(shasum -a 256 "$selected_release/package/deploy-user.sh" | awk '{print $1}')
     actual_uninstaller_hash=$(shasum -a 256 "$selected_release/package/uninstall-user.sh" | awk '{print $1}')
     actual_chancery_hash=$(bundle_hash "$selected_release/share/chancery/semantics")
@@ -376,12 +507,12 @@ validate_release_selector() {
     [ "$actual_runner_hash" = "$selected_runner_hash" ] || fail "selected Semantics runner is tampered: $selector"
     [ "$(shasum -a 256 "$selected_release/package/semantics-worker" | awk '{print $1}')" = "$selected_runner_hash" ] \
         || fail "selected packaged Semantics runner is tampered: $selector"
-    [ "$actual_plist_hash" = "$selected_plist_hash" ] || fail "selected Semantics plist is tampered: $selector"
+    [ "$actual_schedule_hash" = "$selected_schedule_hash" ] || fail "selected Semantics schedule template is tampered: $selector"
     [ "$actual_deployer_hash" = "$selected_deployer_hash" ] || fail "selected Semantics deployer is tampered: $selector"
     [ "$actual_uninstaller_hash" = "$selected_uninstaller_hash" ] || fail "selected Semantics uninstaller is tampered: $selector"
     [ "$actual_chancery_hash" = "$selected_chancery_hash" ] || fail "selected Semantics provider is tampered: $selector"
     actual_release_id=$(printf '%s\n' "$actual_binary_hash" "$actual_frontend_hash" \
-        "$actual_runner_hash" "$actual_plist_hash" "$actual_deployer_hash" \
+        "$actual_runner_hash" "$actual_schedule_hash" "$actual_deployer_hash" \
         "$actual_uninstaller_hash" "$actual_chancery_hash" | shasum -a 256 | awk '{print $1}')
     [ "$actual_release_id" = "$selected_id" ] \
         || fail "selected Semantics release content ID does not match: $selector"
@@ -389,6 +520,11 @@ validate_release_selector() {
 
 if [ -n "$old_current" ]; then
     validate_release_selector "$old_current"
+    current_release_format=$selected_format
+    current_schedule_template=$selected_schedule_file
+    current_clockwork_release=$selected_release
+    current_clockwork_release_id=$selected_id
+    current_clockwork_runner_hash=$selected_runner_hash
     [ -z "$old_previous" ] || validate_release_selector "$old_previous"
     [ -z "$old_cli" ] || [ "$old_cli" = "$EXPECTED_CLI" ] \
         || fail "installed command is not owned by Semantics: $CLI_PATH"
@@ -398,14 +534,98 @@ fi
 [ -z "$old_provider" ] || [ "$old_provider" = "$EXPECTED_PROVIDER" ] \
     || fail "provider selector is not owned by Semantics: $PROVIDER_LINK"
 
+prove_owned_clockwork_definition() {
+    definition_digest=$1
+    [ -n "${current_clockwork_release:-}" ] \
+        || fail 'selected Clockwork binding has no current Semantics release'
+    [ "$current_release_format" -eq 2 ] \
+        || fail 'selected Clockwork binding cannot be owned by a legacy Semantics release'
+    definition_show="$transaction_dir/clockwork-definition.json"
+    HOME="$install_home" "$clockwork_path" --json definition show "$definition_digest" \
+        >"$definition_show" 2>"$definition_show.stderr" \
+        || fail 'unable to inspect the selected Semantics Clockwork definition'
+    [ "$(/usr/bin/plutil -extract ok raw "$definition_show" 2>/dev/null)" = true ] \
+        && [ "$(/usr/bin/plutil -extract data.digest raw "$definition_show" 2>/dev/null)" = "$definition_digest" ] \
+        && [ "$(/usr/bin/plutil -extract data.key raw "$definition_show" 2>/dev/null)" = "$CLOCKWORK_KEY" ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.schema_version raw "$definition_show" 2>/dev/null)" = 1 ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.key raw "$definition_show" 2>/dev/null)" = "$CLOCKWORK_KEY" ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.release_id raw "$definition_show" 2>/dev/null)" = "$current_clockwork_release_id" ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.release_root raw "$definition_show" 2>/dev/null)" = "$current_clockwork_release" ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.authority raw "$definition_show" 2>/dev/null)" = current-user-background ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.overlap raw "$definition_show" 2>/dev/null)" = skip ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.cwd raw "$definition_show" 2>/dev/null)" = "$STATE_DIR" ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.schedule.kind raw "$definition_show" 2>/dev/null)" = interval ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.schedule.seconds raw "$definition_show" 2>/dev/null)" = 60 ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.schedule.run_at_load raw "$definition_show" 2>/dev/null)" = false ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.launch.kind raw "$definition_show" 2>/dev/null)" = interpreted ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.launch.interpreter raw "$definition_show" 2>/dev/null)" = /bin/sh ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.launch.interpreter_sha256 raw "$definition_show" 2>/dev/null)" = "$interpreter_hash" ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.launch.script raw "$definition_show" 2>/dev/null)" = "$current_clockwork_release/bin/semantics-worker" ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.launch.script_sha256 raw "$definition_show" 2>/dev/null)" = "$current_clockwork_runner_hash" ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.environment.HOME raw "$definition_show" 2>/dev/null)" = "$install_home" ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.output.stdout raw "$definition_show" 2>/dev/null)" = "$LOG_DIR/worker.stdout.log" ] \
+        && [ "$(/usr/bin/plutil -extract data.manifest.output.stderr raw "$definition_show" 2>/dev/null)" = "$LOG_DIR/worker.stderr.log" ] \
+        || fail 'selected Clockwork definition is not owned by the current Semantics release'
+    if /usr/bin/plutil -extract data.manifest.timeout_seconds raw "$definition_show" >/dev/null 2>&1 \
+        || /usr/bin/plutil -extract data.manifest.arguments.0 raw "$definition_show" >/dev/null 2>&1; then
+        fail 'selected Clockwork definition adds unsupported timeout or arguments'
+    fi
+    environment_keys=$(/usr/bin/plutil -extract data.manifest.environment xml1 -o - \
+        "$definition_show" 2>/dev/null | awk '/<key>/{count++} END {print count+0}')
+    [ "$environment_keys" -eq 1 ] \
+        || fail 'selected Clockwork definition contains foreign environment entries'
+}
+
+interpreter_hash=$(shasum -a 256 /bin/sh | awk '{print $1}')
+
+if clockwork_show=$(HOME="$install_home" "$clockwork_path" --json \
+    binding show "$CLOCKWORK_KEY" 2>"$transaction_dir/clockwork-show.stderr")
+then
+    clockwork_compact=$(printf '%s' "$clockwork_show" | tr -d '[:space:]')
+    prior_clockwork_digest=$(printf '%s\n' "$clockwork_compact" | sed -n \
+        's/.*"definition_digest":"\([0-9a-f]\{64\}\)".*/\1/p')
+    case "$clockwork_compact" in
+        *'"enabled":true'*)
+            prior_clockwork_enabled=1
+            [ -n "$prior_clockwork_digest" ] \
+                || fail 'enabled Clockwork binding has no definition digest'
+            ;;
+        *'"enabled":false'*)
+            prior_clockwork_enabled=0
+            if [ -z "$prior_clockwork_digest" ]; then
+                printf '%s\n' "$clockwork_compact" | grep -F '"definition_digest":null' >/dev/null \
+                    || fail 'disabled Clockwork binding has an invalid definition digest'
+            fi
+            ;;
+        *) fail 'Clockwork returned an invalid binding document' ;;
+    esac
+    [ -z "$prior_clockwork_digest" ] \
+        || prove_owned_clockwork_definition "$prior_clockwork_digest"
+else
+    grep -F '"code":"binding_not_found"' "$transaction_dir/clockwork-show.stderr" >/dev/null \
+        || fail 'unable to inspect the Clockwork binding'
+fi
+
 if [ -L "$PLIST_PATH" ]; then fail "LaunchAgent must not be a symbolic link: $PLIST_PATH"; fi
 if [ -e "$PLIST_PATH" ] && [ ! -f "$PLIST_PATH" ]; then fail "LaunchAgent path is occupied: $PLIST_PATH"; fi
 if [ -f "$PLIST_PATH" ]; then
     [ -n "$old_current" ] || fail 'LaunchAgent has no owned Semantics release'
-    [ "$(plutil -extract Label raw "$PLIST_PATH" 2>/dev/null)" = "$LABEL" ] \
-        || fail 'LaunchAgent label is not owned by Semantics'
-    [ "$(plutil -extract ProgramArguments.1 raw "$PLIST_PATH" 2>/dev/null)" = "$INSTALL_DIR/current/bin/semantics-worker" ] \
-        || fail 'LaunchAgent runner is not owned by Semantics'
+    [ "$current_release_format" -eq 1 ] \
+        || fail 'legacy LaunchAgent is not owned by the current Semantics release'
+    [ "$(stat -f '%u' "$PLIST_PATH")" -eq "$operator_uid" ] \
+        || fail 'legacy LaunchAgent is not owned by the Semantics operator'
+    [ "$(stat -f '%Lp' "$PLIST_PATH")" = 644 ] \
+        || fail 'legacy LaunchAgent permissions are not owned by Semantics'
+    expected_legacy_plist_hash=$(sed \
+        -e "s|__SEMANTICS_WORKER_RUNNER__|$INSTALL_DIR/current/bin/semantics-worker|g" \
+        -e "s|__SEMANTICS_STATE_DIR__|$STATE_DIR|g" \
+        -e "s|__SEMANTICS_HOME__|$install_home|g" \
+        -e "s|__SEMANTICS_WORKER_STDOUT__|$LOG_DIR/worker.stdout.log|g" \
+        -e "s|__SEMANTICS_WORKER_STDERR__|$LOG_DIR/worker.stderr.log|g" \
+        "$current_schedule_template" | shasum -a 256 | awk '{print $1}')
+    [ "$(shasum -a 256 "$PLIST_PATH" | awk '{print $1}')" = \
+        "$expected_legacy_plist_hash" ] \
+        || fail 'legacy LaunchAgent bytes do not match the current Semantics release'
     old_plist=$(mktemp "$INSTALL_DIR/.old-worker-plist.XXXXXX")
     cp -p "$PLIST_PATH" "$old_plist"
     cp -p "$PLIST_PATH" "$transaction_dir/prior-worker.plist"
@@ -414,15 +634,17 @@ if "$launchctl_path" print "$SERVICE_TARGET" >/dev/null 2>&1; then
     service_was_loaded=1
     [ -n "$old_plist" ] || fail 'loaded Semantics label has no owned recoverable plist'
 fi
+[ "$prior_clockwork_enabled" -eq 0 ] || [ "$service_was_loaded" -eq 0 ] \
+    || fail 'Clockwork and the legacy Semantics LaunchAgent are both active'
 
 binary_hash=$(shasum -a 256 "$binary_path" | awk '{print $1}')
 frontend_hash=$(shasum -a 256 "$SOURCE_FRONTEND" | awk '{print $1}')
 runner_hash=$(shasum -a 256 "$SOURCE_RUNNER" | awk '{print $1}')
-plist_hash=$(shasum -a 256 "$SOURCE_PLIST" | awk '{print $1}')
+definition_template_hash=$(shasum -a 256 "$SOURCE_DEFINITION" | awk '{print $1}')
 deployer_hash=$(shasum -a 256 "$0" | awk '{print $1}')
 uninstaller_hash=$(shasum -a 256 "$SOURCE_UNINSTALLER" | awk '{print $1}')
 chancery_hash=$(bundle_hash "$SOURCE_CHANCERY")
-release_id=$(printf '%s\n' "$binary_hash" "$frontend_hash" "$runner_hash" "$plist_hash" \
+release_id=$(printf '%s\n' "$binary_hash" "$frontend_hash" "$runner_hash" "$definition_template_hash" \
     "$deployer_hash" "$uninstaller_hash" "$chancery_hash" | shasum -a 256 | awk '{print $1}')
 release="$RELEASES_DIR/$release_id"
 
@@ -435,7 +657,7 @@ elif [ -d "$release" ]; then
     [ "$(shasum -a 256 "$release/libexec/semantics" | awk '{print $1}')" = "$binary_hash" ] || fail 'existing release binary is tampered'
     [ "$(shasum -a 256 "$release/bin/semantics" | awk '{print $1}')" = "$frontend_hash" ] || fail 'existing release frontend is tampered'
     [ "$(shasum -a 256 "$release/bin/semantics-worker" | awk '{print $1}')" = "$runner_hash" ] || fail 'existing release runner is tampered'
-    [ "$(shasum -a 256 "$release/package/$LABEL.plist" | awk '{print $1}')" = "$plist_hash" ] || fail 'existing release plist is tampered'
+    [ "$(shasum -a 256 "$release/package/semantics-worker.clockwork.toml.in" | awk '{print $1}')" = "$definition_template_hash" ] || fail 'existing release Clockwork template is tampered'
     [ "$(shasum -a 256 "$release/package/deploy-user.sh" | awk '{print $1}')" = "$deployer_hash" ] || fail 'existing release deployer is tampered'
     [ "$(shasum -a 256 "$release/package/uninstall-user.sh" | awk '{print $1}')" = "$uninstaller_hash" ] || fail 'existing release uninstaller is tampered'
     [ "$(bundle_hash "$release/share/chancery/semantics")" = "$chancery_hash" ] || fail 'existing release provider is tampered'
@@ -448,16 +670,17 @@ else
     install -m 0755 "$SOURCE_RUNNER" "$temporary/package/semantics-worker"
     install -m 0755 "$0" "$temporary/package/deploy-user.sh"
     install -m 0755 "$SOURCE_UNINSTALLER" "$temporary/package/uninstall-user.sh"
-    install -m 0644 "$SOURCE_PLIST" "$temporary/package/$LABEL.plist"
+    install -m 0644 "$SOURCE_DEFINITION" \
+        "$temporary/package/semantics-worker.clockwork.toml.in"
     cp -R "$SOURCE_CHANCERY" "$temporary/share/chancery/semantics"
     {
-        printf '%s\n' 'format=1'
+        printf '%s\n' 'format=2'
         printf 'release_id=%s\n' "$release_id"
         printf 'version=%s\n' "$version"
         printf 'binary_sha256=%s\n' "$binary_hash"
         printf 'frontend_sha256=%s\n' "$frontend_hash"
         printf 'runner_sha256=%s\n' "$runner_hash"
-        printf 'plist_sha256=%s\n' "$plist_hash"
+        printf 'clockwork_template_sha256=%s\n' "$definition_template_hash"
         printf 'deployer_sha256=%s\n' "$deployer_hash"
         printf 'uninstaller_sha256=%s\n' "$uninstaller_hash"
         printf 'chancery_sha256=%s\n' "$chancery_hash"
@@ -465,19 +688,9 @@ else
     chmod 0444 "$temporary/manifest.txt"
     chmod -R go-w "$temporary"
     mv "$temporary" "$release"
-    release_created=1
     temporary=$(mktemp -d "$INSTALL_DIR/.candidate.XXXXXX")
     validate_release_selector "releases/$release_id"
 fi
-
-sed \
-    -e "s|__SEMANTICS_WORKER_RUNNER__|$INSTALL_DIR/current/bin/semantics-worker|g" \
-    -e "s|__SEMANTICS_STATE_DIR__|$STATE_DIR|g" \
-    -e "s|__SEMANTICS_HOME__|$install_home|g" \
-    -e "s|__SEMANTICS_WORKER_STDOUT__|$LOG_DIR/worker.stdout.log|g" \
-    -e "s|__SEMANTICS_WORKER_STDERR__|$LOG_DIR/worker.stderr.log|g" \
-    "$SOURCE_PLIST" >"$temporary_plist"
-plutil -lint "$temporary_plist" >/dev/null || fail 'generated worker LaunchAgent is invalid'
 
 if [ -x /opt/homebrew/bin/codex ]; then
     codex_path=/opt/homebrew/bin/codex
@@ -488,10 +701,46 @@ else
 fi
 [ -x "$install_home/.local/bin/decisions" ] || fail 'Decisions executable is unavailable'
 
+engage_maintenance \
+    || fail 'Semantics maintenance gate is invalid or unavailable'
+prepare_private_log "$LOG_DIR/worker.stdout.log"
+prepare_private_log "$LOG_DIR/worker.stderr.log"
+
+sed \
+    -e "s|__RELEASE_ID__|$release_id|g" \
+    -e "s|__RELEASE_ROOT__|$release|g" \
+    -e "s|__SEMANTICS_STATE__|$STATE_DIR|g" \
+    -e "s|__SEMANTICS_HOME__|$install_home|g" \
+    -e "s|__SEMANTICS_LOGS__|$LOG_DIR|g" \
+    -e "s|__INTERPRETER_SHA256__|$interpreter_hash|g" \
+    -e "s|__RUNNER_SHA256__|$runner_hash|g" \
+    "$release/package/semantics-worker.clockwork.toml.in" >"$temporary_definition"
+chmod 0600 "$temporary_definition"
+definition_output=$(HOME="$install_home" "$clockwork_path" --json \
+    definition register "$temporary_definition") \
+    || fail 'Clockwork rejected the candidate worker definition'
+definition_compact=$(printf '%s' "$definition_output" | tr -d '[:space:]')
+candidate_definition_digest=$(printf '%s\n' "$definition_compact" | sed -n \
+    's/.*"digest":"\([0-9a-f]\{64\}\)".*/\1/p')
+[ -n "$candidate_definition_digest" ] \
+    || fail 'Clockwork returned no candidate definition digest'
+
+# Treat the transition as changed before calling Clockwork because an error
+# may still mean Clockwork failed closed with the binding disabled.
+clockwork_disabled=1
+HOME="$install_home" "$clockwork_path" --json binding disable \
+    "$CLOCKWORK_KEY" >/dev/null \
+    || fail 'unable to disable the Clockwork worker binding'
 if [ "$service_was_loaded" -eq 1 ]; then
+    # A failing bootout can still have stopped the service; make rollback
+    # prove restoration instead of assuming no transition occurred.
+    service_stopped=1
     "$launchctl_path" bootout "$SERVICE_TARGET" >/dev/null \
         || fail 'unable to stop the owned worker service'
-    service_stopped=1
+fi
+if [ -n "$old_plist" ]; then
+    rm -f "$PLIST_PATH"
+    legacy_plist_removed=1
 fi
 if [ -n "$old_cli" ]; then
     rm -f "$CLI_PATH"
@@ -535,6 +784,8 @@ done
     printf 'cli=%s\n' "$old_cli"
     printf 'provider=%s\n' "$old_provider"
     printf 'service_was_loaded=%s\n' "$service_was_loaded"
+    printf 'clockwork_enabled=%s\n' "$prior_clockwork_enabled"
+    printf 'clockwork_definition=%s\n' "$prior_clockwork_digest"
 } >"$transaction_dir/prior-install.txt"
 chmod 0600 "$transaction_dir/prior-install.txt"
 
@@ -600,16 +851,58 @@ for check_name in database participation_markers decisions_lifecycle conversatio
 done
 case "$doctor_compact" in *'"detail":"schema1at'*) ;; *) fail 'candidate doctor did not prove schema version 1' ;; esac
 
-install -m 0644 "$temporary_plist" "$PLIST_PATH"
-plist_changed=1
 atomic_symlink "$EXPECTED_CLI" "$CLI_PATH"
 cli_suspended=0
-"$launchctl_path" bootstrap "$SERVICE_DOMAIN" "$PLIST_PATH" >/dev/null 2>&1 \
-    || fail 'launchd rejected the worker service'
-new_service_loaded=1
-"$launchctl_path" print "$SERVICE_TARGET" >/dev/null 2>&1 \
-    || fail 'launchd did not report the worker service loaded'
+clockwork_switched=1
+HOME="$install_home" "$clockwork_path" --json binding switch \
+    "$CLOCKWORK_KEY" "$candidate_definition_digest" >/dev/null \
+    || fail 'Clockwork rejected the worker binding switch'
+
+completed_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+if [ -n "$old_current" ] && [ "$old_current" != "releases/$release_id" ]; then
+    rollback_snapshot="$DEPLOYMENT_BACKUPS_DIR/pre-$release_id-$$"
+    rollback_stage="$transaction_dir/rollback-snapshot"
+    install -d -m 0700 "$rollback_stage"
+    install -m 0600 "$transaction_dir/prior-install.txt" \
+        "$rollback_stage/prior-install.txt"
+    if [ -f "$transaction_dir/prior-worker.plist" ]; then
+        install -m 0600 "$transaction_dir/prior-worker.plist" \
+            "$rollback_stage/prior-worker.plist"
+    fi
+    if [ -f "$transaction_dir/semantics.db" ]; then
+        install -m 0600 "$transaction_dir/semantics.db" \
+            "$rollback_stage/semantics.db"
+        for suffix in wal shm journal; do
+            [ ! -f "$transaction_dir/semantics.db-$suffix" ] || \
+                install -m 0600 "$transaction_dir/semantics.db-$suffix" \
+                    "$rollback_stage/semantics.db-$suffix"
+        done
+    fi
+    mv "$rollback_stage" "$rollback_snapshot"
+    rollback_snapshot_created=1
+fi
+receipt="$LAST_UPDATE_PATH.tmp.$$"
+{
+    printf 'release=releases/%s\n' "$release_id"
+    printf 'previous=%s\n' "$old_current"
+    printf 'clockwork_definition=%s\n' "$candidate_definition_digest"
+    printf 'previous_clockwork_definition=%s\n' "$prior_clockwork_digest"
+    printf 'previous_clockwork_enabled=%s\n' "$prior_clockwork_enabled"
+    printf 'legacy_launchagent_loaded=%s\n' "$service_was_loaded"
+    printf 'rollback_snapshot=%s\n' "$rollback_snapshot"
+    printf 'completed_at=%s\n' "$completed_at"
+} >"$receipt"
+chmod 0600 "$receipt"
+mv -f "$receipt" "$INSTALL_DIR/last-update.txt"
+receipt_changed=1
 release_worker_lock || fail 'unable to release the Semantics worker lock'
 
 committed=1
+maintenance_marker_is_owned \
+    || fail 'committed Semantics but the maintenance gate changed before removal'
+rm -f "$MAINTENANCE_MARKER" \
+    || fail 'committed Semantics but could not clear the maintenance gate'
+[ ! -e "$MAINTENANCE_MARKER" ] && [ ! -L "$MAINTENANCE_MARKER" ] \
+    || fail 'committed Semantics but the maintenance gate remains'
+maintenance_created=0
 printf 'installed semantics %s (%s)\n' "$version" "$release_id"

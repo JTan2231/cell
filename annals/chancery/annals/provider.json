@@ -3,7 +3,7 @@
   "provider": {
     "id": "annals",
     "name": "Annals",
-    "release": "0.14.1"
+    "release": "0.14.2"
   },
   "promise_scope": {
     "authoritative_for": [
@@ -12,7 +12,7 @@
     ],
     "not_authoritative_for": [
       "Source material remains evidence rather than objective truth, and an Annals reconciliation is a provisional evidence-grounded interpretation rather than a uniquely correct decomposition.",
-      "Nucleus owns shared model execution, authentication, job and attempt state, and raw protocol output; Annals Usage owns only its separately versioned consumption projection."
+      "Nucleus owns shared model execution, authentication, job and attempt state, and raw protocol output; Clockwork owns scheduled activation definitions, bindings, and execution history but not Annals inbox outcomes; Annals Usage owns only its separately versioned consumption projection."
     ],
     "inventory": {
       "covers": [
@@ -29,7 +29,7 @@
     ],
     "shared_privacy_and_retention": [
       "Annals libraries, spools, backups, logs, and Nucleus requests may retain complete private source material, exact evidence, and model context.",
-      "Only entries that invoke Nucleus may cross that private local boundary, and their entry-specific disclosure and retention rules apply."
+      "Only entries that invoke Nucleus may cross that private local boundary, and their entry-specific disclosure and retention rules apply. Clockwork retains only activation metadata and opens Annals-owned logs without ingesting their bodies."
     ],
     "compatibility_and_retirement": [
       "Provider release, entry contract version, Annals library schema, Nucleus protocol, and installed package generation are distinct compatibility identities.",

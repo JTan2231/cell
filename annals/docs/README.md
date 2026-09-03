@@ -38,7 +38,7 @@ The implemented contracts are:
   observation coverage, and account-wide Codex budget reads;
 - [Search](search.md): revision-scoped label and ancestor-context retrieval;
 - [System installation](system-installation.md): filesystem inbox operation,
-  configuration, and systemd or launchd scheduling;
+  configuration, and systemd or Clockwork scheduling;
 - [Runtime characteristics](performance-results.md): enforced limits and cost
   shape, without unsupported benchmark claims.
 

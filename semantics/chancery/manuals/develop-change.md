@@ -1,7 +1,8 @@
 # Change Semantics safely
 
 Read `semantics/AGENTS.md`, architecture, data model, the affected Decisions and
-Conversations contracts, and both Nucleus requester and operator manuals before
+Conversations contracts, both Nucleus requester and operator manuals, and the
+Clockwork schedule contract before
 changing persistent state, the toolset, service lifecycle, or packaging.
 
 ## Invariants
@@ -27,7 +28,7 @@ changing persistent state, the toolset, service lifecycle, or packaging.
 
 Use synthetic Decisions pages and Conversations cwd values. Nucleus integration
 tests use the fake local server and immutable schemas; never connect CI to the
-live service. Packaging tests use fake candidate binaries and fake launchctl in
+live service. Packaging tests use fake candidate binaries, fake Clockwork, and fake launchctl in
 an isolated home. Fixtures contain no real user content, credentials, or
 personal paths.
 
@@ -35,13 +36,14 @@ personal paths.
 semantics/ci.sh
 ```
 
-The complete gate is offline. It validates shell and plist syntax,
-runner/frontend behavior, content-addressed deployment,
+The complete gate is offline. It validates shell behavior and Clockwork template contents,
+release-local runner/frontend behavior, content-addressed deployment,
 database quiescence and rollback, retained-state uninstall, Chancery provider
 and dependency contracts, rustfmt, clippy, tests, rustdoc, and a release build.
 
 For a SQLite schema change, add an explicit versioned migration. Deployment
-must stop the worker, suspend the public command, prove the database is closed,
+must disable its Clockwork binding and any owned legacy LaunchAgent, stop the
+worker, suspend the public command, prove the database is closed,
 and privately back up the database plus `-wal`, `-shm`, and `-journal` before a
 candidate can touch it. Prove rollback after a candidate mutation and a later
 activation failure.

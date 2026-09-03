@@ -1,22 +1,23 @@
 {
   "id": "decisions.develop.change",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
   "title": "Change the Decisions product safely",
-  "summary": "Develop Decisions while preserving enacted-decision authority, fair narrow continuous observation, guarded unavailable-source recovery, immutable classification and lifecycle-event contracts, activation and SQLite migrations, delivery idempotency, and the complete product CI gate.",
+  "summary": "Develop Decisions while preserving enacted-decision authority, fair narrow continuous observation, guarded unavailable-source recovery, immutable classification and lifecycle-event contracts, exact Clockwork activation handoff, SQLite migrations, delivery idempotency, and the complete product CI gate.",
   "use_when": ["Decisions code, schemas, prompts, classifier tools, packaging, service lifecycle, or documentation should change."],
   "do_not_use_when": ["The installed Decisions capability should only be used or operated."],
   "outcome": "A reviewed product change whose standalone CI is green and whose operational contracts remain synchronized.",
-  "effects": ["May change source, tests, docs, observation scheduling and recovery, hook/service packaging, database migrations, or publish a new immutable schema/toolset identity."],
-  "authority": ["Decisions source and docs own product semantics.", "The Nucleus operator manual owns shared requester constraints."],
+  "effects": ["May change source, tests, docs, observation scheduling and recovery, hook/service packaging and Clockwork definition templates, database migrations, or publish a new immutable schema/toolset identity."],
+  "authority": ["Decisions source and docs own product semantics.", "Clockwork owns immutable scheduled-activation definitions, stable bindings, same-key admission, direct supervision, and runtime history without owning Decisions domain success.", "The Nucleus operator manual owns shared requester constraints."],
   "success": ["`decisions/ci.sh` finishes green.", "Changed registered meanings use new immutable IDs or versions and retained decoders remain valid."],
   "failure_and_recovery": ["Do not deploy or release a failing candidate.", "Restore or migrate requester state using the documented backup boundary."],
   "privacy": ["Fixtures must not contain real transcripts, credentials, email bodies, or personal paths."],
   "dependencies": [
     {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],
   "runtime": "interactive_agent",
@@ -33,6 +34,7 @@
     "Level-0 classification contains all eligible current-turn authorities, the immediately preceding assistant proposal needed to interpret them when one exists, and at most the final assistant result; context expands at most once and processing remains serial.",
     "Observation selection resumes processing first, skips queued rows before their retry time, and orders ready queued work by retry-ready time so one deferred source cannot monopolize the serial worker.",
     "The write-once activation baseline prevents pre-deployment reconciliation and is preserved across redeploy and rollback.",
+    "Clockwork templates are release-owned inputs rendered only after the release ID is known; registered definitions pin the exact release runner and explicit interpreter with digests, contain no secret or mutable selector, retain product locks and domain recovery, and scheduler mutation is covered by the private release-independent maintenance gate.",
     "An unresolved incomplete source or classification known by a run's durable completion cutoff cannot create a complete run, snapshot, or delivery; the only source-unavailable exception is explicit audited closure of a previously deferred pending correlation that remains entirely unbound.",
     "Unavailable-source abandonment requires explicit confirmation, refuses merely unfinished or bound rows, creates no verdict, candidate, or lifecycle event, preserves the baseline, is idempotent only for the exact prior closure, and makes later completed-root reconciliation fail closed.",
     "Nucleus retains no shell, workspace, web, launch-context, or direct-Codex fallback authority.",
@@ -42,7 +44,8 @@
     "Publish new immutable schema IDs or toolset versions for changed registered meaning.",
     "Scale tests to the changed boundary and retain historical decode and explicit migration behavior.",
     "Prove regular and projection ready-time ordering plus guarded, audited, idempotent unavailable-source abandonment when observation scheduling or recovery changes.",
-    "Prove Stop-hook output, foreign-hook refusal, scrubbed observer execution, serial processing, and both-service rollback when those boundaries change."
+    "Prove Stop-hook output, foreign-hook refusal, scrubbed release-local runner execution, serial processing, and exact Clockwork binding rollback when those boundaries change.",
+    "For scheduler handoff changes, prove both runners honor the private release-independent maintenance gate before domain work, the gate precedes definition registration and remains through both binding switches and the deployment commit boundary, unprovable rollback retains it, and only byte-identical current-user mode-0644 legacy plists rendered from the exact current release templates are removed or restored."
   ],
   "stop_when": [
     "A turn, activity, or correlation requirement cannot be satisfied through documented Codex hook and App Server behavior.",
@@ -183,6 +186,13 @@
         "target": "semantics",
         "kind": "authority",
         "contract": "semantics.repository.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Scheduled-activation integration relies on Clockwork's closed manifest, binding, admission, supervision, history, privacy, compatibility, and failure contract; Decisions retains its locks, retries, idempotency, and domain authority.",
+        "target": "clockwork",
+        "kind": "authority",
+        "contract": "clockwork.schedule.operate"
       }
     ]
   },

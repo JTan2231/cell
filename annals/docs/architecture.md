@@ -304,10 +304,15 @@ envelopes, and verifies the destination count. Attempted processing envelopes
 are terminalized rather than imported for another liaison run. The importer
 requires an otherwise fresh destination with both pause and maintenance
 active. The deployer clears the operator pause while maintenance still prevents
-dispatch, commits its cutover receipt, then removes maintenance and wakes
-launchd.
+dispatch, switches the exact-release Clockwork binding, commits its cutover
+receipt, then removes maintenance for the next activation.
 
 Any failure before that commit restores the previous release selector,
-configuration, library and sidecars, spool, pause state, and service. On
+configuration, library and sidecars, spool, and pause state. It restores the
+exact prior Clockwork definition only when its binding was enabled, or the
+legacy LaunchAgent, never both; a prior absent or disabled binding stays
+disabled without transient activation. Every selected definition is compared
+field for field with the complete relevant Annals release before Annals
+disables or replaces it; unknown same-key state is left untouched. On
 success the old generation remains under `backups/generations/` for explicit
 recovery.

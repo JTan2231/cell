@@ -1,6 +1,6 @@
 {
   "id": "semantics.develop.change",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -16,13 +16,13 @@
     "The shared Nucleus operator manual owns cross-product requester and service-maintenance procedures."
   ],
   "success": [
-    "semantics/ci.sh finishes green offline without contacting live Nucleus, Decisions, Conversations, launchd, or Chancery state.",
+    "semantics/ci.sh finishes green offline without contacting live Nucleus, Decisions, Conversations, Clockwork, launchd, or Chancery state.",
     "Schema and effect changes retain historical replay or add explicit migration and rollback proofs.",
     "Changed registered tool meaning uses a new immutable schema ID or toolset version and old correlations remain recoverable."
   ],
   "failure_and_recovery": [
     "Do not deploy a failing candidate or change persistent bytes without a quiescent backup and tested rollback.",
-    "Use synthetic upstreams, fake Nucleus mailbox transport, fake binaries, and fake launchctl in tests.",
+    "Use synthetic upstreams, fake Nucleus mailbox transport, fake Clockwork, fake binaries, and fake launchctl in tests.",
     "Preserve the same job and requester identity across ambiguous submission or result transport."
   ],
   "privacy": ["Fixtures must not contain real decisions, conversation text, project content, credentials, personal paths, prompts, diffs, commands, or tool payloads in logs."],
@@ -31,6 +31,7 @@
     {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
     {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
     {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2},
     {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],

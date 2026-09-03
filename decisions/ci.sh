@@ -17,8 +17,8 @@ printf '%s\n' '==> shell and packaging'
 for script in release.sh packaging/macos/decisions packaging/macos/deploy-user.sh packaging/macos/uninstall-user.sh packaging/macos/test-frontend.sh packaging/macos/test-scheduled-runner.sh packaging/macos/test-observer-runner.sh packaging/macos/test-deploy-user.sh; do
     sh -n "$script"
 done
-/bin/zsh -n packaging/macos/decisions-daily-email
-/bin/zsh -n packaging/macos/decisions-observer
+/bin/sh -n packaging/macos/decisions-daily-email
+/bin/sh -n packaging/macos/decisions-observer
 plutil -lint packaging/macos/org.decisions.daily-email.plist >/dev/null
 plutil -lint packaging/macos/org.decisions.observer.plist >/dev/null
 plutil -convert binary1 -o /dev/null -- packaging/macos/hooks.json

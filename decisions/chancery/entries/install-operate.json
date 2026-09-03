@@ -1,14 +1,14 @@
 {
   "id": "decisions.install.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install or operate the continuous Decisions services",
-  "summary": "Deploy, inspect, recover, or uninstall the user-owned Decisions CLI, schema-3 lifecycle stream, write-once observer baseline, exact Codex Stop hook, 60-second observer, retained SQLite state, Chancery selector, and local 09:00 digest service.",
+  "summary": "Deploy, inspect, recover, or uninstall the user-owned Decisions CLI, schema-3 lifecycle stream, write-once observer baseline, exact Codex Stop hook, Clockwork-activated 60-second observer and local 09:00 digest, retained SQLite state, and Chancery selector.",
   "use_when": [
     "Decisions should be installed or updated for this macOS user.",
-    "The observer, daily service, Codex hook, activation baseline, logs, database, release selector, or recovery state should be inspected.",
+    "The observer or daily Clockwork binding, Codex hook, activation baseline, logs, database, release selector, or recovery state should be inspected.",
     "One observer-deferred Stop-hook source has been proven permanently unavailable and needs explicit audited closure."
   ],
   "do_not_use_when": [
@@ -18,38 +18,40 @@
   ],
   "outcome": "A validated content-addressed user installation with post-activation continuous enacted-decision observation, or an evidence-backed operational diagnosis.",
   "effects": [
-    "Deployment writes user application support, CLI and Chancery symlinks, two LaunchAgent plists, and an exact Decisions-owned ~/.codex/hooks.json, records the observer baseline once, and may restart both Decisions services.",
+    "Deployment engages a private release-independent maintenance gate, writes user application support plus CLI and Chancery symlinks, registers two immutable release-pinned Clockwork definitions, installs an exact Decisions-owned ~/.codex/hooks.json after recording the observer baseline once, switches two stable bindings, and removes the gate only after the durable cutover has committed.",
     "Candidate doctor may transactionally migrate the Decisions database from schema version 1 or 2 to 3 after both existing services are quiesced, the public command is suspended, and a private database-plus-sidecars backup exists; version 3 preserves old rows and backfills lifecycle events.",
     "Explicit unavailable-source recovery waits for the observer-processing lock and can change one previously pending, entirely unbound queued correlation to complete/not-eligible with a fixed audit marker.",
     "The operator separately reviews and trusts the exact non-managed Stop hook through Codex; deployment never bypasses hook trust.",
-    "Uninstall removes both loaded services, the exact owned hook, and public selectors but retains database, baseline, logs, and releases."
+    "Deploy and uninstall serialize through one private installation update lock. Uninstall of a current release engages and retains the maintenance gate, disables only Clockwork bindings whose selected immutable definitions prove the exact current Decisions release, removes any exact legacy services, the exact owned hook, and public selectors, and retains Clockwork definitions and history plus the Decisions database, baseline, logs, and releases."
   ],
   "authority": [
-    "The deployer owns content-addressed release switching, hook/service file ownership, baseline cutover ordering, and rollback.",
+    "The deployer owns content-addressed release switching, exact runner and legacy-service ownership, baseline cutover ordering, Clockwork handoff, and rollback.",
     "Codex owns hook discovery, exact-definition trust, and Stop delivery on each client surface.",
-    "launchd owns observer and daily service loading and invocation.",
+    "Clockwork owns immutable definition registration, stable binding selection, same-key admission, direct process supervision, and runtime history; launchd owns delivery of generated user timers.",
     "Decisions SQLite remains observation and projection authority."
   ],
   "success": [
-    "The candidate version matches its provider bundle, doctor proves schema version 3 plus Conversations, Nucleus, and Email contract v2 readiness, selectors resolve inside the current release, and launchd accepts both plists only after baseline activation.",
+    "The candidate version matches its provider bundle, doctor proves schema version 3 plus Conversations, Nucleus, and Email contract v2 readiness, selectors resolve inside the current release, and Clockwork accepts both exact definitions and switches the daily then observer binding only after baseline activation.",
     "The exact user Stop hook is visible and trusted in /hooks and one deliberate post-baseline effectful turn appears in decisions observe status on the actual Codex surface in use.",
     "Unavailable-source abandonment is accepted only for a previously observer-deferred pending level-0 row with a retry time but no not-completed marker, source, job, authority, verdict, or candidate.",
     "The routine 09:00 path projects already-observed results without model work; only missed-observation catch-up invokes Nucleus."
   ],
   "failure_and_recovery": [
-    "A failed update restores prior selectors, both plists, exact hook bytes, quiescent database and sidecars, and both prior service states.",
+    "A provable failed update restores prior selectors, exact hook bytes, quiescent database and sidecars, any prior selected Clockwork definition digest and enabled state, and exact prior legacy plist bytes and loaded state; an absent binding may become an inert disabled tombstone, while Clockwork's guarded disabled-selection recovery restores an inactive digest without loading its schedule.",
+    "If rollback cannot prove complete restoration, including after a formerly unselected binding was switched, Decisions retains its maintenance gate and private transaction backup, attempts Clockwork and legacy scheduler cleanup, reports only proven maintenance and public-command evidence, and does not claim either external scheduler was disabled.",
     "The baseline is stored once in SQLite, survives redeploy/uninstall/reinstall, and is removed only with separately authorized retained-state deletion.",
-    "Foreign or ambiguous selectors, plists, loaded labels, hooks, or modified owned hooks are refused rather than replaced or removed.",
+    "Foreign or ambiguous selectors, selected Clockwork definitions, legacy plists, loaded labels, hooks, or modified owned hooks are refused rather than replaced or removed; an absent or unselected disabled binding has no executable authority and is left inert by uninstall.",
+    "Definition ownership is a point-in-time inspection rather than a Clockwork compare-and-swap; Decisions serializes its own deploy and uninstall, while concurrent direct same-user mutation of either stable key is unsupported and may require maintenance-gated recovery.",
     "A missed hook is recovered with decisions observe reconcile, which enqueues content-free turn correlations without classifying; decisions observe process remains serial.",
     "Processing resumes an in-flight row first, skips queued rows until their retry time, and orders ready queued work by retry-ready time so a deferred source yields to later ready work.",
     "Only after explicit recovery authorization and proof that the exact source is permanently unavailable may decisions observe abandon OBSERVATION_ID --source-unavailable close its unbound pending correlation; a merely unfinished turn or changed row is refused, exact repetition is idempotent, and later completed-root reconciliation fails closed.",
-    "Inspect body-free observer/daily stderr logs, decisions doctor, decisions observe status, launchd state, and Codex hook trust before retrying."
+    "Inspect body-free observer/daily stderr logs, decisions doctor, decisions observe status, Clockwork binding and runtime history, generated launchd state, and Codex hook trust before retrying."
   ],
   "privacy": [
     "State can contain normalized decision text and source identifiers, but hook bodies, transcripts, paths, diffs, and tool output are not stored.",
     "Unavailable-source abandonment stores no caller-provided reason and creates no verdict, candidate, classification receipt, or lifecycle event.",
-    "Observer and daily logs must not contain email bodies, conversation text, hook bodies, or credentials.",
-    "Both LaunchAgent runners use scrubbed environments and contain no Email credential key."
+    "Observer and daily logs must not contain email bodies, conversation text, hook bodies, or credentials; the empty maintenance marker contains no domain data.",
+    "Clockwork definitions contain only literal non-secret environment and no output body; both pinned Decisions runners create scrubbed environments and contain no Email credential key."
   ],
   "dependencies": [
     {
@@ -66,28 +68,35 @@
       "id": "email.message.send",
       "min_contract": 2,
       "max_contract_exclusive": 3
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read the matching installation document and inspect Decisions, Conversations, Nucleus, Email, Codex hooks, and Chancery readiness.",
-    "Build a green candidate, then run the content-addressed deployer with the exact user home and candidate path.",
-    "Verify doctor, observer status and baseline, current release/provider selectors, both loaded LaunchAgents, and body-free logs.",
+    "Read the matching installation document and inspect Decisions, Clockwork, Conversations, Nucleus, Email, Codex hooks, and Chancery readiness.",
+    "Build a green candidate, then run the content-addressed deployer with the exact user home, candidate path, and compatible Clockwork frontend.",
+    "Verify doctor, observer status and baseline, current release/provider selectors, both Clockwork bindings and histories, generated LaunchAgents, body-free logs, and that the maintenance gate was removed after commit.",
     "For one permanently unavailable deferred source, obtain explicit recovery authorization and invoke observe abandon with --source-unavailable; never edit SQLite or use it for a merely unfinished turn.",
     "Open /hooks, review and trust the exact user Stop hook, then canary one new post-baseline effectful turn on the actual Codex surface in use.",
-    "For uninstall, remove only the two services, exact owned hook, and public selectors and report that database, baseline, releases, and logs remain."
+    "For uninstall, engage the maintenance gate, inspect each selected definition and disable only an exact current-release Decisions binding, refuse foreign or ambiguous selected definitions, remove exact legacy services plus the exact owned hook and public selectors, and report that the gate, Clockwork history, database, baseline, releases, and logs remain."
   ],
   "checkpoints": [
     "Existing releases pass canonical content-manifest and hash checks before reuse.",
     "Unavailable-source abandonment is serialized with observation processing, preserves the baseline, and is limited to a deferred pending correlation with no bound source or classification state.",
-    "Both services are stopped and the public hook command is suspended for its bounded timeout before the migration backup and schema-3 outbox backfill; default activation stores the next whole Unix second after release/selector staging and before either plist, the hook, or the command is published or observer bootstraps, so the cutover second and all pre-baseline authority are excluded.",
-    "Foreign hook files are never merged, overwritten, or removed; failed activation restores every prior selector, file, database, and service state, while an unprovable rollback leaves both services stopped, disables the public command, and retains the private transaction backup.",
-    "Both plists are key-free and lack RunAtLoad; the observer uses StartInterval 60, while the digest service schedules local 09:00 with separate private body-free logs."
+    "The private current-user-owned mode-0600 non-hard-linked maintenance marker is present before either scheduler is mutated, future Clockwork admission is disabled, any exact legacy services are stopped, and the public hook command is suspended for its bounded timeout before lsof proves database quiescence for the migration backup and schema-3 outbox backfill; existing product log files are accepted only as current-user-owned non-hard-linked regular files and restricted to mode 0600 without truncation before definition registration; default activation stores the next whole Unix second after release/selector staging and before the hook, command, or observer binding is published, so the cutover second and all pre-baseline authority are excluded.",
+    "Every release-pinned runner invocation checks the valid maintenance marker before dependency resolution or domain work and becomes a successful no-op when it observes the gate; the marker does not terminate an invocation already past that check. Deployment holds it through both binding switches and the committed durable cutover, removes it only afterward, removes a marker it created only after proven rollback, and retains it when rollback is unprovable.",
+    "A legacy plist is attributable only when it byte-matches the complete current format-2 release-local rendered template and is current-user-owned mode 0644; it is rechecked before stop, removal, restoration, and bootstrap.",
+    "Foreign hook files are never merged, overwritten, or removed; a provable failed activation restores prior executable authority, while an unprovable rollback retains maintenance gating and the private transaction backup, attempts scheduler cleanup, and reports without claiming external scheduler state.",
+    "Both Clockwork definitions pin exact release runners and explicit interpreter digests with no secret or mutable selector; Clockwork's contract limits generated plist ProgramArguments to its absolute frontend path, private entry, and stable key and both schedules lack RunAtLoad, while the observer uses 60 seconds and the digest uses local 09:00 with separate private body-free Decisions logs."
   ],
   "adaptation": [
-    "Use explicit home and launchctl overrides only for a deliberate alternate-user test boundary.",
+    "Use explicit home and launchctl overrides only for a deliberate alternate-user test boundary; home must be an absolute current-user-owned nonsymbolic directory and cannot contain XML/TOML schedule-rendering metacharacters, including double quote or backslash.",
     "A nonzero queued count can consist only of deferred rows not yet ready; inspect retry state and source evidence before considering explicit abandonment.",
     "Canary Desktop or another client directly; do not infer cross-surface Stop delivery from the installed file or CLI alone.",
     "Diagnose dependency readiness at its owning product instead of adding a fallback inside Decisions."
@@ -100,11 +109,11 @@
     "The requested action would delete retained state without separate explicit authorization."
   ],
   "interfaces": [
-    {"label": "Deploy", "invocation": "decisions/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH"},
+    {"label": "Deploy", "invocation": "decisions/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH --clockwork ABSOLUTE_PATH"},
     {"label": "Doctor", "invocation": "/Users/joey/.local/bin/decisions doctor"},
     {"label": "Observer status", "invocation": "/Users/joey/.local/bin/decisions observe status"},
     {"label": "Abandon one proven-unavailable source", "invocation": "/Users/joey/.local/bin/decisions observe abandon OBSERVATION_ID --source-unavailable"},
-    {"label": "Uninstall and retain state", "invocation": "decisions/packaging/macos/uninstall-user.sh"}
+    {"label": "Uninstall and retain state", "invocation": "decisions/packaging/macos/uninstall-user.sh --clockwork ABSOLUTE_PATH"}
   ],
   "does_not_authorize": [
     "Deleting retained state or logs.",
@@ -116,7 +125,7 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current macOS user or an authorized operator may install, update, inspect, recover, or uninstall the user-owned Decisions release and its continuous observer and daily services."
+        "statement": "The current macOS user or an authorized operator may install, update, inspect, recover, or uninstall the user-owned Decisions release and its Clockwork-activated continuous observer and daily services."
       },
       {
         "status": "unsupported",
@@ -140,7 +149,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Deploy consumes one absolute candidate binary plus the product-owned deployer, exact provider tree, current-user home and launchd state, owned release and selector state, exact hook bytes, and current Decisions database state."
+        "statement": "Deploy consumes one absolute candidate binary, one compatible absolute Clockwork frontend, the product-owned deployer and exact provider tree, current-user home, Clockwork binding and legacy launchd state, owned release and selector state, exact hook bytes, and current Decisions database state."
       },
       {
         "status": "declared",
@@ -154,11 +163,11 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Successful deployment selects one validated content-addressed release for the public Decisions command and Chancery provider, installs the exact owned Stop hook and two key-free LaunchAgents, preserves or migrates state, records activation once, and reports operational verification."
+        "statement": "Successful deployment selects one validated content-addressed release for the public Decisions command and Chancery provider, installs the exact owned Stop hook, registers two immutable exact-release definitions, switches the daily then observer Clockwork binding, preserves or migrates state, records activation once, and reports operational verification."
       },
       {
         "status": "declared",
-        "statement": "Supported reads expose candidate doctor, observer counts and baseline, launchd and log evidence; guarded source abandonment records one complete/not-eligible audit state, and uninstall removes only owned services, hook, and public selectors while retaining state."
+        "statement": "Supported reads expose candidate doctor, observer counts and baseline, Clockwork binding/runtime plus generated launchd and log evidence; guarded source abandonment records one complete/not-eligible audit state, and uninstall disables only definition-proven current-release bindings and removes the hook and public selectors while retaining state and Clockwork history."
       }
     ],
     "data_semantics": [
@@ -172,13 +181,13 @@
       },
       {
         "status": "declared",
-        "statement": "A content-addressed release binds exact binary, deployer, hook, runner, plist, and provider bytes; current and previous selectors identify deployment state rather than domain success."
+        "statement": "A content-addressed release binds exact binary, deployer, hook, runner, Clockwork definition-template, and provider bytes; the concrete registered definition additionally pins the release ID/root, interpreter, runner, process context, schedule, and output paths, while selectors identify deployment state rather than domain success."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Release content hash, provider release, entry contract version, database schema version, hook bytes, LaunchAgent labels, observation ID, and activation timestamp are separate identities and compatibility axes."
+        "statement": "Release content hash, Clockwork definition digest, stable binding key, provider release, entry contract version, database schema version, hook bytes, generated LaunchAgent label, Decisions observation ID, and activation identity are separate identities and compatibility axes."
       },
       {
         "status": "declared",
@@ -192,7 +201,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Deployment verifies exact candidate and provider versions, content manifests, state schema, dependency surfaces, owned selectors, exact hook and plist bytes, activation order, and both loaded services before declaring the installation successful."
+        "statement": "Deployment verifies exact candidate and provider versions, content manifests, state schema, dependency surfaces, owned selectors, exact hook and legacy-service bytes, activation order, and both selected Clockwork bindings before declaring the installation successful."
       },
       {
         "status": "declared",
@@ -214,27 +223,27 @@
       },
       {
         "status": "unsupported",
-        "statement": "Foreign, symbolic, modified, ambiguous, or unowned selectors, hooks, plists, state files, or loaded labels are refused rather than merged, replaced, removed, or followed."
+        "statement": "Foreign, symbolic, modified, ambiguous, or unowned selectors, hooks, legacy plists, state files, selected Clockwork definitions, or loaded labels are refused rather than merged, replaced, removed, or followed; matching a legacy label or runner without exact rendered bytes, current UID, and mode 0644 is insufficient, and uninstall leaves absent and unselected disabled bindings unchanged."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "An update validates ownership, stops both services, suspends and drains the hook, backs up quiescent SQLite state, migrates sequentially to schema 3, stages the release and selectors, records activation once, then publishes the hook, command, plists, and services with observer last."
+        "statement": "An update validates selectors, complete rendered legacy plist identity, and selected Clockwork definitions against the exact current-release manifests, engages the stable maintenance gate, registers inactive definitions, disables both bindings and stops any exact legacy services, suspends and drains the hook, backs up quiescent SQLite state, migrates sequentially to schema 3, stages the release and selectors, records activation once, then publishes the hook and command, switches bindings with observer last, commits, and removes the gate."
       },
       {
         "status": "declared",
-        "statement": "Failure restores selectors, exact hook and plist bytes, database and sidecars, and prior loaded service states; if full quiescent restoration cannot be proved, both services remain stopped, the public command remains disabled, and the private transaction backup is retained."
+        "statement": "Provable failure restores selectors, exact hook and legacy-plist bytes, database and sidecars, prior selected Clockwork definition digests/enabled states, and prior legacy loaded states without loading a previously disabled selection; an absent binding may become an inert tombstone. If full restoration cannot be proved, the stable maintenance gate and private transaction backup remain, scheduler cleanup is attempted, maintenance and public-command evidence is reported only when proven, and no claim is made that either external scheduler was disabled."
       },
       {
         "status": "declared",
-        "statement": "Uninstall removes only exact owned public surfaces and preserves the database, write-once baseline, releases, and logs until a separate destructive decision."
+        "statement": "Uninstall of a current release first engages and then retains the maintenance gate, removes only exact owned public surfaces, and preserves the database, write-once baseline, releases, and logs until a separate destructive decision."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "The standard operation supports one current macOS user, exactly two Decisions LaunchAgents and one exact user Stop hook, a content-addressed release pair, explicit schema-1-or-2-to-3 migration, and serialized observation processing."
+        "statement": "The standard operation supports one current macOS user, exactly two stable Clockwork bindings and one exact user Stop hook, a content-addressed release pair, explicit schema-1-or-2-to-3 migration, and serialized observation processing."
       },
       {
         "status": "declared",
@@ -289,7 +298,14 @@
       },
       {
         "status": "declared",
-        "statement": "The observer and daily user-service lifecycle relies on macOS launchd; no installed Chancery contract covers launchd availability or scheduling.",
+        "statement": "Definition registration, stable binding selection, same-key admission, direct supervision, and runtime history rely on Clockwork without transferring Decisions domain authority.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Clockwork-generated observer and daily timer delivery ultimately relies on macOS launchd; no installed Chancery contract covers launchd availability or timing.",
         "target": "launchd",
         "kind": "readiness"
       }

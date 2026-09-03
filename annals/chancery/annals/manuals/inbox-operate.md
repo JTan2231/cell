@@ -27,6 +27,9 @@ Dispatch is explicit or externally scheduled:
 /Users/joey/.local/bin/annals inbox run
 ```
 
+Scheduling is outside this cross-platform inbox contract. The macOS
+installation contract documents its scheduler binding and lifecycle.
+
 Before every new claim, Annals checks the configured available-byte reserve on
 both the library and spool filesystems. Low storage leaves the next job queued
 with attempts zero and no delivery record; the ordinary activation exits and a

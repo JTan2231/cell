@@ -21,6 +21,10 @@ nucleus="$temporary/nucleus"
 nucleus_socket="$temporary/nucleus.sock"
 launchctl="$temporary/launchctl"
 launchctl_log="$temporary/launchctl.log"
+clockwork="$temporary/clockwork"
+clockwork_loaded="$temporary/clockwork-loaded"
+fail_clockwork_switch="$temporary/fail-next-clockwork-switch"
+fail_bootout="$temporary/fail-next-bootout"
 
 read_package_version() {
     awk '
@@ -65,11 +69,15 @@ mkdir -p "$package" "$package_share" \
     "$home/Library/Application Support/Annals/codex-home"
 cp "$SCRIPT_DIR/deploy-user.sh" "$package/deploy-user.sh"
 cp "$SCRIPT_DIR/annals-user" "$package/annals-user"
+cp "$SCRIPT_DIR/annals-inbox" "$package/annals-inbox"
+cp "$SCRIPT_DIR/annals-inbox.clockwork.toml.in" \
+    "$package/annals-inbox.clockwork.toml.in"
 cp "$SCRIPT_DIR/org.annals.inbox.agent.plist" \
     "$package/org.annals.inbox.agent.plist"
 cp -R "$SCRIPT_DIR/../../chancery/annals" "$package_share/annals"
 cp -R "$SCRIPT_DIR/../../chancery/annals-usage" "$package_share/annals-usage"
-chmod 0755 "$package/deploy-user.sh" "$package/annals-user"
+chmod 0755 "$package/deploy-user.sh" "$package/annals-user" \
+    "$package/annals-inbox"
 
 cat >"$candidate_template" <<'EOF'
 #!/bin/sh
@@ -267,6 +275,103 @@ exit 99
 EOF
 chmod 0755 "$launchctl"
 
+cat >"$clockwork" <<EOF
+#!/bin/sh
+set -eu
+printf '%s\n' "\$*" >>'$temporary/clockwork.log'
+[ "\${1:-}" = --json ] && shift
+root="\${HOME:?}/Library/Application Support/Clockwork/test"
+binding="\$root/annals.inbox"
+mkdir -p "\$root" "$clockwork_loaded"
+command=\${1:-}; shift || true
+case "\$command:\${1:-}" in
+    definition:register)
+        shift
+        digest=\$(shasum -a 256 "\$1" | awk '{print \$1}')
+        cp "\$1" "\$root/definition.\$digest.toml"
+        printf '{"ok":true,"data":{"digest":"%s"}}\n' "\$digest"
+        ;;
+    definition:show)
+        shift
+        selected_digest=\$1
+        selected_definition="\$root/definition.\$selected_digest.toml"
+        [ -f "\$selected_definition" ] || exit 1
+        selected_release_id=\$(sed -n 's/^release_id = "\(.*\)"$/\1/p' \
+            "\$selected_definition")
+        selected_release_root=\$(sed -n 's/^release_root = "\(.*\)"$/\1/p' \
+            "\$selected_definition")
+        selected_cwd=\$(sed -n 's/^cwd = "\(.*\)"$/\1/p' "\$selected_definition")
+        selected_seconds=\$(sed -n 's/^seconds = \([0-9][0-9]*\)$/\1/p' \
+            "\$selected_definition")
+        selected_run_at_load=\$(sed -n 's/^run_at_load = \(.*\)$/\1/p' \
+            "\$selected_definition")
+        selected_interpreter_hash=\$(sed -n \
+            's/^interpreter_sha256 = "\(.*\)"$/\1/p' "\$selected_definition")
+        selected_script=\$(sed -n 's/^script = "\(.*\)"$/\1/p' \
+            "\$selected_definition")
+        selected_script_hash=\$(sed -n 's/^script_sha256 = "\(.*\)"$/\1/p' \
+            "\$selected_definition")
+        selected_home=\$(sed -n 's/^HOME = "\(.*\)"$/\1/p' "\$selected_definition")
+        selected_user=\$(sed -n 's/^USER = "\(.*\)"$/\1/p' "\$selected_definition")
+        selected_logname=\$(sed -n 's/^LOGNAME = "\(.*\)"$/\1/p' \
+            "\$selected_definition")
+        selected_config=\$(sed -n 's/^ANNALS_CONFIG = "\(.*\)"$/\1/p' \
+            "\$selected_definition")
+        selected_stdout=\$(sed -n 's/^stdout = "\(.*\)"$/\1/p' \
+            "\$selected_definition")
+        selected_stderr=\$(sed -n 's/^stderr = "\(.*\)"$/\1/p' \
+            "\$selected_definition")
+        printf '{"ok":true,"data":{"digest":"%s","key":"annals/inbox","registered_at":1,"manifest":{"schema_version":1,"key":"annals/inbox","release_id":"%s","release_root":"%s","authority":"current-user-background","overlap":"skip","arguments":[],"cwd":"%s","schedule":{"kind":"interval","seconds":%s,"run_at_load":%s},"launch":{"kind":"interpreted","interpreter":"/bin/sh","interpreter_sha256":"%s","script":"%s","script_sha256":"%s"},"environment":{"HOME":"%s","USER":"%s","LOGNAME":"%s","ANNALS_CONFIG":"%s"},"output":{"stdout":"%s","stderr":"%s"}}}}\n' \
+            "\$selected_digest" "\$selected_release_id" "\$selected_release_root" \
+            "\$selected_cwd" "\$selected_seconds" "\$selected_run_at_load" \
+            "\$selected_interpreter_hash" "\$selected_script" \
+            "\$selected_script_hash" "\$selected_home" "\$selected_user" \
+            "\$selected_logname" "\$selected_config" "\$selected_stdout" \
+            "\$selected_stderr"
+        ;;
+    binding:show)
+        shift
+        if [ ! -f "\$binding" ]; then
+            printf '%s\n' '{"ok":false,"error":{"code":"binding_not_found","message":"absent"}}' >&2
+            exit 1
+        fi
+        enabled=\$(sed -n '1p' "\$binding")
+        digest=\$(sed -n '2p' "\$binding")
+        if [ -n "\$digest" ]; then digest_json="\"\$digest\""; else digest_json=null; fi
+        printf '{"ok":true,"data":{"key":"annals/inbox","definition_digest":%s,"enabled":%s,"updated_at":1}}\n' \
+            "\$digest_json" "\$enabled"
+        ;;
+    binding:disable)
+        shift
+        key=\$1
+        shift
+        digest=
+        [ ! -f "\$binding" ] || digest=\$(sed -n '2p' "\$binding")
+        if [ "\${1:-}" = --select ]; then
+            digest=\${2:?}
+        fi
+        printf 'false\n%s\n' "\$digest" >"\$binding"
+        rm -f "$clockwork_loaded/org.clockwork.annals.inbox"
+        if [ -n "\$digest" ]; then digest_json="\"\$digest\""; else digest_json=null; fi
+        printf '{"ok":true,"data":{"key":"%s","definition_digest":%s,"enabled":false}}\n' \
+            "\$key" "\$digest_json"
+        ;;
+    binding:switch)
+        shift
+        key=\$1; digest=\$2
+        if [ -f "$fail_clockwork_switch" ]; then
+            rm -f "$fail_clockwork_switch"
+            exit 1
+        fi
+        printf 'true\n%s\n' "\$digest" >"\$binding"
+        : >"$clockwork_loaded/org.clockwork.annals.inbox"
+        printf '{"ok":true,"data":{"key":"%s","definition_digest":"%s","enabled":true}}\n' "\$key" "\$digest"
+        ;;
+    *) exit 1 ;;
+esac
+EOF
+chmod 0755 "$clockwork"
+
 deploy() {
     selected_nucleus=${ANNALS_TEST_NUCLEUS:-$nucleus}
     selected_candidate=${ANNALS_TEST_BINARY:-$candidate}
@@ -276,6 +381,7 @@ deploy() {
         --usage-binary "$selected_usage_candidate" \
         --nucleus "$selected_nucleus" \
         --nucleus-socket "$nucleus_socket" \
+        --clockwork "$clockwork" \
         --home "$home" \
         --launchctl "$launchctl" \
         "$@"
@@ -329,6 +435,11 @@ usage_provider="$chancery_providers/annals-usage"
 [ -f "$state/install/current/manifest.json" ]
 [ -x "$state/install/current/libexec/annals" ]
 [ -x "$state/install/current/libexec/annals-usage" ]
+[ -x "$state/install/current/bin/annals-inbox" ]
+grep -Fx 'umask 077' "$state/install/current/bin/annals-inbox" >/dev/null
+[ -x "$state/install/current/package/annals-inbox" ]
+[ -f "$state/install/current/package/annals-inbox.clockwork.toml.in" ]
+[ -f "$state/install/current/package/org.annals.inbox.agent.plist" ]
 [ -f "$state/install/current/share/chancery/annals/provider.json" ]
 [ -f "$state/install/current/share/chancery/annals-usage/provider.json" ]
 [ -L "$annals_provider" ]
@@ -340,7 +451,7 @@ usage_provider="$chancery_providers/annals-usage"
 [ -f "$annals_provider/provider.json" ]
 [ -f "$usage_provider/provider.json" ]
 [ "$(sed -n 's/^  "format": \([0-9][0-9]*\),$/\1/p' \
-    "$state/install/current/manifest.json")" -eq 2 ]
+    "$state/install/current/manifest.json")" -eq 3 ]
 [ -f "$state/annals.db" ]
 [ -d "$state/spool/queued" ]
 [ -d "$state/spool/duplicates" ]
@@ -385,27 +496,32 @@ printf '%s\n' "$alternate_environment" \
 usage_candidate_hash=$(shasum -a 256 "$usage_candidate" | awk '{print $1}')
 grep -Fx "  \"usage_binary_sha256\": \"$usage_candidate_hash\"," \
     "$state/install/current/manifest.json" >/dev/null
+legacy_agent_plist_hash=$(shasum -a 256 \
+    "$SCRIPT_DIR/org.annals.inbox.agent.plist" | awk '{print $1}')
+grep -Fx "  \"legacy_agent_plist_sha256\": \"$legacy_agent_plist_hash\"," \
+    "$state/install/current/manifest.json" >/dev/null
 printf '%s\n' preserved >"$state/spool/duplicates/preserved"
 printf '%s\n' skipped >"$state/spool/skipped/preserved"
 : >"$state/spool/.paused"
-[ "$(plutil -extract ProgramArguments.0 raw -o - "$plist")" = "$cli" ]
-[ "$(plutil -extract ProgramArguments.1 raw -o - "$plist")" = --quiet ]
-[ "$(plutil -extract ProgramArguments.2 raw -o - "$plist")" = inbox ]
-[ "$(plutil -extract ProgramArguments.3 raw -o - "$plist")" = run ]
-if plutil -extract ProgramArguments.4 raw -o - "$plist" >/dev/null 2>&1; then
-    printf '%s\n' 'user LaunchAgent contains an extra program argument' >&2
-    exit 1
-fi
-[ "$(plutil -extract WorkingDirectory raw -o - "$plist")" = "$state" ]
-[ "$(plutil -extract EnvironmentVariables.HOME raw -o - "$plist")" = "$home" ]
-if plutil -extract EnvironmentVariables.CODEX_HOME raw -o - "$plist" >/dev/null 2>&1; then
-    printf '%s\n' 'user LaunchAgent unexpectedly owns CODEX_HOME' >&2
-    exit 1
-fi
-if plutil -extract UserName raw -o - "$plist" >/dev/null 2>&1; then
-    printf '%s\n' 'user LaunchAgent unexpectedly contains UserName' >&2
-    exit 1
-fi
+definition=$(find "$home/Library/Application Support/Clockwork/test" \
+    -type f -name 'definition.*.toml' -exec grep -l \
+    "release_root = \"$state/install/$(readlink "$state/install/current")\"" {} \; \
+    | head -1)
+[ -n "$definition" ]
+grep -Fx 'key = "annals/inbox"' "$definition" >/dev/null
+grep -Fx 'seconds = 300' "$definition" >/dev/null
+grep -Fx 'run_at_load = true' "$definition" >/dev/null
+grep -Fx 'overlap = "skip"' "$definition" >/dev/null
+! grep -F 'timeout_seconds' "$definition" >/dev/null
+grep -Fx "cwd = \"$state\"" "$definition" >/dev/null
+grep -Fx "script = \"$state/install/$(readlink "$state/install/current")/bin/annals-inbox\"" \
+    "$definition" >/dev/null
+grep -Fx "HOME = \"$home\"" "$definition" >/dev/null
+grep -Fx "ANNALS_CONFIG = \"$state/config.toml\"" "$definition" >/dev/null
+grep -Fx "stdout = \"$state/log/inbox.stdout.log\"" "$definition" >/dev/null
+grep -Fx "stderr = \"$state/log/inbox.stderr.log\"" "$definition" >/dev/null
+! grep -E 'CODEX_HOME|TOKEN|SECRET|CREDENTIAL' "$definition" >/dev/null
+[ ! -e "$plist" ]
 HOME="$home" "$cli" stats >/dev/null
 
 first_release=$(readlink "$state/install/current")
@@ -461,7 +577,7 @@ rollback_snapshot=$(sed -n 's/^  "rollback_snapshot": "\([^"]*\)",$/\1/p' \
 [ -n "$rollback_snapshot" ]
 [ -f "$rollback_snapshot/config.toml" ]
 [ -f "$rollback_snapshot/usage.toml" ]
-[ -f "$rollback_snapshot/agent.plist" ]
+[ -f "$rollback_snapshot/schedule.txt" ]
 [ -f "$rollback_snapshot/rollback.json" ]
 grep -Fx "codex = \"$nucleus\"" "$rollback_snapshot/config.toml" >/dev/null
 grep -F "\"release\": \"$first_release\"" \
@@ -507,9 +623,7 @@ install -m 0600 "$package_share/annals/provider.json" \
     "$state/install/current/share/chancery/annals/provider.json"
 
 loaded="$state/service-loaded"
-fail_bootstrap="$temporary/fail-next-bootstrap"
-fail_kickstart="$temporary/fail-next-kickstart"
-kickstart_order_error="$temporary/kickstart-order-error"
+fail_bootstrap="$fail_clockwork_switch"
 cat >"$launchctl" <<EOF
 #!/bin/sh
 printf '%s\n' "\$*" >>'$launchctl_log'
@@ -519,25 +633,15 @@ case "\${1:-}" in
         ;;
     disable|enable)
         ;;
-    kickstart)
-        [ -f '$state/install/last-update.json' ] \
-            || : >'$kickstart_order_error'
-        current=\$(readlink '$state/install/current')
-        release=\${current#releases/}
-        grep -F "\"release_id\": \"\$release\"" \
-            '$state/install/last-update.json' >/dev/null \
-            || : >'$kickstart_order_error'
-        [ ! -e '$state/spool/.maintenance' ] \
-            || : >'$kickstart_order_error'
-        if [ -f '$fail_kickstart' ]; then
-            rm -f '$fail_kickstart'
+    bootout)
+        if [ -f '$fail_bootout' ]; then
+            rm -f '$fail_bootout'
             exit 1
         fi
-        ;;
-    bootout)
         rm -f '$loaded'
         ;;
     bootstrap)
+        [ ! -f '$loaded' ] || exit 1
         if [ -f '$fail_bootstrap' ]; then
             rm -f '$fail_bootstrap'
             exit 1
@@ -551,6 +655,57 @@ esac
 EOF
 chmod 0755 "$launchctl"
 
+# Refuse a foreign file at the migration-only legacy LaunchAgent path before
+# touching either scheduler.
+cat >"$plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>Label</key><string>org.foreign.inbox</string><key>ProgramArguments</key><array><string>/bin/false</string></array></dict></plist>
+EOF
+if deploy >"$temporary/foreign-plist.out" 2>"$temporary/foreign-plist.err"; then
+    printf '%s\n' 'deployment unexpectedly replaced a foreign LaunchAgent' >&2
+    exit 1
+fi
+grep -F 'org.foreign.inbox' "$plist" >/dev/null
+rm -f "$plist"
+
+# Model the one-time migration from Annals' owned direct LaunchAgent. The
+# deployer must quiesce and remove it before enabling Clockwork.
+cp "$SCRIPT_DIR/org.annals.inbox.agent.plist" "$plist"
+plutil -remove ProgramArguments.0 "$plist"
+plutil -insert ProgramArguments.0 -string "$cli" "$plist"
+plutil -replace WorkingDirectory -string "$state" "$plist"
+plutil -replace EnvironmentVariables.HOME -string "$home" "$plist"
+plutil -replace StandardOutPath -string "$state/log/inbox.stdout.log" "$plist"
+plutil -replace StandardErrorPath -string "$state/log/inbox.stderr.log" "$plist"
+chmod 0600 "$plist"
+
+# Matching the executable tuple is insufficient ownership: any additional
+# launchd behavior makes the legacy file foreign and it must remain untouched.
+install -m 0600 "$plist" "$temporary/owned-agent.plist"
+plutil -insert KeepAlive -bool true "$plist"
+if deploy >"$temporary/extra-plist-key.out" 2>"$temporary/extra-plist-key.err"; then
+    printf '%s\n' 'deployment unexpectedly removed a LaunchAgent with extra behavior' >&2
+    exit 1
+fi
+plutil -extract KeepAlive raw -o - "$plist" >/dev/null
+install -m 0600 "$temporary/owned-agent.plist" "$plist"
+: >"$loaded"
+
+# If bootout reports a transition failure while the legacy service remains
+# loaded, rollback must not try to bootstrap the already loaded label.
+: >"$fail_bootout"
+if deploy >"$temporary/legacy-bootout-failure.out" \
+    2>"$temporary/legacy-bootout-failure.err"
+then
+    printf '%s\n' 'deployment unexpectedly survived a legacy bootout failure' >&2
+    exit 1
+fi
+[ -f "$loaded" ]
+[ -f "$plist" ]
+[ ! -e "$state/spool/.maintenance" ]
+[ -L "$cli" ]
+[ ! -e "$clockwork_loaded/org.clockwork.annals.inbox" ]
+
 mkdir -p "$state/spool/queued/successor/material"
 printf '%s\n' successor >"$state/spool/queued/successor/material/source.txt"
 : >"$state/simulate-running-worker"
@@ -562,7 +717,9 @@ running_release=$(readlink "$state/install/current")
 [ ! -e "$state/maintenance-order-error" ]
 [ -f "$state/active-delivery-finished" ]
 [ -f "$state/spool/queued/successor/material/source.txt" ]
-[ -f "$loaded" ]
+[ ! -f "$loaded" ]
+[ ! -e "$plist" ]
+[ -f "$clockwork_loaded/org.clockwork.annals.inbox" ]
 [ ! -e "$state/spool/.maintenance" ]
 [ -f "$state/spool/.paused" ]
 [ "$(cat "$state/codex-home/auth.json")" = credential-sentinel ]
@@ -571,6 +728,41 @@ running_release=$(readlink "$state/install/current")
     "doctor current=$second_release" ]
 [ "$(tail -n 8 "$state/candidate-commands.log" | tr '\n' ' ')" = \
     'inbox status inbox status inbox run backup migrate inbox status stats inbox status ' ]
+
+# A same-key selected digest is not ownership. Even while disabled, a
+# definition that is not the exact current Annals release must remain
+# untouched and must block the deployment before any binding mutation.
+clockwork_binding="$home/Library/Application Support/Clockwork/test/annals.inbox"
+owned_definition_digest=$(sed -n '2p' "$clockwork_binding")
+[ -n "$owned_definition_digest" ]
+binding_mutations_before=$(grep -Ec '^--json binding (disable|switch) ' \
+    "$temporary/clockwork.log")
+clockwork_store="$home/Library/Application Support/Clockwork/test"
+sed 's/^seconds = 300$/seconds = 301/' \
+    "$clockwork_store/definition.$owned_definition_digest.toml" \
+    >"$clockwork_store/definition.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.toml"
+printf '%s\n%s\n' false \
+    bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+    >"$clockwork_binding"
+rm -f "$clockwork_loaded/org.clockwork.annals.inbox"
+if deploy >"$temporary/foreign-clockwork.out" \
+    2>"$temporary/foreign-clockwork.err"
+then
+    printf '%s\n' 'deployment unexpectedly replaced a foreign Clockwork definition' >&2
+    exit 1
+fi
+grep -F 'does not select the exact current Annals release definition' \
+    "$temporary/foreign-clockwork.err" >/dev/null
+binding_mutations_after=$(grep -Ec '^--json binding (disable|switch) ' \
+    "$temporary/clockwork.log")
+[ "$binding_mutations_after" -eq "$binding_mutations_before" ]
+[ "$(sed -n '1p' "$clockwork_binding")" = false ]
+[ "$(sed -n '2p' "$clockwork_binding")" = \
+    bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ]
+[ "$(readlink "$state/install/current")" = "$running_release" ]
+[ ! -e "$state/spool/.maintenance" ]
+printf 'true\n%s\n' "$owned_definition_digest" >"$clockwork_binding"
+: >"$clockwork_loaded/org.clockwork.annals.inbox"
 
 printf '%s\n' '# rejected update' >>"$candidate"
 alternate_nucleus="$temporary/alternate-nucleus"
@@ -586,18 +778,17 @@ printf '%s\n' rejected-legacy-shm >"$state/usage.db-shm"
 if ANNALS_TEST_NUCLEUS="$alternate_nucleus" \
     deploy >"$temporary/rejected.out" 2>"$temporary/rejected.err"
 then
-    printf '%s\n' 'deployment unexpectedly survived a bootstrap failure' >&2
+    printf '%s\n' 'deployment unexpectedly survived a Clockwork switch failure' >&2
     exit 1
 fi
 [ "$(readlink "$state/install/current")" = "$running_release" ]
 [ "$(readlink "$state/install/previous")" = "$second_release" ]
 [ -f "$annals_provider/provider.json" ]
 [ -f "$usage_provider/provider.json" ]
-[ -f "$loaded" ]
+[ -f "$clockwork_loaded/org.clockwork.annals.inbox" ]
 [ ! -e "$state/spool/.maintenance" ]
 [ -f "$state/spool/.paused" ]
 [ ! -e "$state/install/.update-lock" ]
-[ ! -e "$kickstart_order_error" ]
 [ "$(shasum -a 256 "$state/config.toml" | awk '{print $1}')" = "$config_before_rejection" ]
 [ "$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')" = "$usage_config_before_rejection" ]
 [ "$(shasum -a 256 "$state/annals.db" | awk '{print $1}')" = "$library_before_rejection" ]
@@ -606,20 +797,31 @@ fi
 [ "$(cat "$state/usage.db-shm")" = rejected-legacy-shm ]
 grep -Fx "nucleus = \"$nucleus\"" "$state/usage.toml" >/dev/null
 
-: >"$fail_kickstart"
-deploy >"$temporary/kickstart-warning.out" 2>"$temporary/kickstart-warning.err"
+# A disabled prior binding stays disabled during rollback; restoring an old
+# inactive digest must not transiently enable its schedule.
+HOME="$home" "$clockwork" --json binding disable annals/inbox >/dev/null
+disabled_switches_before=$(grep -c '^--json binding switch ' "$temporary/clockwork.log")
+: >"$fail_bootstrap"
+if deploy >"$temporary/disabled-rollback.out" 2>"$temporary/disabled-rollback.err"; then
+    printf '%s\n' 'failed deployment unexpectedly enabled a disabled prior binding' >&2
+    exit 1
+fi
+disabled_switches_after=$(grep -c '^--json binding switch ' "$temporary/clockwork.log")
+[ "$disabled_switches_after" -eq "$((disabled_switches_before + 1))" ]
+[ "$(sed -n '1p' "$home/Library/Application Support/Clockwork/test/annals.inbox")" = false ]
+[ ! -f "$clockwork_loaded/org.clockwork.annals.inbox" ]
+[ "$(readlink "$state/install/current")" = "$running_release" ]
+
+deploy >"$temporary/next-update.out" 2>"$temporary/next-update.err"
 [ "$(readlink "$state/install/current")" != "$running_release" ]
 [ "$(readlink "$state/install/previous")" = "$running_release" ]
-[ -f "$loaded" ]
+[ -f "$clockwork_loaded/org.clockwork.annals.inbox" ]
 [ ! -e "$state/spool/.maintenance" ]
 [ -f "$state/spool/.paused" ]
 [ ! -e "$state/install/.update-lock" ]
-[ ! -e "$kickstart_order_error" ]
 [ ! -e "$state/usage.db" ]
 [ ! -e "$state/usage.db-wal" ]
 [ ! -e "$state/usage.db-shm" ]
-grep -F 'warning: unable to wake the installed service' \
-    "$temporary/kickstart-warning.err" >/dev/null
 
 printf '%s\n' old-library >"$state/annals.db"
 printf '%s\n' legacy-usage >"$state/usage.db"
@@ -644,7 +846,7 @@ fi
 [ -f "$state/spool/queued/j00000000000000000091/material/second.txt" ]
 [ -f "$state/spool/.paused" ]
 [ ! -e "$state/spool/.maintenance" ]
-[ -f "$loaded" ]
+[ -f "$clockwork_loaded/org.clockwork.annals.inbox" ]
 [ "$(cat "$state/usage.db")" = legacy-usage ]
 [ "$(cat "$state/usage.db-wal")" = legacy-wal ]
 [ "$(cat "$state/usage.db-shm")" = legacy-shm ]
@@ -656,7 +858,7 @@ fresh_output=$(deploy --fresh-state)
 [ -d "$state/spool/skipped" ]
 [ ! -e "$state/spool/.paused" ]
 [ ! -e "$state/spool/.maintenance" ]
-[ -f "$loaded" ]
+[ -f "$clockwork_loaded/org.clockwork.annals.inbox" ]
 grep -F '"fresh_state": true' "$state/install/last-update.json" >/dev/null
 grep -F '"imported_backlog": 3' "$state/install/last-update.json" >/dev/null
 generation=$(sed -n 's/^  "rollback_generation": "\([^"]*\)",$/\1/p' \

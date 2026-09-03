@@ -35,10 +35,21 @@ closed if an abandoned correlation later appears.
 
 The observer baseline is a write-once deployment cutover. Migration may open
 the candidate database only after both services are quiesced and its SQLite
-files are backed up; bootstrap the observer only after activation. Tests must
-prove no pre-baseline reconciliation, foreign-hook preservation, scrubbed
-key-free runners, and rollback of both service states, hook bytes, selectors,
-and migrated database files.
+files are backed up; switch the `decisions/observer` Clockwork binding only
+after activation. A Clockwork definition must name the exact content-addressed
+release, explicit interpreter and release-owned runner with their digests,
+literal argv, scrubbed non-secret environment, working directory, schedule,
+overlap policy, and product-owned log paths. Render the concrete definition
+outside the release only after its release ID is known; never register a
+template, mutable `current` selector, public frontend, shell command string, or
+secret. Tests must prove no pre-baseline reconciliation, foreign-hook
+preservation, scrubbed key-free runners, no legacy/Clockwork dual schedule, and
+definition-show ownership proof before binding mutation, exact restoration of
+previously disabled selectors, maintenance gating before definition
+registration and through both switches and commit, retained gating after
+unprovable rollback, complete rendered legacy
+plist ownership including UID and mode, rollback of both binding states, exact
+legacy service state, hook bytes, selectors, and migrated database files.
 
 Tests for observation scheduling or recovery must prove ready-time yielding for
 both selectors, processing-row resumption, the complete abandonment guard,

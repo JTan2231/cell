@@ -1,13 +1,39 @@
-#!/bin/zsh
+#!/bin/sh
 
-unsetopt VERBOSE XTRACE
+set -eu
+umask 077
 
-if [[ -x /opt/homebrew/bin/codex ]]; then
+script_dir=${0%/*}
+release_dir=${script_dir%/*}
+decisions_path="$release_dir/libexec/decisions"
+maintenance="$HOME/Library/Application Support/Decisions/.clockwork-maintenance"
+
+if [ -L "$maintenance" ] || { [ -e "$maintenance" ] && [ ! -f "$maintenance" ]; }; then
+    printf '%s\n' 'decisions daily: maintenance gate is invalid' >&2
+    exit 1
+fi
+if [ -f "$maintenance" ]; then
+    if [ "$(/usr/bin/stat -f '%u' "$maintenance")" -ne "$(/usr/bin/id -u)" ] \
+        || [ "$(/usr/bin/stat -f '%Lp' "$maintenance")" != 600 ] \
+        || [ "$(/usr/bin/stat -f '%l' "$maintenance")" -ne 1 ]; then
+        printf '%s\n' 'decisions daily: maintenance gate is not private' >&2
+        exit 1
+    fi
+    printf '%s\n' 'decisions daily: maintenance gate is active' >&2
+    exit 0
+fi
+
+if [ ! -x "$decisions_path" ]; then
+    printf '%s\n' 'decisions daily: release-owned Decisions executable is unavailable' >&2
+    exit 1
+fi
+
+if [ -x /opt/homebrew/bin/codex ]; then
     codex_path=/opt/homebrew/bin/codex
-elif [[ -x "$HOME/.local/bin/codex" ]]; then
+elif [ -x "$HOME/.local/bin/codex" ]; then
     codex_path="$HOME/.local/bin/codex"
 else
-    print -u2 -- 'decisions daily: Codex executable is unavailable'
+    printf '%s\n' 'decisions daily: Codex executable is unavailable' >&2
     exit 1
 fi
 
@@ -16,4 +42,4 @@ exec /usr/bin/env -i \
     PATH=/usr/bin:/bin:/usr/sbin:/sbin \
     CONVERSATIONS_CODEX="$codex_path" \
     DECISIONS_DATABASE="$HOME/Library/Application Support/Decisions/decisions.db" \
-    "$HOME/.local/bin/decisions" daily run --scheduled
+    "$decisions_path" daily run --scheduled

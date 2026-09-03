@@ -1,0 +1,27 @@
+schema_version = 1
+key = "semantics/worker"
+release_id = "__RELEASE_ID__"
+release_root = "__RELEASE_ROOT__"
+authority = "current-user-background"
+overlap = "skip"
+arguments = []
+cwd = "__SEMANTICS_STATE__"
+
+[schedule]
+kind = "interval"
+seconds = 60
+run_at_load = false
+
+[launch]
+kind = "interpreted"
+interpreter = "/bin/sh"
+interpreter_sha256 = "__INTERPRETER_SHA256__"
+script = "__RELEASE_ROOT__/bin/semantics-worker"
+script_sha256 = "__RUNNER_SHA256__"
+
+[environment]
+HOME = "__SEMANTICS_HOME__"
+
+[output]
+stdout = "__SEMANTICS_LOGS__/worker.stdout.log"
+stderr = "__SEMANTICS_LOGS__/worker.stderr.log"

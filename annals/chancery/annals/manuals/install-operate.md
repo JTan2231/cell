@@ -2,8 +2,9 @@
 
 The user-owned macOS deployment installs Annals and Annals Usage together,
 plus configuration, content-addressed releases, and the scheduled inbox
-LaunchAgent. Nucleus remains a separately installed execution and credential
-service.
+Clockwork binding `annals/inbox`. Nucleus remains a separately installed
+execution and credential service; Clockwork remains a separately installed
+activation and process-history service.
 
 ## Deploy or update
 
@@ -17,14 +18,33 @@ cd /Users/joey/rust/cell
   --binary <ABSOLUTE_ANNALS_BINARY> \
   --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> \
   --nucleus <ABSOLUTE_NUCLEUS_BINARY> \
-  --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET>
+  --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> \
+  --clockwork <ABSOLUTE_CLOCKWORK_BINARY>
 ```
 
 The deployer stages a complete content-addressed release, checks candidate
 programs and the Nucleus boundary, establishes Annals maintenance, quiesces
 scheduled work, performs supported migration, switches the release and
-LaunchAgent configuration, and checks the installed commands. It does not stop,
-replace, or take ownership of Nucleus.
+exact Clockwork definition digest, and checks the installed commands. It first
+registers the definition inactive. Before disabling or replacing a selected
+binding, it verifies the complete current Annals release and compares every
+stored executable-definition field with it; a same-key foreign definition is
+left untouched. The first handoff similarly removes only an exactly owned
+legacy LaunchAgent. It does not stop, replace, or take ownership of Nucleus or
+Clockwork.
+
+Definition inspection and binding mutation are not a compare-and-swap.
+Concurrent same-user direct Clockwork mutation of `annals/inbox` during deploy
+or migration is unsupported; reinspection detects attributable changes where
+possible, fails the handoff closed, and may retain maintenance for recovery.
+
+The immutable definition requests run-at-load and a 300-second interval,
+skips overlap, has no activation timeout, and pins `/bin/sh` plus the
+release-local Annals runner by SHA-256. The runner executes only its sibling
+release payload as `annals --quiet inbox run` in the Annals state directory
+with an explicit nonsecret environment and umask `077`. Clockwork records
+process outcomes but does not inspect Annals domain state or ingest
+Annals-owned log bodies.
 
 The inbox storage gate is not a deployment lock. A closed gate does not by
 itself reject an Annals deployment, globally stop the Nucleus service or
@@ -40,9 +60,33 @@ action remains a user decision requiring explicit consent for the exact target
 and scope.
 
 An ordinary pre-commit failure restores the captured release, configuration,
-library, spool, and service state. Do not remove maintenance markers, edit
+library, and spool, then restores the exact prior Clockwork definition only if
+its binding was enabled, or restores the legacy LaunchAgent, never both. A
+previously absent or disabled binding stays disabled without transient
+activation; its inactive selected digest may remain the candidate digest. If
+that exclusive restoration cannot be proved, Annals leaves unproved scheduler
+state untouched, keeps maintenance, removes its public selectors, and retains
+private recovery material. Do not remove maintenance markers, edit
 receipts, or swap database files manually after interruption; inspect the
 deployer result and follow the installation guide's exact recovery procedure.
+
+The attended migration from the former system LaunchDaemon uses a narrower
+handoff. Its child fresh-state deploy keeps Annals maintenance in place and
+renders the exact Clockwork definition, but does not register or select it.
+The outer migration verifies that inert file and durably records its committed phase
+before registration or binding selection, so the definition never points at a
+state root that rollback can move away. RunAtLoad remains maintenance-gated
+while the outer migration registers the definition, records its digest,
+selects `annals/inbox`, and retires the system files. It clears maintenance
+only after `system/org.annals.inbox` is proved absent and those steps complete.
+A failed bootout or still-loaded service retains the legacy files,
+transaction, and maintenance marker. A committed interruption retains the
+transaction and handoff so a rerun can finish the same definition and binding
+idempotently. Before commit the migration accepts only an absent Clockwork
+binding or a disabled tombstone with no selected digest. Legacy plist removal
+and restoration additionally require the complete file to match Annals'
+rendered template, expected owner, and mode. A familiar label or executable is
+not ownership, and an extra launchd key is treated as foreign.
 
 ## Fresh-state cutover
 
@@ -55,6 +99,7 @@ boundary:
   --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> \
   --nucleus <ABSOLUTE_NUCLEUS_BINARY> \
   --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> \
+  --clockwork <ABSOLUTE_CLOCKWORK_BINARY> \
   --fresh-state
 ```
 
@@ -75,6 +120,8 @@ After an authorized cutover, verify:
 /Users/joey/.local/bin/annals stats
 /Users/joey/.local/bin/annals inbox status
 /Users/joey/.local/bin/annals-usage doctor
+/Users/joey/.local/bin/clockwork --json binding show annals/inbox
+/Users/joey/.local/bin/clockwork --json history annals/inbox --limit 20
 ```
 
 Run a deliberate Annals integration canary when execution changed and inspect
@@ -87,3 +134,8 @@ may contain complete private source and model context. Preserve private
 ownership and permissions. Deployment does not authorize
 `annals/release.sh`, deletion of prior recovery material, or a fresh-state
 replacement.
+
+There is no supported raw path-only retirement sequence. A shared Clockwork
+key, launchd label, command pathname, or provider pathname is not ownership;
+leave it intact unless a product-owned operation has proved the exact current
+definition, fully rendered legacy plist, and selector targets before mutation.

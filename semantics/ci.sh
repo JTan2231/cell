@@ -27,7 +27,7 @@ for script in \
 do
     sh -n "$script"
 done
-/bin/zsh -n packaging/macos/semantics-worker
+/bin/sh -n packaging/macos/semantics-worker
 plutil -lint packaging/macos/org.semantics.worker.plist >/dev/null
 packaging/macos/test-frontend.sh
 packaging/macos/test-worker-runner.sh
@@ -53,9 +53,29 @@ ln -s "$SCRIPT_DIR/chancery" "$registry/semantics"
 ln -s "$WORKSPACE_DIR/decisions/chancery" "$registry/decisions"
 ln -s "$WORKSPACE_DIR/conversations/chancery" "$registry/conversations"
 ln -s "$WORKSPACE_DIR/nucleus/chancery" "$registry/nucleus"
+ln -s "$WORKSPACE_DIR/clockwork/chancery" "$registry/clockwork"
+ln -s "$WORKSPACE_DIR/chancery/provider" "$registry/chancery"
+ln -s "$WORKSPACE_DIR/email/chancery" "$registry/email"
 catalog=$(cargo run --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package chancery --locked --offline --quiet -- --registry "$registry" --json list)
 for entry_id in semantics.repository.explore semantics.project.operate semantics.develop.change; do
     case "$catalog" in *"\"id\":\"$entry_id\""*) ;; *) printf 'catalog entry missing: %s\n' "$entry_id" >&2; exit 1 ;; esac
+done
+for entry_id in semantics.project.operate semantics.develop.change; do
+    resolution=$(cargo run --manifest-path "$WORKSPACE_DIR/Cargo.toml" \
+        --package chancery --locked --offline --quiet -- \
+        --registry "$registry" --json resolve "$entry_id") || true
+    case "$resolution" in
+        *'"dependency_closure_status":"complete"'*) ;;
+        *) printf 'dependency closure is incomplete: %s\n' "$entry_id" >&2; exit 1 ;;
+    esac
+    case "$resolution" in
+        *'"id":"clockwork.schedule.operate"'*) ;;
+        *) printf 'Clockwork schedule dependency is absent: %s\n' "$entry_id" >&2; exit 1 ;;
+    esac
+    case "$resolution" in
+        *'"issues":[]'*) ;;
+        *) printf 'dependency compatibility failed: %s\n' "$entry_id" >&2; exit 1 ;;
+    esac
 done
 
 printf '%s\n' '==> rustfmt'

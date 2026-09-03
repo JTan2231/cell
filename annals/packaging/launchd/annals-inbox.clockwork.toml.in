@@ -1,0 +1,30 @@
+schema_version = 1
+key = "annals/inbox"
+release_id = "__RELEASE_ID__"
+release_root = "__RELEASE_ROOT__"
+authority = "current-user-background"
+overlap = "skip"
+arguments = []
+cwd = "__ANNALS_STATE__"
+
+[schedule]
+kind = "interval"
+seconds = 300
+run_at_load = true
+
+[launch]
+kind = "interpreted"
+interpreter = "/bin/sh"
+interpreter_sha256 = "__INTERPRETER_SHA256__"
+script = "__RELEASE_ROOT__/bin/annals-inbox"
+script_sha256 = "__RUNNER_SHA256__"
+
+[environment]
+HOME = "__ANNALS_HOME__"
+USER = "__ANNALS_USER__"
+LOGNAME = "__ANNALS_USER__"
+ANNALS_CONFIG = "__ANNALS_STATE__/config.toml"
+
+[output]
+stdout = "__ANNALS_LOGS__/inbox.stdout.log"
+stderr = "__ANNALS_LOGS__/inbox.stderr.log"

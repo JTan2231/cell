@@ -29,12 +29,16 @@ decisions show DECISION_ID
 decisions review confirm DECISION_ID
 ```
 
-The installed observer runs every 60 seconds. The 09:00 service normally does
-no model work: it reconciles and drains only missed observations before
+Clockwork activates the installed observer every 60 seconds and the daily
+runner at 09:00 machine-local time. The daily runner normally does no model
+work: it reconciles and drains only missed observations before
 projecting the previous local day as of a durable completion cutoff. A turn
 completing later can enter a manual rebuild of its authority date, but does not
 automatically amend an accepted scheduled delivery. The write-once activation
-baseline prevents deployment from importing older messages.
+baseline prevents deployment from importing older messages. During scheduler
+handoff, both release-pinned runners treat the private release-independent
+maintenance marker as a successful no-op before resolving release dependencies
+or doing domain work; invalid marker state fails closed.
 
 A temporarily incomplete or unavailable source is deferred so other ready
 observations can continue. After the exact Stop-hook source has been proven
