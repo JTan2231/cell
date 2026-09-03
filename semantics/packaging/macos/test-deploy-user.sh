@@ -23,6 +23,11 @@ cp "$SCRIPT_DIR/semantics" "$SCRIPT_DIR/semantics-worker" \
 cp -R "$SCRIPT_DIR/../../chancery" "$share/semantics"
 chmod 0755 "$package/semantics" "$package/semantics-worker" \
     "$package/deploy-user.sh" "$package/uninstall-user.sh"
+SEMANTICS_TEST_VERSION=$(awk -F '"' \
+    '/"release"[[:space:]]*:/ { print $4; exit }' \
+    "$share/semantics/provider.json")
+[ -n "$SEMANTICS_TEST_VERSION" ]
+export SEMANTICS_TEST_VERSION
 
 launchctl="$temporary/launchctl"
 loaded="$temporary/loaded"
@@ -83,7 +88,7 @@ candidate="$temporary/semantics"
 cat >"$candidate" <<'EOF'
 #!/bin/sh
 set -eu
-if [ "${1:-}" = --version ]; then printf '%s\n' 'semantics 0.1.0'; exit 0; fi
+if [ "${1:-}" = --version ]; then printf 'semantics %s\n' "$SEMANTICS_TEST_VERSION"; exit 0; fi
 database=
 previous=
 for argument in "$@"; do
@@ -106,7 +111,7 @@ bad_candidate="$temporary/semantics-bad"
 cat >"$bad_candidate" <<'EOF'
 #!/bin/sh
 set -eu
-if [ "${1:-}" = --version ]; then printf '%s\n' 'semantics 0.1.0'; exit 0; fi
+if [ "${1:-}" = --version ]; then printf 'semantics %s\n' "$SEMANTICS_TEST_VERSION"; exit 0; fi
 database=
 previous=
 for argument in "$@"; do
@@ -213,7 +218,7 @@ candidate_two="$temporary/semantics-two"
 cat >"$candidate_two" <<'EOF'
 #!/bin/sh
 set -eu
-if [ "${1:-}" = --version ]; then printf '%s\n' 'semantics 0.1.0'; exit 0; fi
+if [ "${1:-}" = --version ]; then printf 'semantics %s\n' "$SEMANTICS_TEST_VERSION"; exit 0; fi
 database=
 previous=
 for argument in "$@"; do
