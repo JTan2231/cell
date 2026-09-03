@@ -174,7 +174,7 @@ reported_version=$(target/release/semantics --version) \
     || fail 'untracked files appeared while running release checks'
 changed_files=$(git diff --name-only)
 expected_files=$(printf '%s\n' \
-    "$lockfile_path" "$provider_path" "$manifest_path")
+    "$lockfile_path" "$manifest_path" "$provider_path")
 [ "$changed_files" = "$expected_files" ] \
     || fail 'files other than the package, provider, and lockfile changed'
 git diff --check
