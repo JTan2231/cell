@@ -1,6 +1,6 @@
 {
   "id": "chancery.provider.publish",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -28,7 +28,7 @@
   "success": [
     "The source bundle passes chancery validate.",
     "The product CI proves the bundle is staged and its provider selector follows current across install, update, and rollback.",
-    "After deployment, chancery doctor is valid and list/show expose the intended contract.",
+    "After deployment, chancery doctor is valid, list/show expose the intended contract, and resolve exposes its scope, normalized claims, exact basis, dependency closure, and intentional gaps.",
     "The product still runs when Chancery and its registry are absent."
   ],
   "failure_and_recovery": [
@@ -64,11 +64,11 @@
   "automation": "none",
   "steps": [
     "Identify the durable user outcome and owning product before choosing an entry ID or mode.",
-    "Author a discriminative title and summary plus a self-contained manual from current product contracts, with semantic request boundaries, effects, authority, success, failure recovery, privacy, interfaces, and dependencies.",
+    "Author a scoped provider promise plus discriminative entries and self-contained manuals from current product contracts, with normalized boundary claims, semantic request boundaries, effects, authority, success, failure recovery, privacy, interfaces, dependencies, and substantive reliance kept distinct.",
     "Validate the source bundle with the candidate Chancery reader before changing installed selectors.",
     "Stage the unchanged bundle inside the owning product's content-addressed release and make its installer own exactly one registry selector.",
     "Exercise product CI and deployment rollback, then deploy the product release.",
-    "Run Chancery doctor and confirm that list and show expose the installed contract with its full meaning and status."
+    "Run Chancery doctor and confirm that list, show, and exact-ID resolve expose the installed contract with its full meaning, scope, basis, gaps, and status."
   ],
   "checkpoints": [
     "The product owner confirms the capability describes supported current behavior rather than an aspiration.",
@@ -87,5 +87,107 @@
     "A dependency or authority owner cannot be identified.",
     "The installer cannot update and roll back the product release and provider selector coherently."
   ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Product maintainers may use this operation to publish or revise product-owned outward promises for Chancery discovery and exact-ID resolution."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The owning product currently supports the claimed outcome, its public contracts establish the claims, and its release and selector lifecycle can stage and roll back the exact bundle coherently."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "The operation takes the product's current public contracts, provider source tree, release metadata, packaging protocol, and intended outward outcome as reviewed inputs."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "The product source contains one schema-valid provider scope, indexed entry set, normalized declarations where onboarded, manuals, dependency bounds, and packaging tests suitable for a matching product release."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Provider scope declares jurisdiction and a non-circular inventory boundary; entry claims distinguish declared support, explicit unsupported behavior, unspecified guarantees, and non-applicable facets."
+      },
+      {
+        "status": "declared",
+        "statement": "Documentation dependencies express installed contract compatibility; substantive runtime, data, authority, readiness, and external reliances are published separately and are never inferred from dependency edges."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Provider ID, product release, provider schema version, stable entry ID, and entry contract version are independently reviewed identities and versions."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "Provider publication defines no domain measurement unit."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "The provider's inventory claim must name a meaningful class of public outcomes and say whether coverage is complete or partial; it must not define completeness as merely whatever was indexed."
+      },
+      {
+        "status": "declared",
+        "statement": "The provider release identifies the exact published bundle bytes; installed freshness changes only when the product advances its owned selector."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Publication changes only product-owned source, releases, and the product's single installed provider selector through the product's reviewed maintenance path."
+      },
+      {
+        "status": "unsupported",
+        "statement": "This operation does not authorize taking over another provider's selector or editing an installed content-addressed bundle in place."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "The compatible reader deploys first, the owning product then stages and advances its bundle and selector atomically, integrated validation follows, and only then may global routing depend on the new contract."
+      },
+      {
+        "status": "declared",
+        "statement": "Rollback restores product program, bundle, and provider selector together without creating a product runtime dependency on Chancery."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "The operation stops when ownership, supported current behavior, dependency authority, safe bundle content, or coherent selector rollback cannot be established."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Publication cannot advertise aspirations, retain secrets or transient output, execute represented capabilities, or substitute contract validation for product-domain acceptance."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Schema additions follow reader-first deployment; incompatible entry semantics increment contract version; removal updates dependents and global routing before retiring the old contract."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No universal product release cadence or deprecation window is imposed by Chancery."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "The publication operation creates no product runtime reliance on Chancery; source and deployment tools are attended operation surfaces rather than capability dependencies."
+      }
+    ]
+  },
   "manual": "manuals/provider-publish.md"
 }

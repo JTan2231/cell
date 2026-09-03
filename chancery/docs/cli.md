@@ -3,6 +3,7 @@
 ```text
 chancery [--registry PATH] [--json] list [--mode MODE] [--kind KIND]
 chancery [--registry PATH] [--json] show ID
+chancery [--registry PATH] [--json] resolve ID [--min-contract VERSION] [--max-contract-exclusive VERSION] [--require FACET]...
 chancery [--registry PATH] [--json] doctor
 chancery [--json] validate BUNDLE
 ```
@@ -14,7 +15,12 @@ precedence over `CHANCERY_REGISTRY`.
 Every command is read-only. Chancery does not probe runtime readiness, execute
 a documented interface, call a model, or access the network. Usage errors exit
 2. Unreadable state, a missing requested entry, or an invalid doctor or
-validation report exits 1. JSON output is one versioned envelope.
+validation report exits 1. An unresolved dossier also exits 1 while retaining
+its complete inspectable result. JSON output is one versioned envelope.
+
+The output excerpts below are schematic. Provider releases, installed entries,
+and aggregate counts come from the selected registry and are not a maintained
+inventory in this document.
 
 ## `list`
 
@@ -99,6 +105,83 @@ applicable, and the complete installed Markdown manual. Reading `show` should
 be enough to decide and carry out the represented request without inspecting
 source code. It still does not prove live readiness or execute an interface.
 
+## `resolve`
+
+After discovery and `show` have selected one exact entry, resolve its complete
+outward-promise dossier:
+
+```sh
+/Users/joey/.local/bin/chancery resolve decisions.lifecycle.consume
+```
+
+`resolve` accepts exactly one stable installed ID. It does not accept a user
+request, keywords, provider guess, or ranking criteria. Candidate selection
+remains with the interactive agent; extra positional text is a usage error.
+
+The dossier contains:
+
+- the root provider identity, release, schema, promise scope, complete entry
+  and manual, normalized facet coverage, direct dependency status,
+  availability, compatibility, and readiness;
+- the same complete dossier for every installed transitive documentation
+  dependency, once, in stable ID order;
+- provider-manifest, entry, and manual bundle paths plus SHA-256 digests of the
+  exact raw UTF-8 bytes read;
+- optional contract-bound and required-positive-facet results; and
+- registry issues and explicit gaps.
+
+Provider scope and a complete normalized entry declaration are required for a
+fully resolved dossier. Schema-1, schema-2, and partially onboarded entries
+still resolve their existing full contracts, but absent scope and normalized
+facets are `undeclared`. Claim status remains `declared`, `unsupported`,
+`unspecified`, or `not_applicable`; a facet with several statuses is `mixed`.
+Silence is never converted into support from manual prose, a database schema,
+tests, or implementation code.
+
+Use optional bounds when a consumer needs a particular root contract family:
+
+```sh
+chancery resolve decisions.lifecycle.consume \
+  --min-contract 1 \
+  --max-contract-exclusive 2
+```
+
+Use repeatable `--require` values when a design needs positive root claims:
+
+```sh
+chancery resolve decisions.lifecycle.consume \
+  --require data_semantics \
+  --require completeness_and_freshness
+```
+
+The supported facet names are `applicability`, `outcome`, `consumers`,
+`preconditions`, `interfaces`, `inputs`, `outputs`, `data_semantics`,
+`identity_and_units`, `completeness_and_freshness`, `effects`, `authority`,
+`access`, `lifecycle_and_consistency`, `success`, `failure_and_recovery`,
+`privacy`, `operational_limits`, `compatibility_and_evolution`,
+`dependencies`, `reliances`, and `exclusions`. A requirement is satisfied only
+when that root facet contains a positive `declared` claim.
+
+Resolution status is:
+
+| Status | Meaning |
+| --- | --- |
+| `resolved_not_ready` | The documentary promise and dependency closure resolve; live readiness remains separately unchecked. |
+| `incomplete_declaration` | Scope, normalized claims, a dedicated substantive-reliance contract, or a required positive facet is absent. |
+| `dependency_unavailable` | A documentation dependency is missing, out of range, cyclic, or transitively unavailable. |
+| `contract_incompatible` | The root entry falls outside caller-supplied contract bounds. |
+
+Explicit `unsupported` and `not_applicable` claims are boundaries rather than
+gaps. Explicit `unspecified` claims are listed as gaps without making the
+authored document structurally incomplete. A substantive declared reliance
+without a dedicated versioned contract is an `uncontracted_reliance`; ordinary
+`dependencies` never acquire runtime or data-flow meaning by inference.
+
+`resolved_not_ready` exits 0. The other resolution statuses return the full
+dossier on stdout and exit 1 so automation cannot silently treat them as a
+complete promise. Resolution never probes readiness, executes an interface,
+or grants authorization.
+
 ## `doctor`
 
 `doctor` validates the complete installed registry and cross-provider contract
@@ -110,7 +193,7 @@ Chancery registry
 
 PASS  annals        0.12.0  7 entries
 PASS  annals-usage  0.4.0   3 entries
-PASS  chancery      0.2.0   2 entries
+PASS  chancery      0.2.0   3 entries
 PASS  nucleus       0.3.0   3 entries
 PASS  todo          0.3.0   7 entries
 PASS  weaver        0.1.0   3 entries
@@ -142,10 +225,11 @@ name another entry in the same bundle are checked for contract-version
 compatibility and cycles. Cross-provider dependencies are deliberately
 reported as `not_checked`; installed compatibility belongs to `doctor`.
 
-The current provider schema is version 2. During coordinated migration the
-reader also accepts schema-v1 bundles, discards their obsolete `routable` and
-`routing` metadata, and presents the same catalog and `show` shape. New or
-updated bundles must publish schema v2.
+The current provider schema is version 3. During coordinated migration the
+reader also accepts schema-1 and schema-2 bundles. It discards obsolete
+`routable` and `routing` metadata only for schema 1 and presents the same
+catalog and `show` shape. New or updated bundles publish schema 3 with a
+provider promise scope; older entries resolve with explicit normalized gaps.
 
 ## JSON
 
@@ -166,16 +250,20 @@ Invalid doctor or validate reports retain the complete data report with
 The JSON `show` result contains the complete current entry document, provider
 identity, availability, compatibility, readiness, dependency statuses, manual
 text, and registry issues. Neither list nor show emits legacy routing metadata.
+The JSON `resolve` result adds the requested ID, resolution and declaration
+status, contract and facet requirement results, root dossier, dependency
+closure, gaps, and registry issues. Each dossier includes its exact basis.
+
 Consumers should use the output schema version and named fields, not human
-formatting. Output schema 2 removes request-resolution documents and adds the
-complete catalog fields. The output-envelope schema is independent from the
-provider schema.
+formatting. Output schema 2 removed the former semantic request-resolution
+documents; the new exact-ID dossier is deterministic and does not restore that
+matcher. The output-envelope schema is independent from the provider schema.
 
 ## Exit status
 
 | Result | Exit |
 | --- | ---: |
-| List or show success | 0 |
+| List, show, or fully documented resolve success | 0 |
 | Valid doctor or standalone bundle | 0 |
-| Invalid doctor/bundle, unreadable registry, or missing entry | 1 |
+| Incomplete/incompatible resolve, invalid doctor/bundle, unreadable registry, or missing entry | 1 |
 | CLI usage | 2 |

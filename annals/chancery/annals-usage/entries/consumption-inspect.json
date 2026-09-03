@@ -26,7 +26,7 @@
     "Annals Usage owns only the disposable live interpretation and its projection version."
   ],
   "success": [
-    "Every reported delivery and attempt carries a coverage value explaining whether its total is exact, cumulative, incomplete, pending, no-model, or reused.",
+    "Every reported delivery carries exact, cumulative, gap, no-model, pending, or reused-no-new-usage coverage; each reported attempt carries exact, cumulative, gap, or pending coverage.",
     "Overlapping token categories are not added twice.",
     "Unattributed runs and output gaps remain visible rather than being silently reassigned or estimated."
   ],
@@ -52,5 +52,173 @@
     "Any Nucleus job, authentication, or service mutation.",
     "A claim that a rate-card equivalent is an invoice or subscription share."
   ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "A local user or agent examining model consumption attributable to Annals source deliveries may use this read-only live projection."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The report is not a generic arbitrary-command, arbitrary-requester, all-account, invoice, or subscription-allocation capability."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "A valid Annals Usage configuration identifies readable current Annals library and spool authority plus a readable Nucleus socket and its retained jobs, attempts, and output."
+      },
+      {
+        "status": "declared",
+        "statement": "Historical recalculation requires the owning Annals and Nucleus records to remain retained and compatible."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Report accepts an optional configuration path, JSON selection, and delivery limit; without a limit it selects the newest 20 Annals source deliveries."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The report accepts no arbitrary requester, command identity, invoice, subscription denominator, time-range query, historical estimate, or UI-scraped input."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Human output shows recent source deliveries, observed attempts, coverage, token categories, and any calculable known credit-equivalent."
+      },
+      {
+        "status": "declared",
+        "statement": "JSON additionally exposes projectionVersion, generation time, complete attempt and response projections, delivery attribution, coverage, known credit-equivalent and unpriced cache-write tokens, plus unattributed model runs."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Delivery coverage is exact, cumulative, gap, no-model, pending, or reused-no-new-usage; gap means no authoritative complete delivery total exists and must never be replaced by an estimate."
+      },
+      {
+        "status": "declared",
+        "statement": "An exact total sums distinct per-response usage for every observed attempt; cumulative uses a consistent final thread total fallback; unattributed runs remain visible rather than being assigned to a delivery."
+      },
+      {
+        "status": "unsupported",
+        "statement": "knownCreditEquivalent is a supported rate-card comparison, not an invoice amount, currency charge, subscription share, or account allowance unit."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "A model-run token correlates a Nucleus job with an Annals model run and, for inbox work, its source delivery and job receipt; a retry child remains a distinct delivery."
+      },
+      {
+        "status": "declared",
+        "statement": "inputTokens includes cached and cache-write input, outputTokens includes reasoning, and totalTokens equals input plus output; subset categories must not be added twice."
+      },
+      {
+        "status": "declared",
+        "statement": "knownCreditEquivalent applies the supported model rate card to measured ordinary input, cached input, and output; unpriced cache-write input is reported separately."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No generic currency, invoice unit, or account-wide credit unit beyond the named rate-card equivalent is promised."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Each invocation rereads current Annals delivery, model-run, receipt, and current Nucleus job, attempt, and output authorities and fails instead of serving a retained stale projection."
+      },
+      {
+        "status": "declared",
+        "statement": "Coverage qualifies completeness for every delivery and attempt; missing or unusable required output remains gap, active work remains pending, and uncorrelated work remains unattributed."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No atomic snapshot guarantee across separately read Annals and Nucleus authorities is promised."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No wall-clock visibility latency or upstream retention horizon is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported interface is the local annals-usage report CLI using its configured local Annals library, spool, and Nucleus socket; it reads no Nucleus credential files."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The report grants no direct mutation, arbitrary account query, remote service, database-sharing, or credential access surface."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Report derives one in-memory projection for one invocation and retains no telemetry database, aggregate, response projection, account snapshot, or offline fallback."
+      },
+      {
+        "status": "declared",
+        "statement": "Every Nucleus attempt associated with a delivery contributes separately; a retry child's new work remains attributed to the child, and the report does not pair or merge domain retry outcomes."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "The read-only projection has no acknowledgement, mutation idempotency, or consumer retry transaction."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "The default report scope is the newest 20 Annals source deliveries, and the command has no retained or offline reporting mode."
+      },
+      {
+        "status": "unsupported",
+        "statement": "A gap cannot be estimated, rate-card output cannot be promoted to invoice or subscription truth, and report output cannot be used to pair original and retry-child domain outcomes."
+      },
+      {
+        "status": "unspecified",
+        "statement": "The accepted --limit bounds, pagination behavior, stable recency ordering and tie-break, throughput, and wall-clock latency are not promised by this contract."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Every result identifies the annals-usage projectionVersion so derived interpretation may evolve independently of retained atomic records."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No exact JSON compatibility contract, projection-version migration rule, cross-release support window, or deprecation period is promised."
+      },
+      {
+        "status": "unspecified",
+        "statement": "The external supported-model rate card has no installed contract ID, pinned digest, version, or freshness guarantee in this capability."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "The projection reads Annals source deliveries, model-run attribution, library state, spool receipts, and retry identity, but no dedicated public upstream data-surface contract currently describes that exact reliance.",
+        "target": "annals",
+        "kind": "data"
+      },
+      {
+        "status": "declared",
+        "statement": "The projection reads Nucleus job, attempt, and exact ordered output records, but no dedicated public usage-data contract currently describes that exact reliance.",
+        "target": "nucleus",
+        "kind": "data"
+      },
+      {
+        "status": "declared",
+        "statement": "Known credit-equivalent calculations rely on an external supported-model rate card that has no installed Chancery contract or pinned version.",
+        "target": "external-rate-card",
+        "kind": "external"
+      },
+      {
+        "status": "unsupported",
+        "statement": "Documentation dependencies on annals.corpus.explore and nucleus.execution.operate must not be reinterpreted as promises for these private upstream data surfaces."
+      }
+    ]
+  },
   "manual": "manuals/consumption-inspect.md"
 }

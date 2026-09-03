@@ -50,6 +50,9 @@ ln -s "$WORKSPACE_DIR/email/chancery" "$registry/email"
 catalog=$(cargo run --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package chancery --locked --quiet -- --registry "$registry" --json list)
 case "$catalog" in *'"id":"decisions.daily.digest"'*) ;; *) printf '%s\n' 'daily digest missing from catalog' >&2; exit 1 ;; esac
 case "$catalog" in *'"id":"decisions.lifecycle.consume"'*) ;; *) printf '%s\n' 'lifecycle stream missing from catalog' >&2; exit 1 ;; esac
+resolution=$(cargo run --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package chancery --locked --quiet -- --registry "$registry" --json resolve decisions.lifecycle.consume --require completeness_and_freshness)
+case "$resolution" in *'"status":"resolved_not_ready"'*) ;; *) printf '%s\n' 'lifecycle promise did not resolve' >&2; exit 1 ;; esac
+case "$resolution" in *'"state":"mixed"'*) ;; *) printf '%s\n' 'lifecycle promise did not retain mixed declared and unspecified facets' >&2; exit 1 ;; esac
 
 printf '%s\n' '==> rustfmt'
 cargo fmt --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package decisions -- --check

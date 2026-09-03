@@ -37,6 +37,19 @@ chancery list
 chancery show ENTRY_ID
 ```
 
+When the question concerns a system's complete outward promise or a proposed
+design reliance, resolve the selected exact ID after semantic discovery:
+
+```sh
+chancery resolve ENTRY_ID
+```
+
+Resolution assembles the owner-declared provider scope, normalized boundary
+facets, complete root and transitive documentation contracts, exact basis, and
+explicit gaps. It is exact-ID analysis, not natural-language matching. Treat
+unsupported, unspecified, not-applicable, and undeclared facts distinctly;
+never fill a promise gap from a database schema or implementation detail.
+
 Chancery is a read-only documentation and discovery authority. It does not run
 the capability, choose an entry, probe readiness, authorize an effect, or
 determine domain success. The interactive agent owns semantic selection. The
@@ -68,8 +81,10 @@ Typical routing examples:
 - “What does this project mean by grounding?” is a Semantics query when that
   folder is registered.
 - “Have we already solved something shaped like this?” is a Geste query.
-- “What contracts must this new CRM reach with the systems it crosses?” is a
-  Pratica negotiation.
+- “What does Decisions promise a lifecycle consumer?” starts with Chancery
+  discovery and exact-ID promise resolution.
+- “Negotiate the exact CRM terms with each independently stewarded system
+  before implementation” is a Pratica negotiation.
 - “Could this new local project use an agent?” starts with the new-requester
   checklist in this manual.
 - “Fix this now” is ordinary immediate work, not automatically a Todo.
@@ -289,13 +304,11 @@ The following distinctions are operationally important:
 ~/Library/LaunchAgents/org.semantics.worker.plist
 
 ~/Library/Application Support/Chancery/providers/
-  nucleus -> Nucleus's current release share/chancery/nucleus
-  email -> Email's current release share/chancery/email
-  conversations -> Conversations's current release share/chancery/conversations
-  decisions -> Decisions's current release share/chancery/decisions
-  semantics -> Semantics's current release share/chancery/semantics
-  geste -> Geste's current release share/chancery/geste
-  pratica -> Pratica's current release share/chancery/pratica
+  PROVIDER_ID -> owning product's current release share/chancery/PROVIDER_ID
+
+Use `chancery doctor` for the current complete provider set. One product
+release may publish multiple independently versioned providers, as Annals and
+Annals Usage do.
 
 ~/Library/Application Support/Nucleus/
   install/
@@ -810,13 +823,25 @@ ordering, rollback boundary, and operator documentation before production use.
 
 ### 9. Add its capability relationship
 
-If the requester exposes a distinct user-facing durable outcome, publish a
-product-owned Chancery entry and detailed manual with its release. Give it a
-plain-language title and outcome-discriminative summary, then state when it
-does and does not apply, its effects, authority, success, recovery, privacy,
-interfaces, dependencies, and Nucleus relationship. Make the product installer
-own its one Chancery provider selector. Validate the source bundle in product
-CI and prove installed list/show discovery during deployment.
+If the requester exposes a distinct user-facing durable outcome or supported
+local-product consumer surface, publish a product-owned Chancery entry and
+detailed manual with its release. Give its provider a promise scope that names
+the product's jurisdiction and a meaningful complete or partial inventory
+boundary. Give the entry a plain-language title and outcome-discriminative
+summary, then state when it does and does not apply, its effects, authority,
+success, recovery, privacy, interfaces, and dependencies.
+
+Normalize the consumers, preconditions, inputs, outputs, data semantics,
+identity and units, completeness and freshness, access, lifecycle and
+consistency, limits, compatibility and evolution, and substantive reliances.
+Mark each claim declared, unsupported, unspecified, or not applicable. Keep
+documentation-contract dependencies distinct from runtime, data, authority,
+readiness, and external reliance; do not mechanically reinterpret old edges.
+
+Make the product installer own its one Chancery provider selector. Validate
+the source bundle in product CI and prove installed list/show discovery and
+exact-ID resolution during deployment. A resolver gap is an owning-product
+contract gap, not permission to infer a promise from code or schema.
 
 Do not copy the card into this manual or global discovery instructions. Global
 instructions contain only the Chancery bootstrap; exact behavior stays in the
@@ -844,8 +869,8 @@ provider registry or documentation storage.
 | Requester prompt, model, timeout, or permission profile | Requester | Use new job IDs for new attempts, verify health capabilities, and rerun domain acceptance tests. |
 | Credential or credential-lease behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and canary every requester. |
 | Nucleus service layout or installer | Nucleus CLI/packaging | Preserve state/log ownership, rollback, launchd behavior, and requester configuration. |
-| Chancery bundle schema, catalog, contract reader, or directory installation | Chancery | Preserve read-only behavior, failure isolation, complete installed inventory, and provider-owned selectors; do not introduce a product runtime dependency. |
-| A product's published capability or operation | Owning product | Stage the version-matched bundle with its release, validate it in product CI, require the complete root CI to accept the twelve-provider source dependency graph, and update only that product's Chancery selector. |
+| Chancery bundle schema, catalog, contract reader, exact-ID resolver, or directory installation | Chancery | Preserve read-only behavior, failure isolation, exact basis, explicit gaps, complete installed inventory, and provider-owned selectors; do not introduce semantic matching or a product runtime dependency. |
+| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the twelve-provider source graph, and update only that product's Chancery selector. |
 
 ## Guarded change playbooks
 
@@ -1081,10 +1106,13 @@ Use these placement rules to keep the manual current and small:
   exhaustive concern discovery, source truth, or deployment authorization.
 - **Component documentation:** exact Nucleus protocol, Todo creation behavior,
   Annals corpus and inbox behavior, or Annals Usage accounting.
-- **Chancery provider bundle:** current, version-matched user capability cards,
-  detailed capability manuals, and adaptive cross-system operation manuals.
-  The owning product controls its claims; Chancery controls schema and
-  discovery. An operation describes choreography but does not execute it.
+- **Chancery provider bundle:** current, version-matched provider promise
+  scope, normalized outward-boundary claims and substantive reliances, user
+  capability cards, detailed manuals, and adaptive cross-system operations.
+  The owning product controls its claims; Chancery controls schema, discovery,
+  deterministic resolution, exact basis, and gap classification. An operation
+  describes choreography but does not execute it, and a resolved dossier is
+  not runtime readiness or implementation proof.
 - **Code, schema, migration, and tests:** behavior the software must enforce.
   Documentation does not enforce idempotency, compatibility, or rollback.
 - **Code comment:** a narrow, non-obvious local invariant or race, paired with a
@@ -1191,5 +1219,6 @@ directory.
 
 - [Documentation index](/Users/joey/rust/cell/chancery/docs/README.md)
 - [Architecture](/Users/joey/rust/cell/chancery/docs/architecture.md)
+- [CLI contract](/Users/joey/rust/cell/chancery/docs/cli.md)
 - [Provider manifest](/Users/joey/rust/cell/chancery/docs/manifest.md)
 - [User-owned installation](/Users/joey/rust/cell/chancery/docs/system-installation.md)

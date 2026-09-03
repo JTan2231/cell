@@ -1,12 +1,14 @@
 # Discover installed capabilities and operations
 
-Chancery answers two questions from installed, version-matched documentation:
+Chancery answers three questions from installed, version-matched documentation:
 
 1. Which capabilities and adaptive operations are installed, and what result
    does each one offer?
 2. What exactly does a plausible capability claim to do, and where do its
    authority, side effects, recovery, privacy, and live-readiness boundaries
    end?
+3. Once one exact entry is selected, what complete outward promise, provider
+   scope, dependency closure, exact basis, and unresolved gaps does it expose?
 
 It does not answer those questions by scanning source trees, historical notes,
 or arbitrary documentation. Every provider explicitly indexes its entries.
@@ -48,6 +50,19 @@ contracts remain materially different but plausible, apply ordinary semantic
 judgment or ask the user for the choice that matters. Then invoke the selected
 interface separately if the request authorizes it. Chancery itself never
 invokes it.
+
+When the request concerns a complete system promise or a design reliance,
+resolve the selected exact ID after discovery:
+
+```sh
+/Users/joey/.local/bin/chancery resolve ENTRY_ID
+```
+
+Resolution is deterministic, not semantic search. It assembles provider scope,
+normalized claims, complete root and transitive dependency contracts, exact
+basis digests, and explicit gaps. Treat `unsupported`, `unspecified`,
+`not_applicable`, and `undeclared` distinctly. Do not fill a gap from a schema
+or implementation detail and call it a promise.
 
 ## State and failure boundaries
 

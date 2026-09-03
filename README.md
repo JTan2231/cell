@@ -12,7 +12,8 @@ product directories:
 - `annals/`: Annals and the independently versioned Annals Usage reporting
   projection;
 - `todo/`: the synchronous Todo CLI and its database;
-- `chancery/`: the read-only installed capability catalog and contract reader;
+- `chancery/`: the read-only installed capability catalog, contract reader,
+  and exact-ID outward-promise resolver;
 - `weaver/`: the durable five-stage public-facing narrative requester;
 - `email/`: the synchronous fixed-recipient plain-text Email CLI, which sends
   directly through Resend;
@@ -66,7 +67,10 @@ A shared Nucleus contract or client change must pass all eleven gates. A purely
 domain-local change may use its product gate while iterating, but the complete
 root gate is the final repository check. A complete run also assembles all
 twelve source provider bundles and requires Chancery doctor and list to accept
-their combined dependency graph.
+their combined dependency graph. It also proves the Decisions lifecycle pilot
+has a complete declaration and resolves as `resolved_not_ready` while retaining
+its explicit unspecified guarantees, and that the Annals Usage stress pilot
+reports its known uncontracted upstream reliances rather than hiding them.
 
 ## Versions and releases
 

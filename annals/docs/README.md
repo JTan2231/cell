@@ -41,3 +41,11 @@ The implemented contracts are:
   configuration, and systemd or launchd scheduling;
 - [Runtime characteristics](performance-results.md): enforced limits and cost
   shape, without unsupported benchmark claims.
+
+The [Annals provider](../chancery/annals/provider.json) and independently
+versioned [Annals Usage provider](../chancery/annals-usage/provider.json)
+publish their release-matched installed outward contracts. After discovery
+selects an exact entry, `chancery resolve ENTRY_ID` assembles the provider
+scope, normalized facets, dependency contracts, exact basis, and explicit
+gaps. Annals Usage remains authority only for its live projection, not for
+Annals or Nucleus records.

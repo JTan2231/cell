@@ -54,10 +54,12 @@ if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_s
 then
     printf '%s\n' '==> integrated Chancery source catalog'
     (
-        catalog_registry=$(mktemp -d "${TMPDIR:-/tmp}/cell-catalog.XXXXXX")
-        catalog_registry=$(CDPATH='' cd "$catalog_registry" && pwd)
+        catalog_workspace=$(mktemp -d "${TMPDIR:-/tmp}/cell-catalog.XXXXXX")
+        catalog_workspace=$(CDPATH='' cd "$catalog_workspace" && pwd)
+        catalog_registry="$catalog_workspace/providers"
+        mkdir "$catalog_registry"
         cleanup_catalog_registry() {
-            rm -rf "$catalog_registry"
+            rm -rf "$catalog_workspace"
         }
         trap cleanup_catalog_registry EXIT
         trap 'exit 1' HUP INT TERM
@@ -84,6 +86,26 @@ then
         }
         "$chancery_candidate" --registry "$catalog_registry" doctor
         "$chancery_candidate" --registry "$catalog_registry" --json list \
+            >/dev/null
+        "$chancery_candidate" --registry "$catalog_registry" --json resolve \
+            decisions.lifecycle.consume \
+            --require completeness_and_freshness \
+            >/dev/null
+
+        annals_resolution="$catalog_workspace/annals-usage-resolution.json"
+        set +e
+        "$chancery_candidate" --registry "$catalog_registry" --json resolve \
+            annals-usage.consumption.inspect >"$annals_resolution"
+        annals_resolution_status=$?
+        set -e
+        [ "$annals_resolution_status" -eq 1 ] || {
+            printf 'ci.sh: Annals Usage resolution should report incomplete declaration; exit %s\n' \
+                "$annals_resolution_status" >&2
+            exit 1
+        }
+        grep -F '"status":"incomplete_declaration"' "$annals_resolution" \
+            >/dev/null
+        grep -F '"code":"uncontracted_reliance"' "$annals_resolution" \
             >/dev/null
     )
 fi

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use serde_json::{Value, json};
+use sha2::{Digest as _, Sha256};
 use tempfile::TempDir;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -92,7 +93,7 @@ fn legacy_v1_bundles_are_read_with_routing_metadata_ignored() -> TestResult {
 }
 
 #[test]
-fn schema_v2_rejects_removed_routing_fields_and_newer_schemas() -> TestResult {
+fn schema_v2_rejects_removed_and_v3_fields_and_newer_schemas() -> TestResult {
     let fixture = Fixture::new()?;
     let mut routed = capability("alpha.run", &json!([]));
     routed["routable"] = json!(true);
@@ -102,10 +103,53 @@ fn schema_v2_rejects_removed_routing_fields_and_newer_schemas() -> TestResult {
     assert_eq!(routed_report.status.code(), Some(1));
     assert!(has_issue(&stdout_json(&routed_report)?, "invalid_entry"));
 
+    let promised = fixture.write_provider(
+        "promised",
+        vec![normalized_capability("promised.run", &json!([]))],
+    )?;
+    let promised_report = run_validate(&promised)?;
+    assert_eq!(promised_report.status.code(), Some(1));
+    assert!(has_issue(
+        &stdout_json(&promised_report)?,
+        "unexpected_promise_declaration"
+    ));
+
+    let null_scope = fixture.write_provider_named(
+        "null-scope",
+        "null-scope",
+        2,
+        vec![capability("null-scope.run", &json!([]))],
+    )?;
+    let manifest_path = null_scope.join("provider.json");
+    let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
+    manifest["promise_scope"] = Value::Null;
+    fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+    let null_scope_report = run_validate(&null_scope)?;
+    assert_eq!(null_scope_report.status.code(), Some(1));
+    assert!(has_issue(
+        &stdout_json(&null_scope_report)?,
+        "unexpected_promise_scope"
+    ));
+
+    let mut null_promise_entry = capability("null-promise.run", &json!([]));
+    null_promise_entry["promise"] = Value::Null;
+    let null_promise = fixture.write_provider_named(
+        "null-promise",
+        "null-promise",
+        2,
+        vec![null_promise_entry],
+    )?;
+    let null_promise_report = run_validate(&null_promise)?;
+    assert_eq!(null_promise_report.status.code(), Some(1));
+    assert!(has_issue(
+        &stdout_json(&null_promise_report)?,
+        "unexpected_promise_declaration"
+    ));
+
     let newer = fixture.write_provider_named(
         "newer",
         "beta",
-        3,
+        4,
         vec![capability("beta.run", &json!([]))],
     )?;
     let newer_report = run_validate(&newer)?;
@@ -114,6 +158,63 @@ fn schema_v2_rejects_removed_routing_fields_and_newer_schemas() -> TestResult {
         &stdout_json(&newer_report)?,
         "unsupported_schema"
     ));
+    Ok(())
+}
+
+#[test]
+fn schema_v3_requires_and_validates_provider_scope_and_promise_claims() -> TestResult {
+    let fixture = Fixture::new()?;
+    let missing_scope = fixture.write_provider_named(
+        "missing-scope",
+        "alpha",
+        3,
+        vec![normalized_capability("alpha.run", &json!([]))],
+    )?;
+    let missing_report = run_validate(&missing_scope)?;
+    assert_eq!(missing_report.status.code(), Some(1));
+    assert!(has_issue(
+        &stdout_json(&missing_report)?,
+        "missing_promise_scope"
+    ));
+
+    let mut blank_promise = normalized_capability("beta.run", &json!([]));
+    blank_promise["promise"]["outputs"] = json!([]);
+    let blank_root = fixture.write_v3_provider("beta", vec![blank_promise])?;
+    let blank_report = run_validate(&blank_root)?;
+    assert_eq!(blank_report.status.code(), Some(1));
+    assert!(has_issue(&stdout_json(&blank_report)?, "empty_field"));
+
+    let mut null_promise = normalized_capability("null-v3.run", &json!([]));
+    null_promise["promise"] = Value::Null;
+    let null_root = fixture.write_v3_provider("null-v3", vec![null_promise])?;
+    let null_report = run_validate(&null_root)?;
+    assert_eq!(null_report.status.code(), Some(1));
+    assert!(has_issue(
+        &stdout_json(&null_report)?,
+        "invalid_promise_declaration"
+    ));
+
+    let mut unbounded_reliance = normalized_capability("reliance.run", &json!([]));
+    unbounded_reliance["promise"]["reliances"] = json!([{
+        "status": "declared",
+        "statement": "The result relies on an upstream contract.",
+        "target": "upstream",
+        "kind": "data",
+        "contract": "upstream.read"
+    }]);
+    let reliance_root = fixture.write_v3_provider("reliance", vec![unbounded_reliance])?;
+    let reliance_report = run_validate(&reliance_root)?;
+    assert_eq!(reliance_report.status.code(), Some(1));
+    assert!(has_issue(
+        &stdout_json(&reliance_report)?,
+        "unbounded_reliance_contract"
+    ));
+
+    let valid = fixture.write_v3_provider(
+        "gamma",
+        vec![normalized_capability("gamma.run", &json!([]))],
+    )?;
+    assert!(run_validate(&valid)?.status.success());
     Ok(())
 }
 
@@ -218,6 +319,29 @@ fn standalone_validation_rejects_internal_dependency_cycles() -> TestResult {
     let report = run_validate(&cyclic)?;
     assert_eq!(report.status.code(), Some(1));
     assert!(has_issue(&stdout_json(&report)?, "dependency_cycle"));
+
+    let fixture = Fixture::new()?;
+    fixture.write_provider(
+        "alpha",
+        vec![
+            capability(
+                "alpha.one",
+                &json!([
+                    {"id": "alpha.two", "min_contract": 1, "max_contract_exclusive": 2},
+                    {"id": "alpha.three", "min_contract": 1, "max_contract_exclusive": 2}
+                ]),
+            ),
+            dependent_entry("alpha.two", "alpha.one"),
+            dependent_entry("alpha.three", "alpha.four"),
+            dependent_entry("alpha.four", "alpha.three"),
+        ],
+    )?;
+    let shown = stdout_json(&fixture.run_json(&["show", "alpha.one"])?)?;
+    assert_eq!(shown["data"]["dependency_statuses"][0]["state"], "cycle");
+    assert_eq!(
+        shown["data"]["dependency_statuses"][1]["state"],
+        "unavailable"
+    );
     Ok(())
 }
 
@@ -317,17 +441,225 @@ fn operations_require_session_surfaces_and_non_authorizations() -> TestResult {
         fixture.write_provider_named("career-valid", "career", 2, vec![operation_entry()])?;
     let valid = run_validate(&valid_root)?;
     assert!(valid.status.success());
+
+    let operation_fixture = Fixture::new()?;
+    let mut normalized_operation = operation_entry();
+    normalized_operation["promise"] = normalized_promise();
+    operation_fixture.write_v3_provider("career", vec![normalized_operation])?;
+    let resolved = stdout_json(&operation_fixture.run_json(&["resolve", "career.jobs.line-up"])?)?;
+    assert_eq!(resolved["data"]["status"], "resolved_not_ready");
+    assert_eq!(resolved["data"]["readiness"], "session_dependent");
+    assert_eq!(
+        resolved["data"]["root"]["facet_coverage"]["interfaces"]["state"],
+        "declared"
+    );
     Ok(())
 }
 
 #[test]
-fn resolve_is_not_a_command_and_errors_follow_the_cli_contract() -> TestResult {
+fn resolve_assembles_an_exact_dossier_and_reports_legacy_dependency_gaps() -> TestResult {
     let fixture = Fixture::new()?;
-    fixture.write_provider("alpha", vec![capability("alpha.run", &json!([]))])?;
+    let alpha_root = fixture.write_v3_provider(
+        "alpha",
+        vec![normalized_capability(
+            "alpha.run",
+            &json!([{
+                "id": "beta.run",
+                "min_contract": 1,
+                "max_contract_exclusive": 2
+            }]),
+        )],
+    )?;
+    fixture.write_v3_provider(
+        "beta",
+        vec![normalized_capability(
+            "beta.run",
+            &json!([{
+                "id": "gamma.run",
+                "min_contract": 1,
+                "max_contract_exclusive": 2
+            }]),
+        )],
+    )?;
+    fixture.write_provider("gamma", vec![capability("gamma.run", &json!([]))])?;
+    let before = tree_snapshot(fixture.registry())?;
 
-    let removed = fixture.run_json(&["resolve", "run", "alpha"])?;
-    assert_eq!(removed.status.code(), Some(2));
-    let error = stderr_json(&removed)?;
+    let resolved = fixture.run_json(&[
+        "resolve",
+        "alpha.run",
+        "--min-contract",
+        "1",
+        "--max-contract-exclusive",
+        "2",
+        "--require",
+        "data_semantics",
+    ])?;
+    assert_eq!(resolved.status.code(), Some(1));
+    let resolved_json = stdout_json(&resolved)?;
+    assert_eq!(resolved_json["ok"], false);
+    assert_eq!(resolved_json["data"]["status"], "incomplete_declaration");
+    assert_eq!(
+        resolved_json["data"]["contract_requirement"]["satisfied"],
+        true
+    );
+    assert_eq!(
+        resolved_json["data"]["facet_requirements"]["unsatisfied"]
+            .as_array()
+            .map(Vec::len),
+        Some(0)
+    );
+    assert_eq!(
+        resolved_json["data"]["root"]["provider_promise_scope"]["inventory"]["completeness"],
+        "complete"
+    );
+    assert_eq!(
+        resolved_json["data"]["root"]["facet_coverage"]["data_semantics"]["state"],
+        "declared"
+    );
+    assert_eq!(
+        resolved_json["data"]["dependency_closure"][0]["entry"]["id"],
+        "beta.run"
+    );
+    assert_eq!(
+        resolved_json["data"]["dependency_closure"][1]["entry"]["id"],
+        "gamma.run"
+    );
+    assert!(has_gap(&resolved_json, "provider_scope_undeclared"));
+    assert!(has_gap(&resolved_json, "facet_undeclared"));
+    assert_eq!(
+        resolved_json["data"]["root"]["basis"]["provider_manifest"]["sha256"],
+        sha256_file(&alpha_root.join("provider.json"))?
+    );
+    assert_eq!(
+        resolved_json["data"]["root"]["basis"]["entry_contract"]["sha256"],
+        sha256_file(&alpha_root.join("entries/alpha-run.json"))?
+    );
+    assert_eq!(
+        resolved_json["data"]["root"]["basis"]["manual"]["sha256"],
+        sha256_file(&alpha_root.join("manuals/alpha-run.md"))?
+    );
+
+    let human = fixture.run_human(&["resolve", "alpha.run"])?;
+    assert_eq!(human.status.code(), Some(1));
+    let human = String::from_utf8(human.stdout)?;
+    assert!(human.contains("Resolved outward promise"));
+    assert!(human.contains("DEPENDENCY CONTRACT"));
+    assert!(human.contains("RESOLUTION GAPS"));
+    assert!(human.contains("Readiness:           not_checked"));
+    assert_eq!(before, tree_snapshot(fixture.registry())?);
+    Ok(())
+}
+
+#[test]
+fn fully_declared_resolution_succeeds_without_claiming_readiness() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.write_v3_provider(
+        "alpha",
+        vec![normalized_capability("alpha.run", &json!([]))],
+    )?;
+
+    let resolved = fixture.run_json(&[
+        "resolve",
+        "alpha.run",
+        "--require",
+        "outputs",
+        "--require",
+        "data_semantics",
+    ])?;
+    assert!(resolved.status.success());
+    let resolved = stdout_json(&resolved)?;
+    assert_eq!(resolved["ok"], true);
+    assert_eq!(resolved["data"]["status"], "resolved_not_ready");
+    assert_eq!(resolved["data"]["readiness"], "not_checked");
+    assert_eq!(resolved["data"]["dependency_closure_status"], "complete");
+    assert_eq!(
+        resolved["data"]["dependency_closure"]
+            .as_array()
+            .map(Vec::len),
+        Some(0)
+    );
+    assert_eq!(resolved["data"]["gaps"].as_array().map(Vec::len), Some(0));
+
+    let unsatisfied = fixture.run_json(&["resolve", "alpha.run", "--require", "reliances"])?;
+    assert_eq!(unsatisfied.status.code(), Some(1));
+    let unsatisfied = stdout_json(&unsatisfied)?;
+    assert_eq!(unsatisfied["data"]["status"], "incomplete_declaration");
+    assert!(has_gap(&unsatisfied, "required_facet_unsatisfied"));
+    Ok(())
+}
+
+#[test]
+fn partial_provider_inventory_remains_an_explicit_resolution_gap() -> TestResult {
+    let fixture = Fixture::new()?;
+    let root = fixture.write_v3_provider(
+        "alpha",
+        vec![normalized_capability("alpha.run", &json!([]))],
+    )?;
+    let manifest_path = root.join("provider.json");
+    let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
+    manifest["promise_scope"]["inventory"]["completeness"] = json!("partial");
+    fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+
+    let resolved = fixture.run_json(&["resolve", "alpha.run"])?;
+    assert_eq!(resolved.status.code(), Some(1));
+    let resolved = stdout_json(&resolved)?;
+    assert_eq!(resolved["data"]["status"], "incomplete_declaration");
+    assert!(has_gap(&resolved, "provider_inventory_partial"));
+    Ok(())
+}
+
+#[test]
+fn resolve_reports_dependency_and_uncontracted_reliance_gaps() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.write_v3_provider(
+        "alpha",
+        vec![normalized_capability(
+            "alpha.run",
+            &json!([{
+                "id": "missing.run",
+                "min_contract": 1,
+                "max_contract_exclusive": 2
+            }]),
+        )],
+    )?;
+    let unavailable = fixture.run_json(&["resolve", "alpha.run"])?;
+    assert_eq!(unavailable.status.code(), Some(1));
+    let unavailable = stdout_json(&unavailable)?;
+    assert_eq!(unavailable["data"]["status"], "dependency_unavailable");
+    assert_eq!(
+        unavailable["data"]["dependency_closure_status"],
+        "unavailable"
+    );
+    assert_eq!(unavailable["data"]["root"]["entry"]["id"], "alpha.run");
+    assert!(has_gap(&unavailable, "dependency_unavailable"));
+
+    let mut reliant = normalized_capability("reliant.run", &json!([]));
+    reliant["promise"]["reliances"] = json!([{
+        "status": "declared",
+        "statement": "The result reads upstream records without a published data contract.",
+        "target": "upstream",
+        "kind": "data"
+    }]);
+    fixture.write_v3_provider("reliant", vec![reliant])?;
+    let unresolved = fixture.run_json(&["resolve", "reliant.run"])?;
+    assert_eq!(unresolved.status.code(), Some(1));
+    let unresolved = stdout_json(&unresolved)?;
+    assert_eq!(unresolved["data"]["status"], "incomplete_declaration");
+    assert!(has_gap(&unresolved, "uncontracted_reliance"));
+    Ok(())
+}
+
+#[test]
+fn resolve_requires_one_exact_id_and_valid_contract_bounds() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.write_v3_provider(
+        "alpha",
+        vec![normalized_capability("alpha.run", &json!([]))],
+    )?;
+
+    let semantic_text = fixture.run_json(&["resolve", "alpha.run", "extra words"])?;
+    assert_eq!(semantic_text.status.code(), Some(2));
+    let error = stderr_json(&semantic_text)?;
     assert_eq!(error["schema_version"], 2);
     assert_eq!(error["error"]["code"], "invalid_command");
 
@@ -340,11 +672,32 @@ fn resolve_is_not_a_command_and_errors_follow_the_cli_contract() -> TestResult {
 
     let help = fixture.run_human(&["--help"])?;
     assert!(help.status.success());
-    assert!(!String::from_utf8(help.stdout)?.contains("  resolve"));
+    assert!(String::from_utf8(help.stdout)?.contains("  resolve"));
 
-    let missing = fixture.run_json(&["show", "missing.entry"])?;
+    let missing = fixture.run_json(&["resolve", "missing.entry"])?;
     assert_eq!(missing.status.code(), Some(1));
     assert_eq!(stderr_json(&missing)?["error"]["code"], "entry_not_found");
+
+    let invalid_range = fixture.run_json(&[
+        "resolve",
+        "alpha.run",
+        "--min-contract",
+        "2",
+        "--max-contract-exclusive",
+        "2",
+    ])?;
+    assert_eq!(invalid_range.status.code(), Some(1));
+    assert_eq!(
+        stderr_json(&invalid_range)?["error"]["code"],
+        "invalid_contract_range"
+    );
+
+    let incompatible = fixture.run_json(&["resolve", "alpha.run", "--min-contract", "2"])?;
+    assert_eq!(incompatible.status.code(), Some(1));
+    assert_eq!(
+        stdout_json(&incompatible)?["data"]["status"],
+        "contract_incompatible"
+    );
     Ok(())
 }
 
@@ -382,6 +735,15 @@ impl Fixture {
         entries: Vec<Value>,
     ) -> Result<PathBuf, Box<dyn Error>> {
         self.write_provider_named(id, id, 1, entries)
+    }
+
+    fn write_v3_provider(&self, id: &str, entries: Vec<Value>) -> Result<PathBuf, Box<dyn Error>> {
+        let root = self.write_provider_named(id, id, 3, entries)?;
+        let manifest_path = root.join("provider.json");
+        let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
+        manifest["promise_scope"] = provider_promise_scope();
+        fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+        Ok(root)
     }
 
     fn write_provider_named(
@@ -480,6 +842,49 @@ fn capability(id: &str, dependencies: &Value) -> Value {
     })
 }
 
+fn normalized_capability(id: &str, dependencies: &Value) -> Value {
+    let mut entry = capability(id, dependencies);
+    entry["promise"] = normalized_promise();
+    entry
+}
+
+fn normalized_promise() -> Value {
+    json!({
+        "consumers": [claim("declared", "Local callers may use this capability.")],
+        "preconditions": [claim("declared", "The installed provider is available.")],
+        "inputs": [claim("declared", "The documented input is accepted.")],
+        "outputs": [claim("declared", "The documented output is returned.")],
+        "data_semantics": [claim("declared", "Output fields retain their documented meaning.")],
+        "identity_and_units": [claim("declared", "Stable IDs identify records.")],
+        "completeness_and_freshness": [claim("declared", "The output states its current coverage.")],
+        "access": [claim("declared", "Access is local and read-only.")],
+        "lifecycle_and_consistency": [claim("declared", "One invocation observes one provider view.")],
+        "operational_limits": [claim("declared", "The documented bounds apply.")],
+        "compatibility_and_evolution": [claim("declared", "Contract version identifies compatibility.")],
+        "reliances": [claim("not_applicable", "No substantive cross-system reliance exists.")]
+    })
+}
+
+fn claim(status: &str, statement: &str) -> Value {
+    json!({"status": status, "statement": statement})
+}
+
+fn provider_promise_scope() -> Value {
+    json!({
+        "authoritative_for": ["The provider owns its domain result."],
+        "not_authoritative_for": ["The caller owns its domain use."],
+        "inventory": {
+            "covers": ["All supported public CLI outcomes in this fixture."],
+            "completeness": "complete",
+            "excludes": ["Implementation helpers and live readiness."]
+        },
+        "shared_access_and_trust": ["Interfaces are local."],
+        "shared_privacy_and_retention": ["The provider retains no resolver state."],
+        "compatibility_and_retirement": ["Contract versions identify compatibility."],
+        "operational_limits": ["Per-entry bounds apply."]
+    })
+}
+
 fn legacy_capability(id: &str, trigger: &str, dependencies: &Value) -> Value {
     let mut entry = capability(id, dependencies);
     entry["routable"] = json!(true);
@@ -574,6 +979,12 @@ fn has_issue(value: &Value, code: &str) -> bool {
         .is_some_and(|issues| issues.iter().any(|issue| issue["code"] == code))
 }
 
+fn has_gap(value: &Value, code: &str) -> bool {
+    value["data"]["gaps"]
+        .as_array()
+        .is_some_and(|gaps| gaps.iter().any(|gap| gap["code"] == code))
+}
+
 fn tree_snapshot(
     root: &Path,
 ) -> Result<Vec<(PathBuf, u64, Option<std::time::SystemTime>)>, io::Error> {
@@ -605,4 +1016,8 @@ fn tree_snapshot(
     let mut values = Vec::new();
     walk(root, root, &mut values)?;
     Ok(values)
+}
+
+fn sha256_file(path: &Path) -> Result<String, io::Error> {
+    Ok(format!("{:x}", Sha256::digest(fs::read(path)?)))
 }

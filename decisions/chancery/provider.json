@@ -1,9 +1,44 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "provider": {
     "id": "decisions",
     "name": "Decisions",
     "release": "0.3.1"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Decisions owns its durable runs, observations, admitted candidates, normalized candidate meaning, source anchors, append-only reviews, lifecycle-event order and envelopes, daily projections and snapshots, and delivery attempts.",
+      "Decisions SQLite is authoritative for those records and their domain transitions."
+    ],
+    "not_authoritative_for": [
+      "Only the cited user message supplies decision authority; file activity selects an enacted turn but does not make a decision.",
+      "Conversations owns normalized conversation-source resolution, Nucleus owns bounded execution and retained request and output records, Email owns transport acceptance, and lifecycle consumers own their copied state, cursor, policy, retry, retention, and domain success."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Decisions CLI outcomes, supported local-product consumer surfaces, installation and recovery operations, and development operations in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, implementation primitives, direct SQLite access, upstream product capabilities, client-side hook trust, current runtime readiness, and downstream consumer behavior are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Decisions interfaces are local-user surfaces; each entry separately declares whether it reads, writes, or invokes another product.",
+      "A published read surface does not authorize direct SQLite access, mutation through that surface, or downstream interpretation as Decisions authority."
+    ],
+    "shared_privacy_and_retention": [
+      "Decisions state is private local-user state and may contain normalized decision text and machine-local source anchors.",
+      "A capability may disclose or invoke another product only where its own entry explicitly says so; no general disclosure or retention promise follows from provider installation."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release identifies these exact bundle bytes, and entry contract versions identify documented semantic compatibility.",
+      "No additional cross-release support, migration window, or deprecation period is promised unless an entry declares it."
+    ],
+    "operational_limits": [
+      "Inventory completeness concerns published interfaces and operations, not live service readiness, downstream availability, or unlimited throughput and retention.",
+      "Per-entry contracts own command bounds, failure behavior, recovery, and any narrower non-guarantees."
+    ]
   },
   "entries": [
     "entries/daily-digest.json",

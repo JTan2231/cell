@@ -54,3 +54,17 @@ The report reads private local attribution and output metadata. Historical
 recalculation depends on retaining the underlying Annals and Nucleus
 authorities. Use `annals-usage budget` for a live account-global allowance
 snapshot; that snapshot cannot be converted into an exact per-delivery share.
+
+The report defaults to the newest 20 source deliveries. This contract does not
+promise the accepted `--limit` bounds, pagination, stable recency tie-breaking,
+an atomic snapshot across Annals and Nucleus, a wall-clock visibility bound, or
+an upstream retention horizon. `projectionVersion` identifies the live
+interpretation, but no exact JSON compatibility, migration, or deprecation
+window is promised.
+
+The installed dependencies on `annals.corpus.explore` and
+`nucleus.execution.operate` establish documentation-contract compatibility;
+they are not dedicated contracts for the private upstream records this report
+reads. Those Annals and Nucleus data reliances, and the external rate card with
+no pinned contract version or digest, remain explicit resolver gaps rather
+than inferred public data surfaces.

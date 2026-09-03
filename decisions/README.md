@@ -49,4 +49,7 @@ transcripts, working directories, paths, diffs, commands, or tool output.
 
 See [docs/architecture.md](docs/architecture.md), [docs/cli.md](docs/cli.md),
 [docs/data-model.md](docs/data-model.md), and
-[docs/system-installation.md](docs/system-installation.md).
+[docs/system-installation.md](docs/system-installation.md). The
+[release-matched Chancery provider](chancery/provider.json) publishes the
+complete Decisions outward inventory; after selecting an exact entry, use
+`chancery resolve ENTRY_ID` for its scoped promise and explicit gaps.

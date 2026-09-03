@@ -3,13 +3,15 @@ use std::fs;
 use std::io::Read as _;
 use std::path::{Component, Path};
 
+use sha2::{Digest as _, Sha256};
 use unicode_normalization::UnicodeNormalization as _;
 
 use crate::error::AppError;
 use crate::model::{
-    DependencyState, DependencyStatus, EntryDocument, EntryKind, Issue,
-    LEGACY_PROVIDER_SCHEMA_VERSION, LoadedEntry, PROVIDER_SCHEMA_VERSION, ProviderBundle,
-    ProviderManifest, Registry,
+    ClaimStatus, DependencyState, DependencyStatus, EntryDocument, EntryKind, EntryPromise, Issue,
+    LEGACY_PROVIDER_SCHEMA_VERSION, LoadedEntry, PREVIOUS_PROVIDER_SCHEMA_VERSION,
+    PROVIDER_SCHEMA_VERSION, PromiseClaim, ProviderBundle, ProviderManifest, ProviderPromiseScope,
+    Registry, RelianceClaim,
 };
 
 const MAX_MANIFEST_BYTES: u64 = 1_048_576;
@@ -166,7 +168,7 @@ fn load_registry_child(child: &Path, issues: &mut Vec<Issue>) -> Option<Provider
 }
 
 pub(crate) fn load_bundle(bundle_path: &Path) -> Result<ProviderBundle, Vec<Issue>> {
-    let (root, manifest) = load_manifest(bundle_path)?;
+    let (root, manifest, manifest_sha256) = load_manifest(bundle_path)?;
     let mut issues = validate_manifest(&manifest);
     if manifest.entries.len() > MAX_ENTRIES_PER_PROVIDER {
         issues.push(Issue::new(
@@ -188,8 +190,11 @@ pub(crate) fn load_bundle(bundle_path: &Path) -> Result<ProviderBundle, Vec<Issu
     }
     entries.sort_by(|left, right| left.document.id.cmp(&right.document.id));
     Ok(ProviderBundle {
+        schema_version: manifest.schema_version,
         identity: manifest.provider,
+        promise_scope: manifest.promise_scope,
         root,
+        manifest_sha256,
         entries,
     })
 }
@@ -226,6 +231,7 @@ pub(crate) fn validate_internal_dependencies(provider: &ProviderBundle) -> Vec<I
             };
             let state = if cycle_nodes.contains(&entry.document.id)
                 && cycle_nodes.contains(&dependency.id)
+                && dependency_edge_is_cyclic(&entry.document.id, &dependency.id, &adjacency)
             {
                 DependencyState::Cycle
             } else if installed_contract < dependency.min_contract
@@ -254,7 +260,9 @@ pub(crate) fn validate_internal_dependencies(provider: &ProviderBundle) -> Vec<I
     issues
 }
 
-fn load_manifest(bundle_path: &Path) -> Result<(std::path::PathBuf, ProviderManifest), Vec<Issue>> {
+fn load_manifest(
+    bundle_path: &Path,
+) -> Result<(std::path::PathBuf, ProviderManifest, String), Vec<Issue>> {
     let root = fs::canonicalize(bundle_path).map_err(|error| {
         vec![
             Issue::new(
@@ -282,16 +290,32 @@ fn load_manifest(bundle_path: &Path) -> Result<(std::path::PathBuf, ProviderMani
         MAX_MANIFEST_BYTES,
         "manifest_unavailable",
     )?;
-    let manifest = serde_json::from_str(&manifest_text).map_err(|error| {
-        vec![
-            Issue::new(
-                "invalid_manifest",
-                format!("invalid provider.json: {error}"),
-            )
-            .path(root.join("provider.json").display().to_string()),
-        ]
-    })?;
-    Ok((root, manifest))
+    let manifest_value: serde_json::Value =
+        serde_json::from_str(&manifest_text).map_err(|error| {
+            vec![
+                Issue::new(
+                    "invalid_manifest",
+                    format!("invalid provider.json: {error}"),
+                )
+                .path(root.join("provider.json").display().to_string()),
+            ]
+        })?;
+    let promise_scope_present = manifest_value
+        .as_object()
+        .is_some_and(|object| object.contains_key("promise_scope"));
+    let mut manifest: ProviderManifest =
+        serde_json::from_value(manifest_value).map_err(|error| {
+            vec![
+                Issue::new(
+                    "invalid_manifest",
+                    format!("invalid provider.json: {error}"),
+                )
+                .path(root.join("provider.json").display().to_string()),
+            ]
+        })?;
+    manifest.promise_scope_present = promise_scope_present;
+    let manifest_sha256 = sha256(&manifest_text);
+    Ok((root, manifest, manifest_sha256))
 }
 
 fn load_entries(
@@ -353,7 +377,7 @@ fn load_entry(
             .path(indexed_path),
         ]
     })?;
-    let mut issues = validate_entry(provider_id, &document);
+    let mut issues = validate_entry(schema_version, provider_id, &document);
     if !entry_ids.insert(document.id.clone()) {
         issues.push(
             Issue::new(
@@ -367,6 +391,9 @@ fn load_entry(
     if issues.is_empty() {
         Ok(LoadedEntry {
             document,
+            source_path: indexed_path.to_owned(),
+            source_sha256: sha256(&entry_text),
+            manual_sha256: sha256(&manual_text),
             manual_text,
             dependency_statuses: Vec::new(),
             compatible: true,
@@ -378,13 +405,18 @@ fn load_entry(
 
 fn parse_entry(entry_text: &str, schema_version: u32) -> Result<EntryDocument, serde_json::Error> {
     let mut value: serde_json::Value = serde_json::from_str(entry_text)?;
+    let promise_present = value
+        .as_object()
+        .is_some_and(|object| object.contains_key("promise"));
     if schema_version == LEGACY_PROVIDER_SCHEMA_VERSION
         && let Some(object) = value.as_object_mut()
     {
         object.remove("routable");
         object.remove("routing");
     }
-    serde_json::from_value(value)
+    let mut document: EntryDocument = serde_json::from_value(value)?;
+    document.promise_present = promise_present;
+    Ok(document)
 }
 
 fn load_manual(root: &Path, document: &EntryDocument, issues: &mut Vec<Issue>) -> String {
@@ -444,13 +476,16 @@ fn validate_manifest(manifest: &ProviderManifest) -> Vec<Issue> {
     let mut issues = Vec::new();
     if !matches!(
         manifest.schema_version,
-        LEGACY_PROVIDER_SCHEMA_VERSION | PROVIDER_SCHEMA_VERSION
+        LEGACY_PROVIDER_SCHEMA_VERSION | PREVIOUS_PROVIDER_SCHEMA_VERSION | PROVIDER_SCHEMA_VERSION
     ) {
         issues.push(Issue::new(
             "unsupported_schema",
             format!(
-                "provider schema {} is unsupported; supported schemas are {} and {}",
-                manifest.schema_version, LEGACY_PROVIDER_SCHEMA_VERSION, PROVIDER_SCHEMA_VERSION
+                "provider schema {} is unsupported; supported schemas are {}, {}, and {}",
+                manifest.schema_version,
+                LEGACY_PROVIDER_SCHEMA_VERSION,
+                PREVIOUS_PROVIDER_SCHEMA_VERSION,
+                PROVIDER_SCHEMA_VERSION
             ),
         ));
     }
@@ -473,17 +508,316 @@ fn validate_manifest(manifest: &ProviderManifest) -> Vec<Issue> {
             "provider must index at least one entry",
         ));
     }
+    match (
+        manifest.schema_version,
+        manifest.promise_scope_present,
+        &manifest.promise_scope,
+    ) {
+        (PROVIDER_SCHEMA_VERSION, true, Some(scope)) => {
+            validate_provider_scope(&manifest.provider.id, scope, &mut issues);
+        }
+        (PROVIDER_SCHEMA_VERSION, _, None) => issues.push(
+            Issue::new(
+                "missing_promise_scope",
+                "provider schema 3 requires promise_scope to be an object",
+            )
+            .provider(&manifest.provider.id),
+        ),
+        (LEGACY_PROVIDER_SCHEMA_VERSION | PREVIOUS_PROVIDER_SCHEMA_VERSION, true, _) => issues
+            .push(
+                Issue::new(
+                    "unexpected_promise_scope",
+                    "promise_scope requires provider schema 3",
+                )
+                .provider(&manifest.provider.id),
+            ),
+        _ => {}
+    }
     issues
 }
 
-fn validate_entry(provider_id: &str, entry: &EntryDocument) -> Vec<Issue> {
+fn validate_entry(schema_version: u32, provider_id: &str, entry: &EntryDocument) -> Vec<Issue> {
     let mut issues = Vec::new();
     validate_entry_identity(provider_id, entry, &mut issues);
     validate_entry_text(entry, &mut issues);
     validate_interfaces(entry, &mut issues);
     validate_dependencies(entry, &mut issues);
     validate_entry_kind(entry, &mut issues);
+    match (schema_version, entry.promise_present, &entry.promise) {
+        (PROVIDER_SCHEMA_VERSION, true, Some(promise)) => {
+            validate_promise(entry, promise, &mut issues);
+        }
+        (PROVIDER_SCHEMA_VERSION, true, None) => issues.push(
+            Issue::new(
+                "invalid_promise_declaration",
+                "promise must be an object or omitted",
+            )
+            .entry(&entry.id),
+        ),
+        (LEGACY_PROVIDER_SCHEMA_VERSION | PREVIOUS_PROVIDER_SCHEMA_VERSION, true, _) => issues
+            .push(
+                Issue::new(
+                    "unexpected_promise_declaration",
+                    "entry promise requires provider schema 3",
+                )
+                .entry(&entry.id),
+            ),
+        _ => {}
+    }
     issues
+}
+
+fn validate_provider_scope(
+    provider_id: &str,
+    scope: &ProviderPromiseScope,
+    issues: &mut Vec<Issue>,
+) {
+    for (label, values) in [
+        ("authoritative_for", scope.authoritative_for.as_slice()),
+        (
+            "not_authoritative_for",
+            scope.not_authoritative_for.as_slice(),
+        ),
+        ("inventory.covers", scope.inventory.covers.as_slice()),
+        ("inventory.excludes", scope.inventory.excludes.as_slice()),
+        (
+            "shared_access_and_trust",
+            scope.shared_access_and_trust.as_slice(),
+        ),
+        (
+            "shared_privacy_and_retention",
+            scope.shared_privacy_and_retention.as_slice(),
+        ),
+        (
+            "compatibility_and_retirement",
+            scope.compatibility_and_retirement.as_slice(),
+        ),
+        ("operational_limits", scope.operational_limits.as_slice()),
+    ] {
+        validate_provider_list(label, values, provider_id, issues);
+    }
+}
+
+fn validate_provider_list(
+    label: &str,
+    values: &[String],
+    provider_id: &str,
+    issues: &mut Vec<Issue>,
+) {
+    if values.is_empty() {
+        issues.push(
+            Issue::new(
+                "empty_field",
+                format!("promise_scope.{label} must not be empty"),
+            )
+            .provider(provider_id),
+        );
+        return;
+    }
+    let mut unique = BTreeSet::new();
+    for value in values {
+        let before = issues.len();
+        validate_text(label, value, issues, None);
+        for issue in &mut issues[before..] {
+            issue.provider = Some(provider_id.to_owned());
+        }
+        if !unique.insert(normalized(value)) {
+            issues.push(
+                Issue::new(
+                    "duplicate_value",
+                    format!("provider {provider_id} repeats a value in promise_scope.{label}"),
+                )
+                .provider(provider_id),
+            );
+        }
+    }
+}
+
+fn validate_promise(entry: &EntryDocument, promise: &EntryPromise, issues: &mut Vec<Issue>) {
+    for (label, claims) in [
+        ("consumers", promise.consumers.as_slice()),
+        ("preconditions", promise.preconditions.as_slice()),
+        ("inputs", promise.inputs.as_slice()),
+        ("outputs", promise.outputs.as_slice()),
+        ("data_semantics", promise.data_semantics.as_slice()),
+        ("identity_and_units", promise.identity_and_units.as_slice()),
+        (
+            "completeness_and_freshness",
+            promise.completeness_and_freshness.as_slice(),
+        ),
+        ("access", promise.access.as_slice()),
+        (
+            "lifecycle_and_consistency",
+            promise.lifecycle_and_consistency.as_slice(),
+        ),
+        ("operational_limits", promise.operational_limits.as_slice()),
+        (
+            "compatibility_and_evolution",
+            promise.compatibility_and_evolution.as_slice(),
+        ),
+    ] {
+        validate_promise_claims(label, claims, &entry.id, issues);
+    }
+    validate_reliance_claims(entry, &promise.reliances, issues);
+}
+
+fn validate_promise_claims(
+    label: &str,
+    claims: &[PromiseClaim],
+    entry_id: &str,
+    issues: &mut Vec<Issue>,
+) {
+    if claims.is_empty() {
+        issues.push(
+            Issue::new(
+                "empty_field",
+                format!("promise.{label} must contain at least one explicit claim"),
+            )
+            .entry(entry_id),
+        );
+        return;
+    }
+    let mut unique = BTreeSet::new();
+    for claim in claims {
+        validate_text(
+            &format!("promise.{label} statement"),
+            &claim.statement,
+            issues,
+            Some(entry_id),
+        );
+        if !unique.insert(normalized(&claim.statement)) {
+            issues.push(
+                Issue::new(
+                    "duplicate_value",
+                    format!("entry {entry_id} repeats a statement in promise.{label}"),
+                )
+                .entry(entry_id),
+            );
+        }
+    }
+}
+
+fn validate_reliance_claims(
+    entry: &EntryDocument,
+    claims: &[RelianceClaim],
+    issues: &mut Vec<Issue>,
+) {
+    if claims.is_empty() {
+        issues.push(
+            Issue::new(
+                "empty_field",
+                "promise.reliances must contain at least one explicit claim",
+            )
+            .entry(&entry.id),
+        );
+        return;
+    }
+    let dependency_ids: BTreeSet<_> = entry
+        .dependencies
+        .iter()
+        .map(|dependency| dependency.id.as_str())
+        .collect();
+    let mut unique = BTreeSet::new();
+    for claim in claims {
+        validate_text(
+            "promise.reliances statement",
+            &claim.statement,
+            issues,
+            Some(&entry.id),
+        );
+        if !unique.insert(normalized(&claim.statement)) {
+            issues.push(
+                Issue::new(
+                    "duplicate_value",
+                    format!(
+                        "entry {} repeats a statement in promise.reliances",
+                        entry.id
+                    ),
+                )
+                .entry(&entry.id),
+            );
+        }
+        validate_reliance_metadata(entry, claim, &dependency_ids, issues);
+    }
+}
+
+fn validate_reliance_metadata(
+    entry: &EntryDocument,
+    claim: &RelianceClaim,
+    dependency_ids: &BTreeSet<&str>,
+    issues: &mut Vec<Issue>,
+) {
+    if claim.status != ClaimStatus::Declared {
+        if claim.target.is_some() || claim.kind.is_some() || claim.contract.is_some() {
+            issues.push(
+                Issue::new(
+                    "unexpected_reliance_metadata",
+                    format!(
+                        "entry {} may attach target, kind, and contract only to a declared reliance",
+                        entry.id
+                    ),
+                )
+                .entry(&entry.id),
+            );
+        }
+        return;
+    }
+
+    match &claim.target {
+        Some(target) if valid_slug(target) => {}
+        Some(target) => issues.push(
+            Issue::new(
+                "invalid_reliance_target",
+                format!("entry {} has invalid reliance target {target}", entry.id),
+            )
+            .entry(&entry.id),
+        ),
+        None => issues.push(
+            Issue::new(
+                "missing_reliance_target",
+                format!(
+                    "entry {} has a declared reliance without a target",
+                    entry.id
+                ),
+            )
+            .entry(&entry.id),
+        ),
+    }
+    if claim.kind.is_none() {
+        issues.push(
+            Issue::new(
+                "missing_reliance_kind",
+                format!("entry {} has a declared reliance without a kind", entry.id),
+            )
+            .entry(&entry.id),
+        );
+    }
+    let Some(contract) = &claim.contract else {
+        return;
+    };
+    if !valid_entry_id(contract) {
+        issues.push(
+            Issue::new(
+                "invalid_reliance_contract",
+                format!(
+                    "entry {} has invalid reliance contract {contract}",
+                    entry.id
+                ),
+            )
+            .entry(&entry.id),
+        );
+    } else if !dependency_ids.contains(contract.as_str()) {
+        issues.push(
+            Issue::new(
+                "unbounded_reliance_contract",
+                format!(
+                    "entry {} reliance contract {contract} must also be a versioned dependency",
+                    entry.id
+                ),
+            )
+            .entry(&entry.id),
+        );
+    }
 }
 
 fn validate_entry_identity(provider_id: &str, entry: &EntryDocument, issues: &mut Vec<Issue>) {
@@ -854,6 +1188,10 @@ fn path_has_parent(value: &str, parent: &str, extension: &str) -> bool {
         && path.extension().and_then(|value| value.to_str()) == Some(extension)
 }
 
+fn sha256(value: &str) -> String {
+    format!("{:x}", Sha256::digest(value.as_bytes()))
+}
+
 fn valid_slug(value: &str) -> bool {
     let mut characters = value.chars();
     matches!(characters.next(), Some('a'..='z'))
@@ -934,6 +1272,7 @@ fn calculate_dependencies(providers: &mut [ProviderBundle], issues: &mut Vec<Iss
                     installed_contract,
                     &compatibility,
                     &cycle_nodes,
+                    &adjacency,
                 );
                 if state != DependencyState::Compatible {
                     let (code, message) =
@@ -1047,8 +1386,12 @@ fn dependency_state(
     installed_contract: Option<u32>,
     compatibility: &BTreeMap<String, bool>,
     cycle_nodes: &BTreeSet<String>,
+    adjacency: &BTreeMap<String, Vec<String>>,
 ) -> DependencyState {
-    if cycle_nodes.contains(entry_id) && cycle_nodes.contains(&dependency.id) {
+    if cycle_nodes.contains(entry_id)
+        && cycle_nodes.contains(&dependency.id)
+        && dependency_edge_is_cyclic(entry_id, &dependency.id, adjacency)
+    {
         return DependencyState::Cycle;
     }
     match installed_contract {
@@ -1064,6 +1407,27 @@ fn dependency_state(
         }
         Some(_) => DependencyState::Compatible,
     }
+}
+
+fn dependency_edge_is_cyclic(
+    entry_id: &str,
+    dependency_id: &str,
+    adjacency: &BTreeMap<String, Vec<String>>,
+) -> bool {
+    let mut pending = vec![dependency_id];
+    let mut visited = BTreeSet::new();
+    while let Some(node) = pending.pop() {
+        if node == entry_id {
+            return true;
+        }
+        if !visited.insert(node) {
+            continue;
+        }
+        if let Some(dependencies) = adjacency.get(node) {
+            pending.extend(dependencies.iter().map(String::as_str));
+        }
+    }
+    false
 }
 
 fn dependency_issue(

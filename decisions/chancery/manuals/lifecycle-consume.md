@@ -98,3 +98,10 @@ historical replay is not exposed by this contract. The backfill preserves
 complete stream state for future compatibility without creating an implicit
 history-import path. The stream has no acknowledgement and is not pruned;
 consumer success, retry, and retention belong to the consumer.
+
+“Not pruned” describes the current stream implementation, not a perpetual
+retention guarantee. This contract promises no wall-clock bound from a user
+decision to admission, no throughput or polling service level, and no future
+pruning, migration, or deprecation window. It also defines no network access
+surface. These remain explicitly unspecified rather than inferred from the
+SQLite schema or current behavior.

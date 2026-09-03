@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use crate::model::{EntryKind, Mode};
+use crate::model::{EntryKind, Mode, PromiseFacet};
 
 /// Inspect installed local capability and operation contracts.
 #[derive(Debug, Parser)]
@@ -37,6 +37,8 @@ pub(crate) enum Command {
     List(ListArgs),
     /// Show one complete installed contract.
     Show(ShowArgs),
+    /// Resolve one exact installed ID into its complete outward-promise dossier.
+    Resolve(ResolveArgs),
     /// Validate the installed provider registry and dependencies.
     Doctor,
     /// Validate one standalone provider bundle.
@@ -62,6 +64,25 @@ pub(crate) struct ShowArgs {
 }
 
 #[derive(Debug, Args)]
+pub(crate) struct ResolveArgs {
+    /// Exact stable capability or operation ID. Chancery does not match natural-language requests.
+    #[arg(value_name = "ID")]
+    pub(crate) id: String,
+
+    /// Require the installed contract to be at least this version.
+    #[arg(long, value_name = "VERSION")]
+    pub(crate) min_contract: Option<u32>,
+
+    /// Require the installed contract to be below this version.
+    #[arg(long, value_name = "VERSION")]
+    pub(crate) max_contract_exclusive: Option<u32>,
+
+    /// Require a declared positive claim for this facet. May be repeated.
+    #[arg(long, value_enum, value_name = "FACET")]
+    pub(crate) require: Vec<PromiseFacet>,
+}
+
+#[derive(Debug, Args)]
 pub(crate) struct ValidateArgs {
     /// Standalone provider bundle directory.
     #[arg(value_name = "BUNDLE")]
@@ -81,6 +102,16 @@ impl ValueEnum for Mode {
 impl ValueEnum for EntryKind {
     fn value_variants<'a>() -> &'a [Self] {
         &[Self::Capability, Self::Operation]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(clap::builder::PossibleValue::new(self.as_str()))
+    }
+}
+
+impl ValueEnum for PromiseFacet {
+    fn value_variants<'a>() -> &'a [Self] {
+        &Self::ALL
     }
 
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {

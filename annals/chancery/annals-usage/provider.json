@@ -1,9 +1,44 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "provider": {
     "id": "annals-usage",
     "name": "Annals Usage",
     "release": "0.4.1"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Annals Usage owns only its versioned live interpretation of Annals-attributed model consumption and its Annals-facing live diagnostic and allowance projections.",
+      "It owns no telemetry database, token aggregate, response projection, account snapshot, credential, source delivery, job, attempt, or raw model-output record."
+    ],
+    "not_authoritative_for": [
+      "Annals owns source deliveries, model-run attribution, library state, and inbox receipts; Nucleus owns job and attempt state, exact model-output records, account reads, authentication, and credentials.",
+      "Invoice truth, subscription denominators, arbitrary command identity, external rate-card publication, and non-Annals requester attribution are not Annals Usage authorities."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public annals-usage CLI reporting outcomes and its account, readiness, administration, and development operations in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, Annals and Nucleus interfaces, upstream and internal data surfaces, arbitrary-requester accounting, retained or offline reporting, and current runtime readiness are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Annals Usage is a local companion that reads product-owned public or private local interfaces described by each entry and owns only the resulting in-memory interpretation.",
+      "Its reporting output does not authorize mutation of Annals or Nucleus and cannot establish invoice, subscription, or arbitrary-command truth."
+    ],
+    "shared_privacy_and_retention": [
+      "The companion reads private local Annals attribution and Nucleus output and account metadata but retains no reporting state.",
+      "It never reads, copies, or stores Nucleus credential files; per-entry effects govern any attended login delegation."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release identifies these exact bundle bytes, projectionVersion identifies reporting interpretation, and entry contract versions identify documented semantic compatibility.",
+      "No additional cross-release support, rate-card stability, migration window, or deprecation period is promised unless an entry declares it."
+    ],
+    "operational_limits": [
+      "Annals Usage is bounded by the current availability and retention of its Annals and Nucleus authorities and has no offline fallback or retained projection.",
+      "Per-entry contracts define report scope, account and readiness behavior, and any narrower bounds or unsupported outcomes."
+    ]
   },
   "entries": [
     "entries/consumption-inspect.json",

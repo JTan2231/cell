@@ -1,0 +1,196 @@
+{
+  "id": "chancery.capability.resolve",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Resolve an installed outward promise",
+  "summary": "Assemble one exact installed capability or operation with its provider scope, normalized boundary claims, transitive documentation-contract dependencies, exact basis, and explicit gaps.",
+  "use_when": [
+    "List and show have identified one exact installed entry and the caller needs the owning system's complete outward promise for design or reliance analysis.",
+    "A caller must distinguish declared support, explicit unsupported behavior, unspecified guarantees, non-applicable facets, documentation compatibility, and unverified readiness without inspecting implementation code."
+  ],
+  "do_not_use_when": [
+    "A natural-language request still needs semantic candidate selection; use the complete catalog and inspect every plausible contract first.",
+    "The caller wants to execute an interface, probe live readiness, infer authorization, or prove domain success.",
+    "The desired behavior is absent from the installed catalog and no exact entry ID has been selected."
+  ],
+  "outcome": "The caller receives one deterministic, provenance-bearing outward-promise dossier for an exact installed entry, including its provider scope, complete contract and manual, normalized facet coverage, transitive dependency contracts, requested version and facet results, and explicit resolution gaps.",
+  "effects": [
+    "Reads the same fixed, explicitly indexed local provider bundle view used by list, show, and doctor.",
+    "Calculates the dossier and SHA-256 basis digests in memory, writes no state, performs no network or model request, and invokes no represented interface."
+  ],
+  "authority": [
+    "Each owning provider bundle is authoritative for its scope and entry claims; Chancery is authoritative only for structural validation, exact-byte basis identification, deterministic assembly, facet classification, and dependency compatibility.",
+    "The interactive agent remains authoritative for semantic candidate selection, and represented products remain authoritative for readiness, authorization, actual behavior, and domain success."
+  ],
+  "success": [
+    "The root dossier identifies one exact provider release and contract version and contains the complete entry document, manual, provider promise scope or an explicit absence, facet coverage, direct dependency statuses, and raw-byte SHA-256 locators.",
+    "Every installed transitive documentation-contract dependency appears exactly once in stable entry-ID order; missing, incompatible, cyclic, and transitively unavailable edges remain visible as gaps.",
+    "The result never upgrades silence into support and keeps readiness not_checked or session_dependent rather than probing it."
+  ],
+  "failure_and_recovery": [
+    "entry_not_found means the exact ID is not present in the valid installed catalog; return to list/show or repair an excluded provider rather than guessing a route.",
+    "contract_incompatible means the root contract falls outside caller-supplied bounds; dependency_unavailable means its declared documentation closure is not usable.",
+    "incomplete_declaration means a provider scope, normalized entry declaration, dedicated reliance contract, or caller-required positive facet is absent; consult the owner and publish the missing promise instead of inferring it from schemas or code.",
+    "resolved_not_ready means documentary resolution succeeded while runtime readiness remains deliberately unverified."
+  ],
+  "privacy": [
+    "Resolution processes installed product-owned documentation locally and retains neither the dossier nor caller intent.",
+    "Contracts and manuals must not contain credentials, secrets, private source material, transient runtime output, or live records."
+  ],
+  "interfaces": [
+    {
+      "label": "Resolve exact installed entry",
+      "invocation": "/Users/joey/.local/bin/chancery resolve <ENTRY_ID>"
+    },
+    {
+      "label": "Resolve with contract bounds and required facets",
+      "invocation": "/Users/joey/.local/bin/chancery resolve <ENTRY_ID> --min-contract <VERSION> --max-contract-exclusive <VERSION> --require <FACET>"
+    }
+  ],
+  "dependencies": [],
+  "does_not_authorize": [
+    "Selecting a candidate from natural-language intent, treating an incomplete dossier as a supported promise, or filling reported gaps from a database schema or implementation code.",
+    "Executing or mutating any represented product, checking readiness or access, negotiating cross-system terms, or claiming implementation conformance or domain success."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Interactive agents and local tooling may resolve one already-selected capability or operation by exact stable entry ID."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Semantic discovery has already selected an exact entry ID, and the requested registry is locally available."
+      },
+      {
+        "status": "declared",
+        "statement": "A caller that supplies contract bounds uses positive integer versions with any exclusive maximum greater than the minimum."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Required input is one exact stable entry ID; optional inputs are a minimum contract version, an exclusive maximum contract version, and repeatable required promise facets."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Free-form requests, keywords, provider guesses, ranking weights, live records, and authorization claims are not resolver inputs."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "The result contains resolution status, root dossier, stable transitive dependency dossier list, contract and facet requirement results, declaration and dependency-closure states, readiness classification, gaps, and registry issues."
+      },
+      {
+        "status": "declared",
+        "statement": "Each dossier contains provider identity and schema, provider promise scope, complete entry JSON and manual, facet coverage, dependency statuses, and paths plus SHA-256 digests for the exact provider manifest, entry, and manual bytes."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Facet claims are classified as declared, unsupported, unspecified, or not_applicable; an entry without a normalized declaration is reported as undeclared, and mixed claim statuses remain mixed."
+      },
+      {
+        "status": "declared",
+        "statement": "resolved_not_ready is documentary success, incomplete_declaration and dependency_unavailable are unresolved documentary outcomes, and readiness remains a separate not_checked or session_dependent classification."
+      },
+      {
+        "status": "unsupported",
+        "statement": "A database table, source file, test, manual silence, or dependency edge is never promoted into an unstated outward promise."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "The resolution key is the stable entry ID; provider release, entry contract version, provider schema version, and command output schema version remain separate."
+      },
+      {
+        "status": "declared",
+        "statement": "Basis digests are lowercase SHA-256 over the exact UTF-8 bytes read for provider.json, the indexed entry JSON, and its manual."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "Resolution defines no represented product's domain units."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Resolution includes the selected root and every installed transitive documentation-contract dependency reachable in the fixed registry view exactly once."
+      },
+      {
+        "status": "declared",
+        "statement": "Provider inventory completeness is accepted only within the provider-authored covers and excludes boundary; partial or absent scope remains a gap."
+      },
+      {
+        "status": "declared",
+        "statement": "Each command rereads and fixes the current installed selectors for that invocation; no prior dossier cache is consulted."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Resolution does not establish global ecosystem completeness, currently supported behavior outside published scopes, or live runtime freshness."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The resolver reads only the selected local registry through Chancery's existing safe bundle-path and regular-file validation boundary."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Resolution grants no represented interface access and performs no credentials, health, filesystem workspace, browser, or service check."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "One invocation builds one registry view by canonicalizing each encountered provider selector once, calculates dependency status and closure in memory, emits one dossier, and exits without persistence."
+      },
+      {
+        "status": "declared",
+        "statement": "Dependency closure is deterministic by stable entry ID, excludes the root from its own closure, includes incompatible installed contracts for inspection, and terminates on cycles."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Resolution is bounded by Chancery's registry, provider, entry, field, and manual limits and by the finite installed dependency graph."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The exact-ID resolver does not search, rank, invoke, probe, authorize, persist, crawl source trees, or negotiate terms."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No wall-clock resolution latency service-level objective is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Resolver contract version 1 reads provider schemas 1, 2, and 3; schemas 1 and 2 resolve with explicit missing scope and normalized-facet gaps."
+      },
+      {
+        "status": "declared",
+        "statement": "The command uses the existing Chancery JSON envelope schema 2; the new result is additive and exact-ID resolution does not restore the removed semantic request matcher."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No retirement date for legacy provider schemas or compatibility window for a future resolver contract is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "Resolution creates no runtime, data, authority, or readiness reliance on represented products; provider documents are local declarative inputs rather than invoked systems."
+      }
+    ]
+  },
+  "manual": "manuals/capability-resolve.md"
+}

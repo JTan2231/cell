@@ -187,6 +187,13 @@ gaps. Token categories overlap, and the Codex subscription percentage has no
 exposed token denominator, so it cannot be divided into an exact per-delivery
 subscription share. See
 [Consumption telemetry](docs/telemetry.md) for the accounting contract.
+The independently versioned
+[Annals Usage Chancery provider](chancery/annals-usage/provider.json) publishes
+the installed reporting promise and its uncontracted upstream boundaries;
+`chancery resolve annals-usage.consumption.inspect` assembles those claims
+without treating broad documentation dependencies as data contracts. The
+[Annals provider](chancery/annals/provider.json) remains a separate release and
+authority.
 
 ## Release
 

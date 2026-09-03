@@ -1,12 +1,48 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "provider": {
     "id": "chancery",
     "name": "Chancery",
     "release": "0.2.0"
   },
+  "promise_scope": {
+    "authoritative_for": [
+      "Chancery owns structural validation of installed provider bundles, complete installed catalog presentation, exact-ID promise resolution, and documentation-contract compatibility reporting.",
+      "Each Chancery invocation canonicalizes each encountered provider selector once to build one in-memory registry view and identifies the exact provider, entry, and manual bytes used as its basis."
+    ],
+    "not_authoritative_for": [
+      "Owning products remain authoritative for capability semantics, effects, current runtime behavior, live readiness, authorization, and domain success.",
+      "The interactive agent, not Chancery, interprets a user's natural-language request and selects plausible entries."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Chancery CLI outcomes for installed catalog discovery, exact contract reading, exact-ID promise resolution, registry validation, and provider publication in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, implementation helpers, provider-product behavior, live readiness probes, semantic request matching, and represented capability invocation are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Chancery reads only the selected local registry and explicitly indexed regular files beneath fixed provider bundle roots.",
+      "Catalog presence and resolution do not grant access to or authorize any represented interface."
+    ],
+    "shared_privacy_and_retention": [
+      "Provider documentation is processed locally in memory and Chancery retains no registry, query, dossier, or runtime state.",
+      "Provider bundles must not contain credentials, secrets, private source material, or transient runtime output."
+    ],
+    "compatibility_and_retirement": [
+      "Provider schema version identifies bundle shape, provider release identifies the owning release, and entry contract version identifies documented semantic compatibility.",
+      "Schema changes deploy reader-first; dependency ranges describe documentation-contract compatibility only."
+    ],
+    "operational_limits": [
+      "Resolution is bounded by the installed registry, explicitly indexed files, configured file-size and provider-count limits, and one deterministic transitive dependency walk.",
+      "Chancery has no daemon, database, network access, model integration, runtime readiness probe, or execution path for represented interfaces."
+    ]
+  },
   "entries": [
     "entries/directory-discover.json",
+    "entries/capability-resolve.json",
     "entries/provider-publish.json"
   ]
 }

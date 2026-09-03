@@ -49,5 +49,107 @@
     }
   ],
   "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Interactive agents and local readers that need the installed catalog or one exact product-owned contract may use this read-only capability."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The selected registry directory exists, and product installers have published any provider selectors the caller expects to discover."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "List accepts optional mode and kind filters; show accepts one exact stable entry ID."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Natural-language request text is not an input to Chancery and is not matched or ranked by this capability."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "List emits catalog cards and registry issues; show emits the selected provider identity, complete entry document, dependency statuses, manual, availability, compatibility, readiness classification, and registry issues."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Support is provider-declared, availability means the installed bundle is structurally valid, compatibility concerns documentation-contract dependencies, and readiness is never established by discovery."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Provider ID, provider release, stable entry ID, entry contract version, and provider schema version are distinct identities and versions."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "Discovery publishes no domain measurement or quantitative unit."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "List is complete for every explicitly indexed entry in every structurally valid provider fixed during that invocation; invalid providers and registry issues remain visible."
+      },
+      {
+        "status": "declared",
+        "statement": "Each invocation rereads the selected installed registry and retains no earlier catalog snapshot."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Catalog completeness does not mean every possible product behavior has been published or that represented runtimes are currently ready."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Access is a local read of an absolute registry path or the current user's default Chancery registry; indexed inner symlinks and path escapes are rejected."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "One invocation canonicalizes each selector once, constructs one deterministic in-memory view, prints it, and exits without writing provider or registry state."
+      },
+      {
+        "status": "declared",
+        "statement": "A malformed provider is excluded as a unit, duplicate global entry IDs are excluded rather than selected by filesystem order, and dependency unavailability propagates transitively."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Configured bounds limit provider count, entries per provider, manifest and entry size, manual size, and individual field size."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No wall-clock discovery latency or registry-size service-level objective is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "This reader accepts provider schemas 1, 2, and 3; removed schema-1 routing metadata is ignored only for schema 1, and unknown fields remain errors."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No retirement date is promised here for legacy provider schema support."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "Discovery creates no runtime, data, authority, or readiness reliance on a represented product; installed provider documentation is its local input."
+      }
+    ]
+  },
   "manual": "manuals/directory-discover.md"
 }

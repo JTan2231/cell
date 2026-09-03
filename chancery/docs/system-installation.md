@@ -53,6 +53,14 @@ upgrade includes the bundle bytes in its release identity, advances `current`,
 and leaves the selector following that current release. A failed upgrade
 restores both product behavior and documentation coherently.
 
+Provider schema 3 adds provider promise scope and normalized entry
+declarations. Deploy a Chancery reader that accepts schema 3 before publishing
+the first schema-3 product bundle. That reader continues to accept schemas 1
+and 2, so providers can migrate independently; their exact-ID dossiers show
+missing scope and normalized facets as explicit gaps during the mixed-schema
+period. Only after the reader and required provider releases are installed may
+global instructions depend on `chancery resolve`.
+
 Chancery owns `providers/chancery`. Its deployment refuses to take over an
 existing selector with a foreign target and never removes other providers.
 Uninstalling Chancery's binary should likewise preserve product selectors;
@@ -63,10 +71,15 @@ they become readable again when a compatible Chancery reader is installed.
 ```sh
 /Users/joey/.local/bin/chancery doctor
 /Users/joey/.local/bin/chancery list
+/Users/joey/.local/bin/chancery show ENTRY_ID
+/Users/joey/.local/bin/chancery resolve ENTRY_ID
 ```
 
 `doctor` checks provider structure and cross-provider contract compatibility,
-not live product readiness. Repair an invalid provider by validating its source
-bundle, running that product's deployment tests, and redeploying the owning
-product. Do not edit a content-addressed installed release or repoint a selector
-to a source checkout.
+not live product readiness. `resolve` assembles the installed provider scope,
+normalized claims, dependency closure, and exact basis—or reports their
+explicit gaps—while continuing to report readiness separately as unchecked.
+Repair an invalid provider by
+validating its source bundle, running that product's deployment tests, and
+redeploying the owning product. Do not edit a content-addressed installed
+release or repoint a selector to a source checkout.
