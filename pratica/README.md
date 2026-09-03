@@ -33,5 +33,9 @@ The installed database defaults to
 `PRATICA_DATABASE` for an isolated ledger. Pratica never falls back to a
 database in the current directory.
 
-Start with [the documentation index](docs/README.md). `release.sh` publishes a
-Git release and is not a build or installation command.
+Start with [the documentation index](docs/README.md). The
+[Pratica provider bundle](chancery/provider.json) is the release-matched index
+of supported outward promises; after selecting an exact entry, use
+`chancery resolve pratica.integration.negotiate` (or the selected ID) for its
+normalized boundary and explicit gaps. `release.sh` publishes a Git release and
+is not a build or installation command.

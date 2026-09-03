@@ -74,5 +74,65 @@
     "Deploying Annals or Annals Usage.",
     "Changing upstream Annals or Nucleus meaning without their owning changes."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A contributor or interactive development agent may use this operation for an authorized Annals Usage projection, rate-card, configuration, diagnostics, account-access, or delegated-login change."},
+      {"status": "unsupported", "statement": "This operation does not run reports or account commands, create a reporting database, change Annals or Nucleus authority from the companion side, publish a release, or deploy."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The contributor has read the installed Semantics exploration contract, complete current annals repository, telemetry contract, and current owning Annals Usage boundary."},
+      {"status": "declared", "statement": "Changes to shared output, account, authentication, compatibility, deployment, or requester integration require the installed Nucleus manual and coordinated owner contract before implementation."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Input is one scoped Annals Usage change request plus current canonical terminology, telemetry documentation, source, tests, and any affected upstream owner contract."},
+      {"status": "unsupported", "statement": "A UI scrape, credential copy, retained aggregate, unqualified estimate, or requester-side redefinition of Annals or Nucleus state is not a valid implementation input."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The result is the smallest coherent separately versioned projection, test, configuration, and telemetry-documentation change with explicit accounting limits and a green ./annals/ci.sh gate."},
+      {"status": "unsupported", "statement": "Development completion does not itself publish, deploy, mutate live account state, or prove a live report and login canary."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Annals Usage owns disposable live interpretation only; Annals retains source-delivery and model-run attribution, and Nucleus retains jobs, attempts, output, account, and credential authority."},
+      {"status": "declared", "statement": "Exact, cumulative, gap, no-model, pending, and reused coverage remain distinct, and overlapping token categories are not additive."},
+      {"status": "declared", "statement": "Rate-card equivalent is a comparison rather than an invoice, and allowance remains account-global rather than a per-delivery denominator."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Annals Usage package and provider versions, projectionVersion, entry contract version, upstream record identities, Nucleus protocol, and Annals schema are distinct evolution axes."},
+      {"status": "declared", "statement": "Token categories retain their documented units and subset relationships; external rate-card units remain separate from invoices and account allowance."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Every affected coverage case, attribution gap, rate-card limit, account scope, and upstream decoding boundary is updated explicitly in tests and telemetry documentation."},
+      {"status": "declared", "statement": "Completion requires the full Annals product gate and separately authorized live report, budget, doctor, login, or requester canaries when the changed boundary affects them."},
+      {"status": "unspecified", "statement": "No development duration, external rate-card freshness, live-canary availability, or guarantee about unrelated projections is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The operation uses the current local workspace, filesystem, and shell through an interactive agent session under Annals repository instructions."},
+      {"status": "unsupported", "statement": "Development authority does not grant credential access, release publication, installed deployment, external disclosure, direct upstream database mutation, or direct Semantics-state editing."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Identify the owning product meaning, update the smallest projection and exact coverage tests, version changed interpretation, update telemetry documentation, then run the full Annals gate."},
+      {"status": "declared", "statement": "Atomic Annals and Nucleus records remain the recalculation authorities, and an unreadable upstream fails a live projection rather than causing a stale retained fallback."},
+      {"status": "declared", "statement": "Publication and joint Annals deployment remain separately authorized lifecycles after development completion."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "No telemetry store, aggregate, snapshot, credential copy, UI scrape, offline estimate, or unqualified gap is permitted, and every code change must leave ./annals/ci.sh green."},
+      {"status": "unspecified", "statement": "No maximum change size, completion time, account availability, or external rate-card service level is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Derived interpretation changes advance projectionVersion and preserve the atomic records required for historical recalculation; upstream changes are coordinated through the owning Annals or Nucleus contract."},
+      {"status": "declared", "statement": "Package release, provider release, entry contract version, projectionVersion, Annals schema, and Nucleus protocol are evaluated independently."},
+      {"status": "unspecified", "statement": "No release cadence, rate-card stability, cross-release compatibility window, or deprecation period is promised."}
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Annals Usage development relies on the registered Semantics repository for current Annals terminology while retaining telemetry documentation and project sources as behavior authority.",
+        "target": "semantics",
+        "kind": "authority",
+        "contract": "semantics.repository.explore"
+      },
+      {"status": "unsupported", "statement": "A documentation dependency or conditional need to consult an upstream owner must not be interpreted as authority to mutate that upstream product."}
+    ]
+  },
   "manual": "manuals/develop-change.md"
 }

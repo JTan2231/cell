@@ -19,7 +19,10 @@ revisions, intake state, and durable Nucleus correlations. Project files are
 never rewritten by the worker.
 
 Start with [the documentation map](docs/README.md), then see the
-[CLI reference](docs/cli.md) or [user installation guide](docs/system-installation.md).
+[CLI reference](docs/cli.md), [user installation guide](docs/system-installation.md),
+or [Semantics provider bundle](chancery/provider.json). After selecting an exact
+Semantics entry, use `chancery resolve semantics.repository.explore` (or the
+selected ID) to inspect its normalized outward boundary and explicit gaps.
 
 ```sh
 ./ci.sh

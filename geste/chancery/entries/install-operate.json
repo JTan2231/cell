@@ -81,5 +81,43 @@
     "Silently initializing or migrating domain storage during deployment.",
     "Changing Chancery, Semantics, or another Cell product."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "The local operator may deploy or diagnose Geste and may separately initialize one intentionally selected empty casebook."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Deployment has explicit authority, a regular absolute candidate binary whose version matches the provider, and Geste-owned or absent selector paths; initialization is separately intended."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Deployment consumes one absolute candidate binary and the version-matched packaged deployer and provider bundle; init consumes the selected database path."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Deployment selects one content-addressed release for both public selectors; init creates one schema-one database; doctor reports schema, integrity, and privacy evidence."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Current and previous name validated immutable release generations, while an absent database after deployment is expected and is not installation failure."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Release identity is a content digest over the exact staged tree; provider release must equal binary version, and the domain database is a separately selected identity."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A successful cutover stages and validates the complete owned release before atomically publishing both selectors; doctor reads current local database state at invocation."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The operation uses local filesystem and shell authority over Geste-owned user paths only and refuses foreign, symbolic, fabricated, or tampered state."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Identical deployment is idempotent, update retains a valid previous generation, and pre-commit or failed-smoke recovery restores command and provider views together."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Deployment starts no daemon and never creates, opens, migrates, backs up, or deletes the casebook; init creates only a new empty schema-one database."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Candidate binary version and provider release must match exactly; database schema and release identity remain separate, and rollback requires a validated compatible prior release."}
+    ],
+    "reliances": [
+      {"status": "not_applicable", "statement": "Deployment, initialization, and diagnosis invoke no model, network service, Nucleus, Chancery runtime, or other Cell product."}
+    ]
+  },
   "manual": "manuals/install-operate.md"
 }

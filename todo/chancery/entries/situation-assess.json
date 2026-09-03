@@ -52,5 +52,56 @@
     "Choosing or accepting a desired design.",
     "Implementing any identified gap or responsibility."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A caller preparing desired-state reconciliation may request one dated, evidence-backed description of an established Todo umbrella's current situation."},
+      {"status": "unsupported", "statement": "The assessment is not a design choice, authorization, implementation instruction, or substitute for an owning system's current truth."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The selected tN is open and canonical and Todo can freeze its current direction, attachments, note cursor, accepted design, own projection, and admitted evidence catalog."},
+      {"status": "declared", "statement": "Compatible authenticated Nucleus execution and the source-specific tools required by the frozen catalog are available."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "The public input is one exact tN plus optional documented quality or model selection; the host supplies the frozen Todo bases and bounded source catalog."},
+      {"status": "unsupported", "statement": "The caller cannot use this stage to revise direction, choose architecture, introduce unrestricted sources, grant shell or web access, or authorize work."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The result is one immutable aN containing observation time, exact bases, summary, subject identity, grounded findings, jurisdiction assignments, direction coverage, unresolved items, and ready, needs_user_choice, or inconclusive disposition."},
+      {"status": "declared", "statement": "Historical reads expose the persisted source-ref mapping and derived current or stale reasons without editing the assessment."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "ready means evidence is adequate for design reconciliation, needs_user_choice means a material authority or value choice cannot be inferred, and inconclusive means a material evidence gap remains."},
+      {"status": "declared", "statement": "Each jurisdiction assigns concrete responsibilities to parties as owner, participant, or consumer with exactly one owner; infrastructure failure is not an inconclusive domain finding."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "aN identifies one immutable dated assessment of one tN; stable s-... source IDs map to persisted source:<id> bases and exact evidence locations."},
+      {"status": "not_applicable", "statement": "This capability publishes no quantitative accounting or pricing unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A committed assessment covers every boundary in the frozen direction, records every used admitted source and jurisdiction, and distinguishes unresolved choices from evidence gaps."},
+      {"status": "declared", "statement": "The observation is dated and basis-bound; any newer assessment or change to its recorded Todo bases makes it non-current without rewriting history."},
+      {"status": "unsupported", "statement": "The bounded catalog is not a global proof that every potentially relevant external source or later state was observed."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The current-user Todo CLI starts one constrained Nucleus stage whose only evidence access is list, read, and search over the frozen admitted source catalog."},
+      {"status": "unsupported", "statement": "The stage has no shell, broad workspace, inherited environment, web search, routing decision, design decision, or implementation interface."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Todo freezes the assessment basis before submission and commits the validated aN atomically; replay identities prevent duplicate domain results."},
+      {"status": "declared", "statement": "Assessments are append-only observations, and creating a newer aN intentionally makes every older assessment for the umbrella non-current."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "One invocation assesses one open canonical umbrella from one bounded catalog in one Nucleus attempt and cannot mutate the subject or external evidence."},
+      {"status": "unspecified", "statement": "No evidence-source count, observation recency threshold, assessment latency, or model-quality service-level objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 preserves immutable aN identity, exact frozen bases, three dispositions, jurisdiction ownership rules, and versioned Nucleus schemas and toolsets."},
+      {"status": "unspecified", "statement": "No universal source-revision protocol, external freshness window, or deprecation period is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Assessment generation relies on Nucleus for one constrained model execution, authentication, durable job state, and raw protocol history; Todo remains authoritative for the committed assessment record (aN).", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"},
+      {"status": "declared", "statement": "Assessment findings rely on the selected evidence sources for their cited state and authority, but no single installed contract describes the heterogeneous source catalog.", "target": "evidence-sources", "kind": "authority"}
+    ]
+  },
   "manual": "manuals/situation-assess.md"
 }

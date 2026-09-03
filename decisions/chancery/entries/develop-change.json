@@ -15,7 +15,8 @@
   "failure_and_recovery": ["Do not deploy or release a failing candidate.", "Restore or migrate requester state using the documented backup boundary."],
   "privacy": ["Fixtures must not contain real transcripts, credentials, email bodies, or personal paths."],
   "dependencies": [
-    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],
   "runtime": "interactive_agent",
@@ -53,5 +54,137 @@
     "Deploying, sending email, or deleting retained state as a side effect of development.",
     "Broad queue clearing, abandoning a merely unfinished source, or bypassing the explicit unbound pending-source recovery guard."
   ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Decisions maintainers may use this operation for an authorized change to product code, schemas, prompts, classifier tools, packaging, service lifecycle, recovery, or exact documentation."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The maintainer has read Decisions instructions, architecture, data model, affected CLI and installation contracts, and the current Nucleus requester manual, and has identified every affected source, authority, consumer, service, persistence, delivery, and privacy boundary."
+      },
+      {
+        "status": "declared",
+        "statement": "Separate authority exists before release, deployment, email sending, retained-state deletion, source abandonment, or a new requester attempt."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Inputs are one authorized product change plus current Decisions public contracts, registered semantic identities, affected requester contracts, source behavior, tests, packaging rules, and recovery evidence."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Assistant prose, file activity, model output, a schema shortcut, or requester runtime convenience cannot supply user decision authority or justify weakening an ownership boundary."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "The operation produces the smallest reviewed source, test, packaging, and exact contract change with Decisions standalone CI and every affected requester or rollback proof green."
+      },
+      {
+        "status": "unsupported",
+        "statement": "A development result does not itself publish, deploy, send a digest, migrate live state, abandon an observation, reset the baseline, or retry application work."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A decision remains an explicit user settlement in an eligible completed effectful root turn; fileChange establishes enacted scope only, model output is bounded classification evidence, and Decisions SQLite remains domain authority."
+      },
+      {
+        "status": "declared",
+        "statement": "Observation source resolution, classification attempts, durable receipts, candidate identity, lifecycle events, projection cutoffs, snapshot revisions, and Email acceptance remain separate states with separate recovery rules."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Decision identity derives only from host, canonical authority item, and exact authority byte span; observation, run, job, event, review, snapshot revision, schema, toolset, product release, and entry contract identities remain distinct."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "This development operation defines no usage, billing, or quantitative domain unit."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Completeness requires all changed authority, selection, observation, retry and abandonment, activation, migration, lifecycle-consumer, delivery, packaging, privacy, and rollback contracts to agree with focused proof and the standalone gate."
+      },
+      {
+        "status": "declared",
+        "statement": "Changed installed or requester facts are checked against the current version-matched Nucleus manual and exact affected public contracts rather than inferred from workspace proximity."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No development duration, review turnaround, release cadence, or consumer upgrade window is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The operation uses the authorized local Decisions source tree and shell; synthetic fixtures and private operational evidence stay within the documented local boundaries."
+      },
+      {
+        "status": "unsupported",
+        "statement": "It grants no implicit access to live transcripts, credentials, email bodies, destructive state changes, deployment targets, or another product's domain authority."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "The sequence is inspect exact contracts, identify every affected invariant and owner, implement the smallest synchronized change, retain historical decoders and migrations, run focused proofs and Decisions CI, then separately authorize release and deployment."
+      },
+      {
+        "status": "declared",
+        "statement": "Changes preserve serial observation, retry-ready yielding, first-writer-wins receipts, write-once activation, cutoff-bounded projections, append-only lifecycle history, and recovery that never manufactures authority."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Stop when Conversations cannot establish exact completed-turn scope, a migration lacks quiescent backup and rollback, immutable meaning cannot be versioned, or a requested change would make file activity, model output, Nucleus completion, or Email acceptance the wrong authority."
+      },
+      {
+        "status": "unsupported",
+        "statement": "This operation cannot add a direct Codex fallback, parallel classification, broad queue clearing, implicit source abandonment, baseline reset, or bypass of registered schema and toolset immutability."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Changed registered meaning receives a new immutable schema ID, toolset version, event envelope version, or entry contract version, while historical decoders and explicit database migrations remain available as required."
+      },
+      {
+        "status": "declared",
+        "statement": "Shared requester changes follow Nucleus compatibility and deployment ordering, and release publication remains distinct from the green development candidate."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general backward-compatibility lifetime, deprecation period, or Decisions release frequency is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Changes affecting bounded classification rely on Nucleus's requester-integration contract as the authority for shared execution, registration, mailbox, compatibility, and recovery obligations.",
+        "target": "nucleus",
+        "kind": "authority",
+        "contract": "nucleus.requester.integrate"
+      },
+      {
+        "status": "declared",
+        "statement": "Decisions development relies on its registered Semantics repository for maintained project terminology while source, tests, and product documentation remain authoritative for behavior.",
+        "target": "semantics",
+        "kind": "authority",
+        "contract": "semantics.repository.explore"
+      }
+    ]
+  },
   "manual": "manuals/develop-change.md"
 }

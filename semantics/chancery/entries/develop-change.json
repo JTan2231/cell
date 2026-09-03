@@ -30,7 +30,8 @@
     {"id": "decisions.lifecycle.consume", "min_contract": 1, "max_contract_exclusive": 2},
     {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
     {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],
   "runtime": "interactive_agent",
@@ -65,5 +66,44 @@
     {"label": "Installation", "invocation": "semantics/docs/system-installation.md"}
   ],
   "does_not_authorize": ["Deploying, deleting retained state, mutating upstream products, or publishing a release as a side effect of development."],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "An interactive contributor may change Semantics while preserving project-scoped authority, append-only replay, restricted requester behavior, and synchronized public contracts."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The contributor has read Semantics instructions, repository terminology, affected public and upstream contracts, and the Nucleus operator manual, with separate authority for release or deployment."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are the requested scoped change, current Semantics source and contracts, exact compatible upstream documentation, and synthetic fixtures or fakes."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The output is the smallest synchronized source, schema, toolset, test, documentation, packaging, or provider change with the offline Semantics CI green."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Development preserves stable project and concept identities, contiguous immutable typed-effect replay, exact upstream provenance, and Semantics-owned transactional domain success."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Existing project, concept, event, decision, schema, toolset, requester, and job identities retain their documented meanings unless an explicit successor is published."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Completion covers every affected registry, cursor, intake, replay, tool, requester, service, packaging, documentation, and test boundary and the current offline CI run."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "Development uses the local repository filesystem and shell; tests use synthetic upstreams and fakes rather than live services or private data."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Persistent changes require explicit versioned migration and database-plus-sidecars rollback proof; immutable tool meaning changes require successor schema or toolset identities."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "The standalone gate is offline, bounded to Semantics, and must complete within its documented 60-second deadline without contacting live upstream services."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Development retains historical replay and old correlation decoding; incompatible public, storage, or managed-tool meaning is introduced through an explicit versioned successor."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Semantics development relies on its own registered semantic repository for maintained project terminology while source, tests, and product documentation remain authoritative for behavior.", "target": "semantics", "kind": "authority", "contract": "semantics.repository.explore"},
+      {"status": "unsupported", "statement": "Other upstream entries remain documentation contracts and do not create live represented-product runtime reliances of the development operation."}
+    ]
+  },
   "manual": "manuals/develop-change.md"
 }

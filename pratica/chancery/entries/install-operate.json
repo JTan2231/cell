@@ -77,5 +77,43 @@
     "Publishing a release, replacing foreign state, retrying a negotiation attempt, or deleting retained releases or contracts.",
     "Changing Nucleus, Chancery, CRM, a stewarded system, or Semantics state."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "The local operator may deploy or diagnose Pratica and may separately initialize one intentionally selected empty negotiation ledger."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Deployment has explicit authority and a regular absolute candidate whose version matches the provider; doctor requires compatible Nucleus readiness to prove model-assisted operation."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Deployment consumes the candidate binary and packaged provider/deployer bytes; init consumes a selected database path; doctor reads the selected database and Nucleus readiness."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Outputs are one content-addressed installed release, one separately initialized schema-one database, or readiness evidence for storage, permissions, Nucleus, and immutable toolsets."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Installed current and previous name validated release generations; deployment success is separate from database existence, Nucleus readiness, and negotiation-domain success."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Content digest identifies the exact release tree, provider release must equal binary version, and database schema plus three toolset identities are separately versioned."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A successful deployment publishes the complete validated owned release through both selectors; doctor reads current local storage and live Nucleus readiness at invocation."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The operation uses local filesystem and shell authority over Pratica-owned paths and read-only Nucleus health; it refuses foreign, symbolic, fabricated, or tampered state."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Redeployment is idempotent, update retains a valid previous release, failure restores both public selectors, and deployment never opens or changes negotiation state."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Deployment starts no daemon or schedule and creates no database; initialization and any attempt retry remain separate explicit operations."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Candidate and provider versions match exactly, doctor requires Nucleus execution contract 1 and immutable version-one toolsets, and schema change requires a separate migration and rollback project."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Doctor relies on Nucleus health and capability reporting to prove model-assisted Pratica readiness without transferring negotiation authority.", "target": "nucleus", "kind": "readiness", "contract": "nucleus.execution.operate"}
+    ]
+  },
   "manual": "manuals/install-operate.md"
 }

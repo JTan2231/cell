@@ -57,5 +57,47 @@
     "Treating a historical seal as implementation proof, current target truth, exhaustive system coverage, or deployment authorization.",
     "Publishing or sending private terms or reviews."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A local caller may inspect current or historical Pratica protocol state, export exact sealed terms, and mechanically recheck a recorded agreement basis."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The selected private schema-one database and requested integration, negotiation, agreement, attempt, or review identity exist; export selects a new safe absolute output path."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are exact Pratica record IDs, an optional explicit output path, and for verification the already-recorded bounded local source locators."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Outputs are deterministic status, history, report, attempt, agreement, or review views; export writes exact stored Markdown; verify appends one fresh, stale, or unknown observation."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Agreement output separates exact terms, current-at-seal assent, steward basis, predecessor, coverage, advisory review, candidate evidence, and unproven current applicability."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Each protocol ID names its exact stored record, offer digest identifies exact Markdown bytes, and basis digests identify frozen source content rather than current target-system meaning."},
+      {"status": "not_applicable", "statement": "Inspection defines no pricing or product-domain measurement unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "History and reports are complete for the selected committed Pratica records; verification rereads only recorded local source paths at invocation and records unknown where current comparison cannot be established."},
+      {"status": "unsupported", "statement": "Inspection does not prove current target behavior, implementation conformance, exhaustive integration coverage, or continuing agreement applicability."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported boundary is the local Pratica CLI and selected private database; explicit export transfers exact terms to a caller-owned new file, while no network or target adapter is used."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Ordinary reads do not mutate protocol state, verify appends a new observation without changing the historical seal, and export refuses overwrite, symbolic, relative, or unsafe targets."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Each command selects bounded stored records or recorded source paths and invokes no model, Nucleus job, target-system adapter, Chancery runtime, network, or general source crawl."},
+      {"status": "unspecified", "statement": "No wall-clock read or basis-verification latency service-level objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 reads schema-one Pratica protocol records and preserves exact historical offer and agreement bytes; provider release remains separate."},
+      {"status": "unspecified", "statement": "No future read-format deprecation or migration window is promised here."}
+    ],
+    "reliances": [
+      {"status": "not_applicable", "statement": "Recorded local source paths are caller-selected verification inputs, not an invoked product contract; inspection otherwise uses only Pratica-owned state."}
+    ]
+  },
   "manual": "manuals/agreement-explore.md"
 }

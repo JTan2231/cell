@@ -51,6 +51,23 @@
     "Observer and daily logs must not contain email bodies, conversation text, hook bodies, or credentials.",
     "Both LaunchAgent runners use scrubbed environments and contain no Email credential key."
   ],
+  "dependencies": [
+    {
+      "id": "conversations.history.explore",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "email.message.send",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
+  ],
   "session_surfaces": ["local_filesystem", "local_shell"],
   "runtime": "interactive_agent",
   "automation": "none",
@@ -95,5 +112,188 @@
     "Replacing or merging a foreign Codex hooks file.",
     "Bypassing Codex hook trust, resetting the observer baseline, or changing Nucleus, Codex, Email, or Gmail configuration."
   ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current macOS user or an authorized operator may install, update, inspect, recover, or uninstall the user-owned Decisions release and its continuous observer and daily services."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The operation is not a general Codex-hook manager, cross-user deployment surface, retained-state deletion command, digest-send authority, or direct database repair path."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Deployment requires a green candidate binary and release-matched provider bundle, compatible Conversations, Nucleus, and Email contracts, owned or absent selectors and service artifacts, and an exact supported Codex hooks boundary."
+      },
+      {
+        "status": "declared",
+        "statement": "Before candidate doctor opens persistent state, both Decisions services are quiesced, the public hook command is suspended for its timeout, and a private backup contains the database and every SQLite sidecar."
+      },
+      {
+        "status": "declared",
+        "statement": "Hook trust, source-unavailable abandonment, retained-state deletion, and real send or canary effects each require their separately documented authority."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Deploy consumes one absolute candidate binary plus the product-owned deployer, exact provider tree, current-user home and launchd state, owned release and selector state, exact hook bytes, and current Decisions database state."
+      },
+      {
+        "status": "declared",
+        "statement": "Diagnosis and guarded recovery accept supported doctor, observer, launchctl, log, exact observation-ID, and uninstall invocations; alternate home or launchctl values are deliberate test-boundary inputs only."
+      },
+      {
+        "status": "unsupported",
+        "statement": "A foreign hooks file, ambiguous selector or loaded label, direct SQLite edit, caller-provided abandonment reason, arbitrary service definition, or unapproved retention deletion is not accepted."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Successful deployment selects one validated content-addressed release for the public Decisions command and Chancery provider, installs the exact owned Stop hook and two key-free LaunchAgents, preserves or migrates state, records activation once, and reports operational verification."
+      },
+      {
+        "status": "declared",
+        "statement": "Supported reads expose candidate doctor, observer counts and baseline, launchd and log evidence; guarded source abandonment records one complete/not-eligible audit state, and uninstall removes only owned services, hook, and public selectors while retaining state."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "The observer baseline is a write-once authority-time cutover stored in Decisions SQLite; default activation is the next whole Unix second and permanently excludes the cutover second and all earlier authority from continuous projection."
+      },
+      {
+        "status": "declared",
+        "statement": "The Stop hook is only a durable session-and-turn wake correlation, the observer owns later source resolution and classification, and a deferred queue row is not a failure or proof that its source is unavailable."
+      },
+      {
+        "status": "declared",
+        "statement": "A content-addressed release binds exact binary, deployer, hook, runner, plist, and provider bytes; current and previous selectors identify deployment state rather than domain success."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Release content hash, provider release, entry contract version, database schema version, hook bytes, LaunchAgent labels, observation ID, and activation timestamp are separate identities and compatibility axes."
+      },
+      {
+        "status": "declared",
+        "statement": "The observer interval is 60 seconds, the daily service schedules at 09:00 machine-local time, and the public hook timeout and suspension drain are three seconds."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "Installation publishes no usage, pricing, or billing unit."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Deployment verifies exact candidate and provider versions, content manifests, state schema, dependency surfaces, owned selectors, exact hook and plist bytes, activation order, and both loaded services before declaring the installation successful."
+      },
+      {
+        "status": "declared",
+        "statement": "Doctor and installed files establish current local installation state, while actual hook delivery and trust on each Codex client surface require a deliberate new post-baseline canary."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No service-availability, hook-delivery, observation-latency, release-retention, log-retention, or repair-time objective is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported boundary is the current user's local filesystem, Decisions CLI and deployer, launchctl user domain, exact user-level Codex hooks file, and product-owned application-support and log paths."
+      },
+      {
+        "status": "declared",
+        "statement": "Codex separately requires attended review and trust for the exact non-managed Stop hook; the installer cannot write or bypass that trust state."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Foreign, symbolic, modified, ambiguous, or unowned selectors, hooks, plists, state files, or loaded labels are refused rather than merged, replaced, removed, or followed."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "An update validates ownership, stops both services, suspends and drains the hook, backs up quiescent SQLite state, migrates sequentially to schema 3, stages the release and selectors, records activation once, then publishes the hook, command, plists, and services with observer last."
+      },
+      {
+        "status": "declared",
+        "statement": "Failure restores selectors, exact hook and plist bytes, database and sidecars, and prior loaded service states; if full quiescent restoration cannot be proved, both services remain stopped, the public command remains disabled, and the private transaction backup is retained."
+      },
+      {
+        "status": "declared",
+        "statement": "Uninstall removes only exact owned public surfaces and preserves the database, write-once baseline, releases, and logs until a separate destructive decision."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "The standard operation supports one current macOS user, exactly two Decisions LaunchAgents and one exact user Stop hook, a content-addressed release pair, explicit schema-1-or-2-to-3 migration, and serialized observation processing."
+      },
+      {
+        "status": "declared",
+        "statement": "Stop on incompatible dependency or candidate versions, foreign or unsafe paths, unprovable rollback, missing activation, premature observer execution, untrusted hook behavior, or unapproved destructive retention changes."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The operation provides no hook-file merge, trust bypass, baseline reset, direct SQLite repair, parallel observer, implicit source abandonment, arbitrary recipient configuration, or cross-user service installation."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Candidate program version and provider release match exactly, schema versions 1 and 2 migrate sequentially to schema 3 with retained rows and lifecycle backfill, and an incompatible installed artifact is refused before selector publication."
+      },
+      {
+        "status": "declared",
+        "statement": "The prior complete release remains selected through previous for rollback, but restoration never crosses a database schema that the prior binary cannot read."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No universal release retention count beyond current and previous, downgrade window, future migration path, or deprecation period is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Candidate doctor and continuous source operation rely on Conversations' supported normalized completed-turn and activity contract.",
+        "target": "conversations",
+        "kind": "readiness",
+        "contract": "conversations.history.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Classification readiness and exceptional catch-up rely on Nucleus's compatible bounded execution service without transferring Decisions domain authority.",
+        "target": "nucleus",
+        "kind": "readiness",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "The daily send path relies on Email's compatible immediate-send contract and external acceptance result, while the service runner itself retains no Email credential.",
+        "target": "email",
+        "kind": "readiness",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "The installed hook and real surface canary rely on Codex's client-specific hook discovery, exact-definition trust, and Stop delivery; no installed Chancery contract covers that external behavior.",
+        "target": "codex",
+        "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "The observer and daily user-service lifecycle relies on macOS launchd; no installed Chancery contract covers launchd availability or scheduling.",
+        "target": "launchd",
+        "kind": "readiness"
+      }
+    ]
+  },
   "manual": "manuals/install-operate.md"
 }

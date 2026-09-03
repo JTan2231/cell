@@ -87,5 +87,196 @@
     "Abandoning a source without explicit recovery authorization, before permanent unavailability is proven, or after any source or classification state has been bound.",
     "Resetting the observer baseline, requeuing a terminal failure without explicit recovery authority, or treating model output, file activity, or delivery acceptance as source truth."
   ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user may inspect continuous enacted-decision coverage, review candidates, build and preview one local-day projection, explicitly repair eligible failures, or authorize an immediate digest send; the installed daily service may use only its separately established recurring send authority."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Raw-conversation readers, decisions without a same-turn completed file change, arbitrary email recipients, and downstream lifecycle consumers are not served through this digest capability."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Continuous processing and projection require the write-once observer baseline, a uniquely resolved completed root turn, post-baseline user authority, and at least one successfully completed nonempty fileChange in the same turn."
+      },
+      {
+        "status": "declared",
+        "statement": "Classification requires compatible Conversations source resolution and Nucleus execution; sending additionally requires an exact frozen snapshot, explicit or installed standing send authority, and compatible Email transport."
+      },
+      {
+        "status": "declared",
+        "statement": "Retry requires a diagnosed and corrected terminal observation failure, while source abandonment requires explicit recovery authorization and proof that one previously deferred entirely unbound source is permanently unavailable."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Supported commands accept an optional exact local calendar date, an exact decision ID for review or inspection, or an exact observation ID for retry or guarded source-unavailable abandonment."
+      },
+      {
+        "status": "declared",
+        "statement": "The observer consumes only normalized completed-turn evidence from Conversations: eligible user authorities, minimal proposal and final-response context, content-free file-change count, and at most one validated prior-context expansion."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Paths, diffs, commands, reasoning, approvals, tool output, raw transcript files, caller-authored abandonment reasons, and user-supplied email addresses are not accepted as digest authority inputs."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Observation produces durable per-authority decision or no-decision coverage, or one narrowly audited no-verdict source-unavailable closure; inspection returns durable candidate and observer state."
+      },
+      {
+        "status": "declared",
+        "statement": "Build produces a cutoff- and admission-watermark-bounded daily run, preview freezes and renders one exact run revision locally, review appends a state transition, and send persists one Email acceptance identifier under its delivery key."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The capability returns no raw transcript export, Gmail-receipt proof, unbounded historical digest, automatic amendment of an accepted send, or authority inferred from file activity or model prose."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "An enacted decision is an explicit user settlement in a completed root turn made eligible by a same-turn completed nonempty file change; the effect selects scope but never supplies decision meaning."
+      },
+      {
+        "status": "declared",
+        "statement": "A no-decision verdict is durable negative coverage, a complete/not-eligible source abandonment is audited absence of classifiable source rather than a verdict, and Nucleus completion is execution evidence rather than Decisions truth."
+      },
+      {
+        "status": "declared",
+        "statement": "A daily projection is complete only as of its durable turn-completion cutoff and observation-admission watermark; Email acceptance proves submission, not Gmail delivery."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Decision ID derives from host, canonical authority item, and exact byte span; observation, run, revision, candidate, review, Nucleus job, delivery, and external message IDs identify separate records."
+      },
+      {
+        "status": "declared",
+        "statement": "Report dates are machine-local calendar days, authority and completion times preserve their documented precision, the activation baseline is an absolute instant, and SQLite append position or rowid—not timestamps—orders lifecycle and admission frontiers."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "The digest publishes no usage, cost, or billing unit."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "A successful observation covers every eligible user authority supplied for its one completed turn with exactly one validated decision or no-decision verdict, except the separately audited source-unavailable state which binds no authority."
+      },
+      {
+        "status": "declared",
+        "statement": "A successful daily build reaches a fixed point and includes all post-baseline eligible turns completed by its cutoff and observations admitted through its fixed watermark; any known unresolved or failed item blocks normal and all-clear delivery."
+      },
+      {
+        "status": "declared",
+        "statement": "A later-completing turn may enter a later manual rebuild of its authority date but never another date and never automatically amends an already accepted scheduled delivery."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No wall-clock bound from turn completion to observation, projection, review, Email acceptance, or Gmail receipt is promised, and no perpetual retention horizon is declared here."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Supported access is through the current-user Decisions CLI, its exact user Stop hook, and its two installed local LaunchAgent runners; direct SQLite mutation is unsupported."
+      },
+      {
+        "status": "declared",
+        "statement": "Only an explicit current request or separately installed recurring authority permits sending, and source abandonment has its own explicit recovery authorization and fail-closed state guard."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Observation, reconciliation, build, preview, review, catalog discovery, or possession of an Email key does not authorize disclosure or sending."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Stop ingest idempotently records only correlation, one serial worker resumes processing first and otherwise selects ready queued work by retry time, and at most one validated context expansion occurs before transactional verdict and candidate commit."
+      },
+      {
+        "status": "declared",
+        "statement": "A terminal failure remains blocking until explicitly retried with a new attempt epoch; guarded source abandonment is serialized, changes only one still-unbound pending row, is idempotent for the exact success, and makes later source discovery fail closed."
+      },
+      {
+        "status": "declared",
+        "statement": "Review and lifecycle history append atomically, snapshot bodies freeze by run revision, and duplicate scheduled or unresolved manual delivery uses the same stable idempotency key and exact body."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Observation processing is serial, source context expands at most once, each scope has one initial Nucleus attempt plus at most two retries after positively observed terminal failure, and the scheduled service runs at local 09:00."
+      },
+      {
+        "status": "declared",
+        "statement": "The capability stops on incomplete or ambiguous source, missing baseline, failed or unresolved coverage, invalid classifier output, incompatible dependencies, unproven permanent source absence, or unauthorized sending."
+      },
+      {
+        "status": "unsupported",
+        "statement": "It provides no parallel whole-history classification, arbitrary queue clearing, implicit source abandonment, pre-baseline backfill, recipient configuration, or direct-Codex fallback."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Provider release, capability contract version, Decisions SQLite schema, immutable classification schema and toolset, lifecycle envelope, Email contract, Conversations contract, and Nucleus protocol remain distinct compatibility axes."
+      },
+      {
+        "status": "declared",
+        "statement": "Legacy schema-version-one runs and receipts remain readable, migrations are explicit, and changed registered meaning uses a new immutable identity with historical decoding retained."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No universal retention period, consumer migration window, deprecation interval, or release cadence is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Turn resolution, bounded source content, and missed-hook activity discovery rely on Conversations' normalized read-only history contract.",
+        "target": "conversations",
+        "kind": "data",
+        "contract": "conversations.history.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Eligible classification and exceptional catch-up rely on Nucleus for bounded agent execution, exact output evidence, and durable requester-tool transport without transferring Decisions authority.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "An authorized digest send relies on Email for immediate Resend submission and acceptance reporting; Decisions still owns occurrence and idempotency state and Gmail receipt remains separate.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "Continuous observation relies on Codex discovering, trusting, and delivering the installed Stop hook, but no dedicated installed Chancery contract describes that source boundary.",
+        "target": "codex",
+        "kind": "data"
+      },
+      {
+        "status": "declared",
+        "statement": "Periodic observer and daily-digest invocation rely on per-user launchd supervision, but no dedicated installed Chancery contract describes launchd readiness.",
+        "target": "launchd",
+        "kind": "readiness"
+      }
+    ]
+  },
   "manual": "manuals/daily-digest.md"
 }

@@ -64,5 +64,157 @@
     "Changing the fixed sender, recipient, Resend account, or API key.",
     "Treating Resend acceptance as proof of final Gmail delivery."
   ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user may send a supplied or approved message immediately, and an installed local product may send one exact frozen occurrence only under its own explicit standing authority."
+      },
+      {
+        "status": "unsupported",
+        "statement": "A caller asking only to draft, revise, preview, discuss, schedule, track, or address another recipient cannot rely on this capability to send."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "A real send requires explicit current-user authority or a calling product's documented standing authority, an approved exact subject and plain-text body, the product-fixed addresses, a valid RESEND_API_KEY, network access, and Resend availability."
+      },
+      {
+        "status": "declared",
+        "statement": "A supplied idempotency key already identifies the exact frozen product occurrence, contains no secret or message content, and satisfies the visible-ASCII length contract."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "The supported CLI takes one required UTF-8 subject and one required UTF-8 plain-text body, with a body value of '-' selecting complete standard input, plus an optional caller-owned idempotency key."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Recipients, senders, HTML, attachments, carbon copies, schedules, drafts, previews, delivery callbacks, API keys in arguments, and hidden occurrence authority are not accepted inputs."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "On Resend acceptance the command exits zero and prints 'Sent' followed by the returned Resend message identifier."
+      },
+      {
+        "status": "declared",
+        "statement": "On input, credential, transport, rate-limit, server, or provider rejection the command exits nonzero with a bounded secret-safe error."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Email returns no draft identity, queued occurrence, local send-history record, scheduled state, final Gmail receipt, delivery tracking result, or domain-success assertion for its caller."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A successful command means Resend accepted the exact frozen submission request; it does not mean Gmail delivered, classified, displayed, or retained the message."
+      },
+      {
+        "status": "declared",
+        "statement": "The optional idempotency key identifies one caller-owned exact payload for Resend deduplication and does not create standing authority, scheduling, occurrence state, or Email-side retention."
+      },
+      {
+        "status": "declared",
+        "statement": "Subject and body are caller-provided plain text; Email fixes both addresses and does not reinterpret the message as a requester-domain fact."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "The Resend message ID identifies provider acceptance, a caller key identifies one exact frozen occurrence, and an ordinary invocation creates a fresh email/UUIDv7 request key."
+      },
+      {
+        "status": "declared",
+        "statement": "A caller key contains 1 through 256 visible ASCII characters without whitespace, and one invocation makes at most three transport attempts using the identical key and request."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "Email publishes no pricing, token, storage, or delivery-time measurement unit."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Each invocation freezes and submits the complete provided subject and body immediately, preserves standard input, and reports the acceptance or final bounded failure observed during that command."
+      },
+      {
+        "status": "declared",
+        "statement": "Email keeps no queue or local delivery history, so final receipt and any later provider state must be observed separately at Gmail or Resend."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No submission-latency, final-delivery-time, provider-availability, inbox-retention, or perpetual external idempotency-retention objective is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported surface is the current-user local Email CLI; the installed wrapper reads only RESEND_API_KEY from ~/.zshrc, preserves standard input, and starts the payload with a scrubbed minimal environment."
+      },
+      {
+        "status": "declared",
+        "statement": "Help and version reads bypass credential loading, while a send makes an authenticated outbound Resend request and discloses the exact message to Resend and Gmail."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Chancery discovery, binary presence, API-key availability, or possession of an idempotency key grants no send authority or access to another address."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "One command freezes the request and selected key, submits immediately, and retries only transport errors, rate limits, and server errors at most twice using the identical bytes and key."
+      },
+      {
+        "status": "declared",
+        "statement": "Within Resend's documented 24-hour key retention, the same key and payload deduplicate while changed payload under that key is rejected; Email stores no state to extend or reconstruct that window."
+      },
+      {
+        "status": "declared",
+        "statement": "After ambiguous failure, the caller inspects Resend before any separately authorized retry when avoiding a duplicate matters; Email has no queued operation to resume."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Each invocation supports one synchronous immediate plain-text message, one fixed sender, one fixed recipient, one optional bounded key, and no more than three attempts."
+      },
+      {
+        "status": "unsupported",
+        "statement": "There is no draft, preview, HTML, attachment, copy, recipient option, scheduler, daemon, background retry queue, retained delivery database, or final-receipt observer."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No maximum message-size promise beyond provider acceptance, throughput objective, rate-limit allocation, or provider service-level objective is declared."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Capability contract version 2 includes caller-supplied idempotency keys and remains distinct from the Email product and provider release and from Resend's external API behavior."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future API migration protocol, cross-release support interval, fixed external-provider retention policy, or deprecation window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Immediate submission and acceptance reporting rely on Resend's authenticated network API, availability, retry semantics, idempotency behavior, and returned message record; no installed Chancery contract covers Resend.",
+        "target": "resend",
+        "kind": "external"
+      },
+      {
+        "status": "unsupported",
+        "statement": "Email does not rely on or observe Gmail to establish command success; final delivery, spam classification, and inbox receipt remain outside this promise and require separate observation."
+      }
+    ]
+  },
   "manual": "manuals/message-send.md"
 }

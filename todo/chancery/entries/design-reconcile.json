@@ -55,5 +55,56 @@
     "Design acceptance based on model prose or job completion.",
     "Using a stale assessment or changing external-system ownership without explicit accepted desired state."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A caller with an established open Todo and a current ready assessment may obtain, correct, inspect, or explicitly decide a normative desired-state design."},
+      {"status": "unsupported", "statement": "Implementation planners, task runners, deployment systems, and callers seeking current-state research are outside this capability."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Proposal requires an open canonical tN whose newest assessment is current and ready; correction requires an eligible ready, rejected, or abandoned dN bound to an assessment that remains current and ready."},
+      {"status": "declared", "statement": "Accept or reject requires a readable UTF-8 authorization source, and acceptance additionally requires the exact design and all recorded umbrella bases to remain current."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Public inputs are an exact tN for proposal, an exact dN plus nonblank feedback for correction, or an exact dN plus decision provenance and any required rejection reason for decision."},
+      {"status": "declared", "statement": "The liaison receives only the resolved direction, exact aN, accepted predecessor if any, correction feedback if any, and a closed basis catalog; quality and exact model overrides are optional."},
+      {"status": "unsupported", "statement": "Arbitrary external research, free-form basis references, implementation tasks, commands, sequences, estimates, and deployment actions are rejected inputs."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "A successful reconciliation returns one dN with explicit jurisdiction changes, nine clause kinds, basis references, choices, predecessor or correction provenance, and open, ready, abandoned, rejected, or accepted history as applicable."},
+      {"status": "declared", "statement": "When the assessment cannot support design, the run records a separate immutable assessment return with exact aN, reason, and missing-or-stale references, allocating no dN before initial submission."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Design is normative desired state rather than observed state or implementation; ready is structural readiness for a user decision, and accepted records authorization without planning or performing work."},
+      {"status": "declared", "statement": "Jurisdiction actions are keep, move, add, or retire, and active clauses cover ownership, boundary, state, interface, lifecycle, failure, compatibility, acceptance, and non-goal."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "dN identifies one immutable basis-bound design history; aN identifies its exact assessment basis, while stable operation IDs and draft versions coordinate correction and revision."},
+      {"status": "not_applicable", "statement": "This capability publishes no implementation effort, schedule, cost, or accounting unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A ready design has no active choices, includes all nine clause kinds, and collectively covers the direction body, every structured direction boundary, and every active predecessor operation."},
+      {"status": "declared", "statement": "Proposal, correction, and acceptance bind and recheck one exact current assessment and exact umbrella bases; a newer assessment blocks correction and acceptance against the older basis."},
+      {"status": "unsupported", "statement": "Design completeness does not establish current external facts, implementation completeness, deployment readiness, or execution success."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The current-user Todo CLI uses a constrained Nucleus liaison for propose or correct and deterministic direct Todo writes for accept or reject."},
+      {"status": "unsupported", "statement": "The liaison has no external research, shell, workspace, web, implementation, deployment, design-decision, or routing-decision interface."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Initial design submission validates atomically before allocating dN; correction records immutable feedback and creates a successor rather than editing its predecessor."},
+      {"status": "declared", "statement": "Open drafts left by a completed run become abandoned, assessment returns are terminal for their run, and accept or reject commits a deterministic provenance-bearing decision after current-basis revalidation."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "One reconciliation run uses one exact assessment and one Nucleus attempt with a closed basis grammar; there is no force path around stale bases and no automatic implementation transition."},
+      {"status": "unspecified", "statement": "No design-size, clause-count, reconciliation latency, or model-quality service-level objective is promised beyond the documented structural checks."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 preserves dN and aN bindings, immutable predecessor and correction history, the closed basis grammar, nine clause kinds, and versioned Nucleus toolsets and schemas."},
+      {"status": "unspecified", "statement": "No deprecation period, cross-version design migration protocol, or external-system compatibility window is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Proposal and correction rely on Nucleus for one constrained model execution, authentication, durable job state, and raw protocol history; Todo remains authoritative for design records and all decisions.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"}
+    ]
+  },
   "manual": "manuals/design-reconcile.md"
 }

@@ -43,5 +43,12 @@ Interactive commands inherit App Server diagnostics by default. Embedded or
 scheduled callers with private-log requirements should set
 `ClientConfig.stderr_policy` to `StderrPolicy::Suppress`.
 
+The product-owned [`chancery/`](chancery/) bundle indexes Conversations' public
+capabilities. Use `chancery list`, then read every plausible entry with
+`chancery show`. After selecting one exact entry, use `chancery resolve
+<ENTRY_ID>` for its complete outward promise, documentation dependency closure,
+exact basis, and explicit gaps. Resolution does not check App Server readiness
+or authorize an effect, and its uncontracted App Server reliance remains a gap.
+
 See [CLI behavior](docs/cli.md), [architecture](docs/architecture.md), and
 [macOS installation](docs/system-installation.md).

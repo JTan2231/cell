@@ -62,5 +62,47 @@
     "Treating a steward response as authority beyond its selected scope and basis, or a review as party assent or integration approval.",
     "Retrying a terminal attempt, publishing private terms, or accepting target-system changes without separate explicit authority."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "An entrant with complete expectations and authorized target evidence may negotiate one or more fixed bilateral tracks with registered steward scopes and inspect advisory composition or conformance findings."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Each track has fixed parties, complete exact Markdown terms, a registered versioned steward scope, and a bounded authorized source basis; model-assisted work additionally requires compatible Nucleus readiness."},
+      {"status": "unsupported", "statement": "A merely exploratory design walkthrough or incomplete expectation set is not ready for this capability."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are entrant and integration identity, complete Markdown offer files, versioned steward or candidate-basis manifests, explicit base offer IDs, and bounded frozen UTF-8 source catalogs."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Outputs are immutable offers, party assents, sealed bilateral agreements on exact steward bases, and separately immutable advisory composition or evidence-only conformance reviews."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Terms remain opaque exact Markdown; a seal means every fixed party assented to the same current offer on the current recorded basis and does not mean implementation, deployment, or whole-integration approval."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Integration, track, negotiation, offer, agreement, attempt, steward-scope/version, and review IDs identify distinct protocol records; content and catalog digests identify exact bytes, not semantic equivalence."},
+      {"status": "not_applicable", "statement": "Pratica defines no pricing or quantitative product-domain unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "An offer is a complete replacement snapshot and a sealed agreement records the complete required-party assent set and exact basis current at seal time."},
+      {"status": "unsupported", "statement": "Pratica does not automatically discover every concerned system or guarantee that a historical agreement remains applicable after its basis changes."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "Protocol writes use the local Pratica CLI and private database; model attempts receive only explicitly selected frozen sources through closed immutable managed tools with workspace none, no shell, and no web."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Offers and seals are immutable, stale offer or basis transitions fail without partial state, assent follows exact current offer identity, and committed tool outcomes are idempotent under identical redelivery."},
+      {"status": "declared", "statement": "Ambiguous admission reuses the same persisted request and job ID; a new terminal retry requires explicit authority and a new attempt identity."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Each source file is at most 4 MiB, one attempt's catalog is at most 32 MiB, managed jobs have one attempt, and the product performs no target mutation, deployment, release, or automatic crawl."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 uses schema-one protocol state and the three immutable version-one toolset meanings; incompatible tool or state meaning requires a successor identity and retained historical decoding."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Steward, composition, and conformance model work uses Nucleus for admission, authentication, execution, and mailbox transport while Pratica retains protocol and domain-success authority.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"}
+    ]
+  },
   "manual": "manuals/integration-negotiate.md"
 }

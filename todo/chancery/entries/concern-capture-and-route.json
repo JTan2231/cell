@@ -54,5 +54,54 @@
     "Creating, revising, attaching, or unifying a durable `tN` identity.",
     "Planning, implementing, or completing the retained concern."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A person or local agent may durably retain one actionable concern for later and obtain a separately decidable routing proposal."},
+      {"status": "unsupported", "statement": "Immediate work, casual notes, implementation plans, and general project-graph records are not consumers of this capability."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The caller supplies a nonblank direction and an existing readable UTF-8 regular file relevant to where that direction arose."},
+      {"status": "declared", "statement": "Routing research requires compatible, authenticated, accepting Nucleus execution after the concern has committed."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Capture accepts direction text and one source path; research selects a committed cN and may accept documented quality or exact model overrides."},
+      {"status": "unsupported", "statement": "Placeholder files, source bytes as durable Todo state, automatic routing authority, shell access, workspace access, and web search are not inputs."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Capture returns one durable cN containing direction and canonical source-path provenance; successful research returns one pending rN with a sealed attach, create, revise, unify, dismiss, or defer proposal and frozen bases."},
+      {"status": "declared", "statement": "If research fails after capture, the committed concern remains the durable output and the later runtime failure is reported separately."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "A concern preserves originating direction and provenance; a routing proposal is model-produced research that cannot apply or authorize its proposed disposition."},
+      {"status": "declared", "statement": "Attach preserves umbrella direction, revise preserves identity, unify preserves both histories under one survivor, dismiss requires positive no-action evidence, and defer preserves an unresolved concern."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "cN identifies one immutable concern and rN identifies one sealed routing proposal; neither identifier is a tN todo identity."},
+      {"status": "not_applicable", "statement": "This capability publishes no quantitative accounting or pricing unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Research uses the exact concern plus one frozen bounded candidate snapshot and records the basis needed to detect a later stale proposal."},
+      {"status": "unsupported", "statement": "The candidate snapshot is not a global proof that no other concern or external work is related, and a pending proposal is not guaranteed current after later Todo changes."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported interface is the current-user local Todo CLI over its selected database, with selected source reads exposed to a constrained Nucleus stage."},
+      {"status": "unsupported", "statement": "The routing stage has no shell, filesystem workspace, inherited environment, web search, or decision command."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Capture commits before model submission; research freezes its basis, submits one constrained job, validates at most one proposal, and commits it without applying it."},
+      {"status": "declared", "statement": "Stable job, call, and operation identities make a replay return the same committed Todo result rather than duplicate it."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Research is bounded to Todo's frozen source and candidate surfaces and one Nucleus attempt; a failed or stale proposal requires explicit reassessment of the existing concern."},
+      {"status": "unspecified", "statement": "No research latency, model-quality, candidate-count, or retained-source availability service-level objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 preserves distinct cN, rN, and tN semantics and uses immutable versioned Nucleus tool and result schemas."},
+      {"status": "unspecified", "statement": "No deprecation date or cross-version migration window for this public capability is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Routing research relies on Nucleus for one constrained model execution, authentication, durable job state, and raw protocol history; Todo remains authoritative for the committed concern and proposal.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"}
+    ]
+  },
   "manual": "manuals/concern-capture-and-route.md"
 }

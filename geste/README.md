@@ -29,5 +29,9 @@ The installed database defaults to
 `GESTE_DATABASE` for an isolated casebook. Geste never falls back to a database
 in the current directory.
 
-Start with [the documentation index](docs/README.md). `release.sh` publishes a
-Git release and is not a build or installation command.
+Start with [the documentation index](docs/README.md). The
+[Geste provider bundle](chancery/provider.json) is the release-matched index of
+supported outward promises; after selecting an exact entry, use
+`chancery resolve geste.episode.explore` (or the selected ID) for its normalized
+boundary and explicit gaps. `release.sh` publishes a Git release and is not a
+build or installation command.

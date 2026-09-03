@@ -67,10 +67,52 @@
     "A persistent-state change lacks explicit migration and rollback proof.",
     "The requested behavior cannot be represented within Geste's reviewed manual v0.1 boundary."
   ],
+  "dependencies": [
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
   "does_not_authorize": [
     "Running `release.sh`, which commits, tags, and pushes.",
     "Deploying an installed Geste release or initializing a user database.",
     "Changing, invoking, or reading another Cell product beyond separately selected installed contracts."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "An interactive contributor may change Geste within its reviewed manual-casebook boundary while keeping product contracts and tests synchronized."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The contributor has read Geste instructions and affected public contracts, identified the owning boundary, and has separate authority before any release or deployment."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are the requested scoped change, current Geste source and public contracts, synthetic fixtures, and any explicitly selected installed documentation contracts."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The output is the smallest synchronized source, test, documentation, packaging, or provider change with a green Geste CI result."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Development preserves episode-authored interpretation, immutable complete revisions, source-owner authority, deterministic projections, and the distinction between a historical case and current procedure."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Existing public episode, revision, capture-schema, database-schema, and release identities retain their documented meanings unless an explicit successor is introduced."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Completion covers every affected Geste code, test, architecture, CLI, data-model, installation, and Chancery contract and the current CI run."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "Development uses the local repository filesystem and shell; access to another product requires its separately selected installed contract."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Persistent changes require explicit migration, quiescent backup, old-state proof, and database-aware rollback; release and deployment remain later separate transitions."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "The operation is bounded to Geste's short-lived manual v0.1 product and must stop before continuous ingestion, model inference, or an unreviewed source adapter."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Incompatible capture, storage, source, or packaging meaning receives an explicit new contract or migration while historical revisions remain readable."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Geste development relies on its registered Semantics repository for maintained project terminology while source, tests, and product documentation remain authoritative for behavior.", "target": "semantics", "kind": "authority", "contract": "semantics.repository.explore"},
+      {"status": "unsupported", "statement": "This terminology authority does not create a represented-product runtime reliance of the development operation."}
+    ]
+  },
   "manual": "manuals/develop-change.md"
 }

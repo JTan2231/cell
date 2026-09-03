@@ -58,5 +58,57 @@
     "Deleting `current.json`, generated outputs, Nucleus history, retained release directories, or private logs.",
     "Publication, public-service interaction, or a new terminal-run attempt."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A current-user operator may inspect, wait for, recover, cancel, or validate a Weaver workflow, diagnose readiness, or explicitly deploy the user-owned installation."},
+      {"status": "unsupported", "statement": "A new narrative build, implementation change, automatic retry, publication workflow, public-service operation, or unscoped process controller is outside this capability."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Workflow commands select Weaver private state, the applicable narrative repository, and optionally the exact observed run ID; cancellation and deployment require explicit authority."},
+      {"status": "declared", "statement": "Deployment requires a tested absolute Weaver binary, compatible Nucleus readiness, an available maintenance boundary, and ownership of Weaver's existing selectors or their absence."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Supported inputs are repository and state selectors, an optional exact run ID, a narrative name for check, and an absolute binary plus documented maintenance wait bound for deployment."},
+      {"status": "unsupported", "statement": "Arbitrary process IDs, foreign provider selectors, edited current.json, direct maintenance-file mutation, new model-attempt content, and public-service targets are unsupported inputs."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Doctor, status, wait, cancel, and check report the exact selected readiness, current-run, terminal, cancellation, or mechanical-validation outcome."},
+      {"status": "declared", "statement": "Successful deployment returns a validated content-addressed current release, command and Weaver-owned provider selector, previous selector when applicable, no prototype service, and ended maintenance."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "current.json is the sole current workflow record; status is observation, wait is observation plus explicit worker recovery, cancel is durable intent plus one current-stage cancellation request, and check is mechanical validity rather than freshness."},
+      {"status": "declared", "statement": "A terminal failed, lost, cancelled, timed-out, malformed, or blocked workflow remains historical current state until an explicit new submission replaces it and is never retried automatically."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Run ID selects one complete workflow, deterministic stage job ID selects one Nucleus attempt, content hash identifies one installed release, and org.weaver.worker identifies only the removed prototype service."},
+      {"status": "declared", "statement": "Nonterminal wait reactivates a worker immediately and every 30 seconds; maintenance begin defaults to a 60-second command bound while deployment supplies its documented update bound."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "An explicit run ID prevents status, wait, or cancel from following a replacement; without it the command selects the sole current record at command time."},
+      {"status": "declared", "statement": "Check validates all five persisted outputs and required cross-file invariants; deployment manifests and validates all packaged bytes and installed selectors before commit."},
+      {"status": "unsupported", "statement": "Status is not machine-wide process liveness, check is not repeated editorial review, and deployment does not establish future Nucleus readiness or narrative freshness."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "Operations run as the current user and access Weaver private state and the selected narrative repository through the interactive process lineage; deployment owns only Weaver installation paths and provider selector."},
+      {"status": "unsupported", "statement": "Weaver does not select unrelated Codex or Nucleus processes, take over foreign selectors, delete retained private state or outputs, or install a resident service."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Status is read-only; wait starts replaceable one-shot workers for the exact durable request; cancel records intent before asking Nucleus and is idempotent for the selected run."},
+      {"status": "declared", "statement": "Deployment establishes maintenance, waits for the run lock, stages and validates a release, switches selectors atomically, removes only the exact prototype, and restores all captured pre-commit state on failure."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Weaver supports one current workflow, one run lock, one product installation, no resident daemon or LaunchAgent, and no deletion or automatic terminal-retry interface."},
+      {"status": "unspecified", "statement": "No recovery duration, workflow duration, deployment duration, retained-release count, repository capacity, or service availability objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 retains exact-run selection, one-attempt recovery, maintenance ordering, content-addressed packaging, and Nucleus invocation protocol 1 compatibility."},
+      {"status": "declared", "statement": "A failed pre-commit deployment restores the prior release and selector set; a post-commit failure leaves the new release authoritative and requires maintenance end through that installed CLI."},
+      {"status": "unspecified", "statement": "No perpetual support window for older Weaver releases, private-state formats, macOS behavior, or Nucleus versions is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Readiness, wait recovery, and cancellation rely on Nucleus for current job and authentication state and exact cancellation behavior.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"},
+      {"status": "declared", "statement": "Mechanical check and workflow recovery rely on the selected narrative repository for the current generated output tree, but no dedicated installed Chancery contract describes that repository promise.", "target": "narrative-repository", "kind": "data"}
+    ]
+  },
   "manual": "manuals/workflow-operate.md"
 }

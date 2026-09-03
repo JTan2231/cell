@@ -77,8 +77,8 @@ validate_bundle() {
     if find "$bundle" ! -type d ! -type f -print | grep -q .; then
         fail "Chancery provider contains a non-file entry: $bundle"
     fi
-    grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*2' "$bundle/provider.json" \
-        || fail 'Chancery provider schema is not version 2'
+    grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*3' "$bundle/provider.json" \
+        || fail 'Chancery provider schema is not version 3'
     grep -Eq '"id"[[:space:]]*:[[:space:]]*"semantics"' "$bundle/provider.json" \
         || fail 'Chancery provider ID is not semantics'
     for entry_id in semantics.repository.explore semantics.project.operate semantics.develop.change; do

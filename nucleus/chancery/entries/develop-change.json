@@ -39,7 +39,8 @@
     "Canaries create real runtime and sometimes requester-domain records; choose and account for them deliberately."
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": [
     "local_filesystem",
@@ -73,5 +74,134 @@
     "Deploying to the installed service.",
     "Changing requester-owned domain meaning merely for runtime convenience."
   ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Nucleus maintainers may use this operation for an authorized change to Nucleus implementation, public protocol, storage, harness compatibility, authentication, service lifecycle, deployment behavior, or exact contracts."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The maintainer has read the installed Nucleus manual, identified the primary authority and every affected requester, and classified compatibility, persistence, authentication, service, disclosure, migration, and recovery consequences."
+      },
+      {
+        "status": "declared",
+        "statement": "Separate authority exists before release publication, installed deployment, a requester retry, a canary that creates durable records, or any destructive migration or credential move."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Inputs are one authorized change request plus current Nucleus source, tests, runtime and operator contracts, affected requester contracts, installed harness evidence where relevant, and the applicable recovery playbook."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Requester-domain convenience, an unproved harness, an unsafe migration, or publication intent inferred from ordinary development is not a valid basis for changing Nucleus."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "The operation produces the smallest reviewed Nucleus source, test, and exact documentation change with the complete Nucleus product CI green and affected requester proof synchronized."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Development completion alone does not publish a release, deploy the service, migrate live state, authenticate an account, retry requester work, or prove a production canary."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Nucleus changes preserve the distinction between operational execution records and requester-owned domain truth, between public protocol and store schema, and between harness evidence and portable invocation semantics."
+      },
+      {
+        "status": "declared",
+        "statement": "A green development candidate proves the checked-in contract and tests, while release, deployment, migration, and live canary outcomes remain separate externally consequential states."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Product release, public protocol version, store schema, adapter version, exact harness version, requester identity, entry contract version, and immutable schema or toolset identity are independently reviewed."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "This development operation defines no runtime accounting or usage unit."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Completeness requires every affected source, test, requester, public and operator contract, migration, packaging boundary, recovery path, and focused canary obligation to agree before the product gate passes."
+      },
+      {
+        "status": "declared",
+        "statement": "Exact Codex changes use freshly inspected executable, model-catalog, and generated app-server schema evidence rather than an assumed version range."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No development duration, release cadence, requester upgrade window, or review turnaround objective is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The operation uses the authorized local Nucleus source tree and shell surfaces; sensitive fixtures, backups, logs, credentials, canary records, and retained output stay within their documented private boundaries."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The operation grants no implicit access to requester-owned domain state, production credentials, external publication, installed service mutation, or private source disclosure."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "The sequence is classify the change, name authorities and affected requesters, make the smallest owning edit, synchronize contracts and migrations, run Nucleus and affected requester gates, then separately authorize and perform any release or deployment."
+      },
+      {
+        "status": "declared",
+        "statement": "Additive protocol support deploys daemon-first; incompatible changes retain both forms where possible or quiesce affected requesters, and store or credential recovery follows the exact guarded manual rather than binary-only rollback."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Stop when a destructive migration or credential move lacks safe recovery, an affected requester cannot be quiesced, exact harness behavior is unproved, or the proposed change would transfer requester-domain authority to Nucleus."
+      },
+      {
+        "status": "unsupported",
+        "statement": "This operation cannot treat release.sh as a build step, bypass the complete product gate, silently change requester meaning, or use binary rollback across an incompatible store migration."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Changed public meaning advances the relevant protocol, schema, toolset, adapter, or capability-contract identity and retains supported historical decoding or supplies an explicit migration."
+      },
+      {
+        "status": "declared",
+        "statement": "Deployment order and rollback are selected from the current version-matched manual according to the actual compatibility shape rather than source-workspace lockstep."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No universal backward-compatibility horizon, deprecation window, or release frequency is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Nucleus development relies on its registered Semantics repository for maintained project terminology while source, tests, and product documentation remain authoritative for behavior.",
+        "target": "semantics",
+        "kind": "authority",
+        "contract": "semantics.repository.explore"
+      },
+      {
+        "status": "unsupported",
+        "statement": "The documentation dependency on nucleus.execution.operate is not reinterpreted as a product runtime reliance of the source-change operation."
+      }
+    ]
+  },
   "manual": "manuals/develop-change.md"
 }

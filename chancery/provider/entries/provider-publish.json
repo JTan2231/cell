@@ -50,7 +50,9 @@
       "invocation": "/Users/joey/.local/bin/chancery doctor"
     }
   ],
-  "dependencies": [],
+  "dependencies": [
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
   "session_surfaces": [
     "product source tree",
     "product deployment environment"
@@ -184,8 +186,15 @@
     ],
     "reliances": [
       {
-        "status": "not_applicable",
-        "statement": "The publication operation creates no product runtime reliance on Chancery; source and deployment tools are attended operation surfaces rather than capability dependencies."
+        "status": "declared",
+        "statement": "Chancery publication relies on its registered Semantics repository for maintained project terminology while source, tests, and product documentation remain authoritative for behavior.",
+        "target": "semantics",
+        "kind": "authority",
+        "contract": "semantics.repository.explore"
+      },
+      {
+        "status": "unsupported",
+        "statement": "This documentation authority does not create a Chancery runtime reliance on represented products or turn attended source and deployment tools into capability dependencies."
       }
     ]
   },

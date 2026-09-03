@@ -55,5 +55,58 @@
     "Publishing a Todo release.",
     "Changing the Resend account or exposing its API key."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A current-user operator with explicit installed-state authority may initialize or migrate one Todo database or deploy, diagnose, validate, or recover Todo's macOS installation and daily email service."},
+      {"status": "unsupported", "statement": "Ordinary Todo domain use, release publication, retained-state deletion, and incidental external email sending are outside this capability."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Initialization targets an absent database path; a version-one migration targets a stopped database and an absent absolute caller-owned backup path."},
+      {"status": "declared", "statement": "Deployment requires an absolute tested Todo binary, healthy compatible Nucleus, explicit installed-state authority, and complete sender and recipient configuration on first install."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Supported inputs are exact database, backup, binary, sender, recipient, installation, and documented wait or environment selectors for the chosen operation."},
+      {"status": "unsupported", "statement": "Relative or existing required migration backups, partial email configuration, foreign provider selectors, stored Resend credentials, and implicit migration are rejected."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Database operation returns a new current database, a current migrated database plus retained complete backup, or a true no-op for an already-current database."},
+      {"status": "declared", "statement": "Deployment returns a validated content-addressed current release, stable command and Todo-owned provider selectors, current database and config, and installed daily email LaunchAgent, with previous release retained when applicable."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Migration preserves historical Todo identities and records conservatively and does not infer cross-todo relationships, assessments, accepted design, implementation, or closure evidence."},
+      {"status": "declared", "statement": "The release identity covers the binary, deployer, and complete Chancery bundle; the selected config owns database and email addresses while RESEND_API_KEY remains environment-only."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "SQLite schema version, Todo package and provider release, content-addressed release hash, LaunchAgent label org.todo.daily-email, and public Todo IDs are separate identities."},
+      {"status": "declared", "statement": "The daily occurrence is 09:00 in the Mac's current local clock; migration backup paths and release selectors identify exact filesystem objects."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A required migration writes a complete pre-transaction SQLite backup, and deployment stages and manifests every packaged binary, deployment, and provider-document byte before switching selectors."},
+      {"status": "declared", "statement": "Post-switch validation checks installed version and help, database and configuration shape, Nucleus readiness, and email service state as applicable to the deployment."},
+      {"status": "unsupported", "statement": "Installation success does not prove future Nucleus availability, final email receipt, or exact 09:00 execution while the user session or Mac is unavailable."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "Operations run as the current user and own only Todo's selected database, config, release, command, provider selector, LaunchAgent, and logs."},
+      {"status": "unsupported", "statement": "The deployer does not take over foreign selectors, store credentials, modify Nucleus authentication or state, or delete caller-retained backups and releases."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Ordinary Todo commands never migrate; explicit migration backs up before one transaction, and current databases are no-ops that leave the supplied backup path untouched."},
+      {"status": "declared", "statement": "Deployment stages content-addressed bytes, quiesces the email service, backs up and migrates, switches and validates selectors, then installs the service; any pre-commit failure restores captured database and installed state."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Todo owns no daemon; the only service is one user LaunchAgent invoking the synchronous email command, and deployment changes only Todo-owned installation paths."},
+      {"status": "unspecified", "statement": "No database-size, migration-duration, deployment-duration, email-delivery, retained-release-count, or uptime service-level objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 supports explicit backup-bearing migration to SQLite schema 2 and content-addressed release rollback with package and provider releases kept equal."},
+      {"status": "declared", "statement": "An update may preserve an existing complete email config byte-for-byte or replace it only when both sender and recipient are supplied together."},
+      {"status": "unspecified", "statement": "No perpetual support window for older database, macOS, launchd, Nucleus, Resend, or provider-schema versions is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Deployment readiness relies on the installed Nucleus operation contract for the execution service state required by Todo research.", "target": "nucleus", "kind": "readiness", "contract": "nucleus.execution.operate"},
+      {"status": "declared", "statement": "Email validation and later scheduled submission rely on Resend, but no dedicated installed Chancery contract describes that external service promise.", "target": "resend", "kind": "external"},
+      {"status": "declared", "statement": "Installation and scheduled daily digest execution rely on per-user launchd supervision, but no dedicated installed Chancery contract describes launchd readiness.", "target": "launchd", "kind": "readiness"}
+    ]
+  },
   "manual": "manuals/install-operate.md"
 }

@@ -63,5 +63,60 @@
     "Continuing, mutating, archiving, deleting, or messaging any Codex task.",
     "Sending or publishing exported transcript text, or interpreting it with a model."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A current-user caller or local Rust product may retrieve complete selected Codex task metadata, normalized user and assistant history, exact task summaries, or content-free completed-turn activity."},
+      {"status": "unsupported", "statement": "Task mutation, raw storage access, reasoning or tool-payload extraction, model interpretation, and machine-wide liveness monitoring are outside this capability."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The selected Codex binary can launch a compatible App Server and complete initialization, and any supplied host reference matches the client's stable current-machine identity."},
+      {"status": "declared", "statement": "Full-history and activity operations require App Server to return every requested page or the specifically documented method-unavailable legacy fallback."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs include the selected Codex binary and host identity, exact thread, turn, or session identifiers, archive and source-kind filters, cwd, title, updated-after, query text, limits, output mode, and diagnostic policy documented for the chosen interface."},
+      {"status": "unsupported", "statement": "Raw Codex file paths, SQLite queries, task mutations, arbitrary JSON-RPC methods, credential material, and private internal item kinds are not supported inputs."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "List and exact-summary reads return typed ThreadSummary metadata; show, search, and export return typed user-and-assistant-only normalized records with stable references."},
+      {"status": "declared", "statement": "Activity returns one completed turn's timing, status, user and assistant message counts, and stable references plus change counts for structurally valid completed nonempty file-change items, without bodies, paths, or diffs."},
+      {"status": "declared", "statement": "Refresh returns active and archived metadata counts after permitting App Server's own scan-and-repair path and never loads message content."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "The default corpus is active and archived interactive root tasks; subagents and exec tasks are included only by explicit independent filters, and copied fork items are deduplicated by item ID for snapshot, search, and export."},
+      {"status": "declared", "statement": "Only userMessage and agentMessage text become Message records; activity is a separate content-free projection, and observed runtimeStatus belongs only to the newly launched App Server."},
+      {"status": "unsupported", "statement": "Reasoning, images, commands, tool calls or results, approvals, file paths, diffs, raw storage records, and machine-wide task liveness are not corpus fields."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "ThreadRef is host plus thread ID, TurnRef adds turn ID, and ItemRef adds item ID; exact summary requires one canonical host-matching ThreadRef to occur exactly once."},
+      {"status": "declared", "statement": "Message timestamps identify item, turn, or unknown precision; activity counts messages and completed change entries, and updated-after is Unix seconds."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Every requested active and archived metadata page and every selected full-history page must complete; protocol, page, timeout, ambiguity, or unsupported-record failure aborts instead of returning a normal partial corpus."},
+      {"status": "declared", "statement": "Ordinary operations read App Server's state-database-only view at invocation time; refresh is the sole operation that permits App Server metadata repair, and no Conversations cache is consulted."},
+      {"status": "unsupported", "statement": "The result does not guarantee that App Server metadata represents machine-wide live clients or that transcript state remains unchanged after the invocation."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "Conversations accesses Codex state only through one local documented App Server JSON-RPC session and writes results only to the caller's process output or typed library return."},
+      {"status": "unsupported", "statement": "It never opens Codex JSONL or SQLite storage, changes authentication, mutates tasks, sends transcript content to a model or network service of its own, or targets unrelated Codex processes."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "One invocation launches and initializes one App Server in a private process group, performs the bounded operation, terminates inherited descendants, reaps the direct child, and retains no Conversations state."},
+      {"status": "declared", "statement": "Full history prefers paginated thread/turns/list and uses legacy thread/read only for exact method-unavailable response; other errors never trigger fallback."},
+      {"status": "declared", "statement": "Activity validates exact thread first, searches session, parent, and fork lineage only on exact miss, and requires the requested turn to resolve to exactly one candidate."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Activity reads newest-first pages of 100 until the requested turn; candidate and result limits bound supported list, search, and export work when supplied, while unbounded full-text work is proportional to every selected history."},
+      {"status": "unsupported", "statement": "Conversations offers no daemon, persistent index, event listener, background refresh, task mutation, raw-store fallback, or network API."},
+      {"status": "unspecified", "statement": "No App Server availability, wall-clock latency, corpus-size, throughput, or perpetual history-retention service-level objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 3 preserves the typed normalized schema, complete-read failure, explicit refresh, exact summary, activity separation, stable host references, and the narrow -32601 legacy fallback."},
+      {"status": "declared", "statement": "The selected Codex CLI and recorded task CLI versions may differ; doctor reports compatibility observations without converting them into machine-wide liveness."},
+      {"status": "unspecified", "statement": "No App Server protocol support window, future source-kind guarantee, or deprecation period for this capability version is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Every result relies on Codex App Server for task discovery, metadata, pagination, source records, storage compatibility, and availability, but no dedicated installed Chancery contract describes that exact data surface.", "target": "codex-app-server", "kind": "data"}
+    ]
+  },
   "manual": "manuals/history-explore.md"
 }

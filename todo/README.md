@@ -98,6 +98,13 @@ human output and `--json` output.
 See [the documentation index](docs/README.md) for the complete CLI, liaison,
 data, and installation contracts.
 
+Todo's product-owned [`chancery/`](chancery/) bundle is the public capability
+index. Use `chancery list`, then read every plausible entry with `chancery
+show`. After selecting one exact entry, use `chancery resolve <ENTRY_ID>` for
+its complete outward promise, documentation dependency closure, exact basis,
+and explicit gaps. Resolution does not check runtime readiness or authorize an
+effect, and an unsupported, unspecified, or uncontracted result remains a gap.
+
 ## Release
 
 Todo releases use annotated tags named `todo-vMAJOR.MINOR.PATCH`. From a clean

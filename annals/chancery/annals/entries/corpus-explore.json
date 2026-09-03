@@ -55,5 +55,56 @@
     "A truth claim beyond the exact retained evidence.",
     "External disclosure of private library content."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A local reader may inspect retained works, evidence-backed concepts, graph neighborhoods, source-delivery metadata, or corpus revision history."},
+      {"status": "unsupported", "statement": "This surface is not semantic similarity, source-content topic search, web research, truth adjudication, account reporting, or corpus mutation."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The caller selects a readable compatible Annals library and uses public concept IDs, work labels, revisions, filters, or opaque cursors accepted by the chosen command."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Supported reads accept lexical query words, public cN concept IDs, work labels, revision selectors, bounded graph options, source-activity filters, or a context-bound opaque page cursor as applicable."},
+      {"status": "unsupported", "statement": "Labels and concept paths cannot select concepts, and source text, semantic vectors, objective-truth predicates, or arbitrary SQL are not search inputs."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Outputs identify the resolved revision and return bounded concept, graph, evidence, work, delivery, commit, or revision-difference records with pagination and any truncation frontier visible."},
+      {"status": "declared", "statement": "Work show returns complete retained text; lately returns delivery metadata and never searches or emits source content or document-internal dates."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Lexical search matches normalized concept labels and derived ancestor-label context; it is not semantic similarity, evidence retrieval, or a truth claim."},
+      {"status": "declared", "statement": "Evidence is an exact retained quotation supporting a concept across its parent relationships, not proof of objective truth or evidence attached to one edge."},
+      {"status": "declared", "statement": "A graph frontier marks where configured depth or node limits stopped expansion and is not necessarily a leaf or the complete graph."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Durable lowercase cN IDs select concepts, normalized-unique labels select works, and integer revisions select immutable corpus states; concept labels and paths are not identities."},
+      {"status": "declared", "statement": "Graph depth is measured in explicit parent-edge hops, maximum nodes and page limits are record counts, and lately windows use the selected delivery timestamp basis."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A command resolves HEAD once by default or reads one selected immutable historical revision; its output reports pagination and any graph frontier needed to qualify completeness."},
+      {"status": "declared", "statement": "Work show returns the complete selected retained source, while paged results are complete only for the reported page and fixed cursor context."},
+      {"status": "unspecified", "statement": "No wall-clock read latency, unlimited graph expansion, or indefinite cursor validity across changed command context is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported boundary is a local read through the Annals CLI against an explicitly resolved private library."},
+      {"status": "unsupported", "statement": "No model, network, mutation, direct SQLite, or external disclosure surface is provided by exploration."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Reads leave HEAD and library state unchanged, and historical corpus states are reconstructed from canonical commit effects."},
+      {"status": "declared", "statement": "Opaque cursors remain bound to the same library, command, query, scope, and revision; a changed context requires restarting pagination."},
+      {"status": "declared", "statement": "Commit history records applied corpus transitions, not work retention, no-change interpretations, model runs, or failed deliveries."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Graph expansion is bounded by direction, depth, and maximum nodes; search is lexical; lately can omit a delivery lacking the selected timestamp basis."},
+      {"status": "unspecified", "statement": "No universal maximum corpus size, result throughput, query latency, or cursor-retention interval is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 is distinct from provider release and library schema; opaque cursors are not a parseable compatibility interface."},
+      {"status": "unspecified", "statement": "No cross-release cursor compatibility, output-schema support window, or deprecation period is promised."}
+    ],
+    "reliances": [
+      {"status": "not_applicable", "statement": "Exploration reads only the selected Annals library and invokes no Nucleus, model, network, or other product."}
+    ]
+  },
   "manual": "manuals/corpus-explore.md"
 }

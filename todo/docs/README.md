@@ -48,3 +48,11 @@ The implemented contracts are:
   decisions, and version-1 migration;
 - [macOS installation](system-installation.md): user-owned deployment,
   migration rollback, the daily email LaunchAgent, and recovery.
+
+The product-owned [Chancery provider](../chancery/provider.json) indexes these
+public use, operation, and development promises. Discover semantically with
+`chancery list` and `chancery show`; once one exact entry is selected, run
+`chancery resolve <ENTRY_ID>` to assemble its provider scope, normalized
+boundary claims, documentation dependency closure, exact basis, and explicit
+gaps. Keep documentary resolution separate from live readiness, authorization,
+and domain success.

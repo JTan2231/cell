@@ -55,5 +55,48 @@
     "Reading, changing, or verifying any cited upstream record.",
     "Publishing or sending private episode output."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A local caller may search the manually captured casebook, inspect an exact episode revision, or derive its bounded report or provenance graph."},
+      {"status": "unsupported", "statement": "A reader may not treat a retrieved episode as current policy, upstream truth, or proof that an analogy applies."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The selected path is an initialized supported Geste schema-one database, and the caller supplies an exact supported read or bounded lexical query."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are 1 through 16 normalized unique search terms or one public episode ID with an optional exact historical revision and documented output limit."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Outputs are deterministically ranked current-head candidates, an exact stored revision, or a read-time report or bounded typed provenance graph."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Search is lexical all-term matching over current heads; reports and graphs distinguish episode-authored interpretation, cited-source anchors, verified or unverified settlement, and explicit coverage gaps."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "A public episode ID identifies one episode lineage and a positive revision number identifies one immutable complete snapshot; search rank is a deterministic retrieval score rather than semantic confidence."},
+      {"status": "not_applicable", "statement": "The read surface defines no pricing, usage, or physical measurement unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "An exact revision read is complete for that committed snapshot, while search is complete only over manually captured latest heads in the selected database and a graph only over the selected revision."},
+      {"status": "unsupported", "statement": "The casebook does not refresh, resolve, or verify current cited-source state."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported boundary is the local Geste CLI reading the explicitly selected private database; direct SQLite and cited-source access are not consumer interfaces."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Reads are side-effect free, historical selection is immutable, and repeated reads of unchanged database state use deterministic normalization, ranking, and projection rules."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Search accepts 1 through 16 unique terms and graphs are bounded to one selected episode revision rather than traversing cited systems."},
+      {"status": "unspecified", "statement": "No wall-clock read latency or maximum database-size service level is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 reads the documented schema-one casebook and public episode/revision identities; provider release remains a separate version."},
+      {"status": "unspecified", "statement": "No cross-version migration or deprecation window is promised by this read contract."}
+    ],
+    "reliances": [
+      {"status": "not_applicable", "statement": "Reading and projecting the casebook invokes no model, network, Chancery runtime, or cited product; source anchors are stored data rather than live dependencies."}
+    ]
+  },
   "manual": "manuals/episode-explore.md"
 }

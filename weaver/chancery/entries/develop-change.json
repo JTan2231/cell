@@ -41,7 +41,8 @@
   ],
   "dependencies": [
     {"id": "weaver.workflow.operate", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": [
     "local_filesystem",
@@ -76,5 +77,59 @@
     "Deploying Weaver or cancelling an active installed workflow.",
     "Adding live job search, application submission, publication, profile editing, or volatile UI automation."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "An interactive developer authorized to change the Weaver repository may use this operation for Weaver-owned source, tests, contracts, state, requester integration, recovery, packaging, or documentation."},
+      {"status": "unsupported", "statement": "Ordinary Weaver operation, release publication, deployment, workflow cancellation, job application, browser automation, publication, and profile editing are not implied by this operation."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The developer has current Weaver source, applicable Semantics and installed contract context, the exact affected product and narrative-repository documents, and authority for the requested change."},
+      {"status": "declared", "statement": "Requester, persistent-state, lifecycle, deployment, or compatibility changes first consult the current Nucleus manual and establish migration, recovery, and coordinated owner obligations."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are the requested scoped change, Weaver source and tests, exact architecture, CLI, installation and selected narrative-repository contracts, installed Nucleus contracts, and authorized compatibility constraints."},
+      {"status": "unsupported", "statement": "A proposed shortcut cannot supply browser, public-service, repository access from Codex, direct-Codex fallback, or automatic model-retry authority."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The output is the smallest coherent Weaver source and documentation change with proportional tests for requester, state, activation, cancellation, validation, maintenance, packaging, rollback, and privacy boundaries and a passing product CI gate."},
+      {"status": "unsupported", "statement": "This operation does not itself publish, tag, push, deploy, cancel an active run, generate a narrative, or interact with a public service."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Weaver remains a five-stage durable narrative requester: it owns workflow state and repository I/O, the narrative repository owns authored and current output meaning, and Nucleus owns model execution and raw job history."},
+      {"status": "declared", "statement": "Nucleus completion is not Weaver success, generated text is not factual authority, and a failed or lost terminal run never implies another model attempt."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Weaver package and provider release, entry contract version, private-state format, run and stage job IDs, repository contract, and Nucleus protocol or schema versions evolve as distinct identities."},
+      {"status": "not_applicable", "statement": "The development operation publishes no effort, schedule, cost, or accounting unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Completion requires every affected owning component and exact product or repository document to agree, proportional authority and recovery tests to pass, and Weaver's complete product CI gate to succeed."},
+      {"status": "declared", "statement": "The current version-matched Nucleus manual is used for shared requester facts instead of assuming source and installed releases move together."},
+      {"status": "unsupported", "statement": "Passing source tests alone does not establish a released, deployed, runtime-ready, narratively valid, or externally published result."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The operation uses the interactive developer's authorized local filesystem and shell for scoped Weaver repository work and exact validation."},
+      {"status": "unsupported", "statement": "It grants no narrative publication, browser, public-profile, job-application, Nucleus credential, active-workflow cancellation, release, or installed-state authority."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Changes preserve atomic current-state replacement, one-attempt correlations, interactive-lineage repository I/O, terminal-run semantics, maintenance ordering, content-addressed releases, and pre-commit rollback."},
+      {"status": "declared", "statement": "Incompatible requester or persistent-state changes version immutable schemas or formats and retain recovery for historical and post-commit states rather than editing them in place."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "The operation is limited to the smallest Weaver-owned change and stops at an unsupported product boundary, unresolved owner contract, unsafe migration, or unauthorized release, deployment, cancellation, or public-service effect."},
+      {"status": "unspecified", "statement": "No development duration, review turnaround, release cadence, deployment schedule, or future platform support objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 requires synchronized package and provider release changes, versioned incompatible requester or state changes, exact documentation updates, and rollback proof before retirement."},
+      {"status": "declared", "statement": "Release publication and installed deployment remain separate explicitly authorized actions even when their source workflows change."},
+      {"status": "unspecified", "statement": "No universal support window or deprecation period for Weaver releases, state, repositories, Nucleus versions, or macOS behavior is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Changes to Weaver's requester boundary rely on Nucleus's dedicated integration contract for execution ownership, immutable registrations, correlation, recovery, privacy, and compatibility obligations.", "target": "nucleus", "kind": "authority", "contract": "nucleus.requester.integrate"},
+      {"status": "declared", "statement": "Changes to repository selection, inputs, output validity, or editorial meaning rely on the selected narrative repository's authored contract, but no dedicated installed Chancery contract describes that promise.", "target": "narrative-repository", "kind": "authority"},
+      {"status": "unsupported", "statement": "The documentation dependency on weaver.workflow.operate is not reinterpreted as a separate external runtime reliance."},
+      {"status": "declared", "statement": "Weaver development relies on its registered Semantics repository for maintained project terminology while source, tests, and product documentation remain authoritative for behavior.", "target": "semantics", "kind": "authority", "contract": "semantics.repository.explore"}
+    ]
+  },
   "manual": "manuals/develop-change.md"
 }

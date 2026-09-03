@@ -89,5 +89,49 @@
     "Reading upstream or Semantics SQLite directly, parsing cursors, or mutating Decisions, Conversations, Nucleus, Codex, or project runtime state.",
     "Treating model output or Nucleus completion as a semantic commit."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "The local operator may install and diagnose Semantics, maintain explicitly marked project registrations and intake, or recover its serial worker."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Project registration or move selects a canonical folder with the exact root participation marker; worker operation requires compatible Decisions lifecycle, Conversations exact-cwd, and Nucleus execution contracts."},
+      {"status": "declared", "statement": "Retirement requires a paused project with no unresolved assigned intake, and retained-state deletion is outside this operation."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are an exact project ID and canonical root, explicit administrative command, selected intake event where applicable, or one version-matched deployment candidate."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Outputs are a validated installed release, durable project or intake transition, one optional committed semantic revision, or structured readiness and recovery evidence."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Registration activates at the current opaque Decisions watermark; moves preserve project identity and cursors, pause fences commits, and semantic success is the validated SQLite revision transaction rather than model completion."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Project ID is stable across moves, lifecycle event and decision IDs retain upstream identity, concept IDs are project-local stable identities, and cursors remain opaque transport positions."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A new project intentionally excludes events before its activation watermark; the serial worker advances durable scan state and commits at most one validated semantic revision per invocation."},
+      {"status": "unspecified", "statement": "No wall-clock bound from an upstream decision to a semantic revision is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "Administrative writes use the local Semantics CLI and owned user state; the worker receives read-only upstream contracts and gives Nucleus workspace none with no shell or web."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Registration and intake transitions are durable, one worker is cross-process serial, repository revisions are atomic and append-only, and identical mailbox redelivery is idempotent while conflicts fail."},
+      {"status": "declared", "statement": "Deployment quiesces the worker and database, backs up database plus sidecars, and restores or fails closed before releasing the worker lock when rollback cannot be proved."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Each worker invocation processes at most one reconciliation and one Nucleus job, with one immutable managed tool, neutral cwd, workspace none, no shell, and no web."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Operation contract version 1 requires Decisions lifecycle contract 1, Conversations history contract 3, and Nucleus execution contract 1; immutable schema or tool meaning changes receive successor identities."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Semantics consumes ordered decision lifecycle events and opaque cursors from Decisions.", "target": "decisions", "kind": "data", "contract": "decisions.lifecycle.consume"},
+      {"status": "declared", "statement": "Semantics reads exact persisted task working-directory metadata from Conversations for deepest-root project routing.", "target": "conversations", "kind": "data", "contract": "conversations.history.explore"},
+      {"status": "declared", "statement": "Semantics uses Nucleus for one restricted reconciliation attempt while retaining all semantic commit authority.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"},
+      {"status": "declared", "statement": "Deployment and recurring intake or reconciliation service lifecycle rely on per-user launchd supervision, but no dedicated installed Chancery contract describes launchd readiness.", "target": "launchd", "kind": "readiness"}
+    ]
+  },
   "manual": "manuals/project-operate.md"
 }

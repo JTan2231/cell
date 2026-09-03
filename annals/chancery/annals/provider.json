@@ -1,9 +1,44 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "provider": {
     "id": "annals",
     "name": "Annals",
     "release": "0.14.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Annals owns retained works and source deliveries, the revisioned corpus of concepts, explicit parent edges and evidence links, examinations, reconciliations, commits, inbox jobs and retry events, and its installed library and spool state.",
+      "The selected Annals library and canonical reducer are authoritative for those records and domain transitions."
+    ],
+    "not_authoritative_for": [
+      "Source material remains evidence rather than objective truth, and an Annals reconciliation is a provisional evidence-grounded interpretation rather than a uniquely correct decomposition.",
+      "Nucleus owns shared model execution, authentication, job and attempt state, and raw protocol output; Annals Usage owns only its separately versioned consumption projection."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Annals CLI outcomes, inbox and library administration, installation and recovery operations, and development operations in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, implementation primitives, direct SQLite or spool editing, Nucleus and Annals Usage interfaces, current runtime readiness, and preserved historical experiments are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Annals interfaces are local-user surfaces over an explicitly resolved library and, where applicable, configured spool and Nucleus connection.",
+      "Read access does not authorize mutation, application, retry, deployment, destructive replacement, or disclosure; each entry declares its narrower effects and authority."
+    ],
+    "shared_privacy_and_retention": [
+      "Annals libraries, spools, backups, logs, and Nucleus requests may retain complete private source material, exact evidence, and model context.",
+      "Only entries that invoke Nucleus may cross that private local boundary, and their entry-specific disclosure and retention rules apply."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release, entry contract version, Annals library schema, Nucleus protocol, and installed package generation are distinct compatibility identities.",
+      "No additional cross-release support, migration window, or deprecation period is promised unless an entry declares it."
+    ],
+    "operational_limits": [
+      "Per-entry contracts define command bounds, storage gates, pagination, one-attempt behavior, migration support, and recovery constraints.",
+      "Inventory completeness does not promise current runtime readiness, unlimited storage or throughput, or a wall-clock service-level objective."
+    ]
   },
   "entries": [
     "entries/work-retain.json",

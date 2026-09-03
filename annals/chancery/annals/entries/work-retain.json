@@ -50,5 +50,54 @@
     "Application of any pending corpus change.",
     "Deletion or replacement of retained source bytes."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A local user or agent that needs to preserve one immutable source while deliberately deferring interpretation may use this capability."},
+      {"status": "unsupported", "statement": "This is not a note, summary, action-backlog, truth-adjudication, or model-assisted interpretation surface."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The caller selects a configured readable Annals library; retention requires it to be writable and requires nonblank UTF-8 bytes plus an explicit label when reading standard input."},
+      {"status": "declared", "statement": "A requested work label must not already identify different retained bytes."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Input is one UTF-8 file or standard-input stream, an optional explicit work label for files, and the normal Annals library/configuration selectors."},
+      {"status": "unsupported", "statement": "Binary, blank, multi-work, reconciliation, replacement, deletion, and model instructions are not accepted by this capability."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Retention reports the canonical retained or recognized work label; list and show expose retained-work metadata and the complete unchanged text."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Retention stores previously unseen exact bytes or recognizes an existing byte-identical work; recognition does not create the requested alternate label."},
+      {"status": "declared", "statement": "A completed manual source delivery records the occasion of supply, while the work is the immutable content object and the corpus remains unchanged."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Exact SHA-256 content identity selects one immutable work, and its normalized-unique work label is the supported public selector."},
+      {"status": "declared", "statement": "Captured source filesystem times are metadata timestamps, not authorship, publication, or document-content dates."},
+      {"status": "not_applicable", "statement": "Retention publishes no usage, price, or accounting measurement."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Work show returns the complete unchanged retained UTF-8 text and first-retained metadata for the selected work."},
+      {"status": "declared", "statement": "A successful command reports the library result committed by that invocation; no cached catalog or remote copy is served."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported boundary is the local Annals CLI and an explicitly resolved library selected by command line, environment, or configuration."},
+      {"status": "unsupported", "statement": "No network, remote sharing, direct SQLite write, or implicit current-directory database surface is provided."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "One successful supply records one manual source delivery and either creates one immutable work or selects the existing byte-identical work without advancing corpus HEAD."},
+      {"status": "declared", "statement": "A label conflict fails without replacing either retained work, and retained bytes have no update-in-place lifecycle."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "One invocation accepts one nonblank UTF-8 source; standard input requires an explicit label."},
+      {"status": "unspecified", "statement": "No maximum accepted source size, retention capacity, throughput, or wall-clock latency is promised by this contract."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 identifies these retention semantics independently of the Annals provider release and library schema."},
+      {"status": "unspecified", "statement": "No cross-release client compatibility window or deprecation period is promised."}
+    ],
+    "reliances": [
+      {"status": "not_applicable", "statement": "Retention invokes no model, Nucleus, network, or other product and has no substantive cross-system reliance."}
+    ]
+  },
   "manual": "manuals/work-retain.md"
 }

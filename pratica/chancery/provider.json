@@ -1,9 +1,38 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "provider": {
     "id": "pratica",
     "name": "Pratica",
     "release": "0.1.1"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Pratica owns integration, track, negotiation, offer, assent, agreement, review, attempt, exact-source-basis, and domain-success records for its local protocol."
+    ],
+    "not_authoritative_for": [
+      "Entrants and stewards author terms, target products retain implementation and behavioral authority, and Nucleus owns agent admission and execution only."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Pratica CLI outcomes for negotiation, agreement inspection, installation and diagnosis, and product development in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, target-system mutation, automatic system discovery, direct SQLite access, implementation work, release gating, and current runtime readiness are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Pratica surfaces are local-user CLI operations; model-assisted entries disclose only explicitly frozen bounded sources through immutable managed tools."
+    ],
+    "shared_privacy_and_retention": [
+      "Pratica and correlated Nucleus state may retain private exact terms, sources, prompts, citations, and reviews; release bundles and logs retain none of those bodies."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release identifies these exact bundle bytes; entry contracts, database schema, source formats, and immutable toolset identities remain separate compatibility axes."
+    ],
+    "operational_limits": [
+      "Pratica is a short-lived local CLI with bounded frozen sources and one-attempt model jobs; it is not a daemon, scheduler, crawler, policy engine, implementation agent, or release gate."
+    ]
   },
   "entries": [
     "entries/integration-negotiate.json",

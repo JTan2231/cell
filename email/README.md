@@ -33,8 +33,12 @@ cd /Users/joey/rust/cell/email
 
 The installed command is `~/.local/bin/email`. Installation details and
 recovery boundaries are in [docs/system-installation.md](docs/system-installation.md).
-The globally discoverable usage contract is in
-[chancery/manuals/message-send.md](chancery/manuals/message-send.md).
+The [release-matched Chancery provider](chancery/provider.json) publishes
+Email's complete outward send inventory. After selecting
+`email.message.send`, use `chancery resolve email.message.send` to read its
+normalized promise, substantive external reliances, exact basis, and explicit
+gaps. Resolution does not load credentials, check Resend readiness, or send a
+message.
 
 Sending discloses the supplied subject and body to Resend and Gmail. The
 runtime does not call Chancery; Chancery only reads the documentation staged

@@ -87,6 +87,73 @@ then
         "$chancery_candidate" --registry "$catalog_registry" doctor
         "$chancery_candidate" --registry "$catalog_registry" --json list \
             >/dev/null
+
+        normalized_entries=0
+        for provider_path in "$catalog_registry"/*; do
+            provider_id=${provider_path##*/}
+            grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*3' \
+                "$provider_path/provider.json" || {
+                printf 'ci.sh: provider is not schema 3: %s\n' "$provider_id" >&2
+                exit 1
+            }
+            grep -F '"promise_scope"' "$provider_path/provider.json" \
+                >/dev/null || {
+                printf 'ci.sh: provider has no promise scope: %s\n' \
+                    "$provider_id" >&2
+                exit 1
+            }
+            for entry_path in "$provider_path"/entries/*.json; do
+                grep -F '"promise"' "$entry_path" >/dev/null || {
+                    printf 'ci.sh: entry has no normalized promise: %s\n' \
+                        "$entry_path" >&2
+                    exit 1
+                }
+                entry_id=$(awk -F '"' '
+                    /^[[:space:]]*"id"[[:space:]]*:/ { print $4; exit }
+                ' "$entry_path")
+                [ -n "$entry_id" ] || {
+                    printf 'ci.sh: entry has no readable ID: %s\n' \
+                        "$entry_path" >&2
+                    exit 1
+                }
+                resolution="$catalog_workspace/resolution-$normalized_entries.json"
+                set +e
+                "$chancery_candidate" --registry "$catalog_registry" \
+                    --json resolve "$entry_id" >"$resolution"
+                resolution_status=$?
+                set -e
+                [ "$resolution_status" -le 1 ] || {
+                    printf 'ci.sh: entry resolution failed structurally: %s\n' \
+                        "$entry_id" >&2
+                    exit 1
+                }
+                if grep -Eq '"code":"(provider_scope_undeclared|provider_inventory_partial|facet_undeclared)"' \
+                    "$resolution"
+                then
+                    printf 'ci.sh: entry has undeclared promise coverage: %s\n' \
+                        "$entry_id" >&2
+                    exit 1
+                fi
+                grep -F '"dependency_closure_status":"complete"' \
+                    "$resolution" >/dev/null || {
+                    printf 'ci.sh: entry dependency closure is incomplete: %s\n' \
+                        "$entry_id" >&2
+                    exit 1
+                }
+                grep -F '"issues":[]' "$resolution" >/dev/null || {
+                    printf 'ci.sh: entry resolution has catalog issues: %s\n' \
+                        "$entry_id" >&2
+                    exit 1
+                }
+                normalized_entries=$((normalized_entries + 1))
+            done
+        done
+        [ "$normalized_entries" -eq 44 ] || {
+            printf 'ci.sh: expected 44 normalized entries; found %s\n' \
+                "$normalized_entries" >&2
+            exit 1
+        }
+
         "$chancery_candidate" --registry "$catalog_registry" --json resolve \
             decisions.lifecycle.consume \
             --require completeness_and_freshness \

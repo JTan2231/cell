@@ -1,9 +1,44 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "provider": {
     "id": "email",
     "name": "Email",
     "release": "0.1.2"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Email owns construction and synchronous submission of one caller-provided plain-text message from its fixed sender to its fixed personal recipient, including bounded request retry and command reporting.",
+      "Email owns use of a generated or caller-supplied idempotency key for the frozen Resend request and reports the message identifier returned on Resend acceptance."
+    ],
+    "not_authoritative_for": [
+      "The caller owns send authorization, message meaning, product occurrence state, rendering, scheduling, and any supplied idempotency-key identity.",
+      "Resend owns submission acceptance and its external record, while Gmail owns final delivery, spam handling, and inbox receipt."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported user-facing Email CLI outcomes for immediate plain-text submission to the product-fixed recipient in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, installation and release operations, drafting, previews, arbitrary recipients or senders, HTML, attachments, copies, scheduling, queues, delivery tracking, and live external readiness are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Email is a local current-user CLI; its installed wrapper obtains only RESEND_API_KEY from the user's shell configuration and starts the payload with a scrubbed environment.",
+      "Catalog presence, command availability, and possession of an idempotency key do not authorize sending."
+    ],
+    "shared_privacy_and_retention": [
+      "A real send discloses the exact subject and body to Resend and Gmail and discloses any caller-supplied idempotency key to Resend.",
+      "Email retains no subject, body, API key, idempotency key, queue, or delivery history in local product state."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release identifies the installed bundle, while entry contract version identifies the supported send semantics.",
+      "No cross-release compatibility window, API deprecation period, or external-provider retention guarantee is promised beyond an entry's explicit declarations."
+    ],
+    "operational_limits": [
+      "Email supports one synchronous immediate plain-text submission to fixed addresses per invocation and has no daemon, draft store, scheduler, queue, or final-delivery observer.",
+      "Submission remains subject to a valid credential, local network access, and Resend availability and policy; any later final delivery remains subject to Gmail's independent behavior and is outside Email success."
+    ]
   },
   "entries": [
     "entries/message-send.json"

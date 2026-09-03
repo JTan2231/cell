@@ -75,5 +75,134 @@
     "Publishing a release or performing a production cutover.",
     "Retrying a failed domain operation."
   ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Maintainers of a local application may use this operation when adding or changing a typed Nucleus requester boundary."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The operation is not a generic way to delegate immediate work, add a workflow engine, or transfer application-domain authority into Nucleus."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The application first defines its durable domain success condition, owning authority, idempotent mutation behavior, duplicate handling, retry authority, and inspectable proof independently of Nucleus."
+      },
+      {
+        "status": "declared",
+        "statement": "The intended invocation, tools, permissions, protocol, adapter capabilities, data disclosure, recovery, and deployment effects are supported and explicitly authorized for design and implementation."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Inputs are the requester-owned domain contract, stable requester and job identities, one complete closed invocation policy, immutable schema and tool definitions, correlation plan, failure policy, and operational constraints."
+      },
+      {
+        "status": "unsupported",
+        "statement": "An open-ended command, implicit permission, mutable registration, model-authored authority rule, or Nucleus interpretation of requester rows is not a valid integration input."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "The operation produces synchronized requester code and contracts with durable bidirectional correlation, replay-safe mailbox handling, explicit invocation and retry policy, historical decoders, tests, observability, backup and recovery procedures, deployment ordering, and a domain-authority canary."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The operation itself does not publish a release, cut over a service, run a requester job, or establish success for any application-domain occurrence."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Nucleus job and output state is execution evidence; the requester's own durable record is domain truth, including when a committed domain result outlives a later runtime failure."
+      },
+      {
+        "status": "declared",
+        "statement": "Dynamic tools are requester-owned mutations transported through a durable Nucleus mailbox, and immutable schemas and toolsets define historical decoding rather than current workflow state."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "A lowercase requester program identifies the integration, requester ID identifies its domain run, job ID is the exact request idempotency key, and schema ID or toolset provider, name, and version identifies immutable registered meaning."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "This integration operation defines no universal domain measurement or billing unit for requesters."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "A complete integration accounts for admission, successful domain completion, identical and conflicting duplicates, pending-call recovery, daemon loss, cancellation, timeout, authentication contention, unsupported invocations, post-domain-commit runtime failure, and absence of a second execution path."
+      },
+      {
+        "status": "declared",
+        "statement": "Implementation uses the installed version-matched Nucleus manual and current strict health contract rather than assuming workspace or release lockstep."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No universal implementation duration, requester release cadence, runtime throughput, or compatibility lifetime is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Cell Rust requesters use the typed client and another language may use the documented version-one HTTP protocol over the current-user Unix socket; shelling out to the human CLI is unsupported when those surfaces are available."
+      },
+      {
+        "status": "declared",
+        "statement": "Every workspace, local-execution, web, launch-context, tool, data, and credential exposure is explicitly bounded in the requester contract and protected as private state."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "The requester persists correlation and exact request before ambiguous submission, services each durable tool call idempotently, commits and binds its domain result before reply, then decides success from its own state."
+      },
+      {
+        "status": "declared",
+        "statement": "An ambiguous admission repeats only byte-equivalent content under the same job ID; a genuinely new attempt uses a new ID only under requester policy, and a requester restart recovers mailbox state while a Nucleus restart cannot resume the harness process."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "The integration must not add a hidden direct-Codex fallback, make Nucleus understand application-specific state, rewrite immutable registrations, or use terminal model prose as domain completion."
+      },
+      {
+        "status": "declared",
+        "statement": "Stop when required protocol or harness semantics are unsupported or when an incompatible migration, credential move, or cutover lacks backup and recovery authority."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Requesters bind the exact public protocol and adapter capabilities they need, version changed schemas and toolsets immutably, retain historical decoders, and order deployment daemon-first only for compatible additive support."
+      },
+      {
+        "status": "declared",
+        "statement": "Incompatible shared changes require retained dual forms or a coordinated requester quiescence and cutover according to the current Nucleus operator manual."
+      },
+      {
+        "status": "unspecified",
+        "statement": "Nucleus imposes no universal requester release schedule, support lifetime, or deprecation window."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "The resulting requester relies on Nucleus for version-one admission, supervised execution, authentication, operational job and output records, and durable dynamic-tool transport while retaining its own domain authority.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      }
+    ]
+  },
   "manual": "manuals/requester-integrate.md"
 }

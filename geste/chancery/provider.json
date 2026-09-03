@@ -1,9 +1,38 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "provider": {
     "id": "geste",
     "name": "Geste",
     "release": "0.1.1"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Geste owns manual episode identity, immutable revision order, authored case interpretation, validation, deterministic retrieval and read-time projections, and its product packaging."
+    ],
+    "not_authoritative_for": [
+      "Each cited source product remains authoritative for its referenced record and current truth, while the caller owns whether a precedent is analogous or applicable now."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Geste CLI outcomes for manual episode capture and exploration, installation and diagnosis, and product development in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, direct SQLite access, automatic ingestion, model inference, source adapters, implementation helpers, and current runtime readiness are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Geste surfaces are local-user CLI and explicitly selected local-database operations; no provider entry grants access to a cited source system."
+    ],
+    "shared_privacy_and_retention": [
+      "Geste state may contain private episode prose and source locators, but it stores no cited upstream source body and publishes no network surface."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release identifies these exact bundle bytes; entry contract versions, capture schema versions, and database schema versions remain distinct compatibility axes."
+    ],
+    "operational_limits": [
+      "Geste is a bounded manual casebook CLI with no daemon, scheduler, continuous observer, model workflow, or source crawler; per-entry bounds govern each operation."
+    ]
   },
   "entries": [
     "entries/episode-explore.json",

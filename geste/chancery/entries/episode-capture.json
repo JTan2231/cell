@@ -53,5 +53,48 @@
     "Presenting episode-authored interpretation or an unverified settlement as user-enacted authority.",
     "Automatic ingestion, deleting an episode or revision, or silently initializing or migrating storage."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A local author who has inspected relevant source products may create one manual episode or append one corrected complete immutable revision."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The selected schema-one database already exists, the request is bounded strict UTF-8 JSON, and revise supplies the currently observed base revision."},
+      {"status": "declared", "statement": "A verified enacted settlement includes a supporting Decisions lifecycle authority anchor; otherwise the request records an explicit unverified gap."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Input is one complete schema-version-one episode snapshot from a regular file or standard input, bounded to 256 KiB, plus an episode ID and exact base revision for revise."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Success returns one new public episode identity at revision one or one next contiguous revision with the exact input digest and normalized members committed together."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Every revision is a complete authored snapshot; source links are caller-supplied anchors and support relations, not copied source bodies or current-source verification."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Episode ID identifies the lineage, revision number orders immutable snapshots, exact-input SHA-256 identifies request bytes, and source identities retain their documented owner and kind."},
+      {"status": "not_applicable", "statement": "Capture defines no quantitative accounting unit beyond byte and collection bounds."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A successful transaction commits the entire validated snapshot and seal or commits nothing; omitted prior members are absent from the new revision."},
+      {"status": "unsupported", "statement": "Geste does not refresh or prove current upstream state during capture."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported mutation surface is the local Geste CLI against an explicitly selected private database; source systems and direct SQLite are outside the surface."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Create and revise are foreign-key-checked atomic transactions, revision seals are immutable, and stale-base comparison fails before any partial write."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "The input is at most 256 KiB and every text, collection, relationship, timestamp, and identity uses the documented schema-one bounds."},
+      {"status": "unsupported", "statement": "Automatic ingestion, model inference, source crawling, deletion, and implicit initialization or migration are unsupported."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 accepts capture schema version 1 and writes database schema 1; changing those meanings requires an explicit new contract or migration."},
+      {"status": "unspecified", "statement": "No future capture-schema compatibility or deprecation period is promised."}
+    ],
+    "reliances": [
+      {"status": "not_applicable", "statement": "The capture process invokes no upstream product, model, network, or Chancery runtime; the caller supplies already-inspected source anchors."}
+    ]
+  },
   "manual": "manuals/episode-capture.md"
 }

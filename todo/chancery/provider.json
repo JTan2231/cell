@@ -1,9 +1,44 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "provider": {
     "id": "todo",
     "name": "Todo",
     "release": "0.4.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Todo owns the durable identities, immutable provenance, routing and design decisions, current projections, lifecycle, database, installation, and digest behavior published by this provider.",
+      "Each Todo entry states the supported boundary for one public use, operation, or development outcome; Todo SQLite and the installed release remain the runtime authorities for actual records and behavior."
+    ],
+    "not_authoritative_for": [
+      "Nucleus owns model execution, authentication, job state, and raw protocol history; Resend and the recipient provider own external email submission and receipt.",
+      "Source artifacts and independently stewarded systems remain authoritative for their own contents and current state, and Todo lifecycle markers do not prove implementation execution."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Todo CLI outcomes for concern capture and routing research, umbrella reads and decisions, situation assessment, desired-state design, digest preview and send, installation and migration, and development in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, internal liaison and mailbox protocol details, implementation helpers, direct database access, external implementation execution, and upstream service behavior are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Todo is a local current-user CLI over its selected SQLite database; model-assisted stages use only frozen bounded inputs through the separately installed Nucleus service.",
+      "Mutation, decision, deployment, migration, and external email effects require the exact authority and preconditions stated by the selected entry; catalog presence grants none of them."
+    ],
+    "shared_privacy_and_retention": [
+      "Todo state can contain private directions, paths, evidence references, assessments, designs, notes, email metadata, and decision provenance and remains within the selected local database and installation boundary.",
+      "Nucleus may retain source and prompt content read during research, while Resend and the recipient provider retain the explicitly sent digest under their own policies."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release identifies the Todo release, entry contract version identifies public semantic compatibility, and SQLite schema version is a separate persistent-state contract.",
+      "Incompatible contract or persistent-state changes require versioning, migration or dependency updates, retained historical meaning, and documented rollback before older behavior is retired."
+    ],
+    "operational_limits": [
+      "Todo has no daemon, workflow engine, implementation executor, or general project graph; model work is bounded research and external email is an explicit synchronous action.",
+      "No global latency, capacity, delivery-time, implementation-completion, or external-state freshness service-level objective is promised across this provider."
+    ]
   },
   "entries": [
     "entries/concern-capture-and-route.json",

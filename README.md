@@ -67,9 +67,11 @@ A shared Nucleus contract or client change must pass all eleven gates. A purely
 domain-local change may use its product gate while iterating, but the complete
 root gate is the final repository check. A complete run also assembles all
 twelve source provider bundles and requires Chancery doctor and list to accept
-their combined dependency graph. It also proves the Decisions lifecycle pilot
-has a complete declaration and resolves as `resolved_not_ready` while retaining
-its explicit unspecified guarantees, and that the Annals Usage stress pilot
+their combined dependency graph. It requires every provider to publish a
+schema-3 promise scope and every one of the 44 indexed entries to publish a
+complete normalized promise without undeclared facets. It also proves the
+Decisions lifecycle pilot resolves as `resolved_not_ready` while retaining its
+explicit unspecified guarantees, and that the Annals Usage stress pilot
 reports its known uncontracted upstream reliances rather than hiding them.
 
 ## Versions and releases

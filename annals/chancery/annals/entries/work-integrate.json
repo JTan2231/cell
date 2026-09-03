@@ -55,5 +55,65 @@
     "Treating the provisional concept decomposition as uniquely correct or objectively true.",
     "Publishing or disclosing the source or corpus."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A local user or agent may request an evidence-grounded examination of one immutable work against one frozen Annals corpus revision."},
+      {"status": "unsupported", "statement": "This capability is not a summary, truth judgment, action backlog, generic semantic search, or silent corpus-application surface."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "A configured Annals library contains or can retain the selected nonblank UTF-8 work, and the configured Nucleus execution path is compatible, authenticated, and accepting work."},
+      {"status": "declared", "statement": "Immediate material application requires explicit --apply authority; later application additionally requires current HEAD to equal the reconciliation base revision."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Input selects one UTF-8 file plus work label or one already retained work label, with optional immediate application or forced reexamination."},
+      {"status": "unsupported", "statement": "The caller cannot supply arbitrary corpus writes, bypass draft validation, force a stale reconciliation, or make final model prose the domain result."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The durable result is a valid reconciliation tied to one work and base revision, its projected corpus state and status, and, when authorized and material, the applied commit revision."},
+      {"status": "declared", "statement": "A mechanically equal projection is recorded as a no-change interpretation with no commit or revision advance."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "A reconciliation is a provisional evidence-grounded interpretation, not objective truth or a uniquely correct concept decomposition."},
+      {"status": "declared", "statement": "Nucleus completion and liaison prose are execution evidence only; Annals records decide whether the domain reconciliation or application succeeded."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Work identity, base revision, prompt version, model, and reasoning effort form the documented exact examination-reuse context; reconciliation and commit identities remain distinct."},
+      {"status": "declared", "statement": "Existing concepts use public cN identifiers and corpus revisions are monotonic integer states; work labels select retained works."},
+      {"status": "not_applicable", "statement": "This capability does not report token, allowance, price, or billing units."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Each examination uses the complete selected immutable work and one frozen base corpus state; a selected reusable result matches the complete documented context."},
+      {"status": "declared", "statement": "Application verifies current HEAD against the frozen base at apply time, so a pending result becomes stale rather than being silently rebased."},
+      {"status": "unspecified", "statement": "No model-completion latency, queue-time, or universal interpretation-quality service level is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported surface is the local Annals CLI using its selected private library and configured local Nucleus requester boundary."},
+      {"status": "unsupported", "statement": "The liaison receives only Annals-scoped tools and cannot publish the work, directly edit SQLite, or acquire general host access through this contract."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Annals freezes HEAD before the closed Nucleus job, validates draft operations together, and durably records one valid reconciliation or reuses an exact-context successful examination."},
+      {"status": "declared", "statement": "Material output remains pending by default; authorized application atomically creates a commit and advances HEAD, while stale application fails without a force path."},
+      {"status": "declared", "statement": "If Annals commits the domain result before a later Nucleus failure, recovery preserves the Annals result and does not create an automatic new attempt."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "One invocation examines one work at one base revision through the constrained Annals liaison contract."},
+      {"status": "declared", "statement": "Application is opt-in for material changes, and a pending result can apply only at its unchanged base HEAD."},
+      {"status": "unspecified", "statement": "No maximum work size, execution duration, queue latency, or Codex allowance consumption is promised here."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 is distinct from provider release, library schema, prompt version, model identity, and Nucleus public protocol."},
+      {"status": "declared", "statement": "Examination reuse requires the exact documented context; changed context requires a new reading or explicit reexamination."},
+      {"status": "unspecified", "statement": "No cross-release pending-reconciliation support window or deprecation period is promised."}
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Examination submits one constrained job through Nucleus for authenticated model execution and retained raw protocol history, while Annals retains domain authority.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      }
+    ]
+  },
   "manual": "manuals/work-integrate.md"
 }

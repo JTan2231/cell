@@ -40,7 +40,8 @@
     "Diagnostics and JSON examples should avoid private paths and conversation text."
   ],
   "dependencies": [
-    {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4}
+    {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": [
     "local_filesystem",
@@ -74,5 +75,58 @@
     "Deploying an installed Conversations release.",
     "Mutating Codex tasks or accessing private Codex storage directly."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "An interactive developer authorized to change the Conversations repository may use this operation for its library, CLI, typed schema, App Server compatibility, tests, packaging, or documentation."},
+      {"status": "unsupported", "statement": "Ordinary history exploration, task mutation, release publication, deployment, raw Codex storage access, daemon or index creation, and model interpretation are outside this operation."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The developer has current Conversations source, applicable Semantics and installed contract context, exact architecture, CLI, installation and Chancery documents, and authority for the requested change."},
+      {"status": "declared", "statement": "A protocol assumption change is grounded in current official version-matched Codex App Server documentation and preserves or explicitly versions the public typed boundary."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are the requested scoped change, current library and CLI source, synthetic fake-App-Server fixtures, product documents, installed capability contracts, and any authorized compatibility or recovery constraints."},
+      {"status": "unsupported", "statement": "Real transcript fixtures, raw JSONL or SQLite inspection, inferred private storage formats, task mutation, and arbitrary unsupported App Server fields are not acceptable inputs."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The output is the smallest coherent source and documentation change with synthetic protocol, normalization, lifecycle, compatibility, packaging, and rollback tests proportional to the boundary changed and a passing product CI gate."},
+      {"status": "unsupported", "statement": "This operation does not itself publish, tag, push, deploy, refresh metadata, retrieve a private corpus, or mutate a Codex task."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Changes preserve App Server as the only discovery and storage-compatibility authority and Conversations as owner of typed normalization, filters, stable references, deduplication, and failure-on-incomplete behavior."},
+      {"status": "declared", "statement": "The default public corpus remains user-and-assistant-only, root-task-only, active-and-archived, and state-database-only unless an incompatible versioned contract explicitly changes it."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Conversations package and provider release, entry contract version, typed JSON schema, host, thread, turn and item references, Codex CLI version, and App Server protocol evolve as distinct identities."},
+      {"status": "not_applicable", "statement": "The development operation publishes no effort, cost, schedule, or accounting unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Completion requires the smallest owning code and every affected CLI, architecture, installation and Chancery document to agree, with synthetic fixtures covering the exact protocol and normalization boundary and product CI passing."},
+      {"status": "declared", "statement": "Process-lifecycle changes prove private-group descendant cleanup, and packaging changes prove content identity, tamper detection, retained selectors, and rollback as applicable."},
+      {"status": "unsupported", "statement": "Passing source tests alone does not establish a released, deployed, runtime-compatible, metadata-refreshed, or complete live App Server result."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The operation uses the interactive developer's authorized local filesystem and shell for scoped Conversations repository work and synthetic local test processes."},
+      {"status": "unsupported", "statement": "It grants no private Codex storage, real transcript, task mutation, Codex authentication, release publication, installed deployment, or unrelated process authority."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Changes preserve one short-lived App Server process group per invocation, complete pagination or explicit failure, the narrow method-unavailable fallback, stable typed references, and no retained Conversations service state."},
+      {"status": "declared", "statement": "Incompatible public schemas or packaging behavior are versioned and tested rather than silently changing existing local library or JSON consumers."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "The operation is limited to the smallest Conversations-owned change and stops when required data is absent from App Server, a local consumer would silently break, or the change requires task mutation, persistent indexing, or raw storage."},
+      {"status": "unspecified", "statement": "No development duration, review turnaround, release cadence, future App Server support window, or deployment schedule is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Development contract version 3 requires synthetic version-matched App Server proof, explicit public-schema compatibility, synchronized exact documentation, and content-addressed packaging rollback."},
+      {"status": "declared", "statement": "Release publication and installed deployment remain separate authorized operations even when this operation changes their source workflows."},
+      {"status": "unspecified", "statement": "No perpetual support window or deprecation period for Conversations, Codex CLI, or App Server versions is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Changes to public query or normalization behavior rely on Conversations' exact history-exploration contract as the owning product promise.", "target": "conversations", "kind": "authority", "contract": "conversations.history.explore"},
+      {"status": "declared", "statement": "Protocol and compatibility changes rely on Codex App Server's documented behavior, but no dedicated installed Chancery contract describes that upstream promise.", "target": "codex-app-server", "kind": "authority"},
+      {"status": "declared", "statement": "Conversations development relies on its registered Semantics repository for maintained project terminology while source, tests, and product documentation remain authoritative for behavior.", "target": "semantics", "kind": "authority", "contract": "semantics.repository.explore"}
+    ]
+  },
   "manual": "manuals/develop-change.md"
 }

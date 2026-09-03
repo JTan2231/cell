@@ -50,5 +50,56 @@
     "Changing configured sender, recipient, or Resend account.",
     "Treating email preview or delivery as a Nucleus requester canary."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "The configured current user may preview the exact Todo attention digest locally or explicitly submit it through the configured email path."},
+      {"status": "unsupported", "statement": "A generic Todo listing, Nucleus canary, remote scheduler, delivery ledger, or implicit external-disclosure consumer is outside this capability."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Preview requires a selected Todo database and complete installed sender and recipient configuration."},
+      {"status": "declared", "statement": "Send additionally requires explicit external-disclosure authority, a nonblank whitespace-clean RESEND_API_KEY in the process environment, and a Resend-verified sender domain."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "The projection reads current unresolved concerns, open canonical todos, and configured sender and recipient; send accepts only the optional scheduled-mode selector."},
+      {"status": "unsupported", "statement": "Future scheduled_at timestamps, arbitrary recipients, stored API keys, custom message bodies, and Nucleus model inputs are unsupported."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Preview returns configured From, To, subject, attention, pending-concern and open-todo counts, and exact plain-text and HTML bodies without network access."},
+      {"status": "declared", "statement": "Send returns Resend submission acceptance for one frozen message and idempotency key; recipient receipt is a separate external outcome."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Needs your decision, Needs follow-up, and Other open todos are current derived attention groups; empty groups are omitted and accepted desired state does not imply implemented work."},
+      {"status": "declared", "statement": "The digest includes aggregate counts, titles or plain-language labels, typed references, and read-only inspection commands while excluding concern bodies, directions, notes, paths, detailed assessments or designs, choices, and evidence."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "attention_count counts items in the first two attention groups, pending_concern_count counts unresolved captured concerns, and todo_count counts open canonical tN umbrellas."},
+      {"status": "declared", "statement": "Manual idempotency keys use todo-email/<UUIDv7>; scheduled keys use todo-daily-email/<local YYYY-MM-DD> for the most recent machine-local 09:00 occurrence."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Each invocation derives one current projection from every unresolved captured concern and every open canonical Todo record visible in the selected database, then freezes the body and key before send attempts."},
+      {"status": "unsupported", "statement": "A successful submission does not prove final receipt, and the user LaunchAgent cannot guarantee a 09:00 submission while the machine is off or the user is logged out."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "Preview is a local current-user read that does not read the API key; send reads the key from process environment and calls the configured Resend endpoint."},
+      {"status": "unsupported", "statement": "Todo exposes no credential storage, recipient mutation, delivery database, background retry queue, or implicit send path."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "One send invocation freezes its body and idempotency key and uses them for at most three total attempts on transport, rate-limit, or server failure."},
+      {"status": "declared", "statement": "Manual and scheduled invocations use distinct key spaces, no digest state is committed to Todo SQLite, and a failed command has no Todo-owned later retry lifecycle."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Retries are bounded to three total attempts, sending is immediate, and the user-owned daily schedule is one machine-local 09:00 LaunchAgent occurrence without RunAtLoad."},
+      {"status": "unspecified", "statement": "No Resend quota, recipient-provider latency, delivery deadline, perpetual retention, or maximum digest-size service-level objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 2 distinguishes local preview, immediate send, and local-occurrence scheduled mode while keeping sender, recipient, and API-key ownership explicit."},
+      {"status": "unspecified", "statement": "No compatibility window for future digest schemas, Resend APIs, email-provider behavior, or external retention policies is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "External send relies on Resend for API acceptance and submission records, but no dedicated installed Chancery contract describes that service promise.", "target": "resend", "kind": "external"},
+      {"status": "unsupported", "statement": "Final recipient receipt is outside this submission-acceptance promise and must be confirmed separately when delivery is the required outcome."},
+      {"status": "declared", "statement": "Automatic daily invocation relies on per-user launchd supervision, but no dedicated installed Chancery contract describes launchd readiness.", "target": "launchd", "kind": "readiness"}
+    ]
+  },
   "manual": "manuals/digest-email.md"
 }

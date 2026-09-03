@@ -43,7 +43,8 @@
   "dependencies": [
     {"id": "pratica.integration.negotiate", "min_contract": 1, "max_contract_exclusive": 2},
     {"id": "pratica.agreement.explore", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],
   "runtime": "interactive_agent",
@@ -73,5 +74,44 @@
     "Running release.sh, which commits, tags, and pushes.",
     "Deploying Pratica, initializing or deleting installed state, invoking a real Nucleus job, or changing CRM or another target system."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "An interactive contributor may change Pratica while preserving opaque terms, exact bases, bilateral protocol mechanics, restricted requester behavior, and synchronized public contracts."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The contributor has read Pratica instructions and semantics, affected public contracts, and Nucleus requester/operator contracts, with separate authority for release or deployment."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are the requested scoped change, current Pratica source and contracts, exact selected documentation contracts, and synthetic frozen-source and fake-runtime fixtures."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The output is the smallest synchronized protocol, state, requester, test, documentation, packaging, or provider change with Pratica and root CI green."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Development preserves exact opaque Markdown, complete immutable offers, fixed parties, basis-bound assent and seals, advisory composition, evidence-only conformance, and target-product authority."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Existing protocol, offer, source, schema, toolset, requester, attempt, and agreement identities retain exact meanings unless explicit successors are introduced."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Completion covers every affected Pratica architecture, CLI, data model, requester fact, installation behavior, provider contract, synthetic test, and current CI result."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "Development uses the local repository filesystem and shell; tests use synthetic sources and fake Nucleus transport and disclose no real terms or target data."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Persistent changes require explicit migration, old-state fixture, quiescent backup, and database-aware rollback; tool meaning changes require immutable successor schemas and toolsets."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "The operation stays within a short-lived local CLI and stops before acquiring target mutation, automatic scope discovery, policy enforcement, or release-gate authority."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Development retains historical exact-byte decoding and explicit protocol compatibility; incompatible state or tool meaning receives a versioned successor rather than reinterpretation."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Pratica development relies on its registered Semantics repository for maintained project terminology while source, tests, and product documentation remain authoritative for behavior.", "target": "semantics", "kind": "authority", "contract": "semantics.repository.explore"},
+      {"status": "unsupported", "statement": "Other selected entries remain documentation contracts and do not create a live Pratica, Nucleus, or target-system runtime reliance of the development operation."}
+    ]
+  },
   "manual": "manuals/develop-change.md"
 }

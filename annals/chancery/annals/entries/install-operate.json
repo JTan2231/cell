@@ -58,5 +58,71 @@
     "Clearing user data as storage remediation, or lowering or disabling the inbox storage reserve, without the user's explicit consent for the exact target and scope.",
     "Deleting prior generations, backups, logs, or retained failed envelopes."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "An authorized local macOS operator may install, update, verify, or recover the user-owned Annals and Annals Usage deployment as one release generation."},
+      {"status": "unsupported", "statement": "This operation is not source development, Git publication, routine library administration, implicit fresh-state replacement, or storage cleanup."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Candidate Annals and Annals Usage binaries have passed the product gate, and the caller supplies absolute candidate binary, Nucleus binary, and Nucleus socket paths with enough physical capacity for staging and recovery writes."},
+      {"status": "declared", "statement": "Fresh-state replacement additionally requires explicit destructive authority, retained prior-generation rollback material, and a verified uncompleted-backlog import and recovery plan."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Deployment accepts absolute Annals, Annals Usage, Nucleus binary, and Nucleus socket paths plus an optional explicitly authorized --fresh-state mode."},
+      {"status": "unsupported", "statement": "The deployer does not accept release publication, arbitrary cleanup, manual receipt editing, implicit data deletion, or Nucleus replacement as installation inputs."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Success selects a complete content-addressed installed release containing both binaries, runners, configuration, provider bundles, LaunchAgent, and a verified compatible library and spool generation."},
+      {"status": "declared", "statement": "Verification exposes installed versions, Nucleus health, Annals statistics and inbox status, and Annals Usage diagnostics; deliberate execution and usage canaries remain boundary-dependent checks."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "An ordinary update migrates and preserves the active library and spool; fresh state replaces them together and imports uncompleted backlog in preserved lane order."},
+      {"status": "declared", "statement": "Maintenance is an Annals deployment boundary distinct from operator pause and storage gate; it clears only after the complete cutover commits."},
+      {"status": "declared", "statement": "A measured closed storage gate does not itself reject deployment, while an unreadable probe or insufficient physical capacity can fail required inspection or writes."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Product versions, provider releases, content-addressed release identity, current selector, LaunchAgent label, library schema, and library/spool rollback generation are distinct identities."},
+      {"status": "declared", "statement": "Storage checks and reserve comparisons use filesystem bytes; freshness and service checks are observations made during the selected deployment."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "The current selector changes only after the staged release, configuration, library migration or replacement, spool, provider bundles, and service checks form one complete candidate generation."},
+      {"status": "declared", "statement": "Post-cutover checks inspect the newly selected installed commands and current service state rather than a retained readiness snapshot."},
+      {"status": "unspecified", "statement": "No deployment-duration, service-availability, rollback-retention duration, or disk-capacity service-level objective is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported boundary is the repository-owned launchd deployer operating the current user's private Annals installation, LaunchAgent, library, spool, configuration, and provider selectors."},
+      {"status": "unsupported", "statement": "The operation does not own or replace Nucleus, publish Git state, delete recovery material, or grant direct library and spool editing."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Deployment stages and checks a complete release, establishes maintenance, quiesces scheduled work, captures recovery state, performs supported migration or authorized replacement, switches selectors and service configuration, verifies, then clears maintenance."},
+      {"status": "declared", "statement": "An ordinary pre-commit failure restores the captured program, service, configuration, library, and spool generation before work resumes."},
+      {"status": "declared", "statement": "Fresh state treats library and spool plus uncompleted backlog as one rollback generation; credentials remain forward-only and outside binary or database rollback."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "The supported deployer is a per-user macOS LaunchAgent installation, requires absolute inputs, stages one complete generation, and needs enough physical capacity for release, backup, migration, and rollback artifacts."},
+      {"status": "unsupported", "statement": "Deployment authority never implies fresh state, data cleanup, reserve reduction, prior-generation deletion, or service work outside Annals."},
+      {"status": "unspecified", "statement": "No maximum installed-state size, deployment time, retained-generation count, or service downtime bound is promised here."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Annals and Annals Usage package versions, provider releases, library schema, Nucleus protocol, and installed generation are checked as separate axes and cut over together where the package owns them."},
+      {"status": "declared", "statement": "Library changes use only supported migrations or explicit fresh state; provider selectors follow the same release generation as their executables for rollback."},
+      {"status": "unspecified", "statement": "No cross-release installation support window, migration horizon, or deprecation period is promised."}
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Deployment checks a separately owned Nucleus binary, socket, compatibility, authentication readiness, and requester boundary without stopping or replacing Nucleus.",
+        "target": "nucleus",
+        "kind": "readiness",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Deployment and unattended inbox processing rely on per-user launchd supervision, but no dedicated installed Chancery contract describes launchd readiness.",
+        "target": "launchd",
+        "kind": "readiness"
+      }
+    ]
+  },
   "manual": "manuals/install-operate.md"
 }

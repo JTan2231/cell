@@ -65,10 +65,65 @@
     "A destructive migration or external email change lacks explicit authority and recovery.",
     "The shared Nucleus boundary is changing without the corresponding owning contract work."
   ],
+  "dependencies": [
+    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
   "does_not_authorize": [
     "Running `todo/release.sh`, which commits, tags, and pushes.",
     "Deploying Todo or migrating the installed database.",
     "Sending email or changing external Resend state."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "An interactive developer authorized to change the Todo repository may use this operation for Todo-owned code, tests, contracts, documentation, migrations, packaging, or release workflow."},
+      {"status": "unsupported", "statement": "Ordinary Todo use, independent Nucleus changes, release publication, deployment, database migration, and email sending are not implied by this development operation."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The developer has the Todo source, applicable Semantics and installed contract context, and authority to modify the requested Todo-owned boundary."},
+      {"status": "declared", "statement": "Requester, persistent-state, compatibility, service, deployment, or integration changes first consult the current Nucleus manual and identify coordinated owner obligations."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are the requested Todo change, current product source and tests, exact owning domain and operational documentation, installed contracts, and any authorized compatibility or recovery constraints."},
+      {"status": "unsupported", "statement": "Model prose, historical notes, or a Nucleus terminal job cannot replace current Todo source, tests, explicit decisions, or separately authorized external effects."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The output is the smallest coherent Todo source and documentation change with affected tests, migration or rollback proof, and product CI results proportional to the boundary changed."},
+      {"status": "unsupported", "statement": "This operation does not itself output a published release, deployed installation, migrated user database, sent email, or implemented underlying tN direction."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Changes preserve the distinctions among immutable cN concern, rN proposal and decision, enduring tN umbrella, dated aN observation, normative dN design, immutable nN note, lifecycle, and external implementation."},
+      {"status": "declared", "statement": "Nucleus jobs are research provenance and execution state, not Todo decision authority or evidence that an accepted design was implemented."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Todo package and provider release, entry contract version, SQLite schema version, Nucleus toolset and result-schema versions, and public domain IDs evolve as distinct identities."},
+      {"status": "not_applicable", "statement": "The development operation publishes no implementation-effort, schedule, cost, or accounting unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Completion requires every affected code, test, CLI, liaison, architecture, data, installation, and authored-contract surface to agree and the Todo product CI gate to pass."},
+      {"status": "declared", "statement": "Current installed manuals and source documentation are reread for the selected boundary; separately authorized live canaries are required only when their actual runtime boundary changed."},
+      {"status": "unsupported", "statement": "Passing source tests alone does not establish a released, deployed, migrated, emailed, or externally successful outcome."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The operation uses only the interactive developer's authorized local filesystem and shell surfaces for scoped Todo repository work and validation."},
+      {"status": "unsupported", "statement": "It grants no production database, Nucleus credential, Resend account, recipient, release publication, or installed-state authority."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Immutable historical records, schemas, and toolsets remain meaningful; incompatible changes publish new versions and persistent changes include transactional migration, backup, and rollback."},
+      {"status": "declared", "statement": "A Todo domain commit can outlive a later Nucleus error and must remain recoverable rather than being rolled back or duplicated from runtime state."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "The operation is limited to the smallest Todo-owned change and its proportional tests and documentation; it stops at another owner's unresolved boundary or unauthorized external effect."},
+      {"status": "unspecified", "statement": "No development duration, review turnaround, release cadence, or deployment schedule is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 requires immutable Nucleus registration identities, meaningful historical Todo records, and synchronized public and operational documentation for incompatible changes."},
+      {"status": "declared", "statement": "Release publication and deployment remain separately authorized operations even when development changes their source workflows."},
+      {"status": "unspecified", "statement": "No universal support window or deprecation period for Todo releases, schemas, or integrations is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Todo development relies on its registered Semantics repository for maintained project terminology while source, tests, and product documentation remain authoritative for behavior.", "target": "semantics", "kind": "authority", "contract": "semantics.repository.explore"},
+      {"status": "unsupported", "statement": "This terminology authority does not create a Todo runtime reliance; any other cross-system boundary is governed and validated through its separately selected owning contract."}
+    ]
+  },
   "manual": "manuals/develop-change.md"
 }

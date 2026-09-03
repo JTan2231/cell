@@ -16,6 +16,14 @@ Todo, or Codex, start with [the operator manual](docs/operator-manual.md). An
 installed release also makes its version-matched manual available with
 `nucleus manual`.
 
+The [release-matched Chancery provider](chancery/provider.json) publishes
+Nucleus's complete outward inventory for execution and service operation,
+requester integration, and product development. After Chancery discovery
+selects an exact entry, use `chancery resolve ENTRY_ID` to assemble its scoped
+promise, substantive reliances, dependency contracts, exact basis, and
+explicit gaps. Resolution does not inspect live Nucleus readiness or execute a
+job or service action.
+
 ## Build and run
 
 ```sh

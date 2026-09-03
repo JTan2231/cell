@@ -73,5 +73,65 @@
     "Deploying or replacing the installed Annals library.",
     "Changing Nucleus shared policy solely from the requester side."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A contributor or interactive development agent may use this operation for an authorized Annals code, test, terminology, public contract, storage, inbox, liaison, installation, or release-behavior change."},
+      {"status": "unsupported", "statement": "This operation does not cover ordinary product use, changes owned solely by Nucleus, release publication, or installed deployment without separate authority."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The contributor has read the installed Semantics exploration contract and complete current annals repository, identified the owning Annals behavior contract, and has a scoped authorized change."},
+      {"status": "declared", "statement": "A change crossing Nucleus execution, authentication, compatibility, persistent state, deployment, or requester integration requires the installed Nucleus manual and owning boundary before design."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Input is one scoped Annals change request plus the current Semantics terminology, owning product documentation, source, tests, and any separately required installed operational contract."},
+      {"status": "unsupported", "statement": "Historical experiment vocabulary, Semantics repository output as liaison runtime input, and requester-side invention of Nucleus policy are not valid change inputs."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The result is the smallest coherent source, test, fixture, and owning-documentation change with canonical terminology and a green ./annals/ci.sh gate."},
+      {"status": "unsupported", "statement": "A development result does not itself include Git publication, installed deployment, destructive migration, or a live production success claim."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "The registered annals Semantics repository governs maintained contributor terminology, while code, tests, and component documentation remain authoritative for behavior."},
+      {"status": "declared", "statement": "Work, source delivery, examination, reconciliation, commit, revision, inbox job, and retry event remain distinct Annals lifecycle concepts."},
+      {"status": "declared", "statement": "Nucleus terminal state and model prose remain execution evidence rather than Annals domain success."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Semantics concept IDs and revisions, Annals provider release and entry contract versions, package versions, library schema, and Nucleus protocol identify separate change and compatibility domains."},
+      {"status": "not_applicable", "statement": "This development operation promises no domain measurement, usage, price, or accounting unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "The operation begins from the current authoritative Semantics repository and current owning project contracts and updates every affected behavior contract in the same change."},
+      {"status": "declared", "statement": "Completion requires the full Annals product gate and any separately authorized boundary-specific migration, installation, inbox, or requester canary that the change affects."},
+      {"status": "unspecified", "statement": "No development duration, universal review coverage, or guarantee about unrelated product areas is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The operation uses the current local workspace, filesystem, and shell through an interactive agent session under repository instructions."},
+      {"status": "unsupported", "statement": "Development authority does not grant release, deployment, destructive installed-state replacement, external disclosure, or direct Semantics-state editing."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Select the owning contract, make one minimal coherent change, update corresponding documentation and compatibility or recovery material, then run the complete product gate before handoff."},
+      {"status": "declared", "statement": "Persistent meaning changes retain historical decoding and define migration and rollback rather than rewriting old state in place."},
+      {"status": "declared", "statement": "Annals domain results survive later Nucleus runtime failure and publication or installation remains a separately authorized lifecycle."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Every code change must leave ./annals/ci.sh green, contributor Semantics output must not enter liaison context, and destructive migration or installed fresh state stops without exact authority and recovery material."},
+      {"status": "unspecified", "statement": "No maximum change size, completion time, or automatic availability of live canaries is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Product release, library schema, Nucleus public protocol, immutable tool registrations, installed packaging, provider schema, and entry contract version are evaluated separately."},
+      {"status": "declared", "statement": "A public or persistent semantic change updates its owning documentation, migration, rollback, and historical decoder in the same coherent change."},
+      {"status": "unspecified", "statement": "No release cadence, compatibility window, or deprecation period is promised by the development operation."}
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Annals development relies on the registered Semantics repository for current maintained terminology while retaining project sources as behavior authority.",
+        "target": "semantics",
+        "kind": "authority",
+        "contract": "semantics.repository.explore"
+      },
+      {"status": "unsupported", "statement": "A documentation dependency or conditional requirement to consult Nucleus must not be interpreted as unconditional Nucleus runtime authority over an Annals change."}
+    ]
+  },
   "manual": "manuals/develop-change.md"
 }

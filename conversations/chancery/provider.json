@@ -1,9 +1,44 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "provider": {
     "id": "conversations",
     "name": "Conversations",
     "release": "0.3.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Conversations owns its short-lived local App Server adapter, filters, typed normalized user-and-assistant corpus, stable references, completed-turn activity projection, completeness failures, and installation behavior published by this provider.",
+      "Each invocation owns and terminates only its private App Server process group and emits no retained Conversations database or index."
+    ],
+    "not_authoritative_for": [
+      "Codex App Server owns task discovery, persisted metadata, pagination, storage compatibility, source records, and availability.",
+      "Conversations does not own task mutation, machine-wide task liveness, transcript interpretation, Codex authentication, or raw Codex storage."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Conversations CLI and embedded-library outcomes for history exploration, exact task-summary reads, completed-turn activity, refresh, and development in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, private implementation helpers, unsupported App Server records, task mutation, raw storage access, model interpretation, and App Server's own behavior are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Conversations accesses local Codex task state only through the documented App Server JSON-RPC interface and never opens Codex JSONL or SQLite storage.",
+      "Ordinary reads request state-database-only metadata; refresh is the sole public operation that permits App Server metadata repair."
+    ],
+    "shared_privacy_and_retention": [
+      "Task titles, working directories, stable references, activity counts, and normalized user and assistant text can be private and are written only to caller-selected process output.",
+      "Conversations retains no corpus, index, daemon state, or credentials; redirected output and inherited App Server diagnostics become the caller's retention responsibility."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release and entry contract versions are distinct from the selected Codex CLI and App Server protocol version.",
+      "Protocol or public-schema changes require compatible typed behavior, synthetic fixture proof, and documented fallback or explicit failure before an older contract is retired."
+    ],
+    "operational_limits": [
+      "Every operation is bounded to one short-lived App Server launch; full-text search and export are proportional to selected histories and no persistent index or network service is offered.",
+      "No App Server availability, wall-clock latency, corpus-size, machine-wide liveness, or perpetual compatibility service-level objective is promised across this provider."
+    ]
   },
   "entries": [
     "entries/history-explore.json",

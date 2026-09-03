@@ -53,5 +53,73 @@
     "Resuming requesters before account and requester canaries are understood.",
     "Treating global account activity as exact Annals delivery consumption."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A local Annals operator may inspect current account-global Codex allowance, diagnose the Annals Usage path, or deliberately delegate attended login to Nucleus."},
+      {"status": "unsupported", "statement": "This is not exact per-delivery consumption reporting, Annals reconciliation diagnosis, general Nucleus administration, invoice truth, or subscription allocation."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Budget and doctor require a valid Annals Usage configuration and a compatible reachable Nucleus account interface; doctor also requires the configured Annals library and spool paths to be inspectable."},
+      {"status": "declared", "statement": "Attended login requires authentication recovery authority, quiesced requesters, and later account, strict-health, and deliberate Annals requester verification before any paused dispatch resumes."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "The CLI accepts the selected Annals Usage configuration and one of budget, doctor, or explicit login --device-auth."},
+      {"status": "unsupported", "statement": "No arbitrary account, per-delivery denominator, credential path, offline snapshot, UI scrape, or generic Nucleus service action is accepted."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Budget returns observation time, account-global scope, plan, available allowance windows, used percentages, reset times, credit fields, and contextual activity."},
+      {"status": "declared", "statement": "Doctor reports configuration, Annals library and spool access, Nucleus and Codex versions, strict readiness, and authenticated account telemetry boundaries."},
+      {"status": "declared", "statement": "Login reports the attended Nucleus-owned authentication result; later account, health, and requester canaries establish recovery separately."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Allowance is a live account-global rate-limit snapshot shared with other Codex activity; percent used and reset fields do not identify Annals delivery consumption."},
+      {"status": "declared", "statement": "Lifetime, peak-day, and latest-day token activity are contextual cross-checks rather than allowance units or subscription denominators."},
+      {"status": "declared", "statement": "Authentication busy means another Nucleus credential consumer owns the lease and does not establish invalid credentials."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Observation time identifies one live account response, allowance windows carry percent-used and reset-time fields, and plan and credit fields retain their upstream account-global identity."},
+      {"status": "declared", "statement": "Reported token activity is counted in tokens but is not the unit of an allowance percentage or a per-delivery subscription share."},
+      {"status": "unspecified", "statement": "No exposed token denominator, monetary invoice unit, or Annals-specific allowance unit is promised."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Budget and doctor perform live Nucleus reads for each invocation and Annals Usage retains no account or diagnostic snapshot."},
+      {"status": "declared", "statement": "Doctor reports every configured boundary it checks but does not establish Annals corpus-domain success or general service readiness beyond those named observations."},
+      {"status": "unspecified", "statement": "No account-data publication latency, wall-clock command latency, historical retention, or atomic snapshot across Annals and Nucleus checks is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported surface is the local annals-usage CLI through its configured Annals paths and Nucleus socket; login delegates to Nucleus's attended device-auth interface."},
+      {"status": "unsupported", "statement": "Annals Usage never reads, copies, serializes, or stores Nucleus credential files and exposes no arbitrary remote account or direct database interface."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Budget and doctor are one-shot live reads with no retained companion state; login changes only the forward-moving Nucleus-owned credential."},
+      {"status": "declared", "statement": "Authentication uses a nonblocking credential lease, so busy recovery waits for the current user rather than replacing or racing credentials."},
+      {"status": "declared", "statement": "After attended login, recovery verifies account and strict Nucleus health, then a deliberate Annals domain canary, before clearing only the pause established for recovery."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Allowance scope is account-global and cannot be divided into exact Annals delivery shares; login is attended and requester quiescence is required when active continuity matters."},
+      {"status": "unsupported", "statement": "Repeated snapshots cannot manufacture a hidden subscription denominator, per-delivery percentage, invoice, or credential copy."},
+      {"status": "unspecified", "statement": "No account-response latency, allowance-window availability, credential-lease wait, or service-level objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1, Annals Usage provider and package version, Nucleus account and authentication protocol, and Annals library compatibility are distinct axes checked by the relevant command."},
+      {"status": "unspecified", "statement": "No exact account-response schema guarantee, cross-release support window, or deprecation period is promised."}
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Budget, strict readiness checks, account telemetry, credential leasing, and attended login rely on the Nucleus execution and authentication authority.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Doctor reads configured Annals library and spool presence and accessibility, but no dedicated installed Annals readiness contract describes that exact diagnostic surface.",
+        "target": "annals",
+        "kind": "readiness"
+      },
+      {"status": "unsupported", "statement": "The documentation dependency on annals.corpus.explore must not be reinterpreted as a contract for private library and spool readiness checks."}
+    ]
+  },
   "manual": "manuals/execution-operate.md"
 }

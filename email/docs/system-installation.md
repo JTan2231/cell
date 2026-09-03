@@ -66,7 +66,13 @@ deployment, Chancery discovery can be checked separately:
 ```sh
 /Users/joey/.local/bin/chancery doctor
 /Users/joey/.local/bin/chancery show email.message.send
+/Users/joey/.local/bin/chancery resolve email.message.send
 ```
+
+`resolve` reads the release-matched provider scope, normalized send promise,
+substantive external reliances, exact documentation basis, and explicit gaps.
+It does not source the Email credential, probe Resend or Gmail, or authorize or
+perform a send.
 
 ## Validate a real send
 

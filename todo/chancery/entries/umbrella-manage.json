@@ -54,5 +54,55 @@
     "Inferring completion evidence from an open/done marker.",
     "A routing decision without explicit readable decision-source provenance."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A current-user caller may inspect exact Todo identities and history or perform an explicitly authorized routing, note, done, or reopen transition."},
+      {"status": "unsupported", "statement": "An implementation runner, work-plan tracker, or completion-evidence consumer is outside this capability."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Reads require a selected current Todo database and any exact public ID or query required by the command."},
+      {"status": "declared", "statement": "Routing decisions require a pending current proposal plus a readable UTF-8 authorization source; rejection also requires a nonblank reason."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are typed cN, rN, or tN identities, search text and documented filters or limits, note text, and exact decision source or rejection reason where applicable."},
+      {"status": "unsupported", "statement": "A model result, Nucleus completion, stale proposal, or untyped row number cannot serve as decision authorization."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Read commands return exact concern, proposal, umbrella, direction, attachment, note, lifecycle, assessment, design, decision, staleness, or supersession projections selected by the command."},
+      {"status": "declared", "statement": "Writes return one durable provenance-bearing routing decision, immutable nN note, or idempotent open/done lifecycle result."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "cN, rN, tN, aN, dN, and nN denote different durable concepts; staleness is derived comparison data and never rewrites historical decisions."},
+      {"status": "declared", "statement": "Attachment does not revise direction, revision does not merge identities, unification retains superseded identities and history, and done does not assert external implementation."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Public typed IDs retain their prefix semantics; tN is the stable umbrella identity while its title and direction derive from append-only revisions."},
+      {"status": "not_applicable", "statement": "This capability publishes no quantitative accounting or pricing unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "An exact show returns the selected durable record and its documented current or historical projection; list and search return open canonical umbrellas by default and include applicable history only with --all."},
+      {"status": "declared", "statement": "Routing acceptance atomically rechecks the complete frozen proposal basis against current Todo state before applying it."},
+      {"status": "unsupported", "statement": "Todo reads do not establish the freshness or completion of independently owned external work."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported surface is the noninteractive current-user Todo CLI over its selected local SQLite database; deterministic reads and writes do not invoke Nucleus."},
+      {"status": "unsupported", "statement": "Direct SQLite writes, model-side accept or reject tools, and force-overrides for stale routing are unsupported."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Routing acceptance revalidates and applies its action in one immediate transaction; rejection records a terminal reason without applying it."},
+      {"status": "declared", "statement": "Notes are append-only, done and reopen are idempotent, direction revisions preserve umbrella identity, and unification retains one canonical survivor plus superseded history."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "List and search are bounded by documented limits, all mutation commands target one explicit Todo identity or proposal, and no delete or stale-force interface is provided."},
+      {"status": "unspecified", "statement": "No query-latency, database-size, retention-horizon, or external-state freshness service-level objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 preserves typed public identities, append-only history, explicit provenance-bearing decisions, and the open/done umbrella lifecycle."},
+      {"status": "unspecified", "statement": "No public deprecation period or perpetual compatibility window is promised."}
+    ],
+    "reliances": [
+      {"status": "not_applicable", "statement": "These reads and deterministic Todo writes invoke no other product and create no runtime, data, authority, or readiness reliance outside the selected local Todo state."}
+    ]
+  },
   "manual": "manuals/umbrella-manage.md"
 }

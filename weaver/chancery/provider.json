@@ -1,9 +1,44 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "provider": {
     "id": "weaver",
     "name": "Weaver",
     "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Weaver owns current workflow admission, five-stage order, repository input snapshots and output writes, exact Nucleus correlations, cancellation intent, recovery, validation, maintenance, and installation behavior published by this provider.",
+      "The installed Weaver release and selected narrative output tree remain authoritative for actual operational state and current generated artifacts."
+    ],
+    "not_authoritative_for": [
+      "Each narrative repository owns its authored basis, brief, sources, prompts, editorial vocabulary, current output validity, and disclosure rules; Nucleus owns execution, authentication, and raw job history.",
+      "Weaver does not own job search, application submission, publication, upload, browser automation, public-profile editing, or the factual truth of generated text."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Weaver outcomes for five-stage narrative building, workflow and installation operation, and development in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, internal worker entry points, narrative-repository-specific editorial rules, unsupported public-service workflows, and upstream Nucleus behavior are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Weaver is a current-user local CLI whose detached interactive-lineage worker alone reads and writes the selected repository; Nucleus-launched Codex receives embedded content with no repository filesystem, local execution, web, launch-context, or dynamic-tool access.",
+      "Cancellation, maintenance, deployment, and release effects require the exact authority stated by the selected entry; catalog presence grants none of them."
+    ],
+    "shared_privacy_and_retention": [
+      "Weaver private state can temporarily contain complete selected narrative inputs, and Nucleus retains complete requests and raw protocol output inside its separately owned private boundary.",
+      "Release bundles contain only Weaver program, deployment, and public Chancery documentation bytes and never narrative repository inputs."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release identifies the Weaver release, entry contract version identifies public semantic compatibility, and Nucleus invocation protocol and repository contracts evolve separately.",
+      "Incompatible requester, state, repository, or installation changes require versioned contracts, recovery proof, coordinated dependency updates, and rollback before old behavior is retired."
+    ],
+    "operational_limits": [
+      "Weaver admits one current workflow, runs five sequential one-attempt stages, owns no resident daemon or LaunchAgent, and exposes no automatic terminal-run retry.",
+      "No workflow-duration, model-latency, repository-size, publication, factual-correctness, or external-service service-level objective is promised across this provider."
+    ]
   },
   "entries": [
     "entries/narrative-build.json",

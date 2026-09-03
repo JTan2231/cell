@@ -17,7 +17,12 @@ publishes, sends, uploads, or edits a public profile.
 The product-owned [`chancery/`](chancery/) bundle publishes Weaver's supported
 use, operation, and development capabilities for global discovery. It is
 versioned with Weaver and installed with each release, but it is documentation:
-the Weaver runtime never invokes Chancery.
+the Weaver runtime never invokes Chancery. Use `chancery list`, then read every
+plausible entry with `chancery show`. After selecting one exact entry, use
+`chancery resolve <ENTRY_ID>` for its complete outward promise, documentation
+dependency closure, exact basis, and explicit gaps. Resolution does not check
+runtime readiness or authorize an effect, and an unsupported, unspecified, or
+uncontracted result remains a gap.
 
 ## Requirements
 

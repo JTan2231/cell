@@ -55,5 +55,57 @@
     "Applying a pending reconciliation without explicit authorization.",
     "Bypassing confirmation, stale-state, migration, or history checks."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "An authorized local operator or expert caller may initialize, inspect, migrate, back up, reconcile, normalize, or revert one Annals library through deterministic product-owned commands."},
+      {"status": "unsupported", "statement": "This capability is not ordinary source retention, model-assisted integration, inbox operation, direct row editing, or an implicit destructive fresh-state cutover."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The caller explicitly selects the target library and holds authority for the requested mutation; initialization and backup require absent destination paths."},
+      {"status": "declared", "statement": "Reconciliation application requires a valid pending result whose base is current HEAD, shake confirmation requires the exact preview context, and revert requires relevant facts not to have conflicted."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs select one command and library, an absent backup destination, strict reconciliation JSON with work and base revision, a pending work, or a commit revision to revert."},
+      {"status": "unsupported", "statement": "Arbitrary SQL, in-place backup replacement, forced stale application, unsupported-schema reinterpretation, history erasure, and bypass of confirmation are not accepted."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The selected command reports the exact initialized or migrated library, statistics, backup result, reconciliation validation, shake plan or commit, revert commit, and resulting revision as applicable."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Initialization creates revision zero; application, confirmed nonempty shake, and successful revert append a commit and advance the corpus rather than rewriting prior history."},
+      {"status": "declared", "statement": "Direct reconciliation submission resolves and validates a complete projected corpus state but does not apply it."},
+      {"status": "declared", "statement": "Shake removes only direct parent edges already implied by longer paths, preserving reachability but not every direct-neighbor count or hop distance."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "The selected library, public cN concept IDs, normalized work labels, reconciliation identity, commit identity, and integer corpus revision are distinct selectors."},
+      {"status": "declared", "statement": "Backup paths identify filesystem copies, while statistics and shake plans report documented record and edge counts rather than usage or billing units."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Backup creates one consistent SQLite copy of the selected library, and validation re-resolves the stored request against its exact base rather than trusting a cached projection."},
+      {"status": "declared", "statement": "Every mutation checks the current library state at commit time and either applies its complete atomic transition or leaves the library unchanged."},
+      {"status": "unspecified", "statement": "No backup duration, maximum library size, migration latency, or long-term backup-retention guarantee is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported boundary is the local Annals CLI operating one explicitly resolved private library and an explicitly chosen backup or request file where applicable."},
+      {"status": "unsupported", "statement": "Direct SQLite mutation, manual database replacement, remote administration, and model execution are not supported by this capability."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Supported migrations and all corpus mutations are transactional; failure or conflict leaves no partial transition."},
+      {"status": "declared", "statement": "Application requires unchanged base HEAD, confirmed shake binds to exact library identity and HEAD, and revert appends an inverse commit while preserving unrelated intervening facts."},
+      {"status": "declared", "statement": "Initialization and backup refuse replacement, and migration rejects unsupported older or newer schemas without partial reinterpretation."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Migration accepts only documented prior schemas; backup and initialization never overwrite; stale reconciliation has no force path; destructive installed fresh state is outside this operation."},
+      {"status": "unspecified", "statement": "No maximum library, reconciliation, backup, or commit size, throughput, or wall-clock latency is promised here."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 2, provider release, library schema, reconciliation shape, and installed package generation are distinct; migrations cover only explicitly supported prior schemas."},
+      {"status": "declared", "statement": "Revert and commit history are append-only compatibility records; older history is not rewritten to current meaning."},
+      {"status": "unspecified", "statement": "No universal forward-compatibility, migration window, or deprecation period is promised."}
+    ],
+    "reliances": [
+      {"status": "not_applicable", "statement": "Deterministic library operations invoke no Nucleus, model, network, or other product; filesystem storage is inside the selected Annals operating boundary."}
+    ]
+  },
   "manual": "manuals/library-operate.md"
 }

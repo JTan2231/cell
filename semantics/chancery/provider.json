@@ -1,9 +1,38 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "provider": {
     "id": "semantics",
     "name": "Semantics",
     "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Semantics owns project registration and routing, stable concept identity, append-only semantic revisions and typed effects, intake policy and cursors, reconciliation validation, and semantic commit success."
+    ],
+    "not_authoritative_for": [
+      "Participating products own runtime behavior; Decisions owns lifecycle facts, Conversations owns task metadata, and Nucleus owns bounded execution rather than semantic truth."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Semantics CLI outcomes for repository exploration, project and intake operation, installation, recovery, and product development in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, direct SQLite access, upstream product capabilities, implementation helpers, and current service readiness are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Repository reads and administrative writes use local-user interfaces; the worker receives only published upstream data and never grants Nucleus project workspace, shell, or web access."
+    ],
+    "shared_privacy_and_retention": [
+      "Semantics retains private normalized meanings and provenance but no raw transcript, diff, command, prompt, credential, or project-file body."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release identifies these exact bundle bytes; entry contracts, SQLite schema, immutable toolsets, and semantic revision numbers remain separate version axes."
+    ],
+    "operational_limits": [
+      "Semantics is a local project registry with one serial bounded worker; per-entry contracts define replay, project, page, and reconciliation bounds."
+    ]
   },
   "entries": [
     "entries/repository-explore.json",

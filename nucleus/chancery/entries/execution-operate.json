@@ -56,5 +56,167 @@
     "Acceptance of any Todo, Annals, Weaver, or other requester-owned domain result.",
     "Restarting or uninstalling the service while active attempts matter."
   ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local requester products may submit closed version-one invocations, and the current user may inspect or operate Nucleus jobs, account access, authentication, and the user service."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Ordinary interactive work, requester-domain policy, workflow orchestration, and source-product success are not consumers of Nucleus authority merely because they involve an agent or job."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Job admission requires a compatible running daemon, strict adapter and harness checks, an available authenticated credential lease, and one complete supported version-one request."
+      },
+      {
+        "status": "declared",
+        "statement": "A requester persists its exact request and correlation before ambiguous submission and independently decides that any genuinely new attempt is safe."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "A version-one job request supplies a requester-chosen job ID, label, requester program and domain-run ID, instructions, optional developer instructions, prompt, and one closed invocation policy."
+      },
+      {
+        "status": "declared",
+        "statement": "Supported operational inputs include exact job IDs, output cursors, account wait bounds, cancellation requests, a separately attended login, and service-control commands."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Version one accepts no arbitrary command or argv, automatic-retry policy, workflow graph, project registry, open-ended harness configuration, or requester-domain mutation."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Supported reads return health and adapter readiness, account payloads, durable job and attempt state, pending tool calls, and ordered exact harness-output observations attributed to the owning attempt."
+      },
+      {
+        "status": "declared",
+        "statement": "A completed attempt may expose a derived structured thread ID, turn ID, and final message, while its retained output atoms remain the exact operational evidence."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Nucleus returns no requester-domain success assertion, automatic replacement attempt, workflow result, or authoritative interpretation of model prose."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A job is Nucleus's durable record for one admitted typed request and exactly one version-one attempt; terminal job or attempt state describes runtime execution rather than requester-domain truth."
+      },
+      {
+        "status": "declared",
+        "statement": "Each output atom preserves one harness stdout JSONL payload in arrival order, and a requester result is schema-bound mailbox transport rather than a Nucleus-authored domain fact."
+      },
+      {
+        "status": "declared",
+        "statement": "Strict health reports whether the exact installed daemon, adapter, harness, credential, and admission conditions currently permit work; a degraded document is still diagnostic output and exits nonzero."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "The requester-chosen job ID is the request idempotency key, requester program plus requester ID identifies the domain run, attempt ID identifies the single execution, and output sequence is ordered within that attempt."
+      },
+      {
+        "status": "declared",
+        "statement": "Output payload digests are calculated over the public payload bytes; timestamps identify recorded lifecycle or observation times rather than stream order."
+      },
+      {
+        "status": "unspecified",
+        "statement": "Nucleus passes through Codex account rate-limit and usage payloads without defining independent accounting units, prices, or billing semantics."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "For an admitted attempt, Nucleus retains one ordered observation for every harness stdout JSONL record it receives and derives structured output only from the bound thread and turn records in that ledger."
+      },
+      {
+        "status": "declared",
+        "statement": "Health and account reads describe the live service and external account response at invocation time; job and mailbox reads describe committed local state at the read boundary."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No job-start, completion, account-response, output-arrival, retention-horizon, or service-availability objective is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported standard surfaces are the current-user CLI and version-one HTTP protocol over Nucleus's filesystem-protected Unix socket."
+      },
+      {
+        "status": "declared",
+        "statement": "Local filesystem ownership and permissions protect the socket, database, and Nucleus-owned credential home; version one has no application-level authentication protocol."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No TCP endpoint, cross-user service, catalog-granted access, direct SQLite integration, or implicit workspace and tool authority is supported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Byte-equivalent resubmission under one job ID returns the existing job, different content conflicts, and one admitted job receives exactly one attempt with no automatic retry."
+      },
+      {
+        "status": "declared",
+        "statement": "Pending dynamic-tool calls and at most one matching requester result are durable and replayable; requester restart can recover a pending call, while daemon restart marks every unfinished harness attempt lost."
+      },
+      {
+        "status": "declared",
+        "statement": "Cancellation records durable intent for one attempt but cannot erase retained output or undo a requester mutation already committed."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Version one is per-user and serializes credential use; it admits one attempt per job and provides no automatic retry, global drain, workflow scheduler, project registry, capability discovery, or requester-domain interpreter."
+      },
+      {
+        "status": "declared",
+        "statement": "Invocation policy is closed to a proved harness and model, supported reasoning effort, absolute working directory, explicit workspace and built-in-tool access, timeout, and optional immutable toolset or short-lived launch context."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No throughput, queue depth, database capacity, output volume, wall-clock latency, or automatic retention and pruning bound is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Public invocation protocol version, store schema, adapter version, exact Codex compatibility, immutable schema and toolset identity, capability contract version, and provider release evolve independently."
+      },
+      {
+        "status": "declared",
+        "statement": "Changed registered meaning receives a new immutable schema or toolset version with historical decoding retained; incompatible public invocation meaning requires a new protocol version."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general requester-support window, harness-upgrade cadence, database-retention period, or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Job execution and account access rely on the separately installed and exactly adapter-proved Codex executable and its account service; no installed Chancery contract covers that external behavior.",
+        "target": "codex",
+        "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "The standard always-on macOS service lifecycle relies on launchd, while foreground protocol use does not establish launchd readiness; no installed Chancery contract covers launchd.",
+        "target": "launchd",
+        "kind": "readiness"
+      }
+    ]
+  },
   "manual": "manuals/execution-operate.md"
 }

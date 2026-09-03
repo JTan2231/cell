@@ -6,7 +6,10 @@
 - [System installation](system-installation.md): macOS deployment, service
   operation, rollback, and uninstall.
 
-Chancery publishes discovery contracts for repository exploration, project
-operation, and product development. Chancery is not a Semantics runtime
+The [Semantics provider bundle](../chancery/provider.json) publishes the
+complete supported CLI promise inventory for repository exploration, project
+operation, and product development in this release. Use `chancery show ID` for
+the full contract and `chancery resolve ID` for its normalized outward
+boundary, exact basis, and explicit gaps. Chancery is not a Semantics runtime
 dependency; the installed CLI remains usable if its discovery catalog is
 unavailable.

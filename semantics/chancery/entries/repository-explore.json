@@ -53,5 +53,48 @@
     "Reading Semantics SQLite directly or treating a current snapshot as runtime implementation authority.",
     "Disclosing repository output outside the local project boundary."
   ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A local contributor or tool may read a registered project's maintained terminology and immutable semantic history before analysis, review, documentation, or implementation."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The caller selects an exact registered project and, for historical reads, an existing revision or valid revision range."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are a stable project ID plus an optional search query, historical revision, or from/to revision range."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Outputs are a replayed repository snapshot, semantic search matches, contiguous immutable revision log, or typed revision-range diff in JSON."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Concept identity is stable across wording and path changes; active or retired state, distinctions, groundings, and withdrawals are replayed from immutable typed effects rather than a mutable projection."},
+      {"status": "unsupported", "statement": "Repository meaning is not runtime implementation truth and a grounding is not permission to ignore newer product evidence."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Project ID identifies one registered semantic repository, concept ID identifies one stable concept, and positive revision number identifies one contiguous committed effect set."},
+      {"status": "not_applicable", "statement": "The repository surface defines no quantitative usage or pricing unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A snapshot replays every committed revision through the selected head; a historical snapshot stops exactly at its selected revision and preserves retirement and withdrawal history."},
+      {"status": "unsupported", "statement": "A repository read does not inspect current code, tests, project files, or runtime state for fresher behavioral truth."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported read boundary is the local Semantics repository CLI; direct SQLite access and disclosure outside the local project boundary are unsupported."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Reads are side-effect free and deterministic over contiguous immutable revisions; any replay validation failure stops instead of returning a partial normal result."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Each invocation selects one registered project and bounded command arguments; it invokes no worker, model, upstream system, or network."},
+      {"status": "unspecified", "statement": "No repository-size, result-count, or wall-clock read service-level objective is promised here beyond command-specific bounds."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 preserves stable project and concept IDs and replays schema-one immutable revisions; provider release and revision number remain separate."},
+      {"status": "unspecified", "statement": "No future contract deprecation or repository migration window is promised by this read capability."}
+    ],
+    "reliances": [
+      {"status": "not_applicable", "statement": "Repository reads invoke no Decisions, Conversations, Nucleus, Chancery runtime, model, or network; retained groundings are local provenance rather than live dependencies."}
+    ]
+  },
   "manual": "manuals/repository-explore.md"
 }
