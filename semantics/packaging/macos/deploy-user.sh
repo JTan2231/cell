@@ -78,22 +78,28 @@ validate_bundle() {
     if find "$bundle" ! -type d ! -type f -print | grep -q .; then
         fail "Chancery provider contains a non-file entry: $bundle"
     fi
-    schema_version=$(awk -F '[:,]' '
-        /"schema_version"[[:space:]]*:/ {
-            value = $2
-            gsub(/[[:space:]]/, "", value)
-            print value
-            exit
-        }
-    ' "$bundle/provider.json")
+    schema_version=$(/usr/bin/plutil -extract schema_version raw \
+        "$bundle/provider.json" 2>/dev/null) \
+        || fail "Chancery provider schema is unreadable: $bundle"
     case "$role:$schema_version" in
         source:3|installed:2|installed:3) ;;
         *) fail "Chancery provider schema $schema_version is not valid for $role bundle" ;;
     esac
-    grep -Eq '"id"[[:space:]]*:[[:space:]]*"semantics"' "$bundle/provider.json" \
-        || fail 'Chancery provider ID is not semantics'
-    for entry_id in semantics.repository.explore semantics.project.operate semantics.develop.change; do
-        grep -R -F -q "\"id\": \"$entry_id\"" "$bundle/entries" \
+    provider_id=$(/usr/bin/plutil -extract provider.id raw \
+        "$bundle/provider.json" 2>/dev/null) \
+        || fail "Chancery provider ID is unreadable: $bundle"
+    [ "$provider_id" = semantics ] || fail 'Chancery provider ID is not semantics'
+    for entry_spec in \
+        repository-explore.json:semantics.repository.explore \
+        project-operate.json:semantics.project.operate \
+        develop-change.json:semantics.develop.change
+    do
+        entry_file=${entry_spec%%:*}
+        entry_id=${entry_spec#*:}
+        actual_entry_id=$(/usr/bin/plutil -extract id raw \
+            "$bundle/entries/$entry_file" 2>/dev/null) \
+            || fail "Chancery provider entry ID is unreadable: $entry_file"
+        [ "$actual_entry_id" = "$entry_id" ] \
             || fail "Chancery provider entry is missing: $entry_id"
     done
 }
@@ -127,7 +133,9 @@ case "$candidate_version" in
     'semantics '*) version=${candidate_version#semantics } ;;
     *) fail "unexpected candidate version: $candidate_version" ;;
 esac
-provider_version=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' "$SOURCE_CHANCERY/provider.json")
+provider_version=$(/usr/bin/plutil -extract provider.release raw \
+    "$SOURCE_CHANCERY/provider.json" 2>/dev/null) \
+    || fail 'Chancery provider release is unreadable'
 [ "$provider_version" = "$version" ] \
     || fail "provider release $provider_version does not match candidate $version"
 

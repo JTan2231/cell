@@ -110,23 +110,35 @@ chmod 0755 "$candidate"
 legacy_package="$temporary/legacy-package"
 cp -R "$temporary/package" "$legacy_package"
 legacy_bundle="$legacy_package/share/chancery/semantics"
-/usr/bin/perl -0pi -e 's/"schema_version": 3/"schema_version": 2/' \
-    "$legacy_bundle/provider.json"
+/usr/bin/plutil -replace schema_version -integer 2 "$legacy_bundle/provider.json"
+/usr/bin/plutil -remove promise_scope "$legacy_bundle/provider.json"
+/usr/bin/plutil -replace provider.release -string 0.1.0 "$legacy_bundle/provider.json"
+for legacy_entry in "$legacy_bundle"/entries/*.json; do
+    /usr/bin/plutil -remove promise "$legacy_entry"
+done
 /usr/bin/perl -0pi -e \
     's/validate_bundle "\$SOURCE_CHANCERY" source/validate_bundle "\$SOURCE_CHANCERY" installed/' \
     "$legacy_package/macos/deploy-user.sh"
 grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*2' \
     "$legacy_bundle/provider.json"
+! grep -Eq '"promise_scope"[[:space:]]*:' "$legacy_bundle/provider.json"
+! grep -R -Eq '"promise"[[:space:]]*:' "$legacy_bundle/entries"
 
 legacy_home="$temporary/LegacyHome"
 make_home "$legacy_home"
-HOME="$legacy_home" "$legacy_package/macos/deploy-user.sh" --binary "$candidate" \
+SEMANTICS_TEST_VERSION=0.1.0 HOME="$legacy_home" \
+    "$legacy_package/macos/deploy-user.sh" --binary "$candidate" \
     --home "$legacy_home" --launchctl "$launchctl" >/dev/null
 legacy_provider="$legacy_home/Library/Application Support/Chancery/providers/semantics/provider.json"
 grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*2' "$legacy_provider"
+legacy_state="$legacy_home/Library/Application Support/Semantics"
+grep -Fx 'version=0.1.0' "$legacy_state/install/current/manifest.txt" >/dev/null
 HOME="$legacy_home" "$package/deploy-user.sh" --binary "$candidate" \
     --home "$legacy_home" --launchctl "$launchctl" >/dev/null
 grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*3' "$legacy_provider"
+grep -Fx "version=$SEMANTICS_TEST_VERSION" \
+    "$legacy_state/install/current/manifest.txt" >/dev/null
+grep -Fx 'version=0.1.0' "$legacy_state/install/previous/manifest.txt" >/dev/null
 HOME="$legacy_home" "$package/uninstall-user.sh" \
     --home "$legacy_home" --launchctl "$launchctl" >/dev/null
 
