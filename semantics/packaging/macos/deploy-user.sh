@@ -59,6 +59,7 @@ done
 
 validate_bundle() {
     bundle=$1
+    role=$2
     [ -d "$bundle" ] && [ ! -L "$bundle" ] \
         || fail "Chancery provider is not a regular directory: $bundle"
     for relative in \
@@ -77,8 +78,18 @@ validate_bundle() {
     if find "$bundle" ! -type d ! -type f -print | grep -q .; then
         fail "Chancery provider contains a non-file entry: $bundle"
     fi
-    grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*3' "$bundle/provider.json" \
-        || fail 'Chancery provider schema is not version 3'
+    schema_version=$(awk -F '[:,]' '
+        /"schema_version"[[:space:]]*:/ {
+            value = $2
+            gsub(/[[:space:]]/, "", value)
+            print value
+            exit
+        }
+    ' "$bundle/provider.json")
+    case "$role:$schema_version" in
+        source:3|installed:2|installed:3) ;;
+        *) fail "Chancery provider schema $schema_version is not valid for $role bundle" ;;
+    esac
     grep -Eq '"id"[[:space:]]*:[[:space:]]*"semantics"' "$bundle/provider.json" \
         || fail 'Chancery provider ID is not semantics'
     for entry_id in semantics.repository.explore semantics.project.operate semantics.develop.change; do
@@ -110,7 +121,7 @@ atomic_symlink() {
     mv -fT "$temporary_link" "$path"
 }
 
-validate_bundle "$SOURCE_CHANCERY"
+validate_bundle "$SOURCE_CHANCERY" source
 candidate_version=$("$binary_path" --version) || fail 'unable to read candidate version'
 case "$candidate_version" in
     'semantics '*) version=${candidate_version#semantics } ;;
@@ -342,7 +353,7 @@ validate_release_selector() {
         [ -f "$owned_file" ] && [ ! -L "$owned_file" ] \
             || fail "selected Semantics release is incomplete: $selector"
     done
-    validate_bundle "$selected_release/share/chancery/semantics"
+    validate_bundle "$selected_release/share/chancery/semantics" installed
     actual_binary_hash=$(shasum -a 256 "$selected_release/libexec/semantics" | awk '{print $1}')
     actual_frontend_hash=$(shasum -a 256 "$selected_release/bin/semantics" | awk '{print $1}')
     actual_runner_hash=$(shasum -a 256 "$selected_release/bin/semantics-worker" | awk '{print $1}')
