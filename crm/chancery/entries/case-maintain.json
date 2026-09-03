@@ -1,0 +1,107 @@
+{
+  "id": "crm.case.maintain",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Maintain an employment relationship case",
+  "summary": "Create a private case, record free-form information as one durable queued update, inspect its progress, or explicitly resume or retry its bounded AI steward while preserving exact evidence and immutable revisions.",
+  "use_when": [
+    "A person, company, role, posting, location, introduction, interaction, or outcome should begin or update one employment-oriented case.",
+    "New information should be retained before a bounded steward proposes a complete next case revision.",
+    "A known update should be inspected, waited on, resumed without a new attempt, or explicitly retried after terminal failure."
+  ],
+  "do_not_use_when": [
+    "The task is only to search or read the existing case library.",
+    "CRM should crawl a source, discover people, send a message, or decide that contact is authorized.",
+    "A failed or ambiguous attempt should be retried without CRM proving the documented retry transition."
+  ],
+  "outcome": "One new case at immutable revision one, one exact delivery plus queued update committed before return, one observed or resumed update, or one explicitly authorized successor update whose CRM and Nucleus identities remain correlated.",
+  "effects": [
+    "Case creation stores exact input Markdown as SQLite TEXT and atomically creates a case and initial immutable revision.",
+    "Tell stores exact free-form delivery text, its optional label and opaque source reference, and one queued update in CRM before launching a hidden worker and returning.",
+    "Resume synchronously processes the same queued, recoverable running, or applied-but-runtime-unsettled update; retry reuses its immutable delivery in a successor update with new requester/job identities only when the prior update is failed or lost.",
+    "A valid submit_case_revision tool call may atomically append one complete revision and update the case head, stage, summary, and nullable advisory."
+  ],
+  "authority": [
+    "The caller owns supplied information, source labels, and every real-world action.",
+    "CRM owns validation, case and revision identity, stage and advisory retention, update transitions, guarded domain commit, duplicate handling, and retry admission.",
+    "Nucleus owns execution and mailbox evidence but does not decide CRM success; the steward proposes one revision and cannot contact anyone or bypass CRM validation."
+  ],
+  "success": [
+    "Case creation commits the validated case, exact document, and revision one together or commits nothing.",
+    "Tell returns success only after the exact delivery and queued update are durable; post-commit launch or Nucleus unavailability cannot erase accepted intake.",
+    "Steward success is a CRM transaction that verifies the frozen base, stores a replay-safe tool receipt, inserts the complete immutable next revision, advances the case head, and binds the update to that revision.",
+    "A committed revision remains domain success if the harness later fails; terminal Nucleus completion without a committed revision is not CRM success.",
+    "Every non-null advisory remains conspicuous on case reads, tell acknowledgment, and update list/show/wait/resume/retry, and never changes the validity of an otherwise allowed operation."
+  ],
+  "failure_and_recovery": [
+    "Invalid UTF-8, invalid stage, input-bound, missing-case, stale-base, conflicting replay, or invalid state-transition failures do not commit a partial case revision.",
+    "Use update resume for queued, exactly recoverable running, or applied-but-runtime-unsettled work; it cannot invent a successor update merely because progress is uncertain.",
+    "Use update retry only when CRM records the selected update as failed or lost; the successor retains retry_of and uses new requester/job identities.",
+    "A Nucleus restart may leave an attempt lost and never authorizes automatic retry."
+  ],
+  "privacy": [
+    "The selected CRM database and correlated Nucleus request/output may contain private contact, employment, source, prompt, and advisory text.",
+    "Caller input paths are transient and not retained, while redirected CLI output becomes caller-owned retained data."
+  ],
+  "interfaces": [
+    {"label": "Create a case", "invocation": "/Users/joey/.local/bin/crm case new --title TITLE [INPUT] [--stage STAGE]"},
+    {"label": "Record new information", "invocation": "/Users/joey/.local/bin/crm tell CASE_ID INPUT [--name LABEL] [--source REF]"},
+    {"label": "Inspect updates", "invocation": "/Users/joey/.local/bin/crm update list [--limit N] | show UPDATE_ID | wait UPDATE_ID [--timeout SECONDS]"},
+    {"label": "Recover an update", "invocation": "/Users/joey/.local/bin/crm update resume UPDATE_ID | retry UPDATE_ID"},
+    {"label": "Select another database", "invocation": "/Users/joey/.local/bin/crm --database PATH case new --title TITLE [INPUT]"}
+  ],
+  "does_not_authorize": [
+    "Fetching or accepting the truth of an external source, sending or publishing content, or contacting a person.",
+    "Treating a CRM stage, summary, or advisory as permission, independent verification, or a guaranteed employment result.",
+    "Automatic retry, direct Codex execution, changing Nucleus, or replacing a terminal attempt by hand."
+  ],
+  "dependencies": [
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A local caller may create or tell one private employment-oriented case and may inspect or explicitly recover the resulting update."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The selected schema-one database exists, the caller supplies a valid case identity where required, and input is at most 1,048,576 UTF-8 bytes from a regular non-symbolic file or standard input."},
+      {"status": "declared", "statement": "Resume requires queued, exactly recoverable running, or applied-but-runtime-unsettled work; retry requires the selected update to be failed or lost."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Case creation accepts a title, optional raw Markdown input, and optional fixed stage; tell accepts one case, required raw text delivery, optional label, and opaque source reference."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Outputs identify the committed case or delivery/update, current progress and correlations including result-post and terminal runtime evidence, or an explicitly created successor update; machine output uses the documented ok/data or ok/error envelope."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "A revision is a complete immutable Markdown, stage, nullable advisory, and summary snapshot; a source reference is an unverified caller-supplied locator, and a stage is CRM state rather than real-world permission or proof."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Case ID identifies one lineage, positive revision numbers identify complete snapshots, update ID identifies one steward attempt/domain run, requester identity is case-steward:UPDATE_ID, and Nucleus job ID is one request idempotency key."},
+      {"status": "not_applicable", "statement": "The capability defines no pricing, ranking confidence, contact score, or physical unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A successful case or tell transaction retains the complete validated input accepted at that time; a successful steward commit retains all four revision fields and exact attempt/tool correlation."},
+      {"status": "unsupported", "statement": "CRM does not refresh, resolve, or prove the current truth of caller-supplied sources."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported boundary is the local CRM CLI against an explicitly selected private database; hidden steward work uses Codex model gpt-5.6-terra with medium reasoning and a 1,200-second timeout through Nucleus, with workspace, shell, web, and launch context disabled and one managed tool."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Tell commits delivery and queued work before launch; steward commit is atomic and base-guarded; exact duplicate admission/tool delivery is replay-safe; terminal runtime evidence remains distinct from domain success; only explicit retry creates a successor update."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "CRM has no crawler, sender, scheduler, daemon, direct-Codex path, automatic retry, or content file tree; tell returns without waiting for AI completion; revision Markdown is at most 1,048,576 UTF-8 bytes, advisory at most 4,000 bytes, and summary at most 1,000 bytes."},
+      {"status": "unspecified", "statement": "No steward completion latency, Nucleus availability, or employment outcome is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 uses database schema one, the documented JSON envelope, Nucleus toolset crm/case-steward/1, and the fixed six-stage vocabulary; incompatible meanings require explicit successor versions and retained decoding."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Hidden steward attempts rely on Nucleus for compatible admission, authentication, supervised execution, job/output evidence, and durable delivery of the one managed tool call.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"},
+      {"status": "unsupported", "statement": "Nucleus execution does not replace CRM domain state, decide retry, or make terminal model prose authoritative."}
+    ]
+  },
+  "manual": "manuals/case-maintain.md"
+}

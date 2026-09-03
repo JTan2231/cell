@@ -59,6 +59,7 @@ separately maintained discovery catalog.
 | System | Use it when | It owns | Do not use it for |
 | --- | --- | --- | --- |
 | Todo | An actionable concern or follow-up should be researched and retained for later. | Concern provenance, routing and its explicit decisions, stable todo identities, dated situation assessments, proposed or accepted designs, open/done state, and working notes. | Work requested for immediate completion, general knowledge, implementation execution, or shared runtime policy. |
+| CRM | Employment-relevant people, opportunities, and contemplated contact should be retained as evidence-grounded cases. | Its local SQLite library, queued steward runs, immutable case revisions, evidence, and advisory review notes. | Sending or authorizing outreach, scheduled intake, treating an advisory as a gate, or storing CRM domain state in Nucleus. |
 | Annals | Immutable source material should be retained or reconciled with an evidence-grounded conceptual corpus, or that corpus should be searched or explored. | Retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, or account telemetry. |
 | Weaver | Authored repository inputs should become the current five-stage public-facing narrative outputs. | Current-run admission, stage order and input snapshots, repository output writes, validation, cancellation intent, and recovery. | Publishing, editing a public profile, treating generated text as factual authority, or general job orchestration. |
 | Email | A plain-text email should be sent to the single fixed recipient. | The synchronous Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, or agent execution. |
@@ -74,6 +75,8 @@ separately maintained discovery catalog.
 Typical routing examples:
 
 - “Leave this concern for later” is Todo work.
+- “Retain this possible employment connection and assess the case for contact”
+  is CRM work.
 - “Incorporate this report into what we know” is Annals work.
 - “What does the corpus say about predicate locking?” is an Annals query.
 - “Build the current public-facing narrative” is Weaver work.
@@ -104,6 +107,7 @@ nucleus service status
 annals --version
 annals-usage --version
 todo --version
+crm --version
 email --version
 conversations --version
 decisions --version
@@ -131,6 +135,7 @@ reason.
 
 ```text
 Todo research -----\
+CRM steward --------+
 Annals -------------+
 Weaver -------------+--> Nucleus ----------> isolated Codex app-server --> account
 Decisions observer -+
@@ -147,6 +152,7 @@ Pratica reviews ----/
 
 Annals Usage <------ Nucleus output atoms and account reads
 Todo SQLite <------- Todo's validated stage tools and explicit decisions
+CRM SQLite <-------- CRM's queued intake and validated case revisions
 Weaver outputs <---- Weaver's detached repository worker
 Email -------------> Resend
 Conversations ------> normal-user Codex app-server
@@ -171,6 +177,20 @@ Todo's SQLite database directly. In particular, an authorization command
 cannot be invoked by a model, and the optional daily email path calls Resend
 without creating a Nucleus job, using Nucleus authentication, or depending on
 Nucleus health.
+
+CRM is a short-lived local CLI, SQLite case library, and bounded Nucleus
+requester.
+`crm tell` stores its supplied content as SQLite `TEXT` and queues an
+asynchronous steward run; CRM-owned content has no sidecar-file authority. Each
+steward job uses requester program `crm`, immutable toolset
+`crm/case-steward/1`, model `gpt-5.6-terra` at medium reasoning, a neutral
+absolute temporary-directory working directory, workspace access `none`, no
+local execution, no web search, no launch context, and a 1,200-second timeout.
+Its only managed tool is `submit_case_revision`. A committed revision in the
+CRM database, not Nucleus completion or model prose, is steward success. CRM is
+the sole authority for that result. Advisory review notes are prominent on
+every CRM consumption surface but never block capture, revision, or later
+action. CRM has no scheduler and no direct-Codex fallback.
 
 Weaver submits five content-only jobs in order. Its detached interactive-lineage
 worker owns repository reads and atomic Markdown output writes; Nucleus and the
@@ -254,8 +274,8 @@ it does not implement a target system, prove runtime behavior, discover every
 concern, or authorize deployment.
 
 Nucleus, Annals, Annals Usage, Todo, Chancery, Weaver, Email, Conversations,
-Decisions, Semantics, Geste, and Pratica share the Cell source repository,
-Cargo workspace, and lockfile. That source layout does not
+Decisions, Semantics, Geste, Pratica, Clockwork, and CRM share the Cell source
+repository, Cargo workspace, and lockfile. That source layout does not
 merge their release, installation, state, backup, recovery, or domain-success
 boundaries. Product runtimes do not call Chancery. Their installers only
 co-stage owned documentation and publish one provider selector.
@@ -268,11 +288,12 @@ The following distinctions are operationally important:
    according to its retained reconciliation and delivery state. Weaver succeeds
    only after it persists and validates the required narrative outputs.
    Semantics succeeds when its validated revision and intake receipt are
-   durable. A model's final prose is diagnostic.
+   durable. CRM steward work succeeds when its validated case revision is
+   committed. A model's final prose is diagnostic.
 2. **A domain commit can outlive a runtime failure.** If Todo records its
    validated stage result, Annals records its reconciliation, or Semantics
-   appends its revision and Codex later fails, the durable domain result remains
-   authoritative.
+   appends its revision, or CRM commits its case revision and Codex later fails,
+   the durable domain result remains authoritative.
 3. **A requester restart differs from a daemon restart.** A requester can
    rediscover a durable pending tool call. A Nucleus restart cannot resume a
    Codex process; startup marks unfinished attempts `lost` and their jobs failed.
@@ -288,6 +309,8 @@ The following distinctions are operationally important:
 8. **A Pratica agreement is not implementation proof.** It preserves exact
    party assent and basis. Composition is advisory, and conformance reviews one
    supplied candidate snapshot without testing, changing, or deploying it.
+9. **A CRM advisory is not a gate.** It remains conspicuous wherever the case
+   is consumed, but it cannot block or authorize any operation.
 
 ### Standard installed paths
 
@@ -301,6 +324,7 @@ The following distinctions are operationally important:
 ~/.local/bin/geste
 ~/.local/bin/pratica
 ~/.local/bin/clockwork
+~/.local/bin/crm
 ~/.codex/hooks.json
 ~/Library/LaunchAgents/org.nucleus.daemon.plist
 ~/Library/LaunchAgents/org.clockwork.annals.inbox.plist
@@ -353,6 +377,10 @@ Annals Usage do.
 
 ~/Library/Application Support/Pratica/
   pratica.db
+  install/
+
+~/Library/Application Support/CRM/
+  crm.db
   install/
 
 ~/Library/Logs/Semantics/
@@ -464,6 +492,12 @@ version-0.1 uninstaller. Explicit steward, composition, and conformance
 commands synchronously use Nucleus. Rollback changes only program/provider
 selection and is safe only when the retained database schema remains readable.
 
+CRM owns its content-addressed CLI installation, provider selector, and local
+SQLite library. All CRM-owned content is stored as database `TEXT`. Deployment
+switches immutable program and provider selectors without adding a daemon or
+schedule. `crm tell` queues an asynchronous steward run, which uses Nucleus and
+never falls back to a direct Codex invocation.
+
 ## Compatibility model
 
 | Axis | Authority | How to inspect | Change consequence |
@@ -521,9 +555,9 @@ currently owns the lease; it does not by itself mean the credential is invalid.
 
 Nucleus has no global drain mode. Quiescence is established at its requesters:
 
-1. Do not start a synchronous Todo creation, a new Weaver submission, a
-   Pratica steward/composition/conformance review, `decisions observe process`,
-   or another manual requester job.
+1. Do not start a synchronous Todo creation, invoke `crm tell`, start a new
+   Weaver submission, run a Pratica steward/composition/conformance review,
+   invoke `decisions observe process`, or start another manual requester job.
 2. If Weaver has a nonterminal current run, select its exact run ID and let it
    settle through `weaver wait RUN_ID`.
 3. Pause Annals and wait for its active delivery to settle:
@@ -568,10 +602,11 @@ Nucleus has no global drain mode. Quiescence is established at its requesters:
 
 7. Perform the service, storage, or harness operation.
 8. Verify Nucleus and requester canaries before resuming Annals, both Decisions
-   schedules, the Semantics worker, or new Weaver work. For Clockwork, switch
-   only a key that step 4 recorded as enabled back to its exact captured digest;
-   leave every originally disabled or absent key unchanged. For a legacy
-   install, bootstrap only the exact previously loaded owned product plists.
+   schedules, the Semantics worker, or new Weaver or CRM work. For Clockwork,
+   switch only a key that step 4 recorded as enabled back to its exact captured
+   digest; leave every originally disabled or absent key unchanged. For a
+   legacy install, bootstrap only the exact previously loaded owned product
+   plists.
 
 Stopping or replacing `nucleusd` while a job is active makes that attempt
 `lost`. The requester—not Nucleus—decides whether a new domain attempt is safe.
@@ -587,7 +622,7 @@ their durable queues are the intended recovery path.
 
 Nucleus owns one authoritative Codex home under its private state directory.
 Jobs, account reads, refreshes, and attended login share one exclusive
-credential lease. Annals and Todo do not read or refresh the credential.
+credential lease. Annals, Todo, and CRM do not read or refresh the credential.
 
 For attended recovery:
 
@@ -638,8 +673,8 @@ For a backup intended to support service recovery:
    recovery is in scope. Treat that copy as authentication material, not as an
    ordinary document archive.
 6. Include the LaunchAgent, daemon logs, and requester state only when the
-   recovery objective requires them. Nucleus state does not replace Annals or
-   Todo backups.
+   recovery objective requires them. Nucleus state does not replace Annals,
+   Todo, or CRM backups.
 7. Bootstrap the unchanged service and verify health:
 
    ```sh
@@ -789,6 +824,13 @@ Todo's current immutable requester toolsets are
 execute implementation. The historical Todo `create_todo` schema and toolset
 remain immutable for compatibility; current `todo new` does not use them.
 
+CRM's immutable requester toolset is `crm/case-steward/1`. It exposes only
+`submit_case_revision`; the model receives no managed read, search, or effect
+tool and no builtin filesystem or web access. CRM validates that one typed
+submission and atomically commits the revision in its own SQLite database. The
+tool cannot send contact, schedule work, or turn an advisory note into an
+authorization or blocker.
+
 Decisions' current immutable requester toolset is
 `decisions/turn-classification/1`. It returns complete per-authority decision or
 no-decision verdicts for one serial observation scope. The historical
@@ -908,6 +950,7 @@ provider registry or documentation storage.
 | Change | Primary authority | Cross-system obligations |
 | --- | --- | --- |
 | Todo concerns, routing and explicit decisions, identities, assessments, designs, lifecycle, provenance, database, email delivery, or deployment | Todo | Preserve its Nucleus adapter contract when affected; the direct Resend path does not become a Nucleus job, and Nucleus does not gain Todo fields. |
+| CRM intake, cases, evidence, revisions, advisories, queued steward runs, database, or deployment | CRM | Preserve its bounded Nucleus adapter and prominent nonblocking advisories; Nucleus gains no CRM fields, domain success, scheduling, or retry authority. |
 | Annals works, concepts, evidence, reconciliation, inbox, retry, or corpus migration | Annals | Preserve job correlation and adapter behavior when affected; Nucleus does not gain Annals workflow state. |
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
 | Weaver workflow state, stage prompts, repository inputs or outputs, validation, cancellation, recovery, or deployment | Weaver | Preserve its Nucleus invocation and correlation contract; Nucleus does not gain narrative repository authority or retry policy. |
@@ -925,7 +968,7 @@ provider registry or documentation storage.
 | Credential or credential-lease behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and canary every requester. |
 | Nucleus service layout or installer | Nucleus CLI/packaging | Preserve state/log ownership, rollback, launchd behavior, and requester configuration. |
 | Chancery bundle schema, catalog, contract reader, exact-ID resolver, or directory installation | Chancery | Preserve read-only behavior, failure isolation, exact basis, explicit gaps, complete installed inventory, and provider-owned selectors; do not introduce semantic matching or a product runtime dependency. |
-| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the twelve-provider source graph, and update only that product's Chancery selector. |
+| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the fourteen-provider source graph, and update only that product's Chancery selector. |
 
 ## Guarded change playbooks
 
@@ -983,8 +1026,9 @@ rejects any version it has not proved.
 4. Quiesce requesters and deploy Nucleus with the candidate's absolute path.
 5. Confirm health reports that exact executable, harness version, and required
    capabilities.
-6. Run a fresh Nucleus job, a deliberate Todo creation when affected, and an
-   Annals reconciliation canary when affected.
+6. Run a fresh Nucleus job and the affected requester canaries, including a
+   deliberate Todo creation, Annals reconciliation, or isolated CRM steward
+   revision as applicable.
 7. Rebuild affected requesters only if the stable Nucleus types or semantics
    they consume changed.
 
@@ -1087,7 +1131,9 @@ For Annals failures, use its status, pause, interruption, and bounded retry
 procedures. Never move failed envelopes back into the queue or edit their
 receipts. For Todo, inspect the Todo database/result first; a committed creation
 wins over later runtime failure. Detailed recovery policy remains in each
-requester.
+requester. For CRM, inspect the queued run and revision first; a committed case
+revision remains success even when the steward job later fails, while a
+terminal job without that revision is not CRM success.
 
 ## Canaries and resumption
 
@@ -1133,6 +1179,12 @@ episode and prove search, historical show, report, and graph from the installed
 database. Do not fabricate a Decisions event merely to label a settlement
 verified. If the effectful turn's admission is not yet available, retain a
 provenance-bearing Todo for the later self-episode.
+For CRM, use an isolated database and deliberate `crm tell` content. Verify the
+durable queued run, one committed case revision, the correlated `crm` Nucleus
+job and `crm/case-steward/1` toolset, and prominent advisory rendering on every
+consumption surface. Also prove that the advisory does not change command
+success and that Nucleus completion without a committed revision is not CRM
+success.
 For Pratica, use an isolated database and a deliberate integration whose source
 snapshots were obtained through their owning public contracts. The acceptance
 canary brokers only the CRM terms derived from “Review CRM data model concerns”:
@@ -1150,6 +1202,9 @@ Use these placement rules to keep the manual current and small:
 - **Todo:** an unimplemented actionable outcome or researched follow-up.
   “Implement pruning” may be a todo; “Nucleus currently does not prune” is
   current operator truth.
+- **CRM:** employment-relationship cases, supplied content, case revisions,
+  evidence, steward-run state, and conspicuous nonblocking advisories. It is
+  not outreach authority or a scheduler.
 - **Annals:** retained source material and evidence-grounded conceptual
   knowledge. It may retain released documentation, but it is not the sole
   editable runbook.
@@ -1217,6 +1272,14 @@ directory.
 - [Architecture](/Users/joey/rust/cell/todo/docs/architecture.md)
 - [CLI contract](/Users/joey/rust/cell/todo/docs/cli.md)
 - [User-owned installation](/Users/joey/rust/cell/todo/docs/system-installation.md)
+
+### CRM
+
+- [Documentation index](/Users/joey/rust/cell/crm/docs/README.md)
+- [Architecture](/Users/joey/rust/cell/crm/docs/architecture.md)
+- [CLI contract](/Users/joey/rust/cell/crm/docs/cli.md)
+- [Data model](/Users/joey/rust/cell/crm/docs/data-model.md)
+- [User-owned installation](/Users/joey/rust/cell/crm/docs/system-installation.md)
 
 ### Weaver
 

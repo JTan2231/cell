@@ -6,11 +6,11 @@ ROOT=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 
 usage() {
     printf '%s\n' \
-        'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver|email|conversations|decisions|semantics|geste|pratica|clockwork]...'
+        'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver|email|conversations|decisions|semantics|geste|pratica|clockwork|crm]...'
 }
 
 if [ "$#" -eq 0 ]; then
-    set -- nucleus annals todo chancery weaver email conversations decisions semantics geste pratica clockwork
+    set -- nucleus annals todo chancery weaver email conversations decisions semantics geste pratica clockwork crm
 fi
 
 nucleus_selected=0
@@ -25,6 +25,7 @@ semantics_selected=0
 geste_selected=0
 pratica_selected=0
 clockwork_selected=0
+crm_selected=0
 for project in "$@"; do
     case "$project" in
         nucleus) nucleus_selected=1 ;;
@@ -39,6 +40,7 @@ for project in "$@"; do
         geste) geste_selected=1 ;;
         pratica) pratica_selected=1 ;;
         clockwork) clockwork_selected=1 ;;
+        crm) crm_selected=1 ;;
         *)
             usage >&2
             exit 2
@@ -51,8 +53,8 @@ for project in "$@"; do
     "$ROOT/$project/ci.sh"
 done
 
-if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$decisions_selected$semantics_selected$geste_selected$pratica_selected$clockwork_selected" = \
-    111111111111 ]
+if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$decisions_selected$semantics_selected$geste_selected$pratica_selected$clockwork_selected$crm_selected" = \
+    1111111111111 ]
 then
     printf '%s\n' '==> integrated Chancery source catalog'
     (
@@ -80,6 +82,7 @@ then
         ln -s "$ROOT/geste/chancery" "$catalog_registry/geste"
         ln -s "$ROOT/pratica/chancery" "$catalog_registry/pratica"
         ln -s "$ROOT/clockwork/chancery" "$catalog_registry/clockwork"
+        ln -s "$ROOT/crm/chancery" "$catalog_registry/crm"
 
         chancery_candidate="$ROOT/target/release/chancery"
         [ -f "$chancery_candidate" ] && [ -x "$chancery_candidate" ] || {
@@ -151,8 +154,8 @@ then
                 normalized_entries=$((normalized_entries + 1))
             done
         done
-        [ "$normalized_entries" -eq 47 ] || {
-            printf 'ci.sh: expected 47 normalized entries; found %s\n' \
+        [ "$normalized_entries" -eq 51 ] || {
+            printf 'ci.sh: expected 51 normalized entries; found %s\n' \
                 "$normalized_entries" >&2
             exit 1
         }

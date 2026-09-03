@@ -1,0 +1,98 @@
+{
+  "id": "crm.library.explore",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Search and inspect the CRM case library",
+  "summary": "List cases, search their current text lexically, or inspect an exact immutable current or historical revision with stage, summary, advisory, and its source-update correlation visible.",
+  "use_when": [
+    "Existing employment-oriented cases should be found before starting or updating work.",
+    "The current state or one exact historical revision of a known case should be inspected.",
+    "A case's immutable revision lineage and evidence boundary should be reviewed."
+  ],
+  "do_not_use_when": [
+    "New information should be recorded or hidden steward work resumed or retried.",
+    "The caller needs a semantic people search, live source refresh, contact recommendation guarantee, or proof of an external interaction.",
+    "A case advisory should be used to block an otherwise valid operation."
+  ],
+  "outcome": "A deterministic bounded list or lexical search over current case heads, or one exact case revision or complete revision history whose CRM claims, advisory, source-update correlation, and evidence limits remain explicit.",
+  "effects": [
+    "Case list, show, history, and search make no CRM domain mutation and invoke no model, Nucleus job, source, browser, network, or hidden worker; database opening may enforce private file/sidecar permissions and WAL mode.",
+    "Human or JSON output may disclose private case Markdown, summaries, stages, advisories, and stable source-update references to the caller or redirected output."
+  ],
+  "authority": [
+    "CRM owns stored case and revision identity, immutable order, stage/advisory state, deterministic read projection, and source-update correlation.",
+    "The caller and cited sources retain authority for external facts; the reader owns whether the stored material is relevant and whether a real-world action is appropriate."
+  ],
+  "success": [
+    "The selected database is an initialized supported schema-one CRM database and the bounded read completes without integrity or identity error.",
+    "An omitted case revision selects the current head, while an explicit positive revision selects exactly that immutable snapshot.",
+    "Search performs one case-insensitive literal-substring match over title, current Markdown, and current advisory, orders by most-recently updated case then identity, and never claims semantic confidence or source freshness.",
+    "Every returned revision includes its stage, summary and nullable advisory; every non-null advisory is conspicuous on human and machine consumption surfaces."
+  ],
+  "failure_and_recovery": [
+    "Run crm doctor against the same database when schema, integrity, permission, or Nucleus/toolset readiness is uncertain.",
+    "A no-match result means only that the selected stored current heads did not match the lexical query; it does not establish that no useful person, company, role, or relationship exists.",
+    "Resolve mutable external facts through their source before relying on them for real-world action."
+  ],
+  "privacy": [
+    "CRM state and output may expose private contact, employment, interaction, source, summary, advisory, and agent-correlation data.",
+    "The CLI performs no network or model call for reads, but redirected output becomes caller-owned retained data."
+  ],
+  "interfaces": [
+    {"label": "List current cases", "invocation": "/Users/joey/.local/bin/crm case list [--limit N]"},
+    {"label": "Show a case revision", "invocation": "/Users/joey/.local/bin/crm case show CASE_ID [--revision N]"},
+    {"label": "Show revision history", "invocation": "/Users/joey/.local/bin/crm case history CASE_ID"},
+    {"label": "Search current cases", "invocation": "/Users/joey/.local/bin/crm search QUERY [--limit N]"},
+    {"label": "Select another database", "invocation": "/Users/joey/.local/bin/crm --database PATH case list"}
+  ],
+  "does_not_authorize": [
+    "Treating a stage or generated summary as permission, a guarantee, or independently verified real-world truth.",
+    "Hiding a non-null advisory, fetching a cited source, contacting a person, or changing case state.",
+    "Treating lexical rank as semantic similarity, contact worthiness, or complete coverage."
+  ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "A local reader may list or lexically search current case heads and inspect one exact current or historical case revision and its lineage."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The selected path is an initialized supported schema-one CRM database and the caller supplies a valid bounded read, query, and optional positive limit or revision."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are an optional positive result limit, a lexical query, or one case identity with an optional exact positive revision."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Outputs are deterministic current-head summaries or exact immutable revisions carrying stage, summary, nullable advisory, and stored source-update correlation in human text or the documented ok/data JSON envelope."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Search is case-insensitive literal-substring matching over stored title, current Markdown, and current advisory; revisions are complete CRM snapshots, source-update IDs are stored correlations, and advisories are visible warnings rather than gates."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Case ID identifies one lineage, a positive case-local revision selects one immutable complete snapshot, and lexical ordering is retrieval behavior rather than a confidence score."},
+      {"status": "not_applicable", "statement": "The read capability defines no pricing, probability, contact score, or physical unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "An exact revision read is complete for that committed snapshot; history covers the retained lineage; list and search cover only current heads in the selected database up to their explicit limits."},
+      {"status": "unsupported", "statement": "CRM does not refresh sources or prove that a stored person, title, role, posting, interaction, or outcome remains current externally."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported read boundary is the local CRM CLI against an explicitly selected private database; direct SQLite and cited-source access are not consumer interfaces."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Reads make no case-domain mutation, historical revisions are immutable, omitted revision selects the committed current head, and unchanged database state yields deterministic projections; opening may tighten database/sidecar permissions and select WAL mode."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Search is bounded lexical retrieval over retained current heads and does not invoke a model, source adapter, network, browser, Nucleus, or hidden worker; version 0.1 has no raw-delivery, request, or receipt export command."},
+      {"status": "unspecified", "statement": "No maximum database size, wall-clock latency, semantic recall, or source coverage service level is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract version 1 reads database schema one and emits the documented ok/data or ok/error JSON envelope while preserving public case and revision identities."},
+      {"status": "unspecified", "statement": "No future schema migration window or cross-release search-ranking stability is promised."}
+    ],
+    "reliances": [
+      {"status": "not_applicable", "statement": "Library reads invoke no Nucleus job, model, network service, Chancery runtime, or cited source system."}
+    ]
+  },
+  "manual": "manuals/library-explore.md"
+}

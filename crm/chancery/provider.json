@@ -1,0 +1,43 @@
+{
+  "schema_version": 3,
+  "provider": {
+    "id": "crm",
+    "name": "CRM",
+    "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "CRM owns private case identity, exact retained intake, immutable case revisions, stage and advisory state, queued update and retry lifecycle, requester correlation and replay-safe tool receipts, deterministic library reads, and its product packaging."
+    ],
+    "not_authoritative_for": [
+      "Callers and cited sources remain authoritative for supplied real-world facts, while Nucleus owns agent execution; CRM does not authorize contact, send a message, or independently prove an external connection or employment outcome."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public CRM CLI outcomes for case maintenance, library exploration, installation and steward operation, and product development in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help and version display, direct SQLite access, the hidden worker entry point, automatic source collection, contact delivery, direct model execution, and current runtime readiness are outside this inventory claim."
+      ]
+    },
+    "shared_access_and_trust": [
+      "CRM surfaces are local-user CLI and explicitly selected local-database operations; only hidden update work uses the typed Nucleus boundary and immutable crm/case-steward/1 toolset."
+    ],
+    "shared_privacy_and_retention": [
+      "CRM and correlated Nucleus state may retain private case, source, prompt, advisory, and tool-result text; release bundles and provider contracts contain no user case data."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release identifies these exact bundle bytes; CLI JSON contract, database schema, requester toolset, and Nucleus protocol remain separate compatibility axes."
+    ],
+    "operational_limits": [
+      "CRM has no daemon, scheduler, source crawler, contact sender, filesystem content store, or direct-Codex fallback; per-entry bounds govern each explicit operation."
+    ]
+  },
+  "entries": [
+    "entries/case-maintain.json",
+    "entries/library-explore.json",
+    "entries/steward-operate.json",
+    "entries/develop-change.json"
+  ]
+}

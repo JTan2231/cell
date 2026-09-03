@@ -4,8 +4,8 @@ Cell is the source monorepo for the local Nucleus ecosystem. It coordinates
 changes across the shared execution substrate and its first-party requesters
 without combining their runtime or domain authorities.
 
-The repository contains thirteen independently versioned release units in
-twelve product directories:
+The repository contains fourteen independently versioned release units in
+thirteen product directories:
 
 - `nucleus/`: the Nucleus CLI, daemon, typed client, portable contract, store,
   and exact Codex adapter;
@@ -25,13 +25,15 @@ twelve product directories:
   constrained decision-reconciliation requester;
 - `geste/`: the manual episode casebook and precedent-reporting CLI;
 - `pratica/`: the durable system-integration terms negotiation and agreement
-  CLI; and
+  CLI;
 - `clockwork/`: the current-user broker for immutable scheduled non-agent
-  activations and their runtime history.
+  activations and their runtime history; and
+- `crm/`: the local evidence-grounded employment-relationship case library and
+  bounded case-steward requester.
 
 Nucleus owns agent admission, execution, authentication, job history, and the
 durable requester-tool mailbox. Annals, Todo, Weaver, Decisions, Semantics,
-Geste, and Pratica continue to own their domain state and success rules.
+Geste, Pratica, and CRM continue to own their domain state and success rules.
 Clockwork owns stable schedule bindings, direct-child supervision, and runtime
 history, while each scheduled product retains its work, retries, secrets,
 logs, and domain-success rule.
@@ -66,29 +68,30 @@ selected product gate or the full ecosystem gate:
 ./ci.sh geste
 ./ci.sh pratica
 ./ci.sh clockwork
+./ci.sh crm
 ```
 
-Running `./ci.sh` without selectors runs the twelve product gates sequentially.
-A shared Nucleus contract or client change must pass all twelve gates. A purely
-domain-local change may use its product gate while iterating, but the complete
-root gate is the final repository check. A complete run also assembles all
-thirteen source provider bundles and requires Chancery doctor and list to accept
-their combined dependency graph. It requires every provider to publish a
-schema-3 promise scope and every one of the 47 indexed entries to publish a
-complete normalized promise without undeclared facets. It also proves the
-Decisions lifecycle pilot resolves as `resolved_not_ready` while retaining its
-explicit unspecified guarantees, and that the Annals Usage stress pilot
+Running `./ci.sh` without selectors runs the thirteen product gates
+sequentially. A shared Nucleus contract or client change must pass all thirteen
+gates. A purely domain-local change may use its product gate while iterating,
+but the complete root gate is the final repository check. A complete run also
+assembles all fourteen source provider bundles and requires Chancery doctor and
+list to accept their combined dependency graph. It requires every provider to
+publish a schema-3 promise scope and every one of the 51 indexed entries to
+publish a complete normalized promise without undeclared facets. It also proves
+the Decisions lifecycle pilot resolves as `resolved_not_ready` while retaining
+its explicit unspecified guarantees, and that the Annals Usage stress pilot
 reports its known uncontracted upstream reliances rather than hiding them.
 
 ## Versions and releases
 
 Nucleus's six crates share one Nucleus version. Annals, Annals Usage, Todo,
 Chancery, Weaver, Email, Conversations, Decisions, Semantics, Geste, Pratica,
-and Clockwork keep independent versions and release scripts. Source colocation does not imply
-lockstep release or deployment, a shared state directory, or a shared database.
-New releases use
+Clockwork, and CRM keep independent versions and release scripts. Source
+colocation does not imply lockstep release or deployment, a shared state
+directory, or a shared database. New releases use
 product-qualified tags (`nucleus-v*`, `annals-v*`, `annals-usage-v*`,
 `todo-v*`, `chancery-v*`, `weaver-v*`, `email-v*`, `conversations-v*`,
-`decisions-v*`, `semantics-v*`, `geste-v*`, `pratica-v*`, and
-`clockwork-v*`). Pre-Cell release tags remain available in the original product
-repositories.
+`decisions-v*`, `semantics-v*`, `geste-v*`, `pratica-v*`, `clockwork-v*`, and
+`crm-v*`). Pre-Cell release tags remain available in the
+original product repositories.
