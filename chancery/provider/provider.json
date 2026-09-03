@@ -3,7 +3,7 @@
   "provider": {
     "id": "chancery",
     "name": "Chancery",
-    "release": "0.2.0"
+    "release": "0.3.0"
   },
   "promise_scope": {
     "authoritative_for": [
