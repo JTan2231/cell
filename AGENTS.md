@@ -18,6 +18,11 @@ Semantics-Project: cell
   its separately documented interface. Chancery is read-only discovery: catalog
   presence does not establish live readiness, authorize an effect, execute the
   capability, or determine domain success.
+- After selecting an exact entry, run `chancery resolve <ENTRY_ID>` when the
+  request concerns the system's complete outward promise or a design reliance.
+  Preserve unsupported, unspecified, not-applicable, undeclared, dependency,
+  and readiness outcomes as reported; never fill a gap from schemas or
+  implementation code.
 - Before changing the public contract, harness compatibility, persistent state,
   authentication or service lifecycle, deployment, or a requester integration,
   run `/Users/joey/.local/bin/nucleus manual`. If it is unavailable, read
