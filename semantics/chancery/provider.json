@@ -3,7 +3,7 @@
   "provider": {
     "id": "semantics",
     "name": "Semantics",
-    "release": "0.2.0"
+    "release": "0.2.1"
   },
   "promise_scope": {
     "authoritative_for": [
