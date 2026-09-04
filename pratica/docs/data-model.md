@@ -1,6 +1,6 @@
 # Data model
 
-Pratica schema version 1 stores protocol mechanics in private SQLite. The
+Pratica schema version 2 stores protocol mechanics in private SQLite. The
 schema deliberately does not model clauses, headings, obligations, resources,
 entities, fields, or other product-contract semantics. Contract terms are one
 bounded UTF-8 Markdown blob plus an exact digest.
@@ -28,11 +28,30 @@ bounded UTF-8 Markdown blob plus an exact digest.
   immutable advisory Markdown result.
 - `conformance_reviews` retain one sealed agreement, one frozen candidate basis,
   attempt identity, and immutable review result.
+- `ingress_receipts` immutably bind one caller request key and operation to a
+  canonical request plus the durable result identities returned by that
+  admission.
 - append-only events retain ordered protocol history. Current status and reports
   are projections over these durable records.
 
 Concrete table names may combine closely related records, but the invariants
-below are part of schema-one compatibility.
+below are part of schema-two compatibility.
+
+## Input transport and durable meaning
+
+Top-level Markdown and manifest bytes may arrive from a borrowed file or exact
+standard input. File ownership never transfers to Pratica, and no successful
+or failed command deletes or changes an input or referenced source. A stdin
+manifest has an explicit absolute source root; its relative source locators are
+resolved against that root before admission.
+
+Pratica retains exact accepted Markdown, charter, and frozen source bytes. It
+does not retain raw TOML, its whitespace, comments, or the manifest transport
+path as contract meaning. Instead it retains parsed descriptor fields,
+relative source locators, the resolved origins needed for later explicit
+verification, exact snapshots, and their digests. The same normalized manifest
+and source snapshot therefore has the same descriptor identity regardless of
+TOML formatting.
 
 ## Terms identity
 
@@ -95,15 +114,50 @@ Nucleus terminal completion without the required committed tool result is a
 failed Pratica attempt. Conversely, a committed domain event remains success if
 the harness later fails while receiving or finishing after its result.
 
+## Caller ingress idempotency
+
+`integration open`, `track open`, `negotiation propose`, `agreement amend`, and
+`conformance review` optionally accept a caller-generated request key. The key
+is 1-256 visible non-space ASCII bytes and is unique across all operations in
+one database. Each operation constructs a canonical request identity from its
+semantic arguments, selected durable bases, and exact content digests and byte
+counts. Raw TOML formatting is not part of that identity.
+
+When no receipt exists, Pratica commits the new domain rows and receipt in one
+transaction. The receipt retains canonical request and result JSON plus exact
+digests. The same key and canonical request returns the originally recorded
+IDs; any aggregate returned with those IDs is a fresh current-state projection,
+not a byte-for-byte historical response. The same key with another operation or
+request fails without mutation. Commands that read one of these documents from
+standard input require a key. File-backed calls may omit it and retain their
+prior behavior.
+
+Conformance has a deliberately split lifecycle: one transaction admits the
+candidate frozen basis and its ingress receipt, after which normal attempt
+recovery creates, resumes, or reports the associated Nucleus work. Replaying
+the request cannot create a second candidate basis even when model execution
+has not yet reached a domain result.
+
 ## Initialization, integrity, and migration
 
-`init` is the only command that creates schema one. New database bytes are mode
-0600 under a mode-0700 state directory before SQLite opens them. Ordinary
-commands refuse absent, foreign, incomplete, newer, or older schemas and never
-migrate implicitly.
+`init` is the only command that creates a new database, and it creates schema
+two. New database bytes are mode 0600 under a mode-0700 state directory before
+SQLite opens them. Ordinary commands refuse absent, foreign, incomplete, newer,
+or older schemas and never migrate implicitly.
+
+`migrate --backup ABSOLUTE_PATH` is the sole schema-one upgrade. It accepts no
+other source version, requires all Pratica processes to be quiescent and every
+attempt inactive, and uses SQLite's backup API to create an absent mode-0600
+schema-one database inside an existing private directory before its immediate
+schema transaction adds immutable ingress receipts and advances both schema
+markers. Invoking it against current schema two is a no-op that does not inspect
+or create the backup path.
 
 Doctor checks the exact schema object set, `PRAGMA user_version`, foreign keys,
 SQLite integrity, event/order seals, stored content digests, agreement
-requirements, attempt correlations, and private permissions. Any future schema
-change requires quiescence, a retained backup including WAL/SHM state, an
-explicit migration, an old-state fixture, and database-aware rollback.
+requirements, attempt correlations, ingress request/result digests and JSON,
+and private permissions. Rollback from schema two requires the retained
+schema-one backup and matching old binary; replacing only the program is not a
+database rollback. Any future schema change likewise requires quiescence, a
+retained consistent backup, an explicit migration, an old-state fixture, and
+database-aware rollback.

@@ -5,17 +5,30 @@ event order, assent, seals, attempts, and reviews. Use its read commands rather
 than inspecting SQLite directly.
 
 ```sh
+/Users/joey/.local/bin/pratica steward list
+/Users/joey/.local/bin/pratica steward show SCOPE --version VERSION
+/Users/joey/.local/bin/pratica integration list
 /Users/joey/.local/bin/pratica integration status INTEGRATION
 /Users/joey/.local/bin/pratica integration report INTEGRATION
 /Users/joey/.local/bin/pratica negotiation show NEGOTIATION
 /Users/joey/.local/bin/pratica negotiation history NEGOTIATION
 /Users/joey/.local/bin/pratica attempt show ATTEMPT
+/Users/joey/.local/bin/pratica agreement list
 /Users/joey/.local/bin/pratica agreement show AGREEMENT
 /Users/joey/.local/bin/pratica conformance show REVIEW
 ```
 
 Treat all identifiers as opaque. The current textual prefix is a readability
 aid, not a parsing or compatibility contract.
+
+Use `integration list` and `agreement list` to recover identities without
+printing retained context or terms. They are complete newest-first body-free
+projections. Steward list/show and registration output likewise omit charter
+and source bodies and canonical source-origin paths; attempt inspection omits
+canonical source origins. These views can still disclose sensitive metadata,
+including parties, titles, relative locators, digests, byte counts, and
+timestamps. Use detail, report, review, or export commands only when those
+documented bodies are needed.
 
 ## Read the distinctions
 
@@ -56,7 +69,7 @@ overwrite an existing file.
 
 ## Failures and privacy
 
-Run doctor against the same selected database when reads report schema,
+Run doctor against the same selected schema-two database when reads report schema,
 integrity, digest, seal, or permission errors. Resolve current target behavior
 through the target system's public contract; never repair history through raw
 SQL.

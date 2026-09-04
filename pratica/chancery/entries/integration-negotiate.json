@@ -1,6 +1,6 @@
 {
   "id": "pratica.integration.negotiate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -18,7 +18,9 @@
   ],
   "outcome": "One or more immutable bilateral agreements in which every fixed party assents to the same exact current Markdown offer on the recorded steward basis, optionally accompanied by a separate immutable composition or conformance review.",
   "effects": [
-    "Writes private Pratica SQLite integrations, tracks, negotiations, offers, assents, agreements, source snapshots, attempts, and reviews.",
+    "Writes private Pratica SQLite integrations, tracks, negotiations, offers, assents, agreements, normalized source snapshots, caller-ingress receipts, attempts, and reviews.",
+    "Pratica borrows file inputs and referenced sources without deleting or changing them; accepted state no longer depends on retaining a caller-created manifest or terms scratch file.",
+    "For receipt-backed commands, the caller key and canonical request commit atomically with the created domain identities; conformance atomically admits its candidate basis and receipt before the independently resumable attempt.",
     "Steward response, composition review, and conformance review submit one-attempt Nucleus jobs using Codex and can consume account allowance.",
     "Managed source tools disclose only the frozen bounded source snapshots selected for that attempt to Nucleus and Codex.",
     "No command changes target-system source, contracts, database, service, deployment, release, or authorization state."
@@ -32,27 +34,31 @@
     "Each agreement seals only while its negotiation head, complete required-party assent set, and exact steward basis remain current.",
     "Every accepted model-assisted outcome is a validated immutable Pratica tool call committed to Pratica state; Nucleus completion or final prose alone is insufficient.",
     "A composition review names the exact agreement set and remains advisory; a conformance review names one sealed agreement and one frozen candidate basis and remains evidence-only.",
-    "The integration report states selected coverage and unresolved findings without claiming exhaustive system discovery or implementation proof."
+    "The integration report states selected coverage and unresolved findings without claiming exhaustive system discovery or implementation proof.",
+    "Exact replay of a caller request key returns its original result identities, while changed or cross-operation reuse writes nothing."
   ],
   "failure_and_recovery": [
     "A stale offer or basis rejects the proposed transition without a partial write; inspect current state and open a deliberate successor offer or attempt.",
     "Ambiguous Nucleus admission repeats only the exact persisted request under the same job ID; a new attempt requires explicit retry and a new job identity.",
     "A committed Pratica domain result remains authoritative if the harness later fails; do not repeat it from terminal runtime state.",
-    "A Nucleus restart makes an unfinished Codex attempt lost and does not authorize automatic retry or direct-Codex fallback."
+    "A Nucleus restart makes an unfinished Codex attempt lost and does not authorize automatic retry or direct-Codex fallback.",
+    "Standard-input documents for receipt-backed commands require a valid caller request key; standard-input manifests additionally require an absolute source root, and conflicting key reuse fails without partial state."
   ],
   "privacy": [
     "Terms, source snapshots, prompts, citations, reviews, and exports can contain private implementation and product-design material in both Pratica and Nucleus state.",
-    "Use private input paths and isolated state where appropriate; release bundles, fixtures, Chancery, and logs must contain no real negotiated contract or source body."
+    "Use private input paths, standard-input transport, and isolated state where appropriate; Pratica retains normalized manifest fields and exact accepted contract and source bodies but not raw TOML formatting or comments.",
+    "Registration projections omit charter and source bodies and canonical source-origin paths, but their stable identities, relative locators, digests, byte counts, and timestamps can still be sensitive; release bundles, fixtures, Chancery, and logs must contain no real negotiated contract or source body."
   ],
   "interfaces": [
-    {"label": "Open integration", "invocation": "/Users/joey/.local/bin/pratica integration open --entrant ENTRANT --title TITLE [--context FILE]"},
-    {"label": "Register steward", "invocation": "/Users/joey/.local/bin/pratica steward register MANIFEST"},
-    {"label": "Open bilateral track", "invocation": "/Users/joey/.local/bin/pratica track open INTEGRATION --steward SCOPE [--steward-version VERSION] --terms FILE"},
-    {"label": "Submit complete offer", "invocation": "/Users/joey/.local/bin/pratica negotiation propose NEGOTIATION --base OFFER --terms FILE"},
+    {"label": "Open integration", "invocation": "/Users/joey/.local/bin/pratica integration open --entrant ENTRANT --title TITLE [--context FILE_OR_DASH] [--request-key KEY]"},
+    {"label": "Register steward", "invocation": "/Users/joey/.local/bin/pratica steward register MANIFEST_OR_DASH [--source-root ABSOLUTE_DIRECTORY]"},
+    {"label": "Open bilateral track", "invocation": "/Users/joey/.local/bin/pratica track open INTEGRATION --steward SCOPE [--steward-version VERSION] --terms FILE_OR_DASH [--request-key KEY]"},
+    {"label": "Submit complete offer", "invocation": "/Users/joey/.local/bin/pratica negotiation propose NEGOTIATION --base OFFER --terms FILE_OR_DASH [--request-key KEY]"},
     {"label": "Assent unchanged offer", "invocation": "/Users/joey/.local/bin/pratica negotiation assent NEGOTIATION --offer OFFER"},
     {"label": "Obtain steward response", "invocation": "/Users/joey/.local/bin/pratica steward respond NEGOTIATION"},
     {"label": "Review integration composition", "invocation": "/Users/joey/.local/bin/pratica integration review INTEGRATION"},
-    {"label": "Review implementation conformance", "invocation": "/Users/joey/.local/bin/pratica conformance review AGREEMENT --candidate-basis MANIFEST"}
+    {"label": "Amend agreement", "invocation": "/Users/joey/.local/bin/pratica agreement amend AGREEMENT --terms FILE_OR_DASH [--request-key KEY]"},
+    {"label": "Review implementation conformance", "invocation": "/Users/joey/.local/bin/pratica conformance review AGREEMENT --candidate-basis MANIFEST_OR_DASH [--source-root ABSOLUTE_DIRECTORY] [--request-key KEY]"}
   ],
   "dependencies": [
     {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
@@ -71,7 +77,8 @@
       {"status": "unsupported", "statement": "A merely exploratory design walkthrough or incomplete expectation set is not ready for this capability."}
     ],
     "inputs": [
-      {"status": "declared", "statement": "Inputs are entrant and integration identity, complete Markdown offer files, versioned steward or candidate-basis manifests, explicit base offer IDs, and bounded frozen UTF-8 source catalogs."}
+      {"status": "declared", "statement": "Inputs are entrant and integration identity, complete Markdown documents from a borrowed regular file or exact standard input, normalized versioned steward or candidate-basis manifests, explicit base offer IDs, and bounded frozen UTF-8 source catalogs."},
+      {"status": "declared", "statement": "A standard-input manifest requires an absolute source root for relative locators; integration open, track open, negotiation propose, agreement amend, and conformance review accept a global 1-256-character visible-ASCII request key and require it when their document is standard input."}
     ],
     "outputs": [
       {"status": "declared", "statement": "Outputs are immutable offers, party assents, sealed bilateral agreements on exact steward bases, and separately immutable advisory composition or evidence-only conformance reviews."}
@@ -88,17 +95,18 @@
       {"status": "unsupported", "statement": "Pratica does not automatically discover every concerned system or guarantee that a historical agreement remains applicable after its basis changes."}
     ],
     "access": [
-      {"status": "declared", "statement": "Protocol writes use the local Pratica CLI and private database; model attempts receive only explicitly selected frozen sources through closed immutable managed tools with workspace none, no shell, and no web."}
+      {"status": "declared", "statement": "Protocol writes use the local Pratica CLI, selected borrowed files or standard input, and private database; Pratica never deletes input or referenced files, and model attempts receive only explicitly selected frozen sources through closed immutable managed tools with workspace none, no shell, and no web."}
     ],
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "Offers and seals are immutable, stale offer or basis transitions fail without partial state, assent follows exact current offer identity, and committed tool outcomes are idempotent under identical redelivery."},
-      {"status": "declared", "statement": "Ambiguous admission reuses the same persisted request and job ID; a new terminal retry requires explicit authority and a new attempt identity."}
+      {"status": "declared", "statement": "A request key is global within one database: the same key and canonical operation request replays the original IDs, while changed or cross-operation reuse conflicts; receipt and domain mutation are atomic."},
+      {"status": "declared", "statement": "Conformance receipt admission atomically freezes one candidate basis before its attempt is created or resumed; ambiguous Nucleus admission reuses the same persisted request and job ID, while a new terminal retry requires explicit authority and a new attempt identity."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "Each source file is at most 4 MiB, one attempt's catalog is at most 32 MiB, managed jobs have one attempt, and the product performs no target mutation, deployment, release, or automatic crawl."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 uses schema-one protocol state and the three immutable version-one toolset meanings; incompatible tool or state meaning requires a successor identity and retained historical decoding."}
+      {"status": "declared", "statement": "Capability contract version 2 uses schema-two protocol state with borrowed file or standard-input documents and durable caller-ingress receipts; the JSON envelope and three immutable toolset meanings remain version one, and incompatible tool or state meaning requires a successor identity and retained historical decoding."}
     ],
     "reliances": [
       {"status": "declared", "statement": "Steward, composition, and conformance model work uses Nucleus for admission, authentication, execution, and mailbox transport while Pratica retains protocol and domain-success authority.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"}

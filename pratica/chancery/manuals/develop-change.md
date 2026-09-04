@@ -55,6 +55,19 @@ Pratica commits validated tool outcomes idempotently and records durable
 receipts. A completed Nucleus job is not domain success; a committed domain
 result is not undone by later runtime failure. There is no direct runner.
 
+Schema two also records caller-ingress receipts for integration open, track
+open, negotiation propose, agreement amend, and conformance review. Preserve
+the global 1-256 visible-ASCII request-key identity, canonical-request conflict,
+same-request replay, and atomic receipt/domain-write guarantees. Conformance
+atomically admits its candidate basis and receipt before its independently
+resumable attempt.
+
+Top-level document arguments accept borrowed regular files or exact standard
+input. Never delete or change an input or referenced source. Stdin manifests
+require an absolute source root; receipt-backed commands require a request key
+when their document is stdin. Retain normalized manifest descriptors and exact
+accepted contract/source bodies, not raw TOML formatting or comments.
+
 ## Validation
 
 Use synthetic terms and sources and fake Nucleus transport. Cover successful
@@ -67,7 +80,11 @@ domain result after completion.
 For storage, cover exact Markdown bytes, identical-body distinct offers,
 complete replacement, stale-base exclusion, independent track currentness,
 assent/withdrawal, seal requirements, immutable history, amendments, basis
-classification, review immutability, and schema/privacy doctor checks.
+classification, review immutability, file non-deletion, stdin/source-root
+validation, exact replay and conflicting request keys, schema-one migration and
+rollback fixtures, and schema/privacy doctor checks. Registration/list/show and
+attempt source projections must omit bodies and canonical origins; integration
+and agreement lists remain newest-first and body-free.
 
 For packaging, cover exact tree and hashes, version mismatch, idempotency,
 foreign/tampered/traversal refusal, failed smoke rollback, and proof that

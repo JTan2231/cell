@@ -16,11 +16,15 @@ use crate::cli::{
 use crate::error::{AppError, AppResult, Context as _};
 use crate::model::{
     AgentAttemptView, BasisGuard, BasisKind, FrozenBasisView, NegotiationEventKind, NewFrozenBasis,
-    NewFrozenSource, NewStewardScope, OpaqueMarkdown, PartyRole, sha256_hex,
+    NewFrozenSource, NewStewardScope, OpaqueMarkdown, PartyRole, StewardScopeView, sha256_hex,
 };
 use crate::nucleus::{AgentRunOutcome, AgentRunner};
 use crate::source_catalog::FrozenSourceCatalog;
 use crate::store::Store;
+use crate::store::{
+    INGRESS_AGREEMENT_AMEND, INGRESS_CONFORMANCE_REVIEW, INGRESS_INTEGRATION_OPEN,
+    INGRESS_NEGOTIATION_PROPOSE, INGRESS_TRACK_OPEN, IngressRequest,
+};
 
 const MAX_FILE_BYTES: u64 = 1024 * 1024;
 
@@ -75,7 +79,6 @@ fn attempt_projection(store: &Store, attempt: &AgentAttemptView) -> AppResult<Va
                 "source_id": source.source_id,
                 "kind": source.kind,
                 "locator": source.locator,
-                "origin_path": source.origin_path,
                 "revision": source.revision,
                 "content_sha256": source.content_sha256,
                 "content_bytes": source.content.len(),
@@ -153,6 +156,10 @@ pub(crate) fn run(cli: &Cli) -> AppResult<CommandOutput> {
             let result = Store::init(&database)?;
             CommandOutput::serializable("initialized", &result)
         }
+        Command::Migrate(arguments) => {
+            let result = Store::migrate(&database, &arguments.backup)?;
+            CommandOutput::serializable("migrated", &result)
+        }
         Command::Doctor => {
             let storage = Store::doctor(&database)?;
             AgentRunner::for_current_user().doctor()?;
@@ -180,25 +187,37 @@ pub(crate) fn run(cli: &Cli) -> AppResult<CommandOutput> {
 
 fn steward_command(database: &Path, command: &StewardCommand) -> AppResult<CommandOutput> {
     match command {
-        StewardCommand::Register { manifest } => {
-            let catalog = FrozenSourceCatalog::load(manifest)?;
+        StewardCommand::Register {
+            manifest,
+            source_root,
+        } => {
+            let catalog = load_catalog(manifest, source_root.as_deref())?;
             let (scope, basis) = steward_inputs(&catalog)?;
             let mut store = Store::open_write(database)?;
             let (scope, basis) = store.register_steward(&scope, &basis)?;
             CommandOutput::value(json!({
                 "type": "steward_registered",
-                "scope": scope,
-                "basis": basis,
+                "value": steward_projection(&scope, &basis),
             }))
         }
         StewardCommand::List => {
             let store = Store::open_read(database)?;
-            CommandOutput::serializable("steward_list", &store.list_steward_scopes()?)
+            let scopes = store
+                .list_steward_scopes()?
+                .iter()
+                .map(steward_scope_summary)
+                .collect::<Vec<_>>();
+            CommandOutput::serializable("steward_list", &scopes)
         }
         StewardCommand::Show { scope, version } => {
             let store = Store::open_read(database)?;
             let version = select_scope_version(&store, scope, *version)?;
-            CommandOutput::serializable("steward_scope", &store.steward_scope(scope, version)?)
+            let scope = store.steward_scope(scope, version)?;
+            let basis = store.steward_basis(&scope.scope_id, scope.version)?;
+            CommandOutput::value(json!({
+                "type": "steward_scope",
+                "value": steward_projection(&scope, &basis),
+            }))
         }
         StewardCommand::Respond { negotiation } => {
             let mut store = Store::open_write(database)?;
@@ -217,10 +236,31 @@ fn integration_command(database: &Path, command: &IntegrationCommand) -> AppResu
                 .as_deref()
                 .map(read_markdown)
                 .transpose()?;
+            let ingress = build_ingress_request(
+                arguments.request_key.as_deref(),
+                arguments.context.as_deref().is_some_and(is_stdin_path),
+                INGRESS_INTEGRATION_OPEN,
+                &json!({
+                    "entrant_party": arguments.entrant,
+                    "title": arguments.title,
+                    "context": context.as_ref().map(|value| json!({
+                        "sha256": value.sha256(),
+                        "bytes": value.as_bytes().len(),
+                    })),
+                }),
+            )?;
             let mut store = Store::open_write(database)?;
-            let integration =
-                store.create_integration(&arguments.entrant, &arguments.title, context.as_ref())?;
+            let integration = store.create_integration_with_ingress(
+                &arguments.entrant,
+                &arguments.title,
+                context.as_ref(),
+                ingress.as_ref(),
+            )?;
             CommandOutput::serializable("integration_opened", &integration)
+        }
+        IntegrationCommand::List => {
+            let store = Store::open_read(database)?;
+            CommandOutput::serializable("integration_list", &store.list_integrations()?)
         }
         IntegrationCommand::Status(arguments) => {
             let store = Store::open_read(database)?;
@@ -255,11 +295,26 @@ fn track_command(database: &Path, command: &TrackCommand) -> AppResult<CommandOu
     match command {
         TrackCommand::Open(arguments) => {
             let terms = read_markdown(&arguments.terms)?;
+            let ingress = build_ingress_request(
+                arguments.request_key.as_deref(),
+                is_stdin_path(&arguments.terms),
+                INGRESS_TRACK_OPEN,
+                &json!({
+                    "integration_id": arguments.integration,
+                    "scope_id": arguments.steward,
+                    "selected_scope_version": arguments.steward_version,
+                    "terms_sha256": terms.sha256(),
+                    "terms_bytes": terms.as_bytes().len(),
+                }),
+            )?;
             let mut store = Store::open_write(database)?;
-            let version =
-                select_scope_version(&store, &arguments.steward, arguments.steward_version)?;
-            let (track, negotiation) =
-                store.open_track(&arguments.integration, &arguments.steward, version, &terms)?;
+            let (track, negotiation) = store.open_track_with_ingress(
+                &arguments.integration,
+                &arguments.steward,
+                arguments.steward_version,
+                &terms,
+                ingress.as_ref(),
+            )?;
             CommandOutput::value(json!({
                 "type": "track_opened",
                 "track": track,
@@ -290,12 +345,30 @@ fn negotiation_command(database: &Path, command: &NegotiationCommand) -> AppResu
             negotiation,
             base,
             terms,
+            request_key,
         } => {
+            let stdin_input = is_stdin_path(terms);
             let terms = read_markdown(terms)?;
+            let ingress = build_ingress_request(
+                request_key.as_deref(),
+                stdin_input,
+                INGRESS_NEGOTIATION_PROPOSE,
+                &json!({
+                    "negotiation_id": negotiation,
+                    "expected_head_id": base,
+                    "terms_sha256": terms.sha256(),
+                    "terms_bytes": terms.as_bytes().len(),
+                }),
+            )?;
             let mut store = Store::open_write(database)?;
             CommandOutput::serializable(
                 "entrant_proposal",
-                &store.propose_as_entrant(negotiation, base, &terms)?,
+                &store.propose_as_entrant_with_ingress(
+                    negotiation,
+                    base,
+                    &terms,
+                    ingress.as_ref(),
+                )?,
             )
         }
         NegotiationCommand::Assent { negotiation, offer } => {
@@ -346,6 +419,10 @@ fn attempt_command(database: &Path, command: &AttemptCommand) -> AppResult<Comma
 
 fn agreement_command(database: &Path, command: &AgreementCommand) -> AppResult<CommandOutput> {
     match command {
+        AgreementCommand::List => {
+            let store = Store::open_read(database)?;
+            CommandOutput::serializable("agreement_list", &store.list_agreements()?)
+        }
         AgreementCommand::Show(arguments) => {
             let store = Store::open_read(database)?;
             CommandOutput::serializable("agreement", &store.agreement(&arguments.id)?)
@@ -389,12 +466,27 @@ fn agreement_command(database: &Path, command: &AgreementCommand) -> AppResult<C
             )?;
             CommandOutput::serializable("agreement_verification", &agreement)
         }
-        AgreementCommand::Amend { agreement, terms } => {
+        AgreementCommand::Amend {
+            agreement,
+            terms,
+            request_key,
+        } => {
+            let stdin_input = is_stdin_path(terms);
             let terms = read_markdown(terms)?;
+            let ingress = build_ingress_request(
+                request_key.as_deref(),
+                stdin_input,
+                INGRESS_AGREEMENT_AMEND,
+                &json!({
+                    "agreement_id": agreement,
+                    "terms_sha256": terms.sha256(),
+                    "terms_bytes": terms.as_bytes().len(),
+                }),
+            )?;
             let mut store = Store::open_write(database)?;
             CommandOutput::serializable(
                 "agreement_amendment_opened",
-                &store.open_amendment(agreement, &terms)?,
+                &store.open_amendment_with_ingress(agreement, &terms, ingress.as_ref())?,
             )
         }
     }
@@ -405,11 +497,23 @@ fn conformance_command(database: &Path, command: &ConformanceCommand) -> AppResu
         ConformanceCommand::Review {
             agreement,
             candidate_basis,
+            source_root,
+            request_key,
         } => {
-            let candidate = FrozenSourceCatalog::load(candidate_basis)?;
+            let candidate = load_catalog(candidate_basis, source_root.as_deref())?;
+            let ingress = build_ingress_request(
+                request_key.as_deref(),
+                is_stdin_path(candidate_basis),
+                INGRESS_CONFORMANCE_REVIEW,
+                &catalog_ingress_identity(agreement, &candidate)?,
+            )?;
             let mut store = Store::open_write(database)?;
-            let result = AgentRunner::for_current_user()
-                .conformance_review(&mut store, agreement, &candidate)?;
+            let result = AgentRunner::for_current_user().conformance_review(
+                &mut store,
+                agreement,
+                &candidate,
+                ingress.as_ref(),
+            )?;
             agent_run_output("conformance_attempt", &store, &result)
         }
         ConformanceCommand::Show(arguments) => {
@@ -452,6 +556,9 @@ pub(crate) fn resolve_database(explicit: Option<&Path>) -> AppResult<PathBuf> {
 }
 
 fn read_markdown(path: &Path) -> AppResult<OpaqueMarkdown> {
+    if is_stdin_path(path) {
+        return read_markdown_from_reader(std::io::stdin().lock(), "standard input");
+    }
     let file = fs::OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW)
@@ -479,14 +586,147 @@ fn read_markdown(path: &Path) -> AppResult<OpaqueMarkdown> {
             format!("Markdown input exceeds {MAX_FILE_BYTES} bytes"),
         ));
     }
+    read_markdown_from_reader(file, &path.display().to_string())
+}
+
+fn read_markdown_from_reader(
+    reader: impl std::io::Read,
+    description: &str,
+) -> AppResult<OpaqueMarkdown> {
     let mut bytes = Vec::new();
-    file.take(MAX_FILE_BYTES + 1)
+    reader
+        .take(MAX_FILE_BYTES + 1)
         .read_to_end(&mut bytes)
         .context(
             "markdown_read_failed",
-            format!("unable to read {}", path.display()),
+            format!("unable to read {description}"),
         )?;
+    if bytes.len() > usize::try_from(MAX_FILE_BYTES).unwrap_or(usize::MAX) {
+        return Err(AppError::usage(
+            "markdown_too_large",
+            format!("Markdown input exceeds {MAX_FILE_BYTES} bytes"),
+        ));
+    }
     OpaqueMarkdown::new(bytes).map_err(Into::into)
+}
+
+fn is_stdin_path(path: &Path) -> bool {
+    path == Path::new("-")
+}
+
+fn load_catalog(manifest: &Path, source_root: Option<&Path>) -> AppResult<FrozenSourceCatalog> {
+    if is_stdin_path(manifest) {
+        let source_root = source_root.ok_or_else(|| {
+            AppError::usage(
+                "source_root_required",
+                "--source-root is required when a source manifest is read from standard input",
+            )
+        })?;
+        return FrozenSourceCatalog::load_from_reader(std::io::stdin().lock(), source_root)
+            .map_err(Into::into);
+    }
+    if source_root.is_some() {
+        return Err(AppError::usage(
+            "source_root_unexpected",
+            "--source-root is only valid when the source manifest path is -",
+        ));
+    }
+    FrozenSourceCatalog::load(manifest).map_err(Into::into)
+}
+
+fn build_ingress_request<T: Serialize>(
+    request_key: Option<&str>,
+    stdin_input: bool,
+    operation: &str,
+    identity: &T,
+) -> AppResult<Option<IngressRequest>> {
+    if stdin_input && request_key.is_none() {
+        return Err(AppError::usage(
+            "request_key_required",
+            "--request-key is required for a state-changing command that reads standard input",
+        ));
+    }
+    request_key
+        .map(|key| IngressRequest::new(key, operation, identity).map_err(Into::into))
+        .transpose()
+}
+
+fn catalog_ingress_identity(agreement_id: &str, catalog: &FrozenSourceCatalog) -> AppResult<Value> {
+    let sources = catalog
+        .sources
+        .iter()
+        .map(|source| {
+            let origin_path = source.origin_path.to_str().ok_or_else(|| {
+                AppError::usage(
+                    "source_path_not_utf8",
+                    "canonical source paths must be representable as UTF-8",
+                )
+            })?;
+            Ok(json!({
+                "id": source.id,
+                "kind": source.kind,
+                "locator": source.locator,
+                "origin_path": origin_path,
+                "revision": source.revision,
+                "content_sha256": source.content_sha256,
+                "content_bytes": source.content.len(),
+            }))
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+    Ok(json!({
+        "agreement_id": agreement_id,
+        "catalog_sha256": catalog.catalog_sha256,
+        "sources": sources,
+    }))
+}
+
+fn steward_scope_summary(scope: &StewardScopeView) -> Value {
+    json!({
+        "scope_id": scope.scope_id,
+        "version": scope.version,
+        "steward_party": scope.steward_party,
+        "title": scope.title,
+        "charter_sha256": scope.charter_sha256,
+        "charter_bytes": scope.charter_markdown.as_bytes().len(),
+        "descriptor_sha256": scope.descriptor_sha256,
+        "recorded_at": scope.recorded_at,
+    })
+}
+
+fn steward_projection(scope: &StewardScopeView, basis: &FrozenBasisView) -> Value {
+    let sources = basis
+        .sources
+        .iter()
+        .map(|source| {
+            json!({
+                "ordinal": source.ordinal,
+                "source_id": source.source_id,
+                "kind": source.kind,
+                "locator": source.locator,
+                "revision": source.revision,
+                "content_sha256": source.content_sha256,
+                "content_bytes": source.content.len(),
+                "observed_at": source.observed_at,
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "scope": steward_scope_summary(scope),
+        "basis": {
+            "basis_id": basis.basis_id,
+            "kind": basis.kind,
+            "label": basis.label,
+            "scope_id": basis.scope_id,
+            "scope_version": basis.scope_version,
+            "verifier_version": basis.verifier_version,
+            "manifest_sha256": basis.manifest_sha256,
+            "observed_at": basis.observed_at,
+            "recorded_at": basis.recorded_at,
+            "freshness": basis.freshness,
+            "source_count": sources.len(),
+            "sources": sources,
+        }
+    })
 }
 
 fn steward_inputs(catalog: &FrozenSourceCatalog) -> AppResult<(NewStewardScope, NewFrozenBasis)> {
@@ -804,10 +1044,14 @@ fn render_integration_report(status: &crate::model::IntegrationStatusView) -> St
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::io::Cursor;
     use std::os::unix::fs::{PermissionsExt as _, symlink};
     use std::path::Path;
 
-    use super::{read_markdown, resolve_database, write_absent_private_file};
+    use super::{
+        MAX_FILE_BYTES, read_markdown, read_markdown_from_reader, resolve_database,
+        write_absent_private_file,
+    };
 
     #[test]
     fn explicit_database_must_be_absolute() {
@@ -837,6 +1081,20 @@ mod tests {
         assert_eq!(fs::metadata(&output)?.permissions().mode() & 0o777, 0o600);
         assert!(write_absent_private_file(&output, b"replacement").is_err());
         assert_eq!(fs::read(&output)?, exact);
+        Ok(())
+    }
+
+    #[test]
+    fn standard_input_markdown_is_exact_and_bounded() -> Result<(), Box<dyn std::error::Error>> {
+        let exact = "# Terms\r\n\r\nUnicode: π  \r\n".as_bytes();
+        assert_eq!(
+            read_markdown_from_reader(Cursor::new(exact), "test standard input")?.as_bytes(),
+            exact
+        );
+        let oversized = vec![b'x'; usize::try_from(MAX_FILE_BYTES)? + 1];
+        let error = read_markdown_from_reader(Cursor::new(oversized), "test standard input")
+            .expect_err("oversized standard input");
+        assert_eq!(error.code(), "markdown_too_large");
         Ok(())
     }
 }

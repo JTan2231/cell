@@ -1,12 +1,13 @@
 {
   "id": "pratica.agreement.explore",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Inspect integration negotiations and agreements",
-  "summary": "Read Pratica integrations, steward scopes, negotiation history, attempts, exact offers, assent, immutable agreements, advisory reviews, reports, exports, and mechanical verification without invoking an agent or changing target systems.",
+  "summary": "Discover and read Pratica integrations, steward scopes, negotiation history, attempts, exact offers, assent, immutable agreements, advisory reviews, reports, exports, and mechanical verification without invoking an agent or changing target systems.",
   "use_when": [
+    "A caller needs body-free discovery of retained steward scopes, integrations, or agreements without a remembered identity.",
     "A caller needs the current state or complete immutable history of a Pratica integration or bilateral negotiation.",
     "An exact sealed agreement, its terms bytes, party assent, steward basis, predecessor, attempt, composition review, or conformance review should be inspected or exported.",
     "Stored agreement integrity should be mechanically verified before relying on its historical seal."
@@ -18,7 +19,8 @@
   ],
   "outcome": "A deterministic view or exact export of selected Pratica state with authored terms, protocol facts, source basis, reviews, and proof limitations visibly distinct.",
   "effects": [
-    "Show, history, status, report, attempt inspection, and review inspection read only the selected Pratica database.",
+    "Steward list/show, integration list, agreement list, history, status, report, attempt inspection, and review inspection read only the selected Pratica database.",
+    "Integration and agreement lists are newest-first body-free projections, and steward registration/list/show plus attempt source projections omit retained source bodies and canonical source-origin paths.",
     "Agreement verification re-reads only the already-recorded local source paths and appends one fresh, stale, or unknown basis-verification observation without changing the historical agreement seal.",
     "Agreement export writes exact stored Markdown bytes only when the caller explicitly selects an output path; standard output may disclose them to the terminal or redirection target.",
     "These commands invoke no Nucleus job, model, target-system adapter, Chancery runtime, network, or general source crawl."
@@ -29,7 +31,8 @@
     "The caller owns the decision that an agreement remains applicable to current work."
   ],
   "success": [
-    "The selected schema-one database passes the exact read and integrity requirements for the requested record.",
+    "The selected schema-two database passes the exact read and integrity requirements for the requested record.",
+    "Body-free discovery identifies retained records, digests, byte counts, basis metadata, relative source locators, and timestamps without disclosing exact terms, context, charter, source bodies, or canonical source-origin paths.",
     "Agreement output identifies the exact offer, digest, fixed parties, current-at-seal assent, steward basis, and any predecessor without rewriting terms.",
     "Reports distinguish bilateral agreement, integration coverage, advisory composition findings, candidate conformance evidence, and unproven current applicability."
   ],
@@ -39,14 +42,19 @@
     "An existing, symbolic, relative, or unsafe export target is refused rather than overwritten."
   ],
   "privacy": [
-    "Read output can disclose complete private terms, source labels, reviews, citations, and stable system identities.",
+    "Deliberate detail, report, review, and export output can disclose complete private terms, reviews, citations, and stable system identities.",
+    "Body-free discovery still exposes sensitive metadata, including stable identities, titles, parties, relative source locators, digests, byte counts, and timestamps.",
     "Redirected or exported output becomes caller-owned retained data even though Pratica makes no network call."
   ],
   "interfaces": [
+    {"label": "List steward scopes", "invocation": "/Users/joey/.local/bin/pratica steward list"},
+    {"label": "Show steward registration", "invocation": "/Users/joey/.local/bin/pratica steward show SCOPE [--version VERSION]"},
+    {"label": "List integrations", "invocation": "/Users/joey/.local/bin/pratica integration list"},
     {"label": "Integration status", "invocation": "/Users/joey/.local/bin/pratica integration status INTEGRATION"},
     {"label": "Integration report", "invocation": "/Users/joey/.local/bin/pratica integration report INTEGRATION"},
     {"label": "Negotiation history", "invocation": "/Users/joey/.local/bin/pratica negotiation history NEGOTIATION"},
     {"label": "Show agreement", "invocation": "/Users/joey/.local/bin/pratica agreement show AGREEMENT"},
+    {"label": "List agreements", "invocation": "/Users/joey/.local/bin/pratica agreement list"},
     {"label": "Export exact terms", "invocation": "/Users/joey/.local/bin/pratica agreement export AGREEMENT [--output FILE]"},
     {"label": "Verify stored seal", "invocation": "/Users/joey/.local/bin/pratica agreement verify AGREEMENT"},
     {"label": "Show attempt", "invocation": "/Users/joey/.local/bin/pratica attempt show ATTEMPT"},
@@ -62,27 +70,27 @@
       {"status": "declared", "statement": "A local caller may inspect current or historical Pratica protocol state, export exact sealed terms, and mechanically recheck a recorded agreement basis."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The selected private schema-one database and requested integration, negotiation, agreement, attempt, or review identity exist; export selects a new safe absolute output path."}
+      {"status": "declared", "statement": "The selected private schema-two database exists and any requested integration, negotiation, agreement, attempt, or review identity exists; export selects a new safe absolute output path."}
     ],
     "inputs": [
       {"status": "declared", "statement": "Inputs are exact Pratica record IDs, an optional explicit output path, and for verification the already-recorded bounded local source locators."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Outputs are deterministic status, history, report, attempt, agreement, or review views; export writes exact stored Markdown; verify appends one fresh, stale, or unknown observation."}
+      {"status": "declared", "statement": "Outputs are body-free discovery projections or deterministic status, history, report, attempt, agreement, and review views; export writes exact stored Markdown; verify appends one fresh, stale, or unknown observation."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Agreement output separates exact terms, current-at-seal assent, steward basis, predecessor, coverage, advisory review, candidate evidence, and unproven current applicability."}
+      {"status": "declared", "statement": "List and registration projections intentionally omit bodies and canonical source origins; deliberate agreement output separates exact terms, current-at-seal assent, steward basis, predecessor, coverage, advisory review, candidate evidence, and unproven current applicability."}
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "Each protocol ID names its exact stored record, offer digest identifies exact Markdown bytes, and basis digests identify frozen source content rather than current target-system meaning."},
       {"status": "not_applicable", "statement": "Inspection defines no pricing or product-domain measurement unit."}
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "History and reports are complete for the selected committed Pratica records; verification rereads only recorded local source paths at invocation and records unknown where current comparison cannot be established."},
+      {"status": "declared", "statement": "Lists are complete newest-first projections of retained integrations or agreements but omit bodies by contract; history and reports are complete for the selected committed records; verification rereads only recorded local source paths at invocation and records unknown where current comparison cannot be established."},
       {"status": "unsupported", "statement": "Inspection does not prove current target behavior, implementation conformance, exhaustive integration coverage, or continuing agreement applicability."}
     ],
     "access": [
-      {"status": "declared", "statement": "The supported boundary is the local Pratica CLI and selected private database; explicit export transfers exact terms to a caller-owned new file, while no network or target adapter is used."}
+      {"status": "declared", "statement": "The supported boundary is the local Pratica CLI and selected private database; body-free discovery does not export retained bodies, while explicit export transfers exact terms to a caller-owned new file and no network or target adapter is used."}
     ],
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "Ordinary reads do not mutate protocol state, verify appends a new observation without changing the historical seal, and export refuses overwrite, symbolic, relative, or unsafe targets."}
@@ -92,7 +100,7 @@
       {"status": "unspecified", "statement": "No wall-clock read or basis-verification latency service-level objective is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 reads schema-one Pratica protocol records and preserves exact historical offer and agreement bytes; provider release remains separate."},
+      {"status": "declared", "statement": "Capability contract version 2 reads schema-two Pratica protocol records, adds body-free integration and agreement discovery plus redacted steward and attempt source projections, and preserves exact historical offer and agreement bytes; the JSON envelope remains version one and provider release remains separate."},
       {"status": "unspecified", "statement": "No future read-format deprecation or migration window is promised here."}
     ],
     "reliances": [

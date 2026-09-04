@@ -27,22 +27,22 @@
   ],
   "success": [
     "Architecture, CLI, data model, installation, Nucleus operator facts, code, tests, and Chancery contracts agree on every affected behavior.",
-    "Tests preserve exact Markdown bytes, distinct offer identity, stale-base exclusion, assent staleness, immutable seals, basis guards, source bounds, tool-call idempotency, and runtime/domain-success separation as affected.",
+    "Tests preserve exact Markdown bytes, distinct offer identity, stale-base exclusion, assent staleness, immutable seals, basis guards, source bounds, borrowed-input non-deletion, caller-ingress and tool-call idempotency, redacted discovery, and runtime/domain-success separation as affected.",
     "Packaging retains exact content identity, selector ownership, foreign-state refusal, database non-interference, and rollback.",
     "pratica/ci.sh completes green offline with synthetic fixtures."
   ],
   "failure_and_recovery": [
     "Do not weaken validation, interpret contract prose in the database, resurrect stale assent by digest, rewrite sealed history, or infer implementation success from a review.",
-    "Persistent change requires an explicit migration, old-state fixture, quiescent backup, and database-aware rollback.",
+    "Persistent change requires an explicit migration, old-state fixture, quiescent private backup, no active attempt, and database-aware rollback.",
     "Immutable tool meaning changes require new schema and toolset identities with retained historical decoding."
   ],
   "privacy": [
     "Fixtures are synthetic and contain no real CRM terms, conversation body, target source, credentials, private paths, prompts, tool payloads, or negotiated state.",
-    "Diagnostics and packaging tests must remain body-free and release bundles must contain no Pratica database."
+    "Diagnostics, registration/list/show discovery, integration/agreement lists, and attempt source projections must retain their documented redaction boundaries, and release bundles must contain no Pratica database."
   ],
   "dependencies": [
-    {"id": "pratica.integration.negotiate", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "pratica.agreement.explore", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "pratica.integration.negotiate", "min_contract": 2, "max_contract_exclusive": 3},
+    {"id": "pratica.agreement.explore", "min_contract": 2, "max_contract_exclusive": 3},
     {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2},
     {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
   ],
@@ -57,6 +57,7 @@
   ],
   "checkpoints": [
     "Terms remain exact opaque Markdown and offers remain complete immutable snapshots.",
+    "Borrowed inputs and referenced sources are never deleted, raw TOML transport is not retained as meaning, and caller request receipts commit atomically with their domain identities.",
     "pratica/steward-response/1, pratica/composition-review/1, and pratica/conformance-review/1 retain exact immutable meanings or receive successor identities.",
     "Model jobs retain workspace none, no shell/web/launch context, closed frozen source tools, one attempt, and no direct fallback.",
     "Composition cannot mutate agreements and conformance cannot change or implement the target system."
@@ -100,7 +101,7 @@
       {"status": "declared", "statement": "Development uses the local repository filesystem and shell; tests use synthetic sources and fake Nucleus transport and disclose no real terms or target data."}
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Persistent changes require explicit migration, old-state fixture, quiescent backup, and database-aware rollback; tool meaning changes require immutable successor schemas and toolsets."}
+      {"status": "declared", "statement": "Persistent changes require explicit migration, old-state fixture, quiescent private backup, inactive attempts, and database-aware rollback; tool meaning changes require immutable successor schemas and toolsets."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "The operation stays within a short-lived local CLI and stops before acquiring target mutation, automatic scope discovery, policy enforcement, or release-gate authority."}

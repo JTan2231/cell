@@ -7,7 +7,7 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Pratica owns integration, track, negotiation, offer, assent, agreement, review, attempt, exact-source-basis, and domain-success records for its local protocol."
+      "Pratica owns integration, track, negotiation, offer, assent, agreement, review, attempt, exact-source-basis, caller-ingress receipt, and domain-success records for its local protocol."
     ],
     "not_authoritative_for": [
       "Entrants and stewards author terms, target products retain implementation and behavioral authority, and Nucleus owns agent admission and execution only."
@@ -22,10 +22,10 @@
       ]
     },
     "shared_access_and_trust": [
-      "Pratica surfaces are local-user CLI operations; model-assisted entries disclose only explicitly frozen bounded sources through immutable managed tools."
+      "Pratica surfaces are local-user CLI operations; top-level documents may be borrowed files or exact standard input, and model-assisted entries disclose only explicitly frozen bounded sources through immutable managed tools."
     ],
     "shared_privacy_and_retention": [
-      "Pratica and correlated Nucleus state may retain private exact terms, sources, prompts, citations, and reviews; release bundles and logs retain none of those bodies."
+      "Pratica and correlated Nucleus state may retain private exact terms, normalized manifest descriptors, source snapshots, prompts, citations, and reviews; raw TOML transport is not retained, body-free discovery omits contract bodies and canonical source origins, and release bundles and logs retain none of those bodies."
     ],
     "compatibility_and_retirement": [
       "Provider release identifies these exact bundle bytes; entry contracts, database schema, source formats, and immutable toolset identities remain separate compatibility axes."

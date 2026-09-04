@@ -12,15 +12,26 @@ string `scope`, positive numeric `version` (`u32`), represented string `party`,
 human string `title`, and
 `charter_markdown`. Add one or more `[[sources]]` tables containing stable `id`,
 descriptive `kind`, regular `path`, and optional `revision`. Relative paths are
-resolved against the manifest directory.
+resolved against the manifest directory for a file-backed manifest. To stream a
+manifest as exact standard input, pass `-` and an absolute `--source-root`; its
+relative source locators resolve from that directory rather than the process
+working directory.
 
 Registration freezes exact source bytes and per-source/catalog SHA-256 digests.
 It rejects duplicate IDs, symbolic files, non-UTF-8 or control-bearing content,
 sensitive filenames/extensions, files over 4 MiB, and catalogs over 32 MiB.
 The source bodies are untrusted evidence, never instructions.
 
+Pratica retains normalized manifest fields, source metadata, exact charter and
+source bytes, and their digests. It does not retain the raw TOML transport,
+whitespace, or comments. Every input file and referenced source remains
+caller-owned: Pratica never deletes or changes it, and successful work no longer
+depends on keeping a caller-created manifest scratch file.
+
 ```sh
 /Users/joey/.local/bin/pratica steward register steward.toml
+/Users/joey/.local/bin/pratica steward register - \
+  --source-root /absolute/source/root
 /Users/joey/.local/bin/pratica steward show SCOPE --version VERSION
 ```
 
@@ -28,16 +39,39 @@ Registration is a local Pratica write and invokes no model. Select source facts
 through each owning system's public contract before constructing the manifest;
 Pratica does not discover or refresh them automatically.
 
+Registration output and steward list/show are body-free. The list is a scope
+summary; registration and show add stable basis identities and a source roster
+with relative locators, digests, byte counts, and timestamps. None prints
+charter or source bodies or canonical source-origin paths.
+
+## Make retries unambiguous
+
+`integration open`, `track open`, `negotiation propose`, `agreement amend`, and
+`conformance review` accept `--request-key KEY`. A key is global within the
+selected database and must contain 1-256 visible non-space ASCII characters.
+The same key and canonical request returns the original result IDs; using it for
+a changed request or another operation conflicts without a domain write. Any
+aggregate returned beside those IDs reflects current state rather than replaying
+the earlier response bytes. The receipt and identity-establishing domain rows
+commit atomically.
+
+A request key is optional with a file-backed document and required when one of
+those five commands reads its document from standard input. Use a fresh
+caller-generated key per intended operation and retain it until the command
+response is durably recorded.
+
 ## Open one integration and bilateral tracks
 
 ```sh
 integration=$(
   /Users/joey/.local/bin/pratica integration open \
-    --entrant crm --title 'CRM system contracts'
+    --entrant crm --title 'CRM system contracts' \
+    --request-key crm-integration-20260903
 )
 
 /Users/joey/.local/bin/pratica track open "$integration" \
-  --steward SCOPE --steward-version VERSION --terms expectations.md
+  --steward SCOPE --steward-version VERSION --terms expectations.md \
+  --request-key crm-scope-track-20260903
 ```
 
 Open one track for each actual system of concern. Do not create a generic
@@ -83,7 +117,8 @@ complete successor offer or assents unchanged:
 ```sh
 /Users/joey/.local/bin/pratica negotiation show NEGOTIATION
 /Users/joey/.local/bin/pratica negotiation propose NEGOTIATION \
-  --base CURRENT_OFFER --terms replacement.md
+  --base CURRENT_OFFER --terms replacement.md \
+  --request-key crm-offer-revision-2
 /Users/joey/.local/bin/pratica negotiation assent NEGOTIATION \
   --offer CURRENT_OFFER
 ```
@@ -113,9 +148,10 @@ unresolved finding visibly when no party has authority to settle it.
 ## Amend or review conformance
 
 ```sh
-/Users/joey/.local/bin/pratica agreement amend AGREEMENT --terms successor.md
+/Users/joey/.local/bin/pratica agreement amend AGREEMENT \
+  --terms successor.md --request-key crm-amendment-1
 /Users/joey/.local/bin/pratica conformance review AGREEMENT \
-  --candidate-basis candidate.toml
+  --candidate-basis candidate.toml --request-key crm-conformance-1
 ```
 
 The candidate manifest uses the same schema-one descriptive and source fields
@@ -127,6 +163,12 @@ but is snapshotted for this review, not registered as a steward. The immutable
 Conformance is evidence against one candidate basis. It does not run tests,
 change the agreement, or authorize implementation, migration, deployment, or
 release.
+
+When the candidate manifest is `-`, also supply its absolute `--source-root`;
+the request key is required. Pratica atomically admits the normalized candidate
+basis and ingress receipt before model execution. An exact replay returns that
+basis and creates, resumes, or reports the same associated attempt lifecycle
+rather than freezing another candidate basis.
 
 ## Recovery
 

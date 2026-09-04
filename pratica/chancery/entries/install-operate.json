@@ -1,41 +1,45 @@
 {
   "id": "pratica.install.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
-  "title": "Install or initialize Pratica",
-  "summary": "Deploy, verify, or recover the user-owned content-addressed Pratica CLI and Chancery selector, then separately initialize or diagnose its private negotiation database and Nucleus readiness.",
+  "title": "Install, migrate, or initialize Pratica",
+  "summary": "Deploy, verify, or recover the user-owned content-addressed Pratica CLI and Chancery selector, then separately initialize, explicitly migrate, or diagnose its private negotiation database and Nucleus readiness.",
   "use_when": [
     "Pratica should be installed or updated for this macOS user.",
     "The installed binary, provider selector, release identity, database schema, integrity, private permissions, Nucleus readiness, or immutable toolsets should be checked.",
-    "A new empty Pratica database should be explicitly initialized."
+    "A new empty Pratica database should be explicitly initialized.",
+    "An existing schema-one database should be backed up and explicitly upgraded to schema two."
   ],
   "do_not_use_when": [
     "The task is ordinary negotiation or agreement inspection.",
     "A foreign or tampered selector or release should be overwritten, or storage should be initialized or deleted as a deployment side effect.",
     "Deployment, initialization, or another installed-state change has not been explicitly authorized."
   ],
-  "outcome": "A version-matched content-addressed local release whose command and sole providers/pratica selector follow one current release, an explicitly initialized schema-one database, or an evidence-backed readiness diagnosis.",
+  "outcome": "A version-matched content-addressed local release whose command and sole providers/pratica selector follow one current release, an explicitly initialized schema-two database, a safely backed-up schema-one to schema-two migration, or an evidence-backed readiness diagnosis.",
   "effects": [
     "Deployment stages immutable binary, deployer, manifest, and Pratica-owned Chancery bytes, then changes the current release selected by both public surfaces.",
     "Deployment writes ~/.local/bin/pratica and one Chancery provider selector but starts no service, submits no Nucleus job, and never opens or changes the domain database.",
-    "A separate init creates schema one; doctor reads schema, integrity, permissions, Nucleus health, and immutable toolset readiness without negotiating terms."
+    "A separate init creates schema two; doctor reads schema, integrity, permissions, Nucleus health, and immutable toolset readiness without negotiating terms.",
+    "A separate migrate command first creates a private schema-one SQLite backup and then atomically upgrades the selected quiescent database to schema two; invoking it on schema two is a true no-op."
   ],
   "authority": [
     "Pratica owns its releases, current and previous selectors, command selector, providers/pratica selector, schema initialization, and database integrity checks.",
     "Nucleus remains separately authoritative for execution and authentication; deployment does not restart or reconfigure it.",
-    "The operator separately chooses whether and where to initialize persistent negotiation state."
+    "The operator separately chooses whether and where to initialize persistent negotiation state or migrate a selected existing database and retain its backup."
   ],
   "success": [
     "The candidate and provider versions match, the exact staged release manifest matches every component, and both public selectors resolve through one current release.",
     "Identical redeployment is idempotent, an update retains the prior valid release, and failed post-switch smoke restores binary and provider views together.",
     "The deployer refuses foreign, symbolic, traversal, fabricated, incomplete, or tampered owned state and creates no database or sidecar.",
-    "After separate initialization, doctor proves schema-one integrity, content/seal invariants, private permissions, strict Nucleus readiness, and all three immutable Pratica toolsets."
+    "After separate initialization or migration, doctor proves schema-two integrity, content/seal and ingress-receipt invariants, private permissions, strict Nucleus readiness, and all three immutable Pratica toolsets.",
+    "Migration accepts only schema one, requires no active attempts, creates an absent mode-0600 backup at an absolute path in an existing private directory, and rechecks quiescence with the schema update; current schema two neither inspects nor creates the backup path."
   ],
   "failure_and_recovery": [
     "A pre-commit deployment failure restores current, previous, command, and provider selectors; inspect the reported owned paths before retrying.",
     "After a committed domain-canary failure, preserve its evidence and redeploy the exact previous packaged binary/deployer only when schema compatibility remains safe.",
+    "Rollback after schema migration restores the schema-one backup together with the matching old binary; program-only rollback against schema two is unsafe.",
     "Do not bypass manifest or selector refusal, initialize missing state implicitly, rewrite database history, or restart Nucleus to recover a Pratica attempt."
   ],
   "privacy": [
@@ -48,7 +52,7 @@
   "steps": [
     "Build and validate a green Pratica candidate without changing installed state.",
     "Run the product deployer with the absolute release binary and inspect version, current release, command selector, provider selector, and manifest.",
-    "Initialize storage only as a separate explicit action, then run doctor and installed Chancery discovery.",
+    "Initialize new storage or migrate existing schema-one storage only as a separate explicit action, then run doctor and installed Chancery discovery.",
     "Use the documented contract-only CRM canary when a real domain canary is intended."
   ],
   "checkpoints": [
@@ -58,7 +62,7 @@
   ],
   "adaptation": [
     "Use --database or PRATICA_DATABASE when the default private application-support database is not intended.",
-    "Treat a future schema change as a separate quiescent backup, migration, and database-aware rollback project."
+    "For the supported schema-one upgrade, quiesce Pratica and run migrate with an absent absolute backup path in an existing private directory; treat future schema changes as separate migration projects."
   ],
   "stop_when": [
     "Candidate identity, provider version, exact tree, selector ownership, schema, Nucleus compatibility, or privacy cannot be proved.",
@@ -68,6 +72,7 @@
   "interfaces": [
     {"label": "Deploy candidate", "invocation": "pratica/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH"},
     {"label": "Initialize selected database", "invocation": "/Users/joey/.local/bin/pratica init"},
+    {"label": "Migrate selected database", "invocation": "/Users/joey/.local/bin/pratica migrate --backup ABSOLUTE_PATH"},
     {"label": "Diagnose selected database and runtime", "invocation": "/Users/joey/.local/bin/pratica doctor"}
   ],
   "dependencies": [
@@ -79,16 +84,16 @@
   ],
   "promise": {
     "consumers": [
-      {"status": "declared", "statement": "The local operator may deploy or diagnose Pratica and may separately initialize one intentionally selected empty negotiation ledger."}
+      {"status": "declared", "statement": "The local operator may deploy or diagnose Pratica and may separately initialize one intentionally selected empty negotiation ledger or migrate one selected schema-one ledger."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "Deployment has explicit authority and a regular absolute candidate whose version matches the provider; doctor requires compatible Nucleus readiness to prove model-assisted operation."}
+      {"status": "declared", "statement": "Deployment has explicit authority and a regular absolute candidate whose version matches the provider; migration requires schema one, no active attempts or concurrent Pratica use, and an absent absolute backup path in an existing private directory; doctor requires compatible Nucleus readiness to prove model-assisted operation."}
     ],
     "inputs": [
-      {"status": "declared", "statement": "Deployment consumes the candidate binary and packaged provider/deployer bytes; init consumes a selected database path; doctor reads the selected database and Nucleus readiness."}
+      {"status": "declared", "statement": "Deployment consumes the candidate binary and packaged provider/deployer bytes; init consumes a selected database path; migrate consumes that selected database plus an explicit backup path; doctor reads the selected database and Nucleus readiness."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Outputs are one content-addressed installed release, one separately initialized schema-one database, or readiness evidence for storage, permissions, Nucleus, and immutable toolsets."}
+      {"status": "declared", "statement": "Outputs are one content-addressed installed release, one separately initialized schema-two database, one explicit schema-one backup plus upgraded schema-two database, or readiness evidence for storage, permissions, Nucleus, and immutable toolsets."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Installed current and previous name validated release generations; deployment success is separate from database existence, Nucleus readiness, and negotiation-domain success."}
@@ -103,13 +108,13 @@
       {"status": "declared", "statement": "The operation uses local filesystem and shell authority over Pratica-owned paths and read-only Nucleus health; it refuses foreign, symbolic, fabricated, or tampered state."}
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Redeployment is idempotent, update retains a valid previous release, failure restores both public selectors, and deployment never opens or changes negotiation state."}
+      {"status": "declared", "statement": "Redeployment is idempotent, update retains a valid previous release, failure restores both public selectors, and deployment never opens or changes negotiation state; migration backs up schema one before one immediate schema transaction and is a no-op on schema two."}
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "Deployment starts no daemon or schedule and creates no database; initialization and any attempt retry remain separate explicit operations."}
+      {"status": "declared", "statement": "Deployment starts no daemon or schedule and creates no database; initialization, migration, and any attempt retry remain separate explicit operations, and migration supports only schema one to schema two."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Candidate and provider versions match exactly, doctor requires Nucleus execution contract 1 and immutable version-one toolsets, and schema change requires a separate migration and rollback project."}
+      {"status": "declared", "statement": "Operation contract version 2 initializes and diagnoses schema two and explicitly upgrades schema one; rollback requires the retained schema-one backup plus matching old binary, while candidate/provider versions, JSON envelope version one, Nucleus execution contract 1, and immutable version-one toolsets remain separate compatibility axes."}
     ],
     "reliances": [
       {"status": "declared", "statement": "Doctor relies on Nucleus health and capability reporting to prove model-assisted Pratica readiness without transferring negotiation authority.", "target": "nucleus", "kind": "readiness", "contract": "nucleus.execution.operate"}

@@ -6,28 +6,51 @@ use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use rusqlite::backup::Backup;
 use rusqlite::{
     Connection, OpenFlags, OptionalExtension as _, Transaction, TransactionBehavior, params,
 };
-use serde::Serialize;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::model::{
-    AgentAttemptView, AgreementView, AssentStatus, AttemptKind, AttemptSourceInput, BasisFreshness,
-    BasisGuard, BasisKind, BasisVerificationView, CompositionAgreementRef, CompositionOutcome,
-    CompositionReviewView, ConformanceOutcome, ConformanceReviewView, FrozenBasisView,
-    FrozenSourceView, IntegrationStatusView, IntegrationView, MAX_AGENT_REQUEST_BYTES,
-    MAX_FROZEN_CATALOG_BYTES, MAX_FROZEN_SOURCE_BYTES, MAX_FROZEN_SOURCES, MAX_TOOL_RESULT_BYTES,
-    MutationResult, NegotiationEventKind, NegotiationEventView, NegotiationKind, NegotiationStatus,
+    AgentAttemptView, AgreementListItem, AgreementView, AssentStatus, AttemptKind,
+    AttemptSourceInput, BasisFreshness, BasisGuard, BasisKind, BasisVerificationView,
+    CompositionAgreementRef, CompositionOutcome, CompositionReviewView, ConformanceOutcome,
+    ConformanceReviewView, FrozenBasisView, FrozenSourceView, IntegrationListItem,
+    IntegrationStatusView, IntegrationView, MAX_AGENT_REQUEST_BYTES, MAX_FROZEN_CATALOG_BYTES,
+    MAX_FROZEN_SOURCE_BYTES, MAX_FROZEN_SOURCES, MAX_TOOL_RESULT_BYTES, MutationResult,
+    NegotiationEventKind, NegotiationEventView, NegotiationKind, NegotiationStatus,
     NegotiationView, NewAgentAttempt, NewFrozenBasis, NewFrozenSource, NewStewardScope, OfferView,
     OpaqueMarkdown, PartyAssentView, PartyRole, RosterView, RuntimeState, StewardResponse,
     StewardScopeView, ToolReceiptView, TrackStatusView, TrackView, sha256_hex,
 };
 
 const SCHEMA: &str = include_str!("../schema.sql");
-pub const SCHEMA_VERSION: i64 = 1;
+const MIGRATE_V1_TO_V2: &str = "
+    CREATE TABLE ingress_receipts (
+        request_key TEXT PRIMARY KEY CHECK (
+            length(request_key) BETWEEN 1 AND 256
+        ),
+        operation TEXT NOT NULL CHECK (length(operation) > 0),
+        request_bytes BLOB NOT NULL,
+        request_sha256 TEXT NOT NULL CHECK (length(request_sha256) = 64),
+        result_bytes BLOB NOT NULL,
+        result_sha256 TEXT NOT NULL CHECK (length(result_sha256) = 64),
+        recorded_at INTEGER NOT NULL
+    ) STRICT;
+    CREATE TRIGGER ingress_receipts_no_update BEFORE UPDATE ON ingress_receipts
+    BEGIN SELECT RAISE(ABORT, 'ingress_receipts are immutable'); END;
+    CREATE TRIGGER ingress_receipts_no_delete BEFORE DELETE ON ingress_receipts
+    BEGIN SELECT RAISE(ABORT, 'ingress_receipts are immutable'); END;
+    UPDATE pratica_meta SET value = '2' WHERE key = 'schema_version';
+    PRAGMA user_version = 2;
+";
+const FIRST_MIGRATABLE_SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -96,6 +119,81 @@ pub struct DoctorResult {
     pub permissions: String,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct MigrationResult {
+    pub from_version: i64,
+    pub to_version: i64,
+    pub migrated: bool,
+    pub backup: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IngressRequest {
+    request_key: String,
+    operation: String,
+    request_bytes: Vec<u8>,
+}
+
+pub const INGRESS_INTEGRATION_OPEN: &str = "integration.open/1";
+pub const INGRESS_TRACK_OPEN: &str = "track.open/1";
+pub const INGRESS_NEGOTIATION_PROPOSE: &str = "negotiation.propose/1";
+pub const INGRESS_AGREEMENT_AMEND: &str = "agreement.amend/1";
+pub const INGRESS_CONFORMANCE_REVIEW: &str = "conformance.review/1";
+
+#[derive(Debug, Serialize, Deserialize)]
+struct IntegrationIngressResult {
+    integration_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TrackIngressResult {
+    track_id: String,
+    negotiation_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ProposalIngressResult {
+    negotiation_id: String,
+    offer_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AmendmentIngressResult {
+    negotiation_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CandidateIngressResult {
+    agreement_id: String,
+    basis_id: String,
+}
+
+impl IngressRequest {
+    pub fn new<T: Serialize>(
+        request_key: impl Into<String>,
+        operation: impl Into<String>,
+        identity: &T,
+    ) -> StoreResult<Self> {
+        let request_key = request_key.into();
+        validate_request_key(&request_key)?;
+        let operation = operation.into();
+        validate_text("ingress operation", &operation)?;
+        let request_bytes = serde_json::to_vec(identity).map_err(|error| {
+            StoreError::InvalidInput(format!("unable to encode ingress identity: {error}"))
+        })?;
+        if request_bytes.is_empty() || request_bytes.len() > MAX_AGENT_REQUEST_BYTES {
+            return Err(StoreError::InvalidInput(format!(
+                "ingress identity must contain 1-{MAX_AGENT_REQUEST_BYTES} bytes"
+            )));
+        }
+        Ok(Self {
+            request_key,
+            operation,
+            request_bytes,
+        })
+    }
+}
+
 pub struct Store {
     connection: Connection,
 }
@@ -138,6 +236,73 @@ impl Store {
         Ok(InitResult {
             schema_version: SCHEMA_VERSION,
             path: path.to_path_buf(),
+        })
+    }
+
+    /// Upgrade a schema-v1 database after creating a caller-selected `SQLite` backup.
+    ///
+    /// A current database is a true no-op: the backup path is not inspected or touched.
+    pub fn migrate(path: &Path, backup_path: &Path) -> StoreResult<MigrationResult> {
+        require_existing_private_file(path)?;
+        let mut connection = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        configure_connection(&connection)?;
+        let from_version = schema_version(&connection)?;
+        if from_version == SCHEMA_VERSION {
+            require_schema(&connection)?;
+            return Ok(MigrationResult {
+                from_version,
+                to_version: SCHEMA_VERSION,
+                migrated: false,
+                backup: None,
+            });
+        }
+        if from_version != FIRST_MIGRATABLE_SCHEMA_VERSION {
+            return Err(StoreError::Conflict(format!(
+                "Pratica schema version {from_version} cannot be migrated; version {FIRST_MIGRATABLE_SCHEMA_VERSION} is the only supported migration source"
+            )));
+        }
+        require_schema_marker(&connection, FIRST_MIGRATABLE_SCHEMA_VERSION)?;
+        require_schema_objects_for_version(&connection, false)?;
+        require_database_integrity(&connection)?;
+        require_no_active_attempts(&connection)?;
+        if !backup_path.is_absolute() {
+            return Err(StoreError::InvalidInput(
+                "migration backup path must be absolute".into(),
+            ));
+        }
+
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let locked_version = schema_version(&transaction)?;
+        if locked_version != FIRST_MIGRATABLE_SCHEMA_VERSION {
+            return Err(StoreError::Conflict(format!(
+                "Pratica schema changed from version {FIRST_MIGRATABLE_SCHEMA_VERSION} to version {locked_version} while migration was starting"
+            )));
+        }
+        require_schema_marker(&transaction, FIRST_MIGRATABLE_SCHEMA_VERSION)?;
+        require_no_active_attempts(&transaction)?;
+        let backup_source = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        configure_connection(&backup_source)?;
+        require_schema_marker(&backup_source, FIRST_MIGRATABLE_SCHEMA_VERSION)?;
+        create_sqlite_backup(&backup_source, backup_path)?;
+        drop(backup_source);
+        transaction.execute_batch(MIGRATE_V1_TO_V2)?;
+        transaction.commit()?;
+
+        require_schema(&connection)?;
+        require_schema_objects(&connection)?;
+        connection.pragma_update(None, "journal_mode", "WAL")?;
+        secure_sidecars(path)?;
+        Ok(MigrationResult {
+            from_version,
+            to_version: SCHEMA_VERSION,
+            migrated: true,
+            backup: Some(backup_path.to_path_buf()),
         })
     }
 
@@ -426,6 +591,80 @@ impl Store {
         self.freeze_basis(basis)
     }
 
+    pub fn freeze_candidate_basis_with_ingress(
+        &mut self,
+        agreement_id: &str,
+        basis: &NewFrozenBasis,
+        ingress: &IngressRequest,
+    ) -> StoreResult<FrozenBasisView> {
+        if basis.kind != BasisKind::Candidate {
+            return Err(StoreError::InvalidInput(
+                "candidate registration requires a candidate basis".into(),
+            ));
+        }
+        validate_new_basis(basis)?;
+        let manifest_sha256 = Self::basis_manifest_sha256(basis)?;
+        let basis_id = new_id("bas");
+        let now = now_unix();
+        let transaction = self.immediate()?;
+        if let Some(receipt) = replay_ingress::<CandidateIngressResult>(
+            &transaction,
+            Some(ingress),
+            INGRESS_CONFORMANCE_REVIEW,
+        )? {
+            if receipt.agreement_id != agreement_id {
+                return Err(StoreError::CorruptState(format!(
+                    "ingress receipt {} points at the wrong agreement",
+                    ingress.request_key
+                )));
+            }
+            let frozen = read_basis(&transaction, &receipt.basis_id)?;
+            transaction.commit()?;
+            return Ok(frozen);
+        }
+        read_agreement(&transaction, agreement_id)?;
+        insert_frozen_basis(&transaction, &basis_id, basis, &manifest_sha256, now)?;
+        record_ingress(
+            &transaction,
+            Some(ingress),
+            INGRESS_CONFORMANCE_REVIEW,
+            &CandidateIngressResult {
+                agreement_id: agreement_id.to_owned(),
+                basis_id: basis_id.clone(),
+            },
+            now,
+        )?;
+        let frozen = read_basis(&transaction, &basis_id)?;
+        transaction.commit()?;
+        Ok(frozen)
+    }
+
+    pub fn candidate_basis_for_ingress(
+        &mut self,
+        agreement_id: &str,
+        ingress: &IngressRequest,
+    ) -> StoreResult<Option<FrozenBasisView>> {
+        let transaction = self.immediate()?;
+        let receipt = replay_ingress::<CandidateIngressResult>(
+            &transaction,
+            Some(ingress),
+            INGRESS_CONFORMANCE_REVIEW,
+        )?;
+        let Some(receipt) = receipt else {
+            transaction.commit()?;
+            return Ok(None);
+        };
+        if receipt.agreement_id != agreement_id {
+            return Err(StoreError::CorruptState(format!(
+                "ingress receipt {} points at the wrong agreement",
+                ingress.request_key
+            )));
+        }
+        let basis = read_basis(&transaction, &receipt.basis_id)?;
+        transaction.commit()?;
+        Ok(Some(basis))
+    }
+
     pub fn record_basis_verification(
         &mut self,
         basis_id: &str,
@@ -446,11 +685,22 @@ impl Store {
         Ok(view)
     }
 
+    #[allow(dead_code)]
     pub fn create_integration(
         &mut self,
         entrant_party: &str,
         title: &str,
         context_markdown: Option<&OpaqueMarkdown>,
+    ) -> StoreResult<IntegrationView> {
+        self.create_integration_with_ingress(entrant_party, title, context_markdown, None)
+    }
+
+    pub fn create_integration_with_ingress(
+        &mut self,
+        entrant_party: &str,
+        title: &str,
+        context_markdown: Option<&OpaqueMarkdown>,
+        ingress: Option<&IngressRequest>,
     ) -> StoreResult<IntegrationView> {
         validate_text("entrant party", entrant_party)?;
         validate_text("integration title", title)?;
@@ -458,6 +708,14 @@ impl Store {
         let now = now_unix();
         let context_sha256 = context_markdown.map(OpaqueMarkdown::sha256);
         let transaction = self.immediate()?;
+        if let Some(receipt) = replay_ingress::<IntegrationIngressResult>(
+            &transaction,
+            ingress,
+            INGRESS_INTEGRATION_OPEN,
+        )? {
+            transaction.commit()?;
+            return self.integration(&receipt.integration_id);
+        }
         transaction.execute(
             "INSERT INTO integrations (
                 integration_id, entrant_party, title, context_markdown,
@@ -477,6 +735,15 @@ impl Store {
                 integration_id, ordinal, kind, recorded_at
              ) VALUES (?, 1, 'opened', ?)",
             params![integration_id, now],
+        )?;
+        record_ingress(
+            &transaction,
+            ingress,
+            INGRESS_INTEGRATION_OPEN,
+            &IntegrationIngressResult {
+                integration_id: integration_id.clone(),
+            },
+            now,
         )?;
         transaction.commit()?;
         self.integration(&integration_id)
@@ -515,6 +782,26 @@ impl Store {
         }
     }
 
+    pub fn list_integrations(&self) -> StoreResult<Vec<IntegrationListItem>> {
+        let mut statement = self.connection.prepare(
+            "SELECT integration_id, entrant_party, title, context_sha256,
+                    CASE WHEN context_markdown IS NULL THEN NULL ELSE length(context_markdown) END,
+                    created_at
+             FROM integrations ORDER BY created_at DESC, integration_id DESC",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(IntegrationListItem {
+                integration_id: row.get(0)?,
+                entrant_party: row.get(1)?,
+                title: row.get(2)?,
+                context_sha256: row.get(3)?,
+                context_bytes: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })?;
+        collect_rows(rows)
+    }
+
     fn immediate(&mut self) -> StoreResult<Transaction<'_>> {
         Ok(self
             .connection
@@ -526,6 +813,8 @@ impl Store {
 #[allow(clippy::too_many_lines)]
 mod tests {
     use super::*;
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
 
     fn markdown(text: &str) -> OpaqueMarkdown {
         OpaqueMarkdown::new(text.as_bytes().to_vec()).expect("test Markdown")
@@ -1471,6 +1760,435 @@ mod tests {
                 .is_none()
         );
     }
+
+    #[test]
+    fn ingress_request_replays_one_atomic_integration_and_conflicts_on_reuse() {
+        let mut store = Store::open_in_memory().expect("in-memory store");
+        let context = markdown("Exact context.\n");
+        let identity = serde_json::json!({
+            "entrant_party": "crm",
+            "title": "CRM design",
+            "context_sha256": context.sha256(),
+        });
+        let request = IngressRequest::new(
+            "test-suite:integration:1",
+            INGRESS_INTEGRATION_OPEN,
+            &identity,
+        )
+        .expect("request");
+        let first = store
+            .create_integration_with_ingress("crm", "CRM design", Some(&context), Some(&request))
+            .expect("first admission");
+        let replay = store
+            .create_integration_with_ingress("crm", "CRM design", Some(&context), Some(&request))
+            .expect("exact replay");
+        assert_eq!(replay.integration_id, first.integration_id);
+        let counts: (u32, u32) = store
+            .connection
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM integrations),
+                        (SELECT COUNT(*) FROM ingress_receipts)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("counts");
+        assert_eq!(counts, (1, 1));
+
+        let changed = IngressRequest::new(
+            "test-suite:integration:1",
+            INGRESS_INTEGRATION_OPEN,
+            &serde_json::json!({"different": true}),
+        )
+        .expect("changed request");
+        let error = store
+            .create_integration_with_ingress("crm", "Changed", Some(&context), Some(&changed))
+            .expect_err("request-key conflict");
+        assert_eq!(error.kind(), StoreErrorKind::Conflict);
+        assert_eq!(
+            store
+                .connection
+                .query_row("SELECT COUNT(*) FROM integrations", [], |row| row
+                    .get::<_, u32>(0))
+                .expect("integration count"),
+            1
+        );
+    }
+
+    #[test]
+    fn track_and_candidate_ingress_replay_without_duplicate_domain_rows() {
+        let (mut store, scope, steward_basis) = registered_store();
+        let integration = store
+            .create_integration("crm", "CRM", None)
+            .expect("integration");
+        let terms = markdown("Exact terms.\n");
+        let track_request = IngressRequest::new(
+            "test-suite:track:1",
+            INGRESS_TRACK_OPEN,
+            &serde_json::json!({"terms_sha256": terms.sha256()}),
+        )
+        .expect("track request");
+        let first = store
+            .open_track_with_ingress(
+                &integration.integration_id,
+                "evidence.claim-admission",
+                None,
+                &terms,
+                Some(&track_request),
+            )
+            .expect("track");
+        let successor_scope = NewStewardScope {
+            scope_id: scope.scope_id.clone(),
+            version: 2,
+            steward_party: scope.steward_party.clone(),
+            title: scope.title.clone(),
+            charter_markdown: scope.charter_markdown.clone(),
+            descriptor_sha256: sha256_hex(b"descriptor-v2"),
+        };
+        let successor_basis = NewFrozenBasis {
+            kind: BasisKind::Steward,
+            label: "Evidence admission implementation basis v2".into(),
+            scope_id: Some(scope.scope_id.clone()),
+            scope_version: Some(2),
+            verifier_version: steward_basis.verifier_version.clone(),
+            observed_at: 2,
+            sources: steward_basis
+                .sources
+                .iter()
+                .map(|source| NewFrozenSource {
+                    source_id: source.source_id.clone(),
+                    kind: source.kind.clone(),
+                    locator: source.locator.clone(),
+                    origin_path: source.origin_path.clone(),
+                    revision: source.revision.clone(),
+                    content: source.content.clone(),
+                    observed_at: 2,
+                })
+                .collect(),
+        };
+        store
+            .register_steward(&successor_scope, &successor_basis)
+            .expect("new steward version");
+        let replay = store
+            .open_track_with_ingress(
+                &integration.integration_id,
+                "evidence.claim-admission",
+                None,
+                &terms,
+                Some(&track_request),
+            )
+            .expect("track replay");
+        assert_eq!(replay.0.track_id, first.0.track_id);
+        assert_eq!(replay.1.negotiation_id, first.1.negotiation_id);
+
+        let agreement = settle_negotiation(&mut store, &steward_basis, &first.1);
+        let mut candidate = NewFrozenBasis {
+            kind: BasisKind::Candidate,
+            label: "Candidate".into(),
+            scope_id: None,
+            scope_version: None,
+            verifier_version: steward_basis.verifier_version.clone(),
+            observed_at: 2,
+            sources: steward_basis
+                .sources
+                .iter()
+                .map(|source| NewFrozenSource {
+                    source_id: source.source_id.clone(),
+                    kind: source.kind.clone(),
+                    locator: source.locator.clone(),
+                    origin_path: source.origin_path.clone(),
+                    revision: source.revision.clone(),
+                    content: source.content.clone(),
+                    observed_at: 2,
+                })
+                .collect(),
+        };
+        let candidate_request = IngressRequest::new(
+            "test-suite:conformance:1",
+            INGRESS_CONFORMANCE_REVIEW,
+            &serde_json::json!({"catalog": "one"}),
+        )
+        .expect("candidate request");
+        let admitted = store
+            .freeze_candidate_basis_with_ingress(
+                &agreement.agreement_id,
+                &candidate,
+                &candidate_request,
+            )
+            .expect("candidate admission");
+        candidate.observed_at = 3;
+        let replayed = store
+            .freeze_candidate_basis_with_ingress(
+                &agreement.agreement_id,
+                &candidate,
+                &candidate_request,
+            )
+            .expect("candidate replay");
+        assert_eq!(replayed.basis_id, admitted.basis_id);
+        assert_eq!(
+            store
+                .connection
+                .query_row(
+                    "SELECT COUNT(*) FROM frozen_bases WHERE basis_kind = 'candidate'",
+                    [],
+                    |row| row.get::<_, u32>(0),
+                )
+                .expect("candidate count"),
+            1
+        );
+        let first_attempt_input = agent_attempt(
+            AttemptKind::ConformanceReview,
+            &agreement.agreement_id,
+            "conformance-racer-one",
+            None,
+            None,
+            Some(&admitted),
+            "candidate",
+            "crm",
+            "Candidate",
+            &admitted,
+        );
+        let mut second_attempt_input = first_attempt_input.clone();
+        second_attempt_input.requester_id = "other-racer".into();
+        second_attempt_input.nucleus_job_id = "conformance-racer-two".into();
+        second_attempt_input.request_bytes = b"{\"racer\":2}".to_vec();
+        second_attempt_input.request_sha256 = sha256_hex(&second_attempt_input.request_bytes);
+        let first_attempt = store
+            .begin_or_resume_attempt_with_ingress(&first_attempt_input, Some(&candidate_request))
+            .expect("first conformance racer");
+        let second_attempt = store
+            .begin_or_resume_attempt_with_ingress(&second_attempt_input, Some(&candidate_request))
+            .expect("second conformance racer resumes the winner");
+        assert_eq!(second_attempt.attempt_id, first_attempt.attempt_id);
+        assert_eq!(second_attempt.nucleus_job_id, first_attempt.nucleus_job_id);
+        store
+            .mark_attempt_runtime_state(
+                &first_attempt.attempt_id,
+                RuntimeState::Failed,
+                Some("simulated terminal race"),
+            )
+            .expect("terminal first racer");
+        let terminal_replay = store
+            .begin_or_resume_attempt_with_ingress(&second_attempt_input, Some(&candidate_request))
+            .expect("terminal conformance racer still resumes the winner");
+        assert_eq!(terminal_replay.attempt_id, first_attempt.attempt_id);
+        assert!(!terminal_replay.active);
+        assert_eq!(terminal_replay.runtime_state, RuntimeState::Failed);
+        assert_eq!(
+            store
+                .connection
+                .query_row(
+                    "SELECT COUNT(*) FROM agent_attempts
+                     WHERE kind = 'conformance_review' AND subject_id = ? AND basis_id = ?",
+                    params![agreement.agreement_id, admitted.basis_id],
+                    |row| row.get::<_, u32>(0),
+                )
+                .expect("conformance attempt count"),
+            1
+        );
+    }
+
+    #[test]
+    fn proposal_and_amendment_request_keys_replay_original_identities() {
+        let (mut store, _, basis) = registered_store();
+        let (_, _, negotiation) = open_track(&mut store);
+        let head = negotiation.head.as_ref().expect("head");
+        let proposal = IngressRequest::new(
+            "test-suite:proposal:1",
+            INGRESS_NEGOTIATION_PROPOSE,
+            &serde_json::json!({
+                "negotiation_id": negotiation.negotiation_id,
+                "base": head.offer_id,
+                "terms_sha256": head.terms_sha256,
+            }),
+        )
+        .expect("proposal request");
+        let first = store
+            .propose_as_entrant_with_ingress(
+                &negotiation.negotiation_id,
+                &head.offer_id,
+                &head.terms_markdown,
+                Some(&proposal),
+            )
+            .expect("proposal");
+        let replay = store
+            .propose_as_entrant_with_ingress(
+                &negotiation.negotiation_id,
+                &head.offer_id,
+                &head.terms_markdown,
+                Some(&proposal),
+            )
+            .expect("proposal replay");
+        assert_eq!(replay.offer_id, first.offer_id);
+        assert_eq!(
+            store
+                .connection
+                .query_row(
+                    "SELECT COUNT(*) FROM offers WHERE negotiation_id = ?",
+                    [&negotiation.negotiation_id],
+                    |row| row.get::<_, u32>(0),
+                )
+                .expect("offer count"),
+            2
+        );
+
+        let current = store
+            .negotiation(&negotiation.negotiation_id)
+            .expect("current negotiation");
+        let agreement = settle_negotiation(&mut store, &basis, &current);
+        let amendment_terms = markdown("Replacement terms.\n");
+        let amendment = IngressRequest::new(
+            "test-suite:amendment:1",
+            INGRESS_AGREEMENT_AMEND,
+            &serde_json::json!({"agreement_id": agreement.agreement_id}),
+        )
+        .expect("amendment request");
+        let opened = store
+            .open_amendment_with_ingress(
+                &agreement.agreement_id,
+                &amendment_terms,
+                Some(&amendment),
+            )
+            .expect("amendment");
+        let reopened = store
+            .open_amendment_with_ingress(
+                &agreement.agreement_id,
+                &amendment_terms,
+                Some(&amendment),
+            )
+            .expect("amendment replay");
+        assert_eq!(reopened.negotiation_id, opened.negotiation_id);
+        let successor = settle_negotiation(&mut store, &basis, &opened);
+        let agreements = store.list_agreements().expect("agreement list");
+        assert_eq!(agreements.len(), 2);
+        let listed_successor = agreements
+            .iter()
+            .find(|item| item.agreement_id == successor.agreement_id)
+            .expect("listed successor");
+        assert_eq!(
+            listed_successor.predecessor_agreement_id.as_deref(),
+            Some(agreement.agreement_id.as_str())
+        );
+        let listed_predecessor = agreements
+            .iter()
+            .find(|item| item.agreement_id == agreement.agreement_id)
+            .expect("listed predecessor");
+        assert_eq!(
+            listed_predecessor.successor_agreement_id.as_deref(),
+            Some(successor.agreement_id.as_str())
+        );
+        assert_eq!(
+            listed_successor.terms_bytes,
+            i64::try_from(amendment_terms.as_bytes().len()).expect("terms length")
+        );
+    }
+
+    #[test]
+    fn schema_v1_migration_retains_a_private_complete_backup() -> TestResult {
+        use std::os::unix::fs::OpenOptionsExt as _;
+
+        let directory = tempfile::tempdir()?;
+        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700))?;
+        let database = directory.path().join("pratica.db");
+        fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&database)?;
+        let legacy = Connection::open(&database)?;
+        configure_connection(&legacy)?;
+        legacy.execute_batch(include_str!("../tests/fixtures/schema-v1.sql"))?;
+        legacy.pragma_update(None, "journal_mode", "WAL")?;
+        legacy.execute(
+            "INSERT INTO integrations (
+                integration_id, entrant_party, title, context_markdown,
+                context_sha256, created_at
+             ) VALUES ('int_legacy', 'legacy', 'Legacy integration', ?, ?, 1)",
+            params![b"Legacy context.\n", sha256_hex(b"Legacy context.\n")],
+        )?;
+        legacy.execute(
+            "INSERT INTO integration_events (
+                integration_id, ordinal, kind, recorded_at
+             ) VALUES ('int_legacy', 1, 'opened', 1)",
+            [],
+        )?;
+        legacy.execute(
+            "INSERT INTO agent_attempts (
+                attempt_id, kind, subject_id, requester_id, nucleus_job_id,
+                request_bytes, request_sha256, toolset_name, toolset_version,
+                basis_digest, catalog_scope, catalog_version,
+                catalog_verifier_version, catalog_observed_at, catalog_party,
+                catalog_title, catalog_charter_markdown, catalog_charter_sha256,
+                catalog_sha256, created_at, updated_at
+             ) VALUES (
+                'att_active', 'composition_review', 'int_legacy', 'legacy-requester',
+                'legacy-job', ?, ?, 'pratica/composition-review', 1, ?, 'legacy', 1,
+                'pratica-files-v1', 1, 'legacy', 'Legacy', ?, ?, ?, 1, 1
+             )",
+            params![
+                b"{}",
+                sha256_hex(b"{}"),
+                sha256_hex(b"basis"),
+                b"Legacy charter.\n",
+                sha256_hex(b"Legacy charter.\n"),
+                sha256_hex(b"catalog"),
+            ],
+        )?;
+        secure_sidecars(&database)?;
+
+        let blocked_backup = directory.path().join("blocked-v1.backup");
+        let blocked = Store::migrate(&database, &blocked_backup)
+            .expect_err("active attempts must block migration");
+        assert_eq!(blocked.kind(), StoreErrorKind::Conflict);
+        assert!(!blocked_backup.exists());
+        legacy.execute(
+            "UPDATE agent_attempts
+             SET active = 0, runtime_state = 'failed', runtime_detail = 'test quiescence'
+             WHERE attempt_id = 'att_active'",
+            [],
+        )?;
+
+        let backup = directory.path().join("pratica-v1.backup");
+        let result = Store::migrate(&database, &backup)?;
+        assert_eq!(result.from_version, 1);
+        assert_eq!(result.to_version, SCHEMA_VERSION);
+        assert!(result.migrated);
+        assert_eq!(result.backup.as_deref(), Some(backup.as_path()));
+        assert_eq!(fs::metadata(&backup)?.permissions().mode() & 0o777, 0o600);
+
+        let backup_connection = Connection::open_with_flags(
+            &backup,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        assert_eq!(schema_version(&backup_connection)?, 1);
+        assert_eq!(
+            backup_connection.query_row(
+                "SELECT title FROM integrations WHERE integration_id = 'int_legacy'",
+                [],
+                |row| row.get::<_, String>(0),
+            )?,
+            "Legacy integration"
+        );
+        assert!(
+            backup_connection
+                .prepare("SELECT * FROM ingress_receipts")
+                .is_err()
+        );
+        drop(backup_connection);
+
+        let migrated = Store::open_read(&database)?;
+        assert_eq!(
+            migrated.integration("int_legacy")?.title,
+            "Legacy integration"
+        );
+        drop(migrated);
+        assert_eq!(Store::doctor(&database)?.schema_version, SCHEMA_VERSION);
+
+        let no_op = Store::migrate(&database, Path::new("unused-relative-backup"))?;
+        assert!(!no_op.migrated);
+        assert_eq!(no_op.backup, None);
+        Ok(())
+    }
 }
 
 fn configure_connection(connection: &Connection) -> StoreResult<()> {
@@ -1499,6 +2217,7 @@ const REQUIRED_TABLES: &[&str] = &[
     "composition_reviews",
     "composition_review_agreements",
     "conformance_reviews",
+    "ingress_receipts",
 ];
 
 const REQUIRED_INDEXES: &[&str] = &[
@@ -1527,11 +2246,22 @@ const IMMUTABLE_TABLES: &[&str] = &[
     "composition_reviews",
     "composition_review_agreements",
     "conformance_reviews",
+    "ingress_receipts",
 ];
 
 fn require_schema_objects(connection: &Connection) -> StoreResult<()> {
+    require_schema_objects_for_version(connection, true)
+}
+
+fn require_schema_objects_for_version(
+    connection: &Connection,
+    include_ingress: bool,
+) -> StoreResult<()> {
     for (kind, names) in [("table", REQUIRED_TABLES), ("index", REQUIRED_INDEXES)] {
-        for name in names {
+        for name in names
+            .iter()
+            .filter(|name| include_ingress || **name != "ingress_receipts")
+        {
             let exists: bool = connection.query_row(
                 "SELECT EXISTS(
                     SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?
@@ -1546,7 +2276,10 @@ fn require_schema_objects(connection: &Connection) -> StoreResult<()> {
             }
         }
     }
-    for table in IMMUTABLE_TABLES {
+    for table in IMMUTABLE_TABLES
+        .iter()
+        .filter(|table| include_ingress || **table != "ingress_receipts")
+    {
         for suffix in ["no_update", "no_delete"] {
             let trigger = format!("{table}_{suffix}");
             let exists: bool = connection.query_row(
@@ -1583,6 +2316,24 @@ fn require_schema_objects(connection: &Connection) -> StoreResult<()> {
     Ok(())
 }
 
+fn require_database_integrity(connection: &Connection) -> StoreResult<()> {
+    let integrity: String = connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+    if integrity != "ok" {
+        return Err(StoreError::CorruptState(format!(
+            "SQLite integrity_check returned {integrity}"
+        )));
+    }
+    let violation: Option<String> = connection
+        .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
+        .optional()?;
+    if let Some(table) = violation {
+        return Err(StoreError::CorruptState(format!(
+            "foreign-key violation in {table}"
+        )));
+    }
+    Ok(())
+}
+
 fn verify_digest_rows(connection: &Connection, query: &str, label: &str) -> StoreResult<()> {
     let mut statement = connection.prepare(query)?;
     let rows = statement.query_map([], |row| {
@@ -1603,6 +2354,7 @@ fn verify_digest_rows(connection: &Connection, query: &str, label: &str) -> Stor
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn verify_stored_digests(store: &Store) -> StoreResult<()> {
     let connection = &store.connection;
     verify_digest_rows(
@@ -1651,6 +2403,16 @@ fn verify_stored_digests(store: &Store) -> StoreResult<()> {
         "SELECT review_id, review_markdown, review_sha256 FROM conformance_reviews",
         "conformance review",
     )?;
+    verify_digest_rows(
+        connection,
+        "SELECT request_key, request_bytes, request_sha256 FROM ingress_receipts",
+        "ingress request",
+    )?;
+    verify_digest_rows(
+        connection,
+        "SELECT request_key, result_bytes, result_sha256 FROM ingress_receipts",
+        "ingress result",
+    )?;
     let mut statement =
         connection.prepare("SELECT basis_id FROM frozen_bases ORDER BY basis_id")?;
     let basis_ids = collect_rows(statement.query_map([], |row| row.get::<_, String>(0))?)?;
@@ -1691,6 +2453,24 @@ fn verify_stored_digests(store: &Store) -> StoreResult<()> {
         if serde_json::from_slice::<serde_json::Value>(&bytes).is_err() {
             return Err(StoreError::CorruptState(format!(
                 "tool receipt {receipt_id} contains invalid JSON"
+            )));
+        }
+    }
+    let mut ingress = connection
+        .prepare("SELECT request_key, request_bytes, result_bytes FROM ingress_receipts")?;
+    for row in ingress.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, Vec<u8>>(1)?,
+            row.get::<_, Vec<u8>>(2)?,
+        ))
+    })? {
+        let (request_key, request_bytes, result_bytes) = row?;
+        if serde_json::from_slice::<serde_json::Value>(&request_bytes).is_err()
+            || serde_json::from_slice::<serde_json::Value>(&result_bytes).is_err()
+        {
+            return Err(StoreError::CorruptState(format!(
+                "ingress receipt {request_key} contains invalid JSON"
             )));
         }
     }
@@ -1782,6 +2562,7 @@ fn verify_protocol_invariants(connection: &Connection) -> StoreResult<()> {
             "a conformance review does not use a candidate basis".into(),
         ));
     }
+    verify_ingress_invariants(connection)?;
     let mut statement = connection.prepare("SELECT agreement_id FROM agreements")?;
     let agreement_ids = collect_rows(statement.query_map([], |row| row.get::<_, String>(0))?)?;
     for agreement_id in agreement_ids {
@@ -1790,24 +2571,173 @@ fn verify_protocol_invariants(connection: &Connection) -> StoreResult<()> {
     Ok(())
 }
 
-fn require_schema(connection: &Connection) -> StoreResult<()> {
-    let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version != SCHEMA_VERSION {
-        return Err(StoreError::Conflict(format!(
-            "unsupported Pratica schema version {version}; expected {SCHEMA_VERSION}"
-        )));
-    }
+fn schema_version(connection: &Connection) -> StoreResult<i64> {
+    Ok(connection.pragma_query_value(None, "user_version", |row| row.get(0))?)
+}
+
+fn require_schema_marker(connection: &Connection, expected: i64) -> StoreResult<()> {
     let meta: String = connection.query_row(
         "SELECT value FROM pratica_meta WHERE key = 'schema_version'",
         [],
         |row| row.get(0),
     )?;
-    if meta != SCHEMA_VERSION.to_string() {
+    if meta != expected.to_string() {
         return Err(StoreError::CorruptState(
             "Pratica schema markers disagree".into(),
         ));
     }
     Ok(())
+}
+
+fn verify_ingress_invariants(connection: &Connection) -> StoreResult<()> {
+    let mut statement = connection.prepare(
+        "SELECT request_key, operation, result_bytes FROM ingress_receipts ORDER BY request_key",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Vec<u8>>(2)?,
+        ))
+    })?;
+    for row in rows {
+        let (request_key, operation, result_bytes) = row?;
+        let valid = match operation.as_str() {
+            INGRESS_INTEGRATION_OPEN => {
+                let result: IntegrationIngressResult = decode_ingress_result(&result_bytes)?;
+                connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM integrations WHERE integration_id = ?)",
+                    [result.integration_id],
+                    |row| row.get(0),
+                )?
+            }
+            INGRESS_TRACK_OPEN => {
+                let result: TrackIngressResult = decode_ingress_result(&result_bytes)?;
+                connection.query_row(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM integration_tracks t
+                        JOIN negotiations n ON n.track_id = t.track_id
+                        WHERE t.track_id = ? AND n.negotiation_id = ?
+                     )",
+                    params![result.track_id, result.negotiation_id],
+                    |row| row.get(0),
+                )?
+            }
+            INGRESS_NEGOTIATION_PROPOSE => {
+                let result: ProposalIngressResult = decode_ingress_result(&result_bytes)?;
+                connection.query_row(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM offers
+                        WHERE offer_id = ? AND negotiation_id = ?
+                     )",
+                    params![result.offer_id, result.negotiation_id],
+                    |row| row.get(0),
+                )?
+            }
+            INGRESS_AGREEMENT_AMEND => {
+                let result: AmendmentIngressResult = decode_ingress_result(&result_bytes)?;
+                connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM negotiations WHERE negotiation_id = ?)",
+                    [result.negotiation_id],
+                    |row| row.get(0),
+                )?
+            }
+            INGRESS_CONFORMANCE_REVIEW => {
+                let result: CandidateIngressResult = decode_ingress_result(&result_bytes)?;
+                connection.query_row(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM agreements a, frozen_bases b
+                        WHERE a.agreement_id = ? AND b.basis_id = ?
+                          AND b.basis_kind = 'candidate'
+                     )",
+                    params![result.agreement_id, result.basis_id],
+                    |row| row.get(0),
+                )?
+            }
+            _ => false,
+        };
+        if !valid {
+            return Err(StoreError::CorruptState(format!(
+                "ingress receipt {request_key} points at invalid domain state"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn decode_ingress_result<T: DeserializeOwned>(bytes: &[u8]) -> StoreResult<T> {
+    serde_json::from_slice(bytes).map_err(|error| {
+        StoreError::CorruptState(format!("invalid stored ingress result: {error}"))
+    })
+}
+
+fn require_schema(connection: &Connection) -> StoreResult<()> {
+    let version = schema_version(connection)?;
+    if version != SCHEMA_VERSION {
+        if version == FIRST_MIGRATABLE_SCHEMA_VERSION {
+            return Err(StoreError::Conflict(format!(
+                "Pratica schema version {version} requires explicit migration to version {SCHEMA_VERSION}; run `pratica migrate --backup ABSOLUTE_PATH` while Pratica is quiescent"
+            )));
+        }
+        return Err(StoreError::Conflict(format!(
+            "unsupported Pratica schema version {version}; expected {SCHEMA_VERSION}"
+        )));
+    }
+    require_schema_marker(connection, SCHEMA_VERSION)
+}
+
+fn require_no_active_attempts(connection: &Connection) -> StoreResult<()> {
+    let active: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM agent_attempts WHERE active = 1)",
+        [],
+        |row| row.get(0),
+    )?;
+    if active {
+        return Err(StoreError::Conflict(
+            "database has active Pratica attempts; finish them and quiesce all Pratica processes before migration"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
+fn create_sqlite_backup(source: &Connection, output: &Path) -> StoreResult<()> {
+    let parent = output.parent().ok_or_else(|| {
+        StoreError::InvalidInput("migration backup path must have a parent directory".into())
+    })?;
+    require_private_directory(parent)?;
+    match fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(output)
+    {
+        Ok(file) => drop(file),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(StoreError::Conflict(format!(
+                "migration backup already exists at {}",
+                output.display()
+            )));
+        }
+        Err(error) => return Err(error.into()),
+    }
+    let result = (|| {
+        let mut destination = Connection::open_with_flags(
+            output,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        let backup = Backup::new(source, &mut destination)?;
+        backup.run_to_completion(128, Duration::from_millis(10), None)?;
+        drop(backup);
+        fs::set_permissions(output, fs::Permissions::from_mode(0o600))?;
+        require_schema_marker(&destination, FIRST_MIGRATABLE_SCHEMA_VERSION)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(output);
+    }
+    result
 }
 
 fn require_private_directory(path: &Path) -> StoreResult<()> {
@@ -1897,6 +2827,116 @@ fn validate_identifier(label: &str, value: &str) -> StoreResult<()> {
             "{label} must be 1-128 lowercase ASCII identifier characters"
         )));
     }
+    Ok(())
+}
+
+fn validate_request_key(value: &str) -> StoreResult<()> {
+    if value.is_empty()
+        || value.len() > 256
+        || !value.bytes().all(|byte| (0x21..=0x7e).contains(&byte))
+    {
+        return Err(StoreError::InvalidInput(
+            "request key must contain 1-256 visible ASCII characters without spaces".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_ingress_request(request: &IngressRequest, expected_operation: &str) -> StoreResult<()> {
+    validate_request_key(&request.request_key)?;
+    if request.operation != expected_operation {
+        return Err(StoreError::InvalidInput(format!(
+            "ingress request operation must be {expected_operation}"
+        )));
+    }
+    if request.request_bytes.is_empty() || request.request_bytes.len() > MAX_AGENT_REQUEST_BYTES {
+        return Err(StoreError::InvalidInput(format!(
+            "ingress identity must contain 1-{MAX_AGENT_REQUEST_BYTES} bytes"
+        )));
+    }
+    Ok(())
+}
+
+fn replay_ingress<T: DeserializeOwned>(
+    transaction: &Transaction<'_>,
+    request: Option<&IngressRequest>,
+    expected_operation: &str,
+) -> StoreResult<Option<T>> {
+    let Some(request) = request else {
+        return Ok(None);
+    };
+    validate_ingress_request(request, expected_operation)?;
+    let stored = transaction
+        .query_row(
+            "SELECT operation, request_bytes, request_sha256, result_bytes, result_sha256
+             FROM ingress_receipts WHERE request_key = ?",
+            [&request.request_key],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Vec<u8>>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Vec<u8>>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((operation, request_bytes, request_sha256, result_bytes, result_sha256)) = stored
+    else {
+        return Ok(None);
+    };
+    if sha256_hex(&request_bytes) != request_sha256 || sha256_hex(&result_bytes) != result_sha256 {
+        return Err(StoreError::CorruptState(format!(
+            "ingress receipt {} has an invalid digest",
+            request.request_key
+        )));
+    }
+    if operation != request.operation || request_bytes != request.request_bytes {
+        return Err(StoreError::Conflict(format!(
+            "request key {} was already used for a different request",
+            request.request_key
+        )));
+    }
+    serde_json::from_slice(&result_bytes)
+        .map(Some)
+        .map_err(|error| {
+            StoreError::CorruptState(format!(
+                "ingress receipt {} has an invalid result: {error}",
+                request.request_key
+            ))
+        })
+}
+
+fn record_ingress<T: Serialize>(
+    transaction: &Transaction<'_>,
+    request: Option<&IngressRequest>,
+    expected_operation: &str,
+    result: &T,
+    recorded_at: i64,
+) -> StoreResult<()> {
+    let Some(request) = request else {
+        return Ok(());
+    };
+    validate_ingress_request(request, expected_operation)?;
+    let result_bytes = serde_json::to_vec(result).map_err(|error| {
+        StoreError::CorruptState(format!("unable to encode ingress result: {error}"))
+    })?;
+    transaction.execute(
+        "INSERT INTO ingress_receipts (
+            request_key, operation, request_bytes, request_sha256,
+            result_bytes, result_sha256, recorded_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        params![
+            request.request_key,
+            request.operation,
+            request.request_bytes,
+            sha256_hex(&request.request_bytes),
+            result_bytes,
+            sha256_hex(&result_bytes),
+            recorded_at,
+        ],
+    )?;
     Ok(())
 }
 
@@ -3868,6 +4908,43 @@ fn attempt_matches_input(attempt: &AgentAttemptView, input: &NewAgentAttempt) ->
         && attempt.sources == input.sources
 }
 
+fn conformance_attempt_matches_ingress(
+    attempt: &AgentAttemptView,
+    input: &NewAgentAttempt,
+) -> bool {
+    attempt.kind == AttemptKind::ConformanceReview
+        && input.kind == AttemptKind::ConformanceReview
+        && attempt.subject_id == input.subject_id
+        && attempt.toolset_name == input.toolset_name
+        && attempt.toolset_version == input.toolset_version
+        && attempt.expected_offer_id == input.expected_offer_id
+        && attempt.expected_roster_digest == input.expected_roster_digest
+        && attempt.basis_id == input.basis_id
+        && attempt.basis_digest == input.basis_digest
+        && attempt.catalog_scope == input.catalog_scope
+        && attempt.catalog_version == input.catalog_version
+        && attempt.catalog_verifier_version == input.catalog_verifier_version
+        && attempt.catalog_party == input.catalog_party
+        && attempt.catalog_title == input.catalog_title
+        && attempt.catalog_charter_markdown == input.catalog_charter_markdown
+        && attempt.catalog_charter_sha256 == input.catalog_charter_sha256
+        && attempt.catalog_sha256 == input.catalog_sha256
+        && attempt.sources.len() == input.sources.len()
+        && attempt
+            .sources
+            .iter()
+            .zip(&input.sources)
+            .all(|(stored, supplied)| {
+                stored.source_id == supplied.source_id
+                    && stored.kind == supplied.kind
+                    && stored.locator == supplied.locator
+                    && stored.origin_path == supplied.origin_path
+                    && stored.revision == supplied.revision
+                    && stored.content == supplied.content
+                    && stored.content_sha256 == supplied.content_sha256
+            })
+}
+
 fn read_tool_receipt_optional(
     connection: &Connection,
     nucleus_job_id: &str,
@@ -4287,6 +5364,7 @@ impl Store {
         self.track(track_id)
     }
 
+    #[allow(dead_code)]
     pub fn open_track(
         &mut self,
         integration_id: &str,
@@ -4294,11 +5372,50 @@ impl Store {
         scope_version: u32,
         initial_terms: &OpaqueMarkdown,
     ) -> StoreResult<(TrackView, NegotiationView)> {
+        self.open_track_with_ingress(
+            integration_id,
+            scope_id,
+            Some(scope_version),
+            initial_terms,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_lines)]
+    pub fn open_track_with_ingress(
+        &mut self,
+        integration_id: &str,
+        scope_id: &str,
+        selected_scope_version: Option<u32>,
+        initial_terms: &OpaqueMarkdown,
+        ingress: Option<&IngressRequest>,
+    ) -> StoreResult<(TrackView, NegotiationView)> {
         let now = now_unix();
         let track_id = new_id("trk");
         let negotiation_id = new_id("neg");
         let offer_id = new_id("off");
         let transaction = self.immediate()?;
+        if let Some(receipt) =
+            replay_ingress::<TrackIngressResult>(&transaction, ingress, INGRESS_TRACK_OPEN)?
+        {
+            transaction.commit()?;
+            return Ok((
+                self.track(&receipt.track_id)?,
+                self.negotiation(&receipt.negotiation_id)?,
+            ));
+        }
+        let scope_version = match selected_scope_version {
+            Some(version) => version,
+            None => transaction
+                .query_row(
+                    "SELECT MAX(version) FROM steward_scopes WHERE scope_id = ?",
+                    [scope_id],
+                    |row| row.get::<_, Option<u32>>(0),
+                )?
+                .ok_or_else(|| {
+                    StoreError::NotFound(format!("steward scope {scope_id} is not registered"))
+                })?,
+        };
         require_integration(&transaction, integration_id)?;
         let scope = read_scope(&transaction, scope_id, scope_version)?;
         let existing_track_id: Option<String> = transaction
@@ -4316,6 +5433,11 @@ impl Store {
             )
             .optional()?;
         if let Some(existing_track_id) = existing_track_id {
+            if ingress.is_some() {
+                return Err(StoreError::Conflict(format!(
+                    "integration {integration_id} already has an active {scope_id} track created by a different request key"
+                )));
+            }
             let existing = read_track(&transaction, &existing_track_id)?;
             if existing.scope_version != scope_version {
                 return Err(StoreError::Conflict(format!(
@@ -4387,6 +5509,16 @@ impl Store {
             None,
             now,
         )?;
+        record_ingress(
+            &transaction,
+            ingress,
+            INGRESS_TRACK_OPEN,
+            &TrackIngressResult {
+                track_id: track_id.clone(),
+                negotiation_id: negotiation_id.clone(),
+            },
+            now,
+        )?;
         transaction.commit()?;
         Ok((self.track(&track_id)?, self.negotiation(&negotiation_id)?))
     }
@@ -4425,16 +5557,34 @@ impl Store {
         })
     }
 
+    #[allow(dead_code)]
     pub fn open_amendment(
         &mut self,
         agreement_id: &str,
         initial_terms: &OpaqueMarkdown,
     ) -> StoreResult<NegotiationView> {
-        let predecessor = read_agreement(&self.connection, agreement_id)?;
+        self.open_amendment_with_ingress(agreement_id, initial_terms, None)
+    }
+
+    pub fn open_amendment_with_ingress(
+        &mut self,
+        agreement_id: &str,
+        initial_terms: &OpaqueMarkdown,
+        ingress: Option<&IngressRequest>,
+    ) -> StoreResult<NegotiationView> {
         let negotiation_id = new_id("neg");
         let offer_id = new_id("off");
         let now = now_unix();
         let transaction = self.immediate()?;
+        if let Some(receipt) = replay_ingress::<AmendmentIngressResult>(
+            &transaction,
+            ingress,
+            INGRESS_AGREEMENT_AMEND,
+        )? {
+            transaction.commit()?;
+            return self.negotiation(&receipt.negotiation_id);
+        }
+        let predecessor = read_agreement(&transaction, agreement_id)?;
         let track = read_track(&transaction, &predecessor.track_id)?;
         require_track_available(&transaction, &track)?;
         let current = active_agreement_for_track(&transaction, &track.track_id)?
@@ -4461,19 +5611,51 @@ impl Store {
             None,
             now,
         )?;
+        record_ingress(
+            &transaction,
+            ingress,
+            INGRESS_AGREEMENT_AMEND,
+            &AmendmentIngressResult {
+                negotiation_id: negotiation_id.clone(),
+            },
+            now,
+        )?;
         transaction.commit()?;
         self.negotiation(&negotiation_id)
     }
 
+    #[allow(dead_code)]
     pub fn propose_as_entrant(
         &mut self,
         negotiation_id: &str,
         expected_head_id: &str,
         terms: &OpaqueMarkdown,
     ) -> StoreResult<MutationResult> {
+        self.propose_as_entrant_with_ingress(negotiation_id, expected_head_id, terms, None)
+    }
+
+    pub fn propose_as_entrant_with_ingress(
+        &mut self,
+        negotiation_id: &str,
+        expected_head_id: &str,
+        terms: &OpaqueMarkdown,
+        ingress: Option<&IngressRequest>,
+    ) -> StoreResult<MutationResult> {
         let offer_id = new_id("off");
         let now = now_unix();
         let transaction = self.immediate()?;
+        if let Some(receipt) = replay_ingress::<ProposalIngressResult>(
+            &transaction,
+            ingress,
+            INGRESS_NEGOTIATION_PROPOSE,
+        )? {
+            transaction.commit()?;
+            return Ok(MutationResult {
+                negotiation: self.negotiation(&receipt.negotiation_id)?,
+                offer_id: Some(receipt.offer_id),
+                agreement_id: None,
+            });
+        }
         require_open_negotiation(&transaction, negotiation_id)?;
         require_expected_head(&transaction, negotiation_id, expected_head_id)?;
         insert_offer_event(
@@ -4483,6 +5665,16 @@ impl Store {
             PartyRole::Entrant,
             terms,
             None,
+            now,
+        )?;
+        record_ingress(
+            &transaction,
+            ingress,
+            INGRESS_NEGOTIATION_PROPOSE,
+            &ProposalIngressResult {
+                negotiation_id: negotiation_id.to_owned(),
+                offer_id: offer_id.clone(),
+            },
             now,
         )?;
         transaction.commit()?;
@@ -4697,6 +5889,61 @@ impl Store {
         read_agreement(&self.connection, agreement_id)
     }
 
+    pub fn list_agreements(&self) -> StoreResult<Vec<AgreementListItem>> {
+        let mut statement = self.connection.prepare(
+            "SELECT a.agreement_id, t.integration_id, t.track_id, t.scope_id,
+                    t.scope_version, a.negotiation_id, a.offer_id, a.basis_id,
+                    i.entrant_party, t.steward_party, i.title,
+                    o.terms_sha256, length(o.terms_markdown),
+                    COALESCE((
+                        SELECT v.outcome FROM basis_verifications v
+                        WHERE v.basis_id = a.basis_id
+                        ORDER BY v.checked_at DESC, v.verification_id DESC LIMIT 1
+                    ), 'unknown'),
+                    n.predecessor_agreement_id,
+                    (
+                        SELECT successor.agreement_id
+                        FROM negotiations successor_negotiation
+                        JOIN agreements successor
+                          ON successor.negotiation_id = successor_negotiation.negotiation_id
+                        WHERE successor_negotiation.predecessor_agreement_id = a.agreement_id
+                        ORDER BY successor.sealed_at, successor.agreement_id LIMIT 1
+                    ),
+                    a.sealed_at
+             FROM agreements a
+             JOIN negotiations n ON n.negotiation_id = a.negotiation_id
+             JOIN integration_tracks t ON t.track_id = n.track_id
+             JOIN integrations i ON i.integration_id = t.integration_id
+             JOIN offers o ON o.offer_id = a.offer_id
+             ORDER BY a.sealed_at DESC, a.agreement_id DESC",
+        )?;
+        let rows = statement.query_map([], |row| {
+            let freshness = row.get::<_, String>(13)?;
+            let basis_freshness =
+                BasisFreshness::parse(&freshness).ok_or_else(|| sql_enum_error(13, &freshness))?;
+            Ok(AgreementListItem {
+                agreement_id: row.get(0)?,
+                integration_id: row.get(1)?,
+                track_id: row.get(2)?,
+                scope_id: row.get(3)?,
+                scope_version: row.get(4)?,
+                negotiation_id: row.get(5)?,
+                offer_id: row.get(6)?,
+                basis_id: row.get(7)?,
+                entrant_party: row.get(8)?,
+                steward_party: row.get(9)?,
+                integration_title: row.get(10)?,
+                terms_sha256: row.get(11)?,
+                terms_bytes: row.get(12)?,
+                basis_freshness,
+                predecessor_agreement_id: row.get(14)?,
+                successor_agreement_id: row.get(15)?,
+                sealed_at: row.get(16)?,
+            })
+        })?;
+        collect_rows(rows)
+    }
+
     pub fn checked_agreement(&self, agreement_id: &str) -> StoreResult<AgreementView> {
         verify_agreement_integrity(&self.connection, agreement_id)
     }
@@ -4866,14 +6113,72 @@ impl Store {
 }
 
 impl Store {
+    #[allow(dead_code)]
     pub fn begin_or_resume_attempt(
         &mut self,
         input: &NewAgentAttempt,
+    ) -> StoreResult<AgentAttemptView> {
+        self.begin_or_resume_attempt_with_ingress(input, None)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    pub fn begin_or_resume_attempt_with_ingress(
+        &mut self,
+        input: &NewAgentAttempt,
+        ingress: Option<&IngressRequest>,
     ) -> StoreResult<AgentAttemptView> {
         validate_new_attempt(input)?;
         let now = now_unix();
         let attempt_id = new_id("att");
         let transaction = self.immediate()?;
+        let ingress_basis_id = if let Some(ingress) = ingress {
+            if input.kind != AttemptKind::ConformanceReview {
+                return Err(StoreError::InvalidInput(
+                    "only conformance attempts accept an ingress request".into(),
+                ));
+            }
+            let receipt = replay_ingress::<CandidateIngressResult>(
+                &transaction,
+                Some(ingress),
+                INGRESS_CONFORMANCE_REVIEW,
+            )?
+            .ok_or_else(|| {
+                StoreError::CorruptState(
+                    "conformance attempt has no admitted ingress receipt".into(),
+                )
+            })?;
+            if receipt.agreement_id != input.subject_id
+                || input.basis_id.as_deref() != Some(receipt.basis_id.as_str())
+            {
+                return Err(StoreError::Conflict(
+                    "conformance attempt does not match its admitted request key".into(),
+                ));
+            }
+            Some(receipt.basis_id)
+        } else {
+            None
+        };
+        if let Some(basis_id) = &ingress_basis_id {
+            let existing_id: Option<String> = transaction
+                .query_row(
+                    "SELECT attempt_id FROM agent_attempts
+                     WHERE kind = 'conformance_review' AND subject_id = ? AND basis_id = ?
+                     ORDER BY created_at DESC, attempt_id DESC LIMIT 1",
+                    params![input.subject_id, basis_id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if let Some(existing_id) = existing_id {
+                let attempt = read_attempt(&transaction, &existing_id)?;
+                if !conformance_attempt_matches_ingress(&attempt, input) {
+                    return Err(StoreError::Conflict(format!(
+                        "conformance attempt {existing_id} has a different immutable request"
+                    )));
+                }
+                transaction.commit()?;
+                return Ok(attempt);
+            }
+        }
         let existing_id: Option<String> = transaction
             .query_row(
                 "SELECT attempt_id FROM agent_attempts
@@ -4884,7 +6189,12 @@ impl Store {
             .optional()?;
         if let Some(existing_id) = existing_id {
             let attempt = read_attempt(&transaction, &existing_id)?;
-            if !attempt_matches_input(&attempt, input) {
+            let matches = if ingress_basis_id.is_some() {
+                conformance_attempt_matches_ingress(&attempt, input)
+            } else {
+                attempt_matches_input(&attempt, input)
+            };
+            if !matches {
                 return Err(StoreError::Conflict(format!(
                     "active attempt {existing_id} has a different immutable request"
                 )));
@@ -4982,6 +6292,24 @@ impl Store {
                 "SELECT attempt_id FROM agent_attempts
                  WHERE kind = ? AND subject_id = ? AND active = 1",
                 params![kind.as_str(), subject_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        id.map(|id| self.attempt(&id)).transpose()
+    }
+
+    pub fn conformance_attempt_for_basis(
+        &self,
+        agreement_id: &str,
+        basis_id: &str,
+    ) -> StoreResult<Option<AgentAttemptView>> {
+        let id: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT attempt_id FROM agent_attempts
+                 WHERE kind = 'conformance_review' AND subject_id = ? AND basis_id = ?
+                 ORDER BY created_at DESC, attempt_id DESC LIMIT 1",
+                params![agreement_id, basis_id],
                 |row| row.get(0),
             )
             .optional()?;

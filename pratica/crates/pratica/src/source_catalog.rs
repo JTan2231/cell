@@ -150,7 +150,6 @@ impl fmt::Display for CatalogError {
 impl std::error::Error for CatalogError {}
 
 impl FrozenSourceCatalog {
-    #[allow(clippy::too_many_lines)]
     pub(crate) fn load(manifest_path: &Path) -> Result<Self, CatalogError> {
         let manifest_metadata = fs::symlink_metadata(manifest_path).map_err(|error| {
             CatalogError::new(
@@ -176,20 +175,7 @@ impl FrozenSourceCatalog {
                 format!("unable to read {}: {error}", manifest_path.display()),
             )
         })?;
-        if manifest_bytes.len() > usize::try_from(MAX_MANIFEST_BYTES).unwrap_or(usize::MAX) {
-            return Err(CatalogError::new(
-                "manifest_too_large",
-                format!("source manifest may contain at most {MAX_MANIFEST_BYTES} bytes"),
-            ));
-        }
-        let manifest_text = checked_utf8(&manifest_bytes, "source manifest")?;
-        let manifest: SourceManifest = toml::from_str(manifest_text).map_err(|error| {
-            CatalogError::new(
-                "manifest_invalid",
-                format!("unable to decode source manifest: {error}"),
-            )
-        })?;
-        validate_manifest(&manifest)?;
+        let manifest = decode_manifest(&manifest_bytes)?;
 
         let canonical_manifest = fs::canonicalize(manifest_path).map_err(|error| {
             CatalogError::new(
@@ -209,7 +195,39 @@ impl FrozenSourceCatalog {
                 format!("unable to resolve manifest directory: {error}"),
             )
         })?;
+        Self::freeze_manifest(manifest, &canonical_parent, canonical_manifest)
+    }
 
+    pub(crate) fn load_from_reader<R: std::io::Read>(
+        reader: R,
+        source_root: &Path,
+    ) -> Result<Self, CatalogError> {
+        let canonical_root = canonical_source_root(source_root)?;
+        let manifest_bytes = read_reader_bounded(reader, MAX_MANIFEST_BYTES).map_err(|error| {
+            CatalogError::new(
+                "manifest_unreadable",
+                format!("unable to read source manifest from standard input: {error}"),
+            )
+        })?;
+        let manifest = decode_manifest(&manifest_bytes)?;
+        Self::freeze_manifest(manifest, &canonical_root, PathBuf::new())
+    }
+
+    pub(crate) fn load_from_bytes(
+        manifest_bytes: &[u8],
+        source_root: &Path,
+    ) -> Result<Self, CatalogError> {
+        let canonical_root = canonical_source_root(source_root)?;
+        let manifest = decode_manifest(manifest_bytes)?;
+        Self::freeze_manifest(manifest, &canonical_root, PathBuf::new())
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn freeze_manifest(
+        manifest: SourceManifest,
+        source_base: &Path,
+        manifest_path: PathBuf,
+    ) -> Result<Self, CatalogError> {
         let mut ids = BTreeSet::new();
         let mut paths = BTreeSet::new();
         let mut sources = Vec::with_capacity(manifest.sources.len());
@@ -221,7 +239,7 @@ impl FrozenSourceCatalog {
                     format!("source ID is duplicated: {}", source.id),
                 ));
             }
-            let (origin_path, locator) = resolve_source_path(&canonical_parent, &source.path)?;
+            let (origin_path, locator) = resolve_source_path(source_base, &source.path)?;
             if !paths.insert(origin_path.clone()) {
                 return Err(CatalogError::new(
                     "source_path_duplicate",
@@ -304,7 +322,7 @@ impl FrozenSourceCatalog {
             title: manifest.title,
             charter_markdown: manifest.charter_markdown,
             charter_sha256,
-            manifest_path: canonical_manifest,
+            manifest_path,
             catalog_sha256,
             sources,
         })
@@ -501,6 +519,58 @@ impl FrozenSourceCatalog {
                 )
             })
     }
+}
+
+fn decode_manifest(manifest_bytes: &[u8]) -> Result<SourceManifest, CatalogError> {
+    if manifest_bytes.len() > usize::try_from(MAX_MANIFEST_BYTES).unwrap_or(usize::MAX) {
+        return Err(CatalogError::new(
+            "manifest_too_large",
+            format!("source manifest may contain at most {MAX_MANIFEST_BYTES} bytes"),
+        ));
+    }
+    let manifest_text = checked_utf8(manifest_bytes, "source manifest")?;
+    let manifest = toml::from_str(manifest_text).map_err(|error| {
+        CatalogError::new(
+            "manifest_invalid",
+            format!("unable to decode source manifest: {error}"),
+        )
+    })?;
+    validate_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+fn canonical_source_root(source_root: &Path) -> Result<PathBuf, CatalogError> {
+    if !source_root.is_absolute() {
+        return Err(CatalogError::new(
+            "source_root_relative",
+            "source root must be an absolute directory",
+        ));
+    }
+    let canonical = fs::canonicalize(source_root).map_err(|error| {
+        CatalogError::new(
+            "source_root_unreadable",
+            format!(
+                "unable to resolve source root {}: {error}",
+                source_root.display()
+            ),
+        )
+    })?;
+    let metadata = fs::symlink_metadata(&canonical).map_err(|error| {
+        CatalogError::new(
+            "source_root_unreadable",
+            format!(
+                "unable to inspect source root {}: {error}",
+                source_root.display()
+            ),
+        )
+    })?;
+    if !metadata.is_dir() {
+        return Err(CatalogError::new(
+            "source_root_not_directory",
+            format!("source root must be a directory: {}", source_root.display()),
+        ));
+    }
+    Ok(canonical)
 }
 
 fn validate_manifest(manifest: &SourceManifest) -> Result<(), CatalogError> {
@@ -812,8 +882,13 @@ fn read_bounded(path: &Path, maximum: u64) -> std::io::Result<Vec<u8>> {
             "bounded source exceeds its byte limit",
         ));
     }
+    read_reader_bounded(file, maximum)
+}
+
+fn read_reader_bounded<R: std::io::Read>(reader: R, maximum: u64) -> std::io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    file.take(maximum.saturating_add(1))
+    reader
+        .take(maximum.saturating_add(1))
         .read_to_end(&mut bytes)?;
     Ok(bytes)
 }
@@ -846,8 +921,10 @@ fn invalid_cursor() -> CatalogError {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::io::Cursor;
+    use std::path::Path;
 
-    use super::FrozenSourceCatalog;
+    use super::{FrozenSourceCatalog, MAX_MANIFEST_BYTES};
     use crate::agent_contracts::{PageRequest, SourceReadRequest, SourceSearchRequest};
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -931,6 +1008,71 @@ path = "implementation.rs"
     }
 
     #[test]
+    fn reader_and_bytes_manifests_use_the_explicit_source_root() -> TestResult {
+        let (directory, manifest) = fixture()?;
+        let manifest_bytes = fs::read(&manifest)?;
+        let from_file = FrozenSourceCatalog::load(&manifest)?;
+        let from_reader = FrozenSourceCatalog::load_from_reader(
+            Cursor::new(manifest_bytes.clone()),
+            directory.path(),
+        )?;
+        let from_bytes = FrozenSourceCatalog::load_from_bytes(&manifest_bytes, directory.path())?;
+
+        for catalog in [&from_reader, &from_bytes] {
+            assert!(catalog.manifest_path.as_os_str().is_empty());
+            assert_eq!(catalog.catalog_sha256, from_file.catalog_sha256);
+            assert_eq!(catalog.charter_sha256, from_file.charter_sha256);
+            assert_eq!(catalog.sources.len(), from_file.sources.len());
+            for (source, file_source) in catalog.sources.iter().zip(&from_file.sources) {
+                assert_eq!(source.id, file_source.id);
+                assert_eq!(source.kind, file_source.kind);
+                assert_eq!(source.locator, file_source.locator);
+                assert_eq!(source.origin_path, file_source.origin_path);
+                assert_eq!(source.revision, file_source.revision);
+                assert_eq!(source.content, file_source.content);
+                assert_eq!(source.content_sha256, file_source.content_sha256);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn reader_manifest_requires_a_bounded_absolute_existing_directory() -> TestResult {
+        let (directory, manifest) = fixture()?;
+        let manifest_bytes = fs::read(&manifest)?;
+
+        let Err(error) =
+            FrozenSourceCatalog::load_from_bytes(&manifest_bytes, Path::new("relative-root"))
+        else {
+            panic!("relative source root was accepted");
+        };
+        assert_eq!(error.code(), "source_root_relative");
+
+        let missing = directory.path().join("missing");
+        let Err(error) = FrozenSourceCatalog::load_from_bytes(&manifest_bytes, &missing) else {
+            panic!("missing source root was accepted");
+        };
+        assert_eq!(error.code(), "source_root_unreadable");
+
+        let regular_file = directory.path().join("not-a-directory");
+        fs::write(&regular_file, "not a directory")?;
+        let Err(error) = FrozenSourceCatalog::load_from_bytes(&manifest_bytes, &regular_file)
+        else {
+            panic!("regular file source root was accepted");
+        };
+        assert_eq!(error.code(), "source_root_not_directory");
+
+        let oversized = vec![b'x'; usize::try_from(MAX_MANIFEST_BYTES)? + 1];
+        let Err(error) =
+            FrozenSourceCatalog::load_from_reader(Cursor::new(oversized), directory.path())
+        else {
+            panic!("oversized reader manifest was accepted");
+        };
+        assert_eq!(error.code(), "manifest_too_large");
+        Ok(())
+    }
+
+    #[test]
     fn later_source_change_marks_the_basis_stale_without_changing_snapshot() -> TestResult {
         let (directory, manifest) = fixture()?;
         let catalog = FrozenSourceCatalog::load(&manifest)?;
@@ -969,13 +1111,18 @@ path = "../product/contract.md"
 "#,
         )?;
 
-        let catalog = FrozenSourceCatalog::load(&manifest)?;
-        assert_eq!(catalog.sources[0].locator, "../product/contract.md");
-        assert_eq!(
-            catalog.sources[0].origin_path,
-            fs::canonicalize(product.join("contract.md"))?
-        );
-        assert_eq!(catalog.sources[0].content, b"# Actual product contract\n");
+        let manifest_bytes = fs::read(&manifest)?;
+        for catalog in [
+            FrozenSourceCatalog::load(&manifest)?,
+            FrozenSourceCatalog::load_from_bytes(&manifest_bytes, &manifests)?,
+        ] {
+            assert_eq!(catalog.sources[0].locator, "../product/contract.md");
+            assert_eq!(
+                catalog.sources[0].origin_path,
+                fs::canonicalize(product.join("contract.md"))?
+            );
+            assert_eq!(catalog.sources[0].content, b"# Actual product contract\n");
+        }
         Ok(())
     }
 

@@ -20,6 +20,7 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     Init,
+    Migrate(MigrationArgs),
     Doctor,
     Steward {
         #[command(subcommand)]
@@ -55,6 +56,8 @@ pub enum Command {
 pub enum StewardCommand {
     Register {
         manifest: PathBuf,
+        #[arg(long)]
+        source_root: Option<PathBuf>,
     },
     List,
     Show {
@@ -70,6 +73,7 @@ pub enum StewardCommand {
 #[derive(Debug, Subcommand)]
 pub enum IntegrationCommand {
     Open(IntegrationOpenArgs),
+    List,
     Status(IdArgs),
     Review(IdArgs),
     Report(IdArgs),
@@ -83,6 +87,8 @@ pub struct IntegrationOpenArgs {
     pub title: String,
     #[arg(long)]
     pub context: Option<PathBuf>,
+    #[arg(long)]
+    pub request_key: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -104,6 +110,8 @@ pub struct TrackOpenArgs {
     pub steward_version: Option<u32>,
     #[arg(long)]
     pub terms: PathBuf,
+    #[arg(long)]
+    pub request_key: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -116,6 +124,8 @@ pub enum NegotiationCommand {
         base: String,
         #[arg(long)]
         terms: PathBuf,
+        #[arg(long)]
+        request_key: Option<String>,
     },
     Assent {
         negotiation: String,
@@ -142,6 +152,7 @@ pub enum AttemptCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum AgreementCommand {
+    List,
     Show(IdArgs),
     Export {
         agreement: String,
@@ -153,6 +164,8 @@ pub enum AgreementCommand {
         agreement: String,
         #[arg(long)]
         terms: PathBuf,
+        #[arg(long)]
+        request_key: Option<String>,
     },
 }
 
@@ -162,6 +175,10 @@ pub enum ConformanceCommand {
         agreement: String,
         #[arg(long)]
         candidate_basis: PathBuf,
+        #[arg(long)]
+        source_root: Option<PathBuf>,
+        #[arg(long)]
+        request_key: Option<String>,
     },
     Show(IdArgs),
 }
@@ -169,4 +186,78 @@ pub enum ConformanceCommand {
 #[derive(Debug, Args)]
 pub struct IdArgs {
     pub id: String,
+}
+
+#[derive(Debug, Args)]
+pub struct MigrationArgs {
+    #[arg(long)]
+    pub backup: PathBuf,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use clap::Parser as _;
+
+    use super::{Cli, Command, ConformanceCommand, StewardCommand};
+
+    #[test]
+    fn manifest_commands_parse_standard_input_with_an_explicit_source_root() {
+        let steward = Cli::try_parse_from([
+            "pratica",
+            "steward",
+            "register",
+            "-",
+            "--source-root",
+            "/tmp/pratica-source-root",
+        ])
+        .expect("steward registration arguments");
+        let Command::Steward {
+            command:
+                StewardCommand::Register {
+                    manifest,
+                    source_root,
+                },
+        } = steward.command
+        else {
+            panic!("expected steward registration");
+        };
+        assert_eq!(manifest, Path::new("-"));
+        assert_eq!(
+            source_root.as_deref(),
+            Some(Path::new("/tmp/pratica-source-root"))
+        );
+
+        let conformance = Cli::try_parse_from([
+            "pratica",
+            "conformance",
+            "review",
+            "agreement-1",
+            "--candidate-basis",
+            "-",
+            "--source-root",
+            "/tmp/pratica-candidate-root",
+        ])
+        .expect("conformance review arguments");
+        let Command::Conformance {
+            command:
+                ConformanceCommand::Review {
+                    agreement,
+                    candidate_basis,
+                    source_root,
+                    request_key,
+                },
+        } = conformance.command
+        else {
+            panic!("expected conformance review");
+        };
+        assert_eq!(agreement, "agreement-1");
+        assert_eq!(candidate_basis, Path::new("-"));
+        assert_eq!(
+            source_root.as_deref(),
+            Some(Path::new("/tmp/pratica-candidate-root"))
+        );
+        assert!(request_key.is_none());
+    }
 }

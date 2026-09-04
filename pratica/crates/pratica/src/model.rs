@@ -299,6 +299,16 @@ pub struct IntegrationView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct IntegrationListItem {
+    pub integration_id: String,
+    pub entrant_party: String,
+    pub title: String,
+    pub context_sha256: Option<String>,
+    pub context_bytes: Option<i64>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TrackView {
     pub track_id: String,
     pub integration_id: String,
@@ -340,6 +350,27 @@ pub struct AgreementView {
     pub basis_freshness: BasisFreshness,
     pub entrant_assent_event_ordinal: u32,
     pub steward_assent_event_ordinal: u32,
+    pub predecessor_agreement_id: Option<String>,
+    pub successor_agreement_id: Option<String>,
+    pub sealed_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgreementListItem {
+    pub agreement_id: String,
+    pub integration_id: String,
+    pub track_id: String,
+    pub scope_id: String,
+    pub scope_version: u32,
+    pub negotiation_id: String,
+    pub offer_id: String,
+    pub basis_id: String,
+    pub entrant_party: String,
+    pub steward_party: String,
+    pub integration_title: String,
+    pub terms_sha256: String,
+    pub terms_bytes: i64,
+    pub basis_freshness: BasisFreshness,
     pub predecessor_agreement_id: Option<String>,
     pub successor_agreement_id: Option<String>,
     pub sealed_at: i64,

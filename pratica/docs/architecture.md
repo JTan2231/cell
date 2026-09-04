@@ -15,7 +15,7 @@ does not watch target repositories.
 | --- | --- | --- |
 | Entrant party | Its complete proposed terms and assent | The stewarded system's present behavior |
 | Steward party | Whether one exact terms snapshot accurately represents what its scope currently provides, refuses, or would require changed on one exact basis | Authority to implement or deploy the described change |
-| Pratica | Integration and track identity, offer order, exact terms bytes and digests, party roster, current assent, staleness, agreement seals, basis records, attempts, reviews, and exports | Meaning inside the Markdown or truth of target source material |
+| Pratica | Integration and track identity, offer order, exact terms bytes and digests, party roster, current assent, staleness, agreement seals, basis records, ingress receipts, attempts, reviews, and exports | Meaning inside the Markdown or truth of target source material |
 | Target system | Its implementation, behavioral contracts, lifecycle, and change authority | Pratica's negotiation history |
 | Nucleus | Agent admission, authentication, execution, job history, and durable tool mailbox | Negotiation success, accepted terms, retry policy, or target-system changes |
 | Codex agent | A bounded proposed steward, composition, or conformance response | Party identity, assent, implementation authority, or domain success |
@@ -47,8 +47,18 @@ the current head, every required party currently assents to that exact offer,
 and the steward basis guards still match. The seal is immutable. A later offer
 is an amendment negotiation rather than a rewrite of history.
 
-This slice supplies deterministic manual commands, history, status, reports,
-exports, and optimistic-concurrency failures without invoking Nucleus.
+This slice supplies deterministic manual commands, body-free integration and
+agreement discovery, history, status, reports, exports, and
+optimistic-concurrency failures without invoking Nucleus.
+
+Selected state-creating commands may also bind a caller-owned request key to a
+canonical operation request and its durable result identities. The key is
+global within one database. Exact replay returns the identities already bound
+to it; changed reuse fails. The receipt and domain mutation share one SQLite
+transaction, so neither can survive alone. Content digests identify exact
+accepted Markdown bytes, while parsed manifest fields and captured source
+metadata identify a manifest request; TOML whitespace and comments do not
+become durable contract meaning.
 
 ## Slice 2: steward requester
 
@@ -139,13 +149,26 @@ Neither artifact authorizes target-system mutation.
 ## Frozen source and basis boundary
 
 Callers supply steward manifests at registration and candidate manifests at
-conformance review. Pratica reads only their named regular bounded files,
-resolves them before admission, records stable identifiers and digests, and
-serves captured bytes through managed tools. The model never receives arbitrary
-filesystem paths or a shell. Pratica does not call Chancery, Conversations,
-Semantics, Decisions, Git, or a target product at runtime. Later `agreement
-verify` may re-read only the already-recorded local locators to classify basis
-freshness; it performs no adapter discovery or mutation.
+conformance review. A top-level manifest, terms document, or context can be a
+borrowed regular file or exact standard input. A stdin manifest requires an
+explicit absolute source root; Pratica never treats the process working
+directory as an implicit base. File-backed manifests continue to resolve
+relative source paths from their containing directory.
+
+Pratica reads only the manifest's named regular bounded sources, resolves them
+before admission, records normalized source identities and digests, preserves
+their exact bytes, and serves the captured bytes through managed tools. It
+never deletes or changes a supplied manifest, Markdown document, source root,
+or referenced source file. After successful admission, negotiation and model
+recovery use the retained Pratica records rather than a caller-created
+transport file. Source products nevertheless continue to own their original
+evidence; Pratica's frozen copy does not transfer current-truth authority.
+
+The model never receives arbitrary filesystem paths or a shell. Pratica does
+not call Chancery, Conversations, Semantics, Decisions, Git, or a target
+product at runtime. Later `agreement verify` may re-read only the
+already-recorded local origins to classify basis freshness; it performs no
+adapter discovery or mutation.
 
 A basis can become stale independently of negotiation staleness. A new offer
 stales other-party assent; a changed implementation or contract basis makes a
@@ -157,12 +180,21 @@ public contract and ask Pratica to verify or review it explicitly.
 
 Pratica persists the exact typed Nucleus request, job correlation, selected
 offer, selected basis, tool-call outcome, and commit state needed to distinguish
-ambiguous transport from a new attempt. Duplicate tool delivery with identical
-content returns the same result; conflicting reuse fails closed. A Nucleus
-restart makes an unfinished Codex process lost and does not authorize retry.
+ambiguous transport from a new attempt. Separately, schema two persists
+caller-ingress request identities and their result identities for the selected
+direct state-changing commands. Conformance admission atomically retains its
+candidate basis and ingress receipt before the independently resumable Nucleus
+attempt begins. Duplicate tool or ingress delivery with identical content
+returns the bound result; conflicting reuse fails closed. A Nucleus restart
+makes an unfinished Codex process lost and does not authorize retry.
 
 Terms, source snapshots, prompts, tool calls, reviews, and exports may contain
 private implementation and product-design material. Pratica and Nucleus state
-must be protected according to that complete content. Release bundles and test
-fixtures contain only synthetic material and never include negotiated contracts
-or captured source bodies.
+must be protected according to that complete content. Registration, steward
+list/show, integration list, agreement list, and attempt source projections
+remain body-free and omit canonical source-origin paths; their stable
+identities, titles, relative locators, digests, and byte counts can still be
+sensitive. Deliberate detail, report, review, and export commands can disclose
+their documented bodies. Release bundles and test fixtures contain only
+synthetic material and never include negotiated contracts or captured source
+bodies.

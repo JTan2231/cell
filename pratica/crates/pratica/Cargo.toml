@@ -10,7 +10,7 @@ clap.workspace = true
 libc.workspace = true
 nucleus-client.workspace = true
 nucleus-core.workspace = true
-rusqlite.workspace = true
+rusqlite = { workspace = true, features = ["backup"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

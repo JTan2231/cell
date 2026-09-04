@@ -1,11 +1,11 @@
-PRAGMA user_version = 2;
+PRAGMA user_version = 1;
 
 CREATE TABLE pratica_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 ) STRICT;
 
-INSERT INTO pratica_meta (key, value) VALUES ('schema_version', '2');
+INSERT INTO pratica_meta (key, value) VALUES ('schema_version', '1');
 
 CREATE TABLE steward_scopes (
     scope_id TEXT NOT NULL,
@@ -230,16 +230,6 @@ CREATE TABLE tool_receipt_source_refs (
     PRIMARY KEY (receipt_id, source_ref)
 ) STRICT;
 
-CREATE TABLE ingress_receipts (
-    request_key TEXT PRIMARY KEY CHECK (length(request_key) BETWEEN 1 AND 256),
-    operation TEXT NOT NULL CHECK (length(operation) > 0),
-    request_bytes BLOB NOT NULL,
-    request_sha256 TEXT NOT NULL CHECK (length(request_sha256) = 64),
-    result_bytes BLOB NOT NULL,
-    result_sha256 TEXT NOT NULL CHECK (length(result_sha256) = 64),
-    recorded_at INTEGER NOT NULL
-) STRICT;
-
 CREATE TABLE composition_reviews (
     review_id TEXT PRIMARY KEY,
     integration_id TEXT NOT NULL REFERENCES integrations(integration_id),
@@ -330,10 +320,6 @@ CREATE TRIGGER tool_receipt_source_refs_no_update BEFORE UPDATE ON tool_receipt_
 BEGIN SELECT RAISE(ABORT, 'tool_receipt_source_refs are immutable'); END;
 CREATE TRIGGER tool_receipt_source_refs_no_delete BEFORE DELETE ON tool_receipt_source_refs
 BEGIN SELECT RAISE(ABORT, 'tool_receipt_source_refs are immutable'); END;
-CREATE TRIGGER ingress_receipts_no_update BEFORE UPDATE ON ingress_receipts
-BEGIN SELECT RAISE(ABORT, 'ingress_receipts are immutable'); END;
-CREATE TRIGGER ingress_receipts_no_delete BEFORE DELETE ON ingress_receipts
-BEGIN SELECT RAISE(ABORT, 'ingress_receipts are immutable'); END;
 CREATE TRIGGER composition_reviews_no_update BEFORE UPDATE ON composition_reviews
 BEGIN SELECT RAISE(ABORT, 'composition_reviews are immutable'); END;
 CREATE TRIGGER composition_reviews_no_delete BEFORE DELETE ON composition_reviews

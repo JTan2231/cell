@@ -39,7 +39,7 @@ use crate::source_catalog::{
     FrozenSource, FrozenSourceCatalog, MANIFEST_SCHEMA_VERSION, MAX_CATALOG_BYTES,
     MAX_SOURCE_BYTES, MAX_SOURCES,
 };
-use crate::store::{Store, StoreError, StoreErrorKind};
+use crate::store::{IngressRequest, Store, StoreError, StoreErrorKind};
 
 const MODEL: &str = "gpt-5.6-terra";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
@@ -153,6 +153,7 @@ impl AgentRunner {
             Some(basis.basis_id.clone()),
             basis.manifest_sha256.clone(),
             &catalog,
+            None,
         )?;
         self.run_attempt(store, &attempt)
     }
@@ -210,6 +211,7 @@ impl AgentRunner {
             None,
             composition_digest,
             &catalog,
+            None,
         )?;
         self.run_attempt(store, &attempt)
     }
@@ -219,6 +221,7 @@ impl AgentRunner {
         store: &mut Store,
         agreement_id: &str,
         candidate: &FrozenSourceCatalog,
+        ingress: Option<&IngressRequest>,
     ) -> AppResult<AgentRunOutcome> {
         if let Some(attempt) =
             store_result(store.active_attempt(AttemptKind::ConformanceReview, agreement_id))?
@@ -229,18 +232,60 @@ impl AgentRunner {
                     "an active conformance attempt already uses a different candidate basis",
                 ));
             }
+            if let Some(ingress) = ingress {
+                let admitted =
+                    store_result(store.candidate_basis_for_ingress(agreement_id, ingress))?
+                        .ok_or_else(|| {
+                            AppError::new(
+                                "attempt_request_conflict",
+                                "the active conformance attempt belongs to a different request key",
+                            )
+                        })?;
+                if attempt.basis_id.as_deref() != Some(admitted.basis_id.as_str()) {
+                    return Err(AppError::new(
+                        "attempt_request_conflict",
+                        "the request key belongs to a different conformance attempt",
+                    ));
+                }
+            }
             return self.run_attempt(store, &attempt);
         }
 
         candidate.verify_sources_current().map_err(catalog_error)?;
         let agreement = store_result(store.agreement(agreement_id))?;
-        reject_implicit_retry(
-            store_result(store.latest_attempt(AttemptKind::ConformanceReview, agreement_id))?
-                .as_ref(),
-            |latest| latest.catalog_sha256 == candidate.catalog_sha256,
-        )?;
         let frozen_input = crate::app::basis_from_catalog(candidate, BasisKind::Candidate)?;
-        let basis = store_result(store.freeze_candidate_basis(&frozen_input))?;
+        let basis = if let Some(ingress) = ingress {
+            if let Some(basis) =
+                store_result(store.candidate_basis_for_ingress(agreement_id, ingress))?
+            {
+                if let Some(attempt) = store_result(
+                    store.conformance_attempt_for_basis(agreement_id, &basis.basis_id),
+                )? {
+                    return self.run_attempt(store, &attempt);
+                }
+                basis
+            } else {
+                reject_implicit_retry(
+                    store_result(
+                        store.latest_attempt(AttemptKind::ConformanceReview, agreement_id),
+                    )?
+                    .as_ref(),
+                    |latest| latest.catalog_sha256 == candidate.catalog_sha256,
+                )?;
+                store_result(store.freeze_candidate_basis_with_ingress(
+                    agreement_id,
+                    &frozen_input,
+                    ingress,
+                ))?
+            }
+        } else {
+            reject_implicit_retry(
+                store_result(store.latest_attempt(AttemptKind::ConformanceReview, agreement_id))?
+                    .as_ref(),
+                |latest| latest.catalog_sha256 == candidate.catalog_sha256,
+            )?;
+            store_result(store.freeze_candidate_basis(&frozen_input))?
+        };
         let prompt = encode_prompt(json!({
             "stage": "conformance_review",
             "agreement_id": agreement.agreement_id,
@@ -270,6 +315,7 @@ impl AgentRunner {
             Some(basis.basis_id.clone()),
             basis.manifest_sha256.clone(),
             candidate,
+            ingress,
         )?;
         self.run_attempt(store, &attempt)
     }
@@ -318,6 +364,7 @@ impl AgentRunner {
             attempt.basis_id.clone(),
             attempt.basis_digest.clone(),
             &catalog,
+            None,
         )?;
         self.run_attempt(store, &replacement)
     }
@@ -335,6 +382,7 @@ impl AgentRunner {
         basis_id: Option<String>,
         basis_digest: String,
         catalog: &FrozenSourceCatalog,
+        ingress: Option<&IngressRequest>,
     ) -> AppResult<AgentAttemptView> {
         verify_catalog_snapshot(catalog)?;
         let (requester_id, nucleus_job_id) = new_attempt_identity(stage, requester_id);
@@ -404,7 +452,7 @@ impl AgentRunner {
             catalog_sha256: catalog.catalog_sha256.clone(),
             sources,
         };
-        match store.begin_or_resume_attempt(&new_attempt) {
+        match store.begin_or_resume_attempt_with_ingress(&new_attempt, ingress) {
             Ok(attempt) => {
                 if attempt.nucleus_job_id != nucleus_job_id {
                     cleanup_neutral_cwd(&nucleus_job_id);
@@ -2342,6 +2390,7 @@ mod tests {
             None,
             composition_digest,
             &catalog,
+            None,
         )?;
         let persisted = store.attempt(&attempt.attempt_id)?;
         assert_eq!(persisted.sources.len(), catalog.sources.len());

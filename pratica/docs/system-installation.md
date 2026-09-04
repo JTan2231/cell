@@ -27,6 +27,21 @@ Initialize separately after a fresh deployment:
 /Users/joey/.local/bin/pratica doctor
 ```
 
+An existing schema-one database requires a separate, explicit quiescent
+migration after the new release is selected:
+
+```sh
+/Users/joey/.local/bin/pratica migrate \
+  --backup /absolute/private/path/pratica-schema-1.db
+/Users/joey/.local/bin/pratica doctor
+```
+
+Stop every other Pratica process first and ensure no attempt is active. The
+backup path must be absolute and absent inside an existing private directory;
+Pratica creates the backup mode 0600 before changing schema one to schema two.
+Running `migrate` on schema two is a true no-op and neither inspects nor creates
+the named backup. Other source schema versions are refused.
+
 ## Paths
 
 ```text
@@ -103,6 +118,12 @@ apply. Stop if `previous` is absent or invalid. Rollback changes program and
 provider selection only; it never rewrites negotiation state. A binary that
 cannot read the retained schema is not a safe rollback and requires the
 database recovery plan for that release.
+
+After a schema-one to schema-two migration, rollback requires restoring the
+retained schema-one backup and selecting the matching old binary together.
+Redeploying only the old program against schema-two state is unsafe. Preserve
+the newer database separately until the rollback decision and recovery
+evidence are complete.
 
 Pratica participates in Semantics as project `pratica`. Register the canonical
 folder only after this marker and implementation exist, seed only implemented
