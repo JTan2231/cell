@@ -294,9 +294,9 @@ spool = "/var/spool/annals"
 Both configurations must select the same reachable Nucleus socket. The
 `nucleus` executable in `usage.toml` is used only when `annals-usage login`
 delegates to `nucleus auth login`; report, budget, doctor, and examinations use
-the socket. Nucleus owns the Codex executable, persistent credential home, and
-exclusive authentication lease. Annals and Annals Usage do not read or set
-`CODEX_HOME`.
+the socket. Nucleus owns the Codex executable, persistent credential home,
+serialized canonical credential operations, and the exclusive attended-login
+session barrier. Annals and Annals Usage do not read or set `CODEX_HOME`.
 
 The core executable selects a configuration only from `--config`, then a
 nonempty `ANNALS_CONFIG`. The library resolves from `--library`, then a
@@ -420,7 +420,8 @@ sudo install -o root -g root -m 0644 \
 
 Adjust the executable and socket paths in the configs and service if Nucleus
 or Annals is installed elsewhere. Authenticate through the Nucleus service so
-login, account reads, and model jobs share its credential lease:
+login, account reads, and model jobs remain under its single credential
+authority:
 
 ```sh
 sudo -u annals env HOME=/var/lib/annals \
@@ -744,8 +745,9 @@ Nucleus creates and thereafter owns
 credential directory is only the initial import source and is not a runtime
 path or a synchronized backup. The first Annals deployment's doctor check verifies Nucleus
 readiness and authentication. `annals-usage login --device-auth` delegates to
-`nucleus auth login --device-auth`, which uses the same Nucleus credential lease
-as daemon jobs and account reads.
+`nucleus auth login --device-auth`, whose exclusive authentication-session
+barrier waits for active daemon jobs and account reads before replacing the
+account.
 
 #### Attended reauthentication
 

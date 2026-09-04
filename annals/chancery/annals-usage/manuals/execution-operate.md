@@ -33,9 +33,10 @@ telemetry access. It creates no state. A failure identifies the current
 configuration, filesystem, runtime, compatibility, or account boundary; it is
 not an Annals corpus-success diagnosis.
 
-Budget and doctor use a nonblocking credential-lease request. An
-authentication-busy result means another Nucleus consumer owns the lease and
-should be allowed to finish; it does not by itself prove invalid credentials.
+Budget and doctor use a nonblocking canonical-credential request. An
+authentication-busy result means a canonical account, refresh, or login
+operation owns that boundary and should be allowed to finish; an active job
+alone does not make the request busy or prove invalid credentials.
 
 ## Attended login
 

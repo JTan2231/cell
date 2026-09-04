@@ -68,7 +68,7 @@ separately maintained discovery catalog.
 | Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from accepted accounts in the dedicated Annals decisions library. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, decision-feed intake, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, transcript storage, or interpreting Annals retention as semantic truth. |
 | Geste | A prior bounded work episode should be found by problem shape or manually recorded with its source basis. | Episode identity, immutable account revisions, authored interpretation, source anchors, coverage gaps, and read-time search, report, and graph projections. | Source-system truth, current policy, automatic episode ingestion, or deciding that a precedent applies. |
 | Pratica | A proposed entrant needs exact negotiated terms from several independently stewarded systems. | Integration and track identity, immutable offers, current assent, agreement seals, steward bases, caller-keyed ingress receipts, bounded requester attempts, composition reviews, and conformance reviews. | Implementing or changing target systems, automatically discovering every concern, treating review prose as assent, or proving deployment readiness. |
-| Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, harness validation and supervision, credential serialization, cancellation, exact harness-stdout observations, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, requester retry policy, or reporting materializations. |
+| Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, eight-slot harness supervision, single-authority credential coordination, cancellation, exact harness-stdout observations, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, requester retry policy, or reporting materializations. |
 | Annals Usage | Annals-attributed model consumption, account allowance, login, or the Annals-to-Nucleus execution path must be inspected. | Live calculation over Annals attribution and Nucleus output atoms, plus Annals-facing budget and diagnostic commands. | Nucleus runtime authority, durable reporting projections, Codex credential storage, Annals corpus success, or general job orchestration. |
 | Codex | Nucleus needs an inspected harness and account protocol implementation. | Its executable and app-server behavior. | Requester domain policy or a second credential authority for Nucleus jobs. |
 
@@ -122,7 +122,8 @@ weaver --version
 `nucleus health` is strict. It prints the readiness document but exits nonzero
 unless the daemon is compatible, authenticated, and accepting jobs. Its output
 identifies the daemon and harness versions, executable, protocol versions,
-adapter capabilities, and authentication readiness.
+adapter capabilities, authentication readiness, and the configured, active,
+and available execution slots.
 
 A requester's compiled Nucleus client source, the installed Nucleus patch
 release, the public protocol version, the store schema, and the exact supported
@@ -319,6 +320,52 @@ The following distinctions are operationally important:
 9. **A CRM advisory is not a gate.** It remains conspicuous wherever the case
    is consumed, but it cannot block or authorize any operation.
 
+### Shared CI, release, and deployment coordination
+
+Every public product `ci.sh` is a synchronous client of one current-user Cell
+CI broker. The broker keys its production scope by this host and the Git common
+directory, so linked worktrees share admission rather than creating one
+compiler budget and target directory each. Python 3.10 or newer is a CI
+bootstrap prerequisite.
+
+The heavy lane admits exactly one Cargo gate at a time, sets
+`CARGO_BUILD_JOBS=2` and `CARGO_INCREMENTAL=0`, and points every linked worktree
+at the primary checkout's one `target` directory. A separate two-slot light
+lane is only for bodies that do not invoke Cargo. Requests are FIFO. Only an
+exact identical Git-clean source, gate, toolchain, allowed environment, command,
+and relative working directory may join work already queued or running; dirty
+candidates never join, and completed results are never reused. Queued and
+running leases expire fail-closed, abandoned running work becomes `lost`, and
+no crash or stale result becomes green. The journal is under
+`~/Library/Application Support/Cell/ci-broker`; use
+`python3 ci_broker/client.py status EXECUTION_ID` or `recover` from a Cell
+checkout for diagnosis.
+
+The root `./ci.sh` first records one exact source key, passes that expected key
+to each independently scheduled product gate, and rejects the plan with exit
+75 if the worktree changes. A complete run then rebuilds Chancery for that same
+candidate and validates the integrated fifteen-provider, 52-entry source graph.
+This aggregate evidence does not merge product release authority or turn one
+product gate into another's gate.
+
+Each product release entry point uses its checked-in descriptor but remains a
+separate release unit. It holds one Git-common-directory publication lock
+through its brokered product gate, commit, tag, and atomic push, and rechecks
+the expected `origin/main` revision and absent tag before publication. A
+release command still requires separate explicit authority; CI never invokes
+one.
+
+Deployment remains product-owned. Every deployer takes its existing product or
+update lock before the shared Chancery catalog-writer lock and holds the catalog
+lock through selector cutover, smoke, and rollback. Generated selector-only
+deployers for Conversations, Geste, Pratica, and CRM stage immutable bytes
+before the short catalog critical section, publish command and provider through
+one atomic product `current` selector, and reject a changed observed or explicit
+`--expected-current absent|releases/HASH` precondition. Stateful deployers keep
+their product-specific quiescence, migration, service, and recovery logic and
+are conservatively globally conflicting for orchestration. Catalog presence,
+CI success, and release preparation grant no deployment authority.
+
 ### Standard installed paths
 
 ```text
@@ -414,7 +461,9 @@ Clockwork successor together.
 
 The complete Nucleus state directory is sensitive. The database can contain
 prompts, tool arguments and results, source content emitted by an agent, and
-exact app-server stdout. The Nucleus-owned Codex home contains the
+exact non-authentication app-server stdout. Host-managed authentication
+responses and managed-worker stderr are excluded from job events and durable
+output. The Nucleus-owned Codex home contains the
 authoritative credential and may contain additional Codex-local state. The
 Unix socket has no application-level authentication; local user ownership and
 filesystem permissions are the trust boundary. There is no TCP listener in
@@ -447,7 +496,7 @@ config independently when its domain admission must stop. Todo's optional
 launchd invokes Todo at 09:00 machine-local time, its zsh runner sources
 `RESEND_API_KEY` from `~/.zshrc`, and its logs live under
 `~/Library/Logs/Todo/`. It is not part of `org.nucleus.daemon` or Nucleus's
-credential lease.
+authentication authority.
 
 Conversations has a content-addressed installation but no application database.
 Krisis owns its additive schema-version-4 database, write-once activation
@@ -534,6 +583,7 @@ never falls back to a direct Codex invocation.
 | Axis | Authority | How to inspect | Change consequence |
 | --- | --- | --- | --- |
 | Nucleus release | CLI and daemon package versions | `nucleus --version`, `nucleus health` | Candidate CLI and daemon versions must match. A patch need not force requester releases when public semantics are unchanged. |
+| Capability contract | Product Chancery bundle | `chancery show nucleus.execution.operate` | Incompatible operational meaning, including the move from serialized execution to eight slots, increments the entry contract even when the HTTP protocol remains wire-compatible. Audit and widen each compatible requester's dependency bound before deployment. |
 | Public invocation protocol | `nucleus-core`, HTTP contract, runtime contract | `supportedProtocolVersions` in health and the request types | Additive support can be deployed daemon-first. An incompatible change requires a new protocol version and coordinated requester cutover. |
 | Nucleus store schema | `nucleus-store` schema and migration code | SQLite `PRAGMA user_version` and the source constant | A newer schema can make binary-only rollback unsafe. It needs an explicit migration and database rollback plan. |
 | Codex harness | `nucleus-codex` adapter and semantic checks | Harness identity in health | The adapter supports an exact inspected Codex release. Update and prove the adapter before replacing the executable. |
@@ -578,9 +628,18 @@ Scope a search to one domain run when the requester identity is known:
 nucleus jobs list --requester PROGRAM --requester-id REQUESTER_ID
 ```
 
-`nucleus account --wait 0` is a nonblocking credential-lease probe. An
-`authentication_busy` result means another job, account read, refresh, or login
-currently owns the lease; it does not by itself mean the credential is invalid.
+Health's `execution` object reports `maxActiveJobs=8`, the number of slots held
+by live attempts, and the slots immediately available. A job beyond that limit
+remains `accepted` with a `pending` attempt. Its invocation timeout starts when
+it acquires a slot, and a `waiting_on_requester` attempt keeps its slot because
+its app-server remains live. `acceptingJobs` is admission readiness, not a claim
+that a slot is currently free.
+
+`nucleus account --wait 0` is a nonblocking canonical-credential probe. An
+`authentication_busy` result means another account, refresh, or login operation
+currently owns that short exclusive boundary; running jobs alone do not make
+the account probe busy, and contention does not by itself mean the credential
+is invalid.
 
 ### Quiesce before work that cannot tolerate a lost attempt
 
@@ -641,8 +700,9 @@ Nucleus has no global drain mode. Quiescence is established at its requesters:
    legacy install, bootstrap only the exact previously loaded owned product
    plists.
 
-Stopping or replacing `nucleusd` while a job is active makes that attempt
-`lost`. The requester—not Nucleus—decides whether a new domain attempt is safe.
+Graceful shutdown first requests cancellation. On startup, every attempt still
+durably nonterminal is marked `lost`. The requester—not Nucleus—decides whether
+a new domain attempt is safe.
 The Todo daily-email LaunchAgent is not a Nucleus requester and does not need
 to be paused to establish Nucleus quiescence. Krisis' observer can start a
 classification job every 60 seconds, and Semantics can start one reconciliation
@@ -654,8 +714,23 @@ the intended recovery path.
 ### Authentication recovery
 
 Nucleus owns one authoritative Codex home under its private state directory.
-Jobs, account reads, refreshes, and attended login share one exclusive
-credential lease. Annals, Todo, and CRM do not read or refresh the credential.
+Managed ChatGPT jobs receive in-memory access-token and account metadata;
+they never receive the refresh token or write authentication back. Concurrent
+401 requests are coalesced against the credential generation, and the one
+canonical refresh path advances `auth.json` under an exclusive mutation lease
+through a validated, fsynced atomic promotion from a private staging home.
+Once elected, that broker operation survives cancellation of its requesting
+job. Graceful daemon shutdown closes new broker work, repeats job cancellation
+after HTTP handlers drain, and waits for existing broker activity to settle.
+Static API-key jobs use isolated credential snapshots without copy-back.
+Account reads use the same short canonical-operation boundary and can overlap
+running jobs. They run in private staging because Codex may proactively refresh;
+request cancellation or timeout cannot interrupt canonical persistence, and a
+valid same-account generation is atomically promoted before the broker settles.
+Attended login takes the exclusive authentication-session barrier, waits for
+every active job session to settle, writes only private staging, and promotes a
+validated credential only after successful completion. Annals, Todo, and CRM do
+not read or refresh the credential themselves.
 
 For attended recovery:
 
@@ -737,8 +812,9 @@ Apply the host's normal private-log rotation policy to the LaunchAgent's stdout
 and stderr files. Do not delete rows from `nucleus.db`, edit immutable
 registrations, or remove individual Codex-home files as ad hoc retention. The
 database's reporting ledger already excludes harness input, lifecycle/control
-events, stderr chunks, requester results, and calculated aggregates; it keeps
-one exact row per harness stdout record. A supported pruning policy must first
+events, host-managed authentication responses, stderr chunks, requester
+results, and calculated aggregates; it keeps one exact row per remaining
+harness stdout record. A supported pruning policy must first
 define which observations and coordination relationships remain valid,
 implement that policy in Nucleus, and include migration and recovery tests.
 Until then, monitor, back up, and retain the state.
@@ -819,6 +895,11 @@ Keep base `instructions`, optional `developerInstructions`, and the per-job
 All version-1 jobs are ephemeral and unattended, use approvals disabled, and
 have one attempt. Nucleus accepts no command, arbitrary argv, retry count,
 workflow graph, or requester-defined Codex configuration.
+
+For concurrent `read-write` jobs, give each job a disjoint working directory or
+worktree, or serialize access in the requester. Nucleus limits process capacity;
+it does not detect shared working directories or arbitrate conflicting
+filesystem or external mutations.
 
 Use a launch context only when the job must observe the requester's caller
 environment. Register the complete snapshot immediately before submission. The
@@ -902,7 +983,9 @@ A normal requester flow is:
    readiness.
 2. Register required schemas and toolsets idempotently.
 3. Register a launch context if needed.
-4. Submit the exact request.
+4. Submit the exact request. When all eight slots are occupied, tolerate the
+   job remaining `accepted` with a `pending` attempt until a slot opens; its
+   invocation timeout begins only after slot acquisition.
 5. Long-poll the durable tool-call mailbox while the job is nonterminal.
 6. Validate each call, perform the domain operation through the requester's
    backend, durably bind or cache its exact result, and post that result.
@@ -929,7 +1012,11 @@ Account for these cases explicitly:
 - requester exit while a tool call is pending;
 - ambiguous tool-result transport;
 - domain commit followed by harness failure;
-- timeout or cancellation;
+- saturation and accepted/pending queueing;
+- queued cancellation before a start timestamp;
+- active cancellation, or timeout after slot acquisition;
+- a requester-tool wait retaining one execution slot;
+- overlapping read-write jobs aimed at the same workspace or mutation target;
 - daemon restart and a `lost` attempt;
 - Nucleus completion without the required domain result; and
 - domain success despite later runtime failure.
@@ -943,12 +1030,16 @@ allowed.
 At minimum, test:
 
 - strict health and required capabilities;
+- eight simultaneous active attempts with later work accepted/pending;
 - successful admission and domain completion;
 - identical and conflicting duplicate job submissions;
 - identical and conflicting duplicate tool results;
 - requester restart while waiting on a durable tool call;
 - daemon loss during an active attempt;
-- cancellation and timeout;
+- queued and active cancellation, timeout beginning after slot acquisition,
+  and waiting-on-requester slot retention;
+- disjoint worktree or requester-lock enforcement for concurrent write-capable
+  jobs;
 - authentication busy and unavailable behavior;
 - unsupported model, harness, working directory, or permission combinations;
 - durable domain success followed by runtime failure; and
@@ -1005,7 +1096,7 @@ provider registry or documentation storage.
 | Nucleus database schema or retention | Nucleus store | Quiesce, back up, migrate and validate, and define database-aware rollback before deployment. |
 | Requester tool arguments, result, or definition | Requester plus immutable Nucleus registration | Publish a new schema/toolset version and keep historical decoding. |
 | Requester prompt, model, timeout, or permission profile | Requester | Use new job IDs for new attempts, verify health capabilities, and rerun domain acceptance tests. |
-| Credential or credential-lease behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and canary every requester. |
+| Managed-authentication, canonical-refresh, or attended-login behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and canary every requester. |
 | Nucleus service layout or installer | Nucleus CLI/packaging | Preserve state/log ownership, rollback, launchd behavior, and requester configuration. |
 | Chancery bundle schema, catalog, contract reader, exact-ID resolver, or directory installation | Chancery | Preserve read-only behavior, failure isolation, exact basis, explicit gaps, complete installed inventory, and provider-owned selectors; do not introduce semantic matching or a product runtime dependency. |
 | A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the fifteen-provider source graph, and update only that product's Chancery selectors. |
@@ -1142,8 +1233,9 @@ For version 3 or any later change:
 
 1. Pause or prevent every requester and let credential users settle.
 2. Identify the one authoritative credential home before moving anything.
-3. Preserve private directory and file modes and the exclusive lease across
-   login, account reads, job copy-in, refresh, and copy-back.
+3. Preserve private directory and file modes, the exclusive login/session
+   barrier, and the serialized canonical mutation boundary. Never distribute a
+   managed refresh token to job homes or let workers copy authentication back.
 4. Never make an installation rollback restore older authentication bytes.
 5. When moving authority from another system, securely transfer the current
    credential after the old writer is stopped or perform attended login in the
@@ -1158,7 +1250,7 @@ For version 3 or any later change:
 | `nucleus health` cannot connect | The socket or daemon is unavailable, or the configured path is wrong. | Run `nucleus service status`, inspect the LaunchAgent and Nucleus stderr log, and avoid requester fallback. |
 | Health is degraded with an unsupported harness | The configured Codex executable no longer matches the proved adapter. | Restore the proved executable or complete the exact Codex upgrade playbook. |
 | `model_auth_unavailable` | The Nucleus-owned credential or account read failed. | Quiesce, perform attended login, verify account and health, then canary. |
-| `authentication_busy` | Another credential user owns the exclusive lease. | Wait or use the requester's documented bounded wait; do not replace credentials. |
+| `authentication_busy` | Another canonical account, refresh, or login operation owns the short exclusive credential boundary. | Wait or use the requester's documented bounded wait; do not replace credentials. |
 | Job is `waiting_on_requester` | A durable dynamic tool call has not received its requester-owned result. | Inspect pending calls and the requester process/domain state. Restart the requester if it supports mailbox recovery; do not invent a result manually. |
 | Attempt is `lost` | Nucleus restarted while the harness attempt was unfinished. | Inspect domain state first. Let the requester decide whether and how to create a new attempt. |
 | Nucleus job failed after a domain commit | Runtime completion failed after the requester established success. | Preserve the domain result, correlate the Nucleus failure for diagnostics, and do not repeat the mutation. |

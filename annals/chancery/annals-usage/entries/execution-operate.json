@@ -1,6 +1,6 @@
 {
   "id": "annals-usage.execution.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -22,7 +22,7 @@
     "`login --device-auth` delegates to Nucleus and changes the Nucleus-owned Codex credential."
   ],
   "authority": [
-    "Nucleus owns Codex authentication, account reads, credential serialization, and runtime state.",
+    "Nucleus owns Codex authentication, account reads, canonical refresh coordination, and runtime state.",
     "Annals Usage owns only the Annals-facing live diagnostic and allowance projection."
   ],
   "success": [
@@ -31,7 +31,7 @@
     "After login, account access and a deliberate Annals requester canary are verified before resuming paused dispatch."
   ],
   "failure_and_recovery": [
-    "Authentication busy is reported nonblockingly; wait for the current credential user rather than replacing credentials.",
+    "Authentication busy is reported nonblockingly; wait for the current canonical account, refresh, or login operation rather than replacing credentials.",
     "If login is needed, quiesce requesters, perform attended device authentication, verify account and strict Nucleus health, then canary Annals.",
     "A missing allowance denominator or per-delivery share is an upstream limit, not a value to estimate."
   ],
@@ -46,7 +46,7 @@
   ],
   "dependencies": [
     {"id": "annals.corpus.explore", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "does_not_authorize": [
     "Replacing or copying Nucleus credentials.",
@@ -74,7 +74,7 @@
     "data_semantics": [
       {"status": "declared", "statement": "Allowance is a live account-global rate-limit snapshot shared with other Codex activity; percent used and reset fields do not identify Annals delivery consumption."},
       {"status": "declared", "statement": "Lifetime, peak-day, and latest-day token activity are contextual cross-checks rather than allowance units or subscription denominators."},
-      {"status": "declared", "statement": "Authentication busy means another Nucleus credential consumer owns the lease and does not establish invalid credentials."}
+      {"status": "declared", "statement": "Authentication busy means a canonical Nucleus account, refresh, or login operation owns the credential boundary; an active job alone neither makes the read busy nor establishes invalid credentials."}
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "Observation time identifies one live account response, allowance windows carry percent-used and reset-time fields, and plan and credit fields retain their upstream account-global identity."},
@@ -92,22 +92,22 @@
     ],
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "Budget and doctor are one-shot live reads with no retained companion state; login changes only the forward-moving Nucleus-owned credential."},
-      {"status": "declared", "statement": "Authentication uses a nonblocking credential lease, so busy recovery waits for the current user rather than replacing or racing credentials."},
+      {"status": "declared", "statement": "Account access uses a nonblocking canonical-credential boundary, so busy recovery waits for the current account, refresh, or login operation rather than replacing or racing credentials."},
       {"status": "declared", "statement": "After attended login, recovery verifies account and strict Nucleus health, then a deliberate Annals domain canary, before clearing only the pause established for recovery."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "Allowance scope is account-global and cannot be divided into exact Annals delivery shares; login is attended and requester quiescence is required when active continuity matters."},
       {"status": "unsupported", "statement": "Repeated snapshots cannot manufacture a hidden subscription denominator, per-delivery percentage, invoice, or credential copy."},
-      {"status": "unspecified", "statement": "No account-response latency, allowance-window availability, credential-lease wait, or service-level objective is promised."}
+      {"status": "unspecified", "statement": "No account-response latency, allowance-window availability, canonical-credential-operation wait, or service-level objective is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1, Annals Usage provider and package version, Nucleus account and authentication protocol, and Annals library compatibility are distinct axes checked by the relevant command."},
+      {"status": "declared", "statement": "Capability contract version 2, Annals Usage provider and package version, Nucleus account and authentication protocol, and Annals library compatibility are distinct axes checked by the relevant command."},
       {"status": "unspecified", "statement": "No exact account-response schema guarantee, cross-release support window, or deprecation period is promised."}
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Budget, strict readiness checks, account telemetry, credential leasing, and attended login rely on the Nucleus execution and authentication authority.",
+        "statement": "Budget, strict readiness checks, account telemetry, canonical credential coordination, and attended login rely on the Nucleus execution and authentication authority.",
         "target": "nucleus",
         "kind": "control",
         "contract": "nucleus.execution.operate"

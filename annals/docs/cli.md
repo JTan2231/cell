@@ -191,9 +191,9 @@ optionally selects a nonstandard Nucleus Unix socket. Annals submits the same
 prompt, base and developer instructions, model, reasoning effort, and exact
 nine-tool contract as one Nucleus job. There is no direct Codex fallback.
 Nucleus owns the isolated app-server process, persistent authentication,
-credential refresh, and serialization. Annals asks Nucleus for an
-authenticated account preflight before a queued dispatch; it may wait up to 30
-seconds, and failure leaves the envelope queued with attempts zero.
+canonical credential refresh, and eight-slot scheduling. Annals asks Nucleus
+for an authenticated account preflight before a queued dispatch; it may wait
+up to 30 seconds, and failure leaves the envelope queued with attempts zero.
 
 The liaison submits a provisional, best-current interpretation. It does not
 filter source material by estimated novelty or salience and does not claim an
@@ -228,8 +228,9 @@ subscription share. Neither command retains a reporting database or account
 snapshot. `doctor` checks the companion configuration, the Annals paths,
 Nucleus, and authenticated account-telemetry access. `budget`
 and `doctor` report that authentication is busy instead of waiting when another
-Nucleus operation owns the credential lease. `login` delegates to `nucleus auth
-login`, so Annals never owns credential files.
+canonical account, refresh, or login operation owns the credential boundary;
+an active job alone does not make the read busy. `login` delegates to
+`nucleus auth login`, so Annals never owns credential files.
 
 The token categories overlap: cached and cache-write tokens are subsets of
 input, reasoning tokens are a subset of output, and total is input plus output.

@@ -69,7 +69,7 @@
   ],
   "dependencies": [
     {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 3}
   ],
   "does_not_authorize": [
     "Running release.sh, committing, tagging, pushing, or deploying an installed CRM release.",

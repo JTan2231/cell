@@ -61,7 +61,7 @@
     {"label": "Usage doctor", "invocation": "/Users/joey/.local/bin/annals-usage doctor"}
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3},
     {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "does_not_authorize": [

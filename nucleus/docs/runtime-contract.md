@@ -62,6 +62,16 @@ telemetry, and uses `approvalPolicy=never`. There is one attempt and no
 automatic retry. There is no request field for a command, argv, Codex config,
 approval behavior, isolation mode, or output format.
 
+The daemon admits requests durably and owns eight execution slots. At most
+eight attempts may hold live Codex app-server processes at once. An admitted
+job beyond that limit remains `accepted` with its attempt `pending` until a
+slot opens; its invocation timeout starts only after it owns a slot. A
+requester-tool wait keeps the slot because the app-server process is still
+live. Cancellation while queued makes the pending attempt `cancelled` without
+starting Codex. Admission remains available while all slots are occupied, and
+version one does not impose a queue-depth bound or schedule workflow
+dependencies.
+
 A requester that must preserve caller-environment behavior can use
 `POST /v1/launch-contexts`. The body contains the requester identity and a
 complete environment snapshot; the response contains a 120-second, single-use
@@ -99,6 +109,10 @@ turn start. `read-only` uses the requested directory under a read-only sandbox.
 `read-write` uses it under Codex's workspace-write sandbox. Approvals remain
 disabled in all three cases. `localExecution=false` removes Codex's
 command, inspection, and edit primitives; `webSearch=false` removes live search.
+Nucleus does not lock or compare working directories. A requester that submits
+concurrent `read-write` jobs must give them disjoint working directories or
+worktrees, or serialize them itself; the eight-slot scheduler does not resolve
+filesystem or external-mutation conflicts.
 The Codex adapter rejects local execution with `workspaceAccess=none` because it
 cannot prove that combination's filesystem semantics. Todo's current
 concern-routing, situation-assessment, and design-reconciliation stages use
@@ -226,10 +240,13 @@ SQLite stores operational authority separately from reporting observations.
 Jobs, attempts, cancellation, immutable registrations, and the dynamic-tool
 mailbox are operational records. The reporting ledger has exactly four stored
 columns: `attempt_id`, arrival `sequence`, Nucleus `observed_at`, and the raw
-stdout `payload` bytes. There is one row for every `FromHarness` JSONL record,
-with only its line delimiter removed. Harness input, lifecycle/control events,
-stderr chunks, requester results, schema IDs, digests, event types, token
-totals, and final-output fields are not reporting rows or columns.
+stdout `payload` bytes. There is one row for every non-sensitive `FromHarness`
+JSONL record, with only its line delimiter removed. A response to a
+host-managed authentication request is consumed in memory but deliberately not
+emitted or stored, and managed-worker stderr is drained without retention.
+Harness input, lifecycle/control events, other stderr chunks, requester
+results, schema IDs, digests, event types, token totals, and final-output fields
+are not reporting rows or columns.
 
 `GET /logs` retains the version-one compatibility envelope, but its surrounding
 fields are calculated from the output atom and owning attempt:
@@ -308,11 +325,13 @@ GET    /v1/toolsets/{provider}/{name}/{version}
 
 Health reports whether jobs are currently accepted, the checked harness
 identity and executable, adapter capabilities, supported protocol/harness
-versions, and authentication readiness. `nucleus health` exits nonzero for a
-degraded document. Account reads run under the same exclusive credential lease
-as jobs: `waitSeconds=0` is a nonblocking try-lock for interactive budget/doctor
-commands, while the Annals inbox preflight uses up to 30 seconds. Lease
-contention returns `authentication_busy`; credential or account failure returns
+versions, authentication readiness, and the live execution ceiling, active
+slot count, and immediately available slots. `acceptingJobs` describes
+admission readiness rather than whether a slot is free. `nucleus health` exits
+nonzero for a degraded document. Account reads use the bounded credential
+coordination path: `waitSeconds=0` is a nonblocking try-lock for interactive
+budget/doctor commands, while the Annals inbox preflight uses up to 30 seconds.
+Contention returns `authentication_busy`; credential or account failure returns
 `model_auth_unavailable`. `rateLimits` and optional `usage` are the unmodified
 results of Codex's `account/rateLimits/read` and `account/usage/read` methods.
 
@@ -329,10 +348,45 @@ is deliberately excluded from installation rollback: restoring binaries and
 the LaunchAgent must never replace a token refreshed by either the old or the
 replacement daemon with an earlier, already-consumed credential.
 
-Jobs use isolated temporary Codex homes, but the exclusive credential lease is
-held from copy-in through atomic, fsynced refresh copy-back. Account reads and
-`nucleus auth login --device-auth` use the same lease. Once imported, Annals and
-Todo do not read, write, refresh, or lock Codex credentials themselves.
+Every job still uses an isolated temporary Codex home. With a static API key,
+Nucleus writes only that key into the isolated home and never copies job state
+back. With managed ChatGPT authentication, the job home contains no
+`auth.json`: after app-server initialization Nucleus supplies the current access
+token and account ID through Codex's host-managed in-memory authentication
+request, together with optional plan metadata when present. The refresh token
+never enters a job home or a harness-output record.
+
+Managed 401 requests return through Codex's host refresh callback. Nucleus
+compares the rejected access-token generation under the canonical credential
+lease: if another job already advanced it, the current generation is reused;
+otherwise one managed app-server against a private staging copy performs
+`account/read` with proactive refresh enabled. Nucleus validates that the
+access token advanced without changing accounts, then fsyncs and atomically
+promotes the complete new document into the authoritative home before replying.
+The supervised refresh outlives cancellation of the worker that requested it.
+This makes a burst of concurrent 401s one refresh rather than competing
+`auth.json` writers or cancellable writes to the authoritative file.
+
+Jobs and account reads hold a shared authentication-session barrier. Attended
+`nucleus auth login --device-auth` holds that barrier exclusively, so it waits
+for live jobs and account reads before it can replace or revoke the account.
+Canonical account reads and refreshes also take the short exclusive credential
+mutation lease, but running jobs do not hold that lease for their full turns.
+Account reads run against a private staging home because Codex may proactively
+refresh near-expiry credentials. Once started, the supervised account operation
+finishes staged reconciliation after requester cancellation or an account
+deadline: a valid same-account generation is atomically promoted even when the
+account request fails, while an incomplete staging write cannot damage the
+authoritative file. Attended login likewise writes only a private staging home
+and promotes a validated document after successful process completion.
+Credential state remains forward-only and only Nucleus's validated atomic
+promotion writes the authoritative document. Once imported, Annals and Todo do
+not read, write, refresh, or lock Codex credentials themselves.
+
+Graceful shutdown closes admission to new supervised account and refresh
+operations after HTTP handlers drain, repeats job cancellation for work admitted
+during that drain, then waits for already-started authentication operations to
+settle before the daemon exits.
 
 The standard service installer secures its state directory as mode `0700`; the
 daemon secures the database and socket as mode `0600`. There is no TCP listener

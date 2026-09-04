@@ -26,10 +26,10 @@ use nucleus_codex::{
 use nucleus_core::{
     AbsolutePath, AccountSnapshotQueryV1, AccountSnapshotV1, AttemptId, AttemptOutputV1,
     AttemptState, AttemptTerminalReason, AttemptV1, AuthenticationReadinessV1, CancelJobResponseV1,
-    ErrorResponseV1, HarnessCapability, HarnessIdentity, HealthResponseV1, JobAcceptedV1, JobId,
-    JobRequestV1, JobState, JobSummaryV1, JobV1, LaunchContextAcceptedV1, LaunchContextId,
-    LaunchContextRegistrationV1, ListJobsQueryV1, ListJobsResponseV1, LogRecordV1, LogSchemaV1,
-    LogStream, LogsQueryV1, LogsResponseV1, PROTOCOL_VERSION_V1, PendingToolCallV1,
+    ErrorResponseV1, ExecutionCapacityV1, HarnessCapability, HarnessIdentity, HealthResponseV1,
+    JobAcceptedV1, JobId, JobRequestV1, JobState, JobSummaryV1, JobV1, LaunchContextAcceptedV1,
+    LaunchContextId, LaunchContextRegistrationV1, ListJobsQueryV1, ListJobsResponseV1, LogRecordV1,
+    LogSchemaV1, LogStream, LogsQueryV1, LogsResponseV1, PROTOCOL_VERSION_V1, PendingToolCallV1,
     ReasoningEffort, RegisteredToolsetV1, Requester, SchemaId, ToolCallId, ToolCallState,
     ToolCallV1, ToolCallsQueryV1, ToolCallsResponseV1, ToolResultV1, ToolsetDefinitionsV1,
     ToolsetRegistrationV1, sha256_digest,
@@ -47,7 +47,7 @@ use serde_json::{Value, json};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 use tokio::net::UnixListener;
-use tokio::sync::{Mutex, broadcast, oneshot, watch};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore, broadcast, oneshot, watch};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -64,6 +64,8 @@ const ACCOUNT_TIMEOUT: Duration = Duration::from_secs(30);
 const LAUNCH_CONTEXT_TTL: Duration = Duration::from_secs(120);
 const STDERR_TAIL_BYTES: usize = 16 * 1024;
 const TERMINAL_MESSAGE_BYTES: usize = 16 * 1024;
+/// Maximum number of admitted job attempts that may execute concurrently.
+pub const MAX_CONCURRENT_JOB_ATTEMPTS: usize = 8;
 
 type ToolReplyKey = (String, String);
 
@@ -114,6 +116,7 @@ pub struct AppState {
     changes: broadcast::Sender<String>,
     mailbox_changes: broadcast::Sender<String>,
     launch_contexts: Arc<Mutex<HashMap<String, EphemeralLaunchContext>>>,
+    execution_slots: Arc<Semaphore>,
 }
 
 #[derive(Clone)]
@@ -141,6 +144,7 @@ impl AppState {
             changes,
             mailbox_changes,
             launch_contexts: Arc::new(Mutex::new(HashMap::new())),
+            execution_slots: Arc::new(Semaphore::new(MAX_CONCURRENT_JOB_ATTEMPTS)),
         };
         state.seed_internal_schemas().await?;
         state.recover_interrupted_work().await?;
@@ -287,7 +291,15 @@ pub async fn serve(config: ServeConfig) -> Result<(), DaemonError> {
             shutdown_state.shutdown_jobs().await;
         })
         .await;
-    completion_state.wait_for_jobs(Duration::from_secs(4)).await;
+    // The first sweep can overlap with in-flight request handlers. Once Axum
+    // has drained those handlers, close new authentication work and cancel
+    // again so a job admitted during that window cannot escape shutdown.
+    completion_state.codex.close_auth_operations();
+    completion_state.shutdown_jobs().await;
+    completion_state
+        .wait_for_jobs(Duration::from_secs(12))
+        .await;
+    completion_state.codex.wait_for_auth_idle().await;
     result.map_err(|source| DaemonError::Io {
         path: config.socket,
         source,
@@ -344,6 +356,7 @@ async fn health(State(state): State<AppState>) -> Json<HealthResponseV1> {
         ),
     };
     let accepting_jobs = harness.is_some() && auth.configured && auth.authenticated;
+    let available_slots = state.execution_slots.available_permits();
     Json(HealthResponseV1 {
         version: PROTOCOL_VERSION_V1,
         status: if accepting_jobs { "ok" } else { "degraded" }.to_owned(),
@@ -380,6 +393,12 @@ async fn health(State(state): State<AppState>) -> Json<HealthResponseV1> {
             authenticated: auth.authenticated,
             detail: auth.detail,
         },
+        execution: Some(ExecutionCapacityV1 {
+            max_active_jobs: u32::try_from(MAX_CONCURRENT_JOB_ATTEMPTS).unwrap_or(u32::MAX),
+            active_jobs: u32::try_from(MAX_CONCURRENT_JOB_ATTEMPTS.saturating_sub(available_slots))
+                .unwrap_or(u32::MAX),
+            available_slots: u32::try_from(available_slots).unwrap_or(u32::MAX),
+        }),
         detail,
     })
 }
@@ -1085,20 +1104,42 @@ async fn run_job(
     inspection: HarnessInspection,
     definitions: ToolsetDefinitionsV1,
     launch_environment: Option<BTreeMap<String, String>>,
-    cancel_rx: watch::Receiver<bool>,
+    mut cancel_rx: watch::Receiver<bool>,
 ) {
     let job_id = request.id.to_string();
+    let execution_slot = match acquire_execution_slot(&state, &mut cancel_rx).await {
+        Ok(Some(permit)) => permit,
+        Ok(None) => {
+            finalize_pre_start_cancellation(&state, &job_id, &attempt_id).await;
+            return;
+        }
+        Err(failure) => {
+            error!(job_id, attempt_id, error = %failure.message, "could not acquire execution slot");
+            finalize_internal_failure(&state, &job_id, &attempt_id, failure.message).await;
+            return;
+        }
+    };
     let starting = now();
-    if let Err(failure) = begin_attempt(&state, &attempt_id, &starting).await {
-        error!(job_id, attempt_id, error = %failure.message, "could not start attempt");
-        finalize_internal_failure(&state, &job_id, &attempt_id, failure.message).await;
-        return;
+    match begin_attempt(&state, &job_id, &attempt_id, &starting).await {
+        Ok(true) => {}
+        Ok(false) => {
+            cleanup_finished_job(&state, &job_id).await;
+            drop(execution_slot);
+            return;
+        }
+        Err(failure) => {
+            error!(job_id, attempt_id, error = %failure.message, "could not start attempt");
+            finalize_internal_failure(&state, &job_id, &attempt_id, failure.message).await;
+            drop(execution_slot);
+            return;
+        }
     }
 
     let tools = match dynamic_tools(&definitions) {
         Ok(tools) => tools,
         Err(error) => {
             finalize_internal_failure(&state, &job_id, &attempt_id, error.message).await;
+            drop(execution_slot);
             return;
         }
     };
@@ -1205,29 +1246,70 @@ async fn run_job(
     if let Err(error) = finish_attempt(&state, &attempt_id, &terminal).await {
         error!(job_id, attempt_id, error = %error.message, "could not persist terminal attempt state");
     }
-    state.cancellations.lock().await.remove(&job_id);
-    state
-        .tool_replies
-        .lock()
-        .await
-        .retain(|(reply_job, _), _| reply_job != &job_id);
-    state.notify(&job_id);
-    state.notify_mailbox(&job_id);
+    cleanup_finished_job(&state, &job_id).await;
+    drop(execution_slot);
+}
+
+async fn acquire_execution_slot(
+    state: &AppState,
+    cancel_rx: &mut watch::Receiver<bool>,
+) -> Result<Option<OwnedSemaphorePermit>, ApiError> {
+    let permit = Arc::clone(&state.execution_slots).acquire_owned();
+    tokio::pin!(permit);
+    let cancellation = wait_for_cancellation(cancel_rx);
+    tokio::pin!(cancellation);
+    tokio::select! {
+        biased;
+        () = &mut cancellation => Ok(None),
+        result = &mut permit => result.map(Some).map_err(|_| {
+            ApiError::internal("execution_slots_closed", "the execution-slot pool was closed")
+        }),
+    }
+}
+
+async fn wait_for_cancellation(cancel_rx: &mut watch::Receiver<bool>) {
+    loop {
+        if *cancel_rx.borrow_and_update() {
+            return;
+        }
+        if cancel_rx.changed().await.is_err() {
+            return;
+        }
+    }
 }
 
 async fn begin_attempt(
     state: &AppState,
+    job_id: &str,
     attempt_id: &str,
     started_at: &str,
-) -> Result<(), ApiError> {
+) -> Result<bool, ApiError> {
     let mut store = state.store.lock().await;
+    let cancellation_requested = store
+        .get_job(job_id)
+        .map_err(ApiError::store)?
+        .ok_or_else(|| ApiError::not_found("job", job_id))?
+        .cancellation_requested_at
+        .is_some();
+    if cancellation_requested {
+        store
+            .transition_attempt_with_message(
+                attempt_id,
+                StoreAttemptState::Cancelled,
+                started_at,
+                Some("cancelled"),
+                Some("job was cancelled before Codex started"),
+            )
+            .map_err(ApiError::store)?;
+        return Ok(false);
+    }
     store
         .transition_attempt(attempt_id, StoreAttemptState::Starting, started_at, None)
         .map_err(ApiError::store)?;
     store
         .transition_attempt(attempt_id, StoreAttemptState::Running, &now(), None)
         .map_err(ApiError::store)?;
-    Ok(())
+    Ok(true)
 }
 
 struct BufferedHarnessOutput {
@@ -1592,7 +1674,28 @@ async fn finalize_internal_failure(
         message,
     );
     let _ = finish_attempt(state, attempt_id, &terminal).await;
+    cleanup_finished_job(state, job_id).await;
+}
+
+async fn finalize_pre_start_cancellation(state: &AppState, job_id: &str, attempt_id: &str) {
+    let terminal = TerminalOutcome::failed(
+        StoreAttemptState::Cancelled,
+        AttemptTerminalReason::Cancelled,
+        "job was cancelled before Codex started".to_owned(),
+    );
+    if let Err(error) = finish_attempt(state, attempt_id, &terminal).await {
+        error!(job_id, attempt_id, error = %error.message, "could not persist queued cancellation");
+    }
+    cleanup_finished_job(state, job_id).await;
+}
+
+async fn cleanup_finished_job(state: &AppState, job_id: &str) {
     state.cancellations.lock().await.remove(job_id);
+    state
+        .tool_replies
+        .lock()
+        .await
+        .retain(|(reply_job, _), _| reply_job != job_id);
     state.notify(job_id);
     state.notify_mailbox(job_id);
 }
@@ -2803,6 +2906,34 @@ mod tests {
                 .await
                 .contains_key("cancel-overlap-job")
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn post_drain_shutdown_sweep_cancels_late_registration()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let state =
+            AppState::new(Store::open_in_memory()?, CodexHarness::new("unused-codex")).await?;
+        state.shutdown_jobs().await;
+        state.store.lock().await.admit_job(NewJob {
+            id: "late-shutdown-job".to_owned(),
+            label: "late shutdown admission".to_owned(),
+            requester_program: "test".to_owned(),
+            requester_id: "request-1".to_owned(),
+            parent_job_id: None,
+            request_schema_id: JOB_REQUEST_ID.to_owned(),
+            request_bytes: b"{}".to_vec(),
+            created_at: "2026-08-27T00:00:00Z".to_owned(),
+        })?;
+        let mut receiver = register_cancellation_watch(&state, "late-shutdown-job")
+            .await
+            .map_err(|error| error.message)?;
+        assert!(!*receiver.borrow());
+
+        state.shutdown_jobs().await;
+
+        receiver.changed().await?;
+        assert!(*receiver.borrow());
         Ok(())
     }
 

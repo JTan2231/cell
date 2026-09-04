@@ -41,7 +41,7 @@
   ],
   "dependencies": [
     {"id": "weaver.workflow.operate", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 3},
     {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": [

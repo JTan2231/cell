@@ -3,8 +3,16 @@
 Nucleus is a per-user, local job coordinator for agent harnesses. A requester
 submits a small, versioned invocation contract; Nucleus validates it against the
 installed harness, supervises the process, owns its authentication, and retains
-one exact observation for every harness stdout JSONL record. Requesters keep ownership of their
-domain work and execute any domain tools through Nucleus's durable mailbox.
+one exact observation for every non-sensitive harness stdout JSONL record.
+Host-managed authentication responses and managed-worker stderr are excluded
+so bearer credentials cannot enter durable job output. Requesters keep
+ownership of their domain work and execute any domain tools through Nucleus's
+durable mailbox.
+
+The daemon admits work durably and runs up to eight Codex jobs concurrently.
+Additional jobs remain accepted until a slot opens. Nucleus does not interpret
+workflow dependencies or detect shared mutation targets; requesters must
+isolate or serialize conflicting work.
 
 The first adapter is Codex app-server on macOS. Nucleus does not accept shell
 commands, arbitrary argv, retries, or workflow graphs. A requester that needs
@@ -75,9 +83,15 @@ The installer copies `auth.json` from `--codex-home` into
 `~/Library/Application Support/Nucleus/codex-home`, writes a minimal private
 `config.toml` that selects the file credential store, and configures the
 LaunchAgent to use only that Nucleus-owned home. The source home is an import,
-not a shared runtime path. Nucleus serializes every job, account read, token
-refresh, and attended login with one credential lease; a refresh produced in an
-isolated job home is atomically copied back before the lease is released.
+not a shared runtime path. Static API-key jobs receive isolated snapshots.
+Managed ChatGPT jobs receive only in-memory access tokens from Nucleus; their
+401 callbacks are coalesced into one serialized refresh of the authoritative
+home, and no worker receives a refresh token or copies authentication back.
+Account reads and attended login also run against private staging homes; only a
+validated credential generation is atomically promoted into the authoritative
+home. Attended login waits for all active authentication sessions before
+changing the account, while ordinary account reads and refreshes can coexist
+with running jobs.
 
 If Nucleus has no signed-in credential yet, authenticate the owned home with:
 
@@ -94,12 +108,13 @@ unless the daemon is compatible, authenticated, and accepting jobs.
 Nucleus retains job and attempt authority, immutable registrations, the durable
 tool mailbox, and an atomic harness-output ledger in
 `~/Library/Application Support/Nucleus/nucleus.db`. Each ledger row contains
-only attempt attribution, arrival sequence, observation time, and exact stdout
-payload bytes. Inputs, lifecycle events, stderr chunks, requester-result log
-rows, and reporting aggregates are not stored there. Requests, mailbox values,
-and model output can still contain sensitive prompts, tool arguments/results,
-and source content. There is no automatic output-retention or pruning policy,
-so operators should monitor free space and treat the database as sensitive
+only attempt attribution, arrival sequence, observation time, and exact
+non-authentication stdout payload bytes. Inputs, host-managed authentication
+responses, lifecycle events, stderr chunks, requester-result log rows, and
+reporting aggregates are not stored there. Requests, mailbox values, and model
+output can still contain sensitive prompts, tool arguments/results, and source
+content. There is no automatic output-retention or pruning policy, so operators
+should monitor free space and treat the database as sensitive
 local state. Back it up with a SQLite-aware backup while the service is stopped
 (or include its WAL consistently); copying only the main database file while
 the daemon is running is not a complete backup. The LaunchAgent's stdout and

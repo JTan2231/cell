@@ -12,6 +12,7 @@ use nucleus_core::{
     TimeoutSeconds, ToolCallState, ToolCallsQueryV1, ToolDefinitionV1, ToolResultV1,
     ToolsetDefinitionsV1, ToolsetRef, ToolsetRegistrationV1, WorkspaceAccess, sha256_digest,
 };
+use nucleus_daemon::MAX_CONCURRENT_JOB_ATTEMPTS;
 use serde_json::value::to_raw_value;
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -26,10 +27,13 @@ const COMPATIBLE_PROTOCOL_SCHEMA: &str = r##"{
       {"properties":{"method":{"enum":["initialize"]},"params":{"$ref":"#/definitions/InitializeParams"}}},
       {"properties":{"method":{"enum":["thread/start"]},"params":{"$ref":"#/definitions/v2/ThreadStartParams"}}},
       {"properties":{"method":{"enum":["turn/start"]},"params":{"$ref":"#/definitions/v2/TurnStartParams"}}},
-      {"properties":{"method":{"enum":["mcpServerStatus/list"]},"params":{"$ref":"#/definitions/v2/ListMcpServerStatusParams"}}}
+      {"properties":{"method":{"enum":["mcpServerStatus/list"]},"params":{"$ref":"#/definitions/v2/ListMcpServerStatusParams"}}},
+      {"properties":{"method":{"enum":["account/login/start"]},"params":{"$ref":"#/definitions/v2/LoginAccountParams"}}},
+      {"properties":{"method":{"enum":["account/read"]},"params":{"$ref":"#/definitions/v2/GetAccountParams"}}}
     ]},
     "ServerRequest": {"oneOf": [
-      {"properties":{"method":{"enum":["item/tool/call"]},"params":{"$ref":"#/definitions/DynamicToolCallParams"}}}
+      {"properties":{"method":{"enum":["item/tool/call"]},"params":{"$ref":"#/definitions/DynamicToolCallParams"}}},
+      {"properties":{"method":{"enum":["account/chatgptAuthTokens/refresh"]},"params":{"$ref":"#/definitions/ChatgptAuthTokensRefreshParams"}}}
     ]},
     "ServerNotification": {"oneOf": [
       {"properties":{"method":{"enum":["item/completed"]},"params":{"$ref":"#/definitions/v2/ItemCompletedNotification"}}},
@@ -37,12 +41,26 @@ const COMPATIBLE_PROTOCOL_SCHEMA: &str = r##"{
       {"properties":{"method":{"enum":["thread/tokenUsage/updated"]},"params":{"$ref":"#/definitions/v2/ThreadTokenUsageUpdatedNotification"}}}
     ]},
     "DynamicToolCallParams": {"required":["arguments","callId","threadId","tool","turnId"]},
+    "ChatgptAuthTokensRefreshParams": {
+      "required":["reason"],
+      "properties":{"previousAccountId":{},"reason":{}}
+    },
+    "ChatgptAuthTokensRefreshReason": {"enum":["unauthorized"]},
+    "ChatgptAuthTokensRefreshResponse": {
+      "required":["accessToken","chatgptAccountId"],
+      "properties":{"accessToken":{},"chatgptAccountId":{},"chatgptPlanType":{}}
+    },
     "v2": {
       "ThreadStartParams": {"properties":{
         "approvalPolicy":{},"baseInstructions":{},"cwd":{},"developerInstructions":{},"dynamicTools":{},"ephemeral":{},"environments":{},"experimentalRawEvents":{},"model":{},"sandbox":{}
       }},
       "AskForApproval": {"enum":["never"]},
       "SandboxMode": {"enum":["read-only","workspace-write"]},
+      "LoginAccountParams": {"oneOf":[{
+        "required":["accessToken","chatgptAccountId","type"],
+        "properties":{"accessToken":{},"chatgptAccountId":{},"chatgptPlanType":{},"type":{"enum":["chatgptAuthTokens"]}}
+      }]},
+      "GetAccountParams": {"properties":{"refreshToken":{}}},
       "TurnStartParams": {
         "required":["input","threadId"],
         "properties":{"effort":{},"environments":{},"input":{},"threadId":{}}
@@ -223,6 +241,12 @@ impl DaemonFixture {
     fn diagnostics(&self) -> String {
         fs::read_to_string(&self.stderr_path).unwrap_or_default()
     }
+
+    fn active_harness_count(&self) -> usize {
+        fs::read_dir(self.temporary.path().join("fake-codex.active"))
+            .map(|entries| entries.filter_map(Result::ok).count())
+            .unwrap_or_default()
+    }
 }
 
 impl Drop for DaemonFixture {
@@ -241,6 +265,13 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
     assert_eq!(health.status, "ok");
     assert!(health.accepting_jobs);
     assert!(health.authentication.authenticated);
+    let execution = health.execution.or_panic("read execution capacity");
+    assert_eq!(
+        execution.max_active_jobs,
+        u32::try_from(MAX_CONCURRENT_JOB_ATTEMPTS).or_panic("capacity fits the protocol")
+    );
+    assert_eq!(execution.active_jobs, 0);
+    assert_eq!(execution.available_slots, execution.max_active_jobs);
     let account = fixture
         .client
         .account_snapshot(&AccountSnapshotQueryV1 {
@@ -488,6 +519,18 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
         .await
         .or_panic("long-poll for tool call");
     assert_eq!(pending.calls.len(), 1);
+    let waiting_execution = fixture
+        .client
+        .health()
+        .await
+        .or_panic("read requester-blocked execution capacity")
+        .execution
+        .or_panic("health includes execution capacity");
+    assert_eq!(waiting_execution.active_jobs, 1);
+    assert_eq!(
+        waiting_execution.available_slots,
+        waiting_execution.max_active_jobs - 1
+    );
     let call = &pending.calls[0];
     assert_eq!(call.state, ToolCallState::Pending);
     assert_eq!(call.call.tool_name, "read_todo");
@@ -705,6 +748,220 @@ async fn health_degrades_when_authoritative_authentication_is_invalid() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn daemon_runs_eight_jobs_and_dispatches_queued_work() {
+    let fixture = DaemonFixture::start().await;
+    let requester = Requester {
+        program: "delegation".to_owned(),
+        id: "parallel-work-packets".to_owned(),
+    };
+    let active_requests = (0..MAX_CONCURRENT_JOB_ATTEMPTS)
+        .map(|index| {
+            fixture.request(
+                &format!("job-concurrency-{index}"),
+                requester.clone(),
+                "WAIT_FOR_CANCEL",
+            )
+        })
+        .collect::<Vec<_>>();
+    for request in &active_requests {
+        fixture
+            .client
+            .submit_job(request)
+            .await
+            .or_panic("submit concurrent job");
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(8);
+    loop {
+        let mut running = 0;
+        for request in &active_requests {
+            let job = fixture
+                .client
+                .get_job(&request.id)
+                .await
+                .or_panic("inspect concurrent job");
+            match job.summary.state {
+                JobState::Accepted => {}
+                JobState::Running => running += 1,
+                state => panic!(
+                    "concurrency job reached unexpected state {state:?}: {}; {}",
+                    request.id,
+                    fixture.diagnostics()
+                ),
+            }
+        }
+        if running == MAX_CONCURRENT_JOB_ATTEMPTS {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "jobs did not settle at eight running; {}",
+            fixture.diagnostics()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    while fixture.active_harness_count() != MAX_CONCURRENT_JOB_ATTEMPTS {
+        assert!(
+            Instant::now() < deadline,
+            "eight fake harness processes did not overlap; active={}; {}",
+            fixture.active_harness_count(),
+            fixture.diagnostics()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let saturated_health = fixture
+        .client
+        .health()
+        .await
+        .or_panic("read saturated execution capacity");
+    let saturated_execution = saturated_health
+        .execution
+        .or_panic("saturated health includes execution capacity");
+    assert_eq!(
+        saturated_execution.active_jobs,
+        u32::try_from(MAX_CONCURRENT_JOB_ATTEMPTS).or_panic("capacity fits the protocol")
+    );
+    assert_eq!(saturated_execution.available_slots, 0);
+
+    let queued_request = fixture.request(
+        "job-concurrency-queued-cancel",
+        requester.clone(),
+        "WAIT_FOR_CANCEL",
+    );
+    let mut timeout_request =
+        fixture.request("job-concurrency-queued-timeout", requester, "COMPLETE");
+    timeout_request.invocation.timeout_seconds = TimeoutSeconds::new(1);
+    fixture
+        .client
+        .submit_job(&queued_request)
+        .await
+        .or_panic("submit queued cancellation job");
+    fixture
+        .client
+        .submit_job(&timeout_request)
+        .await
+        .or_panic("submit queued timeout job");
+
+    let duplicate = fixture
+        .client
+        .submit_job(&queued_request)
+        .await
+        .or_panic("repeat queued request");
+    assert_eq!(duplicate.state, JobState::Accepted);
+    let queued_before_cancel = fixture
+        .client
+        .get_job(&queued_request.id)
+        .await
+        .or_panic("inspect queued job before cancellation");
+    assert_eq!(queued_before_cancel.attempts.len(), 1);
+    assert_eq!(
+        queued_before_cancel.attempts[0].state,
+        nucleus_core::AttemptState::Pending
+    );
+    assert!(queued_before_cancel.attempts[0].started_at.is_none());
+    let timeout_before_wait = fixture
+        .client
+        .get_job(&timeout_request.id)
+        .await
+        .or_panic("inspect timeout job while queued");
+    assert_eq!(timeout_before_wait.summary.state, JobState::Accepted);
+    assert_eq!(timeout_before_wait.attempts.len(), 1);
+    assert_eq!(
+        timeout_before_wait.attempts[0].state,
+        nucleus_core::AttemptState::Pending
+    );
+    assert!(timeout_before_wait.attempts[0].started_at.is_none());
+
+    tokio::time::sleep(Duration::from_millis(1_200)).await;
+    let timeout_after_queue_wait = fixture
+        .client
+        .get_job(&timeout_request.id)
+        .await
+        .or_panic("inspect timeout job after queue wait");
+    assert_eq!(timeout_after_queue_wait.summary.state, JobState::Accepted);
+    assert!(timeout_after_queue_wait.attempts[0].started_at.is_none());
+
+    fixture
+        .client
+        .cancel_job(&queued_request.id)
+        .await
+        .or_panic("cancel queued job");
+    let cancelled = wait_for_state(&fixture, &queued_request.id, JobState::Cancelled).await;
+    assert_eq!(cancelled.attempts.len(), 1);
+    assert_eq!(
+        cancelled.attempts[0].state,
+        nucleus_core::AttemptState::Cancelled
+    );
+    assert!(cancelled.attempts[0].started_at.is_none());
+    assert_eq!(fixture.active_harness_count(), MAX_CONCURRENT_JOB_ATTEMPTS);
+    let after_queued_cancel = fixture
+        .client
+        .health()
+        .await
+        .or_panic("read capacity after queued cancellation")
+        .execution
+        .or_panic("health includes execution capacity");
+    assert_eq!(
+        after_queued_cancel.active_jobs,
+        saturated_execution.active_jobs
+    );
+    assert_eq!(after_queued_cancel.available_slots, 0);
+
+    fixture
+        .client
+        .cancel_job(&active_requests[0].id)
+        .await
+        .or_panic("release one active execution slot");
+    wait_for_state(&fixture, &active_requests[0].id, JobState::Cancelled).await;
+    let completed_after_queue_wait =
+        wait_for_state(&fixture, &timeout_request.id, JobState::Completed).await;
+    assert_eq!(completed_after_queue_wait.attempts.len(), 1);
+    assert_eq!(
+        completed_after_queue_wait.attempts[0].state,
+        nucleus_core::AttemptState::Completed
+    );
+    assert!(completed_after_queue_wait.attempts[0].started_at.is_some());
+
+    for request in active_requests.iter().skip(1) {
+        fixture
+            .client
+            .cancel_job(&request.id)
+            .await
+            .or_panic("cancel running job");
+    }
+    for request in active_requests.iter().skip(1) {
+        wait_for_state(&fixture, &request.id, JobState::Cancelled).await;
+    }
+    let drained_deadline = Instant::now() + Duration::from_secs(8);
+    loop {
+        let health = fixture
+            .client
+            .health()
+            .await
+            .or_panic("read drained execution capacity");
+        let execution = health
+            .execution
+            .or_panic("health includes execution capacity");
+        if fixture.active_harness_count() == 0
+            && execution.active_jobs == 0
+            && execution.available_slots == execution.max_active_jobs
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < drained_deadline,
+            "execution slots and fake harnesses did not drain; {}",
+            fixture.diagnostics()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
 async fn admission_rejects_unbound_versions_and_incompatible_protocol_schemas() {
     for (version, protocol_schema, expected_detail) in [
         (
@@ -886,6 +1143,10 @@ case "$turn_start" in
     test "${CODEX_HOME:-}" != /attacker/home
     ;;
   *WAIT_FOR_CANCEL*)
+    active_marker="${0}.active/$$"
+    mkdir -p "${0}.active"
+    : > "$active_marker"
+    trap 'rm -f "$active_marker"' EXIT
     trap 'exit 0' TERM INT
     while :; do sleep 1; done
     ;;

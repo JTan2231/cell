@@ -2,10 +2,11 @@
 
 Nucleus is the per-user execution coordinator for local applications that need
 constrained Codex work. It owns admission, one supervised harness attempt per
-job, cancellation, authentication serialization, exact harness-output records,
-and the durable requester-tool mailbox. It is not a project registry or a
-workflow engine, and its terminal job state is never a substitute for an
-application's domain result.
+job, a global eight-slot execution scheduler, cancellation, single-authority
+managed authentication, isolated static API-key job credentials, exact
+harness-output records, and the durable requester-tool mailbox. It is not a
+project registry or a workflow engine, and its terminal job state is never a
+substitute for an application's domain result.
 
 ## Choose this capability
 
@@ -40,9 +41,12 @@ Start diagnosis with supported reads:
 ```
 
 `health` is strict: it prints the readiness document but exits nonzero unless
-the daemon is compatible, authenticated, and accepting work. An
-`authentication_busy` account result means another credential user owns the
-exclusive lease; it does not establish that the credential is invalid.
+the daemon is compatible, authenticated, and accepting work. It also reports
+the configured `maxActiveJobs=8`, live `activeJobs`, and live `availableSlots`.
+An `authentication_busy` account result means the broker cannot grant
+the read while exclusive authentication maintenance or attended login is in
+progress; an ordinary active job does not by itself block an account read or
+establish that the credential is invalid.
 
 One exact request is submitted from a file or standard input:
 
@@ -61,17 +65,33 @@ new ID and the requester must decide that it is safe.
 ## Effects and authority
 
 Submitting can invoke Codex and consume account allowance. A job receives one
-attempt; Nucleus never creates an automatic retry. Dynamic tool calls may
-cause requester-owned mutations only after that requester validates and
-services them. A successful tool result or Nucleus completion still does not
-establish application success.
+attempt; Nucleus never creates an automatic retry. At most eight attempts are
+active across all requesters. A newly admitted job stays `accepted` with a
+`pending` attempt while it waits for a slot. Its wall-clock timeout starts only
+after that slot is acquired, and an attempt in `waiting_on_requester` keeps the
+slot until the process and terminal cleanup finish. Dynamic tool calls may cause
+requester-owned mutations only after that requester validates and services
+them. A successful tool result or Nucleus completion still does not establish
+application success.
+
+Nucleus does not detect overlapping working directories or mutation targets.
+Concurrent `read-write` jobs require disjoint directories or worktrees, or
+requester-owned serialization.
 
 Cancellation targets one exact job. Repeating the request is idempotent. It
 does not remove the job, output history, or a requester mutation already
 committed.
 
-Attended login changes the single credential owned beneath Nucleus private
-state:
+The authentication broker keeps one authoritative managed credential beneath
+Nucleus private state; static API-key jobs instead receive isolated credential
+snapshots without copy-back. Jobs and account reads may overlap; canonical
+refresh is serialized, staged away from the authoritative file, and atomically
+promoted so credential generations move only forward. A started refresh
+survives cancellation of its requesting job. Account reads also use private
+staging and finish safe credential reconciliation after requester cancellation
+or timeout. Attended login is exclusive, does not begin until active job and
+account sessions have ended, and promotes only a validated successful staged
+login:
 
 ```sh
 /Users/joey/.local/bin/nucleus auth login --device-auth

@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+base64.workspace = true
 fs2.workspace = true
 nucleus-core = { path = "../nucleus-core" }
 serde.workspace = true

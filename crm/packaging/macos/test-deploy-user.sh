@@ -3,6 +3,7 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
+python3 "$SCRIPT_DIR/../../../deployment/generate.py" --check --product crm
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/crm-deploy-test.XXXXXX")
 home="$temporary/Operator Home"
 package="$temporary/package/macos"
@@ -80,8 +81,9 @@ make_candidate "$candidate_mismatch" "$mismatch_version" mismatch
 
 deploy() {
     candidate=$1
+    shift
     HOME="$home" "$package/deploy-user.sh" \
-        --binary "$candidate" --home "$home"
+        --binary "$candidate" --home "$home" "$@"
 }
 
 if deploy "$candidate_mismatch" >"$temporary/mismatch.out" \
@@ -132,7 +134,7 @@ if deploy "$candidate_two" >"$temporary/extra-file.out" \
     printf '%s\n' 'test: unmanifested release file was accepted' >&2
     exit 1
 fi
-grep -F 'installed release tree is not the exact CRM v0.1 layout' \
+grep -F 'installed release tree has an unexpected file' \
     "$temporary/extra-file.err" >/dev/null
 rm "$install_dir/current/extra.txt"
 
@@ -142,7 +144,7 @@ if deploy "$candidate_two" >"$temporary/extra-directory.out" \
     printf '%s\n' 'test: unmanifested release directory was accepted' >&2
     exit 1
 fi
-grep -F 'installed release tree is not the exact CRM v0.1 layout' \
+grep -F 'installed release tree is not the exact selector-only layout' \
     "$temporary/extra-directory.err" >/dev/null
 rmdir "$install_dir/current/extra-directory"
 
@@ -207,6 +209,15 @@ second_release_path=$(CDPATH='' cd "$install_dir/$second_current" && pwd -P)
 [ "$second_provider_path" = "$second_release_path/share/chancery/crm" ]
 [ ! -e "$state/crm.db" ]
 
+if deploy "$candidate_three" --expected-current absent \
+    >"$temporary/stale.out" 2>"$temporary/stale.err"; then
+    printf '%s\n' 'test: stale expected-current precondition was accepted' >&2
+    exit 1
+fi
+grep -F 'stale deployment: expected current absent' \
+    "$temporary/stale.err" >/dev/null
+[ "$(readlink "$install_dir/current")" = "$second_current" ]
+
 : >"$home/fail-installed"
 if deploy "$candidate_three" >"$temporary/failed.out" \
     2>"$temporary/failed.err"; then
@@ -228,6 +239,14 @@ rm "$home/fail-installed"
 deploy "$candidate_two" >/dev/null
 [ "$(readlink "$install_dir/current")" = "$second_current" ]
 [ "$(readlink "$install_dir/previous")" = "$first_current" ]
+
+stale_pid=999999
+while kill -0 "$stale_pid" 2>/dev/null; do
+    stale_pid=$((stale_pid + 1))
+done
+/usr/bin/shlock -p "$stale_pid" -f "$install_dir/.update-lock"
+deploy "$candidate_two" >/dev/null
+[ ! -e "$install_dir/.update-lock" ]
 
 mkdir "$install_dir/.update-lock"
 if deploy "$candidate_two" >"$temporary/lock.out" \

@@ -20,6 +20,15 @@ version, exact release tree, content manifest, selector ownership, installed
 help/version, and pre-commit rollback. It does not initialize, open, migrate,
 back up, inspect, or delete negotiation state and does not restart Nucleus.
 
+A PID-aware product lock serializes Pratica updates. Provider publication also
+takes the shared Chancery catalog-writer lock, always after the product lock,
+so generated selector-only deployers cannot publish concurrently; stale lock
+owners are recovered. Deployment snapshots `current` before waiting and
+rejects a stale cutover. Callers may instead supply
+`--expected-current absent|releases/HASH`. The one `current` switch is atomic;
+failed smoke checks restore the prior selector view or detach it if restoration
+cannot be proved.
+
 Initialize separately after a fresh deployment:
 
 ```sh

@@ -61,7 +61,7 @@
     {"label": "Review implementation conformance", "invocation": "/Users/joey/.local/bin/pratica conformance review AGREEMENT --candidate-basis MANIFEST_OR_DASH [--source-root ABSOLUTE_DIRECTORY] [--request-key KEY]"}
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
   ],
   "does_not_authorize": [
     "Changing, implementing, testing, migrating, deploying, or releasing CRM or another target system.",

@@ -7,8 +7,10 @@ contract below is the deployment and compatibility boundary.
 Before either adapter submits work, import the currently signed-in Annals Codex
 home with `nucleus service install --codex-home <annals-codex-home>`. The source
 is copied into Nucleus state; it is not retained as the daemon's runtime home.
-Afterward, login, refresh, account preflight, and account usage all run under
-Nucleus's one exclusive credential lease.
+Afterward, Nucleus remains the only credential authority. Jobs receive
+in-memory managed access tokens, concurrent refresh requests are coalesced at
+the authoritative home, account reads use the short canonical credential
+boundary, and attended login waits for active job sessions to settle.
 
 ## Todo
 
@@ -70,9 +72,9 @@ over a later runtime error.
 
 Its Nucleus adapter replaces only process/protocol supervision:
 
-1. Call Nucleus account preflight, allowing up to 30 seconds for the credential
-   lease, before the first zero-attempt inbox claim. On failure, leave the work
-   queued and report `model_auth_unavailable`.
+1. Call Nucleus account preflight, allowing up to 30 seconds for the canonical
+   credential operation, before the first zero-attempt inbox claim. On failure,
+   leave the work queued and report `model_auth_unavailable`.
 2. Register the exact Annals liaison toolset and schemas.
 3. Submit one job with both built-in tool flags false and the Annals model-run
    token as `requester.id`. Put Annals's existing base rules in `instructions`,
@@ -116,7 +118,11 @@ tool semantics.
 - A current Todo v2 request has no launch context, no workspace, no builtin
   local execution, and no inherited caller environment; it can inspect only
   the frozen material exposed by its admitted stage tools and prompt.
-- A Codex refresh produced by a job is durably copied into Nucleus's
-  authoritative `auth.json` before another credential user can start.
+- Eight independent jobs can own live Codex app-server processes at once. A
+  ninth remains accepted and pending, a requester-tool wait keeps its slot, and
+  queued cancellation never starts Codex.
+- A burst of managed-auth 401 callbacks advances Nucleus's authoritative
+  `auth.json` once and returns the new in-memory access-token generation to all
+  affected jobs without exposing the refresh token.
 - `nucleus health` exits nonzero unless the daemon is compatible,
   authenticated, and accepting jobs.

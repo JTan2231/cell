@@ -25,10 +25,19 @@ The release identity covers the binary, deployer, and complete Chancery bundle.
 An identical deployment is a no-op. Existing release bytes are verified before
 reuse, and any selected current or previous release must have an exact
 content-addressed selector plus a self-consistent manifest and component
-hashes. A per-product lock serializes updates, and a failed post-switch version
-or help smoke restores all prior selectors. The installer refuses to replace a
-foreign selector, trust a malformed or tampered selected release, or accept a
-provider selector without a current release.
+hashes. A PID-aware product lock serializes Conversations updates, and a shared
+Chancery catalog-writer lock serializes provider publication with the other
+generated selector-only deployers. Locks are taken product first and catalog
+second; stale owners are recovered. The `current` selector is published
+atomically, and a failed post-switch version or help smoke restores the prior
+selector view or detaches it if restoration cannot be proved. The installer
+refuses to replace a foreign selector, trust a malformed or tampered selected
+release, or accept a provider selector without a current release.
+
+By default deployment snapshots `current` before waiting for the product lock
+and rejects a stale cutover. Concurrent callers may make that guard explicit
+with `--expected-current absent` for a fresh install or
+`--expected-current releases/HASH` for an update.
 
 Deployment does not run `doctor`, scan Codex metadata, copy transcripts, or
 alter Codex authentication. Run `conversations doctor` separately under the

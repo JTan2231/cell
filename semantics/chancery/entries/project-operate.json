@@ -50,7 +50,7 @@
   "dependencies": [
     {"id": "annals.decision-account.exchange", "min_contract": 1, "max_contract_exclusive": 2},
     {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3},
     {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],

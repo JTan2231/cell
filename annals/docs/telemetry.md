@@ -42,12 +42,12 @@ missing usage, inconsistent totals, or missing terminal output become explicit
 coverage gaps. Nucleus observation times remain the response-event times in
 JSON output.
 
-Nucleus also owns one persistent Codex home and the cross-process
-authentication lease. Annals and Annals Usage never read, copy, or configure
-its credentials. Interactive `budget` and `doctor` account reads use a
-nonblocking lease request and preserve the existing busy error behavior. Inbox
-authentication preflight may wait up to 30 seconds before leaving a new job
-unattempted.
+Nucleus also owns one persistent Codex home and cross-process authentication
+coordination. Annals and Annals Usage never read, copy, or configure its
+credentials. Interactive `budget` and `doctor` account reads use a nonblocking
+canonical-operation request and preserve the existing busy error behavior.
+Inbox authentication preflight may wait up to 30 seconds before leaving a new
+job unattempted.
 
 ## CLI
 

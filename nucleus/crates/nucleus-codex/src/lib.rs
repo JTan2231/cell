@@ -8,14 +8,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::future;
-use std::io;
+use std::io::{self, Write as _};
 use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command as StdCommand, Stdio};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
+use base64::Engine as _;
 use fs2::FileExt as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -37,7 +38,16 @@ const MAX_ACCOUNT_STDERR_BYTES: usize = 64 * 1024;
 const MAX_AUTH_BYTES: u64 = 4 * 1024 * 1024;
 const STDERR_CHUNK_BYTES: usize = 8 * 1024;
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
+const CANONICAL_AUTH_REFRESH_TIMEOUT: Duration = Duration::from_secs(8);
+const AUTH_REFRESH_SHUTDOWN_GRACE: Duration = Duration::from_millis(250);
+// Codex's external-auth bridge waits ten seconds for a host refresh response.
+// Leave time for Nucleus to return a bounded protocol error before that bridge
+// gives up independently.
+const EXTERNAL_AUTH_RESPONSE_TIMEOUT: Duration = Duration::from_millis(9_500);
 const AUTH_LOCK_NAME: &str = ".nucleus-auth.lock";
+const AUTH_SESSION_LOCK_NAME: &str = ".nucleus-auth-sessions.lock";
+const AUTH_STAGING_PREFIX: &str = ".nucleus-auth-operation.";
+const AUTH_GENERATION_PREFIX: &str = ".nucleus-auth-generation.";
 const AUTH_CONFIG: &str = "cli_auth_credentials_store = \"file\"\n";
 
 /// The exact Codex CLI release whose app-server contract this adapter proves.
@@ -197,6 +207,130 @@ pub struct AuthenticationReadiness {
     pub detail: Option<String>,
 }
 
+#[derive(Clone)]
+enum WorkerAuthentication {
+    ApiKey(String),
+    ManagedChatgpt(ManagedChatgptCredentials),
+}
+
+// Deliberately has no `Debug` implementation: these values are carried only
+// in memory between the authoritative home and one external-auth app-server.
+#[derive(Clone)]
+struct ManagedChatgptCredentials {
+    access_token: String,
+    account_id: String,
+    // Codex accepts this as optional and otherwise derives it from JWT claims.
+    plan_type: Option<String>,
+}
+
+impl ManagedChatgptCredentials {
+    fn login_params(&self) -> Value {
+        json!({
+            "type": "chatgptAuthTokens",
+            "accessToken": self.access_token,
+            "chatgptAccountId": self.account_id,
+            "chatgptPlanType": self.plan_type,
+        })
+    }
+
+    fn refresh_response(&self) -> Value {
+        json!({
+            "accessToken": self.access_token,
+            "chatgptAccountId": self.account_id,
+            "chatgptPlanType": self.plan_type,
+        })
+    }
+}
+
+struct ManagedAuthSession {
+    harness: CodexHarness,
+    credentials: ManagedChatgptCredentials,
+    auth_session: AuthSessionLease,
+}
+
+#[derive(Default)]
+struct SensitiveProtocolState {
+    request_ids: BTreeSet<i64>,
+    values: Vec<Vec<u8>>,
+}
+
+#[derive(Debug)]
+struct AuthOperationSupervisor {
+    state: StdMutex<AuthOperationState>,
+    active: watch::Sender<usize>,
+}
+
+#[derive(Debug, Default)]
+struct AuthOperationState {
+    closing: bool,
+    active: usize,
+}
+
+impl Default for AuthOperationSupervisor {
+    fn default() -> Self {
+        let (active, _) = watch::channel(0);
+        Self {
+            state: StdMutex::new(AuthOperationState::default()),
+            active,
+        }
+    }
+}
+
+impl AuthOperationSupervisor {
+    fn begin(self: &Arc<Self>) -> Result<AuthOperationActivity, CodexError> {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state.closing {
+            return Err(CodexError::Authentication(
+                "authentication operations are shutting down".to_owned(),
+            ));
+        }
+        state.active = state.active.saturating_add(1);
+        self.active.send_replace(state.active);
+        drop(state);
+        Ok(AuthOperationActivity {
+            supervisor: Arc::clone(self),
+        })
+    }
+
+    fn close(&self) {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .closing = true;
+    }
+
+    async fn wait_for_idle(&self) {
+        let mut active = self.active.subscribe();
+        loop {
+            if *active.borrow_and_update() == 0 {
+                return;
+            }
+            if active.changed().await.is_err() {
+                return;
+            }
+        }
+    }
+}
+
+struct AuthOperationActivity {
+    supervisor: Arc<AuthOperationSupervisor>,
+}
+
+impl Drop for AuthOperationActivity {
+    fn drop(&mut self) {
+        let mut state = self
+            .supervisor
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.active = state.active.saturating_sub(1);
+        self.supervisor.active.send_replace(state.active);
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum CodexError {
     #[error("Codex harness inspection failed: {0}")]
@@ -230,6 +364,8 @@ pub struct CodexHarness {
     executable: PathBuf,
     codex_home: Option<PathBuf>,
     credential_gate: Arc<tokio::sync::Mutex<()>>,
+    auth_session_gate: Arc<tokio::sync::RwLock<()>>,
+    auth_operation_supervisor: Arc<AuthOperationSupervisor>,
 }
 
 impl Default for CodexHarness {
@@ -245,6 +381,8 @@ impl CodexHarness {
             executable: executable.into(),
             codex_home: default_codex_home(),
             credential_gate: Arc::new(tokio::sync::Mutex::new(())),
+            auth_session_gate: Arc::new(tokio::sync::RwLock::new(())),
+            auth_operation_supervisor: Arc::new(AuthOperationSupervisor::default()),
         }
     }
 
@@ -256,6 +394,8 @@ impl CodexHarness {
             executable: executable.into(),
             codex_home: Some(codex_home.into()),
             credential_gate: Arc::new(tokio::sync::Mutex::new(())),
+            auth_session_gate: Arc::new(tokio::sync::RwLock::new(())),
+            auth_operation_supervisor: Arc::new(AuthOperationSupervisor::default()),
         }
     }
 
@@ -267,6 +407,18 @@ impl CodexHarness {
     #[must_use]
     pub fn codex_home(&self) -> Option<&Path> {
         self.codex_home.as_deref()
+    }
+
+    /// Wait until all supervised authentication operations started by this
+    /// harness and its clones have completed.
+    pub async fn wait_for_auth_idle(&self) {
+        self.auth_operation_supervisor.wait_for_idle().await;
+    }
+
+    /// Permanently reject new supervised account and token-refresh operations.
+    /// Daemon shutdown closes this gate before draining the active count.
+    pub fn close_auth_operations(&self) {
+        self.auth_operation_supervisor.close();
     }
 
     /// Inspect the Nucleus-owned credential files without contacting Codex.
@@ -295,7 +447,9 @@ impl CodexHarness {
 
     /// Read authenticated account limits, and optionally account usage,
     /// without starting a model turn. The credential lease is held for the
-    /// complete app-server session.
+    /// complete app-server session. Account reads share the job-session
+    /// barrier, so an attended login cannot replace the active account while
+    /// either operation is using it.
     ///
     /// # Errors
     ///
@@ -309,17 +463,52 @@ impl CodexHarness {
         let deadline = tokio::time::Instant::now()
             .checked_add(timeout)
             .ok_or_else(|| unsupported("timeout", "cannot represent account deadline"))?;
-        let _lease = if lease_wait.is_zero() {
-            self.try_acquire_credential_lease().await?
-        } else {
-            tokio::time::timeout(lease_wait, self.acquire_credential_lease())
-                .await
-                .map_err(|_| CodexError::AuthenticationBusy)??
-        };
-        let home = self.codex_home.as_deref().ok_or_else(|| {
+        let (session, lease) = self.acquire_account_auth(lease_wait).await?;
+        let home = self.codex_home.clone().ok_or_else(|| {
             CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
         })?;
 
+        // Account handlers may proactively refresh near-expiry managed tokens.
+        // Never give that cancelable child the authoritative home: Codex's file
+        // backend writes auth.json in place. A cancelled or timed-out account
+        // request can only damage this private staging copy.
+        let canonical_auth = read_valid_auth_file(&home.join("auth.json"))?;
+        let temporary = create_auth_staging_directory(&home)?;
+        let staging_home = temporary.path().join("codex-home");
+        prepare_staging_auth_home(&staging_home, Some(&canonical_auth)).await?;
+        let harness = self.clone();
+        let activity = self.auth_operation_supervisor.begin()?;
+        // Once Codex can proactively rotate a refresh token, this task must run
+        // through staged validation and promotion even if the HTTP requester
+        // disconnects or cancels its future.
+        let account = tokio::spawn(async move {
+            let _activity = activity;
+            let _session = session;
+            let _lease = lease;
+            let _temporary = temporary;
+            let result = harness
+                .read_account_snapshot_from_home(&staging_home, include_usage, deadline)
+                .await;
+            match read_valid_auth_file(&staging_home.join("auth.json")) {
+                Ok(staged_auth) => {
+                    promote_account_auth_if_advanced(&home, &canonical_auth, &staged_auth)?;
+                }
+                Err(error) if result.is_ok() => return Err(error),
+                Err(_) => {}
+            }
+            result
+        });
+        account.await.map_err(|_| {
+            CodexError::Authentication("account authentication supervisor failed".to_owned())
+        })?
+    }
+
+    async fn read_account_snapshot_from_home(
+        &self,
+        home: &Path,
+        include_usage: bool,
+        deadline: tokio::time::Instant,
+    ) -> Result<AccountSnapshot, CodexError> {
         let mut command = self.command();
         for feature in DISABLED_FEATURES {
             command.args(["--disable", feature]);
@@ -388,36 +577,138 @@ impl CodexHarness {
         }
         .await;
         terminate_process_group(&mut child, &mut guard).await;
-        let stderr = match stderr_task.await {
-            Ok(Ok(stderr)) => stderr,
-            Ok(Err(_)) | Err(_) => Vec::new(),
-        };
-        result.map_err(|error| account_error_with_stderr(error, &stderr))
+        let _ = stderr_task.await;
+        result
     }
 
-    /// Run an attended Codex login against the Nucleus-owned credential home.
-    /// This uses the same cross-process credential lease as jobs and account
-    /// reads, so login cannot race token refresh.
+    /// Run an attended Codex login through a private staging copy of the
+    /// Nucleus-owned credential home, then atomically promote a successful
+    /// validated result.
+    /// Login owns the cross-process session barrier exclusively and therefore
+    /// cannot switch or revoke the account while a job is active. It also uses
+    /// the canonical credential lease, so it cannot race token refresh or an
+    /// account read.
     ///
     /// # Errors
     ///
     /// Returns an authentication, spawn, or wait error.
     pub async fn login(&self, device_auth: bool) -> Result<std::process::ExitStatus, CodexError> {
+        let _session = self.acquire_login_session().await?;
         let _lease = self.acquire_credential_lease().await?;
         let home = self.codex_home.as_deref().ok_or_else(|| {
             CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
         })?;
+        let auth_path = home.join("auth.json");
+        let canonical_auth = match fs::symlink_metadata(&auth_path) {
+            Ok(_) => Some(read_valid_auth_file(&auth_path)?),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => {
+                return Err(CodexError::Authentication(format!(
+                    "could not inspect {}: {error}",
+                    auth_path.display()
+                )));
+            }
+        };
+        let temporary = create_auth_staging_directory(home)?;
+        let staging_home = temporary.path().join("codex-home");
+        prepare_staging_auth_home(&staging_home, canonical_auth.as_deref()).await?;
         let mut command = self.command();
         command.arg("login");
         if device_auth {
             command.arg("--device-auth");
         }
         command
-            .env("CODEX_HOME", home)
+            .env("CODEX_HOME", &staging_home)
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
-        command.status().await.map_err(CodexError::Spawn)
+        command.as_std_mut().process_group(0);
+        let mut child = command.spawn().map_err(CodexError::Spawn)?;
+        let guard = ProcessGroupGuard::new(child.id());
+        let status = child.wait().await.map_err(CodexError::Spawn)?;
+        // The direct login process has exited; synchronously kill any
+        // descendants before validating the staged generation.
+        drop(guard);
+        if status.success() {
+            let staged_auth = read_valid_auth_file(&staging_home.join("auth.json"))?;
+            promote_auth_document(home, &staged_auth)?;
+        }
+        Ok(status)
+    }
+
+    async fn acquire_account_auth(
+        &self,
+        wait: Duration,
+    ) -> Result<(AuthSessionLease, CredentialLease), CodexError> {
+        if wait.is_zero() {
+            let session = self.try_acquire_auth_session().await?;
+            let credential = self.try_acquire_credential_lease().await?;
+            return Ok((session, credential));
+        }
+        let deadline = tokio::time::Instant::now()
+            .checked_add(wait)
+            .ok_or(CodexError::AuthenticationBusy)?;
+        let session = tokio::time::timeout_at(deadline, self.acquire_auth_session())
+            .await
+            .map_err(|_| CodexError::AuthenticationBusy)??;
+        let credential = tokio::time::timeout_at(deadline, self.acquire_credential_lease())
+            .await
+            .map_err(|_| CodexError::AuthenticationBusy)??;
+        Ok((session, credential))
+    }
+
+    async fn acquire_auth_session(&self) -> Result<AuthSessionLease, CodexError> {
+        let gate = Arc::clone(&self.auth_session_gate).read_owned().await;
+        let home = self.codex_home.clone().ok_or_else(|| {
+            CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
+        })?;
+        let file = tokio::task::spawn_blocking(move || open_auth_session_shared(&home))
+            .await
+            .map_err(|error| {
+                CodexError::Authentication(format!("auth session worker failed: {error}"))
+            })??;
+        Ok(AuthSessionLease {
+            _inner: Arc::new(AuthSessionLeaseInner {
+                _gate: gate,
+                _file: file,
+            }),
+        })
+    }
+
+    async fn try_acquire_auth_session(&self) -> Result<AuthSessionLease, CodexError> {
+        let gate = Arc::clone(&self.auth_session_gate)
+            .try_read_owned()
+            .map_err(|_| CodexError::AuthenticationBusy)?;
+        let home = self.codex_home.clone().ok_or_else(|| {
+            CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
+        })?;
+        let file = tokio::task::spawn_blocking(move || try_open_auth_session_shared(&home))
+            .await
+            .map_err(|error| {
+                CodexError::Authentication(format!("auth session worker failed: {error}"))
+            })??;
+        Ok(AuthSessionLease {
+            _inner: Arc::new(AuthSessionLeaseInner {
+                _gate: gate,
+                _file: file,
+            }),
+        })
+    }
+
+    async fn acquire_login_session(&self) -> Result<LoginSessionLease, CodexError> {
+        let gate = Arc::clone(&self.auth_session_gate).write_owned().await;
+        let home = self.codex_home.clone().ok_or_else(|| {
+            CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
+        })?;
+        let file = tokio::task::spawn_blocking(move || open_auth_session_exclusive(&home))
+            .await
+            .map_err(|error| {
+                CodexError::Authentication(format!("login session worker failed: {error}"))
+            })??;
+        Ok(LoginSessionLease {
+            _gate: gate,
+            _file: file,
+        })
     }
 
     async fn acquire_credential_lease(&self) -> Result<CredentialLease, CodexError> {
@@ -451,6 +742,162 @@ impl CodexHarness {
         Ok(CredentialLease {
             _gate: gate,
             _file: file,
+        })
+    }
+
+    /// Return a fresh external-auth snapshot for a worker that received a 401.
+    /// The rejected access token is the worker's credential generation. Under
+    /// the canonical lease, a changed generation is reused; an unchanged
+    /// generation is advanced by Codex's managed refresh flow exactly once.
+    async fn refresh_managed_auth(
+        &self,
+        rejected: &ManagedChatgptCredentials,
+        auth_session: AuthSessionLease,
+    ) -> Result<ManagedChatgptCredentials, CodexError> {
+        let harness = self.clone();
+        let rejected = rejected.clone();
+        let activity = self.auth_operation_supervisor.begin()?;
+        // Dropping the awaiting job detaches this bounded task rather than
+        // interrupting credential persistence. The task also retains the
+        // job's shared session lease, so attended login remains excluded.
+        let refresh = tokio::spawn(async move {
+            let _activity = activity;
+            let _auth_session = auth_session;
+            harness.refresh_managed_auth_supervised(&rejected).await
+        });
+        refresh.await.map_err(|_| {
+            CodexError::Authentication("managed authentication supervisor failed".to_owned())
+        })?
+    }
+
+    async fn refresh_managed_auth_supervised(
+        &self,
+        rejected: &ManagedChatgptCredentials,
+    ) -> Result<ManagedChatgptCredentials, CodexError> {
+        let _lease = self.acquire_credential_lease().await?;
+        let home = self.codex_home.as_deref().ok_or_else(|| {
+            CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
+        })?;
+        let canonical_auth = read_valid_auth_file(&home.join("auth.json"))?;
+        let current = match worker_authentication_from_document(&canonical_auth)? {
+            WorkerAuthentication::ManagedChatgpt(credentials) => credentials,
+            WorkerAuthentication::ApiKey(_) => {
+                return Err(CodexError::Authentication(
+                    "the authoritative authentication mode changed during the job".to_owned(),
+                ));
+            }
+        };
+        if current.account_id != rejected.account_id {
+            return Err(CodexError::Authentication(
+                "the authoritative ChatGPT account changed during the job".to_owned(),
+            ));
+        }
+        if current.access_token != rejected.access_token {
+            return Ok(current);
+        }
+
+        let temporary = create_auth_staging_directory(home)?;
+        let staging_home = temporary.path().join("codex-home");
+        prepare_staging_auth_home(&staging_home, Some(&canonical_auth)).await?;
+        let refresh_result = self.force_managed_auth_refresh(&staging_home).await;
+        let refreshed_auth = match read_valid_auth_file(&staging_home.join("auth.json")) {
+            Ok(refreshed_auth) => refreshed_auth,
+            Err(error) if refresh_result.is_ok() => return Err(error),
+            Err(_) => {
+                return refresh_result.and(Err(CodexError::Authentication(
+                    "managed Codex token refresh did not leave a valid generation".to_owned(),
+                )));
+            }
+        };
+        let refreshed = match worker_authentication_from_document(&refreshed_auth)? {
+            WorkerAuthentication::ManagedChatgpt(credentials) => credentials,
+            WorkerAuthentication::ApiKey(_) => {
+                return Err(CodexError::Authentication(
+                    "managed Codex authentication changed modes during refresh".to_owned(),
+                ));
+            }
+        };
+        if refreshed.access_token == rejected.access_token {
+            return Err(CodexError::Authentication(
+                "managed Codex authentication did not advance the rejected credential".to_owned(),
+            ));
+        }
+        if refreshed.account_id != rejected.account_id {
+            return Err(CodexError::Authentication(
+                "managed Codex authentication changed ChatGPT accounts during refresh".to_owned(),
+            ));
+        }
+        promote_auth_document(home, &refreshed_auth)?;
+        refresh_result?;
+        Ok(refreshed)
+    }
+
+    async fn force_managed_auth_refresh(&self, home: &Path) -> Result<(), CodexError> {
+        let deadline = tokio::time::Instant::now()
+            .checked_add(CANONICAL_AUTH_REFRESH_TIMEOUT)
+            .ok_or_else(|| {
+                CodexError::Authentication("could not represent authentication deadline".to_owned())
+            })?;
+        let mut command = self.command();
+        for feature in DISABLED_FEATURES {
+            command.args(["--disable", feature]);
+        }
+        for setting in CONFIG_OVERRIDES {
+            command.args(["-c", setting]);
+        }
+        command
+            .args(["app-server", "--stdio"])
+            .env("CODEX_HOME", home)
+            .env_remove("OPENAI_API_KEY")
+            .env_remove("CODEX_ACCESS_TOKEN")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        command.as_std_mut().process_group(0);
+        let mut child = command.spawn().map_err(|_| {
+            CodexError::Authentication("could not start managed Codex token refresh".to_owned())
+        })?;
+        let group = child.id();
+        let mut guard = ProcessGroupGuard::new(group);
+        let stdin = child.stdin.take().ok_or_else(|| {
+            CodexError::Authentication("managed Codex token refresh omitted stdin".to_owned())
+        })?;
+        let stdout = child.stdout.take().ok_or_else(|| {
+            CodexError::Authentication("managed Codex token refresh omitted stdout".to_owned())
+        })?;
+        let mut stderr = child.stderr.take().ok_or_else(|| {
+            CodexError::Authentication("managed Codex token refresh omitted stderr".to_owned())
+        })?;
+        // Drain diagnostics to keep the child unblocked, but never propagate
+        // their contents: the canonical process has access to refresh tokens.
+        let stderr_task = tokio::spawn(async move { read_bounded_stderr(&mut stderr).await });
+        let mut protocol = AccountProtocol::new(stdin, stdout, deadline);
+        let result = async {
+            protocol
+                .request(
+                    0,
+                    "initialize",
+                    Some(json!({
+                        "clientInfo": {
+                            "name": "nucleus-auth-broker",
+                            "title": "Nucleus authentication broker",
+                            "version": env!("CARGO_PKG_VERSION")
+                        }
+                    })),
+                )
+                .await?;
+            protocol.notify("initialized", Some(json!({}))).await?;
+            protocol
+                .request(1, "account/read", Some(json!({ "refreshToken": true })))
+                .await?;
+            Ok::<(), CodexError>(())
+        }
+        .await;
+        terminate_process_group_with_grace(&mut child, &mut guard, AUTH_REFRESH_SHUTDOWN_GRACE)
+            .await;
+        let _ = stderr_task.await;
+        result.map_err(|_| {
+            CodexError::Authentication("managed Codex token refresh failed".to_owned())
         })
     }
 
@@ -799,26 +1246,38 @@ impl CodexHarness {
         let deadline = tokio::time::Instant::now()
             .checked_add(spec.timeout)
             .ok_or_else(|| unsupported("timeoutSeconds", "cannot represent deadline"))?;
-        let _lease = {
+        let auth_session = {
+            let session = self.acquire_auth_session();
+            tokio::pin!(session);
+            let cancellation = wait_for_cancellation(&mut cancelled);
+            tokio::pin!(cancellation);
+            tokio::select! {
+                result = &mut session => result?,
+                () = &mut cancellation => return Err(CodexError::Cancelled),
+                () = tokio::time::sleep_until(deadline) => return Err(CodexError::TimedOut),
+            }
+        };
+        let worker_authentication = {
             let lease = self.acquire_credential_lease();
             tokio::pin!(lease);
             let cancellation = wait_for_cancellation(&mut cancelled);
             tokio::pin!(cancellation);
-            tokio::select! {
+            let _lease = tokio::select! {
                 result = &mut lease => result?,
                 () = &mut cancellation => return Err(CodexError::Cancelled),
                 () = tokio::time::sleep_until(deadline) => return Err(CodexError::TimedOut),
-            }
+            };
+            let persistent_home = self.codex_home.as_deref().ok_or_else(|| {
+                CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
+            })?;
+            read_worker_authentication(persistent_home)?
         };
         let temporary = TempDir::new().map_err(CodexError::Preparation)?;
         let codex_home = temporary.path().join("codex-home");
         tokio::fs::create_dir(&codex_home)
             .await
             .map_err(CodexError::Preparation)?;
-        let persistent_home = self.codex_home.as_deref().ok_or_else(|| {
-            CodexError::Authentication("no Nucleus Codex home is configured".to_owned())
-        })?;
-        prepare_isolated_codex_home(persistent_home, &codex_home).await?;
+        prepare_isolated_codex_home(&codex_home, &worker_authentication).await?;
         let catalog_path = {
             let preparation = async {
                 let current_version = self.read_version().await?;
@@ -857,6 +1316,22 @@ impl CodexHarness {
         let mut command =
             self.app_server_command(&spec, &effective_cwd, &codex_home, &catalog_path)?;
 
+        let sensitive_values = match &worker_authentication {
+            WorkerAuthentication::ApiKey(api_key) => vec![api_key.as_bytes().to_vec()],
+            WorkerAuthentication::ManagedChatgpt(credentials) => {
+                vec![credentials.access_token.as_bytes().to_vec()]
+            }
+        };
+        let managed_auth = match worker_authentication {
+            WorkerAuthentication::ApiKey(_) => None,
+            WorkerAuthentication::ManagedChatgpt(credentials) => Some(ManagedAuthSession {
+                harness: self.clone(),
+                credentials,
+                auth_session: auth_session.clone(),
+            }),
+        };
+
+        let managed_worker = managed_auth.is_some();
         let mut child = command.spawn().map_err(CodexError::Spawn)?;
         let group = child.id();
         // Tokio's `kill_on_drop` targets only the direct child. The guard also
@@ -875,9 +1350,22 @@ impl CodexHarness {
             .take()
             .ok_or_else(|| CodexError::Protocol("app-server did not expose stderr".to_owned()))?;
 
+        let sensitive_protocol = Arc::new(StdMutex::new(SensitiveProtocolState {
+            request_ids: BTreeSet::new(),
+            values: sensitive_values,
+        }));
         let (lines_tx, lines_rx) = mpsc::channel(64);
-        let stdout_task = tokio::spawn(read_protocol_lines(stdout, lines_tx, events.clone()));
-        let stderr_task = tokio::spawn(read_stderr(stderr, events.clone()));
+        let stdout_task = tokio::spawn(read_protocol_lines(
+            stdout,
+            lines_tx,
+            events.clone(),
+            Arc::clone(&sensitive_protocol),
+        ));
+        let stderr_task = if managed_worker {
+            tokio::spawn(discard_stderr(stderr))
+        } else {
+            tokio::spawn(read_stderr(stderr, events.clone()))
+        };
         let result = {
             let protocol = ProtocolClient {
                 stdin,
@@ -889,6 +1377,8 @@ impl CodexHarness {
                 active_turn_id: None,
                 allowed_tools: spec.tools.iter().map(|tool| tool.name.clone()).collect(),
                 seen_tool_calls: BTreeSet::new(),
+                managed_auth,
+                sensitive_protocol,
             }
             .run(&spec, &effective_cwd);
             tokio::pin!(protocol);
@@ -932,11 +1422,9 @@ impl CodexHarness {
         let stdout_result = join_reader(stdout_task, "stdout").await;
         let stderr_result = join_reader(stderr_task, "stderr").await;
         drop(events);
-        let auth_result = persist_refreshed_auth(&codex_home, persistent_home).await;
 
         stdout_result?;
         stderr_result?;
-        auth_result?;
         match (result, observed_exit) {
             (Err(CodexError::Protocol(message)), Some(status))
                 if message == "app-server stdout closed" && !status.success() =>
@@ -951,6 +1439,8 @@ impl CodexHarness {
         let mut command = Command::new(&self.executable);
         command
             .env_remove("CODEX_EXEC_SERVER_URL")
+            .env_remove("OPENAI_API_KEY")
+            .env_remove("CODEX_ACCESS_TOKEN")
             .kill_on_drop(true);
         command
     }
@@ -987,6 +1477,8 @@ impl CodexHarness {
             .current_dir(effective_cwd)
             .env("CODEX_HOME", codex_home)
             .env_remove("CODEX_EXEC_SERVER_URL")
+            .env_remove("OPENAI_API_KEY")
+            .env_remove("CODEX_ACCESS_TOKEN")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -1006,9 +1498,12 @@ struct ProtocolClient {
     active_turn_id: Option<String>,
     allowed_tools: BTreeSet<String>,
     seen_tool_calls: BTreeSet<String>,
+    managed_auth: Option<ManagedAuthSession>,
+    sensitive_protocol: Arc<StdMutex<SensitiveProtocolState>>,
 }
 
 impl ProtocolClient {
+    #[allow(clippy::too_many_lines)]
     async fn run(
         mut self,
         spec: &CodexRunSpec,
@@ -1027,6 +1522,17 @@ impl ProtocolClient {
         )
         .await?;
         self.notify("initialized", None).await?;
+        if let Some(auth) = &self.managed_auth {
+            let params = auth.credentials.login_params();
+            let response = self
+                .request_sensitive("account/login/start", params)
+                .await?;
+            if response.get("type").and_then(Value::as_str) != Some("chatgptAuthTokens") {
+                return Err(CodexError::Authentication(
+                    "Codex did not accept Nucleus-managed ChatGPT authentication".to_owned(),
+                ));
+            }
+        }
         self.ensure_no_mcp_servers().await?;
 
         let dynamic_tools = dynamic_tool_specs(&spec.tools);
@@ -1138,15 +1644,43 @@ impl ProtocolClient {
     }
 
     async fn request(&mut self, method: &str, params: Value) -> Result<Value, CodexError> {
+        self.request_with_error_policy(method, params, false).await
+    }
+
+    // Authentication requests contain access tokens. A harness rejection is
+    // reported without copying its free-form error detail into diagnostics.
+    async fn request_sensitive(
+        &mut self,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, CodexError> {
+        self.request_with_error_policy(method, params, true).await
+    }
+
+    async fn request_with_error_policy(
+        &mut self,
+        method: &str,
+        params: Value,
+        sensitive: bool,
+    ) -> Result<Value, CodexError> {
         let id = self.next_request_id;
         self.next_request_id += 1;
-        self.write(&json!({
+        let request = json!({
             "jsonrpc": "2.0",
             "id": id,
             "method": method,
             "params": params
-        }))
-        .await?;
+        });
+        if sensitive {
+            self.sensitive_protocol
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .request_ids
+                .insert(id);
+            self.write_sensitive(&request).await?;
+        } else {
+            self.write(&request).await?;
+        }
         loop {
             let message = self.receive().await?;
             if self.handle_server_request(&message).await? {
@@ -1157,6 +1691,11 @@ impl ProtocolClient {
                 continue;
             }
             if let Some(error) = message.get("error") {
+                if sensitive {
+                    return Err(CodexError::Authentication(format!(
+                        "{method} was rejected by Codex"
+                    )));
+                }
                 let detail = error
                     .get("message")
                     .and_then(Value::as_str)
@@ -1211,6 +1750,20 @@ impl ProtocolClient {
             .map_err(|error| CodexError::Protocol(format!("could not flush JSON-RPC: {error}")))
     }
 
+    async fn write_sensitive(&mut self, message: &Value) -> Result<(), CodexError> {
+        let mut bytes = serde_json::to_vec(message)
+            .map_err(|_| CodexError::Protocol("could not encode sensitive JSON-RPC".to_owned()))?;
+        bytes.push(b'\n');
+        self.stdin
+            .write_all(&bytes)
+            .await
+            .map_err(|_| CodexError::Protocol("could not write sensitive JSON-RPC".to_owned()))?;
+        self.stdin
+            .flush()
+            .await
+            .map_err(|_| CodexError::Protocol("could not flush sensitive JSON-RPC".to_owned()))
+    }
+
     async fn handle_server_request(&mut self, message: &Value) -> Result<bool, CodexError> {
         let Some(method) = message.get("method").and_then(Value::as_str) else {
             return Ok(false);
@@ -1218,16 +1771,19 @@ impl ProtocolClient {
         let Some(id) = message.get("id").cloned() else {
             return Ok(false);
         };
+        if method == "account/chatgptAuthTokens/refresh" {
+            return self.handle_auth_refresh(id, message).await;
+        }
         if method != "item/tool/call" {
             self.write(&json!({
                 "jsonrpc": "2.0",
                 "id": id,
-                "error": { "code": -32601, "message": format!("unsupported server request {method:?}") }
+                "error": { "code": -32601, "message": "unsupported server request" }
             }))
             .await?;
-            return Err(CodexError::Protocol(format!(
-                "app-server requested unsupported operation {method:?}"
-            )));
+            return Err(CodexError::Protocol(
+                "app-server requested an unsupported operation".to_owned(),
+            ));
         }
 
         let params = message.get("params").cloned().unwrap_or_else(|| json!({}));
@@ -1291,6 +1847,87 @@ impl ProtocolClient {
             }
         }))
         .await?;
+        Ok(true)
+    }
+
+    async fn handle_auth_refresh(
+        &mut self,
+        id: Value,
+        message: &Value,
+    ) -> Result<bool, CodexError> {
+        let Some(session) = &self.managed_auth else {
+            self.write(&json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": { "code": -32600, "message": "external authentication is not active" }
+            }))
+            .await?;
+            return Err(CodexError::Protocol(
+                "app-server requested external authentication refresh unexpectedly".to_owned(),
+            ));
+        };
+        let params = message.get("params").ok_or_else(|| {
+            CodexError::Protocol("authentication refresh omitted params".to_owned())
+        })?;
+        if params.get("reason").and_then(Value::as_str) != Some("unauthorized") {
+            return Err(CodexError::Protocol(
+                "authentication refresh used an unsupported reason".to_owned(),
+            ));
+        }
+        if let Some(previous_account_id) = params.get("previousAccountId")
+            && !previous_account_id.is_null()
+            && previous_account_id.as_str() != Some(session.credentials.account_id.as_str())
+        {
+            return Err(CodexError::Authentication(
+                "Codex requested refresh for a different ChatGPT account".to_owned(),
+            ));
+        }
+        let harness = session.harness.clone();
+        let rejected = session.credentials.clone();
+        let auth_session = session.auth_session.clone();
+        let Ok(Ok(refreshed)) = tokio::time::timeout(
+            EXTERNAL_AUTH_RESPONSE_TIMEOUT,
+            harness.refresh_managed_auth(&rejected, auth_session),
+        )
+        .await
+        else {
+            self.write(&json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": -32603,
+                    "message": "Nucleus managed authentication refresh failed"
+                }
+            }))
+            .await?;
+            return Err(CodexError::Authentication(
+                "managed ChatGPT authentication refresh failed".to_owned(),
+            ));
+        };
+        let response = refreshed.refresh_response();
+        {
+            let mut sensitive = self
+                .sensitive_protocol
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let access_token = refreshed.access_token.as_bytes();
+            if !sensitive
+                .values
+                .iter()
+                .any(|known| known.as_slice() == access_token)
+            {
+                sensitive.values.push(access_token.to_vec());
+            }
+        }
+        self.write_sensitive(&json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": response
+        }))
+        .await?;
+        if let Some(session) = &mut self.managed_auth {
+            session.credentials = refreshed;
+        }
         Ok(true)
     }
 
@@ -1361,9 +1998,24 @@ fn verify_protocol_semantics(document: &Value) -> Result<(), CodexError> {
             "#/definitions/v2/ListMcpServerStatusParams",
         ),
         (
+            "ClientRequest",
+            "account/login/start",
+            "#/definitions/v2/LoginAccountParams",
+        ),
+        (
+            "ClientRequest",
+            "account/read",
+            "#/definitions/v2/GetAccountParams",
+        ),
+        (
             "ServerRequest",
             "item/tool/call",
             "#/definitions/DynamicToolCallParams",
+        ),
+        (
+            "ServerRequest",
+            "account/chatgptAuthTokens/refresh",
+            "#/definitions/ChatgptAuthTokensRefreshParams",
         ),
         (
             "ServerNotification",
@@ -1417,6 +2069,64 @@ fn verify_protocol_semantics(document: &Value) -> Result<(), CodexError> {
         &["effort", "environments", "input", "threadId"],
     )?;
     require_required(turn_start, "v2/TurnStartParams", &["input", "threadId"])?;
+
+    let login = protocol_definition(document, &["v2", "LoginAccountParams"])?;
+    let external_login = login
+        .get("oneOf")
+        .and_then(Value::as_array)
+        .and_then(|variants| {
+            variants.iter().find(|variant| {
+                contains_enum_value(
+                    variant.pointer("/properties/type").unwrap_or(&Value::Null),
+                    "chatgptAuthTokens",
+                )
+            })
+        })
+        .ok_or_else(|| {
+            incompatible_protocol("v2/LoginAccountParams omitted the chatgptAuthTokens variant")
+        })?;
+    require_properties(
+        external_login,
+        "v2/LoginAccountParams chatgptAuthTokens variant",
+        &["accessToken", "chatgptAccountId", "chatgptPlanType", "type"],
+    )?;
+    require_required(
+        external_login,
+        "v2/LoginAccountParams chatgptAuthTokens variant",
+        &["accessToken", "chatgptAccountId", "type"],
+    )?;
+    require_properties(
+        protocol_definition(document, &["v2", "GetAccountParams"])?,
+        "v2/GetAccountParams",
+        &["refreshToken"],
+    )?;
+    let refresh_params = protocol_definition(document, &["ChatgptAuthTokensRefreshParams"])?;
+    require_properties(
+        refresh_params,
+        "ChatgptAuthTokensRefreshParams",
+        &["previousAccountId", "reason"],
+    )?;
+    require_required(
+        refresh_params,
+        "ChatgptAuthTokensRefreshParams",
+        &["reason"],
+    )?;
+    require_enum_value(
+        protocol_definition(document, &["ChatgptAuthTokensRefreshReason"])?,
+        "ChatgptAuthTokensRefreshReason",
+        "unauthorized",
+    )?;
+    let refresh_response = protocol_definition(document, &["ChatgptAuthTokensRefreshResponse"])?;
+    require_properties(
+        refresh_response,
+        "ChatgptAuthTokensRefreshResponse",
+        &["accessToken", "chatgptAccountId", "chatgptPlanType"],
+    )?;
+    require_required(
+        refresh_response,
+        "ChatgptAuthTokensRefreshResponse",
+        &["accessToken", "chatgptAccountId"],
+    )?;
 
     let dynamic_tool = protocol_definition(document, &["v2", "DynamicToolSpec"])?;
     let function_tool = dynamic_tool
@@ -1754,14 +2464,23 @@ async fn read_protocol_lines(
     stdout: tokio::process::ChildStdout,
     sender: mpsc::Sender<io::Result<Vec<u8>>>,
     events: mpsc::Sender<CodexEvent>,
+    sensitive_protocol: Arc<StdMutex<SensitiveProtocolState>>,
 ) -> Result<(), CodexError> {
-    read_protocol_lines_with_limit(stdout, sender, events, MAX_PROTOCOL_BYTES).await
+    read_protocol_lines_with_limit(
+        stdout,
+        sender,
+        events,
+        sensitive_protocol,
+        MAX_PROTOCOL_BYTES,
+    )
+    .await
 }
 
 async fn read_protocol_lines_with_limit(
     stdout: impl AsyncRead + Unpin,
     sender: mpsc::Sender<io::Result<Vec<u8>>>,
     events: mpsc::Sender<CodexEvent>,
+    sensitive_protocol: Arc<StdMutex<SensitiveProtocolState>>,
     max_protocol_bytes: u64,
 ) -> Result<(), CodexError> {
     let mut reader = BufReader::new(stdout);
@@ -1782,13 +2501,15 @@ async fn read_protocol_lines_with_limit(
             && !protocol_limit_exceeded
             && total <= max_protocol_bytes)
             .then(|| line.clone());
-        events
-            .send(CodexEvent::Protocol {
-                direction: ProtocolDirection::FromHarness,
-                bytes: line,
-            })
-            .await
-            .map_err(|_| CodexError::EventConsumerDisconnected)?;
+        if !is_sensitive_protocol_record(&line, &sensitive_protocol) {
+            events
+                .send(CodexEvent::Protocol {
+                    direction: ProtocolDirection::FromHarness,
+                    bytes: line,
+                })
+                .await
+                .map_err(|_| CodexError::EventConsumerDisconnected)?;
+        }
         if !protocol_limit_exceeded && total > max_protocol_bytes {
             protocol_limit_exceeded = true;
             if protocol_consumer_connected
@@ -1811,6 +2532,40 @@ async fn read_protocol_lines_with_limit(
     }
 }
 
+fn is_sensitive_protocol_record(
+    bytes: &[u8],
+    sensitive_protocol: &StdMutex<SensitiveProtocolState>,
+) -> bool {
+    let mut sensitive = sensitive_protocol
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if sensitive
+        .values
+        .iter()
+        .any(|value| !value.is_empty() && bytes.windows(value.len()).any(|window| window == value))
+    {
+        return true;
+    }
+    let Ok(message) = serde_json::from_slice::<Value>(bytes) else {
+        // While a sensitive request is pending, an unparseable response cannot
+        // be attributed safely and therefore cannot become a public event.
+        return !sensitive.request_ids.is_empty();
+    };
+    if message.get("method").and_then(Value::as_str) == Some("account/chatgptAuthTokens/refresh") {
+        return true;
+    }
+    // JSON-RPC client and server request IDs occupy independent spaces. A
+    // normal server request may reuse an outbound sensitive request ID and is
+    // not that request's response.
+    if message.get("method").is_some() {
+        return false;
+    }
+    let Some(id) = message.get("id").and_then(Value::as_i64) else {
+        return false;
+    };
+    sensitive.request_ids.remove(&id)
+}
+
 async fn read_stderr(
     mut stderr: tokio::process::ChildStderr,
     sender: mpsc::Sender<CodexEvent>,
@@ -1828,6 +2583,19 @@ async fn read_stderr(
             .send(CodexEvent::Stderr(buffer[..count].to_vec()))
             .await
             .map_err(|_| CodexError::EventConsumerDisconnected)?;
+    }
+}
+
+async fn discard_stderr(mut stderr: tokio::process::ChildStderr) -> Result<(), CodexError> {
+    let mut buffer = vec![0_u8; STDERR_CHUNK_BYTES];
+    loop {
+        let count = stderr
+            .read(&mut buffer)
+            .await
+            .map_err(|error| CodexError::Protocol(error.to_string()))?;
+        if count == 0 {
+            return Ok(());
+        }
     }
 }
 
@@ -1856,20 +2624,6 @@ fn retain_tail(tail: &mut Vec<u8>, bytes: &[u8], limit: usize) {
     tail.extend_from_slice(bytes);
 }
 
-fn account_error_with_stderr(error: CodexError, stderr: &[u8]) -> CodexError {
-    let stderr = String::from_utf8_lossy(stderr);
-    let stderr = stderr.trim();
-    if stderr.is_empty() {
-        return error;
-    }
-    let sanitized = stderr
-        .chars()
-        .flat_map(char::escape_default)
-        .take(4_096)
-        .collect::<String>();
-    CodexError::Authentication(format!("{error}; stderr: {sanitized}"))
-}
-
 async fn wait_for_cancellation(cancelled: &mut watch::Receiver<bool>) {
     loop {
         if *cancelled.borrow() {
@@ -1884,15 +2638,20 @@ async fn wait_for_cancellation(cancelled: &mut watch::Receiver<bool>) {
 }
 
 async fn terminate_process_group(child: &mut Child, guard: &mut ProcessGroupGuard) {
+    terminate_process_group_with_grace(child, guard, SHUTDOWN_GRACE).await;
+}
+
+async fn terminate_process_group_with_grace(
+    child: &mut Child,
+    guard: &mut ProcessGroupGuard,
+    grace: Duration,
+) {
     if let Some(group) = guard.group {
         signal_process_group(group, "-TERM").await;
     } else {
         let _ = child.start_kill();
     }
-    let needs_wait = !matches!(
-        tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await,
-        Ok(Ok(_))
-    );
+    let needs_wait = !matches!(tokio::time::timeout(grace, child.wait()).await, Ok(Ok(_)));
     // The direct child can exit while a grandchild ignores TERM, so signal the
     // full group once more before disarming the drop guard.
     if let Some(group) = guard.group {
@@ -1957,6 +2716,21 @@ async fn join_reader(
 
 struct CredentialLease {
     _gate: tokio::sync::OwnedMutexGuard<()>,
+    _file: File,
+}
+
+#[derive(Clone)]
+struct AuthSessionLease {
+    _inner: Arc<AuthSessionLeaseInner>,
+}
+
+struct AuthSessionLeaseInner {
+    _gate: tokio::sync::OwnedRwLockReadGuard<()>,
+    _file: File,
+}
+
+struct LoginSessionLease {
+    _gate: tokio::sync::OwnedRwLockWriteGuard<()>,
     _file: File,
 }
 
@@ -2042,43 +2816,18 @@ fn read_valid_auth_file(path: &Path) -> Result<Vec<u8>, CodexError> {
 
 /// Validate the stable credential shape Codex writes to `auth.json`.
 ///
-/// File-backed authentication contains either a nonempty API key or a token
-/// pair. Other fields remain intentionally unconstrained so Codex can evolve
-/// its credential metadata without requiring a Nucleus release.
+/// File-backed authentication contains either a selected nonempty API key or a
+/// managed `ChatGPT` token bundle with enough account identity to construct the
+/// exact external-auth worker handshake. Other fields remain intentionally
+/// unconstrained so Codex can evolve unrelated credential metadata without
+/// requiring a Nucleus release.
 ///
 /// # Errors
 ///
 /// Returns [`CodexError::Authentication`] when the document is not a JSON
-/// object containing usable file-backed credentials.
+/// object containing usable file-backed credentials for the exact adapter.
 pub fn validate_auth_document(bytes: &[u8]) -> Result<(), CodexError> {
-    let document: Value = serde_json::from_slice(bytes).map_err(|error| {
-        CodexError::Authentication(format!("auth.json is not valid JSON: {error}"))
-    })?;
-    let object = document.as_object().ok_or_else(|| {
-        CodexError::Authentication("auth.json must contain a JSON object".to_owned())
-    })?;
-    let has_api_key = object
-        .get("OPENAI_API_KEY")
-        .and_then(Value::as_str)
-        .is_some_and(|value| !value.trim().is_empty());
-    let has_token_pair = object
-        .get("tokens")
-        .and_then(Value::as_object)
-        .is_some_and(|tokens| {
-            ["access_token", "refresh_token"].into_iter().all(|name| {
-                tokens
-                    .get(name)
-                    .and_then(Value::as_str)
-                    .is_some_and(|value| !value.trim().is_empty())
-            })
-        });
-    if !has_api_key && !has_token_pair {
-        return Err(CodexError::Authentication(
-            "auth.json must contain a nonempty OPENAI_API_KEY or tokens.access_token and tokens.refresh_token"
-                .to_owned(),
-        ));
-    }
-    Ok(())
+    worker_authentication_from_document(bytes).map(|_| ())
 }
 
 fn open_credential_lease(home: &Path) -> Result<File, CodexError> {
@@ -2104,8 +2853,42 @@ fn try_open_credential_lease(home: &Path) -> Result<File, CodexError> {
 }
 
 fn open_credential_lock(home: &Path) -> Result<(File, PathBuf), CodexError> {
+    open_private_lock(home, AUTH_LOCK_NAME)
+}
+
+fn open_auth_session_shared(home: &Path) -> Result<File, CodexError> {
+    let (file, path) = open_private_lock(home, AUTH_SESSION_LOCK_NAME)?;
+    fs2::FileExt::lock_shared(&file).map_err(|error| {
+        CodexError::Authentication(format!("could not lock {}: {error}", path.display()))
+    })?;
+    Ok(file)
+}
+
+fn try_open_auth_session_shared(home: &Path) -> Result<File, CodexError> {
+    let (file, path) = open_private_lock(home, AUTH_SESSION_LOCK_NAME)?;
+    match fs2::FileExt::try_lock_shared(&file) {
+        Ok(()) => Ok(file),
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+            Err(CodexError::AuthenticationBusy)
+        }
+        Err(error) => Err(CodexError::Authentication(format!(
+            "could not lock {}: {error}",
+            path.display()
+        ))),
+    }
+}
+
+fn open_auth_session_exclusive(home: &Path) -> Result<File, CodexError> {
+    let (file, path) = open_private_lock(home, AUTH_SESSION_LOCK_NAME)?;
+    file.lock_exclusive().map_err(|error| {
+        CodexError::Authentication(format!("could not lock {}: {error}", path.display()))
+    })?;
+    Ok(file)
+}
+
+fn open_private_lock(home: &Path, name: &str) -> Result<(File, PathBuf), CodexError> {
     validate_credential_home(home, false)?;
-    let path = home.join(AUTH_LOCK_NAME);
+    let path = home.join(name);
     if let Ok(metadata) = fs::symlink_metadata(&path)
         && !metadata.file_type().is_file()
     {
@@ -2131,18 +2914,271 @@ fn open_credential_lock(home: &Path) -> Result<(File, PathBuf), CodexError> {
     Ok((file, path))
 }
 
-async fn prepare_isolated_codex_home(
-    persistent_home: &Path,
-    isolated_home: &Path,
+fn read_worker_authentication(home: &Path) -> Result<WorkerAuthentication, CodexError> {
+    validate_credential_home(home, true)?;
+    let bytes = read_valid_auth_file(&home.join("auth.json"))?;
+    worker_authentication_from_document(&bytes)
+}
+
+fn worker_authentication_from_document(bytes: &[u8]) -> Result<WorkerAuthentication, CodexError> {
+    let document: Value = serde_json::from_slice(bytes)
+        .map_err(|_| CodexError::Authentication("auth.json is not valid JSON".to_owned()))?;
+    let object = document.as_object().ok_or_else(|| {
+        CodexError::Authentication("auth.json must contain a JSON object".to_owned())
+    })?;
+    let api_key = object
+        .get("OPENAI_API_KEY")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty());
+    let declared_mode = match object.get("auth_mode") {
+        Some(Value::String(mode)) => Some(mode.as_str()),
+        Some(Value::Null) | None => None,
+        Some(_) => {
+            return Err(CodexError::Authentication(
+                "auth.json auth_mode must be a string".to_owned(),
+            ));
+        }
+    };
+    let use_api_key = match declared_mode {
+        Some("apikey") => true,
+        Some("chatgpt") => false,
+        None => api_key.is_some(),
+        Some(_) => {
+            return Err(CodexError::Authentication(
+                "Nucleus supports file-backed API key or managed ChatGPT authentication".to_owned(),
+            ));
+        }
+    };
+    if use_api_key {
+        return api_key
+            .map(|key| WorkerAuthentication::ApiKey(key.to_owned()))
+            .ok_or_else(|| {
+                CodexError::Authentication(
+                    "API-key authentication is missing its credential".to_owned(),
+                )
+            });
+    }
+
+    let tokens = object
+        .get("tokens")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            CodexError::Authentication(
+                "managed ChatGPT authentication is missing tokens".to_owned(),
+            )
+        })?;
+    let access_token = tokens
+        .get("access_token")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            CodexError::Authentication(
+                "managed ChatGPT authentication is missing its access token".to_owned(),
+            )
+        })?
+        .to_owned();
+    if jwt_claims(&access_token).is_none() {
+        return Err(CodexError::Authentication(
+            "managed ChatGPT authentication has an invalid access token".to_owned(),
+        ));
+    }
+    if tokens
+        .get("refresh_token")
+        .and_then(Value::as_str)
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        return Err(CodexError::Authentication(
+            "managed ChatGPT authentication is missing its refresh token".to_owned(),
+        ));
+    }
+    let id_token = tokens.get("id_token").and_then(Value::as_str);
+    let account_id = tokens
+        .get("account_id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_owned)
+        .or_else(|| id_token.and_then(|token| chatgpt_claim(token, "chatgpt_account_id")))
+        .or_else(|| chatgpt_claim(&access_token, "chatgpt_account_id"))
+        .ok_or_else(|| {
+            CodexError::Authentication(
+                "managed ChatGPT authentication is missing its account identifier".to_owned(),
+            )
+        })?;
+    let plan_type = id_token
+        .and_then(|token| chatgpt_claim(token, "chatgpt_plan_type"))
+        .or_else(|| chatgpt_claim(&access_token, "chatgpt_plan_type"));
+    Ok(WorkerAuthentication::ManagedChatgpt(
+        ManagedChatgptCredentials {
+            access_token,
+            account_id,
+            plan_type,
+        },
+    ))
+}
+
+fn chatgpt_claim(token: &str, name: &str) -> Option<String> {
+    let claims = jwt_claims(token)?;
+    claims
+        .get("https://api.openai.com/auth")?
+        .get(name)?
+        .as_str()
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_owned)
+}
+
+fn jwt_claims(token: &str) -> Option<Value> {
+    let mut parts = token.split('.');
+    let header = parts.next()?;
+    let payload = parts.next()?;
+    let signature = parts.next()?;
+    if header.is_empty() || payload.is_empty() || signature.is_empty() {
+        return None;
+    }
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload)
+        .ok()?;
+    serde_json::from_slice(&bytes).ok().filter(Value::is_object)
+}
+
+fn create_auth_staging_directory(home: &Path) -> Result<TempDir, CodexError> {
+    // A daemon crash can bypass TempDir's Drop cleanup. Because the credential
+    // lease is cross-process, a new owner can safely remove only prior private
+    // staging directories before creating its own. An orphaned Codex process
+    // may keep an unlinked staging file open, but it can never reach auth.json.
+    for entry in fs::read_dir(home).map_err(CodexError::Preparation)? {
+        let entry = entry.map_err(CodexError::Preparation)?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let file_type = entry.file_type().map_err(CodexError::Preparation)?;
+        if name.starts_with(AUTH_STAGING_PREFIX) && file_type.is_dir() {
+            fs::remove_dir_all(entry.path()).map_err(CodexError::Preparation)?;
+        } else if name.starts_with(AUTH_GENERATION_PREFIX) && file_type.is_file() {
+            fs::remove_file(entry.path()).map_err(CodexError::Preparation)?;
+        }
+    }
+    let temporary = tempfile::Builder::new()
+        .prefix(AUTH_STAGING_PREFIX)
+        .tempdir_in(home)
+        .map_err(CodexError::Preparation)?;
+    fs::set_permissions(temporary.path(), fs::Permissions::from_mode(0o700))
+        .map_err(CodexError::Preparation)?;
+    Ok(temporary)
+}
+
+async fn prepare_staging_auth_home(
+    staging_home: &Path,
+    canonical_auth: Option<&[u8]>,
 ) -> Result<(), CodexError> {
-    validate_credential_home(persistent_home, true)?;
+    tokio::fs::create_dir(staging_home)
+        .await
+        .map_err(CodexError::Preparation)?;
+    tokio::fs::set_permissions(staging_home, fs::Permissions::from_mode(0o700))
+        .await
+        .map_err(CodexError::Preparation)?;
+    write_private_file(&staging_home.join("config.toml"), AUTH_CONFIG.as_bytes()).await?;
+    if let Some(canonical_auth) = canonical_auth {
+        write_private_file(&staging_home.join("auth.json"), canonical_auth).await?;
+    }
+    Ok(())
+}
+
+fn promote_account_auth_if_advanced(
+    home: &Path,
+    canonical_auth: &[u8],
+    staged_auth: &[u8],
+) -> Result<(), CodexError> {
+    let canonical = worker_authentication_from_document(canonical_auth)?;
+    let staged = worker_authentication_from_document(staged_auth)?;
+    match (canonical, staged) {
+        (WorkerAuthentication::ApiKey(canonical), WorkerAuthentication::ApiKey(staged)) => {
+            if canonical != staged {
+                return Err(CodexError::Authentication(
+                    "Codex changed API-key authentication during an account read".to_owned(),
+                ));
+            }
+            Ok(())
+        }
+        (
+            WorkerAuthentication::ManagedChatgpt(canonical),
+            WorkerAuthentication::ManagedChatgpt(staged),
+        ) => {
+            if canonical.account_id != staged.account_id {
+                return Err(CodexError::Authentication(
+                    "Codex changed ChatGPT accounts during an account read".to_owned(),
+                ));
+            }
+            if canonical_auth == staged_auth {
+                return Ok(());
+            }
+            promote_auth_document(home, staged_auth)
+        }
+        _ => Err(CodexError::Authentication(
+            "Codex changed authentication modes during an account read".to_owned(),
+        )),
+    }
+}
+
+fn promote_auth_document(home: &Path, bytes: &[u8]) -> Result<(), CodexError> {
+    let auth_path = home.join("auth.json");
+    let mut replacement = tempfile::Builder::new()
+        .prefix(AUTH_GENERATION_PREFIX)
+        .tempfile_in(home)
+        .map_err(|error| {
+            CodexError::Authentication(format!(
+                "could not stage managed authentication in {}: {error}",
+                home.display()
+            ))
+        })?;
+    replacement
+        .as_file()
+        .set_permissions(fs::Permissions::from_mode(0o600))
+        .and_then(|()| replacement.write_all(bytes))
+        .and_then(|()| replacement.flush())
+        .and_then(|()| replacement.as_file().sync_all())
+        .map_err(|error| {
+            CodexError::Authentication(format!(
+                "could not persist managed authentication in {}: {error}",
+                home.display()
+            ))
+        })?;
+    replacement.persist(&auth_path).map_err(|error| {
+        CodexError::Authentication(format!(
+            "could not promote managed authentication at {}: {}",
+            auth_path.display(),
+            error.error
+        ))
+    })?;
+    File::open(home)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| {
+            CodexError::Authentication(format!(
+                "could not sync managed authentication directory {}: {error}",
+                home.display()
+            ))
+        })
+}
+
+async fn prepare_isolated_codex_home(
+    isolated_home: &Path,
+    authentication: &WorkerAuthentication,
+) -> Result<(), CodexError> {
     tokio::fs::set_permissions(isolated_home, fs::Permissions::from_mode(0o700))
         .await
         .map_err(CodexError::Preparation)?;
     write_private_file(&isolated_home.join("config.toml"), AUTH_CONFIG.as_bytes()).await?;
-    let source = persistent_home.join("auth.json");
-    let bytes = read_valid_auth_file(&source)?;
-    write_private_file(&isolated_home.join("auth.json"), &bytes).await
+    if let WorkerAuthentication::ApiKey(api_key) = authentication {
+        let bytes = serde_json::to_vec(&json!({
+            "auth_mode": "apikey",
+            "OPENAI_API_KEY": api_key,
+        }))
+        .map_err(|error| {
+            CodexError::Authentication(format!("could not prepare API-key authentication: {error}"))
+        })?;
+        write_private_file(&isolated_home.join("auth.json"), &bytes).await?;
+    }
+    Ok(())
 }
 
 async fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), CodexError> {
@@ -2155,50 +3191,15 @@ async fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), CodexError>
     file.flush().await.map_err(CodexError::Preparation)
 }
 
-async fn persist_refreshed_auth(
-    isolated_home: &Path,
-    persistent_home: &Path,
-) -> Result<(), CodexError> {
-    let source = isolated_home.join("auth.json");
-    let bytes = read_valid_auth_file(&source)?;
-    let destination = persistent_home.join("auth.json");
-    let destination = destination.clone();
-    tokio::task::spawn_blocking(move || persist_auth_file(&bytes, &destination))
-        .await
-        .map_err(|error| {
-            CodexError::Authentication(format!("auth persistence worker failed: {error}"))
-        })?
-}
-
-fn persist_auth_file(bytes: &[u8], destination: &Path) -> Result<(), CodexError> {
-    use std::io::Write as _;
-
-    let parent = destination.parent().ok_or_else(|| {
-        CodexError::Authentication("auth.json destination has no parent".to_owned())
-    })?;
-    let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(CodexError::Preparation)?;
-    temporary
-        .as_file()
-        .set_permissions(fs::Permissions::from_mode(0o600))
-        .map_err(CodexError::Preparation)?;
-    temporary
-        .write_all(bytes)
-        .and_then(|()| temporary.as_file().sync_all())
-        .map_err(CodexError::Preparation)?;
-    temporary.persist(destination).map_err(|error| {
-        CodexError::Preparation(io::Error::new(error.error.kind(), error.error.to_string()))
-    })?;
-    File::open(parent)
-        .and_then(|directory| directory.sync_all())
-        .map_err(CodexError::Preparation)
-}
-
 fn apply_launch_environment(command: &mut Command, spec: &CodexRunSpec) {
     if let Some(environment) = &spec.launch_environment {
         command.env_clear();
         command.envs(environment);
     }
-    command.env_remove("CODEX_EXEC_SERVER_URL");
+    command
+        .env_remove("CODEX_EXEC_SERVER_URL")
+        .env_remove("OPENAI_API_KEY")
+        .env_remove("CODEX_ACCESS_TOKEN");
 }
 
 struct AccountProtocol {
@@ -2238,13 +3239,9 @@ impl AccountProtocol {
             if message.get("id") != Some(&json!(id)) {
                 continue;
             }
-            if let Some(error) = message.get("error") {
-                let detail = error
-                    .get("message")
-                    .and_then(Value::as_str)
-                    .unwrap_or("request was rejected");
+            if message.get("error").is_some() {
                 return Err(CodexError::Authentication(format!(
-                    "{method} failed: {detail}"
+                    "{method} was rejected by Codex"
                 )));
             }
             return message
@@ -2334,16 +3331,18 @@ mod tests {
     use super::{
         BuiltinToolsV1, CodexError, CodexEvent, CodexHarness, CodexRunSpec, DynamicTool,
         GeneratedSchema, HarnessInspection, ModelCapability, ProtocolDirection,
-        SUPPORTED_CODEX_VERSION, ToolResult, WorkspaceAccess, account_error_with_stderr,
-        configured_model_catalog, disabled_features, dynamic_tool_specs, persist_refreshed_auth,
-        read_protocol_lines_with_limit, runtime_config, validate_auth_document,
+        SUPPORTED_CODEX_VERSION, ToolResult, WorkerAuthentication, WorkspaceAccess,
+        configured_model_catalog, disabled_features, dynamic_tool_specs,
+        prepare_isolated_codex_home, read_protocol_lines_with_limit, read_worker_authentication,
+        runtime_config, validate_auth_document,
     };
     use serde_json::{Value, json};
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::os::unix::fs::PermissionsExt as _;
     use std::path::Path;
     use std::process::{Command, Stdio};
+    use std::sync::{Arc, Mutex as StdMutex};
     use std::time::Duration;
     use tokio::io::{AsyncWriteExt as _, duplex};
     use tokio::sync::{mpsc, watch};
@@ -2358,6 +3357,7 @@ mod tests {
             reader,
             protocol_tx,
             events_tx,
+            Arc::new(StdMutex::new(super::SensitiveProtocolState::default())),
             4,
         ));
         let records = [
@@ -2401,6 +3401,38 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn sensitive_response_ids_do_not_hide_same_id_server_requests() {
+        let sensitive = StdMutex::new(super::SensitiveProtocolState {
+            request_ids: BTreeSet::from([1]),
+            values: vec![b"bearer-secret".to_vec()],
+        });
+        assert!(!super::is_sensitive_protocol_record(
+            br#"{"id":1,"method":"item/tool/call","params":{}}"#,
+            &sensitive
+        ));
+        assert!(super::is_sensitive_protocol_record(
+            b"malformed bearer-secret response\n",
+            &sensitive
+        ));
+        assert!(super::is_sensitive_protocol_record(
+            b"malformed response while auth is pending\n",
+            &sensitive
+        ));
+        assert!(super::is_sensitive_protocol_record(
+            br#"{"id":1,"result":{}}"#,
+            &sensitive
+        ));
+        assert!(!super::is_sensitive_protocol_record(
+            br#"{"id":1,"result":{}}"#,
+            &sensitive
+        ));
+        assert!(super::is_sensitive_protocol_record(
+            br#"{"id":20,"method":"account/chatgptAuthTokens/refresh","params":{}}"#,
+            &sensitive
+        ));
+    }
+
     fn inspection() -> HarnessInspection {
         HarnessInspection {
             harness: "codex".to_owned(),
@@ -2414,6 +3446,42 @@ mod tests {
                 supports_web_search: true,
             }],
         }
+    }
+
+    #[test]
+    fn refresh_protocol_and_cleanup_fit_the_external_bridge_deadline() {
+        assert!(
+            super::CANONICAL_AUTH_REFRESH_TIMEOUT + super::AUTH_REFRESH_SHUTDOWN_GRACE
+                < super::EXTERNAL_AUTH_RESPONSE_TIMEOUT
+        );
+    }
+
+    const INITIAL_ACCESS_TOKEN: &str = "header.e30.signature-initial-secret";
+    const REFRESHED_ACCESS_TOKEN: &str = "header.e30.signature-refreshed-secret";
+    const INITIAL_REFRESH_TOKEN: &str = "initial-refresh-token-secret";
+    const REFRESHED_REFRESH_TOKEN: &str = "refreshed-refresh-token-secret";
+    const CHATGPT_ACCOUNT_ID: &str = "account-1";
+
+    fn managed_auth_document(access_token: &str, refresh_token: &str) -> String {
+        serde_json::to_string(&json!({
+            "auth_mode": "chatgpt",
+            "OPENAI_API_KEY": null,
+            "tokens": {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "account_id": CHATGPT_ACCOUNT_ID,
+            }
+        }))
+        .unwrap_or_else(|error| panic!("encode managed auth fixture: {error}"))
+    }
+
+    fn write_test_codex_home(path: &Path, auth: &str) -> std::io::Result<()> {
+        fs::create_dir(path)?;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+        fs::write(path.join("config.toml"), super::AUTH_CONFIG)?;
+        fs::set_permissions(path.join("config.toml"), fs::Permissions::from_mode(0o600))?;
+        fs::write(path.join("auth.json"), auth)?;
+        fs::set_permissions(path.join("auth.json"), fs::Permissions::from_mode(0o600))
     }
 
     fn method_schema(method: &str, params_ref: &str) -> Value {
@@ -2435,10 +3503,19 @@ mod tests {
                     method_schema(
                         "mcpServerStatus/list",
                         "#/definitions/v2/ListMcpServerStatusParams"
-                    )
+                    ),
+                    method_schema(
+                        "account/login/start",
+                        "#/definitions/v2/LoginAccountParams"
+                    ),
+                    method_schema("account/read", "#/definitions/v2/GetAccountParams")
                 ] },
                 "ServerRequest": { "oneOf": [
-                    method_schema("item/tool/call", "#/definitions/DynamicToolCallParams")
+                    method_schema("item/tool/call", "#/definitions/DynamicToolCallParams"),
+                    method_schema(
+                        "account/chatgptAuthTokens/refresh",
+                        "#/definitions/ChatgptAuthTokensRefreshParams"
+                    )
                 ] },
                 "ServerNotification": { "oneOf": [
                     method_schema(
@@ -2457,6 +3534,15 @@ mod tests {
                 "DynamicToolCallParams": {
                     "required": ["arguments", "callId", "threadId", "tool", "turnId"]
                 },
+                "ChatgptAuthTokensRefreshParams": {
+                    "required": ["reason"],
+                    "properties": { "previousAccountId": {}, "reason": {} }
+                },
+                "ChatgptAuthTokensRefreshReason": { "enum": ["unauthorized"] },
+                "ChatgptAuthTokensRefreshResponse": {
+                    "required": ["accessToken", "chatgptAccountId"],
+                    "properties": { "accessToken": {}, "chatgptAccountId": {}, "chatgptPlanType": {} }
+                },
                 "v2": {
                     "ThreadStartParams": { "properties": {
                         "approvalPolicy": {}, "baseInstructions": {}, "cwd": {},
@@ -2469,6 +3555,15 @@ mod tests {
                         "required": ["input", "threadId"],
                         "properties": { "effort": {}, "environments": {}, "input": {}, "threadId": {} }
                     },
+                    "LoginAccountParams": { "oneOf": [{
+                        "required": ["accessToken", "chatgptAccountId", "type"],
+                        "properties": {
+                            "accessToken": {}, "chatgptAccountId": {},
+                            "chatgptPlanType": {},
+                            "type": { "enum": ["chatgptAuthTokens"] }
+                        }
+                    }] },
+                    "GetAccountParams": { "properties": { "refreshToken": {} } },
                     "DynamicToolSpec": { "oneOf": [{
                         "required": ["description", "inputSchema", "name", "type"],
                         "properties": { "type": { "enum": ["function"] } }
@@ -2565,6 +3660,79 @@ mod tests {
         };
         assert!(error.to_string().contains("harness.protocolSchema"));
         assert!(error.to_string().contains("dynamicTools"));
+    }
+
+    #[test]
+    fn protocol_schema_binds_managed_chatgpt_authentication() {
+        let harness = CodexHarness::new("codex");
+        let schema = compatible_protocol_schema();
+        let document: Value = serde_json::from_slice(&schema.bytes)
+            .unwrap_or_else(|error| panic!("decode protocol schema: {error}"));
+        let assert_rejected = |document: Value, expected: &str| {
+            let incompatible = GeneratedSchema {
+                media_type: "application/schema+json",
+                bytes: serde_json::to_vec(&document)
+                    .unwrap_or_else(|error| panic!("encode incompatible schema: {error}")),
+            };
+            let error = match harness.validate_protocol_schema(&inspection(), &incompatible) {
+                Ok(()) => panic!("managed authentication schema omission must fail validation"),
+                Err(error) => error,
+            };
+            assert!(
+                error.to_string().contains(expected),
+                "unexpected validation error: {error}"
+            );
+        };
+
+        for (pointer, method) in [
+            ("/definitions/ClientRequest/oneOf", "account/login/start"),
+            ("/definitions/ClientRequest/oneOf", "account/read"),
+            (
+                "/definitions/ServerRequest/oneOf",
+                "account/chatgptAuthTokens/refresh",
+            ),
+        ] {
+            let mut missing_method = document.clone();
+            missing_method
+                .pointer_mut(pointer)
+                .and_then(Value::as_array_mut)
+                .unwrap_or_else(|| panic!("schema must contain {pointer}"))
+                .retain(|variant| {
+                    variant
+                        .pointer("/properties/method/enum/0")
+                        .and_then(Value::as_str)
+                        != Some(method)
+                });
+            assert_rejected(missing_method, method);
+        }
+
+        for (pointer, property) in [
+            (
+                "/definitions/v2/LoginAccountParams/oneOf/0/properties",
+                "chatgptPlanType",
+            ),
+            (
+                "/definitions/v2/GetAccountParams/properties",
+                "refreshToken",
+            ),
+            (
+                "/definitions/ChatgptAuthTokensRefreshResponse/properties",
+                "chatgptPlanType",
+            ),
+        ] {
+            let mut missing_property = document.clone();
+            missing_property
+                .pointer_mut(pointer)
+                .and_then(Value::as_object_mut)
+                .unwrap_or_else(|| panic!("schema must contain {pointer}"))
+                .remove(property);
+            assert_rejected(missing_property, property);
+        }
+
+        let mut missing_unauthorized_reason = document;
+        missing_unauthorized_reason["definitions"]["ChatgptAuthTokensRefreshReason"]["enum"] =
+            json!(["expired"]);
+        assert_rejected(missing_unauthorized_reason, "unauthorized");
     }
 
     #[test]
@@ -2677,18 +3845,6 @@ mod tests {
     }
 
     #[test]
-    fn account_failures_include_bounded_sanitized_stderr() {
-        let error = account_error_with_stderr(
-            CodexError::Protocol("account/rateLimits/read failed".to_owned()),
-            b"HTTP 401: refresh_token_reused\x1b\n",
-        );
-        let message = error.to_string();
-        assert!(message.contains("refresh_token_reused"));
-        assert!(message.contains("\\u{1b}"));
-        assert!(!message.contains('\u{1b}'));
-    }
-
-    #[test]
     fn authentication_document_requires_usable_file_credentials() {
         for invalid in [
             b"".as_slice(),
@@ -2697,6 +3853,9 @@ mod tests {
             br#"{"tokens":"#.as_slice(),
             br#"{"OPENAI_API_KEY":"  "}"#.as_slice(),
             br#"{"tokens":{"access_token":"access","refresh_token":""}}"#.as_slice(),
+            br#"{"tokens":{"access_token":"access","refresh_token":"refresh"}}"#.as_slice(),
+            br#"{"tokens":{"access_token":"access","refresh_token":"refresh","account_id":"account"}}"#.as_slice(),
+            br#"{"auth_mode":"agentIdentity","OPENAI_API_KEY":"key"}"#.as_slice(),
         ] {
             assert!(
                 validate_auth_document(invalid).is_err(),
@@ -2707,13 +3866,123 @@ mod tests {
         validate_auth_document(br#"{"OPENAI_API_KEY":"key"}"#)
             .unwrap_or_else(|error| panic!("validate API-key authentication: {error}"));
         validate_auth_document(
-            br#"{"tokens":{"access_token":"access","refresh_token":"refresh"}}"#,
+            br#"{"tokens":{"access_token":"header.e30.signature","refresh_token":"refresh","account_id":"account"}}"#,
         )
         .unwrap_or_else(|error| panic!("validate token authentication: {error}"));
     }
 
+    #[test]
+    fn managed_authentication_uses_id_token_identity_without_exposing_refresh_token() {
+        use base64::Engine as _;
+
+        let claims = json!({
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": CHATGPT_ACCOUNT_ID,
+                "chatgpt_plan_type": "pro"
+            }
+        });
+        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+            serde_json::to_vec(&claims)
+                .unwrap_or_else(|error| panic!("encode JWT claims: {error}")),
+        );
+        let id_token = format!("header.{payload}.signature");
+        let document = serde_json::to_vec(&json!({
+            "auth_mode": "chatgpt",
+            "tokens": {
+                "id_token": id_token,
+                "access_token": INITIAL_ACCESS_TOKEN,
+                "refresh_token": INITIAL_REFRESH_TOKEN
+            }
+        }))
+        .unwrap_or_else(|error| panic!("encode authentication: {error}"));
+
+        let WorkerAuthentication::ManagedChatgpt(credentials) =
+            super::worker_authentication_from_document(&document)
+                .unwrap_or_else(|error| panic!("parse managed authentication: {error}"))
+        else {
+            panic!("managed authentication was classified as an API key");
+        };
+        assert_eq!(credentials.access_token, INITIAL_ACCESS_TOKEN);
+        assert_eq!(credentials.account_id, CHATGPT_ACCOUNT_ID);
+        assert_eq!(credentials.plan_type.as_deref(), Some("pro"));
+    }
+
     #[tokio::test]
-    async fn truncated_refresh_never_replaces_authoritative_authentication()
+    async fn sensitive_authentication_rejection_is_not_emitted_or_echoed()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("managed-fake-codex");
+        write_managed_fake_codex(&executable)?;
+        fs::write(directory.path().join("reject-sensitive-login"), b"")?;
+        let codex_home = directory.path().join("codex-home");
+        write_test_codex_home(
+            &codex_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
+        let inspection = harness.inspect().await?;
+        let spec = CodexRunSpec {
+            instructions: "Return the managed result.".to_owned(),
+            developer_instructions: None,
+            prompt: "work".to_owned(),
+            model: "example-model".to_owned(),
+            reasoning_effort: Some("medium".to_owned()),
+            working_directory: directory.path().to_path_buf(),
+            workspace_access: WorkspaceAccess::None,
+            builtin_tools: BuiltinToolsV1 {
+                local_execution: false,
+                web_search: false,
+            },
+            timeout: Duration::from_secs(5),
+            tools: Vec::new(),
+            launch_environment: None,
+        };
+        let (events_tx, mut events_rx) = mpsc::channel(64);
+        let event_collector = tokio::spawn(async move {
+            let mut bytes = Vec::new();
+            while let Some(event) = events_rx.recv().await {
+                match event {
+                    CodexEvent::Protocol { bytes: record, .. } | CodexEvent::Stderr(record) => {
+                        bytes.extend(record);
+                    }
+                    CodexEvent::ToolCall(_) => panic!("managed fixture emitted a tool call"),
+                }
+            }
+            bytes
+        });
+        let (_cancel_tx, cancel_rx) = watch::channel(false);
+
+        let Err(error) = harness.run(&inspection, spec, events_tx, cancel_rx).await else {
+            panic!("sensitive authentication rejection must fail");
+        };
+        assert!(!error.to_string().contains(INITIAL_ACCESS_TOKEN));
+        let event_bytes = event_collector.await?;
+        assert!(!String::from_utf8_lossy(&event_bytes).contains(INITIAL_ACCESS_TOKEN));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn managed_worker_home_contains_no_persistent_authentication()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let persistent_home = directory.path().join("persistent-home");
+        let isolated_home = directory.path().join("isolated-home");
+        write_test_codex_home(
+            &persistent_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        fs::create_dir(&isolated_home)?;
+        let authentication = read_worker_authentication(&persistent_home)?;
+
+        prepare_isolated_codex_home(&isolated_home, &authentication).await?;
+
+        assert!(isolated_home.join("config.toml").is_file());
+        assert!(!isolated_home.join("auth.json").exists());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn isolated_worker_authentication_never_replaces_authoritative_authentication()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
         let persistent_home = directory.path().join("persistent-home");
@@ -2726,17 +3995,15 @@ mod tests {
             persistent_home.join("auth.json"),
             fs::Permissions::from_mode(0o600),
         )?;
-        fs::write(isolated_home.join("auth.json"), br#"{"tokens":"#)?;
-        fs::set_permissions(
+        prepare_isolated_codex_home(
+            &isolated_home,
+            &WorkerAuthentication::ApiKey("authoritative".to_owned()),
+        )
+        .await?;
+        fs::write(
             isolated_home.join("auth.json"),
-            fs::Permissions::from_mode(0o600),
+            br#"{"OPENAI_API_KEY":"worker-write"}"#,
         )?;
-
-        let result = persist_refreshed_auth(&isolated_home, &persistent_home).await;
-        assert!(
-            result.is_err(),
-            "truncated refreshed authentication must be rejected"
-        );
 
         assert_eq!(fs::read(persistent_home.join("auth.json"))?, authoritative);
         Ok(())
@@ -2799,6 +4066,11 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
             "CODEX_EXEC_SERVER_URL".to_owned(),
             "https://attacker.invalid".to_owned(),
         );
+        environment.insert("OPENAI_API_KEY".to_owned(), "requester-api-key".to_owned());
+        environment.insert(
+            "CODEX_ACCESS_TOKEN".to_owned(),
+            "requester-access-token".to_owned(),
+        );
         let spec = CodexRunSpec {
             instructions: "contract".to_owned(),
             developer_instructions: None,
@@ -2829,9 +4101,560 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
                 .any(|line| line.starts_with("CODEX_EXEC_SERVER_URL="))
         );
         assert!(
+            !captured
+                .lines()
+                .any(|line| line.starts_with("OPENAI_API_KEY="))
+        );
+        assert!(
+            !captured
+                .lines()
+                .any(|line| line.starts_with("CODEX_ACCESS_TOKEN="))
+        );
+        assert!(
             captured
                 .lines()
                 .any(|line| { line == format!("CODEX_HOME={}", codex_home.display()) })
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn job_sessions_overlap_and_exclude_attended_login_across_harnesses()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("managed-fake-codex");
+        write_managed_fake_codex(&executable)?;
+        let codex_home = directory.path().join("codex-home");
+        write_test_codex_home(
+            &codex_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        let first = CodexHarness::with_codex_home(&executable, &codex_home);
+        // A separate harness has separate in-memory gates, so this also proves
+        // the shared/exclusive file-lock boundary used across processes.
+        let second = CodexHarness::with_codex_home(&executable, &codex_home);
+        let first_job = first.acquire_auth_session().await?;
+        let second_job = second.try_acquire_auth_session().await?;
+        let login_harness = CodexHarness::with_codex_home(&executable, &codex_home);
+        let login = tokio::spawn(async move { login_harness.login(false).await });
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(!directory.path().join("login-started").exists());
+        assert!(!login.is_finished());
+
+        drop(first_job);
+        drop(second_job);
+        let status = tokio::time::timeout(Duration::from_secs(2), login).await???;
+        assert!(status.success());
+        assert!(directory.path().join("login-started").is_file());
+        assert_ne!(
+            fs::read_to_string(directory.path().join("login-home"))?,
+            codex_home.display().to_string()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn account_snapshot_promotes_a_safe_proactive_refresh_from_staging()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("managed-fake-codex");
+        write_managed_fake_codex(&executable)?;
+        fs::write(directory.path().join("proactive-account-refresh"), b"")?;
+        let codex_home = directory.path().join("codex-home");
+        write_test_codex_home(
+            &codex_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
+
+        let snapshot = harness
+            .read_account_snapshot(true, Duration::from_secs(1), Duration::from_secs(3))
+            .await?;
+        assert_eq!(snapshot.rate_limits["limitId"], "primary");
+        assert_eq!(
+            snapshot
+                .usage
+                .as_ref()
+                .and_then(|usage| usage.get("planType")),
+            Some(&json!("pro"))
+        );
+        let staging_home = fs::read_to_string(directory.path().join("account-read-home"))?;
+        assert_ne!(staging_home, codex_home.display().to_string());
+        assert!(!Path::new(&staging_home).exists());
+        let WorkerAuthentication::ManagedChatgpt(refreshed) =
+            read_worker_authentication(&codex_home)?
+        else {
+            panic!("account refresh changed authentication modes");
+        };
+        assert_eq!(refreshed.access_token, REFRESHED_ACCESS_TOKEN);
+        assert_eq!(refreshed.account_id, CHATGPT_ACCOUNT_ID);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn account_request_cancellation_cannot_strand_a_rotated_generation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("managed-fake-codex");
+        write_managed_fake_codex(&executable)?;
+        fs::write(directory.path().join("slow-account-refresh"), b"")?;
+        let codex_home = directory.path().join("codex-home");
+        write_test_codex_home(
+            &codex_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
+        let account_harness = harness.clone();
+        let account = tokio::spawn(async move {
+            account_harness
+                .read_account_snapshot(false, Duration::from_secs(1), Duration::from_secs(3))
+                .await
+        });
+
+        let started = directory.path().join("account-read-started");
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        while !started.is_file() {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "proactive account refresh did not start"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let staging_home = fs::read_to_string(directory.path().join("account-read-home"))?;
+        assert_ne!(staging_home, codex_home.display().to_string());
+        let WorkerAuthentication::ManagedChatgpt(before_promotion) =
+            read_worker_authentication(&codex_home)?
+        else {
+            panic!("canonical authentication changed modes");
+        };
+        assert_eq!(before_promotion.access_token, INITIAL_ACCESS_TOKEN);
+
+        account.abort();
+        let Err(cancellation) = account.await else {
+            panic!("account request completed before cancellation");
+        };
+        assert!(cancellation.is_cancelled());
+        tokio::time::timeout(Duration::from_secs(4), harness.wait_for_auth_idle()).await?;
+
+        let WorkerAuthentication::ManagedChatgpt(refreshed) =
+            read_worker_authentication(&codex_home)?
+        else {
+            panic!("account refresh changed authentication modes");
+        };
+        assert_eq!(refreshed.access_token, REFRESHED_ACCESS_TOKEN);
+        assert_eq!(refreshed.account_id, CHATGPT_ACCOUNT_ID);
+        assert!(!Path::new(&staging_home).exists());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn account_request_timeout_still_promotes_a_complete_rotated_generation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("managed-fake-codex");
+        write_managed_fake_codex(&executable)?;
+        fs::write(directory.path().join("timeout-account-refresh"), b"")?;
+        let codex_home = directory.path().join("codex-home");
+        write_test_codex_home(
+            &codex_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
+
+        let Err(error) = harness
+            .read_account_snapshot(false, Duration::from_secs(1), Duration::from_secs(3))
+            .await
+        else {
+            panic!("stalled account request must time out");
+        };
+        assert!(matches!(error, CodexError::TimedOut));
+        let WorkerAuthentication::ManagedChatgpt(refreshed) =
+            read_worker_authentication(&codex_home)?
+        else {
+            panic!("account refresh changed authentication modes");
+        };
+        assert_eq!(refreshed.access_token, REFRESHED_ACCESS_TOKEN);
+        assert_eq!(refreshed.account_id, CHATGPT_ACCOUNT_ID);
+        let staging_home = fs::read_to_string(directory.path().join("account-read-home"))?;
+        assert!(!Path::new(&staging_home).exists());
+        Ok(())
+    }
+
+    #[test]
+    fn account_promotion_preserves_a_refresh_token_only_rotation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let codex_home = directory.path().join("codex-home");
+        let canonical = managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN);
+        let staged = managed_auth_document(INITIAL_ACCESS_TOKEN, REFRESHED_REFRESH_TOKEN);
+        write_test_codex_home(&codex_home, &canonical)?;
+
+        super::promote_account_auth_if_advanced(
+            &codex_home,
+            canonical.as_bytes(),
+            staged.as_bytes(),
+        )?;
+        assert_eq!(
+            serde_json::from_slice::<Value>(&fs::read(codex_home.join("auth.json"))?)?,
+            serde_json::from_str::<Value>(&staged)?
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn attended_login_promotes_only_from_its_private_staging_home()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("managed-fake-codex");
+        write_managed_fake_codex(&executable)?;
+        fs::write(directory.path().join("login-refresh"), b"")?;
+        let codex_home = directory.path().join("codex-home");
+        write_test_codex_home(
+            &codex_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
+
+        assert!(harness.login(false).await?.success());
+        let staging_home = fs::read_to_string(directory.path().join("login-home"))?;
+        assert_ne!(staging_home, codex_home.display().to_string());
+        assert!(!Path::new(&staging_home).exists());
+        let WorkerAuthentication::ManagedChatgpt(refreshed) =
+            read_worker_authentication(&codex_home)?
+        else {
+            panic!("login changed authentication modes");
+        };
+        assert_eq!(refreshed.access_token, REFRESHED_ACCESS_TOKEN);
+        assert_eq!(refreshed.account_id, CHATGPT_ACCOUNT_ID);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn attended_login_cancellation_cannot_damage_canonical_authentication()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("managed-fake-codex");
+        write_managed_fake_codex(&executable)?;
+        fs::write(directory.path().join("slow-login"), b"")?;
+        let codex_home = directory.path().join("codex-home");
+        let initial = managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN);
+        write_test_codex_home(&codex_home, &initial)?;
+        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
+        let login = tokio::spawn(async move { harness.login(false).await });
+
+        let started = directory.path().join("login-started");
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        while !started.is_file() {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "attended login did not start"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let staging_home = fs::read_to_string(directory.path().join("login-home"))?;
+        assert_ne!(staging_home, codex_home.display().to_string());
+        login.abort();
+        let Err(cancellation) = login.await else {
+            panic!("attended login completed before cancellation");
+        };
+        assert!(cancellation.is_cancelled());
+        assert!(!Path::new(&staging_home).exists());
+        assert_eq!(
+            serde_json::from_slice::<Value>(&fs::read(codex_home.join("auth.json"))?)?,
+            serde_json::from_str::<Value>(&initial)?
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn closed_auth_operation_gate_rejects_new_account_and_refresh_children()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("managed-fake-codex");
+        write_managed_fake_codex(&executable)?;
+        let codex_home = directory.path().join("codex-home");
+        write_test_codex_home(
+            &codex_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
+        let WorkerAuthentication::ManagedChatgpt(rejected) =
+            read_worker_authentication(&codex_home)?
+        else {
+            panic!("managed authentication was classified as an API key");
+        };
+        harness.close_auth_operations();
+
+        let Err(account_error) = harness
+            .read_account_snapshot(false, Duration::from_secs(1), Duration::from_secs(3))
+            .await
+        else {
+            panic!("closed supervisor started an account child");
+        };
+        assert!(account_error.to_string().contains("shutting down"));
+        let auth_session = harness.acquire_auth_session().await?;
+        let Err(refresh_error) = harness.refresh_managed_auth(&rejected, auth_session).await else {
+            panic!("closed supervisor started a refresh child");
+        };
+        assert!(refresh_error.to_string().contains("shutting down"));
+        assert!(!directory.path().join("account-read-home").exists());
+        assert!(!directory.path().join("refresh-count").exists());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn changed_generation_from_another_account_is_never_adopted()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let codex_home = directory.path().join("codex-home");
+        write_test_codex_home(
+            &codex_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        let WorkerAuthentication::ManagedChatgpt(rejected) =
+            read_worker_authentication(&codex_home)?
+        else {
+            panic!("managed authentication was classified as an API key");
+        };
+        fs::write(
+            codex_home.join("auth.json"),
+            json!({
+                "auth_mode": "chatgpt",
+                "tokens": {
+                    "access_token": REFRESHED_ACCESS_TOKEN,
+                    "refresh_token": REFRESHED_REFRESH_TOKEN,
+                    "account_id": "different-account",
+                }
+            })
+            .to_string(),
+        )?;
+        let harness = CodexHarness::with_codex_home("unused-codex", &codex_home);
+        let auth_session = harness.acquire_auth_session().await?;
+
+        let Err(error) = harness.refresh_managed_auth(&rejected, auth_session).await else {
+            panic!("a different account generation must be rejected");
+        };
+        assert!(error.to_string().contains("account changed"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn managed_refresh_subprocess_helper() -> Result<(), Box<dyn std::error::Error>> {
+        let Some(codex_home) = std::env::var_os("NUCLEUS_TEST_REFRESH_HOME") else {
+            return Ok(());
+        };
+        let executable = std::env::var_os("NUCLEUS_TEST_REFRESH_EXECUTABLE")
+            .ok_or("refresh helper omitted executable")?;
+        let WorkerAuthentication::ManagedChatgpt(rejected) =
+            super::worker_authentication_from_document(
+                managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN).as_bytes(),
+            )?
+        else {
+            panic!("managed authentication was classified as an API key");
+        };
+        let harness = CodexHarness::with_codex_home(executable, codex_home);
+        let auth_session = harness.acquire_auth_session().await?;
+        let refreshed = harness
+            .refresh_managed_auth(&rejected, auth_session)
+            .await?;
+        assert_eq!(refreshed.access_token, REFRESHED_ACCESS_TOKEN);
+        assert_eq!(refreshed.account_id, CHATGPT_ACCOUNT_ID);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn eight_simultaneous_rejections_force_one_canonical_refresh()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("managed-fake-codex");
+        write_managed_fake_codex(&executable)?;
+        let codex_home = directory.path().join("codex-home");
+        write_test_codex_home(
+            &codex_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        let test_executable = std::env::current_exe()?;
+        let mut refreshes = Vec::new();
+        for _ in 0..8 {
+            refreshes.push(
+                tokio::process::Command::new(&test_executable)
+                    .args([
+                        "--exact",
+                        "tests::managed_refresh_subprocess_helper",
+                        "--nocapture",
+                    ])
+                    .env("NUCLEUS_TEST_REFRESH_HOME", &codex_home)
+                    .env("NUCLEUS_TEST_REFRESH_EXECUTABLE", &executable)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()?,
+            );
+        }
+        for mut refresh in refreshes {
+            assert!(refresh.wait().await?.success());
+        }
+        assert_eq!(
+            fs::read_to_string(directory.path().join("refresh-count"))?
+                .lines()
+                .count(),
+            1
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&fs::read_to_string(codex_home.join("auth.json"))?)?,
+            serde_json::from_str::<Value>(&managed_auth_document(
+                REFRESHED_ACCESS_TOKEN,
+                REFRESHED_REFRESH_TOKEN,
+            ))?
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn managed_worker_refresh_is_end_to_end_and_secrets_never_become_events()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("managed-fake-codex");
+        write_managed_fake_codex(&executable)?;
+        let codex_home = directory.path().join("codex-home");
+        write_test_codex_home(
+            &codex_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
+        let inspection = harness.inspect().await?;
+        let spec = CodexRunSpec {
+            instructions: "Return the managed result.".to_owned(),
+            developer_instructions: None,
+            prompt: "work".to_owned(),
+            model: "example-model".to_owned(),
+            reasoning_effort: Some("medium".to_owned()),
+            working_directory: directory.path().to_path_buf(),
+            workspace_access: WorkspaceAccess::None,
+            builtin_tools: BuiltinToolsV1 {
+                local_execution: false,
+                web_search: false,
+            },
+            timeout: Duration::from_secs(5),
+            tools: Vec::new(),
+            launch_environment: None,
+        };
+        let (events_tx, mut events_rx) = mpsc::channel(64);
+        let event_collector = tokio::spawn(async move {
+            let mut bytes = Vec::new();
+            while let Some(event) = events_rx.recv().await {
+                match event {
+                    CodexEvent::Protocol { bytes: record, .. } | CodexEvent::Stderr(record) => {
+                        bytes.extend(record);
+                    }
+                    CodexEvent::ToolCall(_) => panic!("managed fixture emitted a tool call"),
+                }
+            }
+            bytes
+        });
+        let (_cancel_tx, cancel_rx) = watch::channel(false);
+
+        let outcome = harness.run(&inspection, spec, events_tx, cancel_rx).await?;
+        assert_eq!(outcome.final_message, "managed");
+        let event_bytes = event_collector.await?;
+        assert!(
+            !String::from_utf8_lossy(&event_bytes).contains("account/chatgptAuthTokens/refresh"),
+            "authentication refresh request became a Codex event"
+        );
+        for secret in [
+            INITIAL_ACCESS_TOKEN,
+            REFRESHED_ACCESS_TOKEN,
+            INITIAL_REFRESH_TOKEN,
+            REFRESHED_REFRESH_TOKEN,
+        ] {
+            assert!(
+                !String::from_utf8_lossy(&event_bytes).contains(secret),
+                "authentication material escaped through a Codex event"
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(directory.path().join("refresh-count"))?
+                .lines()
+                .count(),
+            1
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&fs::read_to_string(codex_home.join("auth.json"))?)?,
+            serde_json::from_str::<Value>(&managed_auth_document(
+                REFRESHED_ACCESS_TOKEN,
+                REFRESHED_REFRESH_TOKEN,
+            ))?
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn worker_cancellation_cannot_interrupt_canonical_refresh()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("managed-fake-codex");
+        write_managed_fake_codex(&executable)?;
+        fs::write(directory.path().join("slow-refresh"), b"")?;
+        let codex_home = directory.path().join("codex-home");
+        write_test_codex_home(
+            &codex_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
+        let inspection = harness.inspect().await?;
+        let spec = CodexRunSpec {
+            instructions: "Return the managed result.".to_owned(),
+            developer_instructions: None,
+            prompt: "work".to_owned(),
+            model: "example-model".to_owned(),
+            reasoning_effort: Some("medium".to_owned()),
+            working_directory: directory.path().to_path_buf(),
+            workspace_access: WorkspaceAccess::None,
+            builtin_tools: BuiltinToolsV1 {
+                local_execution: false,
+                web_search: false,
+            },
+            timeout: Duration::from_secs(5),
+            tools: Vec::new(),
+            launch_environment: None,
+        };
+        let (events_tx, mut events_rx) = mpsc::channel(64);
+        let event_drain = tokio::spawn(async move { while events_rx.recv().await.is_some() {} });
+        let (cancel_tx, cancel_rx) = watch::channel(false);
+        let worker_harness = harness.clone();
+        let worker = tokio::spawn(async move {
+            worker_harness
+                .run(&inspection, spec, events_tx, cancel_rx)
+                .await
+        });
+
+        let refresh_started = directory.path().join("refresh-started");
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        while !refresh_started.is_file() {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "managed refresh did not start"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        cancel_tx.send(true)?;
+        let result = tokio::time::timeout(Duration::from_secs(2), worker).await??;
+        assert!(matches!(result, Err(CodexError::Cancelled)));
+
+        tokio::time::timeout(Duration::from_secs(3), harness.wait_for_auth_idle()).await?;
+        event_drain.await?;
+        let WorkerAuthentication::ManagedChatgpt(refreshed) =
+            read_worker_authentication(&codex_home)?
+        else {
+            panic!("refreshed authentication changed modes");
+        };
+        assert_eq!(refreshed.access_token, REFRESHED_ACCESS_TOKEN);
+        assert_eq!(refreshed.account_id, CHATGPT_ACCOUNT_ID);
+        assert_eq!(
+            fs::read_to_string(directory.path().join("refresh-count"))?
+                .lines()
+                .count(),
+            1
         );
         Ok(())
     }
@@ -2942,7 +4765,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
         }));
         assert_eq!(
             fs::read_to_string(codex_home.join("auth.json"))?,
-            r#"{"OPENAI_API_KEY":"refreshed"}"#
+            r#"{"OPENAI_API_KEY":"credential"}"#
         );
 
         let failed_spec = CodexRunSpec {
@@ -2984,6 +4807,127 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
         panic!("descendant process {pid} survived adapter cleanup");
+    }
+
+    fn write_managed_fake_codex(path: &Path) -> std::io::Result<()> {
+        fs::write(
+            path,
+            r#"#!/bin/sh
+set -eu
+SCRIPT_DIR=${0%/*}
+if [ "${1:-}" = "--version" ]; then
+  printf '%s\n' 'codex-cli 0.146.0'
+  exit 0
+fi
+if [ "${1:-}" = "debug" ]; then
+  printf '%s\n' '{"models":[{"slug":"example-model","default_reasoning_level":"medium","supported_reasoning_levels":[{"effort":"medium"}],"tool_mode":"code_mode_only","shell_type":"shell_command","supports_search_tool":true,"apply_patch_tool_type":"freeform"}]}'
+  exit 0
+fi
+if [ "${1:-}" = "login" ]; then
+  printf '%s' "$CODEX_HOME" > "$SCRIPT_DIR/login-home"
+  if [ -f "$SCRIPT_DIR/slow-login" ]; then
+    printf '%s' '{"auth_mode":' > "$CODEX_HOME/auth.json"
+    printf '%s' 'started' > "$SCRIPT_DIR/login-started"
+    sleep 5
+    exit 48
+  fi
+  if [ -f "$SCRIPT_DIR/login-refresh" ]; then
+    printf '%s' '{"auth_mode":"chatgpt","OPENAI_API_KEY":null,"tokens":{"access_token":"header.e30.signature-refreshed-secret","refresh_token":"refreshed-refresh-token-secret","account_id":"account-1"}}' > "$CODEX_HOME/auth.json"
+  fi
+  printf '%s' 'started' > "$SCRIPT_DIR/login-started"
+  exit 0
+fi
+if [ -f "$CODEX_HOME/auth.json" ]; then
+  IFS= read -r initialize
+  printf '%s\n' '{"id":0,"result":{}}'
+  IFS= read -r initialized
+  IFS= read -r account_request
+  case "$account_request" in
+    *'"method":"account/read"'*'"refreshToken":true'*)
+      printf '%s\n' 'refresh' >> "$SCRIPT_DIR/refresh-count"
+      if [ -f "$SCRIPT_DIR/slow-refresh" ]; then
+        printf '%s' 'started' > "$SCRIPT_DIR/refresh-started"
+        sleep 1
+      fi
+      printf '%s' '{"auth_mode":"chatgpt","OPENAI_API_KEY":null,"tokens":{"access_token":"header.e30.signature-refreshed-secret","refresh_token":"refreshed-refresh-token-secret","account_id":"account-1"}}' > "$CODEX_HOME/auth.json"
+      printf '%s\n' '{"id":1,"result":{"account":{"type":"chatgpt"},"requiresOpenaiAuth":true}}'
+      exit 0
+      ;;
+    *'"method":"account/rateLimits/read"'*)
+      printf '%s' "$CODEX_HOME" > "$SCRIPT_DIR/account-read-home"
+      if [ -f "$SCRIPT_DIR/slow-account-refresh" ]; then
+        printf '%s' '{"auth_mode":"chatgpt","OPENAI_API_KEY":null,"tokens":{"access_token":"header.e30.signature-refreshed-secret","refresh_token":"refreshed-refresh-token-secret","account_id":"account-1"}}' > "$CODEX_HOME/auth.json"
+        printf '%s' 'started' > "$SCRIPT_DIR/account-read-started"
+        sleep 1
+      fi
+      if [ -f "$SCRIPT_DIR/timeout-account-refresh" ]; then
+        printf '%s' '{"auth_mode":"chatgpt","OPENAI_API_KEY":null,"tokens":{"access_token":"header.e30.signature-refreshed-secret","refresh_token":"refreshed-refresh-token-secret","account_id":"account-1"}}' > "$CODEX_HOME/auth.json"
+        printf '%s' 'started' > "$SCRIPT_DIR/account-read-started"
+        sleep 5
+      fi
+      if [ -f "$SCRIPT_DIR/proactive-account-refresh" ]; then
+        printf '%s' '{"auth_mode":"chatgpt","OPENAI_API_KEY":null,"tokens":{"access_token":"header.e30.signature-refreshed-secret","refresh_token":"refreshed-refresh-token-secret","account_id":"account-1"}}' > "$CODEX_HOME/auth.json"
+      fi
+      printf '%s\n' '{"id":1,"result":{"limitId":"primary","usedPercent":1}}'
+      if IFS= read -r usage_request; then
+        case "$usage_request" in
+          *'"method":"account/usage/read"'*)
+            printf '%s\n' '{"id":2,"result":{"planType":"pro"}}'
+            ;;
+        esac
+      fi
+      exit 0
+      ;;
+    *) exit 40 ;;
+  esac
+fi
+
+IFS= read -r initialize
+printf '%s\n' '{"id":0,"result":{}}'
+IFS= read -r initialized
+IFS= read -r login
+case "$login" in
+  *'"method":"account/login/start"'*) ;;
+  *) exit 41 ;;
+esac
+case "$login" in
+  *'"accessToken":"header.e30.signature-initial-secret"'*) ;;
+  *) exit 42 ;;
+esac
+case "$login" in
+  *'"chatgptAccountId":"account-1"'*) ;;
+  *) exit 43 ;;
+esac
+if [ -f "$SCRIPT_DIR/reject-sensitive-login" ]; then
+  printf '%s\n' '{"id":1,"error":{"message":"rejected header.e30.signature-initial-secret"}}'
+  printf '%s\n' 'diagnostic header.e30.signature-initial-secret' >&2
+  exit 46
+fi
+printf '%s\n' '{"id":1,"result":{"type":"chatgptAuthTokens"}}'
+printf '%s\n' '{"method":"account/updated","params":{"authMode":"chatgptAuthTokens","planType":"pro"}}'
+IFS= read -r inventory
+printf '%s\n' '{"id":2,"result":{"data":[],"nextCursor":null}}'
+IFS= read -r thread
+printf '%s\n' '{"id":3,"result":{"thread":{"id":"thread-managed"}}}'
+IFS= read -r turn
+printf '%s\n' '{"id":4,"result":{"turn":{"id":"turn-managed"}}}'
+printf '%s\n' '{"id":20,"method":"account/chatgptAuthTokens/refresh","params":{"reason":"unauthorized","previousAccountId":"account-1"}}'
+IFS= read -r refresh_result
+case "$refresh_result" in
+  *'"accessToken":"header.e30.signature-refreshed-secret"'*) ;;
+  *) exit 44 ;;
+esac
+case "$refresh_result" in
+  *'"chatgptAccountId":"account-1"'*) ;;
+  *) exit 45 ;;
+esac
+printf '%s\n' '{"method":"item/completed","params":{"threadId":"thread-managed","turnId":"turn-managed","item":{"type":"agentMessage","text":"managed"}}}'
+printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thread-managed","turn":{"id":"turn-managed","status":"completed","items":[]}}}'
+"#,
+        )?;
+        let mut permissions = fs::metadata(path)?.permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(path, permissions)
     }
 
     fn write_fake_codex(path: &Path, descendant_pid: &Path) -> std::io::Result<()> {

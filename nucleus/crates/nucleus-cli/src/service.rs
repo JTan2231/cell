@@ -1031,8 +1031,7 @@ mod tests {
         let temporary = tempfile::tempdir().or_panic("create temporary directory");
         let source = temporary.path().join("annals-codex-home");
         let destination = temporary.path().join("nucleus-codex-home");
-        let authentication =
-            br#"{"tokens":{"access_token":"signed-in","refresh_token":"refresh"}}"#;
+        let authentication = br#"{"tokens":{"access_token":"header.e30.signature","refresh_token":"refresh","account_id":"account"}}"#;
         fs::create_dir(&source).or_panic("create source Codex home");
         fs::set_permissions(&source, fs::Permissions::from_mode(0o700))
             .or_panic("secure source Codex home");

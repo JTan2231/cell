@@ -39,11 +39,18 @@ unmanifested files or directories are refused. Symbolic candidates, traversal
 selectors, fabricated or tampered releases, regular-file selectors, and
 selectors aimed outside this installation are refused rather than adopted.
 
-A failed installed version/help smoke before commit restores the exact prior
-current and previous selectors. The public command and provider selector remain
-stable paths through the restored current release. Inspect ownership and the
-last known valid release before retrying; do not bypass refusal or overwrite a
-foreign path.
+A PID-aware product lock serializes Geste updates. The deployer then takes the
+shared Chancery catalog-writer lock before rechecking and publishing the
+provider view. By default it snapshots `current` before waiting and rejects the
+cutover if another deployment changed it. A planner may make that precondition
+explicit with `--expected-current absent` or
+`--expected-current releases/HASH`.
+
+A failed installed version/help smoke restores the exact prior current and
+previous selectors. If coherent restoration cannot be proved, the deployer
+detaches Geste's public selectors and stops fail-closed. Inspect ownership and
+the last known valid release before retrying; do not bypass refusal or overwrite
+a foreign path.
 
 If a domain canary fails after deployment committed, retain its evidence and
 redeploy the exact `install/previous/bin/geste` candidate with

@@ -80,6 +80,7 @@ operator_uid=$(id -u)
 [ -x "$launchctl_path" ] && [ ! -L "$launchctl_path" ] || fail 'launchctl is unavailable'
 [ -x /usr/sbin/lsof ] || fail 'lsof is unavailable'
 [ -x /usr/bin/perl ] || fail 'perl is unavailable'
+[ -x /usr/bin/shlock ] || fail 'shlock is unavailable'
 for source in "$SOURCE_FRONTEND" "$SOURCE_RUNNER" "$SOURCE_DEFINITION" "$SOURCE_UNINSTALLER"; do
     [ -f "$source" ] && [ ! -L "$source" ] || fail "missing packaged file: $source"
 done
@@ -244,6 +245,7 @@ MAINTENANCE_MARKER="$STATE_DIR/.clockwork-maintenance"
 MAINTENANCE_HOLD_RECEIPT="$STATE_DIR/.deployment-maintenance.json"
 PROVIDERS_DIR="$install_home/Library/Application Support/Chancery/providers"
 PROVIDER_LINK="$PROVIDERS_DIR/semantics"
+CHANCERY_CATALOG_LOCK="${PROVIDERS_DIR%/providers}/.catalog-update-lock"
 SERVICE_DOMAIN="gui/$operator_uid"
 SERVICE_TARGET="$SERVICE_DOMAIN/$LABEL"
 EXPECTED_CLI="$INSTALL_DIR/current/bin/semantics"
@@ -314,6 +316,7 @@ maintenance_owned=0
 maintenance_retained=0
 hold_existed=0
 hold_changed=0
+catalog_lock_created=0
 
 release_worker_lock() {
     [ -n "$worker_lock_pid" ] || return 0
@@ -322,6 +325,29 @@ release_worker_lock() {
     worker_lock_pid=
     rm -f "$worker_lock_ready" "$worker_lock_stop"
     return "$lock_status"
+}
+
+release_catalog_lock() {
+    if [ "$catalog_lock_created" -eq 1 ] \
+        && [ -f "$CHANCERY_CATALOG_LOCK" ] \
+        && [ ! -L "$CHANCERY_CATALOG_LOCK" ] \
+        && [ "$(sed -n '1p' "$CHANCERY_CATALOG_LOCK" 2>/dev/null || true)" = "$$" ]
+    then
+        rm -f "$CHANCERY_CATALOG_LOCK" >/dev/null 2>&1 || true
+    fi
+}
+
+acquire_catalog_lock() {
+    [ ! -L "$CHANCERY_CATALOG_LOCK" ] \
+        || fail "Chancery catalog writer lock is a symbolic link: $CHANCERY_CATALOG_LOCK"
+    if [ -e "$CHANCERY_CATALOG_LOCK" ] \
+        && [ ! -f "$CHANCERY_CATALOG_LOCK" ]
+    then
+        fail "Chancery catalog writer lock is not safely recoverable: $CHANCERY_CATALOG_LOCK"
+    fi
+    catalog_lock_created=1
+    /usr/bin/shlock -p "$$" -f "$CHANCERY_CATALOG_LOCK" \
+        || fail "another Chancery catalog writer is active: $CHANCERY_CATALOG_LOCK"
 }
 
 cleanup() {
@@ -473,6 +499,7 @@ cleanup() {
     rm -f "$worker_lock_ready" "$worker_lock_stop"
     [ -z "$old_plist" ] || rm -f "$old_plist"
     [ "$retain_transaction" -eq 1 ] || [ -z "$transaction_dir" ] || rm -rf "$transaction_dir"
+    release_catalog_lock
     rmdir "$LOCK_DIR" >/dev/null 2>&1 || true
     exit "$status"
 }
@@ -970,6 +997,7 @@ if [ "$maintenance_owned" -eq 1 ]; then
         'maintenance hold receipt'
 fi
 
+acquire_catalog_lock
 switched=1
 if [ -n "$old_current" ] && [ "$old_current" != "releases/$release_id" ]; then
     atomic_symlink "$old_current" "$PREVIOUS_LINK"

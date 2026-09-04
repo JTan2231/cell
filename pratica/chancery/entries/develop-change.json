@@ -43,7 +43,7 @@
   "dependencies": [
     {"id": "pratica.integration.negotiate", "min_contract": 2, "max_contract_exclusive": 3},
     {"id": "pratica.agreement.explore", "min_contract": 2, "max_contract_exclusive": 3},
-    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 3},
     {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],

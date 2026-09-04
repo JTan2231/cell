@@ -221,13 +221,15 @@ operation twice. Annals continues to determine success from the durable
 recorded reconciliation, not from the model's final message.
 
 Nucleus exclusively owns Codex process isolation, persistent authentication,
-credential refresh, and serialization across jobs and account operations.
+canonical credential refresh, and bounded scheduling. Up to eight jobs may run
+concurrently; account reads may overlap them, while attended login waits for
+active job and account sessions to settle.
 Annals neither reads nor sets `CODEX_HOME` and has no direct-runner fallback.
 `[liaison].nucleus_socket` optionally selects a nonstandard Unix socket; its
 default is Nucleus's current-user socket. Before the first new queued attempt,
 Annals asks Nucleus for an authenticated account preflight and may wait up to
-30 seconds for Nucleus's authentication lease. Failure leaves the envelope
-queued with attempts zero and no source-delivery record.
+30 seconds for Nucleus's canonical account operation. Failure leaves the
+envelope queued with attempts zero and no source-delivery record.
 
 Nucleus retains exact raw app-server output plus authoritative job, attempt,
 and pending-tool state. Annals services pending tool calls and watches durable

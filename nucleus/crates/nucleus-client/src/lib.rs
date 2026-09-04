@@ -121,7 +121,8 @@ impl NucleusClient {
     }
 
     /// Perform an authenticated account preflight without starting a model
-    /// turn. This reads rate limits under Nucleus's credential lease.
+    /// turn. This reads rate limits through Nucleus's canonical credential
+    /// boundary.
     ///
     /// # Errors
     ///
@@ -134,8 +135,8 @@ impl NucleusClient {
         .await
     }
 
-    /// Read account limits and, when requested, account usage under Nucleus's
-    /// credential lease.
+    /// Read account limits and, when requested, account usage through Nucleus's
+    /// canonical credential boundary.
     ///
     /// # Errors
     ///

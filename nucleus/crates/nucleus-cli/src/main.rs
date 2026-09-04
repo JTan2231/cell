@@ -48,7 +48,7 @@ enum Command {
         /// Also read account token activity; failure is reported in usageError.
         #[arg(long)]
         include_usage: bool,
-        /// Seconds to wait for Nucleus's credential lease; zero is nonblocking.
+        /// Seconds to wait for Nucleus's credential operation; zero is nonblocking.
         #[arg(long, default_value_t = 0)]
         wait: u32,
     },
@@ -74,7 +74,7 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum AuthCommand {
-    /// Run an attended Codex login under Nucleus's exclusive credential lease.
+    /// Run attended Codex login after active authentication sessions settle.
     Login {
         #[arg(long)]
         device_auth: bool,

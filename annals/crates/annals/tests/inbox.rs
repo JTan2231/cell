@@ -3305,10 +3305,13 @@ const COMPATIBLE_PROTOCOL_SCHEMA: &str = r##"{
       {"properties":{"method":{"enum":["initialize"]},"params":{"$ref":"#/definitions/InitializeParams"}}},
       {"properties":{"method":{"enum":["thread/start"]},"params":{"$ref":"#/definitions/v2/ThreadStartParams"}}},
       {"properties":{"method":{"enum":["turn/start"]},"params":{"$ref":"#/definitions/v2/TurnStartParams"}}},
-      {"properties":{"method":{"enum":["mcpServerStatus/list"]},"params":{"$ref":"#/definitions/v2/ListMcpServerStatusParams"}}}
+      {"properties":{"method":{"enum":["mcpServerStatus/list"]},"params":{"$ref":"#/definitions/v2/ListMcpServerStatusParams"}}},
+      {"properties":{"method":{"enum":["account/login/start"]},"params":{"$ref":"#/definitions/v2/LoginAccountParams"}}},
+      {"properties":{"method":{"enum":["account/read"]},"params":{"$ref":"#/definitions/v2/GetAccountParams"}}}
     ]},
     "ServerRequest": {"oneOf": [
-      {"properties":{"method":{"enum":["item/tool/call"]},"params":{"$ref":"#/definitions/DynamicToolCallParams"}}}
+      {"properties":{"method":{"enum":["item/tool/call"]},"params":{"$ref":"#/definitions/DynamicToolCallParams"}}},
+      {"properties":{"method":{"enum":["account/chatgptAuthTokens/refresh"]},"params":{"$ref":"#/definitions/ChatgptAuthTokensRefreshParams"}}}
     ]},
     "ServerNotification": {"oneOf": [
       {"properties":{"method":{"enum":["item/completed"]},"params":{"$ref":"#/definitions/v2/ItemCompletedNotification"}}},
@@ -3316,6 +3319,15 @@ const COMPATIBLE_PROTOCOL_SCHEMA: &str = r##"{
       {"properties":{"method":{"enum":["thread/tokenUsage/updated"]},"params":{"$ref":"#/definitions/v2/ThreadTokenUsageUpdatedNotification"}}}
     ]},
     "DynamicToolCallParams": {"required":["arguments","callId","threadId","tool","turnId"]},
+    "ChatgptAuthTokensRefreshParams": {
+      "required":["reason"],
+      "properties":{"previousAccountId":{},"reason":{}}
+    },
+    "ChatgptAuthTokensRefreshReason": {"enum":["unauthorized"]},
+    "ChatgptAuthTokensRefreshResponse": {
+      "required":["accessToken","chatgptAccountId"],
+      "properties":{"accessToken":{},"chatgptAccountId":{},"chatgptPlanType":{}}
+    },
     "v2": {
       "ThreadStartParams": {"properties":{
         "approvalPolicy":{},"baseInstructions":{},"cwd":{},"developerInstructions":{},
@@ -3324,6 +3336,11 @@ const COMPATIBLE_PROTOCOL_SCHEMA: &str = r##"{
       }},
       "AskForApproval": {"enum":["never"]},
       "SandboxMode": {"enum":["read-only","workspace-write"]},
+      "LoginAccountParams": {"oneOf":[{
+        "required":["accessToken","chatgptAccountId","type"],
+        "properties":{"accessToken":{},"chatgptAccountId":{},"chatgptPlanType":{},"type":{"enum":["chatgptAuthTokens"]}}
+      }]},
+      "GetAccountParams": {"properties":{"refreshToken":{}}},
       "TurnStartParams": {
         "required":["input","threadId"],
         "properties":{"effort":{},"environments":{},"input":{},"threadId":{}}

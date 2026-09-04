@@ -30,6 +30,14 @@ only `~/.local/bin/pratica`, the Pratica install tree, and
 `providers/pratica`. It does not open or change `pratica.db`, stop or restart
 Nucleus, or submit a job.
 
+A PID-aware product lock serializes Pratica updates, followed by the shared
+Chancery catalog-writer lock for publication. The deployer snapshots `current`
+before waiting and rejects a stale cutover after either lock. A planner may
+instead pass `--expected-current absent|releases/HASH`. The one `current`
+replacement publishes command and provider together; failed smoke restores the
+prior view or detaches the public selectors if coherent restoration cannot be
+proved.
+
 ## Initialize, migrate, and diagnose separately
 
 ```sh

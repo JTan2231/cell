@@ -48,7 +48,7 @@
     {"label": "Inspect LaunchAgent", "invocation": "launchctl print gui/<UID>/org.todo.daily-email"}
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
   ],
   "does_not_authorize": [
     "Deleting retained Todo database, backups, logs, or releases.",

@@ -58,7 +58,7 @@
     {"label": "Continue halted event", "invocation": "/Users/joey/.local/bin/annals inbox retry continue <EVENT_ID>"}
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
   ],
   "does_not_authorize": [
     "Editing spool receipts or moving archived envelopes manually.",

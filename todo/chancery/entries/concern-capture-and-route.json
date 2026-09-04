@@ -47,7 +47,7 @@
     {"label": "Inspect proposal", "invocation": "/Users/joey/.local/bin/todo routing show <ROUTING_ID>"}
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
   ],
   "does_not_authorize": [
     "Accepting or rejecting the routing proposal.",

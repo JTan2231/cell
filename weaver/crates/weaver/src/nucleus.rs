@@ -437,6 +437,7 @@ mod tests {
                 authenticated: true,
                 detail: None,
             },
+            execution: None,
             detail: None,
         }
     }

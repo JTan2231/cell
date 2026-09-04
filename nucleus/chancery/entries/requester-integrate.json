@@ -1,6 +1,6 @@
 {
   "id": "nucleus.requester.integrate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -15,32 +15,33 @@
     "The proposed design requires Nucleus to understand requester domain rows or workflow state.",
     "Only ordinary application code unrelated to the requester boundary is changing."
   ],
-  "outcome": "A requester with a defined external domain authority, one closed versioned invocation per job, durable correlation, idempotent tool handling, explicit failure policy, and proven operational recovery.",
+  "outcome": "A requester with a defined external domain authority, one closed versioned invocation per job, durable correlation, capacity-aware admission, idempotent tool handling, explicit failure policy, and proven operational recovery.",
   "effects": [
     "Changes requester implementation, contracts, tests, and operator documentation.",
     "May register new immutable decoder schemas or requester-owned toolset versions.",
     "May change prompts, models, permissions, timeouts, deployment ordering, and retained job provenance."
   ],
   "authority": [
-    "Nucleus owns portable invocation admission, harness supervision, authentication, job records, output atoms, and the tool mailbox.",
+    "Nucleus owns portable invocation admission, the global eight-slot scheduler, harness supervision, single-authority managed authentication, job records, output atoms, and the tool mailbox.",
     "The requester owns every domain mutation, domain success criterion, duplicate handling, and retry decision."
   ],
   "success": [
-    "The requester proves strict health, admission, domain completion, duplicate handling, mailbox recovery, cancellation, timeout, daemon loss, and domain-success/runtime-failure distinctions.",
+    "The requester proves strict health and capacity reporting, admission and queued waiting, domain completion, duplicate handling, mailbox recovery, queued and active cancellation, timeout, daemon loss, and domain-success/runtime-failure distinctions.",
     "No direct-runner fallback exists and retained historical jobs remain decodable.",
     "The requester canary verifies the requester-owned authority rather than only Nucleus completion."
   ],
   "failure_and_recovery": [
     "Ambiguous admission retries only the byte-equivalent request under the same job ID.",
     "A genuinely new attempt uses a new job ID and is allowed only by requester policy.",
-    "A requester restart may recover a durable pending call; a Nucleus restart cannot resume the Codex process and marks the attempt lost."
+    "A requester restart may recover a durable pending call; a Nucleus restart cannot resume the Codex process and marks the attempt lost.",
+    "An accepted job may wait with a pending attempt when eight attempts are active; its timeout begins only after it acquires a slot, and waiting on the requester continues to consume that slot."
   ],
   "privacy": [
     "Treat both requester state and Nucleus output atoms according to all source, prompt, and tool-result content they may retain.",
     "Document the working directory, workspace access, local execution, web search, launch context, and tool permissions explicitly."
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "session_surfaces": [
     "local_filesystem",
@@ -50,7 +51,7 @@
   "automation": "none",
   "steps": [
     "Run the installed Nucleus manual and define the requester-owned durable success condition before specifying a runtime request.",
-    "Choose the typed client or HTTP boundary, stable requester identity, job idempotency key, correlations, and complete invocation policy.",
+    "Choose the typed client or HTTP boundary, stable requester identity, job idempotency key, correlations, complete invocation policy, and capacity-aware waiting behavior.",
     "Version immutable schemas and tools, implement durable mailbox servicing, and separate domain success from terminal model prose.",
     "Define failure and new-attempt policy, then add observability, security, backup, deployment, and canary coverage.",
     "Update the requester and shared operator documentation whenever the integration boundary changes."
@@ -59,7 +60,9 @@
     "The requester domain authority and success proof are named and remain outside Nucleus.",
     "Every invocation permission and immutable registration identity is explicit.",
     "Duplicate admission and tool results are idempotent, and historical decoding is retained.",
-    "Requester and Nucleus restart semantics have separate tested recovery paths."
+    "Requester and Nucleus restart semantics have separate tested recovery paths.",
+    "The requester tolerates accepted/pending queueing, treats waiting-on-requester as active capacity, and keeps its work-packet graph and retry decisions outside Nucleus.",
+    "Concurrent read-write jobs use disjoint working directories or worktrees, or requester-owned serialization."
   ],
   "adaptation": [
     "Use the current installed manual and exact supported protocol rather than assuming source-workspace lockstep.",
@@ -93,7 +96,11 @@
       },
       {
         "status": "declared",
-        "statement": "The intended invocation, tools, permissions, protocol, adapter capabilities, data disclosure, recovery, and deployment effects are supported and explicitly authorized for design and implementation."
+        "statement": "The intended invocation, tools, permissions, protocol, adapter and eight-slot capacity capabilities, data disclosure, recovery, and deployment effects are supported and explicitly authorized for design and implementation."
+      },
+      {
+        "status": "declared",
+        "statement": "The requester assigns disjoint working directories or worktrees to concurrent read-write jobs, or owns serialization for every shared filesystem or external mutation target."
       }
     ],
     "inputs": [
@@ -109,7 +116,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The operation produces synchronized requester code and contracts with durable bidirectional correlation, replay-safe mailbox handling, explicit invocation and retry policy, historical decoders, tests, observability, backup and recovery procedures, deployment ordering, and a domain-authority canary."
+        "statement": "The operation produces synchronized requester code and contracts with durable bidirectional correlation, capacity-aware accepted/pending handling, replay-safe mailbox handling, explicit invocation and retry policy, historical decoders, tests, observability, backup and recovery procedures, deployment ordering, and a domain-authority canary."
       },
       {
         "status": "unsupported",
@@ -139,7 +146,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "A complete integration accounts for admission, successful domain completion, identical and conflicting duplicates, pending-call recovery, daemon loss, cancellation, timeout, authentication contention, unsupported invocations, post-domain-commit runtime failure, and absence of a second execution path."
+        "statement": "A complete integration accounts for admission, eight-slot saturation and accepted/pending waiting, successful domain completion, identical and conflicting duplicates, pending-call recovery, daemon loss, queued and active cancellation, timeout beginning at slot acquisition, managed-auth refresh or login contention, concurrent account reads, unsupported invocations, post-domain-commit runtime failure, and absence of a second execution path."
       },
       {
         "status": "declared",
@@ -168,12 +175,24 @@
       {
         "status": "declared",
         "statement": "An ambiguous admission repeats only byte-equivalent content under the same job ID; a genuinely new attempt uses a new ID only under requester policy, and a requester restart recovers mailbox state while a Nucleus restart cannot resume the harness process."
+      },
+      {
+        "status": "declared",
+        "statement": "Admission does not require a free execution slot: the job remains accepted with its attempt pending until scheduled, the invocation timeout begins after slot acquisition, and waiting on a requester holds the slot through terminal cleanup."
+      },
+      {
+        "status": "declared",
+        "statement": "Account reads may overlap active jobs; Nucleus alone serializes canonical credential refresh and excludes attended login while job or account sessions remain active."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
         "statement": "The integration must not add a hidden direct-Codex fallback, make Nucleus understand application-specific state, rewrite immutable registrations, or use terminal model prose as domain completion."
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus supplies one global ceiling of eight active attempts but no workflow orchestration, write-conflict detection, or automatic retry; the requester remains responsible for its domain work-packet graph, mutation coordination, and any genuinely new attempt."
       },
       {
         "status": "declared",
@@ -197,7 +216,7 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "The resulting requester relies on Nucleus for version-one admission, supervised execution, authentication, operational job and output records, and durable dynamic-tool transport while retaining its own domain authority.",
+        "statement": "The resulting requester relies on Nucleus for version-one admission, global eight-slot scheduling, supervised execution, single-authority managed authentication, operational job and output records, and durable dynamic-tool transport while retaining its own domain authority.",
         "target": "nucleus",
         "kind": "control",
         "contract": "nucleus.execution.operate"

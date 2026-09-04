@@ -19,6 +19,15 @@ It validates the binary/provider version, exact release tree, content manifest,
 selector ownership, installed help/version, and pre-commit rollback. It does
 not initialize or migrate domain state.
 
+A PID-aware product lock serializes Geste updates. Provider publication also
+takes the shared Chancery catalog-writer lock, always after the product lock,
+so generated selector-only deployers cannot publish concurrently; stale lock
+owners are recovered. Deployment snapshots `current` before waiting and
+rejects a stale cutover. Callers may instead supply
+`--expected-current absent|releases/HASH`. The one `current` switch is atomic;
+failed smoke checks restore the prior selector view or detach it if restoration
+cannot be proved.
+
 Initialize explicitly after a fresh deployment:
 
 ```sh

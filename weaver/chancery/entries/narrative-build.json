@@ -48,7 +48,7 @@
     {"label": "Check outputs", "invocation": "/Users/joey/.local/bin/weaver --repo <NARRATIVE_REPOSITORY> check <NARRATIVE>"}
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
   ],
   "does_not_authorize": [
     "Publication, upload, public-profile editing, job search, or job-application submission.",

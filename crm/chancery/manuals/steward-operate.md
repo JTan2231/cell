@@ -33,6 +33,14 @@ Identical redeployment is idempotent. An update retains the prior validated
 release, and a failed post-switch smoke restores both public views before
 commit.
 
+A PID-aware product lock serializes CRM updates, followed by the shared
+Chancery catalog-writer lock for publication. The deployer snapshots `current`
+before waiting and rejects a stale cutover after either lock. A planner may
+instead pass `--expected-current absent|releases/HASH`. The one `current`
+replacement publishes command and provider together; failed smoke restores the
+prior view or detaches the public selectors if coherent restoration cannot be
+proved.
+
 Deployment never creates or opens `crm.db`, launches a worker, restarts
 Nucleus, or installs a daemon, LaunchAgent, or schedule.
 

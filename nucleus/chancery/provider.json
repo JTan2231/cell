@@ -7,7 +7,7 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Nucleus owns version-one invocation admission, one supervised attempt per job, job and cancellation lifecycle, exact harness-output atoms, immutable schema and toolset registrations, the durable requester-tool mailbox, and its credential lease.",
+      "Nucleus owns version-one invocation admission, a global eight-slot execution scheduler, one supervised attempt per job, job and cancellation lifecycle, exact non-authentication harness-output atoms, immutable schema and toolset registrations, the durable requester-tool mailbox, and its single-authority managed authentication broker.",
       "Nucleus SQLite is authoritative for its operational job, attempt, registration, cancellation, mailbox, and output records; the installed service owns its per-user socket, private Codex home, and service lifecycle."
     ],
     "not_authoritative_for": [
@@ -36,7 +36,8 @@
       "Incompatible public meanings require a new version and retained historical decoding; no broader compatibility window or deprecation period is promised unless an entry states one."
     ],
     "operational_limits": [
-      "Version one admits exactly one attempt per job and provides no automatic retry, workflow graph, project registry, capability directory, requester-domain interpretation, or global drain command.",
+      "Version one admits exactly one attempt per job and permits at most eight active attempts globally; accepted jobs with pending attempts wait for a slot, and an attempt waiting on its requester continues to hold its slot. Nucleus provides no automatic retry, workflow graph, project registry, capability directory, requester-domain interpretation, or global drain command.",
+      "Account reads may overlap active jobs. The managed authentication broker keeps one authoritative private Codex home, serializes staged atomic refresh through worker cancellation, and excludes attended login until active job and account sessions have ended; authentication remains forward-only across program, database, and service rollback.",
       "Live acceptance remains bounded by installed service, credential, adapter, account, local storage, and exact harness readiness, none of which provider installation proves."
     ]
   },

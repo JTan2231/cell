@@ -325,6 +325,7 @@ CLI_PATH="$CLI_DIR/clockwork"
 CHANCERY_STATE="$install_home/Library/Application Support/Chancery"
 CHANCERY_PROVIDERS="$CHANCERY_STATE/providers"
 CHANCERY_LINK="$CHANCERY_PROVIDERS/clockwork"
+CHANCERY_CATALOG_LOCK="$CHANCERY_STATE/.catalog-update-lock"
 EXPECTED_CLI="$INSTALL_DIR/current/bin/clockwork"
 EXPECTED_CHANCERY="$INSTALL_DIR/current/share/chancery/clockwork"
 
@@ -368,6 +369,7 @@ old_provider=
 switched=0
 committed=0
 lock_created=0
+catalog_lock_created=0
 
 atomic_symlink() {
     target=$1
@@ -379,6 +381,14 @@ atomic_symlink() {
         return 0
     fi
     mv -fT "$temporary" "$path"
+}
+
+release_owned_lock() {
+    owned_lock=$1
+    if [ -f "$owned_lock" ] && [ ! -L "$owned_lock" ] \
+        && [ "$(sed -n '1p' "$owned_lock" 2>/dev/null || true)" = "$$" ]; then
+        rm -f "$owned_lock" >/dev/null 2>&1 || true
+    fi
 }
 
 cleanup() {
@@ -424,11 +434,9 @@ cleanup() {
         fi
     fi
     [ -z "$temporary_release" ] || rm -rf "$temporary_release"
-    if [ "$lock_created" -eq 1 ] && [ -f "$UPDATE_LOCK" ] \
-        && [ ! -L "$UPDATE_LOCK" ] \
-        && [ "$(sed -n '1p' "$UPDATE_LOCK" 2>/dev/null || true)" = "$$" ]; then
-        rm -f "$UPDATE_LOCK" >/dev/null 2>&1 || true
-    fi
+    [ "$catalog_lock_created" -eq 0 ] \
+        || release_owned_lock "$CHANCERY_CATALOG_LOCK"
+    [ "$lock_created" -eq 0 ] || release_owned_lock "$UPDATE_LOCK"
     exit "$status"
 }
 trap cleanup EXIT
@@ -437,6 +445,19 @@ trap 'exit 1' HUP INT TERM
 acquire_update_lock() {
     /usr/bin/shlock -p "$$" -f "$UPDATE_LOCK" \
         || fail "another Clockwork installation operation is active, or its lock is not safely recoverable: $UPDATE_LOCK"
+}
+
+acquire_catalog_lock() {
+    [ ! -L "$CHANCERY_CATALOG_LOCK" ] \
+        || fail "Chancery catalog writer lock is a symbolic link: $CHANCERY_CATALOG_LOCK"
+    if [ -e "$CHANCERY_CATALOG_LOCK" ] \
+        && [ ! -f "$CHANCERY_CATALOG_LOCK" ]
+    then
+        fail "Chancery catalog writer lock is not safely recoverable: $CHANCERY_CATALOG_LOCK"
+    fi
+    catalog_lock_created=1
+    /usr/bin/shlock -p "$$" -f "$CHANCERY_CATALOG_LOCK" \
+        || fail "another Chancery catalog writer is active: $CHANCERY_CATALOG_LOCK"
 }
 
 acquire_update_lock
@@ -523,6 +544,7 @@ fi
 "$chancery_path" validate "$release_path/share/chancery/clockwork" >/dev/null \
     || fail 'candidate Chancery reader rejected the staged Clockwork provider'
 
+acquire_catalog_lock
 switched=1
 if [ -n "$old_current" ]; then
     if [ "$old_current" != "releases/$release_id" ]; then

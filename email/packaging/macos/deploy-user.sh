@@ -69,10 +69,11 @@ case "$install_home" in /*) ;; *) fail 'install home must be absolute' ;; esac
 [ -f "$SOURCE_FRONTEND" ] && [ ! -L "$SOURCE_FRONTEND" ] \
     || fail "missing packaged file: $SOURCE_FRONTEND"
 [ -x /bin/zsh ] || fail '/bin/zsh is unavailable'
-for command in awk cat cp find grep id install mktemp mv readlink shasum sort stat; do
+for command in awk cat cp find grep id install mktemp mv readlink sed shasum sort stat; do
     command -v "$command" >/dev/null 2>&1 \
         || fail "required command not found: $command"
 done
+[ -x /usr/bin/shlock ] || fail 'required command not found: /usr/bin/shlock'
 
 operator_uid=$(id -u)
 [ "$operator_uid" -ne 0 ] || fail 'run this deployer as the Email operator, not root'
@@ -129,6 +130,7 @@ CHANCERY_STATE_DIR="$install_home/Library/Application Support/Chancery"
 CHANCERY_PROVIDERS_DIR="$CHANCERY_STATE_DIR/providers"
 CHANCERY_PROVIDER_LINK="$CHANCERY_PROVIDERS_DIR/email"
 CHANCERY_PROVIDER_TARGET="$INSTALL_DIR/current/share/chancery/email"
+CHANCERY_CATALOG_LOCK="$CHANCERY_STATE_DIR/.catalog-update-lock"
 
 for path in "$STATE_DIR" "$INSTALL_DIR" "$RELEASES_DIR"; do
     [ ! -L "$path" ] || fail "refusing symbolic-link directory: $path"
@@ -155,6 +157,7 @@ old_provider=
 switched=0
 committed=0
 lock_created=0
+catalog_lock_created=0
 
 atomic_symlink() {
     target=$1
@@ -166,6 +169,29 @@ atomic_symlink() {
         return 0
     fi
     mv -fT "$temporary" "$path"
+}
+
+release_catalog_lock() {
+    if [ "$catalog_lock_created" -eq 1 ] \
+        && [ -f "$CHANCERY_CATALOG_LOCK" ] \
+        && [ ! -L "$CHANCERY_CATALOG_LOCK" ] \
+        && [ "$(sed -n '1p' "$CHANCERY_CATALOG_LOCK" 2>/dev/null || true)" = "$$" ]
+    then
+        rm -f "$CHANCERY_CATALOG_LOCK" >/dev/null 2>&1 || true
+    fi
+}
+
+acquire_catalog_lock() {
+    [ ! -L "$CHANCERY_CATALOG_LOCK" ] \
+        || fail "Chancery catalog writer lock is a symbolic link: $CHANCERY_CATALOG_LOCK"
+    if [ -e "$CHANCERY_CATALOG_LOCK" ] \
+        && [ ! -f "$CHANCERY_CATALOG_LOCK" ]
+    then
+        fail "Chancery catalog writer lock is not safely recoverable: $CHANCERY_CATALOG_LOCK"
+    fi
+    catalog_lock_created=1
+    /usr/bin/shlock -p "$$" -f "$CHANCERY_CATALOG_LOCK" \
+        || fail "another Chancery catalog writer is active: $CHANCERY_CATALOG_LOCK"
 }
 
 cleanup() {
@@ -195,6 +221,7 @@ cleanup() {
         fi
     fi
     [ -z "$temporary_release" ] || rm -rf "$temporary_release"
+    release_catalog_lock
     [ "$lock_created" -eq 0 ] || rmdir "$UPDATE_LOCK" >/dev/null 2>&1 || true
     exit "$status"
 }
@@ -321,6 +348,7 @@ else
     temporary_release=
 fi
 
+acquire_catalog_lock
 switched=1
 if [ -n "$old_current" ] && [ "$old_current" != "releases/$release_id" ]; then
     atomic_symlink "$old_current" "$PREVIOUS_LINK"

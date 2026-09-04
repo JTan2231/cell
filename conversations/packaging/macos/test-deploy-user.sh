@@ -3,6 +3,8 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
+python3 "$SCRIPT_DIR/../../../deployment/generate.py" \
+    --check --product conversations
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/conversations-deploy-test.XXXXXX")
 home="$temporary/Operator Home"
 candidate_template="$temporary/conversations.template"
@@ -38,7 +40,7 @@ provider_version=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' \
         "$package_version" "$provider_version" >&2
     exit 1
 }
-mismatch_version="$package_version-provider-mismatch"
+mismatch_version=9.9.9
 
 mkdir -p "$home"
 cat >"$candidate_template" <<'EOF'
@@ -74,8 +76,9 @@ make_candidate "$candidate_mismatch" "$mismatch_version" mismatch
 
 deploy() {
     candidate=$1
+    shift
     HOME="$home" "$SCRIPT_DIR/deploy-user.sh" \
-        --binary "$candidate" --home "$home"
+        --binary "$candidate" --home "$home" "$@"
 }
 
 if deploy "$candidate_mismatch" >"$temporary/mismatch.out" \
@@ -169,6 +172,30 @@ second_current=$(readlink "$install_dir/current")
 [ "$(readlink "$install_dir/previous")" = "$first_current" ]
 [ "$(HOME="$home" "$cli" marker)" = two ]
 
+if deploy "$candidate_three" --expected-current absent \
+    >"$temporary/stale.out" 2>"$temporary/stale.err"; then
+    printf '%s\n' 'test: stale expected-current precondition was accepted' >&2
+    exit 1
+fi
+grep -F 'stale deployment: expected current absent' \
+    "$temporary/stale.err" >/dev/null
+[ "$(readlink "$install_dir/current")" = "$second_current" ]
+
+catalog_lock="$home/Library/Application Support/Chancery/.catalog-update-lock"
+/usr/bin/shlock -p "$$" -f "$catalog_lock"
+CELL_DEPLOY_LOCK_WAIT_SECONDS=0
+export CELL_DEPLOY_LOCK_WAIT_SECONDS
+if deploy "$candidate_three" --expected-current "$second_current" \
+    >"$temporary/catalog-lock.out" 2>"$temporary/catalog-lock.err"; then
+    printf '%s\n' 'test: deployment ignored the Chancery catalog lock' >&2
+    exit 1
+fi
+unset CELL_DEPLOY_LOCK_WAIT_SECONDS
+grep -F 'timed out waiting for Chancery catalog writer lock' \
+    "$temporary/catalog-lock.err" >/dev/null
+rm "$catalog_lock"
+[ "$(readlink "$install_dir/current")" = "$second_current" ]
+
 : >"$home/fail-installed"
 if deploy "$candidate_three" >"$temporary/failed.out" 2>"$temporary/failed.err"; then
     printf '%s\n' 'test: failing installed smoke was accepted' >&2
@@ -181,6 +208,14 @@ fi
 [ "$(readlink "$providers/preserved")" = "$temporary/preserved-provider" ]
 
 rm -f "$home/fail-installed"
+stale_pid=999999
+while kill -0 "$stale_pid" 2>/dev/null; do
+    stale_pid=$((stale_pid + 1))
+done
+/usr/bin/shlock -p "$stale_pid" -f "$install_dir/.update-lock"
+deploy "$candidate_two" >/dev/null
+[ ! -e "$install_dir/.update-lock" ]
+
 mkdir "$install_dir/.update-lock"
 if deploy "$candidate_two" >"$temporary/lock.out" 2>"$temporary/lock.err"; then
     printf '%s\n' 'test: deployment ignored update lock' >&2

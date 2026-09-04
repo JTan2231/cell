@@ -6,11 +6,12 @@ ROOT=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 
 usage() {
     printf '%s\n' \
-        'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver|email|conversations|krisis|semantics|geste|pratica|clockwork|crm]...'
+        'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver|email|conversations|krisis|decisions|semantics|geste|pratica|clockwork|crm]...'
 }
 
 if [ "$#" -eq 0 ]; then
-    set -- nucleus annals todo chancery weaver email conversations krisis semantics geste pratica clockwork crm
+    set -- nucleus annals todo chancery weaver email conversations krisis \
+        semantics geste pratica clockwork crm
 fi
 
 nucleus_selected=0
@@ -41,152 +42,41 @@ for project in "$@"; do
         pratica) pratica_selected=1 ;;
         clockwork) clockwork_selected=1 ;;
         crm) crm_selected=1 ;;
-        *)
-            usage >&2
-            exit 2
-            ;;
+        *) usage >&2; exit 2 ;;
     esac
 done
 
+# These checks are read-only and do not consume the shared Cargo lane. Run them
+# before binding the exact source candidate used by every selected product.
+"$ROOT/pipeline/test.sh"
+source_key=$(python3 "$ROOT/ci_broker/client.py" source-key --repo-root "$ROOT")
+CELL_CI_EXPECTED_SOURCE_KEY=$source_key
+export CELL_CI_EXPECTED_SOURCE_KEY
+
 for project in "$@"; do
     printf '==> %s CI\n' "$project"
-    if [ "$project" = krisis ]; then
-        "$ROOT/decisions/ci.sh"
-    else
-        "$ROOT/$project/ci.sh"
-    fi
+    case "$project" in
+        krisis) "$ROOT/decisions/ci.sh" ;;
+        *) "$ROOT/$project/ci.sh" ;;
+    esac
 done
 
 if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$krisis_selected$semantics_selected$geste_selected$pratica_selected$clockwork_selected$crm_selected" = \
     1111111111111 ]
 then
     printf '%s\n' '==> integrated Chancery source catalog'
-    (
-        catalog_workspace=$(mktemp -d "${TMPDIR:-/tmp}/cell-catalog.XXXXXX")
-        catalog_workspace=$(CDPATH='' cd "$catalog_workspace" && pwd)
-        catalog_registry="$catalog_workspace/providers"
-        mkdir "$catalog_registry"
-        cleanup_catalog_registry() {
-            rm -rf "$catalog_workspace"
-        }
-        trap cleanup_catalog_registry EXIT
-        trap 'exit 1' HUP INT TERM
-
-        ln -s "$ROOT/chancery/provider" "$catalog_registry/chancery"
-        ln -s "$ROOT/nucleus/chancery" "$catalog_registry/nucleus"
-        ln -s "$ROOT/annals/chancery/annals" "$catalog_registry/annals"
-        ln -s "$ROOT/annals/chancery/annals-usage" \
-            "$catalog_registry/annals-usage"
-        ln -s "$ROOT/todo/chancery" "$catalog_registry/todo"
-        ln -s "$ROOT/weaver/chancery" "$catalog_registry/weaver"
-        ln -s "$ROOT/email/chancery" "$catalog_registry/email"
-        ln -s "$ROOT/conversations/chancery" "$catalog_registry/conversations"
-        ln -s "$ROOT/decisions/chancery" "$catalog_registry/krisis"
-        ln -s "$ROOT/decisions/chancery-legacy" \
-            "$catalog_registry/decisions"
-        ln -s "$ROOT/semantics/chancery" "$catalog_registry/semantics"
-        ln -s "$ROOT/geste/chancery" "$catalog_registry/geste"
-        ln -s "$ROOT/pratica/chancery" "$catalog_registry/pratica"
-        ln -s "$ROOT/clockwork/chancery" "$catalog_registry/clockwork"
-        ln -s "$ROOT/crm/chancery" "$catalog_registry/crm"
-
-        chancery_candidate="$ROOT/target/release/chancery"
-        [ -f "$chancery_candidate" ] && [ -x "$chancery_candidate" ] || {
-            printf 'ci.sh: Chancery release candidate is unavailable: %s\n' \
-                "$chancery_candidate" >&2
-            exit 1
-        }
-        "$chancery_candidate" --registry "$catalog_registry" doctor
-        "$chancery_candidate" --registry "$catalog_registry" --json list \
-            >/dev/null
-
-        normalized_entries=0
-        for provider_path in "$catalog_registry"/*; do
-            provider_id=${provider_path##*/}
-            grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*3' \
-                "$provider_path/provider.json" || {
-                printf 'ci.sh: provider is not schema 3: %s\n' "$provider_id" >&2
-                exit 1
-            }
-            grep -F '"promise_scope"' "$provider_path/provider.json" \
-                >/dev/null || {
-                printf 'ci.sh: provider has no promise scope: %s\n' \
-                    "$provider_id" >&2
-                exit 1
-            }
-            for entry_path in "$provider_path"/entries/*.json; do
-                grep -F '"promise"' "$entry_path" >/dev/null || {
-                    printf 'ci.sh: entry has no normalized promise: %s\n' \
-                        "$entry_path" >&2
-                    exit 1
-                }
-                entry_id=$(awk -F '"' '
-                    /^[[:space:]]*"id"[[:space:]]*:/ { print $4; exit }
-                ' "$entry_path")
-                [ -n "$entry_id" ] || {
-                    printf 'ci.sh: entry has no readable ID: %s\n' \
-                        "$entry_path" >&2
-                    exit 1
-                }
-                resolution="$catalog_workspace/resolution-$normalized_entries.json"
-                set +e
-                "$chancery_candidate" --registry "$catalog_registry" \
-                    --json resolve "$entry_id" >"$resolution"
-                resolution_status=$?
-                set -e
-                [ "$resolution_status" -le 1 ] || {
-                    printf 'ci.sh: entry resolution failed structurally: %s\n' \
-                        "$entry_id" >&2
-                    exit 1
-                }
-                if grep -Eq '"code":"(provider_scope_undeclared|provider_inventory_partial|facet_undeclared)"' \
-                    "$resolution"
-                then
-                    printf 'ci.sh: entry has undeclared promise coverage: %s\n' \
-                        "$entry_id" >&2
-                    exit 1
-                fi
-                grep -F '"dependency_closure_status":"complete"' \
-                    "$resolution" >/dev/null || {
-                    printf 'ci.sh: entry dependency closure is incomplete: %s\n' \
-                        "$entry_id" >&2
-                    exit 1
-                }
-                grep -F '"issues":[]' "$resolution" >/dev/null || {
-                    printf 'ci.sh: entry resolution has catalog issues: %s\n' \
-                        "$entry_id" >&2
-                    exit 1
-                }
-                normalized_entries=$((normalized_entries + 1))
-            done
-        done
-        [ "$normalized_entries" -eq 52 ] || {
-            printf 'ci.sh: expected 52 normalized entries; found %s\n' \
-                "$normalized_entries" >&2
-            exit 1
-        }
-
-        "$chancery_candidate" --registry "$catalog_registry" --json resolve \
-            decisions.lifecycle.consume \
-            --require completeness_and_freshness \
-            >/dev/null
-
-        annals_resolution="$catalog_workspace/annals-usage-resolution.json"
-        set +e
-        "$chancery_candidate" --registry "$catalog_registry" --json resolve \
-            annals-usage.consumption.inspect >"$annals_resolution"
-        annals_resolution_status=$?
-        set -e
-        [ "$annals_resolution_status" -eq 1 ] || {
-            printf 'ci.sh: Annals Usage resolution should report incomplete declaration; exit %s\n' \
-                "$annals_resolution_status" >&2
-            exit 1
-        }
-        grep -F '"status":"incomplete_declaration"' "$annals_resolution" \
-            >/dev/null
-        grep -F '"code":"uncontracted_reliance"' "$annals_resolution" \
-            >/dev/null
-    )
+    python3 "$ROOT/ci_broker/client.py" run \
+        --repo-root "$ROOT" --gate cell.integrated --lane heavy -- \
+        "$ROOT/pipeline/integrated.sh"
 fi
+
+observed_source_key=$(python3 "$ROOT/ci_broker/client.py" \
+    source-key --repo-root "$ROOT")
+if [ "$observed_source_key" != "$source_key" ]; then
+    printf '%s\n' \
+        'ci.sh: source changed while the root plan was running; results are stale' >&2
+    exit 75
+fi
+unset CELL_CI_EXPECTED_SOURCE_KEY
 
 printf '%s\n' 'ci.sh: all selected project gates are green'

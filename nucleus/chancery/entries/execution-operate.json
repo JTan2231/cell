@@ -1,11 +1,11 @@
 {
   "id": "nucleus.execution.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Manage Nucleus agent jobs and service",
-  "summary": "Check readiness and account access, submit or inspect agent jobs, read their output, cancel work, or operate the per-user Nucleus service.",
+  "summary": "Check readiness, eight-slot execution capacity, and account access; submit or inspect agent jobs, read their output, cancel work, or operate the per-user Nucleus service.",
   "use_when": [
     "Nucleus readiness, authentication, job state, exact harness output, cancellation, or service state must be inspected or changed.",
     "An exact version-one invocation must be submitted directly for technical diagnosis or a deliberate runtime task."
@@ -17,13 +17,13 @@
   ],
   "outcome": "A clearly observed or deliberately changed Nucleus runtime condition, identified through Nucleus job, account, service, or health state rather than requester domain inference.",
   "effects": [
-    "Read commands expose daemon, account, job, request, and exact harness-output state.",
-    "Job submission creates one durable Nucleus job and may invoke Codex and consume account allowance.",
+    "Read commands expose daemon, execution-capacity, account, job, request, and exact harness-output state.",
+    "Job submission creates one durable Nucleus job and may invoke Codex and consume account allowance; an accepted job remains queued with a pending attempt while all eight global execution slots are occupied.",
     "Cancellation records intent for one exact job attempt; authentication login changes the Nucleus-owned credential.",
-    "Service restart makes every unfinished attempt lost, while uninstall removes installed programs but retains state and logs."
+    "Graceful shutdown first requests cancellation; on startup every attempt still durably nonterminal is marked lost, while uninstall removes installed programs but retains state and logs."
   ],
   "authority": [
-    "Nucleus owns admission, one harness attempt per job, job lifecycle, cancellation, the credential lease, exact harness stdout, and the durable requester-tool mailbox.",
+    "Nucleus owns admission, the global eight-slot scheduler, one harness attempt per job, job lifecycle, cancellation, the single-authority managed authentication broker, isolated static API-key job credentials, exact non-authentication harness stdout, and the durable requester-tool mailbox.",
     "The requester remains authoritative for the domain result, idempotency, and whether a new attempt is safe."
   ],
   "success": [
@@ -70,7 +70,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Job admission requires a compatible running daemon, strict adapter and harness checks, an available authenticated credential lease, and one complete supported version-one request."
+        "statement": "Job admission requires a compatible running daemon, strict adapter and harness checks, either ready managed authentication or a supported static API-key credential, and one complete supported version-one request; a free execution slot is not required for durable acceptance."
       },
       {
         "status": "declared",
@@ -94,7 +94,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Supported reads return health and adapter readiness, account payloads, durable job and attempt state, pending tool calls, and ordered exact harness-output observations attributed to the owning attempt."
+        "statement": "Supported reads return health and adapter readiness including maxActiveJobs, activeJobs, and availableSlots execution capacity; account payloads; durable job and attempt state; pending tool calls; and ordered exact harness-output observations attributed to the owning attempt."
       },
       {
         "status": "declared",
@@ -112,17 +112,21 @@
       },
       {
         "status": "declared",
-        "statement": "Each output atom preserves one harness stdout JSONL payload in arrival order, and a requester result is schema-bound mailbox transport rather than a Nucleus-authored domain fact."
+        "statement": "Each output atom preserves one non-sensitive harness stdout JSONL payload in arrival order; host-managed authentication responses and managed-worker stderr are excluded so bearer credentials cannot become job output, and a requester result is schema-bound mailbox transport rather than a Nucleus-authored domain fact."
       },
       {
         "status": "declared",
-        "statement": "Strict health reports whether the exact installed daemon, adapter, harness, credential, and admission conditions currently permit work; a degraded document is still diagnostic output and exits nonzero."
+        "statement": "Strict health reports whether the exact installed daemon, adapter, harness, credential, and admission conditions currently permit work and snapshots the scheduler's maxActiveJobs, activeJobs, and availableSlots counts, with maxActiveJobs fixed at eight in this release; a degraded document is still diagnostic output and exits nonzero."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
         "statement": "The requester-chosen job ID is the request idempotency key, requester program plus requester ID identifies the domain run, attempt ID identifies the single execution, and output sequence is ordered within that attempt."
+      },
+      {
+        "status": "declared",
+        "statement": "One active execution slot is the complete lifetime of a started attempt, including any interval waiting on its requester; the per-user service has exactly eight such global slots."
       },
       {
         "status": "declared",
@@ -136,11 +140,11 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "For an admitted attempt, Nucleus retains one ordered observation for every harness stdout JSONL record it receives and derives structured output only from the bound thread and turn records in that ledger."
+        "statement": "For an admitted attempt, Nucleus retains one ordered observation for every non-sensitive harness stdout JSONL record it receives and derives structured output only from the bound thread and turn records in that ledger; host-managed authentication responses and managed-worker stderr are deliberately not retained."
       },
       {
         "status": "declared",
-        "statement": "Health and account reads describe the live service and external account response at invocation time; job and mailbox reads describe committed local state at the read boundary."
+        "statement": "Health and account reads describe the live service, scheduler-capacity snapshot, and external account response at invocation time; job and mailbox reads describe committed local state at the read boundary."
       },
       {
         "status": "unspecified",
@@ -173,20 +177,28 @@
       {
         "status": "declared",
         "statement": "Cancellation records durable intent for one attempt but cannot erase retained output or undo a requester mutation already committed."
+      },
+      {
+        "status": "declared",
+        "statement": "A newly admitted job remains accepted with its sole attempt pending until a global slot is acquired; acquisition starts the attempt's timeout, and waiting on a requester continues to consume that slot until terminal cleanup."
+      },
+      {
+        "status": "declared",
+        "statement": "Account reads may overlap active jobs. Account reads and canonical refresh use private staging, validated atomic promotion, and supervised reconciliation that survives requester cancellation; attended login is excluded until active job and account sessions have ended and promotes only a validated successful staged result. No Codex child writes the authoritative credential directly."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Version one is per-user and serializes credential use; it admits one attempt per job and provides no automatic retry, global drain, workflow scheduler, project registry, capability discovery, or requester-domain interpreter."
+        "statement": "Version one is per-user and permits at most eight active attempts globally; accepted jobs with pending attempts wait for capacity, and attempts waiting on requester tools remain active. It admits one attempt per job and provides no automatic retry, global drain, workflow scheduler, project registry, capability discovery, or requester-domain interpreter."
       },
       {
         "status": "declared",
-        "statement": "Invocation policy is closed to a proved harness and model, supported reasoning effort, absolute working directory, explicit workspace and built-in-tool access, timeout, and optional immutable toolset or short-lived launch context."
+        "statement": "Invocation policy is closed to a proved harness and model, supported reasoning effort, absolute working directory, explicit workspace and built-in-tool access, timeout, and optional immutable toolset or short-lived launch context; Nucleus does not detect shared working directories or serialize conflicting filesystem or external mutations."
       },
       {
         "status": "unspecified",
-        "statement": "No throughput, queue depth, database capacity, output volume, wall-clock latency, or automatic retention and pruning bound is promised."
+        "statement": "Beyond the exact eight-active-attempt ceiling, no throughput, queue-depth, database-capacity, output-volume, wall-clock-latency, or automatic retention and pruning bound is promised."
       }
     ],
     "compatibility_and_evolution": [

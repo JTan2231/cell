@@ -1254,6 +1254,18 @@ pub struct AuthenticationReadinessV1 {
     pub detail: Option<String>,
 }
 
+/// Live bounded-execution capacity reported by the daemon.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionCapacityV1 {
+    /// Maximum number of job attempts that may own a live Codex process.
+    pub max_active_jobs: u32,
+    /// Slots currently held by starting, running, or requester-blocked attempts.
+    pub active_jobs: u32,
+    /// Slots immediately available to accepted work.
+    pub available_slots: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthResponseV1 {
@@ -1270,6 +1282,8 @@ pub struct HealthResponseV1 {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capabilities: Vec<HarnessCapability>,
     pub authentication: AuthenticationReadinessV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<ExecutionCapacityV1>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
 }
@@ -1279,14 +1293,14 @@ pub struct HealthResponseV1 {
 pub struct AccountSnapshotQueryV1 {
     #[serde(default)]
     pub include_usage: bool,
-    /// How long to wait for the credential lease. Zero is a nonblocking
-    /// try-lock; values are capped at thirty seconds.
+    /// How long to wait for the canonical credential operation. Zero is a
+    /// nonblocking try-lock; values are capped at thirty seconds.
     #[serde(default)]
     pub wait_seconds: u32,
 }
 
 impl AccountSnapshotQueryV1 {
-    /// Validate the bounded credential-lease wait.
+    /// Validate the bounded canonical-credential wait.
     ///
     /// # Errors
     ///
@@ -1306,8 +1320,8 @@ impl AccountSnapshotQueryV1 {
     }
 }
 
-/// An authenticated account read performed under Nucleus's exclusive
-/// credential lease. External result objects remain opaque JSON.
+/// An authenticated account read performed through Nucleus's canonical
+/// credential boundary. External result objects remain opaque JSON.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountSnapshotV1 {
@@ -1477,6 +1491,41 @@ mod tests {
         toolset
             .validate()
             .unwrap_or_else(|error| panic!("validate checked-in toolset: {error}"));
+    }
+
+    #[test]
+    fn health_execution_capacity_is_additive_and_camel_case() {
+        let legacy: HealthResponseV1 = serde_json::from_value(serde_json::json!({
+            "version": 1,
+            "status": "ok",
+            "daemonVersion": "0.3.3",
+            "acceptingJobs": true,
+            "checkedAt": "2026-09-03T00:00:00Z",
+            "supportedProtocolVersions": [1],
+            "authentication": {
+                "codexHome": "/tmp/codex-home",
+                "configured": true,
+                "authenticated": true
+            }
+        }))
+        .unwrap_or_else(|error| panic!("deserialize legacy health: {error}"));
+        assert_eq!(legacy.execution, None);
+
+        let execution = ExecutionCapacityV1 {
+            max_active_jobs: 8,
+            active_jobs: 3,
+            available_slots: 5,
+        };
+        let encoded = serde_json::to_value(execution)
+            .unwrap_or_else(|error| panic!("serialize execution capacity: {error}"));
+        assert_eq!(
+            encoded,
+            serde_json::json!({
+                "maxActiveJobs": 8,
+                "activeJobs": 3,
+                "availableSlots": 5
+            })
+        );
     }
 
     #[test]

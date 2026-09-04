@@ -486,6 +486,7 @@ done
 for command in awk cmp cp date find grep install mktemp mv plutil readlink sed shasum sort stat; do
     command -v "$command" >/dev/null 2>&1 || fail "required command not found: $command"
 done
+[ -x /usr/bin/shlock ] || fail 'required command not found: /usr/bin/shlock'
 validate_chancery_bundle "$SOURCE_CHANCERY_ANNALS"
 validate_chancery_bundle "$SOURCE_CHANCERY_USAGE"
 
@@ -523,6 +524,7 @@ CHANCERY_ANNALS_LINK="$CHANCERY_PROVIDERS_DIR/annals"
 CHANCERY_USAGE_LINK="$CHANCERY_PROVIDERS_DIR/annals-usage"
 CHANCERY_ANNALS_TARGET="$INSTALL_DIR/current/share/chancery/annals"
 CHANCERY_USAGE_TARGET="$INSTALL_DIR/current/share/chancery/annals-usage"
+CHANCERY_CATALOG_LOCK="$CHANCERY_STATE_DIR/.catalog-update-lock"
 SERVICE_TARGET="gui/$operator_uid/$SERVICE_LABEL"
 
 temporary_release=
@@ -562,6 +564,7 @@ config_changed=0
 usage_config_changed=0
 committed=0
 lock_created=0
+catalog_lock_created=0
 fresh_state_switched=0
 pause_created=0
 imported_backlog=0
@@ -582,6 +585,29 @@ atomic_symlink() {
     # -h replaces a selector that points at a directory instead of moving the
     # temporary link into that directory.
     mv -fh "$temporary" "$path"
+}
+
+release_catalog_lock() {
+    if [ "$catalog_lock_created" -eq 1 ] \
+        && [ -f "$CHANCERY_CATALOG_LOCK" ] \
+        && [ ! -L "$CHANCERY_CATALOG_LOCK" ] \
+        && [ "$(sed -n '1p' "$CHANCERY_CATALOG_LOCK" 2>/dev/null || true)" = "$$" ]
+    then
+        rm -f "$CHANCERY_CATALOG_LOCK" >/dev/null 2>&1 || true
+    fi
+}
+
+acquire_catalog_lock() {
+    [ ! -L "$CHANCERY_CATALOG_LOCK" ] \
+        || fail "Chancery catalog writer lock is a symbolic link: $CHANCERY_CATALOG_LOCK"
+    if [ -e "$CHANCERY_CATALOG_LOCK" ] \
+        && [ ! -f "$CHANCERY_CATALOG_LOCK" ]
+    then
+        fail "Chancery catalog writer lock is not safely recoverable: $CHANCERY_CATALOG_LOCK"
+    fi
+    catalog_lock_created=1
+    /usr/bin/shlock -p "$$" -f "$CHANCERY_CATALOG_LOCK" \
+        || fail "another Chancery catalog writer is active: $CHANCERY_CATALOG_LOCK"
 }
 
 move_if_present() {
@@ -870,6 +896,7 @@ cleanup() {
     if [ "$retain_transaction" -eq 0 ]; then
         [ -z "$transaction_dir" ] || rm -rf "$transaction_dir"
     fi
+    release_catalog_lock
     if [ "$lock_created" -eq 1 ]; then
         rmdir "$UPDATE_LOCK" >/dev/null 2>&1 || true
     fi
@@ -1522,6 +1549,7 @@ if [ "$no_start" -eq 0 ]; then
         || fail 'candidate did not honor inbox maintenance'
 fi
 
+acquire_catalog_lock
 switched=1
 if [ "$old_current" != "$new_current" ]; then
     if [ -n "$old_current" ]; then

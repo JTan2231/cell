@@ -157,10 +157,11 @@ for source in "$SOURCE_DEPLOYER"; do
     [ -f "$source" ] && [ ! -L "$source" ] \
         || fail "missing packaged file: $source"
 done
-for command in awk cp find grep install mktemp mv readlink shasum sort; do
+for command in awk cp find grep install mktemp mv readlink sed shasum sort; do
     command -v "$command" >/dev/null 2>&1 \
         || fail "required command not found: $command"
 done
+[ -x /usr/bin/shlock ] || fail 'required command not found: /usr/bin/shlock'
 validate_chancery_bundle "$SOURCE_CHANCERY"
 
 binary_version=$("$binary_path" --version) \
@@ -197,6 +198,7 @@ chancery_state_dir="$install_home/Library/Application Support/Chancery"
 chancery_providers_dir="$chancery_state_dir/providers"
 chancery_provider_link="$chancery_providers_dir/nucleus"
 chancery_provider_target="$install_dir/current/share/chancery/nucleus"
+chancery_catalog_lock="$chancery_state_dir/.catalog-update-lock"
 for path in "$install_dir" "$releases_dir" "$chancery_state_dir" \
     "$chancery_providers_dir"
 do
@@ -213,6 +215,29 @@ old_chancery_provider=
 switched=0
 committed=0
 lock_created=0
+catalog_lock_created=0
+
+release_catalog_lock() {
+    if [ "$catalog_lock_created" -eq 1 ] \
+        && [ -f "$chancery_catalog_lock" ] \
+        && [ ! -L "$chancery_catalog_lock" ] \
+        && [ "$(sed -n '1p' "$chancery_catalog_lock" 2>/dev/null || true)" = "$$" ]
+    then
+        rm -f "$chancery_catalog_lock" >/dev/null 2>&1 || true
+    fi
+}
+
+acquire_catalog_lock() {
+    [ ! -L "$chancery_catalog_lock" ] \
+        || fail "Chancery catalog writer lock is a symbolic link: $chancery_catalog_lock"
+    if [ -e "$chancery_catalog_lock" ] && [ ! -f "$chancery_catalog_lock" ]; then
+        fail "Chancery catalog writer lock is not safely recoverable: $chancery_catalog_lock"
+    fi
+    catalog_lock_created=1
+    /usr/bin/shlock -p "$$" -f "$chancery_catalog_lock" \
+        || fail "another Chancery catalog writer is active: $chancery_catalog_lock"
+}
+
 cleanup() {
     deploy_status=$?
     trap - EXIT HUP INT TERM
@@ -237,6 +262,7 @@ cleanup() {
         fi
     fi
     [ -z "$temporary_release" ] || rm -rf "$temporary_release"
+    release_catalog_lock
     [ "$lock_created" -eq 0 ] || rmdir "$update_lock" >/dev/null 2>&1 || true
     exit "$deploy_status"
 }
@@ -332,6 +358,7 @@ else
     temporary_release=
 fi
 
+acquire_catalog_lock
 switched=1
 if [ -n "$old_current" ] && [ "$old_current" != "releases/$release_id" ]; then
     atomic_symlink "$old_current" "$previous_link"

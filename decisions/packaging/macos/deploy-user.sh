@@ -92,6 +92,7 @@ fi
 if [ "$final_cutover" -eq 1 ]; then
     [ -x /usr/sbin/lsof ] || fail 'lsof is unavailable'
 fi
+[ -x /usr/bin/shlock ] || fail 'shlock is unavailable'
 for source in "$SOURCE_FRONTEND" "$SOURCE_RUNNER" "$SOURCE_DEFINITION" "$SOURCE_HOOKS" "$SOURCE_UNINSTALLER"; do
     [ -f "$source" ] && [ ! -L "$source" ] || fail "missing packaged file: $source"
 done
@@ -244,6 +245,7 @@ LEGACY_CLI_PATH="$CLI_DIR/decisions"
 PROVIDERS_DIR="$install_home/Library/Application Support/Chancery/providers"
 PROVIDER_LINK="$PROVIDERS_DIR/krisis"
 LEGACY_PROVIDER_LINK="$PROVIDERS_DIR/decisions"
+CHANCERY_CATALOG_LOCK="${PROVIDERS_DIR%/providers}/.catalog-update-lock"
 HOOKS_PATH="$install_home/.codex/hooks.json"
 AGENT_DIR="$install_home/Library/LaunchAgents"
 OBSERVER_PLIST="$AGENT_DIR/$OBSERVER_LABEL.plist"
@@ -313,6 +315,7 @@ prior_legacy_observer_digest=
 prior_legacy_daily_exists=0
 prior_legacy_daily_enabled=0
 prior_legacy_daily_digest=
+catalog_lock_created=0
 
 restore_binding() {
     restore_key=$1
@@ -325,6 +328,29 @@ restore_binding() {
     else
         HOME="$install_home" "$clockwork_path" --json binding disable "$restore_key" --select "$restore_digest" >/dev/null 2>&1
     fi
+}
+
+release_catalog_lock() {
+    if [ "$catalog_lock_created" -eq 1 ] \
+        && [ -f "$CHANCERY_CATALOG_LOCK" ] \
+        && [ ! -L "$CHANCERY_CATALOG_LOCK" ] \
+        && [ "$(sed -n '1p' "$CHANCERY_CATALOG_LOCK" 2>/dev/null || true)" = "$$" ]
+    then
+        rm -f "$CHANCERY_CATALOG_LOCK" >/dev/null 2>&1 || true
+    fi
+}
+
+acquire_catalog_lock() {
+    [ ! -L "$CHANCERY_CATALOG_LOCK" ] \
+        || fail "Chancery catalog writer lock is a symbolic link: $CHANCERY_CATALOG_LOCK"
+    if [ -e "$CHANCERY_CATALOG_LOCK" ] \
+        && [ ! -f "$CHANCERY_CATALOG_LOCK" ]
+    then
+        fail "Chancery catalog writer lock is not safely recoverable: $CHANCERY_CATALOG_LOCK"
+    fi
+    catalog_lock_created=1
+    /usr/bin/shlock -p "$$" -f "$CHANCERY_CATALOG_LOCK" \
+        || fail "another Chancery catalog writer is active: $CHANCERY_CATALOG_LOCK"
 }
 
 cleanup() {
@@ -341,6 +367,7 @@ cleanup() {
         fi
         [ -z "$TEMPORARY" ] || rm -rf "$TEMPORARY"
         if [ -n "$TRANSACTION" ] && [ "$retain_transaction" -eq 0 ]; then rm -rf "$TRANSACTION"; fi
+        release_catalog_lock
         rmdir "$LOCK_DIR" 2>/dev/null
         exit "$status"
     fi
@@ -427,6 +454,7 @@ cleanup() {
     fi
     [ -z "$TEMPORARY" ] || rm -rf "$TEMPORARY"
     if [ -n "$TRANSACTION" ] && [ "$retain_transaction" -eq 0 ]; then rm -rf "$TRANSACTION"; fi
+    release_catalog_lock
     rmdir "$LOCK_DIR" 2>/dev/null
     exit "$status"
 }
@@ -989,6 +1017,7 @@ if [ "$database_was_absent" -eq 0 ]; then
     for suffix in wal shm journal; do [ ! -f "$DATABASE_PATH-$suffix" ] || install -m 0600 "$DATABASE_PATH-$suffix" "$TRANSACTION/decisions.db-$suffix"; done
 fi
 
+acquire_catalog_lock
 selectors_switched=1
 if [ -n "$old_current" ] && [ "$old_current" != "releases/$release_id" ]; then atomic_symlink "$old_current" "$PREVIOUS_LINK"; fi
 atomic_symlink "releases/$release_id" "$CURRENT_LINK"

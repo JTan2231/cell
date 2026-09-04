@@ -69,10 +69,11 @@ case "$install_home" in /*) ;; *) fail 'install home must be absolute' ;; esac
     || fail "Chancery candidate is not an executable regular file: $binary_path"
 [ -f "$SOURCE_DEPLOYER" ] && [ ! -L "$SOURCE_DEPLOYER" ] \
     || fail "missing packaged file: $SOURCE_DEPLOYER"
-for command in awk cat cp find grep id install mktemp mv readlink shasum sort stat; do
+for command in awk cat cp find grep id install mktemp mv readlink sed shasum sort stat; do
     command -v "$command" >/dev/null 2>&1 \
         || fail "required command not found: $command"
 done
+[ -x /usr/bin/shlock ] || fail 'required command not found: /usr/bin/shlock'
 
 operator_uid=$(id -u)
 [ "$operator_uid" -ne 0 ] || fail 'run this deployer as the Chancery operator, not root'
@@ -110,6 +111,7 @@ RELEASES_DIR="$INSTALL_DIR/releases"
 CURRENT_LINK="$INSTALL_DIR/current"
 PREVIOUS_LINK="$INSTALL_DIR/previous"
 UPDATE_LOCK="$INSTALL_DIR/.update-lock"
+CATALOG_LOCK="$STATE_DIR/.catalog-update-lock"
 CLI_DIR="$install_home/.local/bin"
 CLI_PATH="$CLI_DIR/chancery"
 PROVIDER_LINK="$PROVIDERS_DIR/chancery"
@@ -133,6 +135,7 @@ old_provider=
 switched=0
 committed=0
 lock_created=0
+catalog_lock_created=0
 
 atomic_symlink() {
     target=$1
@@ -144,6 +147,26 @@ atomic_symlink() {
         return 0
     fi
     mv -fT "$temporary" "$path"
+}
+
+release_catalog_lock() {
+    if [ "$catalog_lock_created" -eq 1 ] && [ -f "$CATALOG_LOCK" ] \
+        && [ ! -L "$CATALOG_LOCK" ] \
+        && [ "$(sed -n '1p' "$CATALOG_LOCK" 2>/dev/null || true)" = "$$" ]
+    then
+        rm -f "$CATALOG_LOCK" >/dev/null 2>&1 || true
+    fi
+}
+
+acquire_catalog_lock() {
+    [ ! -L "$CATALOG_LOCK" ] \
+        || fail "Chancery catalog writer lock is a symbolic link: $CATALOG_LOCK"
+    if [ -e "$CATALOG_LOCK" ] && [ ! -f "$CATALOG_LOCK" ]; then
+        fail "Chancery catalog writer lock is not safely recoverable: $CATALOG_LOCK"
+    fi
+    catalog_lock_created=1
+    /usr/bin/shlock -p "$$" -f "$CATALOG_LOCK" \
+        || fail "another Chancery catalog writer is active: $CATALOG_LOCK"
 }
 
 cleanup() {
@@ -173,6 +196,7 @@ cleanup() {
         fi
     fi
     [ -z "$temporary_release" ] || rm -rf "$temporary_release"
+    release_catalog_lock
     [ "$lock_created" -eq 0 ] || rmdir "$UPDATE_LOCK" >/dev/null 2>&1 || true
     exit "$status"
 }
@@ -289,6 +313,7 @@ else
     temporary_release=
 fi
 
+acquire_catalog_lock
 switched=1
 if [ -n "$old_current" ] && [ "$old_current" != "releases/$release_id" ]; then
     atomic_symlink "$old_current" "$PREVIOUS_LINK"

@@ -19,6 +19,20 @@ To check one product while iterating, for example:
 ./ci.sh nucleus
 ```
 
+Product gates are synchronous clients of one host-wide CI broker. Linked Git
+worktrees share a single Cargo target and one heavy execution lane, so any
+number of agents may request CI without multiplying compiler work or writable
+targets. Requests queue fairly; an exact clean candidate may join identical
+work already in flight, and a result is rejected as stale if its source changes
+during execution. CI requires Python 3.10 or newer. See
+[the broker contract](ci_broker/README.md).
+
+Repeated product CI and release mechanics are declared in checked-in
+[pipeline descriptors](pipeline/README.md). Selector-only deployment mechanics
+and optimistic `current` checks are generated from the
+[deployment profile](deployment/README.md); stateful products retain their own
+lifecycle logic.
+
 ## Further documentation
 
 Each product directory has its own README and more specific documentation. For

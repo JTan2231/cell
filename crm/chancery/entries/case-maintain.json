@@ -58,7 +58,7 @@
     "Automatic retry, direct Codex execution, changing Nucleus, or replacing a terminal attempt by hand."
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
   ],
   "promise": {
     "consumers": [

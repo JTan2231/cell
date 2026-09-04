@@ -39,7 +39,20 @@ different content under the same ID is a conflict.
 Every invocation policy is explicit: harness, model, reasoning effort,
 absolute working directory, workspace access, local execution, web search,
 timeout, launch context, and optional dynamic toolset. Require strict health
-and the exact protocol and adapter capabilities needed by the requester.
+and the exact protocol, adapter, and execution-capacity capabilities needed by
+the requester. Health exposes Nucleus's global maximum of eight active attempts
+as `maxActiveJobs` and the live `activeJobs` and `availableSlots` counts.
+
+Admission does not require a free execution slot. A newly admitted job remains
+`accepted` with its sole attempt `pending` until a slot is available. The
+invocation timeout begins only when that slot is acquired. An attempt in
+`waiting_on_requester` still owns its slot because the supervised Codex process
+remains live. Nucleus schedules capacity only; it does not own the requester's
+work-packet graph, priorities, success rule, or retry policy.
+
+Before submitting concurrent `read-write` jobs, assign disjoint working
+directories or worktrees, or serialize them in the requester. Nucleus does not
+compare paths or coordinate filesystem and external-mutation conflicts.
 
 Decoder schemas and toolset registrations are immutable by identity and
 digest. When their meaning changes incompatibly, publish a new version and
@@ -54,7 +67,8 @@ The normal lifecycle is:
 3. Persist correlation and the exact typed request before ambiguous transport
    can occur.
 4. Submit the request.
-5. Long-poll the durable requester-tool mailbox while the job is nonterminal.
+5. Tolerate an accepted/pending interval, then long-poll the durable
+   requester-tool mailbox while the job is nonterminal.
 6. Validate each call, commit the requester-owned mutation idempotently, bind
    the exact result durably, and post it.
 7. Read terminal job and structured output state.
@@ -66,13 +80,24 @@ There is no hidden direct-Codex fallback. A requester restart may rediscover a
 pending durable call. A Nucleus restart cannot resume the app-server process;
 it marks the attempt lost. Only the requester can authorize a new attempt.
 
+Nucleus's managed authentication remains one private authority even while jobs
+run concurrently. Account reads may overlap active jobs. Nucleus serializes
+canonical credential refresh, and attended login is excluded until all active
+job and account sessions have ended; requesters never read, refresh, or copy
+the canonical credential themselves.
+
 ## Required proof
 
-Test strict health, successful admission and domain completion, identical and
-conflicting job submissions, identical and conflicting tool results,
-requester restart with a pending call, daemon loss, cancellation, timeout,
-authentication contention, unsupported invocation combinations, domain
-success followed by runtime failure, and absence of a second execution path.
+Test strict health and capacity reporting, eight simultaneous active attempts
+with later work remaining accepted/pending, successful admission and domain
+completion, identical and conflicting job submissions, identical and
+conflicting tool results, requester restart with a pending call, daemon loss,
+queued and active cancellation, timeout beginning after slot acquisition,
+waiting-on-requester slot retention, concurrent account reads, serialized
+refresh and login exclusion, unsupported invocation combinations, domain
+success followed by runtime failure, absence of a hidden execution path, and
+proof that requester-owned work-packet, write-conflict, and retry semantics stay
+outside Nucleus.
 
 Add requester observability, private-state handling, backup coverage, release
 ordering, rollback boundaries, operator documentation, and a real requester

@@ -48,7 +48,7 @@
     {"label": "Reject design", "invocation": "/Users/joey/.local/bin/todo design reject <DESIGN_ID> --reason <TEXT> --source <READABLE_UTF8_PATH>"}
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
   ],
   "does_not_authorize": [
     "Implementation planning, task creation, file edits, deployment, or execution.",

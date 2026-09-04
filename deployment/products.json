@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "products": [
+    {
+      "product_id": "conversations",
+      "display_name": "Conversations",
+      "application_support_name": "Conversations",
+      "binary_name": "conversations",
+      "provider_id": "conversations",
+      "usage_description": [
+        "Install or update the current user's macOS Conversations CLI. Conversations",
+        "has no daemon, database, authentication, model, or network service of its own."
+      ],
+      "manifest_product_line": false,
+      "print_state_path": true,
+      "completion_note": ""
+    },
+    {
+      "product_id": "geste",
+      "display_name": "Geste",
+      "application_support_name": "Geste",
+      "binary_name": "geste",
+      "provider_id": "geste",
+      "usage_description": [
+        "Install or update the current user's macOS Geste CLI and product-owned",
+        "Chancery provider. Deployment does not initialize or migrate episode storage."
+      ],
+      "manifest_product_line": true,
+      "print_state_path": false,
+      "completion_note": "Database: not initialized by deployment; run `geste init` separately"
+    },
+    {
+      "product_id": "pratica",
+      "display_name": "Pratica",
+      "application_support_name": "Pratica",
+      "binary_name": "pratica",
+      "provider_id": "pratica",
+      "usage_description": [
+        "Install or update the current user's macOS Pratica CLI and product-owned",
+        "Chancery provider. Deployment does not open, initialize, or migrate negotiation",
+        "storage and does not invoke or restart Nucleus."
+      ],
+      "manifest_product_line": true,
+      "print_state_path": false,
+      "completion_note": "Database: untouched by deployment; run `pratica init` separately"
+    },
+    {
+      "product_id": "crm",
+      "display_name": "CRM",
+      "application_support_name": "CRM",
+      "binary_name": "crm",
+      "provider_id": "crm",
+      "usage_description": [
+        "Install or update the current user's macOS CRM CLI and product-owned Chancery",
+        "provider. Deployment does not initialize or migrate CRM storage or launch its",
+        "hidden worker."
+      ],
+      "manifest_product_line": true,
+      "print_state_path": false,
+      "completion_note": "Database: not initialized by deployment; run `crm init` separately"
+    }
+  ]
+}
