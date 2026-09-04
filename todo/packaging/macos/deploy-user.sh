@@ -417,11 +417,15 @@ temporary_plist=$(mktemp "$AGENT_DIR/.$SERVICE_LABEL.XXXXXX")
 install -m 0600 "$SOURCE_PLIST" "$temporary_plist"
 plutil -replace WorkingDirectory -string "$STATE_DIR" "$temporary_plist"
 plutil -replace EnvironmentVariables.HOME -string "$install_home" "$temporary_plist"
-plutil -replace ProgramArguments.1 \
+plutil -remove ProgramArguments.1 "$temporary_plist"
+plutil -insert ProgramArguments.1 \
     -string "$INSTALL_DIR/current/bin/todo-daily-email" "$temporary_plist"
 plutil -replace StandardOutPath -string "$LOG_DIR/email.stdout.log" "$temporary_plist"
 plutil -replace StandardErrorPath -string "$LOG_DIR/email.stderr.log" "$temporary_plist"
 plutil -lint "$temporary_plist" >/dev/null
+if grep -F '__TODO_' "$temporary_plist" >/dev/null; then
+    fail 'rendered LaunchAgent retains a template placeholder'
+fi
 
 if "$launchctl_path" print "$SERVICE_TARGET" >/dev/null 2>&1; then
     was_loaded=1

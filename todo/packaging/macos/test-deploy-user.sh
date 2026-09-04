@@ -215,6 +215,8 @@ plutil -lint "$agent_plist" >/dev/null
 [ "$(plutil -extract ProgramArguments.0 raw "$agent_plist")" = /bin/zsh ]
 [ "$(plutil -extract ProgramArguments.1 raw "$agent_plist")" = \
     "$state/install/current/bin/todo-daily-email" ]
+[ "$(plutil -extract ProgramArguments raw "$agent_plist")" -eq 2 ]
+! grep -F '__TODO_' "$agent_plist" >/dev/null
 [ "$(plutil -extract StartCalendarInterval.Hour raw "$agent_plist")" -eq 9 ]
 [ "$(plutil -extract StartCalendarInterval.Minute raw "$agent_plist")" -eq 0 ]
 [ "$(plutil -extract EnvironmentVariables.HOME raw "$agent_plist")" = "$home" ]
