@@ -503,7 +503,7 @@ validate_release_tree() {
     if ! find "$release_tree" -type f -print | while IFS= read -r release_file; do
         relative=${release_file#"$release_tree/"}
         case "$release_format:$relative" in
-            4:manifest.txt|4:libexec/krisis|4:bin/krisis|4:bin/krisis-observer|4:package/deploy-user.sh|4:package/uninstall-user.sh|4:package/krisis-observer.clockwork.toml.in|4:package/hooks.json|4:share/chancery/krisis/*|4:share/chancery/decisions/*) ;;
+            4:manifest.txt|4:libexec/krisis|4:bin/krisis|4:bin/krisis-observer|4:package/krisis|4:package/krisis-observer|4:package/deploy-user.sh|4:package/uninstall-user.sh|4:package/krisis-observer.clockwork.toml.in|4:package/hooks.json|4:share/chancery/krisis/*|4:share/chancery/decisions/*) ;;
             2:manifest.txt|2:libexec/decisions|2:bin/decisions|2:bin/decisions-daily-email|2:bin/decisions-observer|2:package/decisions|2:package/decisions-daily-email|2:package/decisions-observer|2:package/deploy-user.sh|2:package/uninstall-user.sh|2:package/hooks.json|2:package/org.decisions.daily-email.plist|2:package/org.decisions.observer.plist|2:share/chancery/decisions/*) ;;
             3:manifest.txt|3:libexec/decisions|3:bin/decisions|3:bin/decisions-daily-email|3:bin/decisions-observer|3:package/decisions|3:package/decisions-daily-email|3:package/decisions-observer|3:package/deploy-user.sh|3:package/uninstall-user.sh|3:package/hooks.json|3:package/decisions-daily-email.clockwork.toml.in|3:package/decisions-observer.clockwork.toml.in|3:share/chancery/decisions/*) ;;
             *) exit 1 ;;
@@ -546,6 +546,8 @@ validate_release_selector() {
             [ "$(shasum -a 256 "$selected_release/libexec/krisis" | awk '{print $1}')" = "$selected_binary_hash" ] || fail "selected Krisis binary is tampered: $selector"
             [ "$(shasum -a 256 "$selected_release/bin/krisis" | awk '{print $1}')" = "$selected_frontend_hash" ] || fail "selected Krisis frontend is tampered: $selector"
             [ "$(shasum -a 256 "$selected_release/bin/krisis-observer" | awk '{print $1}')" = "$selected_observer_runner_hash" ] || fail "selected Krisis runner is tampered: $selector"
+            [ "$(shasum -a 256 "$selected_release/package/krisis" | awk '{print $1}')" = "$selected_frontend_hash" ] || fail "selected packaged Krisis frontend is tampered: $selector"
+            [ "$(shasum -a 256 "$selected_release/package/krisis-observer" | awk '{print $1}')" = "$selected_observer_runner_hash" ] || fail "selected packaged Krisis runner is tampered: $selector"
             [ "$(shasum -a 256 "$selected_release/package/krisis-observer.clockwork.toml.in" | awk '{print $1}')" = "$selected_observer_definition_hash" ] || fail "selected Krisis definition is tampered: $selector"
             [ "$(shasum -a 256 "$selected_release/package/hooks.json" | awk '{print $1}')" = "$selected_hooks_hash" ] || fail "selected Krisis hooks are tampered: $selector"
             [ "$(shasum -a 256 "$selected_release/package/deploy-user.sh" | awk '{print $1}')" = "$selected_deployer_hash" ] || fail "selected Krisis deployer is tampered: $selector"
@@ -638,6 +640,8 @@ else
     install -m 0755 "$binary_path" "$TEMPORARY/libexec/krisis"
     install -m 0755 "$SOURCE_FRONTEND" "$TEMPORARY/bin/krisis"
     install -m 0755 "$SOURCE_RUNNER" "$TEMPORARY/bin/krisis-observer"
+    install -m 0755 "$SOURCE_FRONTEND" "$TEMPORARY/package/krisis"
+    install -m 0755 "$SOURCE_RUNNER" "$TEMPORARY/package/krisis-observer"
     install -m 0755 "$0" "$TEMPORARY/package/deploy-user.sh"
     install -m 0755 "$SOURCE_UNINSTALLER" "$TEMPORARY/package/uninstall-user.sh"
     install -m 0644 "$SOURCE_DEFINITION" "$TEMPORARY/package/krisis-observer.clockwork.toml.in"

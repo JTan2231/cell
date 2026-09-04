@@ -109,7 +109,7 @@ validate_release_tree() {
     if ! find "$release" -type f -print | while IFS= read -r release_file; do
         relative=${release_file#"$release/"}
         case "$relative" in
-            manifest.txt|libexec/krisis|bin/krisis|bin/krisis-observer|package/deploy-user.sh|package/uninstall-user.sh|package/krisis-observer.clockwork.toml.in|package/hooks.json|share/chancery/krisis/*|share/chancery/decisions/*) ;;
+            manifest.txt|libexec/krisis|bin/krisis|bin/krisis-observer|package/krisis|package/krisis-observer|package/deploy-user.sh|package/uninstall-user.sh|package/krisis-observer.clockwork.toml.in|package/hooks.json|share/chancery/krisis/*|share/chancery/decisions/*) ;;
             *) exit 1 ;;
         esac
     done; then
@@ -124,6 +124,10 @@ validate_release_tree
 [ -f "$release/bin/krisis-observer" ] && [ ! -L "$release/bin/krisis-observer" ] \
     && [ "$(shasum -a 256 "$release/bin/krisis-observer" | awk '{print $1}')" = "$runner_hash" ] \
     || fail 'current Krisis runner is not release-owned'
+[ "$(shasum -a 256 "$release/package/krisis" | awk '{print $1}')" = "$frontend_hash" ] \
+    || fail 'current packaged Krisis frontend is tampered'
+[ "$(shasum -a 256 "$release/package/krisis-observer" | awk '{print $1}')" = "$runner_hash" ] \
+    || fail 'current packaged Krisis runner is tampered'
 [ "$(shasum -a 256 "$release/package/krisis-observer.clockwork.toml.in" | awk '{print $1}')" = "$definition_hash" ] || fail 'current Krisis definition template is tampered'
 [ "$(shasum -a 256 "$release/package/hooks.json" | awk '{print $1}')" = "$hooks_hash" ] || fail 'current Krisis hooks are tampered'
 [ "$(shasum -a 256 "$release/package/deploy-user.sh" | awk '{print $1}')" = "$deployer_hash" ] || fail 'current Krisis deployer is tampered'

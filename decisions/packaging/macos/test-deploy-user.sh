@@ -23,7 +23,7 @@ cat >"$candidate" <<'EOF'
 #!/bin/sh
 set -eu
 case " $* " in
-    *' --version '*) printf '%s\n' 'krisis 0.4.0' ;;
+    *' --version '*) printf '%s\n' 'krisis 0.4.1' ;;
     *' doctor '*)
         [ -z "${KRISIS_TEST_LEAK_ME:-}" ] || exit 70
         database="$HOME/Library/Application Support/Decisions/decisions.db"
@@ -197,7 +197,7 @@ grep -Fx 'operator-owned maintenance' \
 [ "$(wc -l <"$clockwork_capture")" -eq "$unrelated_capture_lines" ]
 
 deploy >"$temporary/prepare.out"
-grep -F 'prepared krisis 0.4.0' "$temporary/prepare.out" >/dev/null
+grep -F 'prepared krisis 0.4.1' "$temporary/prepare.out" >/dev/null
 [ -f "$home/Library/Application Support/Decisions/.clockwork-maintenance" ]
 [ -f "$home/Library/Application Support/Decisions/install/krisis-maintenance-hold.txt" ]
 [ ! -e "$home/Library/Application Support/Decisions/install/current" ]
@@ -209,9 +209,34 @@ if grep -E 'binding (disable|switch)' "$clockwork_capture" >/dev/null; then
 fi
 grep -F 'definition show' "$clockwork_capture" >/dev/null
 
-KRISIS_TEST_LEAK_ME=forbidden deploy --final-cutover --keep-maintenance \
+prepared_release_id=$(sed -n '3s/^release_id=//p' \
+    "$home/Library/Application Support/Decisions/install/krisis-maintenance-hold.txt")
+prepared_release="$home/Library/Application Support/Decisions/install/releases/$prepared_release_id"
+[ -x "$prepared_release/package/krisis" ]
+[ -x "$prepared_release/package/krisis-observer" ]
+cmp -s "$prepared_release/bin/krisis" "$prepared_release/package/krisis"
+cmp -s "$prepared_release/bin/krisis-observer" \
+    "$prepared_release/package/krisis-observer"
+
+installed_deploy() {
+    HOME="$home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" \
+        KRISIS_CLOCKWORK_STATE="$clockwork_state" \
+        KRISIS_LAUNCHCTL_CAPTURE="$launchctl_capture" \
+        KRISIS_CANDIDATE_CAPTURE="$candidate_capture" \
+        /bin/sh "$prepared_release/package/deploy-user.sh" \
+        --binary "$candidate" --clockwork "$clockwork" --annals "$annals" \
+        --annals-config "$config" \
+        --annals-library-id 0123456789abcdef0123456789abcdef \
+        --home "$home" --launchctl "$launchctl" "$@"
+}
+
+installed_deploy >"$temporary/installed-prepare.out"
+grep -F 'prepared krisis 0.4.1' "$temporary/installed-prepare.out" >/dev/null
+
+KRISIS_TEST_LEAK_ME=forbidden installed_deploy \
+    --final-cutover --keep-maintenance \
     >"$temporary/deploy.out"
-grep -F 'installed krisis 0.4.0' "$temporary/deploy.out" >/dev/null
+grep -F 'installed krisis 0.4.1' "$temporary/deploy.out" >/dev/null
 grep -F 'authenticated maintenance hold retained' "$temporary/deploy.out" >/dev/null
 [ -L "$home/.local/bin/krisis" ]
 [ ! -e "$home/.local/bin/decisions" ]
@@ -229,7 +254,7 @@ first_release="$home/Library/Application Support/Decisions/install/$first_curren
 # Releasing a committed handoff is its own authenticated, idempotent operation.
 # A release failure keeps the exact hold, and the same operation resumes safely.
 state="$home/Library/Application Support/Decisions"
-if KRISIS_BLOCK_GATE_RELEASE_DIR="$state" deploy --release-maintenance \
+if KRISIS_BLOCK_GATE_RELEASE_DIR="$state" installed_deploy --release-maintenance \
     >"$temporary/release-blocked.out" 2>"$temporary/release-blocked.err"
 then
     printf '%s\n' 'maintenance release succeeded after its gate became undeletable' >&2
@@ -241,13 +266,13 @@ grep -F 'could not release its authenticated maintenance hold' \
     "$temporary/release-blocked.err" >/dev/null
 [ -f "$state/.clockwork-maintenance" ]
 [ -f "$state/install/krisis-maintenance-hold.txt" ]
-deploy --release-maintenance >"$temporary/released.out"
+installed_deploy --release-maintenance >"$temporary/released.out"
 grep -F 'released authenticated Krisis maintenance hold' \
     "$temporary/released.out" >/dev/null
 [ ! -e "$state/.clockwork-maintenance" ]
 [ -f "$state/install/krisis-maintenance-hold.txt" ]
 release_lines=$(wc -l <"$clockwork_capture")
-deploy --release-maintenance >"$temporary/released-again.out"
+installed_deploy --release-maintenance >"$temporary/released-again.out"
 grep -F 'released authenticated Krisis maintenance hold' \
     "$temporary/released-again.out" >/dev/null
 [ ! -e "$state/.clockwork-maintenance" ]
@@ -277,6 +302,32 @@ if HOME="$home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" KRISIS_CLOCKWORK_S
 fi
 rm -f "$first_release/bin/krisis-observer"
 install -m 0755 "$external_runner" "$first_release/bin/krisis-observer"
+
+# The release-owned deployer depends on its packaged runner sibling. Both the
+# deployer and uninstaller reject a changed copy even when bin/ remains intact.
+packaged_runner_backup="$temporary/packaged-observer-runner"
+cp "$first_release/package/krisis-observer" "$packaged_runner_backup"
+printf '%s\n' 'tampered packaged runner' \
+    >>"$first_release/package/krisis-observer"
+if deploy --final-cutover \
+    >"$temporary/package-runner-deploy.out" \
+    2>"$temporary/package-runner-deploy.err"
+then
+    printf '%s\n' 'deployer accepted a changed packaged runner' >&2
+    exit 1
+fi
+if HOME="$home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" \
+    KRISIS_CLOCKWORK_STATE="$clockwork_state" \
+    /bin/sh "$SCRIPT_DIR/uninstall-user.sh" --clockwork "$clockwork" \
+    --home "$home" >"$temporary/package-runner-uninstall.out" \
+    2>"$temporary/package-runner-uninstall.err"
+then
+    printf '%s\n' 'uninstaller accepted a changed packaged runner' >&2
+    exit 1
+fi
+install -m 0755 "$packaged_runner_backup" \
+    "$first_release/package/krisis-observer"
+
 printf '%s\n' 'unexpected' >"$first_release/package/unexpected"
 if deploy --final-cutover >"$temporary/extra-deploy.out" 2>"$temporary/extra-deploy.err"; then
     printf '%s\n' 'deployer accepted an uncommitted release member' >&2
