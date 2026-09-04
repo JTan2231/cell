@@ -58,6 +58,21 @@
       "manifest_product_line": true,
       "print_state_path": false,
       "completion_note": "Database: not initialized by deployment; run `crm init` separately"
+    },
+    {
+      "product_id": "vizier",
+      "display_name": "Vizier",
+      "application_support_name": "Vizier",
+      "binary_name": "vizier",
+      "provider_id": "vizier",
+      "usage_description": [
+        "Install or update the current user's macOS Vizier CLI and product-owned",
+        "Chancery provider. Deployment does not initialize or migrate Vizier storage",
+        "and does not invoke Nucleus or start implementation work."
+      ],
+      "manifest_product_line": true,
+      "print_state_path": false,
+      "completion_note": "Database: untouched by deployment; run `vizier init` separately"
     }
   ]
 }
