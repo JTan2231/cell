@@ -3,7 +3,7 @@
   "provider": {
     "id": "vizier",
     "name": "Vizier",
-    "release": "0.0.0"
+    "release": "0.1.0"
   },
   "promise_scope": {
     "authoritative_for": [
