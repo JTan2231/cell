@@ -3,6 +3,18 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
+krisis_version=$(awk '
+    $0 == "[package]" { in_package = 1; next }
+    in_package && $1 == "version" {
+        gsub(/"/, "", $3)
+        print $3
+        exit
+    }
+' "$SCRIPT_DIR/../../crates/decisions/Cargo.toml")
+[ -n "$krisis_version" ] || {
+    printf '%s\n' 'unable to read the Krisis package version' >&2
+    exit 1
+}
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/krisis-deploy.XXXXXX")
 trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 home="$temporary/Home"
@@ -23,7 +35,7 @@ cat >"$candidate" <<'EOF'
 #!/bin/sh
 set -eu
 case " $* " in
-    *' --version '*) printf '%s\n' 'krisis 0.4.3' ;;
+    *' --version '*) printf '%s\n' 'krisis __KRISIS_VERSION__' ;;
     *' doctor '*)
         [ -z "${KRISIS_TEST_LEAK_ME:-}" ] || exit 70
         database="$HOME/Library/Application Support/Decisions/decisions.db"
@@ -33,6 +45,9 @@ case " $* " in
     *) [ -z "${KRISIS_TEST_LEAK_ME:-}" ] || exit 70; [ -z "${KRISIS_CANDIDATE_CAPTURE:-}" ] || printf '%s\n' "$*" >>"$KRISIS_CANDIDATE_CAPTURE" ;;
 esac
 EOF
+sed "s/__KRISIS_VERSION__/$krisis_version/g" "$candidate" \
+    >"$candidate.versioned"
+mv "$candidate.versioned" "$candidate"
 
 cat >"$clockwork" <<'EOF'
 #!/bin/sh
@@ -197,7 +212,7 @@ grep -Fx 'operator-owned maintenance' \
 [ "$(wc -l <"$clockwork_capture")" -eq "$unrelated_capture_lines" ]
 
 deploy >"$temporary/prepare.out"
-grep -F 'prepared krisis 0.4.3' "$temporary/prepare.out" >/dev/null
+grep -F "prepared krisis $krisis_version" "$temporary/prepare.out" >/dev/null
 [ -f "$home/Library/Application Support/Decisions/.clockwork-maintenance" ]
 [ -f "$home/Library/Application Support/Decisions/install/krisis-maintenance-hold.txt" ]
 [ ! -e "$home/Library/Application Support/Decisions/install/current" ]
@@ -231,12 +246,13 @@ installed_deploy() {
 }
 
 installed_deploy >"$temporary/installed-prepare.out"
-grep -F 'prepared krisis 0.4.3' "$temporary/installed-prepare.out" >/dev/null
+grep -F "prepared krisis $krisis_version" \
+    "$temporary/installed-prepare.out" >/dev/null
 
 KRISIS_TEST_LEAK_ME=forbidden installed_deploy \
     --final-cutover --keep-maintenance \
     >"$temporary/deploy.out"
-grep -F 'installed krisis 0.4.3' "$temporary/deploy.out" >/dev/null
+grep -F "installed krisis $krisis_version" "$temporary/deploy.out" >/dev/null
 grep -F 'authenticated maintenance hold retained' "$temporary/deploy.out" >/dev/null
 [ -L "$home/.local/bin/krisis" ]
 [ ! -e "$home/.local/bin/decisions" ]
@@ -610,7 +626,15 @@ IFS='|' read -r legacy_active_enabled _ <"$legacy_active_binding"
 # successor, then all newly staged releases carry the authenticated copies.
 first_manifest_backup="$temporary/first-manifest.backup"
 cp "$first_release/manifest.txt" "$first_manifest_backup"
-sed 's/^version=0\.4\.3$/version=0.4.1/' "$first_manifest_backup" \
+awk -v current="$krisis_version" '
+    $0 == "version=" current {
+        print "version=0.4.1"
+        changed = 1
+        next
+    }
+    { print }
+    END { if (changed != 1) exit 1 }
+' "$first_manifest_backup" \
     >"$temporary/first-manifest.legacy"
 install -m 0444 "$temporary/first-manifest.legacy" \
     "$first_release/manifest.txt"
