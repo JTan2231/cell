@@ -89,6 +89,7 @@ cat >"$candidate_template" <<'EOF'
 #!/bin/sh
 set -eu
 config=
+reject_unmigrated_schema_four=__REJECT_UNMIGRATED_SCHEMA_FOUR__
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --version)
@@ -135,6 +136,12 @@ case "$command" in
     inbox)
         case "${1:-}" in
             status)
+                if [ "$reject_unmigrated_schema_four" -eq 1 ] \
+                    && [ -f "$state/schema-4" ] \
+                    && [ ! -f "$state/migrated" ]
+                then
+                    exit 5
+                fi
                 queued=$(find "$state/spool/queued" -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
                     | wc -l | tr -d ' ')
                 processing=$(find "$state/spool/processing" -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
@@ -203,7 +210,9 @@ case "$command" in
         ;;
 esac
 EOF
-sed "s/__ANNALS_VERSION__/$annals_version/g" \
+sed \
+    -e "s/__ANNALS_VERSION__/$annals_version/g" \
+    -e 's/__REJECT_UNMIGRATED_SCHEMA_FOUR__/0/g' \
     "$candidate_template" >"$candidate"
 chmod 0755 "$candidate"
 
@@ -397,7 +406,9 @@ deploy --no-start >/dev/null
 [ ! -e "$launchctl_log" ]
 
 mismatched_candidate="$temporary/annals-mismatched-provider"
-sed "s/__ANNALS_VERSION__/$annals_mismatch_version/g" \
+sed \
+    -e "s/__ANNALS_VERSION__/$annals_mismatch_version/g" \
+    -e 's/__REJECT_UNMIGRATED_SCHEMA_FOUR__/0/g' \
     "$candidate_template" \
     >"$mismatched_candidate"
 chmod 0755 "$mismatched_candidate"
@@ -570,7 +581,15 @@ grep -Fx "codex = \"$nucleus\"" "$state/config.toml" >/dev/null
 printf '%s\n' legacy-normal >"$state/usage.db"
 printf '%s\n' legacy-normal-wal >"$state/usage.db-wal"
 printf '%s\n' legacy-normal-shm >"$state/usage.db-shm"
-printf '%s\n' '# candidate update' >>"$candidate"
+# Model the real schema-four-to-five boundary: the old installed binary can
+# inspect the existing library, while the candidate refuses to open it until
+# its later guarded migration has completed.
+: >"$state/schema-4"
+sed \
+    -e "s/__ANNALS_VERSION__/$annals_version/g" \
+    -e 's/__REJECT_UNMIGRATED_SCHEMA_FOUR__/1/g' \
+    "$candidate_template" >"$candidate"
+chmod 0755 "$candidate"
 second_candidate_hash=$(shasum -a 256 "$candidate" | awk '{print $1}')
 [ "$first_candidate_hash" != "$second_candidate_hash" ]
 second_output=$(deploy --no-start)

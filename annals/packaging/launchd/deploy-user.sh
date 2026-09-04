@@ -1074,7 +1074,7 @@ if [ ! -e "$LIBRARY_PATH" ]; then
         run_with_installation_environment "$binary_path" --config "$temporary_config" init >/dev/null
     fi
 fi
-run_with_installation_environment "$binary_path" --config "$temporary_config" inbox status >/dev/null
+run_active_annals inbox status >/dev/null
 
 binary_hash=$(shasum -a 256 "$binary_path" | awk '{print $1}')
 usage_binary_hash=$(shasum -a 256 "$usage_binary_path" | awk '{print $1}')
