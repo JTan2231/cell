@@ -504,8 +504,8 @@ validate_release_tree() {
         relative=${release_file#"$release_tree/"}
         case "$release_format:$relative" in
             4:manifest.txt|4:libexec/krisis|4:bin/krisis|4:bin/krisis-observer|4:package/deploy-user.sh|4:package/uninstall-user.sh|4:package/krisis-observer.clockwork.toml.in|4:package/hooks.json|4:share/chancery/krisis/*|4:share/chancery/decisions/*) ;;
-            2:manifest.txt|2:libexec/decisions|2:bin/decisions|2:bin/decisions-daily-email|2:bin/decisions-observer|2:package/deploy-user.sh|2:package/uninstall-user.sh|2:package/hooks.json|2:package/org.decisions.daily-email.plist|2:package/org.decisions.observer.plist|2:share/chancery/decisions/*) ;;
-            3:manifest.txt|3:libexec/decisions|3:bin/decisions|3:bin/decisions-daily-email|3:bin/decisions-observer|3:package/deploy-user.sh|3:package/uninstall-user.sh|3:package/hooks.json|3:package/decisions-daily-email.clockwork.toml.in|3:package/decisions-observer.clockwork.toml.in|3:share/chancery/decisions/*) ;;
+            2:manifest.txt|2:libexec/decisions|2:bin/decisions|2:bin/decisions-daily-email|2:bin/decisions-observer|2:package/decisions|2:package/decisions-daily-email|2:package/decisions-observer|2:package/deploy-user.sh|2:package/uninstall-user.sh|2:package/hooks.json|2:package/org.decisions.daily-email.plist|2:package/org.decisions.observer.plist|2:share/chancery/decisions/*) ;;
+            3:manifest.txt|3:libexec/decisions|3:bin/decisions|3:bin/decisions-daily-email|3:bin/decisions-observer|3:package/decisions|3:package/decisions-daily-email|3:package/decisions-observer|3:package/deploy-user.sh|3:package/uninstall-user.sh|3:package/hooks.json|3:package/decisions-daily-email.clockwork.toml.in|3:package/decisions-observer.clockwork.toml.in|3:share/chancery/decisions/*) ;;
             *) exit 1 ;;
         esac
     done; then

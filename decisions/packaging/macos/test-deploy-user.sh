@@ -402,8 +402,15 @@ done
 printf '%s\n' '#!/bin/sh' 'exit 0' >"$legacy_stage/libexec/decisions"
 printf '%s\n' '#!/bin/sh' 'exit 0' >"$legacy_stage/package/deploy-user.sh"
 printf '%s\n' '#!/bin/sh' 'exit 0' >"$legacy_stage/package/uninstall-user.sh"
+cp "$legacy_stage/bin/decisions" "$legacy_stage/package/decisions"
+cp "$legacy_stage/bin/decisions-daily-email" \
+    "$legacy_stage/package/decisions-daily-email"
+cp "$legacy_stage/bin/decisions-observer" \
+    "$legacy_stage/package/decisions-observer"
 chmod 0755 "$legacy_stage/libexec/decisions" "$legacy_stage/package/deploy-user.sh" \
-    "$legacy_stage/package/uninstall-user.sh"
+    "$legacy_stage/package/uninstall-user.sh" "$legacy_stage/package/decisions" \
+    "$legacy_stage/package/decisions-daily-email" \
+    "$legacy_stage/package/decisions-observer"
 printf '%s\n' 'legacy daily definition template' \
     >"$legacy_stage/package/decisions-daily-email.clockwork.toml.in"
 printf '%s\n' 'legacy observer definition template' \
