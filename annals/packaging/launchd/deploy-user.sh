@@ -1501,8 +1501,7 @@ if [ "$fresh_state" -eq 1 ]; then
 elif [ "$library_existed" -eq 1 ]; then
     if [ "$old_current" != "$new_current" ]; then
         backup_path="$STATE_DIR/backups/pre-update-$release_id-$$.db"
-        run_with_installation_environment "$binary_path" \
-            --config "$temporary_config" --quiet backup "$backup_path"
+        run_active_annals --quiet backup "$backup_path"
         library_backup_ready=1
         library_migration_may_need_rollback=1
     fi

@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "annals"
-version = "0.15.2"
+version = "0.15.3"
 dependencies = [
  "base64",
  "clap",

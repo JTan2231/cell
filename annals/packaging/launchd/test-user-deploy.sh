@@ -204,6 +204,12 @@ case "$command" in
         esac
         ;;
     backup)
+        if [ "$reject_unmigrated_schema_four" -eq 1 ] \
+            && [ -f "$state/schema-4" ] \
+            && [ ! -f "$state/migrated" ]
+        then
+            exit 5
+        fi
         cp "$state/annals.db" "$1"
         ;;
     migrate)
