@@ -529,6 +529,7 @@ validate_release_selector() {
     [ -f "$selected_manifest" ] && [ ! -L "$selected_manifest" ] || fail "selected release has no manifest: $selector"
     selected_format=$(sed -n '1s/^format=//p' "$selected_manifest")
     selected_release_id=$(sed -n '2s/^release_id=//p' "$selected_manifest")
+    selected_version=$(sed -n '3s/^version=//p' "$selected_manifest")
     [ "$selected_release_id" = "${selector#releases/}" ] || fail "selected release manifest does not match: $selector"
     validate_release_tree "$selected_release" "$selected_format"
     case "$selected_format" in
@@ -546,8 +547,19 @@ validate_release_selector() {
             [ "$(shasum -a 256 "$selected_release/libexec/krisis" | awk '{print $1}')" = "$selected_binary_hash" ] || fail "selected Krisis binary is tampered: $selector"
             [ "$(shasum -a 256 "$selected_release/bin/krisis" | awk '{print $1}')" = "$selected_frontend_hash" ] || fail "selected Krisis frontend is tampered: $selector"
             [ "$(shasum -a 256 "$selected_release/bin/krisis-observer" | awk '{print $1}')" = "$selected_observer_runner_hash" ] || fail "selected Krisis runner is tampered: $selector"
-            [ "$(shasum -a 256 "$selected_release/package/krisis" | awk '{print $1}')" = "$selected_frontend_hash" ] || fail "selected packaged Krisis frontend is tampered: $selector"
-            [ "$(shasum -a 256 "$selected_release/package/krisis-observer" | awk '{print $1}')" = "$selected_observer_runner_hash" ] || fail "selected packaged Krisis runner is tampered: $selector"
+            if [ -f "$selected_release/package/krisis" ] \
+                && [ -f "$selected_release/package/krisis-observer" ]; then
+                [ "$(shasum -a 256 "$selected_release/package/krisis" | awk '{print $1}')" = "$selected_frontend_hash" ] || fail "selected packaged Krisis frontend is tampered: $selector"
+                [ "$(shasum -a 256 "$selected_release/package/krisis-observer" | awk '{print $1}')" = "$selected_observer_runner_hash" ] || fail "selected packaged Krisis runner is tampered: $selector"
+            elif [ ! -e "$selected_release/package/krisis" ] \
+                && [ ! -e "$selected_release/package/krisis-observer" ]; then
+                case "$selected_version" in
+                    0.4.0|0.4.1) ;;
+                    *) fail "selected packaged Krisis executables are missing: $selector" ;;
+                esac
+            else
+                fail "selected packaged Krisis executables are incomplete: $selector"
+            fi
             [ "$(shasum -a 256 "$selected_release/package/krisis-observer.clockwork.toml.in" | awk '{print $1}')" = "$selected_observer_definition_hash" ] || fail "selected Krisis definition is tampered: $selector"
             [ "$(shasum -a 256 "$selected_release/package/hooks.json" | awk '{print $1}')" = "$selected_hooks_hash" ] || fail "selected Krisis hooks are tampered: $selector"
             [ "$(shasum -a 256 "$selected_release/package/deploy-user.sh" | awk '{print $1}')" = "$selected_deployer_hash" ] || fail "selected Krisis deployer is tampered: $selector"

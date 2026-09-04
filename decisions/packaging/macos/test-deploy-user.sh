@@ -23,7 +23,7 @@ cat >"$candidate" <<'EOF'
 #!/bin/sh
 set -eu
 case " $* " in
-    *' --version '*) printf '%s\n' 'krisis 0.4.1' ;;
+    *' --version '*) printf '%s\n' 'krisis 0.4.3' ;;
     *' doctor '*)
         [ -z "${KRISIS_TEST_LEAK_ME:-}" ] || exit 70
         database="$HOME/Library/Application Support/Decisions/decisions.db"
@@ -197,7 +197,7 @@ grep -Fx 'operator-owned maintenance' \
 [ "$(wc -l <"$clockwork_capture")" -eq "$unrelated_capture_lines" ]
 
 deploy >"$temporary/prepare.out"
-grep -F 'prepared krisis 0.4.1' "$temporary/prepare.out" >/dev/null
+grep -F 'prepared krisis 0.4.3' "$temporary/prepare.out" >/dev/null
 [ -f "$home/Library/Application Support/Decisions/.clockwork-maintenance" ]
 [ -f "$home/Library/Application Support/Decisions/install/krisis-maintenance-hold.txt" ]
 [ ! -e "$home/Library/Application Support/Decisions/install/current" ]
@@ -231,12 +231,12 @@ installed_deploy() {
 }
 
 installed_deploy >"$temporary/installed-prepare.out"
-grep -F 'prepared krisis 0.4.1' "$temporary/installed-prepare.out" >/dev/null
+grep -F 'prepared krisis 0.4.3' "$temporary/installed-prepare.out" >/dev/null
 
 KRISIS_TEST_LEAK_ME=forbidden installed_deploy \
     --final-cutover --keep-maintenance \
     >"$temporary/deploy.out"
-grep -F 'installed krisis 0.4.1' "$temporary/deploy.out" >/dev/null
+grep -F 'installed krisis 0.4.3' "$temporary/deploy.out" >/dev/null
 grep -F 'authenticated maintenance hold retained' "$temporary/deploy.out" >/dev/null
 [ -L "$home/.local/bin/krisis" ]
 [ ! -e "$home/.local/bin/decisions" ]
@@ -605,8 +605,24 @@ IFS='|' read -r legacy_active_enabled _ <"$legacy_active_binding"
 
 # A failure after selecting a new candidate restores the exact prior digest,
 # current selector, hook, and enabled state while retaining maintenance.
+# Krisis 0.4.0 and 0.4.1 did not stage release-owned executable siblings.
+# A newer deployer accepts that exact historical omission while preparing the
+# successor, then all newly staged releases carry the authenticated copies.
+first_manifest_backup="$temporary/first-manifest.backup"
+cp "$first_release/manifest.txt" "$first_manifest_backup"
+sed 's/^version=0\.4\.3$/version=0.4.1/' "$first_manifest_backup" \
+    >"$temporary/first-manifest.legacy"
+install -m 0444 "$temporary/first-manifest.legacy" \
+    "$first_release/manifest.txt"
+rm -f "$first_release/package/krisis" \
+    "$first_release/package/krisis-observer"
 printf '%s\n' '# second candidate bytes' >>"$candidate"
 deploy >"$temporary/prepare-second.out"
+install -m 0444 "$first_manifest_backup" "$first_release/manifest.txt"
+install -m 0755 "$first_release/bin/krisis" \
+    "$first_release/package/krisis"
+install -m 0755 "$first_release/bin/krisis-observer" \
+    "$first_release/package/krisis-observer"
 second_digest=$(awk '{print $NF}' "$temporary/prepare-second.out")
 [ "$second_digest" != "$first_digest" ]
 if KRISIS_FAIL_VERIFY_SWITCH=1 deploy --final-cutover >"$temporary/fail-switch.out" 2>"$temporary/fail-switch.err"; then
