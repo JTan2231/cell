@@ -1462,14 +1462,6 @@ run_with_installation_environment "$usage_binary_path" doctor \
 # deployment transaction so a pre-commit rollback can still restore the prior release intact.
 stage_legacy_usage_state
 
-if [ "$no_start" -eq 0 ]; then
-    smoke_json=$(run_with_installation_environment "$binary_path" \
-        --config "$temporary_config" --json inbox run) \
-        || fail 'candidate cannot read the quiesced inbox'
-    printf '%s\n' "$smoke_json" | grep -q '"stopped_for_maintenance":true' \
-        || fail 'candidate did not honor inbox maintenance'
-fi
-
 new_current="releases/$release_id"
 if [ "$fresh_state" -eq 1 ]; then
     generation_name="pre-fresh-$release_id-$(date -u '+%Y%m%dT%H%M%SZ')-$$"
@@ -1518,6 +1510,14 @@ elif [ "$library_existed" -eq 1 ]; then
         --config "$temporary_config" --quiet migrate
     run_with_installation_environment "$binary_path" \
         --config "$temporary_config" inbox status >/dev/null
+fi
+
+if [ "$no_start" -eq 0 ]; then
+    smoke_json=$(run_with_installation_environment "$binary_path" \
+        --config "$temporary_config" --json inbox run) \
+        || fail 'candidate cannot read the quiesced inbox'
+    printf '%s\n' "$smoke_json" | grep -q '"stopped_for_maintenance":true' \
+        || fail 'candidate did not honor inbox maintenance'
 fi
 
 switched=1

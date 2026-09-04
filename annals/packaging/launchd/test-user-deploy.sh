@@ -162,6 +162,12 @@ case "$command" in
                     "$locked" "$queued" "$processing" "$paused" "$maintenance"
                 ;;
             run)
+                if [ "$reject_unmigrated_schema_four" -eq 1 ] \
+                    && [ -f "$state/schema-4" ] \
+                    && [ ! -f "$state/migrated" ]
+                then
+                    exit 5
+                fi
                 [ -f "$state/spool/.maintenance" ]
                 [ -f "$state/spool/.paused" ]
                 printf '%s\n' \
@@ -778,7 +784,7 @@ running_release=$(readlink "$state/install/current")
 [ "$(tail -n 1 "$state/usage-doctor.log")" = \
     "doctor current=$second_release" ]
 [ "$(tail -n 8 "$state/candidate-commands.log" | tr '\n' ' ')" = \
-    'inbox status inbox status inbox run backup migrate inbox status stats inbox status ' ]
+    'inbox status inbox status backup migrate inbox status inbox run stats inbox status ' ]
 
 # A same-key selected digest is not ownership. Even while disabled, a
 # definition that is not the exact current Annals release must remain
