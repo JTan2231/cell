@@ -597,6 +597,7 @@ printf '%s\n' legacy-normal-shm >"$state/usage.db-shm"
 # inspect the existing library, while the candidate refuses to open it until
 # its later guarded migration has completed.
 : >"$state/schema-4"
+rm -f "$state/migrated"
 sed \
     -e "s/__ANNALS_VERSION__/$annals_version/g" \
     -e 's/__REJECT_UNMIGRATED_SCHEMA_FOUR__/1/g' \
