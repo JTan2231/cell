@@ -3,7 +3,7 @@
   "provider": {
     "id": "annals-usage",
     "name": "Annals Usage",
-    "release": "0.4.3"
+    "release": "0.4.4"
   },
   "promise_scope": {
     "authoritative_for": [
