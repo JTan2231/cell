@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::OsStr;
+use std::fmt::Write as _;
 use std::fs::{self, FileTimes, OpenOptions};
 use std::io;
 use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
@@ -13,6 +14,7 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 use nucleus_daemon::{ServeConfig, serve};
+use rusqlite::Connection;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -169,6 +171,33 @@ impl Installation {
         Ok(())
     }
 
+    fn init_decisions(&self) -> TestResult<String> {
+        let initialized = self.json_ok(["init", "--kind", "decisions"])?;
+        let library_id = initialized["library_id"]
+            .as_str()
+            .ok_or("decisions init omitted library_id")?
+            .to_owned();
+        let mut config = fs::read_to_string(&self.config)?;
+        write!(
+            config,
+            "\n[decision_feed]\nexpected_library_id = {library_id:?}\n"
+        )?;
+        fs::write(&self.config, config)?;
+        Ok(library_id)
+    }
+
+    fn accept_decision(&self, key: &str, source: &Path) -> TestResult<Value> {
+        self.json_ok([
+            OsStr::new("inbox"),
+            OsStr::new("accept"),
+            OsStr::new("--producer"),
+            OsStr::new("krisis"),
+            OsStr::new("--key"),
+            OsStr::new(key),
+            source.as_os_str(),
+        ])
+    }
+
     fn incoming(&self, name: &str, bytes: &[u8], mode: u32) -> TestResult<Material> {
         let incoming = self.inbox.join("incoming");
         fs::create_dir_all(&incoming)?;
@@ -272,6 +301,27 @@ fn toml_string(path: &Path) -> String {
             .to_string()
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
+    )
+}
+
+fn decision_account(key: &str, detail: &str) -> String {
+    format!(
+        concat!(
+            "# Decision\n\nShared inbox claim.\n\n",
+            "## Authority\n\n> preserve the accepted decision\n\n",
+            "## Context\n\n{detail}\n\n",
+            "## Action\n\nDispatch only the accepted account.\n\n",
+            "## Result\n\nUnknown.\n\n",
+            "## Source\n\n```json\n",
+            "{{\"schema_version\":1,\"decision_id\":{key},",
+            "\"occurred_at\":1788436800,\"occurred_at_precision\":\"second\",",
+            "\"capture_rule_version\":\"krisis/1\",",
+            "\"authority\":{{\"host_id\":\"host\",\"thread_id\":\"thread\",",
+            "\"turn_id\":\"turn\",\"item_id\":\"item\",",
+            "\"span\":{{\"start\":4,\"end\":42}}}}}}\n```\n",
+        ),
+        detail = detail,
+        key = serde_json::to_string(key).unwrap_or_default(),
     )
 }
 
@@ -494,6 +544,157 @@ fn registered_job_id(summary: &Value, source_name: &str) -> TestResult<String> {
 fn assert_work_summary(installation: &Installation, work: &str, expected: &str) -> TestResult {
     let shown = installation.json_ok(["change", "show", "--work", work])?;
     assert_eq!(shown["reconciliation"]["summary"], expected);
+    Ok(())
+}
+
+#[test]
+fn accepted_decision_dispatches_once_and_exact_replay_starts_no_second_delivery() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init_decisions()?;
+    let source = installation.directory.path().join("decision.md");
+    let account = decision_account("decision-dispatch", "Test accepted dispatch and replay.");
+    fs::write(&source, &account)?;
+
+    let accepted = installation.accept_decision("decision-dispatch", &source)?;
+    let job_id = accepted["job_id"]
+        .as_str()
+        .ok_or("acceptance omitted job_id")?
+        .to_owned();
+    assert_eq!(accepted["acceptance"], "created");
+
+    let run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(run["attempted"], 1);
+    assert_eq!(run["applied"], 1);
+    assert_eq!(run["failed"], 0);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
+    let receipt = archived_receipt(&installation.inbox, "done", &job_id)?;
+    assert_eq!(receipt["state"], "done");
+    let producer_path = installation
+        .inbox
+        .join("done")
+        .join(&job_id)
+        .join("producer.json");
+    let producer: Value = serde_json::from_slice(&fs::read(producer_path)?)?;
+    assert_eq!(producer["producer"], "krisis");
+    assert_eq!(producer["key"], "decision-dispatch");
+    assert_eq!(producer["job_id"], job_id);
+
+    let replayed = installation.accept_decision("decision-dispatch", &source)?;
+    assert_eq!(replayed["acceptance"], "replayed");
+    assert_eq!(replayed["job_id"], job_id);
+    let second_run = installation.json_ok(["inbox", "run"])?;
+    assert_eq!(second_run["attempted"], 0);
+    assert_eq!(second_run["applied"], 0);
+    assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
+
+    let connection = Connection::open(&installation.library)?;
+    for (table, expected) in [
+        ("decision_account_acceptances", 1_i64),
+        ("works", 1),
+        ("ingestions", 1),
+        ("model_runs", 1),
+    ] {
+        let count = connection.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get::<_, i64>(0)
+        })?;
+        assert_eq!(count, expected, "unexpected {table} count");
+    }
+    let retained: String = connection.query_row("SELECT text FROM works", [], |row| row.get(0))?;
+    assert_eq!(retained, account);
+    Ok(())
+}
+
+#[test]
+fn failed_decision_stays_terminal_and_retry_creates_a_linked_child() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init_decisions()?;
+    let source = installation.directory.path().join("decision.md");
+    fs::write(
+        &source,
+        decision_account(
+            "decision-retry",
+            "Test explicit recovery of a failed account.",
+        ),
+    )?;
+    let accepted = installation.accept_decision("decision-retry", &source)?;
+    let original_job = accepted["job_id"]
+        .as_str()
+        .ok_or("acceptance omitted job_id")?
+        .to_owned();
+
+    fail_next_inbox_job(&installation)?;
+    let original_path = installation
+        .inbox
+        .join("failed")
+        .join(&original_job)
+        .join("job.json");
+    let original_before = fs::read(&original_path)?;
+    let original_receipt: Value = serde_json::from_slice(&original_before)?;
+    assert_eq!(original_receipt["state"], "failed");
+    assert_eq!(original_receipt["attempts"], 1);
+    let producer: Value = serde_json::from_slice(&fs::read(
+        installation
+            .inbox
+            .join("failed")
+            .join(&original_job)
+            .join("producer.json"),
+    )?)?;
+    assert_eq!(producer["producer"], "krisis");
+    assert_eq!(producer["key"], "decision-retry");
+    assert_eq!(producer["job_id"], original_job);
+
+    installation.json_ok(["inbox", "pause"])?;
+    let retried = installation.json_ok([
+        "inbox",
+        "retry",
+        "start",
+        "--from",
+        &original_job,
+        "--through",
+        &original_job,
+        "--reason",
+        "retry a bounded model failure",
+    ])?;
+    assert_eq!(retried["summary"]["selected"], 1);
+    assert_eq!(retried["summary"]["attempted"], 1);
+    assert_eq!(retried["summary"]["applied"], 1);
+    let child_job = retried["items"][0]["child_job_id"]
+        .as_str()
+        .ok_or("retry omitted child_job_id")?;
+    assert_ne!(child_job, original_job);
+    assert_eq!(retried["items"][0]["outcome"], "applied");
+    assert_eq!(fs::read(&original_path)?, original_before);
+
+    let child_receipt = archived_receipt(&installation.inbox, "done", child_job)?;
+    assert_eq!(child_receipt["state"], "done");
+    assert_eq!(child_receipt["retry_of_job_id"], original_job);
+    assert!(child_receipt["retry_of_ingestion_id"].is_number());
+    assert!(child_receipt["retry_event_id"].is_number());
+    assert_eq!(fs::read_to_string(&installation.counter)?, "2\n");
+
+    let connection = Connection::open(&installation.library)?;
+    assert_eq!(
+        connection.query_row(
+            "SELECT COUNT(*) FROM decision_account_acceptances",
+            [],
+            |row| row.get::<_, i64>(0),
+        )?,
+        1
+    );
+    assert_eq!(
+        connection.query_row("SELECT COUNT(*) FROM works", [], |row| row.get::<_, i64>(0))?,
+        1
+    );
+    assert_eq!(
+        connection.query_row("SELECT COUNT(*) FROM ingestions", [], |row| row
+            .get::<_, i64>(0))?,
+        2
+    );
+    assert_eq!(
+        connection.query_row("SELECT COUNT(*) FROM model_runs", [], |row| row
+            .get::<_, i64>(0))?,
+        2
+    );
     Ok(())
 }
 

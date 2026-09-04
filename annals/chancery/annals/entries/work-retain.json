@@ -56,7 +56,7 @@
       {"status": "unsupported", "statement": "This is not a note, summary, action-backlog, truth-adjudication, or model-assisted interpretation surface."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The caller selects a configured readable Annals library; retention requires it to be writable and requires nonblank UTF-8 bytes plus an explicit label when reading standard input."},
+      {"status": "declared", "statement": "The caller selects a configured readable Annals library whose immutable role is general; retention requires it to be writable and requires nonblank UTF-8 bytes plus an explicit label when reading standard input."},
       {"status": "declared", "statement": "A requested work label must not already identify different retained bytes."}
     ],
     "inputs": [

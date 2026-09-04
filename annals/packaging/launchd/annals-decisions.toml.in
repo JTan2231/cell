@@ -1,0 +1,14 @@
+library = "__ANNALS_DECISIONS_STATE__/annals.db"
+
+[inbox]
+root = "__ANNALS_DECISIONS_STATE__/spool"
+settle_seconds = 60
+minimum_available_bytes = 7_000_000_000
+
+[decision_feed]
+expected_library_id = "__ANNALS_DECISIONS_LIBRARY_ID__"
+
+[liaison]
+quality = "high"
+nucleus_socket = "__NUCLEUS_SOCKET__"
+# model = "gpt-5.6-sol"

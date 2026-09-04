@@ -30,8 +30,13 @@ else
     exit 1
 fi
 
-if [ ! -x "$HOME/.local/bin/decisions" ]; then
-    printf '%s\n' 'semantics worker: Decisions executable is unavailable' >&2
+if [ ! -x "$HOME/.local/bin/annals" ]; then
+    printf '%s\n' 'semantics worker: Annals executable is unavailable' >&2
+    exit 1
+fi
+annals_config="$HOME/Library/Application Support/Annals/decisions/config.toml"
+if [ ! -f "$annals_config" ] || [ -L "$annals_config" ]; then
+    printf '%s\n' 'semantics worker: Annals decisions config is unavailable' >&2
     exit 1
 fi
 
@@ -39,6 +44,7 @@ exec /usr/bin/env -i \
     HOME="$HOME" \
     PATH=/usr/bin:/bin:/usr/sbin:/sbin \
     CONVERSATIONS_CODEX="$codex_path" \
-    SEMANTICS_DECISIONS="$HOME/.local/bin/decisions" \
+    SEMANTICS_ANNALS="$HOME/.local/bin/annals" \
+    SEMANTICS_ANNALS_CONFIG="$annals_config" \
     SEMANTICS_DATABASE="$HOME/Library/Application Support/Semantics/semantics.db" \
     "$runner_dir/../libexec/semantics" --json intake run

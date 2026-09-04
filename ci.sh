@@ -6,11 +6,11 @@ ROOT=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 
 usage() {
     printf '%s\n' \
-        'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver|email|conversations|decisions|semantics|geste|pratica|clockwork|crm]...'
+        'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver|email|conversations|krisis|semantics|geste|pratica|clockwork|crm]...'
 }
 
 if [ "$#" -eq 0 ]; then
-    set -- nucleus annals todo chancery weaver email conversations decisions semantics geste pratica clockwork crm
+    set -- nucleus annals todo chancery weaver email conversations krisis semantics geste pratica clockwork crm
 fi
 
 nucleus_selected=0
@@ -20,7 +20,7 @@ chancery_selected=0
 weaver_selected=0
 email_selected=0
 conversations_selected=0
-decisions_selected=0
+krisis_selected=0
 semantics_selected=0
 geste_selected=0
 pratica_selected=0
@@ -35,7 +35,7 @@ for project in "$@"; do
         weaver) weaver_selected=1 ;;
         email) email_selected=1 ;;
         conversations) conversations_selected=1 ;;
-        decisions) decisions_selected=1 ;;
+        krisis|decisions) krisis_selected=1 ;;
         semantics) semantics_selected=1 ;;
         geste) geste_selected=1 ;;
         pratica) pratica_selected=1 ;;
@@ -50,10 +50,14 @@ done
 
 for project in "$@"; do
     printf '==> %s CI\n' "$project"
-    "$ROOT/$project/ci.sh"
+    if [ "$project" = krisis ]; then
+        "$ROOT/decisions/ci.sh"
+    else
+        "$ROOT/$project/ci.sh"
+    fi
 done
 
-if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$decisions_selected$semantics_selected$geste_selected$pratica_selected$clockwork_selected$crm_selected" = \
+if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$krisis_selected$semantics_selected$geste_selected$pratica_selected$clockwork_selected$crm_selected" = \
     1111111111111 ]
 then
     printf '%s\n' '==> integrated Chancery source catalog'
@@ -77,7 +81,9 @@ then
         ln -s "$ROOT/weaver/chancery" "$catalog_registry/weaver"
         ln -s "$ROOT/email/chancery" "$catalog_registry/email"
         ln -s "$ROOT/conversations/chancery" "$catalog_registry/conversations"
-        ln -s "$ROOT/decisions/chancery" "$catalog_registry/decisions"
+        ln -s "$ROOT/decisions/chancery" "$catalog_registry/krisis"
+        ln -s "$ROOT/decisions/chancery-legacy" \
+            "$catalog_registry/decisions"
         ln -s "$ROOT/semantics/chancery" "$catalog_registry/semantics"
         ln -s "$ROOT/geste/chancery" "$catalog_registry/geste"
         ln -s "$ROOT/pratica/chancery" "$catalog_registry/pratica"
@@ -154,8 +160,8 @@ then
                 normalized_entries=$((normalized_entries + 1))
             done
         done
-        [ "$normalized_entries" -eq 51 ] || {
-            printf 'ci.sh: expected 51 normalized entries; found %s\n' \
+        [ "$normalized_entries" -eq 52 ] || {
+            printf 'ci.sh: expected 52 normalized entries; found %s\n' \
                 "$normalized_entries" >&2
             exit 1
         }

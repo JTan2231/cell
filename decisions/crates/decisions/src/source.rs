@@ -10,12 +10,14 @@ use crate::error::{AppError, AppResult};
 use crate::model::{MessageRole, Precision, SourceMessage, ThreadTranscript};
 use crate::store::Store;
 
+const MAX_CLASSIFICATION_MESSAGES: usize = 64;
+const MAX_CLASSIFICATION_TEXT_BYTES: usize = 262_144;
+
 #[derive(Debug)]
 pub(crate) struct ObservationSource {
     pub(crate) transcript: ThreadTranscript,
     pub(crate) authorities: Vec<SourceMessage>,
     pub(crate) source_digest: String,
-    pub(crate) file_change_count: usize,
     pub(crate) source_completed_at: i64,
 }
 
@@ -87,9 +89,6 @@ pub(crate) fn reconcile_window(
             .map_err(source_error)?;
         for activity in activities {
             activities_scanned += 1;
-            if !activity.has_completed_file_change() {
-                continue;
-            }
             if activity
                 .turn
                 .completed_at
@@ -105,7 +104,7 @@ pub(crate) fn reconcile_window(
             .turn
             .messages
             .iter()
-            .filter(|message| message.role == Role::User)
+            .filter(|message| message.role == Role::User && !message.text.trim().is_empty())
             .collect::<Vec<_>>();
         if user_messages.is_empty() {
             continue;
@@ -175,29 +174,17 @@ fn observation_from_activity(
     })?;
     let host_id = activity.turn.reference.host_id.clone();
     let thread_id = activity.turn.reference.thread_id.clone();
-    let file_change_count =
-        activity
-            .completed_file_changes
-            .iter()
-            .try_fold(0_usize, |total, change| {
-                total.checked_add(change.change_count).ok_or_else(|| {
-                    AppError::new(
-                        "source_activity_invalid",
-                        "completed file-change count exceeds the supported range",
-                    )
-                })
-            })?;
     let target_users = activity
         .turn
         .messages
         .iter()
-        .filter(|message| message.role == Role::User)
+        .filter(|message| message.role == Role::User && !message.text.trim().is_empty())
         .collect::<Vec<_>>();
     let latest_known_authority = target_users
         .iter()
         .filter_map(|message| message.timestamp)
         .max();
-    if file_change_count == 0 || target_users.is_empty() {
+    if target_users.is_empty() {
         return Ok(ObservationLoad::NotEligible {
             host_id,
             thread_id,
@@ -250,14 +237,24 @@ fn observation_from_activity(
                 "the completed authority turn disappeared while its context was read",
             )
         })?;
+    verify_authorities(&conversation.turns[target_index].messages, &authorities)?;
     let messages = if scope_level == 0 {
         bounded_observation_messages(&conversation.turns, target_index, &activity, &authorities)?
     } else if scope_level == 1 {
-        conversation.turns[..=target_index]
+        let prefix = conversation.turns[..=target_index]
             .iter()
             .flat_map(|turn| turn.messages.iter())
             .map(normalize_message)
-            .collect::<AppResult<Vec<_>>>()?
+            .collect::<AppResult<Vec<_>>>()?;
+        bounded_expanded_messages(
+            prefix,
+            &bounded_observation_messages(
+                &conversation.turns,
+                target_index,
+                &activity,
+                &authorities,
+            )?,
+        )?
     } else {
         return Err(AppError::new(
             "observation_scope_invalid",
@@ -277,7 +274,6 @@ fn observation_from_activity(
         },
         authorities,
         source_digest,
-        file_change_count,
         source_completed_at,
     }))
 }
@@ -320,12 +316,26 @@ fn bounded_observation_messages(
         .messages
         .iter()
         .rev()
-        .find(|message| message.role == Role::Assistant && !message.text.trim().is_empty())
-        .map(|message| message.reference.item_id.as_str());
+        .find(|message| message.role == Role::Assistant && !message.text.trim().is_empty());
     if let Some(result) = result {
-        selected_context_ids.insert(result);
+        let verified = prefix
+            .iter()
+            .find(|message| message.reference.item_id == result.reference.item_id)
+            .ok_or_else(|| {
+                AppError::new(
+                    "conversation_source_incomplete",
+                    "the completed-turn result disappeared while its context was read",
+                )
+            })?;
+        if !same_source_message(&normalize_message(result)?, &normalize_message(verified)?) {
+            return Err(AppError::new(
+                "conversation_source_incomplete",
+                "the completed-turn result changed while its context was read",
+            ));
+        }
+        selected_context_ids.insert(verified.reference.item_id.as_str());
     }
-    let mut messages = prefix
+    let messages = prefix
         .into_iter()
         .filter(|message| {
             authority_by_id.contains_key(message.reference.item_id.as_str())
@@ -340,19 +350,99 @@ fn bounded_observation_messages(
                 )
         })
         .collect::<AppResult<Vec<_>>>()?;
-    if let Some(result) = activity
-        .turn
-        .messages
-        .iter()
-        .rev()
-        .find(|message| message.role == Role::Assistant && !message.text.trim().is_empty())
-        && !messages
-            .iter()
-            .any(|message| message.item_id == result.reference.item_id)
-    {
-        messages.push(normalize_message(result)?);
-    }
+    ensure_classification_bounds(&messages, "mandatory level-zero scope")?;
     Ok(messages)
+}
+
+fn same_source_message(left: &SourceMessage, right: &SourceMessage) -> bool {
+    left.host_id == right.host_id
+        && left.thread_id == right.thread_id
+        && left.turn_id == right.turn_id
+        && left.item_id == right.item_id
+        && left.role == right.role
+        && left.text == right.text
+        && left.occurred_at == right.occurred_at
+        && left.precision == right.precision
+}
+
+fn verify_authorities(messages: &[Message], authorities: &[SourceMessage]) -> AppResult<()> {
+    for authority in authorities {
+        let source = messages
+            .iter()
+            .find(|message| message.reference.item_id == authority.item_id)
+            .ok_or_else(|| {
+                AppError::new(
+                    "conversation_source_incomplete",
+                    "an authority item disappeared while its source was verified",
+                )
+            })?;
+        let normalized = normalize_message(source)?;
+        if !same_source_message(&normalized, authority) {
+            return Err(AppError::new(
+                "conversation_source_incomplete",
+                "completed-turn authority changed while its context was read",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn bounded_expanded_messages(
+    prefix: Vec<SourceMessage>,
+    mandatory: &[SourceMessage],
+) -> AppResult<Vec<SourceMessage>> {
+    ensure_classification_bounds(mandatory, "mandatory level-zero scope")?;
+    let mandatory_ids = mandatory
+        .iter()
+        .map(|message| message.item_id.clone())
+        .collect::<BTreeSet<_>>();
+    let mut selected_ids = mandatory_ids.clone();
+    let mut count = mandatory.len();
+    let mut bytes = mandatory
+        .iter()
+        .map(|message| message.text.len())
+        .sum::<usize>();
+    for message in prefix.iter().rev() {
+        if selected_ids.contains(&message.item_id) {
+            continue;
+        }
+        if count == MAX_CLASSIFICATION_MESSAGES
+            || bytes
+                .checked_add(message.text.len())
+                .is_none_or(|next| next > MAX_CLASSIFICATION_TEXT_BYTES)
+        {
+            break;
+        }
+        selected_ids.insert(message.item_id.clone());
+        count += 1;
+        bytes += message.text.len();
+    }
+    let messages = prefix
+        .into_iter()
+        .filter(|message| selected_ids.contains(&message.item_id))
+        .collect::<Vec<_>>();
+    ensure_classification_bounds(&messages, "expanded level-one scope")?;
+    Ok(messages)
+}
+
+fn ensure_classification_bounds(messages: &[SourceMessage], scope: &str) -> AppResult<()> {
+    let bytes = messages.iter().try_fold(0_usize, |total, message| {
+        total.checked_add(message.text.len()).ok_or_else(|| {
+            AppError::new(
+                "classification_scope_too_large",
+                format!("{scope} text size exceeds the supported range"),
+            )
+        })
+    })?;
+    if messages.len() > MAX_CLASSIFICATION_MESSAGES || bytes > MAX_CLASSIFICATION_TEXT_BYTES {
+        return Err(AppError::new(
+            "classification_scope_too_large",
+            format!(
+                "{scope} exceeds {MAX_CLASSIFICATION_MESSAGES} messages or {MAX_CLASSIFICATION_TEXT_BYTES} UTF-8 bytes"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn normalize_message(message: &Message) -> AppResult<SourceMessage> {
@@ -427,18 +517,6 @@ fn observation_source_digest(
             &authority.occurred_at.to_le_bytes(),
         );
         hash_field(&mut hasher, b"authority-text", authority.text.as_bytes());
-    }
-    for change in &activity.completed_file_changes {
-        hash_field(
-            &mut hasher,
-            b"change-item",
-            change.reference.item_id.as_bytes(),
-        );
-        hash_field(
-            &mut hasher,
-            b"change-count",
-            &change.change_count.to_le_bytes(),
-        );
     }
     for turn in prefix {
         hash_field(
@@ -714,13 +792,13 @@ mod tests {
         Turn, TurnActivity, TurnRef,
     };
 
-    use crate::model::ThreadTranscript;
+    use crate::model::{MessageRole, Precision, SourceMessage, ThreadTranscript};
 
     use super::{
-        bounded_observation_messages, canonicalize_transcripts, normalize_message,
-        normalize_selected_thread, observation_source_error, reconciliation_summaries,
-        retain_canonical_activity, source_manifest_hash, summary_may_contain_completion,
-        summary_may_overlap,
+        bounded_expanded_messages, bounded_observation_messages, canonicalize_transcripts,
+        normalize_message, normalize_selected_thread, observation_source_error,
+        reconciliation_summaries, retain_canonical_activity, source_manifest_hash,
+        summary_may_contain_completion, summary_may_overlap,
     };
 
     fn summary(created_at: Option<i64>, updated_at: Option<i64>) -> ThreadSummary {
@@ -963,6 +1041,34 @@ mod tests {
     }
 
     #[test]
+    fn level_zero_rejects_an_unverified_activity_result() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let authority = message(1, Role::User, Some(10));
+        let read_turn = Turn {
+            reference: TurnRef {
+                host_id: "host".to_owned(),
+                thread_id: "thread".to_owned(),
+                turn_id: "turn".to_owned(),
+            },
+            started_at: Some(10),
+            completed_at: Some(12),
+            status: "completed".to_owned(),
+            messages: vec![authority.clone()],
+        };
+        let mut completed_activity = activity("thread", "turn");
+        completed_activity.turn.messages =
+            vec![authority.clone(), message(2, Role::Assistant, Some(11))];
+        let authorities = [normalize_message(&authority)?];
+
+        let error =
+            bounded_observation_messages(&[read_turn], 0, &completed_activity, &authorities)
+                .err()
+                .ok_or("expected an incomplete source")?;
+        assert_eq!(error.code, "conversation_source_incomplete");
+        Ok(())
+    }
+
+    #[test]
     fn canonical_thread_order_makes_manifest_invariant() {
         let transcripts = [
             ThreadTranscript {
@@ -995,6 +1101,61 @@ mod tests {
         });
         assert!(!error.message.contains("SECRET_TRANSCRIPT"));
         assert!(!error.message.contains("/Users/person"));
+    }
+
+    #[test]
+    fn expanded_scope_keeps_the_newest_messages_within_both_limits() {
+        let prefix = (0..100)
+            .map(|index| SourceMessage {
+                host_id: "host".to_owned(),
+                thread_id: "thread".to_owned(),
+                turn_id: format!("turn-{index}"),
+                item_id: format!("item-{index}"),
+                role: MessageRole::Assistant,
+                text: "x".repeat(4_096),
+                occurred_at: i64::from(index),
+                precision: Precision::Item,
+            })
+            .collect::<Vec<_>>();
+        let mandatory = vec![prefix[99].clone()];
+        let bounded =
+            bounded_expanded_messages(prefix, &mandatory).unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(bounded.len(), 64);
+        assert_eq!(
+            bounded.first().map(|message| message.item_id.as_str()),
+            Some("item-36")
+        );
+        assert_eq!(
+            bounded.last().map(|message| message.item_id.as_str()),
+            Some("item-99")
+        );
+        assert_eq!(
+            bounded
+                .iter()
+                .map(|message| message.text.len())
+                .sum::<usize>(),
+            262_144
+        );
+    }
+
+    #[test]
+    fn mandatory_scope_fails_instead_of_truncating() {
+        let mandatory = vec![SourceMessage {
+            host_id: "host".to_owned(),
+            thread_id: "thread".to_owned(),
+            turn_id: "turn".to_owned(),
+            item_id: "item".to_owned(),
+            role: MessageRole::User,
+            text: "x".repeat(262_145),
+            occurred_at: 1,
+            precision: Precision::Item,
+        }];
+        assert_eq!(
+            bounded_expanded_messages(mandatory.clone(), &mandatory)
+                .err()
+                .map(|error| error.code),
+            Some("classification_scope_too_large")
+        );
     }
 
     #[test]

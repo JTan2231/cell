@@ -18,7 +18,9 @@ There is no materialized current graph, stored HEAD snapshot, or alternative
 replay path. Schema version 3 rejects every earlier library rather than
 attempting to translate competing historical representations. Schema version
 4 is an additive migration from version 3 that introduces bounded inbox retry
-provenance without changing existing semantic or delivery history.
+provenance. Schema version 5 adds the immutable Krisis producer-acceptance
+ledger and accepted-account feed without changing existing semantic, work,
+delivery, or retry history.
 
 ## One corpus reducer
 
@@ -53,6 +55,47 @@ query acceleration, not library state or authority.
 A source delivery is distinct from its content-addressed work. Manual commands
 and dispatched inbox jobs create ingestion receipts with captured source
 metadata and lifecycle status. Several deliveries can select the same work.
+
+Producer acceptance is an earlier, distinct boundary. In a dedicated decisions
+library, `inbox accept` binds `(library ID, krisis, decision ID)` to one exact
+SHA-256 digest. Annals publishes a complete envelope containing unchanged
+account bytes plus producer identity before it commits the immutable acceptance
+row. Acceptance starts no delivery or model. Exact replay returns the original
+job; different bytes conflict. If publication wins but the database commit is
+uncertain, the next identical call reconstructs the acceptance from the
+envelope rather than publishing another job.
+
+The decisions-library config contains the expected persistent library ID, and
+its spool contains the same durable binding. Acceptance and feed reads require
+an explicit config, reject library overrides, and fail closed when either
+identity differs. This keeps the primary conversation-export library and its
+spool outside the producer boundary.
+
+The version-5 database itself also owns an immutable library kind. Dedicated
+decision databases are initialized as `decisions`; ordinary initialization and
+every version-3 or version-4 migration produce `general`. Acceptance, feed,
+and decision-config dispatch require the decisions kind. Generic work add,
+integration, inbox admission, backlog import, and generic dispatch require the
+general kind, including when the database is selected directly. A config or
+alternate spool therefore cannot reclassify the physical library.
+
+A run using that config verifies the database identity and binds or verifies
+the spool before recovery or dispatch; first binding requires an empty spool
+and fresh queue index. It never registers `incoming/` files,
+and every non-retry envelope must carry a valid Krisis producer receipt whose
+digest and job metadata match its already committed acceptance. Direct work
+add or integration and generic register, enqueue, or backlog-import commands
+reject the decisions config; generic inbox admission also rejects any spool
+that already carries the decision-library binding. These local role and
+routing checks are not authentication against the operating user; the general
+source and inbox behavior is otherwise unchanged.
+
+The accepted-account feed is a read-only projection of immutable acceptance
+rows. A watermark freezes a committed sequence prefix. Pages are ascending and
+strictly after either an earlier watermark or an item cursor, remain fixed to
+the requested watermark, and keep an empty-page cursor unchanged. The feed
+contains bounded decision projections and one source anchor, never raw account
+Markdown or general-library content, and stores no consumer acknowledgement.
 
 The filesystem inbox separates admission from dispatch. Registration moves a
 settled source into `queued/JOB_ID/material`, assigns an immutable monotonic
@@ -284,7 +327,7 @@ commit and never removes the original.
 ## Fresh-state deployment boundary
 
 Normal user deployments quiesce the inbox, back up the supported library,
-apply the candidate's additive version-3-to-4 migration when needed, switch the
+apply the candidate's additive migration through version 5 when needed, switch the
 complete release, check its commands, library statistics, and inbox state, and
 restore the prior operator pause state. A
 failed cutover restores the pre-migration backup with the prior release.

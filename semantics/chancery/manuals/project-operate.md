@@ -2,7 +2,7 @@
 
 ## Readiness
 
-Before installation or maintenance, verify Decisions lifecycle contract 1,
+Before installation or maintenance, verify Annals decision-account exchange contract 1,
 Conversations history contract 3 with exact cwd metadata, and Nucleus execution
 contract 1, plus Clockwork schedule contract 1. Chancery documents these boundaries but is not called by the
 Semantics worker.
@@ -41,8 +41,8 @@ rollback cannot prove scheduler/database quiescence, the deployer retains the
 release-independent maintenance gate before releasing that flock, attempts
 both scheduler cleanups, and removes public selectors. When a newly selected
 candidate cannot be cleared back to a prior null selection, its exact private
-`current` release selector is retained as ownership evidence; other
-unprovable paths remove it. Semantics retains exact release bytes for
+`current` release selector and authenticated hold are retained as ownership
+evidence. Semantics retains exact release bytes for
 registered definitions. Use
 the retained private transaction backup, including the database,
 prior schedule state, and selector record, for explicit
@@ -50,7 +50,11 @@ recovery.
 
 The release-independent maintenance marker must be a current-user-owned,
 mode-`0600`, non-hard-linked regular file. An existing marker is validated and
-never truncated. Before definition registration, the deployer likewise
+never truncated. `--keep-maintenance` retains a Semantics-owned marker plus
+private receipt bound to the exact key, release ID, and definition digest; a
+later successful invocation of the same release without that option releases
+only the matching hold. An unreceipted pre-existing marker is preserved and
+never claimed. Before definition registration, the deployer likewise
 validates any existing worker stdout/stderr file as a current-user-owned,
 non-hard-linked regular file and restricts its mode to `0600` without changing
 its contents.
@@ -65,9 +69,35 @@ Verify:
 ```
 
 Doctor must report `ok:true` and green `database`,
-`participation_markers`, `decisions_lifecycle`,
+`participation_markers`, `annals_decision_feed`,
 `conversations_exact_cwd`, and `nucleus_reconciliation` checks. This proves
-dependency readiness, not that a future semantic event will succeed.
+dependency readiness, not that a future semantic event will succeed. The
+Annals check fails whenever an active or paused project lacks the selected
+decisions-library identity or its activation and scan cursors; only a database
+with no such projects may remain activation-pending.
+
+## Activate a migrated database
+
+Schema 2 preserves every legacy Decisions cursor, envelope, assignment,
+status, revision, effect, correlation, and mailbox receipt without creating an
+Annals cursor. Before the one-time feed cutover, stop legacy lifecycle append,
+advance every project through its final legacy watermark, resolve active or
+ambiguous legacy Nucleus jobs, engage maintenance, disable the worker and
+public command, prove the database closed, and privately back up the database
+plus sidecars. With the dedicated Annals library healthy and Krisis still
+gated, run the deployer with the captured final Decisions watermark and
+`--keep-maintenance`; it invokes the candidate's hidden
+`project activate-annals` command. It binds
+the exact library and one current watermark to every existing non-retired
+project. Historical Decisions rows are not imported. Verify doctor and fixed
+feed replay before enabling the schedule, then enable Krisis last. Finish with
+a successful same-release deployer invocation without either cutover option to
+release the authenticated Semantics hold.
+
+Before the first new account, a failed cutover restores the exact database,
+sidecars, selectors, and worker state. After any new account or account-derived
+revision commits, recovery is forward under maintenance; never run an old
+binary or discard new state.
 
 ## Register and seed a folder
 
@@ -86,8 +116,8 @@ semantics repository seed-markdown project-id /absolute/project/root/seed.md
 semantics repository show project-id
 ```
 
-Registration captures the current Decisions watermark; pre-registration
-history is outside version-one intake. Seeding is allowed only at revision 0,
+Registration captures the current watermark from the exact configured Annals
+decisions library; earlier accounts are outside automatic intake. Seeding is allowed only at revision 0,
 must use a source inside the canonical root, and commits one atomic revision
 with a project-relative source label and digest. The seed file is required only
 for that command. After verifying repository HEAD, it may be removed under the
@@ -107,13 +137,13 @@ semantics intake status
 semantics --json intake run
 ```
 
-Use `intake assign EVENT PROJECT` only to correct an unassigned or incorrectly
-routed event after verifying the exact project. Assignment history is audited.
-Medium admissions wait for review; do not force them into Nucleus. A dismissal
-withdraws prior groundings append-only. A review follows the stable non-retired
-project already assigned to that decision before cwd routing, so confirmation
-or dismissal remains attached after a project move. New admissions use exact
-current cwd and the deepest current registered root.
+Use `intake assign EVENT PROJECT` only to correct unassigned account intake
+after verifying the exact project. Assignment history is audited. Every valid
+accepted account is immediately eligible for reconciliation; there is no
+confidence, disposition, review, or supersession gate. Exact authority-thread
+cwd and the deepest current registered root determine ownership. Preserved
+legacy Decisions intake remains visible in a separate status collection and
+retains its old states and grounding meaning.
 
 Pause before maintenance:
 
@@ -124,7 +154,7 @@ semantics project resume PROJECT
 ```
 
 The new root must carry the exact marker. A move preserves stable identity and
-both cursors. Pausing prevents pending and late in-flight proposals from
+both Annals and legacy cursor histories. Pausing prevents pending and late in-flight proposals from
 committing. Retirement is permanent, is allowed only while paused, and refuses
 unresolved assigned intake.
 
@@ -134,13 +164,15 @@ be proven. Never clear the stored correlation or manufacture a cursor.
 
 ## Privacy and logs
 
-The worker sends Nucleus only a minimized semantic projection of one lifecycle
-event and the selected repository snapshot. Lossless anchors, cursor, and
-routing metadata remain in Semantics SQLite. Nucleus runs in a neutral
-temporary cwd with workspace `none`, no shell, and no web. Logs may contain
-counters, opaque IDs, and operational failures.
-They must not contain decision statements, rationales, conversation or project
-content, prompts, credentials, diffs, commands, or tool payloads.
+The worker sends Nucleus only a normalized statement/context/action/result and
+occurrence projection plus the selected repository snapshot. Exact cwd is a
+transient routing input and is not stored or exposed with account intake;
+anchors, cursor, project assignment, and a fixed routing outcome remain in
+Semantics SQLite. Nucleus runs in a neutral temporary cwd with workspace
+`none`, no shell, and no web. Logs may contain counters, opaque IDs, and bounded
+product-owned failures. They must not contain raw dependency diagnostics,
+account statements, context, action, result, conversation or project content,
+anchors, paths, prompts, credentials, diffs, commands, or tool payloads.
 Clockwork retains only definition, binding, schedule, and process metadata and
 does not ingest those product-owned log bodies.
 

@@ -17,7 +17,9 @@ Use a file, or standard input with an explicit label:
 A file may omit `--name`, in which case its UTF-8 filename stem is the proposed
 label. A standard-input source always requires a label. The selected library
 comes from `--library`, `ANNALS_LIBRARY`, or configuration; Annals never
-silently creates `./annals.db`.
+silently creates `./annals.db`. The selected database must have the immutable
+`general` role; producer-accepted decisions libraries reject this source inlet
+even when selected directly.
 
 Exact retained bytes are addressed by SHA-256. Re-delivering the same bytes,
 even with another requested label, selects the original retained work and its

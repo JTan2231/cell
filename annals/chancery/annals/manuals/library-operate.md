@@ -7,15 +7,19 @@ AI reader.
 ## Initialize, inspect, and back up
 
 ```sh
-/Users/joey/.local/bin/annals init
+/Users/joey/.local/bin/annals init [--kind general|decisions]
 /Users/joey/.local/bin/annals migrate
 /Users/joey/.local/bin/annals stats
 /Users/joey/.local/bin/annals backup <ABSENT_OUTPUT_PATH>
 ```
 
-`init` creates revision zero and refuses to replace a path. `migrate` supports
-only documented prior schemas, runs transactionally, and refuses older or
-newer unsupported libraries without reinterpretation. `stats` is read-only.
+`init` creates revision zero with one immutable library kind and refuses to
+replace a path. It defaults to `general`; `--kind decisions` is only for a
+physically separate producer-accepted decisions library. `migrate` supports
+only documented prior schemas, assigns version-3 and version-4 libraries the
+`general` kind, runs transactionally, and refuses older or newer unsupported
+libraries without reinterpretation. Configuration cannot change a library's
+kind. `stats` is read-only.
 `backup` creates a consistent SQLite copy and refuses to replace its
 destination.
 

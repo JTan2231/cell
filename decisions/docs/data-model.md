@@ -1,114 +1,58 @@
-# Data model
+# Krisis data model
 
-The current SQLite schema version is 3. `PRAGMA user_version` and
-`schema_migrations` are checked at every open. Versions 1 and 2 migrate
-sequentially in explicit transactions; newer and unsupported older versions
-fail closed.
+Krisis uses SQLite schema version 4 at the migration-compatible Decisions path.
+Schema versions 1 through 3 are upgraded sequentially; their rows and decoders
+remain intact.
 
-- `product_metadata` owns the write-once `observer_baseline_at`. Deployment
-  creates it after candidate migration and release staging but before the live
-  hook, command, plists, or services are published. Default activation stores
-  the next whole Unix second. Processing, reconciliation, and daily projection
-  require it; redeploy never advances it.
-- `observations` is the durable completed-turn queue. Its stable ID derives from
-  the hook session/turn correlation. After exact Conversations resolution it
-  binds the canonical host/thread, a source digest, content-free completed-file
-  change count, authority time, narrow/expanded scope, outcome, and bounded
-  failure state. Source resolution can set `next_attempt_at`; selectors resume
-  `processing` first, skip queued rows before that time, and order ready queued
-  work by `COALESCE(next_attempt_at, created_at)` so a deferred row yields. An
-  explicitly confirmed unavailable-source recovery can change only a previously
-  deferred pending level-0 row with no bound source, job, authority, verdict, or
-  candidate to `complete` / `not_eligible`, retaining the fixed
-  `conversation_source_abandoned` marker. It never stores the hook body, a
-  transcript, or a caller-provided abandonment reason.
-- `observation_jobs` persists each scope's Nucleus attempt, request digest,
-  admission state, and bounded terminal-only retry identity. An explicitly
-  retried terminal observation increments its attempt epoch and retains every
-  earlier job and receipt. There is at most one active processor and no
-  parallel observation fan-out.
-- `observation_classification_receipts` is the continuous requester's durable
-  mailbox ledger. It stores exact bounded result bytes and a text-free validated
-  DTO before acknowledgement, allowing uncertain in-flight processing to
-  resume without a duplicate domain outcome.
-- `authority_verdicts` records exactly one `decision` or `no_decision` result for
-  each eligible user message in a completed observation. Negative verdicts are
-  durable coverage, not inferred silence.
-- `observation_candidates` associates validated stable candidates with the
-  observation that established them.
-- Source abandonment creates no authority verdict, candidate, candidate source,
-  classification receipt, or lifecycle event and does not change the observer
-  baseline. An exact repeat is idempotent; later completed-root reconciliation
-  for the same correlation fails closed.
-- `runs` owns the local date window, durable `coverage_cutoff_at`, SQLite-rowid
-  `observation_admission_watermark`, coverage manifest, terminal state, failure
-  detail, review-driven content revision, and `run_kind`. The two frontiers bind
-  the projection to turns completed by the cutoff and observation rows admitted
-  through the watermark; later hook rows remain outside that immutable run. New
-  runs are `observation_projection`; migrated version-one
-  runs remain `legacy_scan`. Completeness is as of the cutoff, so a later-
-  completing turn can change a manual rebuild of its authority date without
-  amending an accepted scheduled delivery. A partial unique index permits only
-  one `building` or `abandoning` run per report date.
-- `run_jobs` and `classification_receipts` retain the original whole-thread
-  requester correlation and pre-acknowledgement recovery state for legacy runs.
-  They never store request or prompt bytes.
-- `candidates` owns stable decisions, disposition, confidence, source event
-  time and precision, exact authority byte span, optional rationale and
-  supersession reference, and current review state.
-- `run_candidates` lets stable candidates appear in repeat builds without
-  changing identity.
-- `candidate_sources` retains machine-local host/thread/turn/item anchors for
-  the authoritative user message and the minimal supporting context.
-- `reviews` is an append-only confirm/dismiss audit trail.
-- `decision_events` is the append-only consumer outbox. Its SQLite sequence is
-  exposed only through opaque cursors. Each row freezes an immutable
-  version-one `decision_admitted` or `decision_reviewed` envelope containing
-  normalized candidate lifecycle data and stable source anchors. Admission is
-  transactionally coupled to first candidate persistence; each review event is
-  coupled to its review row and current-state update. Partial unique indexes
-  enforce one admission event per decision and one event per review. The
-  version-one consumer contract activates at a current watermark and does not
-  expose an origin cursor for historical replay.
-- `digest_snapshots` freezes the subject and body per run revision.
-- `deliveries` persists manual or scheduled idempotency, acceptance, and the
-  external Email message ID. Admission is transactional, only one unresolved
-  manual delivery may exist per run revision, and acceptance is monotonic.
+## Active schema-4 records
 
-Raw conversation text is sent to the bounded classifier but is not copied into
-the Decisions database. Nucleus does durably retain the exact request prompt
-and tool traffic in its own private local database, with no automatic pruning.
-That retained text is the bounded level-0 slice initially and the normalized
-full thread prefix when the single level-1 expansion is used; Nucleus owns its
-retention and recovery. Initial observation classification receives only the
-eligible current-turn user authorities, the immediately preceding assistant
-proposal needed to interpret them when one exists, at most the current turn's
-final assistant result, and a file-change count—never the whole turn/thread,
-paths, diffs, commands, or tool output. Prior normalized context is disclosed
-only after a validated request for the observation's single allowed expansion.
-Persisted receipt candidates contain normalized statement/rationale fields,
-disposition/confidence,
-time/precision, validated span, and machine anchors only. Request digests
-cannot reconstruct the prompt. Model-controlled invalid source IDs and upstream
-error bodies are replaced by bounded product-owned errors before persistence.
-The email contains normalized, deterministically disclosure-checked decision
-statements and IDs, never excerpts, raw transcripts, rationales, credentials,
-account/email identifiers, source IDs, tool traces, or local paths.
+`observations` owns one correlated completed-turn work item, level, retry epoch,
+source digest, exact Annals config-path/library target binding, status, and
+terminal `decision`/`no_decision` outcome.
+`observation_authority_items` is the admitted user authority set and
+`authority_verdicts` supplies exact binary coverage.
 
-Back up the database together with `-wal` and `-shm` while the application is
-quiescent, or use a SQLite-aware backup. Both the observer and daily-email
-services must be stopped for a quiescent file copy. The user deployer does this
-and preserves the database plus `-wal`, `-shm`, and `-journal` before candidate
-doctor opens and migrates versions 1 or 2 to version 3. Version-3 migration
-preserves existing domain rows and backfills retained candidate admissions
-followed by append-only reviews before committing its new user version. Any
-later schema change must add an explicit migration and preserve the same
-rollback boundary before modification.
+`observation_jobs` and `observation_classification_receipts` retain Nucleus job,
+tool-call, exact call-argument and request digests, accepted-result, retry, and
+recovery correlation. New
+Krisis receipt bodies are reduced to a minimal marker after Annals acceptance;
+legacy Decisions receipt decoding is unchanged.
 
-On Unix, a newly created state leaf is mode `0700`; the main database and any
-existing SQLite `-wal`, `-shm`, or `-journal` sidecars are symlink-checked and
-enforced at mode `0600`. A caller-selected existing parent is validated but its
-mode is never changed. The content-free `.run.lock` sibling is likewise opened
-without following symlinks and enforced at mode `0600`; it serializes only the
-short admission-versus-abandonment critical section and is outside SQLite
-backup state.
+`decision_accounts` holds stable account identity, occurrence, precision,
+authority span, and—only before acceptance—generated statement/context/action/
+result and exact quote. `decision_account_sources` records authority and
+supporting anchors; non-authority support rows may be removed after acceptance.
+`observation_accounts` relates accounts to their producing coverage transaction.
+
+`decision_account_outbox` is the durable handoff ledger. Pending rows contain
+the deterministic Markdown, SHA-256, exact config path, and expected persistent
+library ID. Accepted rows contain no Markdown and
+retain contract/library/producer/key/digest/job/time/created-or-replayed receipt
+evidence. Conflicting account identity, bytes, anchor, or receipt fails closed.
+
+## Stable identity
+
+Krisis derives decision ID from real host identity, canonical authority item
+identity, and the validated exact UTF-8 byte span. Model aliases and normalized
+wording cannot affect it. Occurrence is an `i64` Unix second and timestamp
+precision is retained separately.
+
+The account Source JSON schema version, classifier capture-rule version,
+decision ID, Nucleus job/call IDs, Annals library/job IDs, digest, observation
+ID, and legacy Decisions lifecycle IDs are separate compatibility axes.
+
+## Retained legacy records
+
+Runs, candidates, candidate sources, reviews, snapshots, email deliveries, and
+lifecycle events remain so schema migration, interrupted recovery, existing
+read-only `events`, and legacy `show` can decode prior state. Krisis creates no
+new digest, review, email, candidate, or lifecycle state through its public
+active path.
+
+The database is an operational capture ledger, not the decision library. Once
+Annals accepts an account, Krisis intentionally cannot reconstruct its prose
+from retained state; browse and search through Annals.
+
+Migration to schema 4 refuses any planned/submitted legacy
+`decisions-observe-*` correlation and any accepted legacy classification whose
+observation did not commit. Terminal legacy history remains readable.

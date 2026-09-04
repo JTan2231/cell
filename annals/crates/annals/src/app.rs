@@ -12,9 +12,10 @@ use crate::change::{
     ChangeOperation, ConceptSelector, EvidenceDisposition, EvidenceSelector, Reconciliation,
 };
 use crate::cli::{
-    ChangeCommand, ChangeSelectArgs, ChangeShowArgs, Cli, CliGraphDirection, Command,
-    ConceptCommand, ConceptPageArgs, ConceptShowArgs, GraphArgs, InboxCommand, InboxRetryCommand,
-    IntegrateArgs, LatelyArgs, PagedAtArgs, SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand,
+    ChangeCommand, ChangeSelectArgs, ChangeShowArgs, Cli, CliGraphDirection, CliLibraryKind,
+    Command, ConceptCommand, ConceptPageArgs, ConceptShowArgs, DecisionFeedCommand, GraphArgs,
+    InboxCommand, InboxRetryCommand, InitArgs, IntegrateArgs, LatelyArgs, PagedAtArgs, SearchArgs,
+    ShakeArgs, WorkAddArgs, WorkCommand,
 };
 use crate::config::Config;
 use crate::corpus::{
@@ -33,7 +34,35 @@ use crate::model::{
 use crate::model_runner::{ModelSettings, Runner};
 use crate::render::{CommandOutput, render_terminal_text};
 use crate::resolver::{ResolvedEvidence, ResolvedOperation};
-use crate::{inbox, ingestion, liaison, resolver};
+use crate::{decision_feed, inbox, ingestion, liaison, resolver};
+
+pub fn selected_library_path(cli: &Cli, config: &Config) -> Result<PathBuf, AppError> {
+    if matches!(
+        cli.command,
+        Command::DecisionFeed(_) | Command::Inbox(InboxCommand::Accept(_))
+    ) {
+        if cli.config.is_none() {
+            return Err(AppError::invalid(
+                "decision_feed_config_required",
+                "decision-account acceptance and feed reads require an explicit --config",
+            ));
+        }
+        if cli.library.is_some() {
+            return Err(AppError::invalid(
+                "decision_feed_library_override",
+                "decision-account acceptance and feed reads do not permit --library",
+            ));
+        }
+        config.decision_feed()?;
+        return config.library.clone().ok_or_else(|| {
+            AppError::invalid(
+                "decision_feed_library_not_configured",
+                "the selected decision-feed configuration must define library",
+            )
+        });
+    }
+    library_path(cli.library.as_ref(), config)
+}
 
 pub fn library_path(explicit: Option<&PathBuf>, config: &Config) -> Result<PathBuf, AppError> {
     let environment = std::env::var_os("ANNALS_LIBRARY");
@@ -68,7 +97,7 @@ fn resolve_library_path(
 
 pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> {
     match &cli.command {
-        Command::Init => initialize(path),
+        Command::Init(args) => initialize(path, args),
         Command::Migrate => migrate_library(path),
         Command::Stats => stats(path),
         Command::Overview(args) => overview(path, args.at),
@@ -85,30 +114,53 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
         Command::Shake(args) => shake(path, args, cli.json),
         Command::Backup(args) => backup(path, &args.output),
         Command::Work(command) => match command {
-            WorkCommand::Add(args) => add_work(path, args),
+            WorkCommand::Add(args) => {
+                reject_direct_decision_ingress(config)?;
+                db::require_path_kind(path, db::LibraryKind::General)?;
+                add_work(path, args)
+            }
             WorkCommand::List => work_list(path),
             WorkCommand::Show(args) => show_work(path, &args.label),
         },
-        Command::Integrate(args) => integrate(path, config, args, !cli.json),
-        Command::Inbox(command) => match command {
-            InboxCommand::Run(args) => inbox::run(path, config, args, !cli.json),
-            InboxCommand::Register(args) => inbox::register(config, args),
-            InboxCommand::Enqueue(args) => inbox::enqueue(config, args),
-            InboxCommand::Prioritize(args) => inbox::prioritize(config, args),
-            InboxCommand::Deprioritize(args) => inbox::deprioritize(config, args),
-            InboxCommand::ImportBacklog(args) => inbox::import_backlog(config, &args.from),
-            InboxCommand::Pause => inbox::pause(config),
-            InboxCommand::Resume => inbox::resume(path, config),
-            InboxCommand::Interrupt(args) => inbox::interrupt(path, config, args),
-            InboxCommand::Retry(command) => match command {
-                InboxRetryCommand::Preview(args) => inbox::retry_preview(path, config, args),
-                InboxRetryCommand::Start(args) => inbox::retry_start(path, config, args, !cli.json),
-                InboxRetryCommand::Status(args) => inbox::retry_status(path, args),
-                InboxRetryCommand::Continue(args) => {
-                    inbox::retry_continue(path, config, args, !cli.json)
-                }
-            },
-            InboxCommand::Status => inbox::status(path, config),
+        Command::Integrate(args) => {
+            reject_direct_decision_ingress(config)?;
+            db::require_path_kind(path, db::LibraryKind::General)?;
+            integrate(path, config, args, !cli.json)
+        }
+        Command::Inbox(command) => {
+            let expected = if config.decision_feed.is_some() {
+                db::LibraryKind::Decisions
+            } else {
+                db::LibraryKind::General
+            };
+            db::require_path_kind(path, expected)?;
+            match command {
+                InboxCommand::Run(args) => inbox::run(path, config, args, !cli.json),
+                InboxCommand::Register(args) => inbox::register(config, args),
+                InboxCommand::Enqueue(args) => inbox::enqueue(config, args),
+                InboxCommand::Accept(args) => inbox::accept(path, config, args),
+                InboxCommand::Prioritize(args) => inbox::prioritize(config, args),
+                InboxCommand::Deprioritize(args) => inbox::deprioritize(config, args),
+                InboxCommand::ImportBacklog(args) => inbox::import_backlog(config, &args.from),
+                InboxCommand::Pause => inbox::pause(config),
+                InboxCommand::Resume => inbox::resume(path, config),
+                InboxCommand::Interrupt(args) => inbox::interrupt(path, config, args),
+                InboxCommand::Retry(command) => match command {
+                    InboxRetryCommand::Preview(args) => inbox::retry_preview(path, config, args),
+                    InboxRetryCommand::Start(args) => {
+                        inbox::retry_start(path, config, args, !cli.json)
+                    }
+                    InboxRetryCommand::Status(args) => inbox::retry_status(path, args),
+                    InboxRetryCommand::Continue(args) => {
+                        inbox::retry_continue(path, config, args, !cli.json)
+                    }
+                },
+                InboxCommand::Status => inbox::status(path, config),
+            }
+        }
+        Command::DecisionFeed(command) => match command {
+            DecisionFeedCommand::Watermark => decision_feed::watermark(path, config),
+            DecisionFeedCommand::Page(args) => decision_feed::page(path, config, args),
         },
         Command::Change(command) => match command {
             ChangeCommand::Submit(args) => submit_change(path, &args.input, &args.work, args.base),
@@ -125,10 +177,34 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
     }
 }
 
-fn initialize(path: &Path) -> Result<CommandOutput, AppError> {
-    db::init(path)?;
+fn reject_direct_decision_ingress(config: &Config) -> Result<(), AppError> {
+    if config.decision_feed.is_some() {
+        Err(AppError::conflict(
+            "decision_feed_accept_required",
+            "a decisions library admits source material only through inbox accept --producer krisis",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn initialize(path: &Path, args: &InitArgs) -> Result<CommandOutput, AppError> {
+    let kind = match args.kind {
+        CliLibraryKind::General => db::LibraryKind::General,
+        CliLibraryKind::Decisions => db::LibraryKind::Decisions,
+    };
+    let connection = match kind {
+        db::LibraryKind::General => db::init(path)?,
+        db::LibraryKind::Decisions => db::init_with_kind(path, kind)?,
+    };
+    let library_id = decision_feed::library_id(&connection)?;
     Ok(CommandOutput::new(
-        json!({ "library": path.display().to_string(), "revision": 0 }),
+        json!({
+            "library": path.display().to_string(),
+            "library_id": library_id,
+            "kind": kind.as_str(),
+            "revision": 0
+        }),
         format!(
             "Initialized Annals library {} at revision 0",
             path.display()

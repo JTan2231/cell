@@ -61,7 +61,7 @@
       {"status": "unsupported", "statement": "This capability is not a summary, truth judgment, action backlog, generic semantic search, or silent corpus-application surface."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "A configured Annals library contains or can retain the selected nonblank UTF-8 work, and the configured Nucleus execution path is compatible, authenticated, and accepting work."},
+      {"status": "declared", "statement": "A configured Annals library whose immutable role is general contains or can retain the selected nonblank UTF-8 work, and the configured Nucleus execution path is compatible, authenticated, and accepting work."},
       {"status": "declared", "statement": "Immediate material application requires explicit --apply authority; later application additionally requires current HEAD to equal the reconciliation base revision."}
     ],
     "inputs": [

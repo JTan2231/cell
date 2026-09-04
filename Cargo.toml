@@ -24,7 +24,7 @@ resolver = "3"
 
 [workspace.package]
 # The six Nucleus crates share this release version. Annals, Annals Usage,
-# Todo, Chancery, Weaver, Email, Conversations, Decisions, Semantics, Geste,
+# Todo, Chancery, Weaver, Email, Conversations, Krisis, Semantics, Geste,
 # Pratica, Clockwork, and CRM declare independent product versions in their
 # manifests.
 version = "0.3.2"

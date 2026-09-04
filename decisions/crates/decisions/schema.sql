@@ -48,11 +48,20 @@ CREATE TABLE IF NOT EXISTS observations (
     next_attempt_at INTEGER,
     file_change_count INTEGER NOT NULL DEFAULT 0 CHECK (file_change_count >= 0),
     authority_occurred_at INTEGER,
+    annals_target_library_id TEXT,
+    annals_target_config_path TEXT,
     failure_code TEXT,
     failure_detail TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     completed_at INTEGER,
+    CHECK (
+        (annals_target_library_id IS NULL AND annals_target_config_path IS NULL)
+        OR
+        (length(annals_target_library_id) = 32
+            AND annals_target_config_path IS NOT NULL
+            AND length(annals_target_config_path) > 0)
+    ),
     UNIQUE (session_id, turn_id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS observations_canonical_turn
@@ -92,6 +101,9 @@ CREATE TABLE IF NOT EXISTS observation_jobs (
 CREATE TABLE IF NOT EXISTS observation_classification_receipts (
     nucleus_job_id TEXT NOT NULL REFERENCES observation_jobs(nucleus_job_id) ON DELETE CASCADE,
     call_id TEXT NOT NULL,
+    call_arguments_sha256 TEXT CHECK (
+        call_arguments_sha256 IS NULL OR length(call_arguments_sha256) = 64
+    ),
     result_json TEXT NOT NULL,
     is_error INTEGER NOT NULL CHECK (is_error IN (0, 1)),
     classification_json TEXT,
@@ -230,4 +242,82 @@ CREATE UNIQUE INDEX IF NOT EXISTS deliveries_one_open_manual
 ON deliveries(run_id, content_revision)
 WHERE kind='manual' AND status IN ('pending', 'failed');
 
-PRAGMA user_version = 3;
+CREATE TABLE IF NOT EXISTS decision_accounts (
+    id TEXT PRIMARY KEY,
+    schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+    occurred_at INTEGER NOT NULL,
+    timestamp_precision TEXT NOT NULL CHECK (timestamp_precision IN ('item', 'turn')),
+    statement TEXT,
+    authority_quote TEXT,
+    context TEXT,
+    action TEXT,
+    result TEXT,
+    authority_start INTEGER NOT NULL CHECK (authority_start >= 0),
+    authority_end INTEGER NOT NULL CHECK (authority_end > authority_start),
+    capture_rule_version TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    CHECK (
+        (statement IS NOT NULL AND authority_quote IS NOT NULL)
+        OR
+        (statement IS NULL AND authority_quote IS NULL AND context IS NULL
+            AND action IS NULL AND result IS NULL)
+    )
+);
+
+CREATE TABLE IF NOT EXISTS decision_account_sources (
+    account_id TEXT NOT NULL REFERENCES decision_accounts(id) ON DELETE CASCADE,
+    source_role TEXT NOT NULL CHECK (source_role IN ('authority', 'context', 'action', 'result')),
+    source_order INTEGER NOT NULL CHECK (source_order >= 0),
+    host_id TEXT NOT NULL,
+    thread_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    message_role TEXT NOT NULL CHECK (message_role IN ('user', 'assistant')),
+    occurred_at INTEGER NOT NULL,
+    timestamp_precision TEXT NOT NULL CHECK (timestamp_precision IN ('item', 'turn')),
+    PRIMARY KEY (account_id, source_role, source_order),
+    UNIQUE (account_id, source_role, item_id)
+);
+
+CREATE TABLE IF NOT EXISTS observation_accounts (
+    observation_id TEXT NOT NULL REFERENCES observations(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES decision_accounts(id),
+    PRIMARY KEY (observation_id, account_id)
+);
+
+CREATE TABLE IF NOT EXISTS decision_account_outbox (
+    account_id TEXT PRIMARY KEY REFERENCES decision_accounts(id),
+    producer TEXT NOT NULL CHECK (producer = 'krisis'),
+    producer_key TEXT NOT NULL UNIQUE,
+    account_markdown TEXT,
+    source_sha256 TEXT NOT NULL,
+    target_library_id TEXT NOT NULL CHECK (length(target_library_id) = 32),
+    target_config_path TEXT NOT NULL CHECK (length(target_config_path) > 0),
+    status TEXT NOT NULL CHECK (status IN ('pending', 'accepted')),
+    annals_contract_version INTEGER,
+    annals_library_id TEXT,
+    annals_job_id TEXT,
+    annals_accepted_at TEXT,
+    annals_acceptance TEXT CHECK (
+        annals_acceptance IS NULL OR annals_acceptance IN ('created', 'replayed')
+    ),
+    created_at INTEGER NOT NULL,
+    accepted_at INTEGER,
+    CHECK (
+        (status='pending' AND account_markdown IS NOT NULL
+            AND annals_contract_version IS NULL AND annals_library_id IS NULL
+            AND annals_job_id IS NULL AND annals_accepted_at IS NULL
+            AND annals_acceptance IS NULL
+            AND accepted_at IS NULL)
+        OR
+        (status='accepted' AND account_markdown IS NULL
+            AND annals_contract_version IS NOT NULL AND annals_library_id IS NOT NULL
+            AND annals_job_id IS NOT NULL AND annals_accepted_at IS NOT NULL
+            AND annals_acceptance IN ('created', 'replayed')
+            AND accepted_at IS NOT NULL)
+    )
+);
+CREATE INDEX IF NOT EXISTS decision_account_outbox_pending
+ON decision_account_outbox(status, created_at, account_id);
+
+PRAGMA user_version = 4;

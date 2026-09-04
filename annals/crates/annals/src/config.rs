@@ -15,8 +15,15 @@ const DEFAULT_MINIMUM_AVAILABLE_BYTES: u64 = 7_000_000_000;
 pub(crate) struct Config {
     pub library: Option<PathBuf>,
     pub inbox: Option<InboxConfig>,
+    pub decision_feed: Option<DecisionFeedConfig>,
     #[serde(default)]
     pub liaison: LiaisonConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DecisionFeedConfig {
+    pub expected_library_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -94,6 +101,14 @@ impl Config {
                 "library must not be empty",
             ));
         }
+        if let Some(feed) = &self.decision_feed
+            && !valid_library_id(&feed.expected_library_id)
+        {
+            return Err(AppError::invalid(
+                "invalid_config",
+                "decision_feed.expected_library_id must be exactly 32 lowercase hexadecimal characters",
+            ));
+        }
         if let Some(inbox) = &self.inbox
             && inbox.root.as_os_str().is_empty()
         {
@@ -135,6 +150,22 @@ impl Config {
             )
         })
     }
+
+    pub fn decision_feed(&self) -> Result<&DecisionFeedConfig, AppError> {
+        self.decision_feed.as_ref().ok_or_else(|| {
+            AppError::invalid(
+                "decision_feed_not_configured",
+                "the selected configuration does not define [decision_feed]",
+            )
+        })
+    }
+}
+
+fn valid_library_id(value: &str) -> bool {
+    value.len() == 32
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 fn resolve_config_path(explicit: Option<&Path>, environment: Option<&OsStr>) -> Option<PathBuf> {

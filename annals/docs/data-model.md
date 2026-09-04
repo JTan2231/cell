@@ -1,18 +1,22 @@
 # Data model
 
 [`crates/annals/schema.sql`](../crates/annals/schema.sql) is the authoritative
-SQLite schema. The current schema is version 4. Schema version 3 remains the
+SQLite schema. The current schema is version 5. Schema version 3 remains the
 deliberate fresh-state boundary: older libraries are rejected, while `migrate`
-upgrades version 3 to version 4 by adding only inbox retry-event provenance.
+upgrades version 3 through the additive version-4 retry provenance and
+version-5 library profile and decision-account acceptance tables. Existing
+version-3 and version-4 libraries migrate as general libraries.
 
-The library stores six kinds of facts:
+The library stores eight kinds of facts:
 
-1. immutable works and source-delivery receipts;
-2. bounded inbox retry-event membership and parent-child delivery provenance;
-3. durable concept identities;
-4. normalized reconciliation intent and examination audit records;
-5. immutable commit provenance; and
-6. append-only typed corpus effects.
+1. immutable library identity and role;
+2. immutable works and source-delivery receipts;
+3. bounded inbox retry-event membership and parent-child delivery provenance;
+4. immutable Krisis producer acceptances and their bounded feed projection;
+5. durable concept identities;
+6. normalized reconciliation intent and examination audit records;
+7. immutable commit provenance; and
+8. append-only typed corpus effects.
 
 It does not store a current concept graph, a materialized HEAD, revision
 snapshots, or JSON used as operational truth. `CorpusState` is an immutable
@@ -28,12 +32,41 @@ receipts. See [Consumption telemetry](telemetry.md).
 `library_identity` contains one random persistent identity. `library_state` is
 a view that pairs it with `coalesce(max(commits.revision), 0)`. Revision zero
 is therefore the empty corpus, and HEAD is derived rather than updated.
+`library_profile` contains the database's single immutable kind, either
+`general` or `decisions`. Fresh initialization chooses it explicitly, with
+`general` as the CLI default; supported migration of earlier schemas assigns
+`general`. The profile is the admission boundary: configuration and spool
+files may bind a library but cannot change its role.
 
 Opaque cursors bind to the library identity, revision, and request. A backup
 preserves the identity. Applying a nonempty reconciliation, a confirmed
 nonempty shake, or a revert appends exactly one contiguous revision. Work
 retention, examinations, pending or mechanically equal reconciliations, and
 reads do not advance it.
+
+## Decision-account acceptance
+
+`decision_account_acceptances` stores one immutable row for each
+`(producer, producer_key)` accepted by a dedicated decisions library. Version
+one constrains the producer to `krisis`. The row binds exact source SHA-256,
+original job ID and acceptance time to one event ID, account schema version,
+statement/context/action/result projection, occurrence time and precision, and
+one host/thread/turn/item/span authority anchor. Update and delete triggers make
+the row append-only.
+
+Its integer `sequence` orders the accepted-account feed. Watermark and item
+cursors encode this position together with the persistent library identity,
+but their representation is opaque to consumers. Account Markdown remains in
+the producer job envelope and, after dispatch, the immutable work. It is not
+returned through the feed. Acceptance itself inserts no `ingestions` row;
+dispatch begins the ordinary source-delivery lifecycle later.
+
+The spool file `.decision-feed-library.json` binds a dedicated spool to the
+same persistent library ID. An original producer envelope also contains
+`producer.json`, which records producer, key, exact digest, job, acceptance
+time, and the Annals-derived work label. These files are operational receipts,
+not corpus state. General inbox jobs have neither file and retain their prior
+behavior.
 
 ## Immutable works and deliveries
 

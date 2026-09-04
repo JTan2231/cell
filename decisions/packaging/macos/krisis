@@ -1,0 +1,5 @@
+#!/bin/sh
+
+set -eu
+
+exec "$HOME/Library/Application Support/Decisions/install/current/libexec/krisis" "$@"

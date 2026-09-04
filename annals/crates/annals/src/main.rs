@@ -4,6 +4,7 @@ mod cli;
 mod config;
 mod corpus;
 mod db;
+mod decision_feed;
 mod error;
 mod graph;
 mod inbox;
@@ -72,7 +73,7 @@ fn run_main() -> i32 {
             return error.exit_code();
         }
     };
-    let path = match app::library_path(cli.library.as_ref(), &config) {
+    let path = match app::selected_library_path(&cli, &config) {
         Ok(path) => path,
         Err(error) => {
             if cli.json {

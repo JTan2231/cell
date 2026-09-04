@@ -1,3 +1,6 @@
+#![allow(dead_code)] // Version 1-3 readers and recovery code remain migration-compatible.
+
+mod account;
 mod classifier;
 mod digest;
 mod email;
@@ -26,29 +29,36 @@ const CLASSIFICATION_ATTEMPTS: usize = 3;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "decisions",
+    name = "krisis",
     version,
-    about = "Build and deliver a daily projection of explicit Codex decisions"
+    about = "Identify decisions and deliver immutable accounts to Annals"
 )]
 struct Cli {
-    /// Use an alternate Decisions `SQLite` database.
-    #[arg(long, global = true, env = "DECISIONS_DATABASE")]
+    /// Use an alternate migration-compatible Krisis `SQLite` database.
+    #[arg(long, global = true, env = "KRISIS_DATABASE")]
     database: Option<PathBuf>,
     /// Emit machine-readable JSON.
     #[arg(long, global = true)]
     json: bool,
-    /// Override the installed Email CLI (primarily for tests).
-    #[arg(long, global = true, env = "DECISIONS_EMAIL_BINARY")]
-    email_binary: Option<PathBuf>,
+    /// Exact Annals executable used for decision-account acceptance.
+    #[arg(long, global = true, env = "KRISIS_ANNALS_BINARY")]
+    annals_binary: Option<PathBuf>,
+    /// Exact dedicated decisions-library Annals config.
+    #[arg(long, global = true, env = "KRISIS_ANNALS_CONFIG")]
+    annals_config: Option<PathBuf>,
+    /// Expected persistent ID of the dedicated Annals decisions library.
+    #[arg(long, global = true, env = "KRISIS_ANNALS_LIBRARY_ID")]
+    annals_library_id: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Check the database, Codex source, Nucleus, and Email prerequisites.
+    /// Check the database, Codex source, Nucleus, and Annals prerequisites.
     Doctor,
-    /// Build, preview, or deliver one daily digest.
+    /// Retired Decisions digest surface; retained only to give an explicit failure.
+    #[command(hide = true)]
     Daily {
         #[command(subcommand)]
         command: DailyCommand,
@@ -65,7 +75,8 @@ enum Command {
         #[command(subcommand)]
         command: EventsCommand,
     },
-    /// Confirm or dismiss a projected candidate.
+    /// Retired Decisions review surface; retained only to give an explicit failure.
+    #[command(hide = true)]
     Review {
         #[command(subcommand)]
         command: ReviewCommand,
@@ -164,7 +175,7 @@ enum OutputFormat {
 
 fn main() {
     if let Err(error) = run(Cli::parse()) {
-        eprintln!("decisions: {error}");
+        eprintln!("krisis: {error}");
         std::process::exit(1);
     }
 }
@@ -172,45 +183,13 @@ fn main() {
 #[allow(clippy::too_many_lines)]
 fn run(cli: Cli) -> AppResult<()> {
     let database = cli.database.map_or_else(default_database_path, Ok)?;
-    let email_binary = cli.email_binary.unwrap_or(default_email_binary()?);
+    let annals = annals_configuration(cli.annals_binary, cli.annals_config, cli.annals_library_id)?;
     match cli.command {
-        Command::Doctor => doctor(&database, &email_binary, cli.json),
-        Command::Daily { command } => {
-            let mut store = Store::open(&database)?;
-            match command {
-                DailyCommand::Build(args) => {
-                    let date = requested_date(args.date.as_deref())?;
-                    let result = build(&mut store, date, false)?;
-                    print_build(&result, cli.json)
-                }
-                DailyCommand::Preview(args) => {
-                    let date = requested_date(args.date.as_deref())?;
-                    let snapshot = freeze(&store, date)?;
-                    print_snapshot(&snapshot, cli.json)
-                }
-                DailyCommand::Send(args) => {
-                    let date = requested_date(args.date.as_deref())?;
-                    let run = store.latest_complete_run(&format_date(date))?;
-                    let snapshot = freeze_run(&store, &run)?;
-                    let delivery = store.begin_delivery(&run, None)?;
-                    let delivery = deliver(&store, &email_binary, delivery, snapshot)?;
-                    print_delivery(&delivery, cli.json)
-                }
-                DailyCommand::Abandon(args) => {
-                    let date = requested_date(args.date.as_deref())?;
-                    abandon(&mut store, date, cli.json)
-                }
-                DailyCommand::Run { scheduled } => {
-                    if !scheduled {
-                        return Err(AppError::new(
-                            "scheduled_flag_required",
-                            "daily run requires --scheduled",
-                        ));
-                    }
-                    run_scheduled(&mut store, &email_binary, cli.json)
-                }
-            }
-        }
+        Command::Doctor => doctor(&database, annals.as_ref(), cli.json),
+        Command::Daily { command: _ } => Err(AppError::new(
+            "legacy_surface_retired",
+            "Krisis does not build or send Decisions digests",
+        )),
         Command::Observe { command } => {
             let mut store = Store::open(&database)?;
             match command {
@@ -230,8 +209,21 @@ fn run(cli: Cli) -> AppResult<()> {
                 }
                 ObserveCommand::Ingest => ingest_hook(&store),
                 ObserveCommand::Process => {
-                    let result = process_one_observation(&mut store)?;
-                    print_process_result(result.as_ref(), cli.json)
+                    let annals = annals.as_ref().ok_or_else(|| {
+                        AppError::new(
+                            "annals_configuration_required",
+                            "Krisis processing requires explicit Annals binary, config, and library ID",
+                        )
+                    })?;
+                    account::doctor(annals)?;
+                    if let Some(pending) = store.pending_account()? {
+                        let receipt = account::accept(&pending, annals, store.state_directory())?;
+                        store.record_annals_acceptance(&pending, &receipt)?;
+                        print_account_delivery(&pending.account_id, &receipt, cli.json)
+                    } else {
+                        let result = process_one_observation(&mut store, annals)?;
+                        print_process_result(result.as_ref(), cli.json)
+                    }
                 }
                 ObserveCommand::Status(args) => {
                     let status = match args.date.as_deref() {
@@ -246,14 +238,16 @@ fn run(cli: Cli) -> AppResult<()> {
                         print_json(&status)
                     } else {
                         println!(
-                            "Observer baseline: {}\nQueued: {}\nProcessing: {}\nComplete: {}\nFailed: {}",
+                            "Observer baseline: {}\nQueued: {}\nProcessing: {}\nComplete: {}\nFailed: {}\nAccounts pending Annals: {}\nAccounts accepted by Annals: {}",
                             status
                                 .observer_baseline_at
                                 .map_or_else(|| "inactive".to_owned(), |value| value.to_string()),
                             status.queued,
                             status.processing,
                             status.complete,
-                            status.failed
+                            status.failed,
+                            status.accounts_pending_annals,
+                            status.accounts_accepted_by_annals
                         );
                         for failure in &status.failures {
                             println!("Failure: {} [{}]", failure.id, failure.failure_code);
@@ -375,20 +369,10 @@ fn run(cli: Cli) -> AppResult<()> {
                 }
             }
         }
-        Command::Review { command } => {
-            let mut store = Store::open(&database)?;
-            let (action, id) = match command {
-                ReviewCommand::Confirm { decision_id } => ("confirm", decision_id),
-                ReviewCommand::Dismiss { decision_id } => ("dismiss", decision_id),
-            };
-            let candidate = store.review(&id, action)?;
-            if cli.json {
-                print_json(&candidate)
-            } else {
-                println!("{} {}", candidate.id, candidate.review_state);
-                Ok(())
-            }
-        }
+        Command::Review { command: _ } => Err(AppError::new(
+            "legacy_surface_retired",
+            "Krisis has no decision review state",
+        )),
     }
 }
 
@@ -468,8 +452,11 @@ fn validate_hook_id(field: &str, value: &str) -> AppResult<()> {
     Ok(())
 }
 
-fn process_one_observation(store: &mut Store) -> AppResult<Option<ProcessResult>> {
-    process_one_observation_for_projection(store, None, false)
+fn process_one_observation(
+    store: &mut Store,
+    annals: &account::AnnalsConfig,
+) -> AppResult<Option<ProcessResult>> {
+    process_one_observation_for_projection(store, None, false, Some(annals))
 }
 
 #[allow(clippy::too_many_lines)]
@@ -477,6 +464,7 @@ fn process_one_observation_for_projection(
     store: &mut Store,
     projection_frontier: Option<ProjectionFrontier>,
     wait_for_active_observer: bool,
+    annals: Option<&account::AnnalsConfig>,
 ) -> AppResult<Option<ProcessResult>> {
     let baseline = store.observer_baseline_at()?.ok_or_else(|| {
         AppError::new(
@@ -501,6 +489,17 @@ fn process_one_observation_for_projection(
     let Some(observation) = observation else {
         return Ok(None);
     };
+    let annals = annals.ok_or_else(|| {
+        AppError::new(
+            "annals_configuration_required",
+            "classification requires a verified dedicated Annals target",
+        )
+    })?;
+    store.bind_observation_annals_target(
+        &observation.id,
+        &annals.expected_library_id,
+        account::config_path(annals)?,
+    )?;
     let loaded = match source::load_observation(
         &observation.session_id,
         observation.thread_id.as_deref(),
@@ -564,7 +563,7 @@ fn process_one_observation_for_projection(
         &source.transcript.thread_id,
         source.source_completed_at,
         &source.source_digest,
-        source.file_change_count,
+        0,
         &source.authorities,
     ) {
         fail_observation_if_terminal(store, &observation.id, &error)?;
@@ -601,11 +600,13 @@ fn process_one_observation_for_projection(
             outcome: None,
         }));
     }
-    if let Err(error) = store.complete_observation(&observation.id, &result.as_observation()) {
+    if let Err(error) =
+        store.complete_observation_if_needed(&observation.id, &result.as_observation())
+    {
         fail_observation_if_terminal(store, &observation.id, &error)?;
         return Err(error);
     }
-    let outcome = if result.candidates.is_empty() {
+    let outcome = if result.accounts.is_empty() && result.candidates.is_empty() {
         "no_decision"
     } else {
         "decision"
@@ -623,7 +624,7 @@ fn classify_observation_with_retries(
     observation: &Observation,
     source: &source::ObservationSource,
 ) -> AppResult<ClassificationResult> {
-    let requester_id = format!("decisions-observe-{}", observation.id);
+    let requester_id = format!("krisis-observe-{}", observation.id);
     let runner = Runner::for_current_user();
     let baseline = store
         .observer_baseline_at()?
@@ -646,7 +647,7 @@ fn classify_observation_with_retries(
                 )
             })?;
         let job_id = format!(
-            "decisions-observe-{}-s{}-a{}",
+            "krisis-observe-{}-s{}-a{}",
             observation.id.trim_start_matches("o_"),
             observation.scope_level,
             attempt
@@ -664,7 +665,6 @@ fn classify_observation_with_retries(
             i64::MAX,
             &observation.turn_id,
             observation.scope_level == 0,
-            source.file_change_count,
         ) {
             Ok(result) => {
                 let _changed = store.mark_job(&job_id, "complete", None)?;
@@ -790,7 +790,17 @@ fn abandon(store: &mut Store, date: Date, json_output: bool) -> AppResult<()> {
     }
 }
 
-fn doctor(database: &Path, email_binary: &Path, json_output: bool) -> AppResult<()> {
+fn doctor(
+    database: &Path,
+    annals: Option<&account::AnnalsConfig>,
+    json_output: bool,
+) -> AppResult<()> {
+    let annals = annals.ok_or_else(|| {
+        AppError::new(
+            "annals_configuration_required",
+            "doctor requires explicit Annals binary, decisions config, and expected library ID",
+        )
+    })?;
     let store = Store::open(database)?;
     let schema_version = store.schema_version()?;
     let observer_baseline_at = store.observer_baseline_at()?;
@@ -812,7 +822,7 @@ fn doctor(database: &Path, email_binary: &Path, json_output: bool) -> AppResult<
         )
     })?;
     Runner::for_current_user().doctor()?;
-    email::doctor(email_binary)?;
+    account::doctor(annals)?;
     if json_output {
         print_json(&json!({
             "ok": true,
@@ -821,17 +831,17 @@ fn doctor(database: &Path, email_binary: &Path, json_output: bool) -> AppResult<
             "observer": observer,
             "conversation_source": source,
             "nucleus": "ready",
-            "email_binary": email_binary
+            "annals_library_id": annals.expected_library_id
         }))
     } else {
         println!(
-            "ready: schema v{schema_version}, observer {} (queued {}, processing {}, failed {}), {} visible conversations, Nucleus ready, Email at {}",
+            "ready: schema v{schema_version}, observer {} (queued {}, processing {}, failed {}), {} visible conversations, Nucleus ready, Annals library {}",
             observer_baseline_at.map_or_else(|| "inactive".to_owned(), |value| value.to_string()),
             observer.queued,
             observer.processing,
             observer.failed,
             source.visible_threads,
-            email_binary.display()
+            annals.expected_library_id
         );
         Ok(())
     }
@@ -874,6 +884,7 @@ fn build(store: &mut Store, date: Date, wait_for_active_observer: bool) -> AppRe
                 window_end,
             }),
             wait_for_active_observer,
+            None,
         )?
         .is_some()
         {}
@@ -942,6 +953,7 @@ where
                     let _ = store.mark_job(&job_id, "complete", None)?;
                     return Ok(ClassificationResult {
                         candidates,
+                        accounts: Vec::new(),
                         authority_verdicts: Vec::new(),
                         needs_context: false,
                     });
@@ -1211,6 +1223,47 @@ fn default_email_binary() -> AppResult<PathBuf> {
     Ok(home.join(".local/bin/email"))
 }
 
+fn annals_configuration(
+    binary: Option<PathBuf>,
+    config: Option<PathBuf>,
+    expected_library_id: Option<String>,
+) -> AppResult<Option<account::AnnalsConfig>> {
+    match (binary, config, expected_library_id) {
+        (None, None, None) => Ok(None),
+        (Some(binary), Some(config), Some(expected_library_id)) => {
+            Ok(Some(account::AnnalsConfig {
+                binary,
+                config,
+                expected_library_id,
+            }))
+        }
+        _ => Err(AppError::new(
+            "annals_configuration_incomplete",
+            "Annals binary, decisions config, and expected library ID must be supplied together",
+        )),
+    }
+}
+
+fn print_account_delivery(
+    account_id: &str,
+    receipt: &account::AnnalsReceipt,
+    json_output: bool,
+) -> AppResult<()> {
+    if json_output {
+        print_json(&json!({
+            "processed": true,
+            "kind": "annals_acceptance",
+            "account_id": account_id,
+            "library_id": receipt.library_id,
+            "job_id": receipt.job_id,
+            "accepted_at": receipt.accepted_at
+        }))
+    } else {
+        println!("Delivered {account_id} to Annals job {}", receipt.job_id);
+        Ok(())
+    }
+}
+
 fn print_build(result: &BuildResult, json_output: bool) -> AppResult<()> {
     if json_output {
         print_json(result)
@@ -1442,6 +1495,7 @@ mod tests {
                 })?;
                 Ok(ClassificationResult {
                     candidates,
+                    accounts: Vec::new(),
                     authority_verdicts: Vec::new(),
                     needs_context: false,
                 })
@@ -1572,6 +1626,7 @@ mod tests {
                 unexpected_calls += 1;
                 Ok(ClassificationResult {
                     candidates: Vec::new(),
+                    accounts: Vec::new(),
                     authority_verdicts: Vec::new(),
                     needs_context: false,
                 })

@@ -1,11 +1,11 @@
 schema_version = 1
-key = "decisions/observer"
+key = "krisis/observer"
 release_id = "__RELEASE_ID__"
 release_root = "__RELEASE_ROOT__"
 authority = "current-user-background"
 overlap = "skip"
 arguments = []
-cwd = "__DECISIONS_STATE__"
+cwd = "__KRISIS_STATE__"
 
 [schedule]
 kind = "interval"
@@ -16,12 +16,15 @@ run_at_load = false
 kind = "interpreted"
 interpreter = "/bin/sh"
 interpreter_sha256 = "__INTERPRETER_SHA256__"
-script = "__RELEASE_ROOT__/bin/decisions-observer"
+script = "__RELEASE_ROOT__/bin/krisis-observer"
 script_sha256 = "__RUNNER_SHA256__"
 
 [environment]
-HOME = "__DECISIONS_HOME__"
+HOME = "__KRISIS_HOME__"
+KRISIS_ANNALS_BINARY = "__KRISIS_ANNALS_BINARY__"
+KRISIS_ANNALS_CONFIG = "__KRISIS_ANNALS_CONFIG__"
+KRISIS_ANNALS_LIBRARY_ID = "__KRISIS_ANNALS_LIBRARY_ID__"
 
 [output]
-stdout = "__DECISIONS_LOGS__/observer.stdout.log"
-stderr = "__DECISIONS_LOGS__/observer.stderr.log"
+stdout = "__KRISIS_LOGS__/observer.stdout.log"
+stderr = "__KRISIS_LOGS__/observer.stderr.log"

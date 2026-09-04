@@ -14,16 +14,12 @@ case "$(rustc --version)" in "rustc $EXPECTED_RUST_VERSION "*) ;; *) printf '%s\
 case "$(cargo --version)" in "cargo $EXPECTED_RUST_VERSION "*) ;; *) printf '%s\n' 'wrong cargo version' >&2; exit 1 ;; esac
 
 printf '%s\n' '==> shell and packaging'
-for script in release.sh packaging/macos/decisions packaging/macos/deploy-user.sh packaging/macos/uninstall-user.sh packaging/macos/test-frontend.sh packaging/macos/test-scheduled-runner.sh packaging/macos/test-observer-runner.sh packaging/macos/test-deploy-user.sh; do
+for script in release.sh packaging/macos/krisis packaging/macos/deploy-user.sh packaging/macos/uninstall-user.sh packaging/macos/test-frontend.sh packaging/macos/test-observer-runner.sh packaging/macos/test-deploy-user.sh; do
     sh -n "$script"
 done
-/bin/sh -n packaging/macos/decisions-daily-email
-/bin/sh -n packaging/macos/decisions-observer
-plutil -lint packaging/macos/org.decisions.daily-email.plist >/dev/null
-plutil -lint packaging/macos/org.decisions.observer.plist >/dev/null
+/bin/sh -n packaging/macos/krisis-observer
 plutil -convert binary1 -o /dev/null -- packaging/macos/hooks.json
 packaging/macos/test-frontend.sh
-packaging/macos/test-scheduled-runner.sh
 packaging/macos/test-observer-runner.sh
 packaging/macos/test-deploy-user.sh
 
@@ -39,20 +35,26 @@ package_version=$(awk '
     }
 ' crates/decisions/Cargo.toml)
 provider_version=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' chancery/provider.json)
+legacy_provider_version=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' chancery-legacy/provider.json)
 [ "$package_version" = "$provider_version" ]
+[ "$package_version" = "$legacy_provider_version" ]
 cargo run --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package chancery --locked --quiet -- validate "$SCRIPT_DIR/chancery"
+cargo run --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package chancery --locked --quiet -- validate "$SCRIPT_DIR/chancery-legacy"
 registry=$(mktemp -d)
 trap 'rm -rf "$registry"' EXIT HUP INT TERM
-ln -s "$SCRIPT_DIR/chancery" "$registry/decisions"
+ln -s "$SCRIPT_DIR/chancery" "$registry/krisis"
+ln -s "$SCRIPT_DIR/chancery-legacy" "$registry/decisions"
 ln -s "$WORKSPACE_DIR/conversations/chancery" "$registry/conversations"
 ln -s "$WORKSPACE_DIR/nucleus/chancery" "$registry/nucleus"
-ln -s "$WORKSPACE_DIR/email/chancery" "$registry/email"
+ln -s "$WORKSPACE_DIR/annals/chancery/annals" "$registry/annals"
+ln -s "$WORKSPACE_DIR/clockwork/chancery" "$registry/clockwork"
+ln -s "$WORKSPACE_DIR/semantics/chancery" "$registry/semantics"
 catalog=$(cargo run --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package chancery --locked --quiet -- --registry "$registry" --json list)
-case "$catalog" in *'"id":"decisions.daily.digest"'*) ;; *) printf '%s\n' 'daily digest missing from catalog' >&2; exit 1 ;; esac
+case "$catalog" in *'"id":"krisis.decision.capture"'*) ;; *) printf '%s\n' 'Krisis capture missing from catalog' >&2; exit 1 ;; esac
 case "$catalog" in *'"id":"decisions.lifecycle.consume"'*) ;; *) printf '%s\n' 'lifecycle stream missing from catalog' >&2; exit 1 ;; esac
-resolution=$(cargo run --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package chancery --locked --quiet -- --registry "$registry" --json resolve decisions.lifecycle.consume --require completeness_and_freshness)
-case "$resolution" in *'"status":"resolved_not_ready"'*) ;; *) printf '%s\n' 'lifecycle promise did not resolve' >&2; exit 1 ;; esac
-case "$resolution" in *'"state":"mixed"'*) ;; *) printf '%s\n' 'lifecycle promise did not retain mixed declared and unspecified facets' >&2; exit 1 ;; esac
+resolution=$(cargo run --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package chancery --locked --quiet -- --registry "$registry" --json resolve krisis.decision.capture --require completeness_and_freshness || true)
+case "$resolution" in *'"status":"incomplete_declaration"'*) ;; *) printf '%s\n' 'Krisis capture resolution did not preserve declared gaps' >&2; exit 1 ;; esac
+case "$resolution" in *'"code":"promise_unspecified"'*) ;; *) printf '%s\n' 'Krisis capture resolution lost its explicit non-guarantees' >&2; exit 1 ;; esac
 
 printf '%s\n' '==> rustfmt'
 cargo fmt --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package decisions -- --check
@@ -64,4 +66,5 @@ printf '%s\n' '==> rustdoc'
 RUSTDOCFLAGS='-D warnings' cargo doc --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package decisions --no-deps --locked
 printf '%s\n' '==> release build'
 cargo build --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package decisions --release --locked
+test "$("$WORKSPACE_DIR/target/release/krisis" --version)" = "krisis $package_version"
 printf '%s\n' 'ci.sh: green'

@@ -13,6 +13,9 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 SOURCE_FRONTEND="$SCRIPT_DIR/annals-user"
 SOURCE_RUNNER="$SCRIPT_DIR/annals-inbox"
 SOURCE_DEFINITION="$SCRIPT_DIR/annals-inbox.clockwork.toml.in"
+SOURCE_DECISIONS_CONFIG="$SCRIPT_DIR/annals-decisions.toml.in"
+SOURCE_DECISIONS_DEFINITION="$SCRIPT_DIR/annals-decisions-inbox.clockwork.toml.in"
+SOURCE_DECISIONS_PROVISIONER="$SCRIPT_DIR/provision-decisions-user.sh"
 SOURCE_LEGACY_AGENT_PLIST="$SCRIPT_DIR/org.annals.inbox.agent.plist"
 SOURCE_UPDATER="$SCRIPT_DIR/deploy-user.sh"
 if [ -d "$SCRIPT_DIR/../share/chancery/annals" ] \
@@ -179,11 +182,27 @@ prove_current_release_definition() {
         [ -f "$owned_file" ] && [ ! -L "$owned_file" ] \
             || fail "current Annals release has an invalid file: $owned_file"
     done
-    [ "$(awk 'END { print NR }' "$owned_manifest")" -eq 15 ] \
-        || fail "current Annals release manifest is not canonical: $owned_manifest"
-
     owned_format=$(sed -n 's/^  "format": \([0-9][0-9]*\),$/\1/p' \
         "$owned_manifest")
+    case "$owned_format" in
+        3)
+            [ "$(awk 'END { print NR }' "$owned_manifest")" -eq 15 ] \
+                || fail "current Annals release manifest is not canonical: $owned_manifest"
+            ;;
+        4)
+            [ "$(awk 'END { print NR }' "$owned_manifest")" -eq 18 ] \
+                || fail "current Annals release manifest is not canonical: $owned_manifest"
+            for owned_file in \
+                "$owned_release_root/package/annals-decisions.toml.in" \
+                "$owned_release_root/package/annals-decisions-inbox.clockwork.toml.in" \
+                "$owned_release_root/package/provision-decisions-user.sh"
+            do
+                [ -f "$owned_file" ] && [ ! -L "$owned_file" ] \
+                    || fail "current Annals release has an invalid file: $owned_file"
+            done
+            ;;
+        *) fail "current release has no supported Annals identity: $owned_release_root" ;;
+    esac
     owned_manifest_release=$(sed -n \
         's/^  "release_id": "\([0-9a-f]\{64\}\)",$/\1/p' "$owned_manifest")
     owned_binary_hash=$(sed -n \
@@ -198,6 +217,15 @@ prove_current_release_definition() {
     owned_template_hash=$(sed -n \
         's/^  "clockwork_template_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
         "$owned_manifest")
+    owned_decisions_config_hash=$(sed -n \
+        's/^  "decisions_config_template_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
+        "$owned_manifest")
+    owned_decisions_template_hash=$(sed -n \
+        's/^  "decisions_clockwork_template_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
+        "$owned_manifest")
+    owned_decisions_provisioner_hash=$(sed -n \
+        's/^  "decisions_provisioner_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
+        "$owned_manifest")
     owned_legacy_plist_hash=$(sed -n \
         's/^  "legacy_agent_plist_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
         "$owned_manifest")
@@ -209,7 +237,7 @@ prove_current_release_definition() {
     owned_chancery_usage_hash=$(sed -n \
         's/^  "chancery_usage_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
         "$owned_manifest")
-    [ "$owned_format" = 3 ] \
+    { [ "$owned_format" = 3 ] || [ "$owned_format" = 4 ]; } \
         && [ "$owned_manifest_release" = "$owned_release_id" ] \
         || fail "current release has no exact Annals Clockwork identity: $owned_release_root"
     for owned_hash in \
@@ -223,6 +251,18 @@ prove_current_release_definition() {
             *[!0-9a-f]*) fail 'current Annals release has an invalid hash' ;;
         esac
     done
+    if [ "$owned_format" = 4 ]; then
+        for owned_hash in \
+            "$owned_decisions_config_hash" "$owned_decisions_template_hash" \
+            "$owned_decisions_provisioner_hash"
+        do
+            [ "${#owned_hash}" -eq 64 ] \
+                || fail 'current Annals release has an invalid decisions-package hash'
+            case "$owned_hash" in
+                *[!0-9a-f]*) fail 'current Annals release has an invalid decisions-package hash' ;;
+            esac
+        done
+    fi
 
     validate_chancery_bundle "$owned_release_root/share/chancery/annals"
     validate_chancery_bundle "$owned_release_root/share/chancery/annals-usage"
@@ -234,6 +274,18 @@ prove_current_release_definition() {
         "$owned_release_root/bin/annals" | awk '{print $1}')
     actual_owned_runner_hash=$(shasum -a 256 "$owned_runner" | awk '{print $1}')
     actual_owned_template_hash=$(shasum -a 256 "$owned_template" | awk '{print $1}')
+    actual_owned_decisions_config_hash=
+    actual_owned_decisions_template_hash=
+    actual_owned_decisions_provisioner_hash=
+    if [ "$owned_format" = 4 ]; then
+        actual_owned_decisions_config_hash=$(shasum -a 256 \
+            "$owned_release_root/package/annals-decisions.toml.in" | awk '{print $1}')
+        actual_owned_decisions_template_hash=$(shasum -a 256 \
+            "$owned_release_root/package/annals-decisions-inbox.clockwork.toml.in" \
+            | awk '{print $1}')
+        actual_owned_decisions_provisioner_hash=$(shasum -a 256 \
+            "$owned_release_root/package/provision-decisions-user.sh" | awk '{print $1}')
+    fi
     actual_owned_legacy_plist_hash=$(shasum -a 256 \
         "$owned_release_root/package/org.annals.inbox.agent.plist" | awk '{print $1}')
     actual_owned_updater_hash=$(shasum -a 256 \
@@ -254,13 +306,29 @@ prove_current_release_definition() {
         && [ "$(shasum -a 256 "$owned_release_root/package/annals-user" | awk '{print $1}')" = "$owned_frontend_hash" ] \
         && [ "$(shasum -a 256 "$owned_release_root/package/annals-inbox" | awk '{print $1}')" = "$owned_runner_hash" ] \
         || fail "current Annals release content changed: $owned_release_root"
-    actual_owned_release_id=$(printf '%s\n' \
-        "$actual_owned_binary_hash" "$actual_owned_usage_binary_hash" \
-        "$actual_owned_frontend_hash" "$actual_owned_runner_hash" \
-        "$actual_owned_template_hash" "$actual_owned_legacy_plist_hash" \
-        "$actual_owned_updater_hash" "$actual_owned_chancery_annals_hash" \
-        "$actual_owned_chancery_usage_hash" \
-        | shasum -a 256 | awk '{print $1}')
+    if [ "$owned_format" = 4 ]; then
+        [ "$actual_owned_decisions_config_hash" = "$owned_decisions_config_hash" ] \
+            && [ "$actual_owned_decisions_template_hash" = "$owned_decisions_template_hash" ] \
+            && [ "$actual_owned_decisions_provisioner_hash" = "$owned_decisions_provisioner_hash" ] \
+            || fail "current Annals decisions package changed: $owned_release_root"
+        actual_owned_release_id=$(printf '%s\n' \
+            "$actual_owned_binary_hash" "$actual_owned_usage_binary_hash" \
+            "$actual_owned_frontend_hash" "$actual_owned_runner_hash" \
+            "$actual_owned_template_hash" "$actual_owned_decisions_config_hash" \
+            "$actual_owned_decisions_template_hash" \
+            "$actual_owned_decisions_provisioner_hash" \
+            "$actual_owned_legacy_plist_hash" "$actual_owned_updater_hash" \
+            "$actual_owned_chancery_annals_hash" "$actual_owned_chancery_usage_hash" \
+            | shasum -a 256 | awk '{print $1}')
+    else
+        actual_owned_release_id=$(printf '%s\n' \
+            "$actual_owned_binary_hash" "$actual_owned_usage_binary_hash" \
+            "$actual_owned_frontend_hash" "$actual_owned_runner_hash" \
+            "$actual_owned_template_hash" "$actual_owned_legacy_plist_hash" \
+            "$actual_owned_updater_hash" "$actual_owned_chancery_annals_hash" \
+            "$actual_owned_chancery_usage_hash" \
+            | shasum -a 256 | awk '{print $1}')
+    fi
     [ "$actual_owned_release_id" = "$owned_release_id" ] \
         || fail "current Annals release content identity changed: $owned_release_root"
 
@@ -406,6 +474,9 @@ for source in \
     "$SOURCE_FRONTEND" \
     "$SOURCE_RUNNER" \
     "$SOURCE_DEFINITION" \
+    "$SOURCE_DECISIONS_CONFIG" \
+    "$SOURCE_DECISIONS_DEFINITION" \
+    "$SOURCE_DECISIONS_PROVISIONER" \
     "$SOURCE_LEGACY_AGENT_PLIST" \
     "$SOURCE_UPDATER"
 do
@@ -1010,6 +1081,12 @@ usage_binary_hash=$(shasum -a 256 "$usage_binary_path" | awk '{print $1}')
 frontend_hash=$(shasum -a 256 "$SOURCE_FRONTEND" | awk '{print $1}')
 runner_hash=$(shasum -a 256 "$SOURCE_RUNNER" | awk '{print $1}')
 definition_template_hash=$(shasum -a 256 "$SOURCE_DEFINITION" | awk '{print $1}')
+decisions_config_template_hash=$(shasum -a 256 \
+    "$SOURCE_DECISIONS_CONFIG" | awk '{print $1}')
+decisions_definition_template_hash=$(shasum -a 256 \
+    "$SOURCE_DECISIONS_DEFINITION" | awk '{print $1}')
+decisions_provisioner_hash=$(shasum -a 256 \
+    "$SOURCE_DECISIONS_PROVISIONER" | awk '{print $1}')
 legacy_agent_plist_hash=$(shasum -a 256 "$SOURCE_LEGACY_AGENT_PLIST" | awk '{print $1}')
 updater_hash=$(shasum -a 256 "$SOURCE_UPDATER" | awk '{print $1}')
 chancery_annals_hash=$(chancery_bundle_hash "$SOURCE_CHANCERY_ANNALS")
@@ -1017,8 +1094,10 @@ chancery_usage_hash=$(chancery_bundle_hash "$SOURCE_CHANCERY_USAGE")
 
 release_id=$(printf '%s\n' \
     "$binary_hash" "$usage_binary_hash" "$frontend_hash" "$runner_hash" \
-    "$definition_template_hash" "$legacy_agent_plist_hash" "$updater_hash" \
-    "$chancery_annals_hash" "$chancery_usage_hash" \
+    "$definition_template_hash" "$decisions_config_template_hash" \
+    "$decisions_definition_template_hash" "$decisions_provisioner_hash" \
+    "$legacy_agent_plist_hash" "$updater_hash" "$chancery_annals_hash" \
+    "$chancery_usage_hash" \
     | shasum -a 256 | awk '{print $1}')
 release_dir="$RELEASES_DIR/$release_id"
 
@@ -1038,6 +1117,12 @@ if [ ! -e "$release_dir" ]; then
     install -m 0755 "$SOURCE_RUNNER" "$temporary_release/package/annals-inbox"
     install -m 0600 "$SOURCE_DEFINITION" \
         "$temporary_release/package/annals-inbox.clockwork.toml.in"
+    install -m 0600 "$SOURCE_DECISIONS_CONFIG" \
+        "$temporary_release/package/annals-decisions.toml.in"
+    install -m 0600 "$SOURCE_DECISIONS_DEFINITION" \
+        "$temporary_release/package/annals-decisions-inbox.clockwork.toml.in"
+    install -m 0755 "$SOURCE_DECISIONS_PROVISIONER" \
+        "$temporary_release/package/provision-decisions-user.sh"
     install -m 0600 "$SOURCE_LEGACY_AGENT_PLIST" \
         "$temporary_release/package/org.annals.inbox.agent.plist"
     cp -R "$SOURCE_CHANCERY_ANNALS" \
@@ -1056,13 +1141,19 @@ if [ ! -e "$release_dir" ]; then
     fi
     {
         printf '{\n'
-        printf '  "format": 3,\n'
+        printf '  "format": 4,\n'
         printf '  "release_id": "%s",\n' "$release_id"
         printf '  "binary_sha256": "%s",\n' "$binary_hash"
         printf '  "usage_binary_sha256": "%s",\n' "$usage_binary_hash"
         printf '  "frontend_sha256": "%s",\n' "$frontend_hash"
         printf '  "runner_sha256": "%s",\n' "$runner_hash"
         printf '  "clockwork_template_sha256": "%s",\n' "$definition_template_hash"
+        printf '  "decisions_config_template_sha256": "%s",\n' \
+            "$decisions_config_template_hash"
+        printf '  "decisions_clockwork_template_sha256": "%s",\n' \
+            "$decisions_definition_template_hash"
+        printf '  "decisions_provisioner_sha256": "%s",\n' \
+            "$decisions_provisioner_hash"
         printf '  "legacy_agent_plist_sha256": "%s",\n' "$legacy_agent_plist_hash"
         printf '  "updater_sha256": "%s",\n' "$updater_hash"
         printf '  "chancery_annals_sha256": "%s",\n' "$chancery_annals_hash"
@@ -1093,6 +1184,12 @@ else
         || fail "existing release updater does not match $release_id"
     [ "$(shasum -a 256 "$release_dir/package/annals-inbox.clockwork.toml.in" | awk '{print $1}')" = "$definition_template_hash" ] \
         || fail "existing release Clockwork template does not match $release_id"
+    [ "$(shasum -a 256 "$release_dir/package/annals-decisions.toml.in" | awk '{print $1}')" = "$decisions_config_template_hash" ] \
+        || fail "existing release decisions config template does not match $release_id"
+    [ "$(shasum -a 256 "$release_dir/package/annals-decisions-inbox.clockwork.toml.in" | awk '{print $1}')" = "$decisions_definition_template_hash" ] \
+        || fail "existing release decisions Clockwork template does not match $release_id"
+    [ "$(shasum -a 256 "$release_dir/package/provision-decisions-user.sh" | awk '{print $1}')" = "$decisions_provisioner_hash" ] \
+        || fail "existing release decisions provisioner does not match $release_id"
     [ "$(shasum -a 256 "$release_dir/package/org.annals.inbox.agent.plist" | awk '{print $1}')" = "$legacy_agent_plist_hash" ] \
         || fail "existing release legacy LaunchAgent template does not match $release_id"
     validate_chancery_bundle "$release_dir/share/chancery/annals"
@@ -1124,6 +1221,12 @@ fi
     || fail "release updater does not match $release_id"
 [ "$(shasum -a 256 "$release_dir/package/annals-inbox.clockwork.toml.in" | awk '{print $1}')" = "$definition_template_hash" ] \
     || fail "release Clockwork template does not match $release_id"
+[ "$(shasum -a 256 "$release_dir/package/annals-decisions.toml.in" | awk '{print $1}')" = "$decisions_config_template_hash" ] \
+    || fail "release decisions config template does not match $release_id"
+[ "$(shasum -a 256 "$release_dir/package/annals-decisions-inbox.clockwork.toml.in" | awk '{print $1}')" = "$decisions_definition_template_hash" ] \
+    || fail "release decisions Clockwork template does not match $release_id"
+[ "$(shasum -a 256 "$release_dir/package/provision-decisions-user.sh" | awk '{print $1}')" = "$decisions_provisioner_hash" ] \
+    || fail "release decisions provisioner does not match $release_id"
 [ "$(shasum -a 256 "$release_dir/package/org.annals.inbox.agent.plist" | awk '{print $1}')" = "$legacy_agent_plist_hash" ] \
     || fail "release legacy LaunchAgent template does not match $release_id"
 [ "$(chancery_bundle_hash "$release_dir/share/chancery/annals")" = "$chancery_annals_hash" ] \

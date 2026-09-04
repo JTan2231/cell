@@ -165,7 +165,9 @@ chmod 0755 "$clockwork"
 make_home() {
     target_home=$1
     mkdir -p "$target_home/.local/bin"
-    for prerequisite in codex decisions; do
+    mkdir -p "$target_home/Library/Application Support/Annals/decisions"
+    : >"$target_home/Library/Application Support/Annals/decisions/config.toml"
+    for prerequisite in codex annals; do
         cat >"$target_home/.local/bin/$prerequisite" <<'EOF'
 #!/bin/sh
 exit 0
@@ -186,11 +188,38 @@ for argument in "$@"; do
     if [ "$argument" = --database ]; then previous=database; fi
 done
 case " $* " in
+    *' project activate-annals '*)
+        [ -n "$database" ] || exit 1
+        case " $* " in
+            *' --final-decisions-watermark legacy-final '*) ;;
+            *) exit 1 ;;
+        esac
+        grep -Fx 'schema one database' "$database" >/dev/null || exit 1
+        [ ! -e "$HOME/.local/bin/semantics" ] || exit 1
+        current="$HOME/Library/Application Support/Semantics/install/current"
+        [ -L "$current" ] || exit 1
+        selected=$(readlink "$current")
+        [ "$HOME/Library/Application Support/Semantics/install/$selected/libexec/semantics" != "$0" ] \
+            || exit 1
+        printf '%s\n' "$selected" \
+            >"$HOME/Library/Application Support/Semantics/candidate-activation-selector"
+        printf '%s\n' 'schema two database' 'annals activated before selector switch' >"$database"
+        printf '%s\n' '{"activation_watermark":"afe1_0000","library_id":"0123456789abcdef0123456789abcdef"}'
+        ;;
     *' doctor '*)
         [ "${SECRET_SENTINEL+x}" != x ] || exit 1
+        [ ! -f "$HOME/Library/Application Support/Semantics/fail-candidate-doctor" ] || exit 1
         [ -n "$database" ] || exit 1
-        [ -f "$database" ] || printf '%s\n' 'schema one database' >"$database"
-        printf '%s\n' '{"checks":[{"detail":"schema 1 at synthetic","name":"database","ok":true},{"detail":"synthetic","name":"participation_markers","ok":true},{"detail":"synthetic","name":"decisions_lifecycle","ok":true},{"detail":"synthetic","name":"conversations_exact_cwd","ok":true},{"detail":"synthetic","name":"nucleus_reconciliation","ok":true}],"ok":true}'
+        [ -f "$database" ] || printf '%s\n' 'schema two database' >"$database"
+        ! grep -Fx 'schema one database' "$database" >/dev/null || exit 1
+        activation_selector="$HOME/Library/Application Support/Semantics/candidate-activation-selector"
+        if [ -f "$activation_selector" ]; then
+            current="$HOME/Library/Application Support/Semantics/install/current"
+            selected=$(readlink "$current")
+            [ "$selected" = "$(cat "$activation_selector")" ] || exit 1
+            rm -f "$activation_selector"
+        fi
+        printf '%s\n' '{"checks":[{"detail":"schema 2 at synthetic","name":"database","ok":true},{"detail":"synthetic","name":"participation_markers","ok":true},{"detail":"synthetic","name":"annals_decision_feed","ok":true},{"detail":"synthetic","name":"conversations_exact_cwd","ok":true},{"detail":"synthetic","name":"nucleus_reconciliation","ok":true}],"ok":true}'
         ;;
     *) exit 1 ;;
 esac
@@ -301,6 +330,7 @@ install_format_one_fixture() {
     ln -s "$format_one_install/current/share/chancery/semantics" \
         "$format_one_provider"
     printf '%s\n' 'schema one database' >"$format_one_state/semantics.db"
+    chmod 0600 "$format_one_state/semantics.db"
     sed \
         -e "s|__SEMANTICS_WORKER_RUNNER__|$format_one_install/current/bin/semantics-worker|g" \
         -e "s|__SEMANTICS_STATE_DIR__|$format_one_state|g" \
@@ -375,15 +405,67 @@ fi
 [ -f "$loaded/org.semantics.worker" ]
 grep -F /tmp/foreign-semantics-home "$legacy_plist" >/dev/null
 cp "$legacy_plist_expected" "$legacy_plist"
+touch "$legacy_state/fail-candidate-doctor"
+if HOME="$legacy_home" "$package/deploy-user.sh" --binary "$candidate" \
+    --clockwork "$clockwork" --home "$legacy_home" --launchctl "$launchctl" \
+    --final-decisions-watermark legacy-final --keep-maintenance >/dev/null 2>&1
+then
+    printf '%s\n' 'legacy cutover committed despite candidate doctor failure' >&2
+    exit 1
+fi
+rm -f "$legacy_state/fail-candidate-doctor"
+grep -Fx 'schema one database' "$legacy_state/semantics.db" >/dev/null
+[ -f "$legacy_plist" ]
+[ -f "$loaded/org.semantics.worker" ]
+[ -L "$legacy_home/.local/bin/semantics" ]
+[ -L "$format_one_provider" ]
+[ "$(readlink "$legacy_state/install/current")" = "releases/$format_one_release_id" ]
+[ ! -e "$legacy_state/.clockwork-maintenance" ]
+if HOME="$legacy_home" "$package/deploy-user.sh" --binary "$candidate" \
+    --clockwork "$clockwork" --home "$legacy_home" --launchctl "$launchctl" \
+    >/dev/null 2>&1
+then
+    printf '%s\n' 'legacy deployment activated Annals without the final Decisions watermark assertion' >&2
+    exit 1
+fi
+[ -f "$loaded/org.semantics.worker" ]
+[ -L "$legacy_home/.local/bin/semantics" ]
+grep -Fx 'schema one database' "$legacy_state/semantics.db" >/dev/null
+if HOME="$legacy_home" "$package/deploy-user.sh" --binary "$candidate" \
+    --clockwork "$clockwork" --home "$legacy_home" --launchctl "$launchctl" \
+    --final-decisions-watermark legacy-final >/dev/null 2>&1
+then
+    printf '%s\n' 'legacy cutover accepted a final watermark without a retained handoff' >&2
+    exit 1
+fi
 HOME="$legacy_home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" \
-    --home "$legacy_home" --launchctl "$launchctl" >/dev/null
+    --home "$legacy_home" --launchctl "$launchctl" \
+    --final-decisions-watermark legacy-final --keep-maintenance >/dev/null
 [ ! -e "$legacy_plist" ]
 [ ! -f "$loaded/org.semantics.worker" ]
 [ -f "$clockwork_loaded/org.clockwork.semantics.worker" ]
+[ -f "$legacy_state/.clockwork-maintenance" ]
+[ -f "$legacy_state/.deployment-maintenance.json" ]
+[ "$(stat -f '%Lp' "$legacy_state/.deployment-maintenance.json")" = 600 ]
+[ "$(stat -f '%l' "$legacy_state/.deployment-maintenance.json")" -eq 1 ]
+legacy_selected_release=$(readlink "$legacy_state/install/current")
+legacy_selected_release=${legacy_selected_release#releases/}
+legacy_selected_definition=$(sed -n '2p' \
+    "$legacy_home/Library/Application Support/Clockwork/test/semantics.worker")
+[ "$(plutil -extract key raw "$legacy_state/.deployment-maintenance.json")" = \
+    semantics/worker ]
+[ "$(plutil -extract release_id raw "$legacy_state/.deployment-maintenance.json")" = \
+    "$legacy_selected_release" ]
+[ "$(plutil -extract definition_digest raw \
+    "$legacy_state/.deployment-maintenance.json")" = "$legacy_selected_definition" ]
 grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*3' "$legacy_provider"
 grep -Fx "version=$SEMANTICS_TEST_VERSION" \
     "$legacy_state/install/current/manifest.txt" >/dev/null
 grep -Fx 'version=0.1.0' "$legacy_state/install/previous/manifest.txt" >/dev/null
+HOME="$legacy_home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" \
+    --home "$legacy_home" --launchctl "$launchctl" >/dev/null
+[ ! -e "$legacy_state/.clockwork-maintenance" ]
+[ ! -e "$legacy_state/.deployment-maintenance.json" ]
 HOME="$legacy_home" "$package/uninstall-user.sh" --clockwork "$clockwork" \
     --home "$legacy_home" --launchctl "$launchctl" >/dev/null
 
@@ -399,7 +481,7 @@ for argument in "$@"; do
     if [ "$argument" = --database ]; then previous=database; fi
 done
 [ -n "$database" ] && printf '%s\n' 'bad candidate mutation' >"$database"
-printf '%s\n' '{"ok":true,"checks":[{"name":"database","ok":true,"detail":"schema 2 at synthetic"},{"name":"participation_markers","ok":true,"detail":"synthetic"},{"name":"decisions_lifecycle","ok":true,"detail":"synthetic"},{"name":"conversations_exact_cwd","ok":true,"detail":"synthetic"},{"name":"nucleus_reconciliation","ok":true,"detail":"synthetic"}]}'
+printf '%s\n' '{"ok":true,"checks":[{"name":"database","ok":true,"detail":"schema 1 at synthetic"},{"name":"participation_markers","ok":true,"detail":"synthetic"},{"name":"annals_decision_feed","ok":true,"detail":"synthetic"},{"name":"conversations_exact_cwd","ok":true,"detail":"synthetic"},{"name":"nucleus_reconciliation","ok":true,"detail":"synthetic"}]}'
 EOF
 chmod 0755 "$bad_candidate"
 
@@ -407,7 +489,7 @@ bad_home="$temporary/BadHome"
 make_home "$bad_home"
 if HOME="$bad_home" "$package/deploy-user.sh" --binary "$bad_candidate" --clockwork "$clockwork" \
     --home "$bad_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment accepted a candidate that did not prove schema 1' >&2
+    printf '%s\n' 'deployment accepted a candidate that did not prove schema 2' >&2
     exit 1
 fi
 [ ! -e "$bad_home/.local/bin/semantics" ]
@@ -542,9 +624,25 @@ for argument in "$@"; do
 done
 [ -n "$database" ] || exit 1
 printf '%s\n' 'candidate two mutation' >"$database"
-printf '%s\n' '{"ok":true,"checks":[{"name":"database","ok":true,"detail":"schema 1 at synthetic"},{"name":"participation_markers","ok":true,"detail":"synthetic"},{"name":"decisions_lifecycle","ok":true,"detail":"synthetic"},{"name":"conversations_exact_cwd","ok":true,"detail":"synthetic"},{"name":"nucleus_reconciliation","ok":true,"detail":"synthetic"}]}'
+printf '%s\n' '{"ok":true,"checks":[{"name":"database","ok":true,"detail":"schema 2 at synthetic"},{"name":"participation_markers","ok":true,"detail":"synthetic"},{"name":"annals_decision_feed","ok":true,"detail":"synthetic"},{"name":"conversations_exact_cwd","ok":true,"detail":"synthetic"},{"name":"nucleus_reconciliation","ok":true,"detail":"synthetic"}]}'
 EOF
 chmod 0755 "$candidate_two"
+
+database_hardlink="$temporary/semantics.db.hardlink"
+ln "$database" "$database_hardlink"
+if HOME="$home" "$package/deploy-user.sh" --binary "$candidate_two" --clockwork "$clockwork" \
+    --home "$home" --launchctl "$launchctl" >/dev/null 2>&1
+then
+    printf '%s\n' 'deployment opened a hard-linked Semantics database' >&2
+    exit 1
+fi
+[ "$(cat "$database")" = "$database_before" ]
+[ "$(cat "$database_hardlink")" = "$database_before" ]
+[ "$(readlink "$current")" = "$first_release" ]
+[ "$(sed -n '2p' "$binding")" = "$first_definition" ]
+[ -f "$clockwork_loaded/org.clockwork.semantics.worker" ]
+rm -f "$database_hardlink"
+
 : >"$fail_bootstrap"
 if HOME="$home" "$package/deploy-user.sh" --binary "$candidate_two" --clockwork "$clockwork" \
     --home "$home" --launchctl "$launchctl" >/dev/null 2>&1; then
@@ -647,6 +745,14 @@ fi
 grep -Fx 'retained maintenance evidence' \
     "$home/Library/Application Support/Semantics/.clockwork-maintenance" >/dev/null
 rm -f "$temporary/semantics-maintenance-link"
+HOME="$home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" \
+    --home "$home" --launchctl "$launchctl" >/dev/null
+grep -Fx 'retained maintenance evidence' \
+    "$home/Library/Application Support/Semantics/.clockwork-maintenance" >/dev/null
+grep -Fx 'maintenance_preexisting=1' "$state/install/last-update.txt" >/dev/null
+grep -Fx 'maintenance_owned=0' "$state/install/last-update.txt" >/dev/null
+grep -Fx 'maintenance_retained=1' "$state/install/last-update.txt" >/dev/null
+rm -f "$home/Library/Application Support/Semantics/.clockwork-maintenance"
 
 null_recovery_home="$temporary/NullRecoveryHome"
 make_home "$null_recovery_home"
@@ -663,6 +769,7 @@ null_recovery_binding="$null_recovery_home/Library/Application Support/Clockwork
 [ ! -e "$null_recovery_home/.local/bin/semantics" ]
 [ ! -e "$null_recovery_home/Library/Application Support/Chancery/providers/semantics" ]
 [ -f "$null_recovery_state/.clockwork-maintenance" ]
+[ -f "$null_recovery_state/.deployment-maintenance.json" ]
 [ "$(sed -n '1p' "$null_recovery_binding")" = false ]
 grep -Eq '^[0-9a-f]{64}$' "$null_recovery_binding"
 HOME="$null_recovery_home" "$package/deploy-user.sh" --binary "$candidate" \
@@ -670,6 +777,7 @@ HOME="$null_recovery_home" "$package/deploy-user.sh" --binary "$candidate" \
     --launchctl "$launchctl" >/dev/null
 [ -L "$null_recovery_home/.local/bin/semantics" ]
 [ ! -e "$null_recovery_state/.clockwork-maintenance" ]
+[ ! -e "$null_recovery_state/.deployment-maintenance.json" ]
 [ "$(sed -n '1p' "$null_recovery_binding")" = true ]
 
 unsafe_home="$temporary/UnsafeRollbackHome"
@@ -688,11 +796,12 @@ fi
 [ ! -e "$unsafe_home/.local/bin/semantics" ]
 grep -F 'domain admission is maintenance-gated' "$temporary/unsafe.stderr" >/dev/null
 [ -f "$unsafe_state/.clockwork-maintenance" ]
-[ ! -e "$unsafe_state/install/current" ]
+[ -f "$unsafe_state/.deployment-maintenance.json" ]
+[ -L "$unsafe_state/install/current" ]
 [ ! -e "$unsafe_state/install/previous" ]
 [ ! -e "$unsafe_home/Library/Application Support/Chancery/providers/semantics" ]
 [ ! -e "$unsafe_home/Library/LaunchAgents/org.semantics.worker.plist" ]
-[ ! -x "$unsafe_state/install/current/bin/semantics-worker" ]
+[ -x "$unsafe_state/install/current/bin/semantics-worker" ]
 unsafe_transaction=$(find "$unsafe_state/install" -mindepth 1 -maxdepth 1 -type d -name '.transaction.*' -print | head -1)
 [ -n "$unsafe_transaction" ]
 [ -f "$unsafe_transaction/semantics.db" ]

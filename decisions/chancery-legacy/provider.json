@@ -1,0 +1,34 @@
+{
+  "schema_version": 3,
+  "provider": {
+    "id": "decisions",
+    "name": "Decisions compatibility",
+    "release": "0.4.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "The Decisions compatibility provider documents read-only access to retained version-one lifecycle events."
+    ],
+    "not_authoritative_for": [
+      "It is not authoritative for new Krisis capture, Annals accounts, current decision force, or consumer policy."
+    ],
+    "inventory": {
+      "covers": ["The sole supported retained Decisions lifecycle read surface."],
+      "completeness": "complete",
+      "excludes": ["Retired digest, review, email, scheduling, mutation, and all active Krisis operations are excluded."]
+    },
+    "shared_access_and_trust": [
+      "The compatibility interface is a local-current-user read surface through the krisis executable."
+    ],
+    "shared_privacy_and_retention": [
+      "Retained lifecycle events contain sensitive normalized legacy decision state and machine-local anchors; no retention horizon is promised."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release 0.4.0 preserves contract-version-one reads while Krisis appends no new events."
+    ],
+    "operational_limits": [
+      "Only opaque-cursor watermark and bounded pagination are supported."
+    ]
+  },
+  "entries": ["entries/lifecycle-consume.json"]
+}

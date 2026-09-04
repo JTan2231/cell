@@ -19,7 +19,9 @@ Both forms deliberately examine the selected work even when its bytes were
 retained earlier. Annals freezes HEAD, submits one closed Nucleus job, and
 expects its liaison to record one reconciliation through Annals' validated
 tools. The liaison has only the scoped work/corpus interfaces supplied by
-Annals. Its final prose is diagnostic and is not parsed as the result.
+Annals. Its final prose is diagnostic and is not parsed as the result. Direct
+integration requires a `general` library; a decisions library is dispatched
+only from producer-accepted inbox jobs or their explicit retry children.
 
 Annals may reuse the newest successful examination for the exact same work,
 base revision, prompt version, model, and reasoning effort. Force a fresh

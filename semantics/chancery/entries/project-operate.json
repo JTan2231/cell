@@ -1,6 +1,6 @@
 {
   "id": "semantics.project.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -16,39 +16,39 @@
     "A project folder lacks an exact root AGENTS.md participation marker.",
     "Retained state should be deleted; uninstall intentionally retains it."
   ],
-  "outcome": "A validated content-addressed installation and explicit project registry whose immutable semantic repositories are maintained from post-activation Decisions lifecycle events.",
+  "outcome": "A validated content-addressed installation and explicit project registry whose immutable semantic repositories are maintained from post-activation accounts in one exact Annals decisions library.",
   "effects": [
     "Deployment writes a content-addressed user release whose identity covers the runner and unrendered Clockwork template, renders absolute paths and hashes only after that identity exists, publishes CLI and Chancery selectors, registers an immutable `semantics/worker` definition, and may initialize or migrate retained SQLite after a private backup.",
-    "Registration stores the canonical folder and current Decisions watermark; it intentionally excludes earlier events.",
-    "The worker reads Decisions and Conversations, may submit one restricted Nucleus job, and commits at most one valid semantic revision per invocation.",
+    "Registration stores the canonical folder and current Annals decisions-feed watermark; it intentionally excludes earlier accounts. Existing schema-one projects require one explicit common-watermark feed activation after legacy intake is drained.",
+    "The worker reads the public Annals decision-account feed and Conversations, may submit one restricted Nucleus job, and commits at most one valid semantic revision per invocation.",
     "Uninstall removes only the owned service and public selectors while retaining the database, releases, and body-free logs."
   ],
   "authority": [
     "Semantics owns project identity, routing, cursor persistence, intake transitions, stable concept IDs, typed-effect validation, and the SQLite commit.",
-    "Decisions owns lifecycle order and decision/review facts; Conversations owns exact thread cwd metadata; Nucleus owns model execution and mailbox transport; Clockwork owns scheduled activation metadata and process lifecycle; neither owns semantic truth.",
+    "Annals owns decisions-library identity, acceptance event order, immutable account projection, and feed cursors; Conversations owns exact thread cwd metadata; Nucleus owns model execution and mailbox transport; Clockwork owns scheduled activation metadata and process lifecycle; none owns semantic truth.",
     "A participating project's source and tests remain runtime authority; its root AGENTS.md owns participation instructions."
   ],
   "success": [
-    "Doctor proves schema 1, exact markers, Decisions lifecycle access, Conversations exact-cwd readiness, and Nucleus health, capabilities, schemas, and immutable toolset.",
+    "Doctor proves schema 2, exact markers, the explicitly configured Annals decisions feed and library identity, Conversations exact-cwd readiness, and Nucleus health, capabilities, successor schemas, and immutable toolset.",
     "The `semantics/worker` binding selects one immutable definition with a 60-second interval, no run-at-load, overlap skip, no timeout, exact release-local runner and hashes, and a scrubbed key-free environment; deployment and uninstall prove that exact current-release identity before mutating a selected binding, the release-independent marker is current-user-owned mode 0600 and non-hard-linked, and the product worker lock remains the domain serialization boundary.",
-    "Each registered root is canonical and uniquely owned, and every committed effective admission or confirmation includes an exact Decisions event/decision grounding."
+    "Each registered root is canonical and uniquely owned, and every new account-derived revision includes an exact Annals library/event/account grounding."
   ],
   "failure_and_recovery": [
     "Pause the affected project before semantic maintenance; paused state prevents a late Nucleus proposal from committing.",
-    "A failed deployment restores prior selectors and the quiescent database plus sidecars. It restores the exact prior non-null Clockwork selection and enabled state, or restores the prior owned legacy LaunchAgent, never both. A previously absent or disabled-null binding becomes a disabled tombstone that may retain the candidate digest because Clockwork has no clear-selection operation; a previously disabled selected definition is restored without transient activation. Semantics retains exact release bytes for every registered immutable definition. Before releasing the worker flock, an unprovable rollback retains the release-independent maintenance gate, attempts both scheduler cleanups, removes public selectors, and retains its private recovery backup; when a candidate selection cannot be cleared back to null, its exact private current-release selector is retained as ownership evidence, while other unprovable paths remove it.",
+    "A failed deployment restores prior selectors and the quiescent database plus sidecars. It restores the exact prior non-null Clockwork selection and enabled state, or restores the prior owned legacy LaunchAgent, never both. A previously absent or disabled-null binding becomes a disabled tombstone that may retain the candidate digest because Clockwork has no clear-selection operation; a previously disabled selected definition is restored without transient activation. Semantics retains exact release bytes for every registered immutable definition. Before releasing the worker flock, an unprovable rollback retains the release-independent maintenance gate, exact private current-release selector, authenticated hold, and recovery backup while attempting both scheduler cleanups and removing public selectors.",
     "Clockwork definition ownership is a point-in-time inspection rather than a compare-and-swap; Semantics serializes its own deploy and uninstall, while concurrent direct same-user mutation of `semantics/worker` is unsupported and may require maintenance-gated recovery.",
-    "Unassigned and awaiting-review intake remain explicit. Retry refuses an active or ambiguous prior Nucleus job and creates a new attempt only after positive terminal evidence.",
-    "Never manufacture Decisions cursors, edit SQLite, or clear a Nucleus correlation to force replay."
+    "New missing-route intake and preserved legacy unassigned or awaiting-review intake remain explicit. New accepted accounts never enter a confidence or review gate. Retry refuses an active or ambiguous prior Nucleus job and creates a new attempt only after positive terminal evidence.",
+    "Never manufacture Annals or legacy Decisions cursors, edit SQLite, or clear a Nucleus correlation to force replay."
   ],
   "privacy": [
-    "SQLite can contain normalized decision text, rationale, source anchors, project paths, and repository meanings; keep it local and mode 0600.",
-    "The worker sends only a minimized semantic projection of one lifecycle event and the complete selected repository snapshot to Nucleus; lossless anchors, cursor, and routing metadata stay in Semantics SQLite.",
+    "SQLite can contain normalized decision-account projections, preserved legacy decision state, source anchors, registered project path history, fixed routing outcomes, and repository meanings, but not resolved account cwd; keep it local and mode 0600.",
+    "The worker sends only one normalized account projection and the complete selected repository snapshot to Nucleus; exact cwd is transient, while anchors, cursor, project assignment, and a fixed routing outcome stay in Semantics SQLite.",
     "Clockwork receives executable paths, hashes, schedule, working directory, scrubbed environment, product log paths, and process outcomes only; it does not read or retain Semantics log bodies or semantic content.",
     "Nucleus uses workspace none, no shell, no web, and a neutral temporary cwd.",
-    "Service logs are body-free and must not contain decision statements, conversation text, project content, prompts, credentials, diffs, commands, or tool payloads."
+    "Service logs contain only counters, opaque IDs, and bounded product-owned failures; they must not contain raw dependency diagnostics, decision statements, conversation text, project content, anchors, paths, prompts, credentials, diffs, commands, or tool payloads."
   ],
   "dependencies": [
-    {"id": "decisions.lifecycle.consume", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "annals.decision-account.exchange", "min_contract": 1, "max_contract_exclusive": 2},
     {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
     {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
     {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
@@ -57,7 +57,7 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read the Semantics system installation manual and inspect Decisions, Conversations, Nucleus, Clockwork, retained state, and Chancery publication readiness.",
+    "Read the Semantics system installation manual and inspect the dedicated Annals decisions library, Conversations, Nucleus, Clockwork, retained state, and Chancery publication readiness.",
     "For deployment, build a green candidate and run the content-addressed deployer; verify doctor and all owned selectors before registering projects.",
     "Add the exact Semantics-Project marker to the project's root AGENTS.md, register the canonical folder at the current watermark, and seed only existing authoritative vocabulary when needed; after verifying HEAD, the source file may be separately removed under normal project authority.",
     "Inspect repository HEAD, intake state, the one-shot worker report, Clockwork binding and activation history, and body-free product logs before relying on periodic maintenance.",
@@ -65,8 +65,8 @@
   ],
   "checkpoints": [
     "Registration and moves require an exact line in a regular root AGENTS.md; nested or approximate markers do not participate.",
-    "Every new registration captures the current Decisions watermark, moves preserve activation and scan cursors, and a review follows its existing non-retired decision-to-project binding before cwd routing.",
-    "Deploy and uninstall share one update lock and the release-independent maintenance gate; an existing gate is validated and never truncated, existing product logs are accepted only as current-user-owned non-hard-linked regular files and restricted to mode 0600 without truncation, and deployment registers the inactive candidate definition, disables the prior binding and any owned legacy LaunchAgent, suspends the CLI, holds the exact worker flock, and proves SQLite quiescent before database-plus-sidecars backup and scrubbed candidate doctor.",
+    "Every new registration captures the current Annals decisions-feed watermark; moves preserve both Annals and legacy Decisions cursor history, and account routing always uses the exact authority thread cwd.",
+    "Deploy and uninstall share one update lock and the release-independent maintenance gate; an unreceipted existing gate is validated, preserved, and never claimed, while --keep-maintenance retains an authenticated Semantics-owned hold that a later successful same-release invocation can release. Existing product logs are accepted only as current-user-owned non-hard-linked regular files and restricted to mode 0600 without truncation. Deployment registers the inactive candidate definition, disables the prior binding and any owned legacy LaunchAgent, suspends the CLI, holds the exact worker flock, and proves SQLite quiescent before database-plus-sidecars backup and scrubbed candidate doctor. Doctor fails closed when an active or paused project lacks its selected Annals decisions-library identity or activation and scan cursors.",
     "Nucleus receives no project workspace, shell, web, transcript, diff, command, tool output, or fallback authority; Semantics owns the commit transaction.",
     "Retirement is allowed only from paused and only after all assigned nonterminal or failed intake is resolved."
   ],
@@ -76,12 +76,12 @@
     "For an alternate test home, pass explicit --home and --launchctl only within an isolated synthetic boundary."
   ],
   "stop_when": [
-    "Decisions lifecycle contract 1, Conversations contract 3 exact cwd, or Nucleus execution contract 1 is unavailable or doctor is not fully green.",
+    "Annals decision-account exchange contract 1, Conversations contract 3 exact cwd, or Nucleus execution contract 1 is unavailable or doctor is not fully green.",
     "A selector, release, plist, database, sidecar, marker, or registered root is foreign, symbolic where a regular path is required, ambiguous, or cannot be safely rolled back.",
     "The requested action would delete retained state, manufacture a cursor, expose repository bodies in logs, or let Nucleus bypass Semantics validation."
   ],
   "interfaces": [
-    {"label": "Deploy", "invocation": "semantics/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH --clockwork ABSOLUTE_CLOCKWORK_PATH"},
+    {"label": "Deploy", "invocation": "semantics/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH --clockwork ABSOLUTE_CLOCKWORK_PATH [--final-decisions-watermark OPAQUE_CURSOR --keep-maintenance]"},
     {"label": "Doctor", "invocation": "/Users/joey/.local/bin/semantics --json doctor"},
     {"label": "Register project", "invocation": "/Users/joey/.local/bin/semantics project register ID ABSOLUTE_ROOT"},
     {"label": "Intake status", "invocation": "/Users/joey/.local/bin/semantics intake status"},
@@ -89,7 +89,7 @@
   ],
   "does_not_authorize": [
     "Deleting retained database, releases, logs, or project files.",
-    "Reading upstream or Semantics SQLite directly, parsing cursors, or mutating Decisions, Conversations, Nucleus, Codex, or project runtime state.",
+    "Reading upstream or Semantics SQLite directly, parsing cursors, or mutating Annals, Conversations, Nucleus, Codex, or project runtime state.",
     "Treating model output or Nucleus completion as a semantic commit."
   ],
   "promise": {
@@ -97,7 +97,7 @@
       {"status": "declared", "statement": "The local operator may install and diagnose Semantics, maintain explicitly marked project registrations and intake, or recover its serial worker."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "Project registration or move selects a canonical folder with the exact root participation marker; worker operation requires compatible Decisions lifecycle, Conversations exact-cwd, and Nucleus execution contracts."},
+      {"status": "declared", "statement": "Project registration or move selects a canonical folder with the exact root participation marker; worker operation requires compatible Annals decision-account feed, Conversations exact-cwd, and Nucleus execution contracts."},
       {"status": "declared", "statement": "Retirement requires a paused project with no unresolved assigned intake, and retained-state deletion is outside this operation."}
     ],
     "inputs": [
@@ -107,10 +107,10 @@
       {"status": "declared", "statement": "Outputs are a validated installed release, durable project or intake transition, one optional committed semantic revision, or structured readiness and recovery evidence."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Registration activates at the current opaque Decisions watermark; moves preserve project identity and cursors, pause fences commits, and semantic success is the validated SQLite revision transaction rather than model completion."}
+      {"status": "declared", "statement": "Registration activates at the current opaque Annals decisions-feed watermark; moves preserve project identity plus new and legacy cursor histories, pause fences commits, and semantic success is the validated SQLite revision transaction rather than model completion."}
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Project ID is stable across moves, lifecycle event and decision IDs retain upstream identity, concept IDs are project-local stable identities, and cursors remain opaque transport positions."}
+      {"status": "declared", "statement": "Project ID is stable across moves, Annals library/event/account IDs retain upstream identity, concept IDs are project-local stable identities, and both new and legacy cursors remain opaque transport positions."}
     ],
     "completeness_and_freshness": [
       {"status": "declared", "statement": "A new project intentionally excludes events before its activation watermark; the serial worker advances durable scan state and commits at most one validated semantic revision per invocation."},
@@ -127,10 +127,10 @@
       {"status": "declared", "statement": "Each worker invocation processes at most one reconciliation and one Nucleus job, with one immutable managed tool, neutral cwd, workspace none, no shell, and no web."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Operation contract version 2 requires Decisions lifecycle contract 1, Conversations history contract 3, Nucleus execution contract 1, and Clockwork schedule contract 1; immutable schema or tool meaning changes receive successor identities."}
+      {"status": "declared", "statement": "Operation contract version 3 requires Annals decision-account exchange contract 1, Conversations history contract 3, Nucleus execution contract 1, and Clockwork schedule contract 1; preserved legacy schemas retain their identity and new tool meaning uses successor identities."}
     ],
     "reliances": [
-      {"status": "declared", "statement": "Semantics consumes ordered decision lifecycle events and opaque cursors from Decisions.", "target": "decisions", "kind": "data", "contract": "decisions.lifecycle.consume"},
+      {"status": "declared", "statement": "Semantics consumes the ordered accepted-account feed and opaque cursors from one exact Annals decisions library.", "target": "annals", "kind": "data", "contract": "annals.decision-account.exchange"},
       {"status": "declared", "statement": "Semantics reads exact persisted task working-directory metadata from Conversations for deepest-root project routing.", "target": "conversations", "kind": "data", "contract": "conversations.history.explore"},
       {"status": "declared", "statement": "Semantics uses Nucleus for one restricted reconciliation attempt while retaining all semantic commit authority.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"},
       {"status": "declared", "statement": "Deployment and recurring intake rely on Clockwork for immutable definition registration, one selected binding, overlap suppression, process history, and launchd projection; Semantics retains all intake and commit authority.", "target": "clockwork", "kind": "control", "contract": "clockwork.schedule.operate"},

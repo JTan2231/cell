@@ -20,12 +20,12 @@
   "effects": [
     "Repository show, search, log, and diff are local read-only operations.",
     "Snapshots are rebuilt from immutable typed effects; no mutable concept projection is consulted.",
-    "This capability does not call Decisions, Conversations, Nucleus, Chancery, or a network service."
+    "This capability does not call Annals, Decisions, Conversations, Nucleus, Chancery, or a network service."
   ],
   "authority": [
     "Semantics SQLite is authoritative for maintained project terminology, stable concept identity, grounding history, and semantic revision order.",
     "The participating project's source, tests, and product documentation remain authoritative for runtime behavior and implementation facts.",
-    "Decision and seed groundings are provenance, not permission to ignore newer project evidence."
+    "Annals decision-account, legacy Decision, and seed groundings are provenance, not permission to ignore newer project evidence."
   ],
   "success": [
     "The command selects one registered project and returns the requested HEAD or existing revision.",
@@ -38,7 +38,7 @@
     "If required Chancery discovery is unavailable, report that discovery failure instead of guessing a local route; Semantics repository reads themselves do not call Chancery at runtime."
   ],
   "privacy": [
-    "Repository meanings, normalized decision provenance, source anchors, and project identities remain sensitive local state.",
+    "Repository meanings, normalized account and legacy decision provenance, source anchors, and project identities remain sensitive local state.",
     "Do not copy repository output into service logs or unrelated external systems.",
     "Repository output contains no transcript, diff, command, tool result, prompt, credential, or raw project file content."
   ],
@@ -89,11 +89,11 @@
       {"status": "unspecified", "statement": "No repository-size, result-count, or wall-clock read service-level objective is promised here beyond command-specific bounds."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 preserves stable project and concept IDs and replays schema-one immutable revisions; provider release and revision number remain separate."},
+      {"status": "declared", "statement": "Capability contract version 1 preserves stable project and concept IDs and replays schema-two immutable revisions, including legacy Decision groundings; provider release and revision number remain separate."},
       {"status": "unspecified", "statement": "No future contract deprecation or repository migration window is promised by this read capability."}
     ],
     "reliances": [
-      {"status": "not_applicable", "statement": "Repository reads invoke no Decisions, Conversations, Nucleus, Chancery runtime, model, or network; retained groundings are local provenance rather than live dependencies."}
+      {"status": "not_applicable", "statement": "Repository reads invoke no Annals, Decisions, Conversations, Nucleus, Chancery runtime, model, or network; retained groundings are local provenance rather than live dependencies."}
     ]
   },
   "manual": "manuals/repository-explore.md"

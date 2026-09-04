@@ -77,7 +77,10 @@ for script in \
     packaging/launchd/deploy-user.sh \
     packaging/launchd/install.sh \
     packaging/launchd/migrate-to-user.sh \
+    packaging/launchd/provision-decisions-user.sh \
     packaging/launchd/test-frontend.sh \
+    packaging/launchd/test-decisions-provision.sh \
+    packaging/launchd/test-decisions-template.sh \
     packaging/launchd/test-inbox-runner.sh \
     packaging/launchd/test-migrate-to-user.sh \
     packaging/launchd/test-user-deploy.sh \
@@ -92,12 +95,14 @@ do
 done
 
 packaging/launchd/test-frontend.sh
+packaging/launchd/test-decisions-template.sh
 packaging/launchd/test-inbox-runner.sh
 
 if [ "$(uname -s)" = Darwin ]; then
     packaging/launchd/test-user-frontend.sh
     packaging/launchd/test-user-deploy.sh
     packaging/launchd/test-migrate-to-user.sh
+    packaging/launchd/test-decisions-provision.sh
 fi
 
 if [ "$(uname -s)" = Darwin ] && command -v plutil >/dev/null 2>&1; then

@@ -1,11 +1,12 @@
 # Semantics
 
 Semantics maintains one authoritative, append-only vocabulary for each
-participating project folder. It consumes durable Decisions lifecycle events,
-uses Conversations only to resolve an event's exact thread working directory,
-and asks Nucleus to propose one typed reconciliation when a decision is
-effective. Semantics—not the model and not Nucleus—validates and commits the
-result.
+participating project folder. It consumes durable accepted-account events from
+one dedicated Annals decisions library, uses Conversations only to resolve an
+account's exact authority-thread working directory, and asks Nucleus to propose
+one typed reconciliation. Semantics—not Annals, the model, or Nucleus—validates
+and commits the result. Legacy Decisions intake remains preserved for replay
+and recovery but is no longer the future feed.
 
 On macOS, Clockwork owns the recurring process activation for the immutable
 `semantics/worker` definition. Semantics still owns worker serialization,

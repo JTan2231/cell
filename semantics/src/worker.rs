@@ -318,14 +318,17 @@ where
     }
 }
 
-enum AuthorityGate {
+pub(crate) enum AuthorityGate {
     Reconcile,
     Ignore(String),
     AwaitReview(String),
     Fail(String),
 }
 
-fn authority_gate(store: &Store, intake: &crate::domain::Intake) -> Result<AuthorityGate> {
+pub(crate) fn authority_gate(
+    store: &Store,
+    intake: &crate::domain::Intake,
+) -> Result<AuthorityGate> {
     if intake
         .decision
         .anchors
@@ -421,12 +424,12 @@ fn has_active_grounding(store: &Store, intake: &crate::domain::Intake) -> Result
     }))
 }
 
-struct WorkerLock {
+pub(crate) struct WorkerLock {
     file: File,
 }
 
 impl WorkerLock {
-    fn acquire(database: &Path) -> Result<Option<Self>> {
+    pub(crate) fn acquire(database: &Path) -> Result<Option<Self>> {
         let lock_path = lock_path(database);
         let file = OpenOptions::new()
             .create(true)

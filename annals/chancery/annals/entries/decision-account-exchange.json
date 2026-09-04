@@ -1,0 +1,105 @@
+{
+  "id": "annals.decision-account.exchange",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Accept and read Krisis decision accounts",
+  "summary": "Idempotently accept immutable Krisis accounts into one explicitly identified decisions library and read its bounded accepted-account feed.",
+  "use_when": [
+    "Krisis must hand one deterministic decision account to its configured Annals decisions library.",
+    "A local consumer must freeze or page the accepted-account prefix without reading raw account Markdown."
+  ],
+  "do_not_use_when": [
+    "General source material should enter the primary Annals inbox.",
+    "A caller wants to review, rank, supersede, retract, delete, or determine the current force of a decision.",
+    "The decisions-library config and exact expected persistent library ID are unavailable."
+  ],
+  "outcome": "One durable producer acceptance and unstarted inbox job, an exact idempotent replay, or a bounded immutable feed view fixed to a requested watermark.",
+  "effects": [
+    "First acceptance copies unchanged account bytes into a complete producer-identified inbox envelope and appends one immutable acceptance row.",
+    "A decision-config inbox run binds only a fresh empty spool or verifies its existing binding, ignores ordinary incoming files, and dispatches only committed producer-accepted originals or their explicit retry children.",
+    "Exact replay and feed reads are side-effect free; conflicting bytes, invalid input, maintenance, insufficient storage, or identity mismatch create no acceptance.",
+    "Acceptance starts no source delivery, model run, reconciliation, or corpus transition; later inbox dispatch retains its separate existing effects."
+  ],
+  "authority": [
+    "Krisis owns decision identification, producer key, account meaning, bounded content, and source anchors.",
+    "Annals owns the configured library and spool identity, accepted bytes, producer idempotency, job identity, event order, and feed projection.",
+    "A feed event reports acceptance, not objective truth, semantic relevance, processing success, or current force."
+  ],
+  "success": [
+    "A created or replayed receipt identifies contract version, exact library, producer, key, SHA-256, stable original job, and acceptance time without content or paths.",
+    "A page echoes the requested watermark and cursor, returns ascending immutable events, and leaves an empty-page cursor unchanged.",
+    "Concurrent identical calls converge on one acceptance and concurrent different-byte calls have at most one winner."
+  ],
+  "failure_and_recovery": [
+    "Retry an ambiguous acceptance only with the identical producer key and bytes; never mint a replacement key because dispatch failed.",
+    "If envelope publication completed before an uncertain database commit, the next identical call reconstructs the acceptance from that envelope.",
+    "Treat missing or mismatched config, schema, library identity, spool identity, envelope, or digest as a closed boundary; do not redirect or edit receipts."
+  ],
+  "privacy": [
+    "Complete accounts remain private in Krisis handoff state and the Annals decisions spool, library, archives, and backups; model dispatch may later disclose relevant decisions-library context only through the separate inbox contract.",
+    "Feed output omits raw Markdown, authority quotation, transcript, paths, diffs, commands, tool output, prompts, credentials, and general-library content."
+  ],
+  "interfaces": [
+    {"label": "Accept account", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> inbox accept --producer krisis --key <ID> <FILE>"},
+    {"label": "Freeze watermark", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> decision-feed watermark"},
+    {"label": "Read fixed page", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> decision-feed page --watermark <TOKEN> --after <CURSOR> --limit <N>"}
+  ],
+  "dependencies": [],
+  "does_not_authorize": [
+    "Release, installation, provisioning, migration, activation, historical import, publication, remote sharing, direct SQLite or spool editing, deletion, pruning, or storage cleanup.",
+    "Using the primary library, changing the configured target per account, or treating local producer routing as authentication against the local user.",
+    "Consumer acknowledgement, correction, retraction, review, confidence, disposition, supersession, relationship, semantic relevance, or current-force state."
+  ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "Krisis may submit one immutable schema-one Markdown account per decision, and local consumers may read the resulting accepted-account prefix."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Every exchange command names one explicit decisions config containing a library, inbox root, and exact 32-lowercase-hex expected library ID; the current schema, persistent library identity, and immutable decisions role must match, and acceptance or dispatch binds or verifies the spool identity."},
+      {"status": "declared", "statement": "New acceptance additionally requires no deployment maintenance and enough spool headroom to preserve the configured reserve."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Acceptance takes producer krisis, one nonblank producer key, and one regular non-symbolic nonblank UTF-8 Markdown file of at most 1 MiB with the ordered schema-one account sections and metadata."},
+      {"status": "declared", "statement": "A page takes one committed watermark, one earlier watermark or item cursor, and a limit from 1 through 200."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Acceptance JSON reports contract_version, library_id, producer, key, source_sha256, job_id, accepted_at, and acceptance created or replayed."},
+      {"status": "declared", "statement": "Watermark JSON reports contract and library identity plus an opaque token; page JSON echoes library, watermark, request_cursor and next_cursor and returns bounded accepted-account events."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Producer acceptance means Annals durably owns one exact complete spool copy and the immutable producer tuple; it is not source-delivery, processing, reconciliation, corpus, truth, relevance, or current-force success."},
+      {"status": "declared", "statement": "Each feed event projects the account ID, schema, statement, context, action, result, Unix occurrence time and precision, and exactly one host/thread/turn/item/span authority anchor without returning raw account bytes."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Producer idempotency is scoped by persistent library ID, immutable decisions role, producer krisis, and producer key; SHA-256 binds exact bytes, job ID binds the original queue item, and event and cursor values are opaque."},
+      {"status": "declared", "statement": "Occurrence time is signed Unix seconds paired with producer precision; authority span is a nonempty unsigned byte range; file and page bounds are bytes and event count respectively."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A watermark freezes every committed acceptance through one sequence; pages return the ascending prefix strictly after the requested cursor and no later than that watermark."},
+      {"status": "unsupported", "statement": "No historical Decisions rows, negative decision coverage, raw account body, dispatch result, semantic interpretation, correction, retraction, or consumer acknowledgement appears in feed version one."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported boundary is the local Annals CLI with an explicit decisions config; acceptance permits only producer krisis and feed commands are read-only."},
+      {"status": "declared", "statement": "With decision_feed configured, direct work add or integration, generic enqueue, ordinary incoming registration, and backlog import are rejected; the decisions database rejects those generic source paths even through another config, spool, or direct selector; dispatch permits accepted originals and explicit retry children."},
+      {"status": "unsupported", "statement": "Library override, environment or frontend fallback, direct SQLite access, receipt editing, cross-library query, and remote access are unsupported."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "First acceptance publishes one complete unstarted envelope before committing its event; exact replay returns the original result, changed bytes conflict without mutation, and publication uncertainty is recovered from the envelope."},
+      {"status": "declared", "statement": "Pages are fixed to one watermark, strictly ascending, replay a committed prefix after uncertainty, and preserve the exact request cursor when empty; Annals keeps no consumer cursor."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "One call accepts one file of at most 1 MiB; one page returns 1 through 200 requested events; new spool copies preserve the configured available-byte reserve."},
+      {"status": "unspecified", "statement": "No acceptance, queue, dispatch, model, storage, schedule, throughput, quality, or wall-clock service-level objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Exchange contract version 1, account schema 1, library schema 5, producer receipt 1, feed cursor 1, provider release, and later inbox or Nucleus protocols are distinct compatibility axes."},
+      {"status": "unsupported", "statement": "Changed accepted bytes, correction, retraction, or a new event type cannot be introduced under this version-one identity."}
+    ],
+    "reliances": [
+      {"status": "not_applicable", "statement": "Acceptance and feed reads invoke no Conversations, Nucleus, Clockwork, model, network, or remote service; later dispatch has its own declared Nucleus reliance."}
+    ]
+  },
+  "manual": "manuals/decision-account-exchange.md"
+}

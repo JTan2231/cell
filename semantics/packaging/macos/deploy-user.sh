@@ -23,6 +23,9 @@ binary_path=
 clockwork_path=
 install_home=${HOME:-}
 launchctl_path=/bin/launchctl
+final_decisions_watermark=
+final_decisions_watermark_set=0
+keep_maintenance=0
 
 fail() {
     printf 'semantics user deploy: %s\n' "$*" >&2
@@ -30,7 +33,7 @@ fail() {
 }
 
 usage() {
-    printf '%s\n' 'Usage: deploy-user.sh --binary ABSOLUTE_PATH --clockwork ABSOLUTE_PATH [--home ABSOLUTE_PATH] [--launchctl ABSOLUTE_PATH]'
+    printf '%s\n' 'Usage: deploy-user.sh --binary ABSOLUTE_PATH --clockwork ABSOLUTE_PATH [--home ABSOLUTE_PATH] [--launchctl ABSOLUTE_PATH] [--final-decisions-watermark OPAQUE_CURSOR] [--keep-maintenance]'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -39,6 +42,15 @@ while [ "$#" -gt 0 ]; do
         --clockwork) [ "$#" -ge 2 ] || fail '--clockwork requires a path'; clockwork_path=$2; shift 2 ;;
         --home) [ "$#" -ge 2 ] || fail '--home requires a path'; install_home=$2; shift 2 ;;
         --launchctl) [ "$#" -ge 2 ] || fail '--launchctl requires a path'; launchctl_path=$2; shift 2 ;;
+        --final-decisions-watermark)
+            [ "$#" -ge 2 ] || fail '--final-decisions-watermark requires an opaque cursor'
+            [ "$final_decisions_watermark_set" -eq 0 ] \
+                || fail '--final-decisions-watermark may be supplied only once'
+            final_decisions_watermark=$2
+            final_decisions_watermark_set=1
+            shift 2
+            ;;
+        --keep-maintenance) keep_maintenance=1; shift ;;
         -h|--help) usage; exit 0 ;;
         *) fail "unknown argument: $1" ;;
     esac
@@ -46,6 +58,10 @@ done
 
 [ -n "$binary_path" ] || fail '--binary is required'
 [ -n "$clockwork_path" ] || fail '--clockwork is required'
+[ "$final_decisions_watermark_set" -eq 0 ] || [ -n "$final_decisions_watermark" ] \
+    || fail '--final-decisions-watermark must not be empty'
+[ "$final_decisions_watermark_set" -eq 0 ] || [ "$keep_maintenance" -eq 1 ] \
+    || fail '--final-decisions-watermark requires --keep-maintenance'
 case "$binary_path" in /*) ;; *) fail 'binary must be absolute' ;; esac
 case "$clockwork_path" in /*) ;; *) fail 'clockwork must be absolute' ;; esac
 case "$install_home" in /*) ;; *) fail 'home must be absolute' ;; esac
@@ -175,17 +191,40 @@ prepare_private_log() {
         || fail "unable to make the Semantics log private: $log_path"
 }
 
+validate_private_database_file() {
+    state_path=$1
+    description=$2
+    if [ -L "$state_path" ] \
+        || { [ -e "$state_path" ] && [ ! -f "$state_path" ]; }
+    then
+        fail "$description must be a regular non-symbolic-link file: $state_path"
+    fi
+    [ -e "$state_path" ] || return 0
+    [ "$(stat -f '%u' "$state_path")" -eq "$operator_uid" ] \
+        || fail "$description is not owned by the Semantics operator: $state_path"
+    [ "$(stat -f '%Lp' "$state_path")" = 600 ] \
+        || fail "$description permissions must be exactly 0600: $state_path"
+    [ "$(stat -f '%l' "$state_path")" -eq 1 ] \
+        || fail "$description must not be hard-linked: $state_path"
+}
+
+preflight_private_database_files() {
+    validate_private_database_file "$DATABASE_PATH" 'database'
+    for suffix in wal shm journal; do
+        validate_private_database_file "$DATABASE_PATH-$suffix" 'database sidecar'
+        if [ ! -e "$DATABASE_PATH" ] && [ -f "$DATABASE_PATH-$suffix" ]; then
+            fail "database sidecar exists without its database: $DATABASE_PATH-$suffix"
+        fi
+    done
+    if [ -e "$MAINTENANCE_HOLD_RECEIPT" ] || [ -L "$MAINTENANCE_HOLD_RECEIPT" ]; then
+        validate_private_database_file "$MAINTENANCE_HOLD_RECEIPT" \
+            'maintenance hold receipt'
+        [ -e "$MAINTENANCE_MARKER" ] && [ ! -L "$MAINTENANCE_MARKER" ] \
+            || fail 'maintenance hold receipt has no matching maintenance gate'
+    fi
+}
+
 validate_bundle "$SOURCE_CHANCERY" source
-candidate_version=$("$binary_path" --version) || fail 'unable to read candidate version'
-case "$candidate_version" in
-    'semantics '*) version=${candidate_version#semantics } ;;
-    *) fail "unexpected candidate version: $candidate_version" ;;
-esac
-provider_version=$(/usr/bin/plutil -extract provider.release raw \
-    "$SOURCE_CHANCERY/provider.json" 2>/dev/null) \
-    || fail 'Chancery provider release is unreadable'
-[ "$provider_version" = "$version" ] \
-    || fail "provider release $provider_version does not match candidate $version"
 
 STATE_DIR="$install_home/Library/Application Support/Semantics"
 INSTALL_DIR="$STATE_DIR/install"
@@ -202,6 +241,7 @@ PLIST_PATH="$AGENT_DIR/$LABEL.plist"
 LOG_DIR="$install_home/Library/Logs/Semantics"
 DATABASE_PATH="$STATE_DIR/semantics.db"
 MAINTENANCE_MARKER="$STATE_DIR/.clockwork-maintenance"
+MAINTENANCE_HOLD_RECEIPT="$STATE_DIR/.deployment-maintenance.json"
 PROVIDERS_DIR="$install_home/Library/Application Support/Chancery/providers"
 PROVIDER_LINK="$PROVIDERS_DIR/semantics"
 SERVICE_DOMAIN="gui/$operator_uid"
@@ -221,6 +261,17 @@ for directory in "$CLI_DIR" "$AGENT_DIR" "$PROVIDERS_DIR"; do
     [ ! -e "$directory" ] || [ -d "$directory" ] || fail "directory path is occupied: $directory"
     [ -d "$directory" ] || install -d -m 0755 "$directory"
 done
+preflight_private_database_files
+candidate_version=$("$binary_path" --version) || fail 'unable to read candidate version'
+case "$candidate_version" in
+    'semantics '*) version=${candidate_version#semantics } ;;
+    *) fail "unexpected candidate version: $candidate_version" ;;
+esac
+provider_version=$(/usr/bin/plutil -extract provider.release raw \
+    "$SOURCE_CHANCERY/provider.json" 2>/dev/null) \
+    || fail 'Chancery provider release is unreadable'
+[ "$provider_version" = "$version" ] \
+    || fail "provider release $provider_version does not match candidate $version"
 # Defer catchable termination across the atomic mkdir until the full cleanup
 # trap owns the newly acquired directory lock.
 trap '' HUP INT TERM
@@ -258,6 +309,11 @@ old_last_update=0
 receipt_changed=0
 worker_lock_pid=
 maintenance_created=0
+maintenance_preexisting=0
+maintenance_owned=0
+maintenance_retained=0
+hold_existed=0
+hold_changed=0
 
 release_worker_lock() {
     [ -n "$worker_lock_pid" ] || return 0
@@ -371,6 +427,14 @@ cleanup() {
         if [ "$rollback_ready" -eq 1 ] && ! release_worker_lock; then
             rollback_ready=0
         fi
+        if [ "$rollback_ready" -eq 1 ] && [ "$hold_changed" -eq 1 ]; then
+            if [ "$hold_existed" -eq 1 ]; then
+                install -m 0600 "$transaction_dir/maintenance-hold.before" \
+                    "$MAINTENANCE_HOLD_RECEIPT" || rollback_ready=0
+            else
+                rm -f "$MAINTENANCE_HOLD_RECEIPT" || rollback_ready=0
+            fi
+        fi
         if [ "$rollback_ready" -eq 1 ] && [ "$maintenance_created" -eq 1 ]; then
             maintenance_marker_is_owned && rm -f "$MAINTENANCE_MARKER" \
                 && [ ! -e "$MAINTENANCE_MARKER" ] && [ ! -L "$MAINTENANCE_MARKER" ] \
@@ -381,6 +445,7 @@ cleanup() {
             # The release-independent maintenance marker remains after the
             # worker flock is released, so even an unproven loaded Clockwork
             # projection cannot enter Semantics domain work.
+            [ "$hold_changed" -eq 0 ] || retain_current_for_recovery=1
             HOME="$install_home" "$clockwork_path" --json binding disable \
                 "$CLOCKWORK_KEY" >/dev/null 2>&1 || true
             "$launchctl_path" bootout "$SERVICE_TARGET" >/dev/null 2>&1 || true
@@ -699,10 +764,43 @@ elif [ -x "$install_home/.local/bin/codex" ]; then
 else
     fail 'Codex executable is unavailable'
 fi
-[ -x "$install_home/.local/bin/decisions" ] || fail 'Decisions executable is unavailable'
+[ -x "$install_home/.local/bin/annals" ] || fail 'Annals executable is unavailable'
+[ -f "$install_home/Library/Application Support/Annals/decisions/config.toml" ] \
+    && [ ! -L "$install_home/Library/Application Support/Annals/decisions/config.toml" ] \
+    || fail 'Annals decisions config is unavailable'
 
 engage_maintenance \
     || fail 'Semantics maintenance gate is invalid or unavailable'
+if [ -e "$MAINTENANCE_HOLD_RECEIPT" ]; then
+    validate_private_database_file "$MAINTENANCE_HOLD_RECEIPT" \
+        'maintenance hold receipt'
+    maintenance_marker_is_owned \
+        || fail 'maintenance hold receipt gate is invalid'
+    receipt_key_count=$(/usr/bin/plutil -convert xml1 -o - \
+        "$MAINTENANCE_HOLD_RECEIPT" 2>/dev/null \
+        | awk '/<key>/{count++} END {print count+0}')
+    [ "$receipt_key_count" -eq 4 ] \
+        && [ "$(/usr/bin/plutil -extract version raw \
+            "$MAINTENANCE_HOLD_RECEIPT" 2>/dev/null)" = 1 ] \
+        && [ "$(/usr/bin/plutil -extract key raw \
+            "$MAINTENANCE_HOLD_RECEIPT" 2>/dev/null)" = "$CLOCKWORK_KEY" ] \
+        && [ "$(/usr/bin/plutil -extract release_id raw \
+            "$MAINTENANCE_HOLD_RECEIPT" 2>/dev/null)" = \
+            "${current_clockwork_release_id:-}" ] \
+        && [ "$(/usr/bin/plutil -extract definition_digest raw \
+            "$MAINTENANCE_HOLD_RECEIPT" 2>/dev/null)" = "$prior_clockwork_digest" ] \
+        && [ -n "${current_clockwork_release_id:-}" ] \
+        && [ -n "$prior_clockwork_digest" ] \
+        || fail 'maintenance hold receipt does not match current owned state'
+    install -m 0600 "$MAINTENANCE_HOLD_RECEIPT" \
+        "$transaction_dir/maintenance-hold.before"
+    hold_existed=1
+    maintenance_owned=1
+elif [ "$maintenance_created" -eq 1 ]; then
+    maintenance_owned=1
+else
+    maintenance_preexisting=1
+fi
 prepare_private_log "$LOG_DIR/worker.stdout.log"
 prepare_private_log "$LOG_DIR/worker.stderr.log"
 
@@ -789,22 +887,14 @@ done
 } >"$transaction_dir/prior-install.txt"
 chmod 0600 "$transaction_dir/prior-install.txt"
 
-if [ -L "$DATABASE_PATH" ]; then
-    fail 'database must not be a symbolic link'
-elif [ -e "$DATABASE_PATH" ] && [ ! -f "$DATABASE_PATH" ]; then
-    fail 'database must be a regular file'
-elif [ ! -e "$DATABASE_PATH" ]; then
+preflight_private_database_files
+if [ ! -e "$DATABASE_PATH" ]; then
     database_was_absent=1
 fi
 for suffix in wal shm journal; do
     sidecar="$DATABASE_PATH-$suffix"
-    if [ -L "$sidecar" ]; then
-        fail "database sidecar must not be a symbolic link: $sidecar"
-    elif [ -e "$sidecar" ] && [ ! -f "$sidecar" ]; then
-        fail "database sidecar must be a regular file: $sidecar"
-    elif [ -f "$sidecar" ] && [ "$database_was_absent" -eq 1 ]; then
-        fail "database sidecar exists without its database: $sidecar"
-    fi
+    [ ! -f "$sidecar" ] || [ "$database_was_absent" -eq 0 ] \
+        || fail "database sidecar exists without its database: $sidecar"
 done
 
 require_database_quiescent() {
@@ -826,31 +916,66 @@ if [ "$database_was_absent" -eq 0 ]; then
 fi
 require_database_quiescent
 
+database_touched=1
+if [ "$final_decisions_watermark_set" -eq 1 ]; then
+    /usr/bin/env -i \
+        HOME="$install_home" \
+        PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+        CONVERSATIONS_CODEX="$codex_path" \
+        SEMANTICS_ANNALS="$install_home/.local/bin/annals" \
+        SEMANTICS_ANNALS_CONFIG="$install_home/Library/Application Support/Annals/decisions/config.toml" \
+        "$release/libexec/semantics" --database "$DATABASE_PATH" --json \
+            project activate-annals \
+            --final-decisions-watermark "$final_decisions_watermark" \
+            >"$transaction_dir/annals-activation.json" \
+            2>"$transaction_dir/annals-activation.stderr" \
+        || fail 'candidate rejected the asserted final Decisions watermark or Annals activation'
+fi
+doctor_output=$(/usr/bin/env -i \
+    HOME="$install_home" \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    CONVERSATIONS_CODEX="$codex_path" \
+    SEMANTICS_ANNALS="$install_home/.local/bin/annals" \
+    SEMANTICS_ANNALS_CONFIG="$install_home/Library/Application Support/Annals/decisions/config.toml" \
+    "$release/libexec/semantics" --database "$DATABASE_PATH" --json doctor \
+    2>"$transaction_dir/doctor.stderr") \
+    || fail 'candidate doctor failed'
+doctor_compact=$(printf '%s' "$doctor_output" | tr -d '[:space:]')
+case "$doctor_compact" in *'"ok":true'*) ;; *) fail 'candidate doctor did not report ok' ;; esac
+for check_name in database participation_markers annals_decision_feed conversations_exact_cwd nucleus_reconciliation; do
+    case "$doctor_compact" in
+        *"\"name\":\"$check_name\",\"ok\":true"*) ;;
+        *) fail "candidate doctor did not prove $check_name" ;;
+    esac
+done
+case "$doctor_compact" in *'"detail":"schema2at'*) ;; *) fail 'candidate doctor did not prove schema version 2' ;; esac
+
+# Record the exact owned hold before selector or scheduler publication. A later
+# invocation can therefore prove and release a retained handoff, while an
+# unrelated pre-existing marker remains unclaimed.
+if [ "$maintenance_owned" -eq 1 ]; then
+    maintenance_hold_next="$transaction_dir/maintenance-hold.next"
+    {
+        printf '{\n'
+        printf '  "version": 1,\n'
+        printf '  "key": "%s",\n' "$CLOCKWORK_KEY"
+        printf '  "release_id": "%s",\n' "$release_id"
+        printf '  "definition_digest": "%s"\n' "$candidate_definition_digest"
+        printf '}\n'
+    } >"$maintenance_hold_next"
+    chmod 0600 "$maintenance_hold_next"
+    hold_changed=1
+    mv "$maintenance_hold_next" "$MAINTENANCE_HOLD_RECEIPT"
+    validate_private_database_file "$MAINTENANCE_HOLD_RECEIPT" \
+        'maintenance hold receipt'
+fi
+
 switched=1
 if [ -n "$old_current" ] && [ "$old_current" != "releases/$release_id" ]; then
     atomic_symlink "$old_current" "$PREVIOUS_LINK"
 fi
 atomic_symlink "releases/$release_id" "$CURRENT_LINK"
 atomic_symlink "$EXPECTED_PROVIDER" "$PROVIDER_LINK"
-
-database_touched=1
-doctor_output=$(/usr/bin/env -i \
-    HOME="$install_home" \
-    PATH=/usr/bin:/bin:/usr/sbin:/sbin \
-    CONVERSATIONS_CODEX="$codex_path" \
-    SEMANTICS_DECISIONS="$install_home/.local/bin/decisions" \
-    "$release/libexec/semantics" --database "$DATABASE_PATH" --json doctor) \
-    || fail 'candidate doctor failed'
-doctor_compact=$(printf '%s' "$doctor_output" | tr -d '[:space:]')
-case "$doctor_compact" in *'"ok":true'*) ;; *) fail 'candidate doctor did not report ok' ;; esac
-for check_name in database participation_markers decisions_lifecycle conversations_exact_cwd nucleus_reconciliation; do
-    case "$doctor_compact" in
-        *"\"name\":\"$check_name\",\"ok\":true"*) ;;
-        *) fail "candidate doctor did not prove $check_name" ;;
-    esac
-done
-case "$doctor_compact" in *'"detail":"schema1at'*) ;; *) fail 'candidate doctor did not prove schema version 1' ;; esac
-
 atomic_symlink "$EXPECTED_CLI" "$CLI_PATH"
 cli_suspended=0
 clockwork_switched=1
@@ -859,6 +984,9 @@ HOME="$install_home" "$clockwork_path" --json binding switch \
     || fail 'Clockwork rejected the worker binding switch'
 
 completed_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+if [ "$maintenance_owned" -eq 0 ] || [ "$keep_maintenance" -eq 1 ]; then
+    maintenance_retained=1
+fi
 if [ -n "$old_current" ] && [ "$old_current" != "releases/$release_id" ]; then
     rollback_snapshot="$DEPLOYMENT_BACKUPS_DIR/pre-$release_id-$$"
     rollback_stage="$transaction_dir/rollback-snapshot"
@@ -889,6 +1017,9 @@ receipt="$LAST_UPDATE_PATH.tmp.$$"
     printf 'previous_clockwork_definition=%s\n' "$prior_clockwork_digest"
     printf 'previous_clockwork_enabled=%s\n' "$prior_clockwork_enabled"
     printf 'legacy_launchagent_loaded=%s\n' "$service_was_loaded"
+    printf 'maintenance_preexisting=%s\n' "$maintenance_preexisting"
+    printf 'maintenance_owned=%s\n' "$maintenance_owned"
+    printf 'maintenance_retained=%s\n' "$maintenance_retained"
     printf 'rollback_snapshot=%s\n' "$rollback_snapshot"
     printf 'completed_at=%s\n' "$completed_at"
 } >"$receipt"
@@ -899,10 +1030,14 @@ release_worker_lock || fail 'unable to release the Semantics worker lock'
 
 committed=1
 maintenance_marker_is_owned \
-    || fail 'committed Semantics but the maintenance gate changed before removal'
-rm -f "$MAINTENANCE_MARKER" \
-    || fail 'committed Semantics but could not clear the maintenance gate'
-[ ! -e "$MAINTENANCE_MARKER" ] && [ ! -L "$MAINTENANCE_MARKER" ] \
-    || fail 'committed Semantics but the maintenance gate remains'
-maintenance_created=0
+    || fail 'committed Semantics but the maintenance gate changed'
+if [ "$maintenance_owned" -eq 1 ] && [ "$keep_maintenance" -eq 0 ]; then
+    rm -f "$MAINTENANCE_HOLD_RECEIPT" \
+        || fail 'committed Semantics but could not clear its maintenance receipt'
+    rm -f "$MAINTENANCE_MARKER" \
+        || fail 'committed Semantics but could not clear its maintenance gate'
+    [ ! -e "$MAINTENANCE_MARKER" ] && [ ! -L "$MAINTENANCE_MARKER" ] \
+        || fail 'committed Semantics but its maintenance gate remains'
+    maintenance_created=0
+fi
 printf 'installed semantics %s (%s)\n' "$version" "$release_id"

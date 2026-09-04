@@ -34,6 +34,9 @@ The implemented contracts are:
   and revision history;
 - [Data model](data-model.md): canonical, examination, history, and derived
   SQLite state;
+- [Krisis decision-account exchange](../chancery/annals/manuals/decision-account-exchange.md):
+  producer-idempotent acceptance into a dedicated library and its bounded
+  read-only feed;
 - [Consumption telemetry](telemetry.md): live per-delivery token accounting,
   observation coverage, and account-wide Codex budget reads;
 - [Search](search.md): revision-scoped label and ancestor-context retrieval;

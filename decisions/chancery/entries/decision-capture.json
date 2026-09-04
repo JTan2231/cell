@@ -1,0 +1,125 @@
+{
+  "id": "krisis.decision.capture",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Capture decision accounts into Annals",
+  "summary": "Observe eligible completed root user turns, classify every authority as decision or no-decision, and deliver deterministic immutable decision accounts to the dedicated Annals decisions library.",
+  "use_when": [
+    "Post-activation decisions in completed local Codex root turns should be captured automatically.",
+    "Krisis observer coverage, pending Annals delivery, or a diagnosed failed observation should be inspected or recovered.",
+    "A missed Stop-hook correlation should be reconciled from normalized Conversations history."
+  ],
+  "do_not_use_when": [
+    "Decision accounts should be searched or read after acceptance; use Annals.",
+    "A daily digest, review judgment, supersession graph, truth assessment, or current-force projection is wanted.",
+    "Raw transcripts, files, commands, tools, reasoning, or assistant-only proposals are intended as decision authority."
+  ],
+  "outcome": "Complete durable decision or no-decision coverage for one eligible completed turn and, for each decision, an idempotently accepted immutable account in the configured Annals decisions library.",
+  "effects": [
+    "The Stop hook durably records only a turn correlation; reconciliation may independently enqueue missed eligible completed turns.",
+    "One serial worker may submit one bounded two-level classification job through Nucleus, transactionally record coverage and a deterministic account outbox before acknowledgement, and invoke Annals acceptance for the oldest pending account.",
+    "After Annals accepts an account, Krisis retires its generated prose and body while retaining minimal correlation, authority anchor, digest, coverage, and acceptance receipt."
+  ],
+  "authority": [
+    "A decision is an attributable user transition from practical openness to an explicit settlement constraining intended future behavior or state.",
+    "Only the exact cited user span supplies decision authority; assistant text may provide referential context, action, or result but never creates the decision.",
+    "Krisis owns capture and delivery state, Nucleus owns execution evidence, Conversations owns normalized source resolution, and Annals owns the accepted library."
+  ],
+  "success": [
+    "Every eligible user authority in the admitted completed turn has exactly one durable decision or no-decision verdict.",
+    "Each decision account has a stable ID, exact authority quote and span, bounded statement and optional context/action/result, deterministic Markdown bytes, and a durable Annals outbox item.",
+    "Before classification, Krisis verifies and binds the exact Annals config path and expected library ID; delivery succeeds only when that target returns a matching created or replayed acceptance receipt."
+  ],
+  "failure_and_recovery": [
+    "Ambiguous Nucleus admission resumes the same job and request digest; only positively terminal failure permits a successor, with one initial attempt plus two successors per scope.",
+    "Level zero may request one bounded level-one expansion; level one cannot request further context and oversized mandatory scope fails closed without truncation.",
+    "Annals outage leaves the exact account pending and retries delivery without reclassification; conflicting IDs, bytes, source identity, receipts, or dependency contracts fail closed.",
+    "Terminal observation retry and proven-unavailable unbound source abandonment require their explicit guarded recovery commands."
+  ],
+  "privacy": [
+    "Nucleus receives at most 64 normalized messages and 262144 UTF-8 bytes under opaque aliases, with no real source IDs, paths, commands, tools, reasoning, approvals, file evidence, or web/local execution.",
+    "Krisis temporarily retains bounded accepted account prose until Annals acceptance; routine logs contain only bounded codes and opaque correlations.",
+    "Annals receives only the deterministic account Markdown and exact Source JSON anchor described by this contract."
+  ],
+  "dependencies": [
+    {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "annals.decision-account.exchange", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
+  ],
+  "interfaces": [
+    {"label": "Observer status", "invocation": "/Users/joey/.local/bin/krisis observe status"},
+    {"label": "Process one unit", "invocation": "/Users/joey/.local/bin/krisis observe process"},
+    {"label": "Reconcile missed turns", "invocation": "/Users/joey/.local/bin/krisis observe reconcile"},
+    {"label": "Retry diagnosed failure", "invocation": "/Users/joey/.local/bin/krisis observe retry OBSERVATION_ID"}
+  ],
+  "does_not_authorize": [
+    "Deploying or changing live schedules, Annals libraries, Nucleus registrations, authentication, or existing state.",
+    "Treating Nucleus output, assistant prose, observed action/result, or Annals acceptance as decision authority or truth.",
+    "Reading or mutating either product's SQLite database directly, widening classifier scope, or restoring retired digest/review behavior."
+  ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "The local current user and installed Krisis observer may capture post-baseline decisions into one explicitly configured dedicated Annals decisions library."},
+      {"status": "unsupported", "statement": "This capability is not a decision browser, daily digest, review queue, result tracker, or general transcript exporter."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "Observation requires the write-once activation baseline, a uniquely resolved eligible completed root turn, compatible Conversations and Nucleus contracts, and private migration-compatible Krisis state."},
+      {"status": "declared", "statement": "Delivery requires an absolute Annals executable, an absolute dedicated-library config, and the exact 32-lowercase-hex expected library ID."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Level zero contains every nonblank user authority in the completed turn, the nearest preceding assistant message for each when present, and at most the final assistant message; level one adds the newest prior normalized messages that fit."},
+      {"status": "declared", "statement": "The classifier submits exactly one verdict per authority and decision accounts containing an exact authority quote, statement, and optional context, action, and result with supporting aliases."},
+      {"status": "unsupported", "statement": "File-change evidence, raw items, real source IDs, paths, commands, tools, reasoning, approvals, web, and local execution are not classifier inputs."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Krisis records complete binary authority coverage, stable decision IDs and exact spans, deterministic account SHA-256 digests, delivery state, Nucleus correlation, and matching Annals acceptance receipts."},
+      {"status": "declared", "statement": "Account Markdown contains ordered Decision, Authority, Context, Action, Result, and Source sections; absent context, action, or result is rendered as Unknown."},
+      {"status": "unsupported", "statement": "Krisis publishes no confidence, disposition, review, supersession, importance, current-force, enactment, truth, or longitudinal result field."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "Decision means an attributable user settlement constraining intended future behavior or state; no-decision is durable negative coverage for one authority."},
+      {"status": "declared", "statement": "Context, action, and result are observations available at capture time and do not affect eligibility; Unknown means not observed, not false or pending."},
+      {"status": "declared", "statement": "Annals created and replayed both mean the exact producer key and digest were accepted by the configured dedicated library."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Decision ID derives outside the model from host identity, canonical authority item identity, and the exact UTF-8 byte span; producer key equals decision ID."},
+      {"status": "declared", "statement": "Occurrence and completion times are Unix seconds with separately recorded timestamp precision; spans and scope limits are UTF-8 bytes."},
+      {"status": "not_applicable", "statement": "Krisis publishes no pricing, usage, or accounting unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "A completed observation covers every admitted nonblank user authority exactly once and never silently truncates required context."},
+      {"status": "declared", "statement": "A decision remains pending end to end until Annals accepts it; acceptance becomes durable before generated account prose is retired."},
+      {"status": "unspecified", "statement": "No wall-clock bound from turn completion through classification or Annals acceptance is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "Supported access is the local current-user krisis CLI, exact installed Stop hook, and release-pinned krisis/observer Clockwork runner; direct SQLite access is unsupported."},
+      {"status": "declared", "statement": "Cross-product calls use only the sealed Conversations, Nucleus protocol-v1, and Annals CLI interfaces with explicit configuration."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Validated coverage, stable identities, deterministic account bytes and digest, exact classifier call-argument digest, Nucleus correlation and receipt, and a target-bound outbox commit in one transaction before tool acknowledgement; identical redelivery is idempotent and conflict fails closed."},
+      {"status": "declared", "statement": "Observation is serial; one pending Annals delivery is attempted before new classification, so an outage never causes reclassification or parallel ownership."},
+      {"status": "declared", "statement": "After matching Annals acceptance, account body and generated prose may be discarded while minimal receipt, digest, authority anchor, coverage, and correlations remain."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "A scope contains at most 64 messages, 262144 aggregate UTF-8 bytes, and 100 accounts; quotes are at most 500 bytes and each generated field is 1 through 1000 bytes when present."},
+      {"status": "declared", "statement": "One observation has level zero and at most one level-one expansion; each scope has one initial attempt and at most two successors after positively terminal failure."},
+      {"status": "unspecified", "statement": "No throughput, queue-depth, storage-capacity, latency, or retention service-level objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Krisis provider 0.4.0 uses SQLite schema 4, account schema 1, capture rule krisis/decision-account-classification/1, and immutable Nucleus input/result schema version 1."},
+      {"status": "declared", "statement": "Legacy Decisions schema versions and classifier receipts remain decodable for migration and recovery, while digest and review commands and schedules remain disabled."},
+      {"status": "unspecified", "statement": "No future compatibility window, retention horizon, or release cadence is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Eligible turn discovery, exact normalized source resolution, message ordering, and timestamp precision rely on Conversations.", "target": "conversations", "kind": "data", "contract": "conversations.history.explore"},
+      {"status": "declared", "statement": "Bounded classification execution and durable tool transport rely on Nucleus without transferring decision or delivery authority.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"},
+      {"status": "declared", "statement": "Immutable account acceptance and dedicated-library identity rely on Annals; Krisis retains delivery authority until a matching receipt commits.", "target": "annals", "kind": "control", "contract": "annals.decision-account.exchange"},
+      {"status": "declared", "statement": "Periodic observer invocation relies on Clockwork immutable definitions and the krisis/observer binding.", "target": "clockwork", "kind": "control", "contract": "clockwork.schedule.operate"},
+      {"status": "declared", "statement": "Immediate Stop-hook correlation relies on the local Codex hook facility, for which no installed Chancery contract is declared.", "target": "codex", "kind": "data"}
+    ]
+  },
+  "manual": "manuals/decision-capture.md"
+}

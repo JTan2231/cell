@@ -1,5 +1,8 @@
 use std::fs;
+use std::io::Write as _;
+use std::os::unix::fs::{DirBuilderExt as _, MetadataExt as _, OpenOptionsExt as _};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Duration;
 
 use nucleus_client::{ClientError, NucleusClient};
@@ -15,7 +18,7 @@ use sha2::{Digest as _, Sha256};
 use tokio::runtime::Builder;
 use uuid::Uuid;
 
-use crate::domain::{Intake, IntakeStatus, ReconciliationProposal, Repository};
+use crate::domain::{AccountIntake, Intake, IntakeStatus, ReconciliationProposal, Repository};
 use crate::store::{Correlation, MailboxReceipt, Store};
 use crate::{Error, Result};
 
@@ -26,11 +29,20 @@ const TOOL_NAME: &str = "commit_semantic_reconciliation";
 const MODEL: &str = "gpt-5.6-terra";
 const TOOLSET_NAME: &str = "semantic-reconciliation";
 const TOOLSET_VERSION: u32 = 1;
+const ACCOUNT_INPUT_SCHEMA_ID: &str = "semantics.tool.commit-account-reconciliation.input.v1";
+const ACCOUNT_RESULT_SCHEMA_ID: &str = "semantics.tool.commit-account-reconciliation.result.v1";
+const ACCOUNT_TOOL_NAME: &str = "commit_account_semantic_reconciliation";
+const ACCOUNT_TOOLSET_NAME: &str = "semantic-account-reconciliation";
+const ACCOUNT_TOOLSET_VERSION: u32 = 1;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
 const INSTRUCTIONS: &str = r"Maintain one project's authoritative semantic repository from one normalized Decisions lifecycle event. You have exactly one managed tool. For an admitted decision or an effective confirmation, submit a complete atomic reconciliation that includes at least one ground effect citing the exact supplied event_id and decision_id, even when the meaning is already represented. For a dismissal review, withdraw every active grounding whose decision_id is dismissed using unground; preserve history. Define only durable project terms, not incidental implementation nouns. Prefer revise, differentiate, retire, reopen, ground, or unground over duplicate definitions. Active canonical labels must remain unique. Use only the supplied decision and repository snapshot. Call commit_semantic_reconciliation; if it returns a validation error, correct the proposal and retry. Never finish without an accepted tool result.";
 
 const DEVELOPER_INSTRUCTIONS: &str = r"Treat identifiers as opaque and copy them exactly. New concept IDs must use the supplied next_concept_ids in order. Do not invent source material, paths, conversation text, or implementation evidence. Do not use shell, web, local files, or any tool except commit_semantic_reconciliation. The repository snapshot is complete for the selected revision.";
+
+const ACCOUNT_INSTRUCTIONS: &str = r"Maintain one project's authoritative semantic repository from one normalized, durably accepted Annals decision account. You have exactly one managed tool. Submit a complete atomic reconciliation that includes at least one ground effect citing the exact supplied library_id, event_id, and account_id, even when the meaning is already represented. Define only durable project terms, not incidental implementation nouns. Prefer revise, differentiate, retire, reopen, or ground over duplicate definitions. Active canonical labels must remain unique. Use only the supplied decision-account projection and repository snapshot. Call commit_account_semantic_reconciliation; if it returns a validation error, correct the proposal and retry. Never finish without an accepted tool result.";
+
+const ACCOUNT_DEVELOPER_INSTRUCTIONS: &str = r"Treat identifiers as opaque and copy them exactly. New concept IDs must use the supplied next_concept_ids in order. The account has no confidence, review, disposition, supersession, or current-force semantics; do not invent them. Do not invent source material, paths, conversation text, or implementation evidence. Do not use shell, web, local files, or any tool except commit_account_semantic_reconciliation. The repository snapshot is complete for the selected revision.";
 
 #[derive(Debug, Clone)]
 pub struct NucleusReconciler {
@@ -57,6 +69,90 @@ impl NucleusReconciler {
             let client = self.client()?;
             require_health(&client).await?;
             register_contract(&client).await?;
+            register_account_contract(&client).await?;
+            Ok(())
+        })
+    }
+
+    pub fn prove_legacy_cutover_ready(&self, correlations: &[Correlation]) -> Result<()> {
+        if correlations.is_empty() {
+            return Ok(());
+        }
+        let expected_requests = correlations
+            .iter()
+            .map(|correlation| {
+                if digest(correlation.request_json.as_bytes()) != correlation.request_sha256 {
+                    return Err(Error::domain(
+                        "legacy_correlation_ambiguous",
+                        "a legacy Nucleus correlation no longer matches its immutable request digest",
+                    ));
+                }
+                let request = serde_json::from_str::<JobRequestV1>(&correlation.request_json)
+                    .map_err(|_| {
+                        Error::domain(
+                            "legacy_correlation_ambiguous",
+                            "a legacy Nucleus correlation has undecodable immutable request bytes",
+                        )
+                    })?;
+                if request.id.as_str() != correlation.job_id
+                    || request.requester.id != correlation.requester_id
+                {
+                    return Err(Error::domain(
+                        "legacy_correlation_ambiguous",
+                        "a legacy Nucleus correlation has inconsistent request identity",
+                    ));
+                }
+                Ok((correlation, request))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let runtime = runtime().map_err(|_| {
+            Error::domain(
+                "legacy_correlation_ambiguous",
+                "legacy Nucleus correlation state could not be proven",
+            )
+        })?;
+        runtime.block_on(async {
+            let client = self.client().map_err(|_| {
+                Error::domain(
+                    "legacy_correlation_ambiguous",
+                    "legacy Nucleus correlation state could not be proven",
+                )
+            })?;
+            for (correlation, expected_request) in expected_requests {
+                match client.get_job(&JobId::new(&correlation.job_id)).await {
+                    Ok(job) => {
+                        let expected_digest = expected_request.request_digest().map_err(|_| {
+                            Error::domain(
+                                "legacy_correlation_ambiguous",
+                                "legacy Nucleus correlation state could not be proven",
+                            )
+                        })?;
+                        if job.summary.id.as_str() != correlation.job_id
+                            || job.summary.requester.id != correlation.requester_id
+                            || job.summary.request_digest != expected_digest
+                            || job.request != expected_request
+                        {
+                            return Err(Error::domain(
+                                "legacy_correlation_ambiguous",
+                                "Nucleus returned different immutable state for a legacy correlation",
+                            ));
+                        }
+                        if !job.summary.state.is_terminal() {
+                            return Err(Error::domain(
+                                "legacy_correlation_active",
+                                "a legacy Nucleus correlation is still nonterminal",
+                            ));
+                        }
+                    }
+                    Err(ClientError::Api { status: 404, .. }) if !correlation.admitted => {}
+                    Err(_) => {
+                        return Err(Error::domain(
+                            "legacy_correlation_ambiguous",
+                            "legacy Nucleus correlation state could not be proven",
+                        ));
+                    }
+                }
+            }
             Ok(())
         })
     }
@@ -180,6 +276,126 @@ impl NucleusReconciler {
         })
     }
 
+    pub fn reconcile_account(&self, store: &Store, intake: &AccountIntake) -> Result<u64> {
+        let project_id = intake.project_id.as_deref().ok_or_else(|| {
+            Error::domain(
+                "intake_unassigned",
+                format!("intake event {} is not assigned", intake.event_id),
+            )
+        })?;
+        if intake.status == IntakeStatus::Applied {
+            return intake.applied_revision.ok_or_else(|| {
+                Error::domain(
+                    "intake_revision_missing",
+                    format!("applied intake {} has no revision", intake.event_id),
+                )
+            });
+        }
+        let repository = store.repository(project_id, None)?;
+        let project = store.project(project_id)?;
+        let runtime = runtime().map_err(bounded_account_runtime_error)?;
+        runtime
+            .block_on(async {
+                let client = self.client()?;
+                require_health(&client).await?;
+                let toolset = register_account_contract(&client).await?;
+                let correlation = match store.account_correlation(&intake.event_id)? {
+                    Some(value) => value,
+                    None => {
+                        let suffix = Uuid::now_v7();
+                        let requester_id = format!("semantics-account-intake-{suffix}");
+                        let job_id = format!("semantics-account-reconcile-{suffix}");
+                        let neutral = account_neutral_cwd(&job_id)?;
+                        let request = build_account_request(
+                            &requester_id,
+                            &job_id,
+                            intake,
+                            &repository,
+                            project.next_concept_number,
+                            toolset.toolset.clone(),
+                            neutral.path(),
+                        )?;
+                        let request_json = serde_json::to_string(&request)?;
+                        let request_sha256 = digest(request_json.as_bytes());
+                        store.put_account_correlation(&Correlation {
+                            event_id: intake.event_id.clone(),
+                            requester_id,
+                            job_id,
+                            request_json,
+                            request_sha256,
+                            tool_after: 0,
+                            admitted: false,
+                        })?
+                    }
+                };
+                if digest(correlation.request_json.as_bytes()) != correlation.request_sha256 {
+                    return Err(Error::domain(
+                        "correlation_digest_mismatch",
+                        "persisted Nucleus request bytes do not match their digest",
+                    ));
+                }
+                let neutral = account_neutral_cwd(&correlation.job_id)?;
+                let request: JobRequestV1 = serde_json::from_str(&correlation.request_json)?;
+                if request.invocation.cwd.as_path() != neutral.path() {
+                    return Err(Error::domain(
+                        "correlation_cwd_conflict",
+                        "persisted Nucleus request does not use its deterministic neutral cwd",
+                    ));
+                }
+                async {
+                    let admitted = submit_stably(&client, &request).await?;
+                    if admitted.job_id.as_str() != correlation.job_id {
+                        return Err(Error::domain(
+                            "nucleus_job_mismatch",
+                            "Nucleus admitted a different job identity",
+                        ));
+                    }
+                    store.mark_account_admitted(&intake.event_id)?;
+                    serve_account_mailbox(
+                        &client,
+                        store,
+                        intake,
+                        project_id,
+                        &correlation.job_id,
+                        correlation.tool_after,
+                    )
+                    .await
+                }
+                .await
+            })
+            .map_err(bounded_account_runtime_error)
+    }
+
+    pub fn retry_account_failed(&self, store: &Store, event_id: &str) -> Result<()> {
+        let Some(correlation) = store.account_correlation(event_id)? else {
+            return store.retry_account_intake(event_id);
+        };
+        let runtime = runtime().map_err(bounded_account_runtime_error)?;
+        runtime
+            .block_on(async {
+                let client = self.client()?;
+                let state = match client.get_job(&JobId::new(&correlation.job_id)).await {
+                    Ok(job) => Some(job.summary.state),
+                    Err(ClientError::Api { status: 404, .. }) if !correlation.admitted => None,
+                    Err(ClientError::Api { status: 404, .. }) => {
+                        return Err(Error::domain(
+                            "intake_retry_job_ambiguous",
+                            "the admitted prior Nucleus job is unavailable; retry would risk two jobs",
+                        ));
+                    }
+                    Err(error) => return Err(error.into()),
+                };
+                if state.is_some_and(|state| !state.is_terminal()) {
+                    return Err(Error::domain(
+                        "intake_retry_job_active",
+                        "the prior Nucleus job is still active",
+                    ));
+                }
+                store.reset_account_retry_after_terminal(event_id)
+            })
+            .map_err(bounded_account_runtime_error)
+    }
+
     fn client(&self) -> Result<NucleusClient> {
         match &self.socket {
             Some(socket) => NucleusClient::new(socket).map_err(Into::into),
@@ -259,6 +475,35 @@ async fn submit_stably(
 
 const fn explicit_nonretryable_rejection(status: u16) -> bool {
     (status >= 400 && status < 500) && !matches!(status, 408 | 409 | 425 | 429)
+}
+
+fn bounded_account_runtime_error(error: Error) -> Error {
+    match error.code() {
+        "nucleus_admission_rejected" => Error::domain(
+            "nucleus_admission_rejected",
+            "Nucleus rejected the immutable account reconciliation request",
+        ),
+        "nucleus_job_terminal_invalid" => Error::domain(
+            "nucleus_job_terminal_invalid",
+            "Nucleus completed without an accepted account reconciliation",
+        ),
+        "nucleus_job_terminal_failed" => Error::domain(
+            "nucleus_job_terminal_failed",
+            "Nucleus account reconciliation ended unsuccessfully",
+        ),
+        "intake_retry_job_ambiguous" => Error::domain(
+            "intake_retry_job_ambiguous",
+            "the admitted prior Nucleus job is unavailable; retry would risk two jobs",
+        ),
+        "intake_retry_job_active" => Error::domain(
+            "intake_retry_job_active",
+            "the prior Nucleus job is still active",
+        ),
+        _ => Error::domain(
+            "account_reconciliation_runtime_failed",
+            "account reconciliation did not complete; inspect durable intake and Nucleus state",
+        ),
+    }
 }
 
 async fn serve_mailbox(
@@ -369,6 +614,111 @@ async fn serve_mailbox(
     }
 }
 
+async fn serve_account_mailbox(
+    client: &NucleusClient,
+    store: &Store,
+    intake: &AccountIntake,
+    project_id: &str,
+    job_id: &str,
+    mut tool_after: u64,
+) -> Result<u64> {
+    let job_id = JobId::new(job_id);
+    loop {
+        let calls = client
+            .pending_tool_calls(
+                &job_id,
+                &ToolCallsQueryV1 {
+                    after: tool_after,
+                    wait_seconds: 1,
+                },
+            )
+            .await?;
+        for pending in calls.calls {
+            let call = pending.call;
+            if call.job_id != job_id
+                || call.tool_name != ACCOUNT_TOOL_NAME
+                || call.arguments_schema_id.as_str() != ACCOUNT_INPUT_SCHEMA_ID
+            {
+                return Err(Error::domain(
+                    "nucleus_tool_contract_mismatch",
+                    "Nucleus returned a call outside the admitted account toolset",
+                ));
+            }
+            let arguments_sha256 = digest(call.arguments.get().as_bytes());
+            let result = match store.account_mailbox_receipt(job_id.as_str(), call.id.as_str())? {
+                Some(receipt) => cached_result(&receipt, &arguments_sha256)?,
+                None => dispatch_account_tool(
+                    store,
+                    intake,
+                    project_id,
+                    job_id.as_str(),
+                    call.id.as_str(),
+                    &arguments_sha256,
+                    call.arguments.get(),
+                )?,
+            };
+            let response = ToolResultV1 {
+                version: PROTOCOL_VERSION_V1,
+                call_id: call.id.clone(),
+                requester: Requester {
+                    program: "semantics".to_owned(),
+                    id: store
+                        .account_correlation(&intake.event_id)?
+                        .ok_or_else(|| {
+                            Error::domain(
+                                "correlation_missing",
+                                "Semantics account correlation disappeared",
+                            )
+                        })?
+                        .requester_id,
+                },
+                result_schema_id: SchemaId::new(ACCOUNT_RESULT_SCHEMA_ID),
+                result: RawValue::from_string(result.json).map_err(|error| {
+                    Error::domain(
+                        "tool_result_invalid",
+                        format!("unable to encode tool result: {error}"),
+                    )
+                })?,
+                is_error: result.is_error,
+            };
+            post_result_stably(client, &job_id, &call.id, &response).await?;
+            tool_after = tool_after.max(call.request_sequence);
+            store.advance_account_tool_after(&intake.event_id, tool_after)?;
+        }
+        let refreshed = store.account_intake(&intake.event_id)?;
+        if refreshed.status == IntakeStatus::Applied
+            && let Some(revision) = refreshed.applied_revision
+        {
+            return Ok(revision);
+        }
+        let job = client.get_job(&job_id).await?;
+        if job.summary.state.is_terminal() {
+            if store
+                .account_pending_committed_revision(&intake.event_id, job_id.as_str())?
+                .is_some()
+            {
+                return store.finalize_account_applied(&intake.event_id, job_id.as_str());
+            }
+            return match job.summary.state {
+                JobState::Completed => Err(Error::domain(
+                    "nucleus_job_terminal_invalid",
+                    "Nucleus completed without an accepted account reconciliation",
+                )),
+                JobState::Failed | JobState::Cancelled => Err(Error::domain(
+                    "nucleus_job_terminal_failed",
+                    "Nucleus account reconciliation ended without a semantic commit",
+                )),
+                JobState::Accepted | JobState::Running | JobState::WaitingOnRequester => {
+                    Err(Error::domain(
+                        "nucleus_state_invalid",
+                        "Nucleus reported a nonterminal state as terminal",
+                    ))
+                }
+            };
+        }
+    }
+}
+
 async fn post_result_stably(
     client: &NucleusClient,
     job_id: &JobId,
@@ -452,6 +802,64 @@ fn dispatch_tool(
     }
 }
 
+fn dispatch_account_tool(
+    store: &Store,
+    intake: &AccountIntake,
+    project_id: &str,
+    job_id: &str,
+    call_id: &str,
+    arguments_sha256: &str,
+    arguments: &str,
+) -> Result<PreparedToolResult> {
+    let proposal = match serde_json::from_str::<ReconciliationProposal>(arguments) {
+        Ok(proposal) => proposal,
+        Err(error) => {
+            let result = error_result("proposal_json_invalid", &error.to_string());
+            store.record_account_mailbox_rejection(
+                job_id,
+                call_id,
+                arguments_sha256,
+                &result.json,
+            )?;
+            return Ok(result);
+        }
+    };
+    match store.commit_account_mailbox_proposal(
+        &intake.event_id,
+        job_id,
+        call_id,
+        arguments_sha256,
+        project_id,
+        &proposal,
+    ) {
+        Ok(revision) => {
+            let receipt = store
+                .account_mailbox_receipt(job_id, call_id)?
+                .ok_or_else(|| {
+                    Error::domain(
+                        "mailbox_receipt_missing",
+                        "accepted tool call has no receipt",
+                    )
+                })?;
+            debug_assert_eq!(receipt.committed_revision, Some(revision));
+            Ok(PreparedToolResult {
+                json: receipt.result_json,
+                is_error: false,
+            })
+        }
+        Err(error) => {
+            let result = error_result(error.code(), &error.to_string());
+            store.record_account_mailbox_rejection(
+                job_id,
+                call_id,
+                arguments_sha256,
+                &result.json,
+            )?;
+            Ok(result)
+        }
+    }
+}
+
 fn error_result(code: &str, detail: &str) -> PreparedToolResult {
     let message = detail.chars().take(300).collect::<String>();
     let json = serde_json::to_string(&json!({
@@ -504,6 +912,44 @@ fn build_request(
     Ok(request)
 }
 
+fn build_account_request(
+    requester_id: &str,
+    job_id: &str,
+    intake: &AccountIntake,
+    repository: &Repository,
+    next_concept_number: u64,
+    toolset: ToolsetRef,
+    neutral_cwd: &Path,
+) -> Result<JobRequestV1> {
+    let prompt = account_reconciliation_prompt(intake, repository, next_concept_number)?;
+    let mut invocation = AgentInvocationV1::new(
+        "codex",
+        ModelId::new(MODEL),
+        AbsolutePath::new(neutral_cwd),
+        WorkspaceAccess::None,
+        BuiltinToolsV1 {
+            local_execution: false,
+            web_search: false,
+        },
+        TimeoutSeconds::new(REQUEST_TIMEOUT.as_secs()),
+    );
+    invocation.reasoning_effort = Some(ReasoningEffort::Medium);
+    invocation.toolset = Some(toolset);
+    let mut request = JobRequestV1::new(
+        JobId::new(job_id),
+        format!("Reconcile semantics for {}", intake.event_id),
+        Requester {
+            program: "semantics".to_owned(),
+            id: requester_id.to_owned(),
+        },
+        ACCOUNT_INSTRUCTIONS,
+        prompt,
+        invocation,
+    );
+    request.developer_instructions = Some(ACCOUNT_DEVELOPER_INSTRUCTIONS.to_owned());
+    Ok(request)
+}
+
 fn reconciliation_prompt(
     intake: &Intake,
     repository: &Repository,
@@ -524,6 +970,33 @@ fn reconciliation_prompt(
             "supersedes_decision_id": intake.decision.supersedes_decision_id,
             "review_state": intake.decision.review_state,
             "review_action": intake.decision.review_action
+        },
+        "repository": repository,
+        "next_concept_ids": next_concept_ids
+    }))
+    .map_err(Into::into)
+}
+
+fn account_reconciliation_prompt(
+    intake: &AccountIntake,
+    repository: &Repository,
+    next_concept_number: u64,
+) -> Result<String> {
+    let next_concept_ids = (next_concept_number..next_concept_number.saturating_add(32))
+        .map(crate::domain::concept_id_for)
+        .collect::<Vec<_>>();
+    serde_json::to_string(&json!({
+        "decision_account": {
+            "library_id": intake.account.library_id,
+            "event_id": intake.account.event_id,
+            "account_id": intake.account.account_id,
+            "account_schema_version": intake.account.account_schema_version,
+            "statement": intake.account.statement,
+            "context": intake.account.context,
+            "action": intake.account.action,
+            "result": intake.account.result,
+            "occurred_at": intake.account.occurred_at,
+            "occurred_at_precision": intake.account.occurred_at_precision
         },
         "repository": repository,
         "next_concept_ids": next_concept_ids
@@ -580,6 +1053,58 @@ async fn register_contract(client: &NucleusClient) -> Result<ToolsetRegistration
     Ok(registration)
 }
 
+async fn register_account_contract(client: &NucleusClient) -> Result<ToolsetRegistrationV1> {
+    let input = account_input_schema();
+    let result = result_schema();
+    for (id, title, schema) in [
+        (
+            ACCOUNT_INPUT_SCHEMA_ID,
+            "Semantics Annals decision-account reconciliation input",
+            input.clone(),
+        ),
+        (
+            ACCOUNT_RESULT_SCHEMA_ID,
+            "Semantics Annals decision-account reconciliation result",
+            result,
+        ),
+    ] {
+        client
+            .register_schema(&LogSchemaV1::new(
+                id,
+                title,
+                "1",
+                "application/schema+json",
+                "semantics",
+                to_raw_value(&schema)
+                    .map_err(|error| Error::domain("nucleus_schema_invalid", error.to_string()))?,
+            ))
+            .await?;
+    }
+    let definitions = ToolsetDefinitionsV1 {
+        version: PROTOCOL_VERSION_V1,
+        tools: vec![ToolDefinitionV1 {
+            name: ACCOUNT_TOOL_NAME.to_owned(),
+            description: "Atomically append one decision-account-grounded semantic revision. Retry after a validation error."
+                .to_owned(),
+            input_schema_id: SchemaId::new(ACCOUNT_INPUT_SCHEMA_ID),
+            input_schema: to_raw_value(&input)
+                .map_err(|error| Error::domain("nucleus_schema_invalid", error.to_string()))?,
+        }],
+    };
+    let registration = ToolsetRegistrationV1::new(
+        ToolsetRef {
+            provider: "semantics".to_owned(),
+            name: ACCOUNT_TOOLSET_NAME.to_owned(),
+            version: ACCOUNT_TOOLSET_VERSION,
+        },
+        TOOLSET_DEFINITIONS_SCHEMA_ID,
+        definitions,
+    )
+    .map_err(|error| Error::domain("nucleus_toolset_invalid", error.to_string()))?;
+    client.register_toolset(&registration).await?;
+    Ok(registration)
+}
+
 fn input_schema() -> Value {
     json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -595,6 +1120,52 @@ fn input_schema() -> Value {
             }
         }
     })
+}
+
+fn account_input_schema() -> Value {
+    json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["base_revision", "summary", "effects"],
+        "properties": {
+            "base_revision": {"type": "integer", "minimum": 0},
+            "summary": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "effects": {
+                "type": "array", "minItems": 1, "maxItems": 256,
+                "items": {"oneOf": account_effect_schemas()}
+            }
+        }
+    })
+}
+
+fn account_effect_schemas() -> Vec<Value> {
+    let mut schemas = effect_schemas();
+    schemas.retain(|schema| {
+        !matches!(
+            schema["properties"]["type"]["const"].as_str(),
+            Some("ground" | "unground")
+        )
+    });
+    schemas.push(effect_schema(
+        "ground",
+        &["concept_id", "source", "statement"],
+        json!({
+            "concept_id": text_schema(),
+            "source": {
+                "type": "object", "additionalProperties": false,
+                "required": ["kind", "library_id", "event_id", "account_id"],
+                "properties": {
+                    "kind": {"const": "annals_decision_account"},
+                    "library_id": text_schema(),
+                    "event_id": text_schema(),
+                    "account_id": text_schema()
+                }
+            },
+            "statement": text_schema()
+        }),
+    ));
+    schemas
 }
 
 fn effect_schemas() -> Vec<Value> {
@@ -742,6 +1313,212 @@ fn cleanup_neutral_cwd(job_id: &str) {
     let _result = fs::remove_dir(path);
 }
 
+#[derive(Debug)]
+struct AccountNeutralDirectory {
+    path: PathBuf,
+}
+
+impl AccountNeutralDirectory {
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for AccountNeutralDirectory {
+    fn drop(&mut self) {
+        let Ok(metadata) = fs::symlink_metadata(&self.path) else {
+            return;
+        };
+        if metadata.file_type().is_symlink()
+            || !metadata.is_dir()
+            || metadata.mode() & 0o777 != 0o700
+        {
+            return;
+        }
+        let Ok(entries) = account_directory_entries(&self.path) else {
+            return;
+        };
+        if !entries.is_empty() {
+            return;
+        }
+        let _result = fs::remove_dir(&self.path);
+    }
+}
+
+fn account_neutral_cwd(job_id: &str) -> Result<AccountNeutralDirectory> {
+    account_neutral_cwd_in(&platform_user_temporary_root()?, job_id)
+}
+
+#[cfg(target_os = "macos")]
+fn platform_user_temporary_root() -> Result<PathBuf> {
+    let output = Command::new("/usr/bin/getconf")
+        .arg("DARWIN_USER_TEMP_DIR")
+        .env_clear()
+        .current_dir("/")
+        .output()
+        .map_err(|_| account_cwd_error("unable to resolve the platform user temporary root"))?;
+    if !output.status.success() || output.stdout.len() > 4_096 {
+        return Err(account_cwd_error(
+            "unable to resolve the platform user temporary root",
+        ));
+    }
+    let raw = std::str::from_utf8(&output.stdout)
+        .map_err(|_| account_cwd_error("the platform user temporary root is invalid"))?;
+    let value = raw.strip_suffix('\n').unwrap_or(raw);
+    if value.is_empty()
+        || value
+            .chars()
+            .any(|character| matches!(character, '\n' | '\r' | '\0'))
+    {
+        return Err(account_cwd_error(
+            "the platform user temporary root is invalid",
+        ));
+    }
+    fs::canonicalize(value)
+        .map_err(|_| account_cwd_error("the platform user temporary root is unavailable"))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn platform_user_temporary_root() -> Result<PathBuf> {
+    fs::canonicalize("/tmp")
+        .map_err(|_| account_cwd_error("the platform user temporary root is unavailable"))
+}
+
+fn account_neutral_cwd_in(temporary_root: &Path, job_id: &str) -> Result<AccountNeutralDirectory> {
+    let root_metadata = fs::symlink_metadata(temporary_root)
+        .map_err(|_| account_cwd_error("the platform user temporary root is unavailable"))?;
+    if job_id.is_empty()
+        || !temporary_root.is_absolute()
+        || root_metadata.file_type().is_symlink()
+        || !root_metadata.is_dir()
+        || root_metadata.mode() & 0o777 != 0o700
+        || fs::canonicalize(temporary_root).ok().as_deref() != Some(temporary_root)
+    {
+        return Err(account_cwd_error(
+            "the platform user temporary root is not private and canonical",
+        ));
+    }
+    reject_account_control_ancestors(temporary_root)?;
+    let path = temporary_root.join(format!(
+        "semantics-account-nucleus-v1-{}",
+        digest(job_id.as_bytes())
+    ));
+    let mut builder = fs::DirBuilder::new();
+    builder.mode(0o700);
+    if let Err(error) = builder.create(&path)
+        && error.kind() != std::io::ErrorKind::AlreadyExists
+    {
+        return Err(account_cwd_error(
+            "unable to create the private account reconciliation directory",
+        ));
+    }
+    let before = fs::symlink_metadata(&path)
+        .map_err(|_| account_cwd_error("unable to inspect the account reconciliation directory"))?;
+    if before.file_type().is_symlink()
+        || !before.is_dir()
+        || before.mode() & 0o777 != 0o700
+        || fs::canonicalize(&path).ok().as_ref() != Some(&path)
+        || !account_directory_entries(&path)?.is_empty()
+    {
+        return Err(account_cwd_error(
+            "the account reconciliation directory is not private, canonical, and empty",
+        ));
+    }
+    prove_private_empty_account_directory(&root_metadata, &before, &path)?;
+    Ok(AccountNeutralDirectory { path })
+}
+
+fn prove_private_empty_account_directory(
+    root_metadata: &fs::Metadata,
+    before: &fs::Metadata,
+    path: &Path,
+) -> Result<()> {
+    let marker = path.join(format!(".owner-{}", Uuid::now_v7()));
+    let mut marker_file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&marker)
+        .map_err(|_| account_cwd_error("unable to prove account directory ownership"))?;
+    marker_file
+        .write_all(b"semantics\n")
+        .and_then(|()| marker_file.sync_all())
+        .map_err(|_| account_cwd_error("unable to prove account directory ownership"))?;
+    let marker_metadata = marker_file
+        .metadata()
+        .map_err(|_| account_cwd_error("unable to prove account directory ownership"))?;
+    drop(marker_file);
+    let after = fs::symlink_metadata(path)
+        .map_err(|_| account_cwd_error("the account directory changed during verification"))?;
+    let marker_path_metadata = fs::symlink_metadata(&marker)
+        .map_err(|_| account_cwd_error("unable to prove account directory ownership"))?;
+    let entries = account_directory_entries(path)?;
+    let valid = before.dev() == after.dev()
+        && before.ino() == after.ino()
+        && root_metadata.uid() == before.uid()
+        && after.uid() == marker_metadata.uid()
+        && marker_path_metadata.is_file()
+        && !marker_path_metadata.file_type().is_symlink()
+        && marker_path_metadata.dev() == marker_metadata.dev()
+        && marker_path_metadata.ino() == marker_metadata.ino()
+        && marker_metadata.nlink() == 1
+        && marker_metadata.mode() & 0o777 == 0o600
+        && entries.len() == 1
+        && entries[0] == marker.file_name().unwrap_or_default();
+    fs::remove_file(&marker)
+        .map_err(|_| account_cwd_error("unable to clear account directory ownership proof"))?;
+    if !valid {
+        return Err(account_cwd_error(
+            "the account reconciliation directory changed during verification",
+        ));
+    }
+    fs::File::open(path)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|_| account_cwd_error("unable to verify the empty account directory"))?;
+    if !account_directory_entries(path)?.is_empty() {
+        return Err(account_cwd_error(
+            "the account reconciliation directory changed during verification",
+        ));
+    }
+    Ok(())
+}
+
+fn reject_account_control_ancestors(path: &Path) -> Result<()> {
+    for ancestor in path.ancestors() {
+        for marker in ["AGENTS.md", ".git"] {
+            match fs::symlink_metadata(ancestor.join(marker)) {
+                Ok(_) => {
+                    return Err(account_cwd_error(
+                        "the account reconciliation directory is inside a control tree",
+                    ));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => {
+                    return Err(account_cwd_error(
+                        "unable to prove account working-directory neutrality",
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn account_directory_entries(path: &Path) -> Result<Vec<std::ffi::OsString>> {
+    fs::read_dir(path)
+        .map_err(|_| account_cwd_error("unable to inspect the account reconciliation directory"))?
+        .map(|entry| {
+            entry.map(|entry| entry.file_name()).map_err(|_| {
+                account_cwd_error("unable to inspect the account reconciliation directory")
+            })
+        })
+        .collect()
+}
+
+fn account_cwd_error(message: &'static str) -> Error {
+    Error::domain("account_nucleus_cwd_invalid", message)
+}
+
 fn digest(bytes: &[u8]) -> String {
     let mut digest = Sha256::new();
     digest.update(bytes);
@@ -759,20 +1536,27 @@ fn runtime() -> Result<tokio::runtime::Runtime> {
 mod tests {
     use std::fs;
     use std::io::{BufRead as _, BufReader, Read as _, Write as _};
+    use std::os::unix::fs::{PermissionsExt as _, symlink};
     use std::os::unix::net::{UnixListener, UnixStream};
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
     use std::thread;
     use std::time::{Duration, Instant};
 
-    use nucleus_core::{JobRequestV1, WorkspaceAccess};
+    use nucleus_core::{JobRequestV1, ToolsetRef, WorkspaceAccess};
     use serde_json::{Value, json};
     use tempfile::TempDir;
 
-    use crate::domain::{DecisionAnchor, DecisionEvent, Intake, IntakeStatus, Repository};
+    use crate::domain::{
+        AccountIntake, AccountRoutingOutcome, DecisionAccountAnchor, DecisionAccountEvent,
+        DecisionAnchor, DecisionEvent, Intake, IntakeStatus, Repository,
+    };
     use crate::store::Store;
 
     use super::{
-        INPUT_SCHEMA_ID, RESULT_SCHEMA_ID, TOOL_NAME, effect_schemas,
+        INPUT_SCHEMA_ID, RESULT_SCHEMA_ID, TOOL_NAME, TOOLSET_NAME, TOOLSET_VERSION,
+        account_effect_schemas, account_input_schema, account_neutral_cwd, account_neutral_cwd_in,
+        account_reconciliation_prompt, build_request, digest, effect_schemas,
         explicit_nonretryable_rejection, input_schema, reconciliation_prompt,
     };
 
@@ -811,6 +1595,163 @@ mod tests {
         assert!(!explicit_nonretryable_rejection(409));
         assert!(!explicit_nonretryable_rejection(429));
         assert!(!explicit_nonretryable_rejection(500));
+    }
+
+    #[test]
+    fn legacy_cutover_proof_requires_the_exact_job_to_be_terminal() {
+        let (temporary, store, intake) = requester_fixture();
+        let request = build_request(
+            "legacy-requester",
+            "legacy-job",
+            &intake,
+            &store.repository("cell", None).expect("repository"),
+            1,
+            ToolsetRef {
+                provider: "semantics".to_owned(),
+                name: TOOLSET_NAME.to_owned(),
+                version: TOOLSET_VERSION,
+            },
+            temporary.path(),
+        )
+        .expect("request");
+        let request_json = serde_json::to_string(&request).expect("request JSON");
+        let correlation = crate::store::Correlation {
+            event_id: "event-1".to_owned(),
+            requester_id: "legacy-requester".to_owned(),
+            job_id: "legacy-job".to_owned(),
+            request_sha256: digest(request_json.as_bytes()),
+            request_json,
+            tool_after: 0,
+            admitted: true,
+        };
+        let socket = temporary.path().join("nucleus.sock");
+        let server_request = request.clone();
+        let terminal_listener = listener(&socket);
+        let server = thread::spawn(move || -> ServerResult {
+            let (mut stream, request_line, body) = accept_request(&terminal_listener)?;
+            assert!(request_line.starts_with("GET /v1/jobs/legacy-job "));
+            assert!(body.is_empty());
+            write_json(
+                &mut stream,
+                "200 OK",
+                &terminal_job(&server_request, "completed"),
+            )?;
+            Ok(())
+        });
+        super::NucleusReconciler::with_socket(&socket)
+            .prove_legacy_cutover_ready(std::slice::from_ref(&correlation))
+            .expect("terminal proof");
+        join_server(server);
+
+        rebind(&socket);
+        let active_listener = listener(&socket);
+        let server = thread::spawn(move || -> ServerResult {
+            let (mut stream, request_line, body) = accept_request(&active_listener)?;
+            assert!(request_line.starts_with("GET /v1/jobs/legacy-job "));
+            assert!(body.is_empty());
+            write_json(&mut stream, "200 OK", &terminal_job(&request, "accepted"))?;
+            Ok(())
+        });
+        let error = super::NucleusReconciler::with_socket(&socket)
+            .prove_legacy_cutover_ready(&[correlation])
+            .expect_err("active correlation");
+        assert_eq!(error.code(), "legacy_correlation_active");
+        join_server(server);
+    }
+
+    #[test]
+    fn account_neutral_cwd_is_private_empty_and_rejects_unsafe_reuse() {
+        let temporary = TempDir::new().expect("temporary directory");
+        fs::set_permissions(temporary.path(), fs::Permissions::from_mode(0o700))
+            .expect("private root");
+        let root = fs::canonicalize(temporary.path()).expect("canonical root");
+        let first = account_neutral_cwd_in(&root, "account-job").expect("account neutral cwd");
+        let path = first.path().to_owned();
+        let metadata = fs::symlink_metadata(&path).expect("cwd metadata");
+        assert!(metadata.is_dir());
+        assert_eq!(metadata.permissions().mode() & 0o777, 0o700);
+        assert!(fs::read_dir(&path).expect("empty cwd").next().is_none());
+        let second = account_neutral_cwd_in(&root, "account-job").expect("safe empty reuse");
+        assert_eq!(second.path(), path);
+        drop(second);
+        drop(first);
+
+        fs::create_dir(&path).expect("recreate cwd");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).expect("private cwd");
+        fs::write(path.join("AGENTS.md"), "untrusted instructions\n").expect("control marker");
+        assert_eq!(
+            account_neutral_cwd_in(&root, "account-job")
+                .expect_err("nonempty reuse")
+                .code(),
+            "account_nucleus_cwd_invalid"
+        );
+        fs::remove_dir_all(&path).expect("remove unsafe cwd");
+
+        let elsewhere = temporary.path().join("elsewhere");
+        fs::create_dir(&elsewhere).expect("elsewhere");
+        symlink(&elsewhere, &path).expect("cwd symlink");
+        assert_eq!(
+            account_neutral_cwd_in(&root, "account-job")
+                .expect_err("symlink reuse")
+                .code(),
+            "account_nucleus_cwd_invalid"
+        );
+    }
+
+    #[test]
+    fn account_neutral_cwd_rejects_a_control_tree_root() {
+        let controlled = TempDir::new().expect("controlled directory");
+        fs::set_permissions(controlled.path(), fs::Permissions::from_mode(0o700))
+            .expect("private root");
+        fs::write(
+            controlled.path().join("AGENTS.md"),
+            "project instructions\n",
+        )
+        .expect("control marker");
+        let root = fs::canonicalize(controlled.path()).expect("canonical root");
+        assert_eq!(
+            account_neutral_cwd_in(&root, "account-job")
+                .expect_err("control tree")
+                .code(),
+            "account_nucleus_cwd_invalid"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn account_neutral_cwd_ignores_inherited_project_tmpdir() {
+        const CHILD_FLAG: &str = "SEMANTICS_ACCOUNT_CWD_TEST_CHILD";
+        if std::env::var_os(CHILD_FLAG).is_some() {
+            let inherited = PathBuf::from(std::env::var_os("TMPDIR").expect("TMPDIR"));
+            let cwd =
+                account_neutral_cwd("inherited-project-tmpdir").expect("platform account cwd");
+            assert!(!cwd.path().starts_with(inherited));
+            assert!(
+                fs::read_dir(cwd.path())
+                    .expect("empty cwd")
+                    .next()
+                    .is_none()
+            );
+            return;
+        }
+
+        let project = TempDir::new().expect("project directory");
+        fs::write(project.path().join("AGENTS.md"), "project instructions\n")
+            .expect("project marker");
+        fs::create_dir(project.path().join(".git")).expect("repository marker");
+        let output = Command::new(std::env::current_exe().expect("test executable"))
+            .arg("--exact")
+            .arg("nucleus::tests::account_neutral_cwd_ignores_inherited_project_tmpdir")
+            .arg("--nocapture")
+            .env(CHILD_FLAG, "1")
+            .env("TMPDIR", project.path())
+            .output()
+            .expect("child test");
+        assert!(
+            output.status.success(),
+            "child failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]
@@ -874,6 +1815,77 @@ mod tests {
         ] {
             assert!(!prompt.contains(private));
         }
+    }
+
+    #[test]
+    fn account_tool_and_prompt_use_only_normalized_annals_meaning() {
+        let account = DecisionAccountEvent {
+            library_id: "0123456789abcdef0123456789abcdef".to_owned(),
+            cursor: "PRIVATE_CURSOR".to_owned(),
+            event_id: "event-1".to_owned(),
+            account_id: "account-1".to_owned(),
+            account_schema_version: 1,
+            statement: "Keep vocabulary authoritative.".to_owned(),
+            context: "A durable boundary is needed.".to_owned(),
+            action: "Used an immutable repository.".to_owned(),
+            result: "Meaning replays.".to_owned(),
+            occurred_at: 17,
+            occurred_at_precision: "second".to_owned(),
+            authority: DecisionAccountAnchor {
+                host_id: "PRIVATE_HOST".to_owned(),
+                thread_id: "PRIVATE_THREAD".to_owned(),
+                turn_id: "PRIVATE_TURN".to_owned(),
+                item_id: "PRIVATE_ITEM".to_owned(),
+                span_start: 4,
+                span_end: 8,
+            },
+        };
+        let intake = AccountIntake {
+            event_id: account.event_id.clone(),
+            source_cursor: account.cursor.clone(),
+            project_id: Some("cell".to_owned()),
+            status: IntakeStatus::Processing,
+            routing_outcome: AccountRoutingOutcome::ProjectAssigned,
+            account,
+            attempts: 1,
+            last_error: None,
+            terminal_reason: None,
+            applied_revision: None,
+        };
+        let prompt = account_reconciliation_prompt(&intake, &Repository::empty("cell"), 1)
+            .expect("account prompt");
+        for included in [
+            "0123456789abcdef0123456789abcdef",
+            "event-1",
+            "account-1",
+            "Keep vocabulary authoritative.",
+            "A durable boundary is needed.",
+            "Used an immutable repository.",
+            "Meaning replays.",
+        ] {
+            assert!(prompt.contains(included));
+        }
+        for excluded in [
+            "PRIVATE_CURSOR",
+            "PRIVATE_HOST",
+            "PRIVATE_THREAD",
+            "PRIVATE_TURN",
+            "PRIVATE_ITEM",
+            "/PRIVATE/PROJECT/PATH",
+            "confidence",
+            "review",
+            "disposition",
+            "supersedes",
+        ] {
+            assert!(!prompt.contains(excluded), "prompt exposed {excluded}");
+        }
+        let encoded = serde_json::to_string(&account_effect_schemas()).expect("schemas");
+        assert!(encoded.contains("annals_decision_account"));
+        assert!(!encoded.contains("unground"));
+        assert_eq!(
+            account_input_schema()["properties"]["effects"]["maxItems"],
+            256
+        );
     }
 
     #[test]
@@ -1331,7 +2343,7 @@ mod tests {
                 "label": request.label,
                 "requester": request.requester,
                 "state": state,
-                "requestDigest": "sha256:test",
+                "requestDigest": request.request_digest().expect("request digest"),
                 "createdAt": "2026-09-01T00:00:00Z",
                 "updatedAt": "2026-09-01T00:00:01Z",
                 "completedAt": "2026-09-01T00:00:01Z"

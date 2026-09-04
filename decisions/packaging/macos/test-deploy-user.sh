@@ -3,42 +3,377 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
-temporary=$(mktemp -d "${TMPDIR:-/tmp}/decisions-deploy.XXXXXX")
-holder=
-cleanup() {
-    if [ -n "$holder" ]; then
-        kill "$holder" >/dev/null 2>&1 || true
-        wait "$holder" >/dev/null 2>&1 || true
-    fi
-    rm -rf "$temporary"
-}
-trap cleanup EXIT HUP INT TERM
+temporary=$(mktemp -d "${TMPDIR:-/tmp}/krisis-deploy.XXXXXX")
+trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 home="$temporary/Home"
-package="$temporary/package/macos"
-share="$temporary/package/share/chancery"
-candidate="$temporary/decisions"
-launchctl="$temporary/launchctl"
+candidate="$temporary/krisis"
 clockwork="$temporary/clockwork"
-log="$temporary/launchctl.log"
-fail_switch="$temporary/fail-switch"
-concurrent_hook="$temporary/concurrent-hook"
-concurrent_hook_started="$temporary/concurrent-hook-started"
-clockwork_without_maintenance="$temporary/clockwork-without-maintenance"
-loaded="$temporary/loaded"
-baseline="$home/observer-baseline"
-mkdir -p "$home/.local/bin" "$package" "$share"
-cp "$SCRIPT_DIR/decisions" "$SCRIPT_DIR/decisions-daily-email" "$SCRIPT_DIR/decisions-observer" \
-    "$SCRIPT_DIR/deploy-user.sh" "$SCRIPT_DIR/uninstall-user.sh" \
-    "$SCRIPT_DIR/org.decisions.daily-email.plist" "$SCRIPT_DIR/org.decisions.observer.plist" \
-    "$SCRIPT_DIR/decisions-daily-email.clockwork.toml.in" \
-    "$SCRIPT_DIR/decisions-observer.clockwork.toml.in" \
-    "$SCRIPT_DIR/hooks.json" "$package/"
-cp -R "$SCRIPT_DIR/../../chancery" "$share/decisions"
-DECISIONS_TEST_VERSION=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' \
-    "$share/decisions/provider.json")
-[ -n "$DECISIONS_TEST_VERSION" ]
-export DECISIONS_TEST_VERSION
+annals="$temporary/annals"
+launchctl="$temporary/launchctl"
+config="$temporary/decisions.toml"
+clockwork_state="$temporary/clockwork-state"
+clockwork_capture="$temporary/clockwork.capture"
+launchctl_capture="$temporary/launchctl.capture"
+candidate_capture="$temporary/candidate.capture"
+mkdir -p "$home/.local/bin" "$clockwork_state/definitions" "$clockwork_state/bindings"
+: >"$clockwork_capture"
+: >"$launchctl_capture"
 
+cat >"$candidate" <<'EOF'
+#!/bin/sh
+set -eu
+case " $* " in
+    *' --version '*) printf '%s\n' 'krisis 0.4.0' ;;
+    *' doctor '*)
+        [ -z "${KRISIS_TEST_LEAK_ME:-}" ] || exit 70
+        database="$HOME/Library/Application Support/Decisions/decisions.db"
+        if [ ! -e "$database" ]; then : >"$database"; chmod 0600 "$database"; fi
+        printf '%s\n' '{"ok":true,"schema_version":4,"annals_library_id":"0123456789abcdef0123456789abcdef"}'
+        ;;
+    *) [ -z "${KRISIS_TEST_LEAK_ME:-}" ] || exit 70; [ -z "${KRISIS_CANDIDATE_CAPTURE:-}" ] || printf '%s\n' "$*" >>"$KRISIS_CANDIDATE_CAPTURE" ;;
+esac
+EOF
+
+cat >"$clockwork" <<'EOF'
+#!/bin/sh
+set -eu
+printf '%s\n' "$*" >>"$KRISIS_CLOCKWORK_CAPTURE"
+state=$KRISIS_CLOCKWORK_STATE
+command=$2
+operation=$3
+if [ "$command" = definition ] && [ "$operation" = register ]; then
+    source=$4
+    digest=$(shasum -a 256 "$source" | awk '{print $1}')
+    cp "$source" "$state/definitions/$digest.toml"
+    printf '{"ok":true,"data":{"digest":"%s"}}\n' "$digest"
+    exit 0
+fi
+if [ "$command" = definition ] && [ "$operation" = show ]; then
+    digest=$4
+    source="$state/definitions/$digest.toml"
+    [ -f "$source" ] || { printf '%s\n' '{"code":"definition_not_found"}' >&2; exit 1; }
+    value() { sed -n "s/^$1 = \"\(.*\)\"/\1/p" "$source"; }
+    key=$(value key)
+    release_id=$(value release_id)
+    release_root=$(value release_root)
+    cwd=$(value cwd)
+    interpreter=$(value interpreter)
+    interpreter_sha256=$(value interpreter_sha256)
+    script=$(value script)
+    script_sha256=$(value script_sha256)
+    env_home=$(value HOME)
+    annals_binary=$(value KRISIS_ANNALS_BINARY)
+    annals_config=$(value KRISIS_ANNALS_CONFIG)
+    library_id=$(value KRISIS_ANNALS_LIBRARY_ID)
+    stdout=$(value stdout)
+    stderr=$(value stderr)
+    case "$key" in
+        decisions/daily-email)
+            schedule_json='{"kind":"local-calendar","hour":9,"minute":0,"run_at_load":false}'
+            environment_json="{\"HOME\":\"$env_home\"}"
+            ;;
+        decisions/observer)
+            schedule_json='{"kind":"interval","seconds":60,"run_at_load":false}'
+            environment_json="{\"HOME\":\"$env_home\"}"
+            ;;
+        krisis/observer)
+            schedule_json='{"kind":"interval","seconds":60,"run_at_load":false}'
+            environment_json="{\"HOME\":\"$env_home\",\"KRISIS_ANNALS_BINARY\":\"$annals_binary\",\"KRISIS_ANNALS_CONFIG\":\"$annals_config\",\"KRISIS_ANNALS_LIBRARY_ID\":\"$library_id\"}"
+            ;;
+        *) exit 1 ;;
+    esac
+    printf '{"ok":true,"data":{"digest":"%s","key":"%s","manifest":{"schema_version":1,"key":"%s","release_id":"%s","release_root":"%s","authority":"current-user-background","overlap":"skip","arguments":[],"cwd":"%s","schedule":%s,"launch":{"kind":"interpreted","interpreter":"%s","interpreter_sha256":"%s","script":"%s","script_sha256":"%s"},"environment":%s,"output":{"stdout":"%s","stderr":"%s"}}}}\n' \
+        "$digest" "$key" "$key" "$release_id" "$release_root" "$cwd" \
+        "$schedule_json" "$interpreter" "$interpreter_sha256" "$script" \
+        "$script_sha256" "$environment_json" "$stdout" "$stderr"
+    exit 0
+fi
+if [ "$command" = binding ]; then
+    key=$4
+    binding="$state/bindings/$(printf '%s' "$key" | tr / _).binding"
+    if [ "$operation" = show ]; then
+        if [ ! -f "$binding" ]; then printf '%s\n' '{"code":"binding_not_found"}' >&2; exit 1; fi
+        IFS='|' read -r enabled digest <"$binding"
+        if [ "$key" = krisis/observer ] && [ -n "${KRISIS_BLOCK_GATE_RELEASE_DIR:-}" ]; then
+            chmod 0500 "$KRISIS_BLOCK_GATE_RELEASE_DIR"
+        fi
+        if [ "${KRISIS_FAIL_VERIFY_SWITCH:-0}" -eq 1 ] && [ -f "$state/fail-next-show" ] && [ "$key" = krisis/observer ]; then
+            rm -f "$state/fail-next-show"
+            printf '{"ok":true,"data":{"key":"%s","enabled":true,"definition_digest":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}}\n' "$key"
+            exit 0
+        fi
+        if [ "$digest" = null ]; then digest_json=null; else digest_json="\"$digest\""; fi
+        printf '{"ok":true,"data":{"key":"%s","enabled":%s,"definition_digest":%s}}\n' "$key" "$enabled" "$digest_json"
+        exit 0
+    fi
+    if [ "$operation" = disable ]; then
+        digest=null
+        [ ! -f "$binding" ] || { IFS='|' read -r _ digest <"$binding"; }
+        if [ "${5:-}" = --select ]; then digest=$6; fi
+        printf 'false|%s\n' "$digest" >"$binding"
+        if [ "${KRISIS_FAIL_AFTER_DISABLE_KEY:-}" = "$key" ]; then
+            printf '%s\n' '{"code":"injected_post_disable_failure"}' >&2
+            exit 1
+        fi
+        printf '%s\n' '{"ok":true,"data":{}}'
+        exit 0
+    fi
+    if [ "$operation" = switch ]; then
+        digest=$5
+        if [ "$key" = krisis/observer ]; then
+            for legacy in decisions_observer decisions_daily-email; do
+                legacy_binding="$state/bindings/$legacy.binding"
+                [ ! -f "$legacy_binding" ] || { IFS='|' read -r legacy_enabled _ <"$legacy_binding"; [ "$legacy_enabled" != true ] || { printf '%s\n' '{"code":"joint_observers"}' >&2; exit 1; }; }
+            done
+        fi
+        if [ "$key" = decisions/observer ]; then
+            active_binding="$state/bindings/krisis_observer.binding"
+            [ ! -f "$active_binding" ] || { IFS='|' read -r active_enabled _ <"$active_binding"; [ "$active_enabled" != true ] || { printf '%s\n' '{"code":"joint_observers"}' >&2; exit 1; }; }
+        fi
+        printf 'true|%s\n' "$digest" >"$binding"
+        if [ "${KRISIS_FAIL_VERIFY_SWITCH:-0}" -eq 1 ] && [ "$key" = krisis/observer ]; then : >"$state/fail-next-show"; fi
+        printf '%s\n' '{"ok":true,"data":{}}'
+        exit 0
+    fi
+fi
+printf '%s\n' '{"code":"unsupported"}' >&2
+exit 1
+EOF
+
+cat >"$annals" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+cat >"$launchctl" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >>"$KRISIS_LAUNCHCTL_CAPTURE"
+case "$1" in print) exit 1 ;; *) exit 0 ;; esac
+EOF
+cat >"$home/.local/bin/codex" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+printf '%s\n' '[decision_feed]' 'expected_library_id = "0123456789abcdef0123456789abcdef"' >"$config"
+chmod 0755 "$candidate" "$clockwork" "$annals" "$launchctl" "$home/.local/bin/codex"
+
+deploy_for() {
+    test_home=$1
+    test_clockwork_state=$2
+    shift 2
+    HOME="$test_home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" \
+        KRISIS_CLOCKWORK_STATE="$test_clockwork_state" \
+        KRISIS_LAUNCHCTL_CAPTURE="$launchctl_capture" \
+        KRISIS_CANDIDATE_CAPTURE="$candidate_capture" \
+        /bin/sh "$SCRIPT_DIR/deploy-user.sh" \
+        --binary "$candidate" --clockwork "$clockwork" --annals "$annals" \
+        --annals-config "$config" --annals-library-id 0123456789abcdef0123456789abcdef \
+        --home "$test_home" --launchctl "$launchctl" "$@"
+}
+
+deploy() {
+    deploy_for "$home" "$clockwork_state" "$@"
+}
+
+# A valid but unrelated same-user gate is not adopted, rewritten, or removed.
+unrelated_home="$temporary/UnrelatedHome"
+unrelated_clockwork_state="$temporary/unrelated-clockwork-state"
+unrelated_state="$unrelated_home/Library/Application Support/Decisions"
+mkdir -p "$unrelated_state" "$unrelated_clockwork_state/definitions" \
+    "$unrelated_clockwork_state/bindings"
+printf '%s\n' 'operator-owned maintenance' \
+    >"$unrelated_state/.clockwork-maintenance"
+chmod 0600 "$unrelated_state/.clockwork-maintenance"
+unrelated_capture_lines=$(wc -l <"$clockwork_capture")
+if deploy_for "$unrelated_home" "$unrelated_clockwork_state" \
+    >"$temporary/unrelated-gate.out" 2>"$temporary/unrelated-gate.err"
+then
+    printf '%s\n' 'deployer adopted an unrelated pre-existing maintenance gate' >&2
+    exit 1
+fi
+grep -F 'has no Krisis hold receipt' "$temporary/unrelated-gate.err" >/dev/null
+grep -Fx 'operator-owned maintenance' \
+    "$unrelated_state/.clockwork-maintenance" >/dev/null
+[ ! -e "$unrelated_state/install/krisis-maintenance-hold.txt" ]
+[ "$(wc -l <"$clockwork_capture")" -eq "$unrelated_capture_lines" ]
+
+deploy >"$temporary/prepare.out"
+grep -F 'prepared krisis 0.4.0' "$temporary/prepare.out" >/dev/null
+[ -f "$home/Library/Application Support/Decisions/.clockwork-maintenance" ]
+[ -f "$home/Library/Application Support/Decisions/install/krisis-maintenance-hold.txt" ]
+[ ! -e "$home/Library/Application Support/Decisions/install/current" ]
+[ ! -e "$home/.local/bin/krisis" ]
+[ ! -e "$home/.codex/hooks.json" ]
+if grep -E 'binding (disable|switch)' "$clockwork_capture" >/dev/null; then
+    printf '%s\n' 'prepare mode mutated a Clockwork binding' >&2
+    exit 1
+fi
+grep -F 'definition show' "$clockwork_capture" >/dev/null
+
+KRISIS_TEST_LEAK_ME=forbidden deploy --final-cutover --keep-maintenance \
+    >"$temporary/deploy.out"
+grep -F 'installed krisis 0.4.0' "$temporary/deploy.out" >/dev/null
+grep -F 'authenticated maintenance hold retained' "$temporary/deploy.out" >/dev/null
+[ -L "$home/.local/bin/krisis" ]
+[ ! -e "$home/.local/bin/decisions" ]
+[ -L "$home/Library/Application Support/Chancery/providers/krisis" ]
+[ -L "$home/Library/Application Support/Chancery/providers/decisions" ]
+[ -f "$home/Library/Application Support/Decisions/.clockwork-maintenance" ]
+[ -f "$home/Library/Application Support/Decisions/install/krisis-maintenance-hold.txt" ]
+cmp -s "$home/.codex/hooks.json" "$SCRIPT_DIR/hooks.json"
+active_binding="$clockwork_state/bindings/krisis_observer.binding"
+IFS='|' read -r active_enabled first_digest <"$active_binding"
+[ "$active_enabled" = true ]
+first_current=$(readlink "$home/Library/Application Support/Decisions/install/current")
+first_release="$home/Library/Application Support/Decisions/install/$first_current"
+
+# Releasing a committed handoff is its own authenticated, idempotent operation.
+# A release failure keeps the exact hold, and the same operation resumes safely.
+state="$home/Library/Application Support/Decisions"
+if KRISIS_BLOCK_GATE_RELEASE_DIR="$state" deploy --release-maintenance \
+    >"$temporary/release-blocked.out" 2>"$temporary/release-blocked.err"
+then
+    printf '%s\n' 'maintenance release succeeded after its gate became undeletable' >&2
+    exit 1
+fi
+unset KRISIS_BLOCK_GATE_RELEASE_DIR
+chmod 0700 "$state"
+grep -F 'could not release its authenticated maintenance hold' \
+    "$temporary/release-blocked.err" >/dev/null
+[ -f "$state/.clockwork-maintenance" ]
+[ -f "$state/install/krisis-maintenance-hold.txt" ]
+deploy --release-maintenance >"$temporary/released.out"
+grep -F 'released authenticated Krisis maintenance hold' \
+    "$temporary/released.out" >/dev/null
+[ ! -e "$state/.clockwork-maintenance" ]
+[ -f "$state/install/krisis-maintenance-hold.txt" ]
+release_lines=$(wc -l <"$clockwork_capture")
+deploy --release-maintenance >"$temporary/released-again.out"
+grep -F 'released authenticated Krisis maintenance hold' \
+    "$temporary/released-again.out" >/dev/null
+[ ! -e "$state/.clockwork-maintenance" ]
+tail -n "+$((release_lines + 1))" "$clockwork_capture" \
+    | grep -E 'binding (disable|switch)' >/dev/null && {
+        printf '%s\n' 'idempotent maintenance release mutated a binding' >&2
+        exit 1
+    }
+
+# Existing content-addressed releases are closed regular-file trees. A
+# byte-identical external symlink or an uncommitted extra path is rejected by
+# both deploy and uninstall before either can touch a binding.
+external_runner="$temporary/external-observer-runner"
+cp "$first_release/bin/krisis-observer" "$external_runner"
+rm -f "$first_release/bin/krisis-observer"
+ln -s "$external_runner" "$first_release/bin/krisis-observer"
+release_audit_lines=$(wc -l <"$clockwork_capture")
+if deploy --final-cutover >"$temporary/symlink-deploy.out" 2>"$temporary/symlink-deploy.err"; then
+    printf '%s\n' 'deployer accepted a symlinked release member' >&2
+    exit 1
+fi
+if HOME="$home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" KRISIS_CLOCKWORK_STATE="$clockwork_state" \
+    /bin/sh "$SCRIPT_DIR/uninstall-user.sh" --clockwork "$clockwork" --home "$home" \
+    >"$temporary/symlink-uninstall.out" 2>"$temporary/symlink-uninstall.err"; then
+    printf '%s\n' 'uninstaller accepted a symlinked release member' >&2
+    exit 1
+fi
+rm -f "$first_release/bin/krisis-observer"
+install -m 0755 "$external_runner" "$first_release/bin/krisis-observer"
+printf '%s\n' 'unexpected' >"$first_release/package/unexpected"
+if deploy --final-cutover >"$temporary/extra-deploy.out" 2>"$temporary/extra-deploy.err"; then
+    printf '%s\n' 'deployer accepted an uncommitted release member' >&2
+    exit 1
+fi
+if HOME="$home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" KRISIS_CLOCKWORK_STATE="$clockwork_state" \
+    /bin/sh "$SCRIPT_DIR/uninstall-user.sh" --clockwork "$clockwork" --home "$home" \
+    >"$temporary/extra-uninstall.out" 2>"$temporary/extra-uninstall.err"; then
+    printf '%s\n' 'uninstaller accepted an uncommitted release member' >&2
+    exit 1
+fi
+rm -f "$first_release/package/unexpected"
+tail -n "+$((release_audit_lines + 1))" "$clockwork_capture" | grep -E 'binding (disable|switch)' >/dev/null && {
+    printf '%s\n' 'release-tree rejection happened after binding mutation' >&2
+    exit 1
+}
+
+active_definition="$clockwork_state/definitions/$first_digest.toml"
+cp "$active_definition" "$temporary/active-definition.backup"
+sed 's/0123456789abcdef0123456789abcdef/fedcba9876543210fedcba9876543210/' \
+    "$active_definition" >"$temporary/retargeted-definition.toml"
+mv "$temporary/retargeted-definition.toml" "$active_definition"
+retarget_lines=$(wc -l <"$clockwork_capture")
+if HOME="$home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" KRISIS_CLOCKWORK_STATE="$clockwork_state" \
+    /bin/sh "$SCRIPT_DIR/uninstall-user.sh" --clockwork "$clockwork" --home "$home" \
+    >"$temporary/retarget-uninstall.out" 2>"$temporary/retarget-uninstall.err"; then
+    printf '%s\n' 'uninstaller accepted a retargeted observer definition' >&2
+    exit 1
+fi
+[ "$(cat "$active_binding")" = "true|$first_digest" ]
+tail -n "+$((retarget_lines + 1))" "$clockwork_capture" | grep -E 'binding (disable|switch)' >/dev/null && {
+    printf '%s\n' 'retargeted definition rejection happened after binding mutation' >&2
+    exit 1
+}
+mv "$temporary/active-definition.backup" "$active_definition"
+
+database="$home/Library/Application Support/Decisions/decisions.db"
+database_alias="$temporary/decisions-db-alias"
+ln "$database" "$database_alias"
+database_audit_lines=$(wc -l <"$clockwork_capture")
+if deploy --final-cutover >"$temporary/hardlink-db.out" 2>"$temporary/hardlink-db.err"; then
+    printf '%s\n' 'deployer accepted a hard-linked database' >&2
+    exit 1
+fi
+rm -f "$database_alias"
+tail -n "+$((database_audit_lines + 1))" "$clockwork_capture" | grep -E 'binding (disable|switch)' >/dev/null && {
+    printf '%s\n' 'database rejection happened after binding mutation' >&2
+    exit 1
+}
+
+# The prior-active matrix starts with absent above and enabled here. A failure
+# immediately after touching the enabled key restores its exact selection.
+if KRISIS_FAIL_AFTER_DISABLE_KEY=krisis/observer deploy --final-cutover \
+    >"$temporary/fail-active-disable.out" 2>"$temporary/fail-active-disable.err"; then
+    printf '%s\n' 'deployer ignored a failure after disabling the active key' >&2
+    exit 1
+fi
+unset KRISIS_FAIL_AFTER_DISABLE_KEY
+[ "$(cat "$active_binding")" = "true|$first_digest" ]
+[ "$(readlink "$home/Library/Application Support/Decisions/install/current")" = "$first_current" ]
+[ ! -e "$home/Library/Application Support/Decisions/.clockwork-maintenance" ]
+
+# A foreign legacy binding is observed and refused without mutation.
+foreign_digest=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+printf 'true|%s\n' "$foreign_digest" >"$clockwork_state/bindings/decisions_observer.binding"
+capture_lines=$(wc -l <"$clockwork_capture")
+if deploy --final-cutover >"$temporary/foreign.out" 2>"$temporary/foreign.err"; then
+    printf '%s\n' 'deployer accepted an enabled foreign legacy binding' >&2
+    exit 1
+fi
+[ "$(cat "$clockwork_state/bindings/decisions_observer.binding")" = "true|$foreign_digest" ]
+tail -n "+$((capture_lines + 1))" "$clockwork_capture" | grep -F 'binding disable decisions/observer' >/dev/null && {
+    printf '%s\n' 'deployer mutated a foreign legacy binding' >&2
+    exit 1
+}
+printf 'false|%s\n' "$foreign_digest" >"$clockwork_state/bindings/decisions_observer.binding"
+
+# A foreign legacy plist is rejected before launchctl or binding mutation.
+plist="$home/Library/LaunchAgents/org.decisions.observer.plist"
+printf '%s\n' '<plist>foreign</plist>' >"$plist"
+clockwork_before=$(wc -l <"$clockwork_capture")
+launchctl_before=$(wc -l <"$launchctl_capture")
+if deploy --final-cutover >"$temporary/plist.out" 2>"$temporary/plist.err"; then
+    printf '%s\n' 'deployer accepted a foreign legacy plist' >&2
+    exit 1
+fi
+[ "$(cat "$plist")" = '<plist>foreign</plist>' ]
+[ "$(wc -l <"$launchctl_capture")" -eq "$launchctl_before" ]
+tail -n "+$((clockwork_before + 1))" "$clockwork_capture" | grep -E 'binding (disable|switch)' >/dev/null && {
+    printf '%s\n' 'deployer mutated bindings before rejecting a foreign plist' >&2
+    exit 1
+}
+rm -f "$plist"
+
+# A format-3 release supplies exact ownership evidence for both legacy
+# definitions. Faults immediately after each disable must restore every key
+# touched so far, and a complete handoff must never enable both observers.
 fixture_bundle_hash() {
     fixture_bundle=$1
     (
@@ -50,746 +385,237 @@ fixture_bundle_hash() {
     ) | shasum -a 256 | awk '{print $1}'
 }
 
-chmod 0755 "$package/decisions" "$package/decisions-daily-email" "$package/decisions-observer" \
-    "$package/deploy-user.sh" "$package/uninstall-user.sh"
-hook_plist="$temporary/hooks.plist"
-plutil -convert xml1 -o "$hook_plist" -- "$package/hooks.json"
-[ "$(plutil -extract hooks.Stop.0.hooks.0.type raw "$hook_plist")" = command ]
-[ "$(plutil -extract hooks.Stop.0.hooks.0.command raw "$hook_plist")" = '"$HOME/.local/bin/decisions" observe ingest' ]
-[ "$(plutil -extract hooks.Stop.0.hooks.0.timeout raw "$hook_plist")" -eq 3 ]
-! plutil -extract hooks.Stop.0.hooks.0.async raw "$hook_plist" >/dev/null 2>&1
-cat >"$candidate" <<'EOF'
-#!/bin/sh
-if [ "${1:-}" = --version ]; then printf 'decisions %s\n' "$DECISIONS_TEST_VERSION"; exit 0; fi
-case " $* " in
-    *' doctor '*) printf '%s\n' '{"schema_version":3}' ;;
-    *' events watermark '*) printf '%s\n' '{"stream":"decisions.lifecycle","envelope_version":1,"cursor":"opaque"}' ;;
-    *' observe activate '*)
-        if [ -e "$HOME/.local/bin/decisions" ] || [ -L "$HOME/.local/bin/decisions" ]; then
-            printf '%s\n' 'public observer command existed before baseline' >"$HOME/prebaseline-cli"
-            exit 1
-        fi
-        if [ ! -f "$HOME/observer-baseline" ] && [ -e "$HOME/.codex/hooks.json" ]; then
-            printf '%s\n' 'observer hook existed before baseline' >"$HOME/prebaseline-hook"
-            exit 1
-        fi
-        if [ ! -f "$HOME/observer-baseline" ]; then
-            printf '%s\n' baseline >"$HOME/observer-baseline"
-        fi
-        ;;
-esac
-exit 0
-EOF
-chmod 0755 "$candidate"
-cat >"$launchctl" <<EOF
-#!/bin/sh
-printf '%s\n' "\$*" >>"$log"
-mkdir -p "$loaded"
-if [ "\${1:-}" = print ]; then label=\${2##*/}; [ -f "$loaded/\$label" ]; exit; fi
-if [ "\${1:-}" = bootout ]; then label=\${2##*/}; rm -f "$loaded/\$label"; exit 0; fi
-if [ "\${1:-}" = bootstrap ]; then
-    label=\$(plutil -extract Label raw "\$3")
-    if [ "\$label" = org.decisions.observer ] && [ ! -f "$baseline" ]; then
-        printf '%s\n' 'observer bootstrapped before baseline' >"$temporary/prebaseline"
-        exit 1
-    fi
-    : >"$loaded/\$label"
-fi
-exit 0
-EOF
-chmod 0755 "$launchctl"
-cat >"$clockwork" <<EOF
-#!/bin/sh
-set -eu
-if [ "\${1:-}" = --json ]; then shift; fi
-state="\$HOME/.clockwork-test"
-mkdir -p "\$state"
-require_maintenance() {
-    if [ ! -f "\$HOME/Library/Application Support/Decisions/.clockwork-maintenance" ]; then
-        : >"$clockwork_without_maintenance"
-        exit 1
-    fi
-}
-case "\${1:-} \${2:-}" in
-    'definition register')
-        require_maintenance
-        manifest=\$3
-        key=\$(sed -n 's/^key = "\([^"]*\)"/\1/p' "\$manifest")
-        digest=\$(shasum -a 256 "\$manifest" | awk '{print \$1}')
-        safe_key=\$(printf '%s' "\$key" | tr / -)
-        cp "\$manifest" "\$state/definition-\$safe_key.toml"
-        cp "\$manifest" "\$state/definition-\$digest.toml"
-        printf '{"ok":true,"data":{"digest":"%s","key":"%s"}}\n' "\$digest" "\$key"
-        ;;
-    'definition show')
-        digest=\$3
-        definition="\$state/definition-\$digest.toml"
-        if [ ! -f "\$definition" ]; then
-            printf '%s\n' '{"ok":false,"error":{"code":"definition_not_found","message":"missing"}}' >&2
-            exit 1
-        fi
-        key=\$(sed -n 's/^key = "\([^"]*\)"/\1/p' "\$definition")
-        schema_version=\$(sed -n 's/^schema_version = //p' "\$definition")
-        release_id=\$(sed -n 's/^release_id = "\([^"]*\)"/\1/p' "\$definition")
-        release_root=\$(sed -n 's/^release_root = "\([^"]*\)"/\1/p' "\$definition")
-        authority=\$(sed -n 's/^authority = "\([^"]*\)"/\1/p' "\$definition")
-        overlap=\$(sed -n 's/^overlap = "\([^"]*\)"/\1/p' "\$definition")
-        cwd=\$(sed -n 's/^cwd = "\([^"]*\)"/\1/p' "\$definition")
-        schedule_kind=\$(sed -n 's/^kind = "\([^"]*\)"/\1/p' "\$definition" | sed -n '1p')
-        run_at_load=\$(sed -n 's/^run_at_load = //p' "\$definition")
-        launch_kind=\$(sed -n 's/^kind = "\([^"]*\)"/\1/p' "\$definition" | sed -n '2p')
-        interpreter=\$(sed -n 's/^interpreter = "\([^"]*\)"/\1/p' "\$definition")
-        interpreter_sha256=\$(sed -n 's/^interpreter_sha256 = "\([^"]*\)"/\1/p' "\$definition")
-        script=\$(sed -n 's/^script = "\([^"]*\)"/\1/p' "\$definition")
-        script_sha256=\$(sed -n 's/^script_sha256 = "\([^"]*\)"/\1/p' "\$definition")
-        home=\$(sed -n 's/^HOME = "\([^"]*\)"/\1/p' "\$definition")
-        stdout=\$(sed -n 's/^stdout = "\([^"]*\)"/\1/p' "\$definition")
-        stderr=\$(sed -n 's/^stderr = "\([^"]*\)"/\1/p' "\$definition")
-        case "\$schedule_kind" in
-            interval)
-                seconds=\$(sed -n 's/^seconds = //p' "\$definition")
-                schedule_json="{\"kind\":\"interval\",\"seconds\":\$seconds,\"run_at_load\":\$run_at_load}"
-                ;;
-            local-calendar)
-                hour=\$(sed -n 's/^hour = //p' "\$definition")
-                minute=\$(sed -n 's/^minute = //p' "\$definition")
-                schedule_json="{\"kind\":\"local-calendar\",\"hour\":\$hour,\"minute\":\$minute,\"run_at_load\":\$run_at_load}"
-                ;;
-            *) exit 1 ;;
-        esac
-        printf '{"ok":true,"data":{"digest":"%s","key":"%s","registered_at":0,"manifest":{"schema_version":%s,"key":"%s","release_id":"%s","release_root":"%s","authority":"%s","overlap":"%s","arguments":[],"cwd":"%s","schedule":%s,"launch":{"kind":"%s","interpreter":"%s","interpreter_sha256":"%s","script":"%s","script_sha256":"%s"},"environment":{"HOME":"%s"},"output":{"stdout":"%s","stderr":"%s"}}}}\n' \
-            "\$digest" "\$key" "\$schema_version" "\$key" "\$release_id" "\$release_root" \
-            "\$authority" "\$overlap" "\$cwd" "\$schedule_json" "\$launch_kind" \
-            "\$interpreter" "\$interpreter_sha256" "\$script" "\$script_sha256" \
-            "\$home" "\$stdout" "\$stderr"
-        ;;
-    'binding show')
-        key=\$3
-        safe_key=\$(printf '%s' "\$key" | tr / -)
-        binding="\$state/binding-\$safe_key"
-        if [ ! -f "\$binding" ]; then
-            printf '%s\n' '{"ok":false,"error":{"code":"binding_not_found","message":"missing"}}' >&2
-            exit 1
-        fi
-        IFS='|' read -r enabled digest <"\$binding"
-        if [ -n "\$digest" ]; then digest_json="\"\$digest\""; else digest_json=null; fi
-        if [ "\$enabled" -eq 1 ]; then enabled_json=true; else enabled_json=false; fi
-        printf '{"ok":true,"data":{"key":"%s","definition_digest":%s,"enabled":%s,"updated_at":0}}\n' \
-            "\$key" "\$digest_json" "\$enabled_json"
-        ;;
-    'binding disable')
-        key=\$3
-        require_maintenance
-        safe_key=\$(printf '%s' "\$key" | tr / -)
-        binding="\$state/binding-\$safe_key"
-        digest=
-        if [ -f "\$binding" ]; then IFS='|' read -r ignored digest <"\$binding"; fi
-        if [ "\${4:-}" = --select ]; then digest=\${5:?}; fi
-        printf '0|%s\n' "\$digest" >"\$binding"
-        if [ -n "\$digest" ]; then digest_json="\"\$digest\""; else digest_json=null; fi
-        printf '{"ok":true,"data":{"key":"%s","definition_digest":%s,"enabled":false,"updated_at":0}}\n' \
-            "\$key" "\$digest_json"
-        ;;
-    'binding switch')
-        key=\$3
-        digest=\$4
-        require_maintenance
-        if [ "\$key" = decisions/observer ] && [ -f "$fail_switch" ]; then
-            if [ -f "$concurrent_hook" ]; then
-                : >"$concurrent_hook_started"
-                /bin/sleep 2 <"\$HOME/Library/Application Support/Decisions/decisions.db" >/dev/null 2>&1 &
-            fi
-            rm -f "$fail_switch"
-            exit 1
-        fi
-        safe_key=\$(printf '%s' "\$key" | tr / -)
-        printf '1|%s\n' "\$digest" >"\$state/binding-\$safe_key"
-        printf '{"ok":true,"data":{"key":"%s","definition_digest":"%s","enabled":true,"updated_at":0}}\n' "\$key" "\$digest"
-        ;;
-    *) printf '%s\n' 'unsupported fake Clockwork invocation' >&2; exit 1 ;;
-esac
-EOF
-chmod 0755 "$clockwork"
-: >"$home/.local/bin/email"
-chmod 0755 "$home/.local/bin/email"
-bad_schema_home="$temporary/BadSchemaHome"
-bad_schema_candidate="$temporary/decisions-schema-two"
-mkdir -p "$bad_schema_home/.local/bin"
-: >"$bad_schema_home/.local/bin/email"
-: >"$bad_schema_home/.local/bin/codex"
-chmod 0755 "$bad_schema_home/.local/bin/email" "$bad_schema_home/.local/bin/codex"
-cat >"$bad_schema_candidate" <<'EOF'
-#!/bin/sh
-if [ "${1:-}" = --version ]; then printf 'decisions %s\n' "$DECISIONS_TEST_VERSION"; exit 0; fi
-case " $* " in
-    *' doctor '*) printf '%s\n' '{"schema_version":2}' ;;
-    *' events watermark '*) printf '%s\n' '{"stream":"decisions.lifecycle","envelope_version":1,"cursor":"opaque"}' ;;
-esac
-exit 0
-EOF
-chmod 0755 "$bad_schema_candidate"
-if HOME="$bad_schema_home" "$package/deploy-user.sh" --binary "$bad_schema_candidate" \
-    --clockwork "$clockwork" --home "$bad_schema_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment accepted a candidate that did not prove schema version 3' >&2
-    exit 1
-fi
-[ ! -e "$bad_schema_home/.local/bin/decisions" ]
-
-foreign_binding_home="$temporary/ForeignBindingHome"
-mkdir -p "$foreign_binding_home/.local/bin" "$foreign_binding_home/.clockwork-test"
-: >"$foreign_binding_home/.local/bin/email"
-: >"$foreign_binding_home/.local/bin/codex"
-chmod 0755 "$foreign_binding_home/.local/bin/email" "$foreign_binding_home/.local/bin/codex"
-foreign_binding_digest=$(printf '%064d' 0 | tr 0 f)
-printf '1|%s\n' "$foreign_binding_digest" \
-    >"$foreign_binding_home/.clockwork-test/binding-decisions-observer"
-if HOME="$foreign_binding_home" "$package/deploy-user.sh" --binary "$candidate" \
-    --clockwork "$clockwork" --home "$foreign_binding_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment adopted a foreign Clockwork binding' >&2
-    exit 1
-fi
-grep -Fx "1|$foreign_binding_digest" \
-    "$foreign_binding_home/.clockwork-test/binding-decisions-observer" >/dev/null
-printf '0|%s\n' "$foreign_binding_digest" \
-    >"$foreign_binding_home/.clockwork-test/binding-decisions-observer"
-if HOME="$foreign_binding_home" "$package/deploy-user.sh" --binary "$candidate" \
-    --clockwork "$clockwork" --home "$foreign_binding_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment adopted a disabled foreign Clockwork binding' >&2
-    exit 1
-fi
-grep -Fx "0|$foreign_binding_digest" \
-    "$foreign_binding_home/.clockwork-test/binding-decisions-observer" >/dev/null
-if HOME="$foreign_binding_home" "$package/uninstall-user.sh" --clockwork "$clockwork" \
-    --home "$foreign_binding_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'uninstaller accepted a selected binding without an owned current release' >&2
-    exit 1
-fi
-grep -Fx "0|$foreign_binding_digest" \
-    "$foreign_binding_home/.clockwork-test/binding-decisions-observer" >/dev/null
-printf '%s\n' '0|' \
-    >"$foreign_binding_home/.clockwork-test/binding-decisions-observer"
-HOME="$foreign_binding_home" "$package/uninstall-user.sh" --clockwork "$clockwork" \
-    --home "$foreign_binding_home" --launchctl "$launchctl" >/dev/null
-grep -Fx '0|' \
-    "$foreign_binding_home/.clockwork-test/binding-decisions-observer" >/dev/null
-
-HOME="$home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null
-state="$home/Library/Application Support/Decisions"
-[ ! -e "$state/.clockwork-maintenance" ]
-[ ! -e "$clockwork_without_maintenance" ]
-[ -L "$home/.local/bin/decisions" ]
-[ -L "$state/install/current" ]
-[ -x "$state/install/current/libexec/decisions" ]
-[ -x "$state/install/current/bin/decisions-daily-email" ]
-[ -x "$state/install/current/bin/decisions-observer" ]
-[ -L "$home/Library/Application Support/Chancery/providers/decisions" ]
-daily_plist="$home/Library/LaunchAgents/org.decisions.daily-email.plist"
-observer_plist="$home/Library/LaunchAgents/org.decisions.observer.plist"
-daily_definition="$home/.clockwork-test/definition-decisions-daily-email.toml"
-observer_definition="$home/.clockwork-test/definition-decisions-observer.toml"
-[ ! -e "$daily_plist" ]
-[ ! -e "$observer_plist" ]
-grep -Fx 'kind = "local-calendar"' "$daily_definition" >/dev/null
-grep -Fx 'hour = 9' "$daily_definition" >/dev/null
-grep -Fx 'minute = 0' "$daily_definition" >/dev/null
-grep -Fx 'run_at_load = false' "$daily_definition" >/dev/null
-grep -Fx 'kind = "interval"' "$observer_definition" >/dev/null
-grep -Fx 'seconds = 60' "$observer_definition" >/dev/null
-grep -Fx "cwd = \"$state\"" "$daily_definition" "$observer_definition" >/dev/null
-grep -F '/install/releases/' "$daily_definition" "$observer_definition" >/dev/null
-! grep -F '/install/current/' "$daily_definition" "$observer_definition" >/dev/null
-! grep -F 'RESEND_API_KEY' "$daily_definition" "$observer_definition" >/dev/null
-cmp -s "$package/hooks.json" "$home/.codex/hooks.json"
-[ -f "$baseline" ]
-[ ! -f "$home/prebaseline-cli" ]
-[ ! -f "$home/prebaseline-hook" ]
-[ ! -f "$temporary/prebaseline" ]
-grep -Eq '^1\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-daily-email"
-grep -Eq '^1\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-observer"
-[ ! -f "$loaded/org.decisions.daily-email" ]
-[ ! -f "$loaded/org.decisions.observer" ]
-mkdir "$state/install/.update-lock"
-if HOME="$home" "$package/uninstall-user.sh" --clockwork "$clockwork" \
-    --home "$home" --launchctl "$launchctl" >/dev/null 2>&1
-then
-    printf '%s\n' 'uninstall ignored an active Decisions deployment lock' >&2
-    exit 1
-fi
-[ -L "$home/.local/bin/decisions" ]
-[ -L "$state/install/current" ]
-rmdir "$state/install/.update-lock"
-first_release=$(readlink "$state/install/current")
-baseline_before=$(cat "$baseline")
-owned_observer_binding=$(cat "$home/.clockwork-test/binding-decisions-observer")
-sed 's|^release_root = ".*"$|release_root = "/tmp/foreign-decisions-release"|' "$observer_definition" \
-    >"$home/.clockwork-test/definition-$foreign_binding_digest.toml"
-printf '1|%s\n' "$foreign_binding_digest" \
-    >"$home/.clockwork-test/binding-decisions-observer"
-if HOME="$home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" \
-    --home "$home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment adopted a same-key Clockwork definition with a foreign release root' >&2
-    exit 1
-fi
-grep -Fx "1|$foreign_binding_digest" \
-    "$home/.clockwork-test/binding-decisions-observer" >/dev/null
-printf '%s\n' "$owned_observer_binding" \
-    >"$home/.clockwork-test/binding-decisions-observer"
-HOME="$home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null
-[ "$(cat "$baseline")" = "$baseline_before" ]
-[ ! -f "$temporary/prebaseline" ]
-grep -Eq '^1\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-daily-email"
-grep -Eq '^1\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-observer"
-printf '%s\n' 'original database bytes' >"$state/decisions.db"
-chmod 0600 "$state/decisions.db"
-/bin/sleep 60 <"$state/decisions.db" &
-holder=$!
-if HOME="$home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment migrated an open database' >&2
-    exit 1
-fi
-[ -L "$home/.local/bin/decisions" ]
-grep -Eq '^1\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-daily-email"
-grep -Eq '^1\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-observer"
-grep -Fx 'original database bytes' "$state/decisions.db" >/dev/null
-kill "$holder"
-wait "$holder" >/dev/null 2>&1 || true
-holder=
-candidate_two="$temporary/decisions-two"
-cat >"$candidate_two" <<'EOF'
-#!/bin/sh
-if [ "${1:-}" = --version ]; then printf 'decisions %s\n' "$DECISIONS_TEST_VERSION"; exit 0; fi
-database=
-previous=
-for argument in "$@"; do
-    if [ "$previous" = database ]; then database=$argument; previous=; continue; fi
-    if [ "$argument" = --database ]; then previous=database; continue; fi
-    if [ "$argument" = doctor ] && [ -n "$database" ]; then
-        printf '%s\n' 'candidate changed database' >"$database"
-    fi
-done
-case " $* " in
-    *' doctor '*) printf '%s\n' '{"schema_version":3}' ;;
-    *' events watermark '*) printf '%s\n' '{"stream":"decisions.lifecycle","envelope_version":1,"cursor":"opaque"}' ;;
-    *' observe activate '*)
-        if [ -e "$HOME/.local/bin/decisions" ] || [ -L "$HOME/.local/bin/decisions" ]; then
-            printf '%s\n' 'public observer command existed before baseline' >"$HOME/prebaseline-cli"
-            exit 1
-        fi
-        if [ ! -f "$HOME/observer-baseline" ]; then
-            printf '%s\n' baseline >"$HOME/observer-baseline"
-        fi
-        ;;
-esac
-exit 0
-EOF
-chmod 0755 "$candidate_two"
-prior_disabled_daily_digest=$(sed -n 's/^1|\([0-9a-f]\{64\}\)$/\1/p' \
-    "$home/.clockwork-test/binding-decisions-daily-email")
-[ -n "$prior_disabled_daily_digest" ]
-printf '0|%s\n' "$prior_disabled_daily_digest" \
-    >"$home/.clockwork-test/binding-decisions-daily-email"
-: >"$fail_switch"
-: >"$concurrent_hook"
-if HOME="$home" "$package/deploy-user.sh" --binary "$candidate_two" --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'failed Clockwork switch unexpectedly committed' >&2
-    exit 1
-fi
-[ -f "$concurrent_hook_started" ]
-[ "$(readlink "$state/install/current")" = "$first_release" ]
-[ "$(readlink "$home/.local/bin/decisions")" = "$state/install/current/bin/decisions" ]
-[ "$(readlink "$home/Library/Application Support/Chancery/providers/decisions")" = "$state/install/current/share/chancery/decisions" ]
-grep -Fx 'original database bytes' "$state/decisions.db" >/dev/null
-grep -Fx "0|$prior_disabled_daily_digest" \
-    "$home/.clockwork-test/binding-decisions-daily-email" >/dev/null
-grep -Eq '^1\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-observer"
-cmp -s "$package/hooks.json" "$home/.codex/hooks.json"
-[ ! -e "$state/.clockwork-maintenance" ]
-[ ! -e "$clockwork_without_maintenance" ]
-printf '%s\n' 'uninstall maintenance evidence' >"$state/.clockwork-maintenance"
-chmod 0600 "$state/.clockwork-maintenance"
-ln "$state/.clockwork-maintenance" "$temporary/uninstall-maintenance-link"
-if HOME="$home" "$package/uninstall-user.sh" --clockwork "$clockwork" \
-    --home "$home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'uninstall accepted a hard-linked maintenance gate' >&2
-    exit 1
-fi
-grep -Fx 'uninstall maintenance evidence' "$state/.clockwork-maintenance" >/dev/null
-rm -f "$temporary/uninstall-maintenance-link" "$state/.clockwork-maintenance"
-HOME="$home" "$package/uninstall-user.sh" --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null
-[ ! -e "$home/.local/bin/decisions" ]
-[ ! -e "$home/.codex/hooks.json" ]
-[ ! -e "$home/Library/LaunchAgents/org.decisions.daily-email.plist" ]
-[ ! -e "$home/Library/LaunchAgents/org.decisions.observer.plist" ]
-[ -d "$state/install/releases" ]
-grep -Eq '^0\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-daily-email"
-grep -Eq '^0\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-observer"
-[ -f "$state/.clockwork-maintenance" ]
-[ "$(stat -f '%Lp' "$state/.clockwork-maintenance")" = 600 ]
-[ "$(stat -f '%u' "$state/.clockwork-maintenance")" -eq "$(id -u)" ]
-printf '%s\n' 'retained maintenance evidence' >"$state/.clockwork-maintenance"
-ln "$state/.clockwork-maintenance" "$temporary/maintenance-link"
-if HOME="$home" "$package/deploy-user.sh" --binary "$candidate" \
-    --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment accepted a hard-linked maintenance gate' >&2
-    exit 1
-fi
-grep -Fx 'retained maintenance evidence' "$state/.clockwork-maintenance" >/dev/null
-rm -f "$temporary/maintenance-link"
-chmod 0644 "$state/.clockwork-maintenance"
-if HOME="$home" "$package/deploy-user.sh" --binary "$candidate" \
-    --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment accepted a non-private maintenance gate' >&2
-    exit 1
-fi
-[ "$(stat -f '%Lp' "$state/.clockwork-maintenance")" = 644 ]
-chmod 0600 "$state/.clockwork-maintenance"
-printf '%s\n' 'existing observer log' >"$home/Library/Logs/Decisions/observer.stderr.log"
-chmod 0644 "$home/Library/Logs/Decisions/observer.stderr.log"
-HOME="$home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null
-[ -L "$home/.local/bin/decisions" ]
-[ -L "$home/Library/Application Support/Chancery/providers/decisions" ]
-[ "$(stat -f '%Lp' "$home/Library/Logs/Decisions/observer.stderr.log")" = 600 ]
-grep -Fx 'existing observer log' "$home/Library/Logs/Decisions/observer.stderr.log" >/dev/null
-grep -Eq '^1\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-daily-email"
-grep -Eq '^1\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-observer"
-[ ! -e "$state/.clockwork-maintenance" ]
-
-unsafe_home="$temporary/UnsafeRollbackHome"
-mkdir -p "$unsafe_home/.local/bin"
-: >"$unsafe_home/.local/bin/email"
-: >"$unsafe_home/.local/bin/codex"
-chmod 0755 "$unsafe_home/.local/bin/email" "$unsafe_home/.local/bin/codex"
-: >"$fail_switch"
-if HOME="$unsafe_home" "$package/deploy-user.sh" --binary "$candidate" \
-    --clockwork "$clockwork" --home "$unsafe_home" --launchctl "$launchctl" \
-    >"$temporary/unsafe.stdout" 2>"$temporary/unsafe.stderr"; then
-    printf '%s\n' 'deployment committed after an unprovable Clockwork rollback' >&2
-    exit 1
-fi
-unsafe_state="$unsafe_home/Library/Application Support/Decisions"
-[ -f "$unsafe_state/.clockwork-maintenance" ]
-[ "$(stat -f '%Lp' "$unsafe_state/.clockwork-maintenance")" = 600 ]
-[ "$(stat -f '%u' "$unsafe_state/.clockwork-maintenance")" -eq "$(id -u)" ]
-[ ! -e "$unsafe_home/.local/bin/decisions" ]
-grep -Eq '^0\|[0-9a-f]{64}$' \
-    "$unsafe_home/.clockwork-test/binding-decisions-daily-email"
-grep -Fx '0|' "$unsafe_home/.clockwork-test/binding-decisions-observer" >/dev/null
-grep -F 'a valid maintenance gate is retained' \
-    "$temporary/unsafe.stderr" >/dev/null
-[ ! -e "$clockwork_without_maintenance" ]
-unsafe_transaction=$(find "$unsafe_state/install" -maxdepth 1 -type d \
-    -name '.transaction.*' -print | sed -n '1p')
-[ -n "$unsafe_transaction" ]
-[ -f "$unsafe_transaction/prior-install.txt" ]
-
-owned_observer_binding=$(cat "$home/.clockwork-test/binding-decisions-observer")
-printf '1|%s\n' "$foreign_binding_digest" \
-    >"$home/.clockwork-test/binding-decisions-observer"
-if HOME="$home" "$package/uninstall-user.sh" --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'uninstaller disabled a foreign Clockwork binding' >&2
-    exit 1
-fi
-grep -Fx "1|$foreign_binding_digest" \
-    "$home/.clockwork-test/binding-decisions-observer" >/dev/null
-printf '0|%s\n' "$foreign_binding_digest" \
-    >"$home/.clockwork-test/binding-decisions-observer"
-if HOME="$home" "$package/uninstall-user.sh" --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'uninstaller disabled a selected foreign Clockwork definition' >&2
-    exit 1
-fi
-grep -Fx "0|$foreign_binding_digest" \
-    "$home/.clockwork-test/binding-decisions-observer" >/dev/null
-printf '%s\n' "$owned_observer_binding" \
-    >"$home/.clockwork-test/binding-decisions-observer"
-printf '%s\n' '{"hooks":{"Stop":[]}}' >"$home/.codex/hooks.json"
-if HOME="$home" "$package/uninstall-user.sh" --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'uninstaller removed a modified Codex hook' >&2
-    exit 1
-fi
-grep -Fx '{"hooks":{"Stop":[]}}' "$home/.codex/hooks.json" >/dev/null
-grep -Eq '^1\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-daily-email"
-grep -Eq '^1\|[0-9a-f]{64}$' "$home/.clockwork-test/binding-decisions-observer"
-cp "$package/hooks.json" "$home/.codex/hooks.json"
-rm -f "$home/.local/bin/decisions"
-ln -s /tmp/foreign-decisions "$home/.local/bin/decisions"
-if HOME="$home" "$package/uninstall-user.sh" --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'uninstaller removed a foreign selector' >&2
-    exit 1
-fi
-[ "$(readlink "$home/.local/bin/decisions")" = /tmp/foreign-decisions ]
-rm -f "$home/.local/bin/decisions"
-printf '%s\n' 'foreign command' >"$home/.local/bin/decisions"
-chmod 0755 "$home/.local/bin/decisions"
-if HOME="$home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" --home "$home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'foreign command unexpectedly replaced' >&2
-    exit 1
-fi
-grep -Fx 'foreign command' "$home/.local/bin/decisions" >/dev/null
-
-quote_home="$temporary/Home\"Quote"
-mkdir -p "$quote_home"
-if HOME="$quote_home" "$package/deploy-user.sh" --binary "$candidate" \
-    --clockwork "$clockwork" --home "$quote_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment rendered a quoted home into Clockwork TOML' >&2
-    exit 1
-fi
-if HOME="$quote_home" "$package/uninstall-user.sh" --clockwork "$clockwork" \
-    --home "$quote_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'uninstall accepted a quoted schedule-rendering home' >&2
-    exit 1
-fi
-backslash_home="$temporary/Home\\Backslash"
-mkdir -p "$backslash_home"
-if HOME="$backslash_home" "$package/deploy-user.sh" --binary "$candidate" \
-    --clockwork "$clockwork" --home "$backslash_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment rendered a backslash home into Clockwork TOML' >&2
-    exit 1
-fi
-if HOME="$backslash_home" "$package/uninstall-user.sh" --clockwork "$clockwork" \
-    --home "$backslash_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'uninstall accepted a backslash schedule-rendering home' >&2
-    exit 1
-fi
-
-foreign_home="$temporary/ForeignHome"
-mkdir -p "$foreign_home/.local/bin" "$foreign_home/Library/LaunchAgents"
-: >"$foreign_home/.local/bin/email"
-chmod 0755 "$foreign_home/.local/bin/email"
-cat >"$foreign_home/Library/LaunchAgents/org.decisions.daily-email.plist" <<'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict><key>Label</key><string>org.foreign.service</string><key>ProgramArguments</key><array><string>/bin/false</string><string>/tmp/foreign</string></array></dict></plist>
-EOF
-if HOME="$foreign_home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" --home "$foreign_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'foreign plist unexpectedly replaced' >&2
-    exit 1
-fi
-grep -F 'org.foreign.service' "$foreign_home/Library/LaunchAgents/org.decisions.daily-email.plist" >/dev/null
-
-foreign_hooks_home="$temporary/ForeignHooksHome"
-mkdir -p "$foreign_hooks_home/.local/bin" "$foreign_hooks_home/.codex"
-: >"$foreign_hooks_home/.local/bin/email"
-chmod 0755 "$foreign_hooks_home/.local/bin/email"
-printf '%s\n' '{"hooks":{"Stop":[]}}' >"$foreign_hooks_home/.codex/hooks.json"
-if HOME="$foreign_hooks_home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" --home "$foreign_hooks_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'foreign Codex hooks unexpectedly replaced' >&2
-    exit 1
-fi
-grep -Fx '{"hooks":{"Stop":[]}}' "$foreign_hooks_home/.codex/hooks.json" >/dev/null
-
-traversal_home="$temporary/TraversalHome"
-mkdir -p "$traversal_home/.local/bin" "$traversal_home/Library/Application Support/Decisions/install/releases"
-: >"$traversal_home/.local/bin/email"
-chmod 0755 "$traversal_home/.local/bin/email"
-ln -s 'releases/../foreign' "$traversal_home/Library/Application Support/Decisions/install/current"
-if HOME="$traversal_home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" --home "$traversal_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'traversal selector unexpectedly accepted' >&2
-    exit 1
-fi
-[ "$(readlink "$traversal_home/Library/Application Support/Decisions/install/current")" = 'releases/../foreign' ]
-
 legacy_home="$temporary/LegacyHome"
+legacy_clockwork_state="$temporary/legacy-clockwork-state"
 legacy_state="$legacy_home/Library/Application Support/Decisions"
 legacy_install="$legacy_state/install"
 legacy_stage="$legacy_install/release-stage"
 legacy_logs="$legacy_home/Library/Logs/Decisions"
-mkdir -p "$legacy_home/.local/bin" "$legacy_home/.codex" \
-    "$legacy_home/Library/LaunchAgents" \
-    "$legacy_home/Library/Application Support/Chancery/providers" \
-    "$legacy_install/releases" "$legacy_logs" \
+mkdir -p "$legacy_home/.local/bin" "$legacy_clockwork_state/definitions" \
+    "$legacy_clockwork_state/bindings" "$legacy_install/releases" "$legacy_logs" \
     "$legacy_stage/bin" "$legacy_stage/libexec" "$legacy_stage/package" \
-    "$legacy_stage/share/chancery"
-: >"$legacy_home/.local/bin/email"
-: >"$legacy_home/.local/bin/codex"
-printf '%s\n' baseline >"$legacy_home/observer-baseline"
-chmod 0755 "$legacy_home/.local/bin/email" "$legacy_home/.local/bin/codex"
-install -m 0755 "$candidate" "$legacy_stage/libexec/decisions"
-install -m 0755 "$package/decisions" "$legacy_stage/bin/decisions"
-install -m 0755 "$package/decisions-daily-email" \
-    "$legacy_stage/bin/decisions-daily-email"
-install -m 0755 "$package/decisions-observer" \
-    "$legacy_stage/bin/decisions-observer"
-install -m 0755 "$package/decisions" "$legacy_stage/package/decisions"
-install -m 0755 "$package/decisions-daily-email" \
-    "$legacy_stage/package/decisions-daily-email"
-install -m 0755 "$package/decisions-observer" \
-    "$legacy_stage/package/decisions-observer"
-install -m 0755 "$package/deploy-user.sh" "$legacy_stage/package/deploy-user.sh"
-install -m 0755 "$package/uninstall-user.sh" "$legacy_stage/package/uninstall-user.sh"
-install -m 0644 "$package/org.decisions.daily-email.plist" \
-    "$legacy_stage/package/org.decisions.daily-email.plist"
-install -m 0644 "$package/org.decisions.observer.plist" \
-    "$legacy_stage/package/org.decisions.observer.plist"
-install -m 0644 "$package/hooks.json" "$legacy_stage/package/hooks.json"
-cp -R "$share/decisions" "$legacy_stage/share/chancery/decisions"
+    "$legacy_stage/share/chancery/decisions"
+for legacy_executable in decisions decisions-daily-email decisions-observer; do
+    printf '%s\n' '#!/bin/sh' 'exit 0' >"$legacy_stage/bin/$legacy_executable"
+    chmod 0755 "$legacy_stage/bin/$legacy_executable"
+done
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$legacy_stage/libexec/decisions"
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$legacy_stage/package/deploy-user.sh"
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$legacy_stage/package/uninstall-user.sh"
+chmod 0755 "$legacy_stage/libexec/decisions" "$legacy_stage/package/deploy-user.sh" \
+    "$legacy_stage/package/uninstall-user.sh"
+printf '%s\n' 'legacy daily definition template' \
+    >"$legacy_stage/package/decisions-daily-email.clockwork.toml.in"
+printf '%s\n' 'legacy observer definition template' \
+    >"$legacy_stage/package/decisions-observer.clockwork.toml.in"
+printf '%s\n' '{}' >"$legacy_stage/package/hooks.json"
+printf '%s\n' '{}' >"$legacy_stage/share/chancery/decisions/provider.json"
+
 legacy_binary_hash=$(shasum -a 256 "$legacy_stage/libexec/decisions" | awk '{print $1}')
 legacy_frontend_hash=$(shasum -a 256 "$legacy_stage/bin/decisions" | awk '{print $1}')
-legacy_daily_runner_hash=$(shasum -a 256 \
-    "$legacy_stage/bin/decisions-daily-email" | awk '{print $1}')
-legacy_observer_runner_hash=$(shasum -a 256 \
-    "$legacy_stage/bin/decisions-observer" | awk '{print $1}')
-legacy_daily_plist_hash=$(shasum -a 256 \
-    "$legacy_stage/package/org.decisions.daily-email.plist" | awk '{print $1}')
-legacy_observer_plist_hash=$(shasum -a 256 \
-    "$legacy_stage/package/org.decisions.observer.plist" | awk '{print $1}')
+legacy_daily_runner_hash=$(shasum -a 256 "$legacy_stage/bin/decisions-daily-email" | awk '{print $1}')
+legacy_observer_runner_hash=$(shasum -a 256 "$legacy_stage/bin/decisions-observer" | awk '{print $1}')
+legacy_daily_definition_hash=$(shasum -a 256 "$legacy_stage/package/decisions-daily-email.clockwork.toml.in" | awk '{print $1}')
+legacy_observer_definition_hash=$(shasum -a 256 "$legacy_stage/package/decisions-observer.clockwork.toml.in" | awk '{print $1}')
 legacy_hooks_hash=$(shasum -a 256 "$legacy_stage/package/hooks.json" | awk '{print $1}')
-legacy_deployer_hash=$(shasum -a 256 \
-    "$legacy_stage/package/deploy-user.sh" | awk '{print $1}')
-legacy_uninstaller_hash=$(shasum -a 256 \
-    "$legacy_stage/package/uninstall-user.sh" | awk '{print $1}')
-legacy_chancery_hash=$(fixture_bundle_hash "$legacy_stage/share/chancery/decisions")
+legacy_deployer_hash=$(shasum -a 256 "$legacy_stage/package/deploy-user.sh" | awk '{print $1}')
+legacy_uninstaller_hash=$(shasum -a 256 "$legacy_stage/package/uninstall-user.sh" | awk '{print $1}')
+legacy_provider_hash=$(fixture_bundle_hash "$legacy_stage/share/chancery/decisions")
 legacy_release_id=$(printf '%s\n' "$legacy_binary_hash" "$legacy_frontend_hash" \
     "$legacy_daily_runner_hash" "$legacy_observer_runner_hash" \
-    "$legacy_daily_plist_hash" "$legacy_observer_plist_hash" "$legacy_hooks_hash" \
-    "$legacy_deployer_hash" "$legacy_uninstaller_hash" "$legacy_chancery_hash" \
-    | shasum -a 256 | awk '{print $1}')
+    "$legacy_daily_definition_hash" "$legacy_observer_definition_hash" \
+    "$legacy_hooks_hash" "$legacy_deployer_hash" "$legacy_uninstaller_hash" \
+    "$legacy_provider_hash" | shasum -a 256 | awk '{print $1}')
 {
-    printf '%s\n' 'format=2'
+    printf '%s\n' 'format=3'
     printf 'release_id=%s\n' "$legacy_release_id"
-    printf 'version=%s\n' "$DECISIONS_TEST_VERSION"
+    printf '%s\n' 'version=0.3.4'
     printf 'binary_sha256=%s\n' "$legacy_binary_hash"
     printf 'frontend_sha256=%s\n' "$legacy_frontend_hash"
     printf 'daily_runner_sha256=%s\n' "$legacy_daily_runner_hash"
     printf 'observer_runner_sha256=%s\n' "$legacy_observer_runner_hash"
-    printf 'daily_plist_sha256=%s\n' "$legacy_daily_plist_hash"
-    printf 'observer_plist_sha256=%s\n' "$legacy_observer_plist_hash"
+    printf 'daily_clockwork_definition_sha256=%s\n' "$legacy_daily_definition_hash"
+    printf 'observer_clockwork_definition_sha256=%s\n' "$legacy_observer_definition_hash"
     printf 'hooks_sha256=%s\n' "$legacy_hooks_hash"
     printf 'deployer_sha256=%s\n' "$legacy_deployer_hash"
     printf 'uninstaller_sha256=%s\n' "$legacy_uninstaller_hash"
-    printf 'chancery_sha256=%s\n' "$legacy_chancery_hash"
+    printf 'chancery_sha256=%s\n' "$legacy_provider_hash"
 } >"$legacy_stage/manifest.txt"
 chmod 0444 "$legacy_stage/manifest.txt"
 legacy_release="$legacy_install/releases/$legacy_release_id"
 mv "$legacy_stage" "$legacy_release"
 ln -s "releases/$legacy_release_id" "$legacy_install/current"
-ln -s "$legacy_install/current/bin/decisions" "$legacy_home/.local/bin/decisions"
-ln -s "$legacy_install/current/share/chancery/decisions" \
-    "$legacy_home/Library/Application Support/Chancery/providers/decisions"
-install -m 0600 "$legacy_release/package/hooks.json" "$legacy_home/.codex/hooks.json"
-legacy_daily_plist="$legacy_home/Library/LaunchAgents/org.decisions.daily-email.plist"
-legacy_observer_plist="$legacy_home/Library/LaunchAgents/org.decisions.observer.plist"
-sed \
-    -e "s|__DECISIONS_RUNNER__|$legacy_install/current/bin/decisions-daily-email|g" \
-    -e "s|__DECISIONS_STATE_DIR__|$legacy_state|g" \
-    -e "s|__DECISIONS_HOME__|$legacy_home|g" \
-    -e "s|__DECISIONS_STDOUT__|$legacy_logs/daily-email.stdout.log|g" \
-    -e "s|__DECISIONS_STDERR__|$legacy_logs/daily-email.stderr.log|g" \
-    "$legacy_release/package/org.decisions.daily-email.plist" >"$legacy_daily_plist"
-sed \
-    -e "s|__DECISIONS_OBSERVER_RUNNER__|$legacy_install/current/bin/decisions-observer|g" \
-    -e "s|__DECISIONS_STATE_DIR__|$legacy_state|g" \
-    -e "s|__DECISIONS_HOME__|$legacy_home|g" \
-    -e "s|__DECISIONS_OBSERVER_STDOUT__|$legacy_logs/observer.stdout.log|g" \
-    -e "s|__DECISIONS_OBSERVER_STDERR__|$legacy_logs/observer.stderr.log|g" \
-    "$legacy_release/package/org.decisions.observer.plist" >"$legacy_observer_plist"
-chmod 0644 "$legacy_daily_plist" "$legacy_observer_plist"
-legacy_daily_exact="$temporary/legacy-daily-exact.plist"
-legacy_observer_exact="$temporary/legacy-observer-exact.plist"
-cp "$legacy_daily_plist" "$legacy_daily_exact"
-cp "$legacy_observer_plist" "$legacy_observer_exact"
-: >"$loaded/org.decisions.daily-email"
-: >"$loaded/org.decisions.observer"
-chmod 0600 "$legacy_daily_plist"
-if HOME="$legacy_home" "$package/deploy-user.sh" --binary "$candidate" \
-    --clockwork "$clockwork" --home "$legacy_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment adopted a legacy plist with the wrong mode' >&2
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$legacy_home/.local/bin/codex"
+chmod 0755 "$legacy_home/.local/bin/codex"
+
+legacy_interpreter_hash=$(shasum -a 256 /bin/sh | awk '{print $1}')
+legacy_observer_definition="$temporary/legacy-observer.toml"
+cat >"$legacy_observer_definition" <<EOF
+schema_version = 1
+key = "decisions/observer"
+release_id = "$legacy_release_id"
+release_root = "$legacy_release"
+authority = "current-user-background"
+overlap = "skip"
+arguments = []
+cwd = "$legacy_state"
+[schedule]
+kind = "interval"
+seconds = 60
+run_at_load = false
+[launch]
+kind = "interpreted"
+interpreter = "/bin/sh"
+interpreter_sha256 = "$legacy_interpreter_hash"
+script = "$legacy_release/bin/decisions-observer"
+script_sha256 = "$legacy_observer_runner_hash"
+[environment]
+HOME = "$legacy_home"
+[output]
+stdout = "$legacy_logs/observer.stdout.log"
+stderr = "$legacy_logs/observer.stderr.log"
+EOF
+legacy_daily_definition="$temporary/legacy-daily.toml"
+cat >"$legacy_daily_definition" <<EOF
+schema_version = 1
+key = "decisions/daily-email"
+release_id = "$legacy_release_id"
+release_root = "$legacy_release"
+authority = "current-user-background"
+overlap = "skip"
+arguments = []
+cwd = "$legacy_state"
+[schedule]
+kind = "local-calendar"
+hour = 9
+minute = 0
+run_at_load = false
+[launch]
+kind = "interpreted"
+interpreter = "/bin/sh"
+interpreter_sha256 = "$legacy_interpreter_hash"
+script = "$legacy_release/bin/decisions-daily-email"
+script_sha256 = "$legacy_daily_runner_hash"
+[environment]
+HOME = "$legacy_home"
+[output]
+stdout = "$legacy_logs/daily-email.stdout.log"
+stderr = "$legacy_logs/daily-email.stderr.log"
+EOF
+legacy_observer_digest=$(shasum -a 256 "$legacy_observer_definition" | awk '{print $1}')
+legacy_daily_digest=$(shasum -a 256 "$legacy_daily_definition" | awk '{print $1}')
+install -m 0600 "$legacy_observer_definition" \
+    "$legacy_clockwork_state/definitions/$legacy_observer_digest.toml"
+install -m 0600 "$legacy_daily_definition" \
+    "$legacy_clockwork_state/definitions/$legacy_daily_digest.toml"
+legacy_observer_binding="$legacy_clockwork_state/bindings/decisions_observer.binding"
+legacy_daily_binding="$legacy_clockwork_state/bindings/decisions_daily-email.binding"
+legacy_active_binding="$legacy_clockwork_state/bindings/krisis_observer.binding"
+printf 'true|%s\n' "$legacy_observer_digest" >"$legacy_observer_binding"
+printf 'true|%s\n' "$legacy_daily_digest" >"$legacy_daily_binding"
+
+if KRISIS_FAIL_AFTER_DISABLE_KEY=decisions/observer \
+    deploy_for "$legacy_home" "$legacy_clockwork_state" --final-cutover \
+    >"$temporary/fail-legacy-observer.out" 2>"$temporary/fail-legacy-observer.err"; then
+    printf '%s\n' 'deployer ignored a failure after disabling the legacy observer' >&2
     exit 1
 fi
-[ "$(stat -f '%Lp' "$legacy_daily_plist")" = 600 ]
-[ ! -e "$legacy_state/.clockwork-maintenance" ]
-chmod 0644 "$legacy_daily_plist"
-plutil -insert KeepAlive -bool true "$legacy_daily_plist"
-chmod 0644 "$legacy_daily_plist"
-if HOME="$legacy_home" "$package/deploy-user.sh" --binary "$candidate" \
-    --clockwork "$clockwork" --home "$legacy_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment adopted a legacy plist with extra launchd behavior' >&2
-    exit 1
-fi
-plutil -extract KeepAlive raw "$legacy_daily_plist" >/dev/null
-[ ! -e "$legacy_state/.clockwork-maintenance" ]
-install -m 0644 "$legacy_daily_exact" "$legacy_daily_plist"
-if HOME="$legacy_home" "$package/deploy-user.sh" --binary "$bad_schema_candidate" \
-    --clockwork "$clockwork" --home "$legacy_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'legacy migration accepted an invalid candidate doctor' >&2
-    exit 1
-fi
-cmp -s "$legacy_daily_exact" "$legacy_daily_plist"
-cmp -s "$legacy_observer_exact" "$legacy_observer_plist"
-[ "$(stat -f '%Lp' "$legacy_daily_plist")" = 644 ]
-[ "$(stat -f '%Lp' "$legacy_observer_plist")" = 644 ]
-[ "$(stat -f '%u' "$legacy_daily_plist")" -eq "$(id -u)" ]
-[ "$(stat -f '%u' "$legacy_observer_plist")" -eq "$(id -u)" ]
-[ -f "$loaded/org.decisions.daily-email" ]
-[ -f "$loaded/org.decisions.observer" ]
-[ ! -e "$legacy_state/.clockwork-maintenance" ]
-plutil -insert KeepAlive -bool true "$legacy_observer_plist"
-chmod 0644 "$legacy_observer_plist"
-if HOME="$legacy_home" "$package/uninstall-user.sh" --clockwork "$clockwork" \
-    --home "$legacy_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'uninstaller adopted a legacy plist with extra launchd behavior' >&2
-    exit 1
-fi
-plutil -extract KeepAlive raw "$legacy_observer_plist" >/dev/null
-[ ! -e "$legacy_state/.clockwork-maintenance" ]
-install -m 0644 "$legacy_observer_exact" "$legacy_observer_plist"
-HOME="$legacy_home" "$package/deploy-user.sh" --binary "$candidate" \
-    --clockwork "$clockwork" --home "$legacy_home" --launchctl "$launchctl" >/dev/null
-[ ! -e "$legacy_daily_plist" ]
-[ ! -e "$legacy_observer_plist" ]
-[ ! -f "$loaded/org.decisions.daily-email" ]
-[ ! -f "$loaded/org.decisions.observer" ]
+unset KRISIS_FAIL_AFTER_DISABLE_KEY
+[ "$(cat "$legacy_observer_binding")" = "true|$legacy_observer_digest" ]
+[ "$(cat "$legacy_daily_binding")" = "true|$legacy_daily_digest" ]
+[ ! -e "$legacy_active_binding" ]
 [ ! -e "$legacy_state/.clockwork-maintenance" ]
 
-fabricated_home="$temporary/FabricatedHome"
-fabricated_install="$fabricated_home/Library/Application Support/Decisions/install"
-fabricated_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-fabricated_release="$fabricated_install/releases/$fabricated_id"
-mkdir -p "$fabricated_home/.local/bin" \
-    "$fabricated_release/bin" \
-    "$fabricated_release/libexec" \
-    "$fabricated_release/package" \
-    "$fabricated_release/share/chancery/decisions"
-: >"$fabricated_home/.local/bin/email"
-chmod 0755 "$fabricated_home/.local/bin/email"
-for fabricated_file in \
-    "$fabricated_release/bin/decisions" \
-    "$fabricated_release/bin/decisions-daily-email" \
-    "$fabricated_release/bin/decisions-observer" \
-    "$fabricated_release/libexec/decisions" \
-    "$fabricated_release/package/decisions" \
-    "$fabricated_release/package/decisions-daily-email" \
-    "$fabricated_release/package/decisions-observer" \
-    "$fabricated_release/package/deploy-user.sh" \
-    "$fabricated_release/package/uninstall-user.sh" \
-    "$fabricated_release/package/org.decisions.daily-email.plist" \
-    "$fabricated_release/package/org.decisions.observer.plist" \
-    "$fabricated_release/package/hooks.json"
-do
-    printf '%s\n' 'fabricated payload' >"$fabricated_file"
-done
-printf '%s\n' '{}' >"$fabricated_release/share/chancery/decisions/provider.json"
-{
-    printf '%s\n' 'format=2'
-    printf 'release_id=%s\n' "$fabricated_id"
-    printf 'version=%s\n' "$DECISIONS_TEST_VERSION"
-    printf '%s\n' 'binary_sha256=0000000000000000000000000000000000000000000000000000000000000000'
-    printf '%s\n' 'frontend_sha256=0000000000000000000000000000000000000000000000000000000000000000'
-    printf '%s\n' 'daily_runner_sha256=0000000000000000000000000000000000000000000000000000000000000000'
-    printf '%s\n' 'observer_runner_sha256=0000000000000000000000000000000000000000000000000000000000000000'
-    printf '%s\n' 'daily_plist_sha256=0000000000000000000000000000000000000000000000000000000000000000'
-    printf '%s\n' 'observer_plist_sha256=0000000000000000000000000000000000000000000000000000000000000000'
-    printf '%s\n' 'hooks_sha256=0000000000000000000000000000000000000000000000000000000000000000'
-    printf '%s\n' 'deployer_sha256=0000000000000000000000000000000000000000000000000000000000000000'
-    printf '%s\n' 'uninstaller_sha256=0000000000000000000000000000000000000000000000000000000000000000'
-    printf '%s\n' 'chancery_sha256=0000000000000000000000000000000000000000000000000000000000000000'
-} >"$fabricated_release/manifest.txt"
-ln -s "releases/$fabricated_id" "$fabricated_install/current"
-if HOME="$fabricated_home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" --home "$fabricated_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployer trusted a fabricated release manifest' >&2
+if KRISIS_FAIL_AFTER_DISABLE_KEY=decisions/daily-email \
+    deploy_for "$legacy_home" "$legacy_clockwork_state" --final-cutover \
+    >"$temporary/fail-legacy-daily.out" 2>"$temporary/fail-legacy-daily.err"; then
+    printf '%s\n' 'deployer ignored a failure after disabling the legacy daily key' >&2
     exit 1
 fi
-if HOME="$fabricated_home" "$package/uninstall-user.sh" --clockwork "$clockwork" --home "$fabricated_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'uninstaller trusted a fabricated release manifest' >&2
+unset KRISIS_FAIL_AFTER_DISABLE_KEY
+[ "$(cat "$legacy_observer_binding")" = "true|$legacy_observer_digest" ]
+[ "$(cat "$legacy_daily_binding")" = "true|$legacy_daily_digest" ]
+[ ! -e "$legacy_active_binding" ]
+[ ! -e "$legacy_state/.clockwork-maintenance" ]
+
+deploy_for "$legacy_home" "$legacy_clockwork_state" --final-cutover \
+    >"$temporary/legacy-cutover.out"
+IFS='|' read -r legacy_active_enabled _ <"$legacy_active_binding"
+[ "$legacy_active_enabled" = true ]
+[ "$(cat "$legacy_observer_binding")" = "false|$legacy_observer_digest" ]
+[ "$(cat "$legacy_daily_binding")" = "false|$legacy_daily_digest" ]
+
+# A failure after selecting a new candidate restores the exact prior digest,
+# current selector, hook, and enabled state while retaining maintenance.
+printf '%s\n' '# second candidate bytes' >>"$candidate"
+deploy >"$temporary/prepare-second.out"
+second_digest=$(awk '{print $NF}' "$temporary/prepare-second.out")
+[ "$second_digest" != "$first_digest" ]
+if KRISIS_FAIL_VERIFY_SWITCH=1 deploy --final-cutover >"$temporary/fail-switch.out" 2>"$temporary/fail-switch.err"; then
+    printf '%s\n' 'deployer ignored a failed post-switch verification' >&2
     exit 1
 fi
-[ "$(readlink "$fabricated_install/current")" = "releases/$fabricated_id" ]
-printf '%s\n' 'deploy test passed'
+[ "$(cat "$active_binding")" = "true|$first_digest" ]
+[ "$(readlink "$home/Library/Application Support/Decisions/install/current")" = "$first_current" ]
+cmp -s "$home/.codex/hooks.json" "$SCRIPT_DIR/hooks.json"
+[ -f "$home/Library/Application Support/Decisions/.clockwork-maintenance" ]
+
+# A disabled selected prior definition is restored byte-for-byte and remains
+# disabled when verification fails after the candidate switch.
+printf 'false|%s\n' "$first_digest" >"$active_binding"
+if KRISIS_FAIL_VERIFY_SWITCH=1 deploy --final-cutover >"$temporary/fail-disabled-selected.out" 2>"$temporary/fail-disabled-selected.err"; then
+    printf '%s\n' 'deployer ignored disabled-selected rollback failure' >&2
+    exit 1
+fi
+[ "$(cat "$active_binding")" = "false|$first_digest" ]
+[ "$(readlink "$home/Library/Application Support/Decisions/install/current")" = "$first_current" ]
+printf 'true|%s\n' "$first_digest" >"$active_binding"
+
+# Uninstall refuses an enabled foreign legacy key, then touches only the owned
+# active key once the foreign key is disabled.
+printf 'true|%s\n' "$foreign_digest" >"$clockwork_state/bindings/decisions_observer.binding"
+uninstall_lines=$(wc -l <"$clockwork_capture")
+if HOME="$home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" KRISIS_CLOCKWORK_STATE="$clockwork_state" \
+    /bin/sh "$SCRIPT_DIR/uninstall-user.sh" --clockwork "$clockwork" --home "$home" \
+    >"$temporary/uninstall-foreign.out" 2>"$temporary/uninstall-foreign.err"; then
+    printf '%s\n' 'uninstaller accepted an enabled foreign legacy binding' >&2
+    exit 1
+fi
+[ "$(cat "$clockwork_state/bindings/decisions_observer.binding")" = "true|$foreign_digest" ]
+tail -n "+$((uninstall_lines + 1))" "$clockwork_capture" | grep -F 'binding disable decisions/observer' >/dev/null && exit 1
+printf 'false|%s\n' "$foreign_digest" >"$clockwork_state/bindings/decisions_observer.binding"
+HOME="$home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" KRISIS_CLOCKWORK_STATE="$clockwork_state" \
+    /bin/sh "$SCRIPT_DIR/uninstall-user.sh" --clockwork "$clockwork" --home "$home" \
+    >"$temporary/uninstall.out"
+grep -F 'uninstalled Krisis public surfaces' "$temporary/uninstall.out" >/dev/null
+[ "$(cat "$active_binding")" = "false|$first_digest" ]
+[ ! -e "$home/.local/bin/krisis" ]
+[ ! -e "$home/.codex/hooks.json" ]
+[ ! -e "$home/Library/Application Support/Chancery/providers/krisis" ]
+[ ! -e "$home/Library/Application Support/Chancery/providers/decisions" ]
+[ -f "$home/Library/Application Support/Decisions/.clockwork-maintenance" ]
+
+# Clockwork cannot restore a selected definition to null. A post-switch
+# failure from that prior state therefore disables the owned candidate and
+# retains explicit maintenance recovery evidence instead of claiming rollback.
+printf '%s\n' 'false|null' >"$active_binding"
+if KRISIS_FAIL_VERIFY_SWITCH=1 deploy --final-cutover >"$temporary/fail-null.out" 2>"$temporary/fail-null.err"; then
+    printf '%s\n' 'deployer ignored null-selector recovery failure' >&2
+    exit 1
+fi
+grep -F 'maintenance recovery is retained' "$temporary/fail-null.err" >/dev/null
+[ "$(cat "$active_binding")" = "false|$second_digest" ]
+[ -f "$home/Library/Application Support/Decisions/.clockwork-maintenance" ]
+
+bad_home="$temporary/BadHome"
+mkdir "$bad_home"
+if HOME="$bad_home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" KRISIS_CLOCKWORK_STATE="$clockwork_state" \
+    /bin/sh "$SCRIPT_DIR/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" \
+    --annals "$annals" --annals-config "$config" \
+    --annals-library-id ABCDEF0123456789abcdef0123456789 \
+    --home "$bad_home" --launchctl "$launchctl" >/dev/null 2>"$temporary/bad.err"; then
+    printf '%s\n' 'deployer accepted an uppercase Annals library ID' >&2
+    exit 1
+fi
+grep -F '32 lowercase hexadecimal' "$temporary/bad.err" >/dev/null
+printf '%s\n' 'Krisis guarded deployer test passed'

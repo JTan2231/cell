@@ -6,14 +6,15 @@ use rusqlite::{Connection, OptionalExtension as _, Transaction, params};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    DecisionEvent, Intake, IntakeStatus, PathHistory, Project, ProjectDetail, ProjectStatus,
-    ReconciliationProposal, Repository, RepositoryDiff, Revision, SemanticEffect,
+    AccountIntake, AccountRoutingOutcome, DecisionAccountEvent, DecisionEvent, Intake,
+    IntakeStatus, PathHistory, Project, ProjectDetail, ProjectStatus, ReconciliationProposal,
+    Repository, RepositoryDiff, Revision, SemanticEffect, validate_annals_library_id,
     validate_effects_for_next_ids,
 };
 use crate::error::io;
 use crate::{Error, Result};
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 #[derive(Debug, Clone)]
 pub struct Store {
@@ -68,6 +69,18 @@ impl Store {
             .map_err(Into::into)
     }
 
+    pub fn account_feed_library_id(&self) -> Result<Option<String>> {
+        let connection = self.connection()?;
+        connection
+            .query_row(
+                "SELECT library_id FROM annals_feed_identity WHERE singleton = 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
     pub fn register_project(&self, id: &str, root: &Path, activation_cursor: &str) -> Result<()> {
         let mut connection = self.connection()?;
         let transaction = connection.transaction()?;
@@ -84,9 +97,210 @@ impl Store {
             .map_err(|error| map_project_constraint(error, id, &root))?;
         transaction.execute(
             "INSERT INTO project_paths
-                (project_id, path, activation_cursor, opened_at, closed_at)
-             VALUES (?1, ?2, ?3, ?4, NULL)",
+                (project_id, path, activation_cursor, annals_activation_cursor, opened_at, closed_at)
+             VALUES (?1, ?2, ?3, NULL, ?4, NULL)",
             params![id, root, activation_cursor, now],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn register_project_with_account_feed(
+        &self,
+        id: &str,
+        root: &Path,
+        library_id: &str,
+        activation_cursor: &str,
+    ) -> Result<()> {
+        if activation_cursor.trim().is_empty() {
+            return Err(Error::domain(
+                "annals_cursor_invalid",
+                "Annals activation cursor must not be blank",
+            ));
+        }
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let feed_exists: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM annals_feed_identity WHERE singleton = 1)",
+            [],
+            |row| row.get(0),
+        )?;
+        let project_exists: bool =
+            transaction.query_row("SELECT EXISTS(SELECT 1 FROM projects)", [], |row| {
+                row.get(0)
+            })?;
+        if !feed_exists && project_exists {
+            return Err(Error::domain(
+                "annals_cutover_required",
+                "activate the Annals feed for existing projects before registering another project",
+            ));
+        }
+        require_or_install_feed_identity(&transaction, library_id)?;
+        let now = now();
+        let root = path_text(root)?;
+        let legacy_cursor = "decisions.lifecycle:not-activated";
+        transaction
+            .execute(
+                "INSERT INTO projects
+                    (id, status, current_path, activation_cursor, scan_cursor,
+                     next_concept_number, created_at, updated_at)
+                 VALUES (?1, 'active', ?2, ?3, ?3, 1, ?4, ?4)",
+                params![id, root, legacy_cursor, now],
+            )
+            .map_err(|error| map_project_constraint(error, id, &root))?;
+        transaction.execute(
+            "INSERT INTO annals_project_cursors
+                (project_id, activation_cursor, scan_cursor, activated_at)
+             VALUES (?1, ?2, ?2, ?3)",
+            params![id, activation_cursor, now],
+        )?;
+        transaction.execute(
+            "INSERT INTO project_paths
+                (project_id, path, activation_cursor, annals_activation_cursor, opened_at, closed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, NULL)",
+            params![id, root, legacy_cursor, activation_cursor, now],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn activate_account_feed(&self, library_id: &str, watermark: &str) -> Result<()> {
+        if watermark.trim().is_empty() {
+            return Err(Error::domain(
+                "annals_cursor_invalid",
+                "Annals activation watermark must not be blank",
+            ));
+        }
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        require_or_install_feed_identity(&transaction, library_id)?;
+        let existing: i64 =
+            transaction.query_row("SELECT COUNT(*) FROM annals_project_cursors", [], |row| {
+                row.get(0)
+            })?;
+        if existing != 0 {
+            let mismatch: i64 = transaction.query_row(
+                "SELECT COUNT(*) FROM annals_project_cursors
+                 WHERE activation_cursor != ?1",
+                [watermark],
+                |row| row.get(0),
+            )?;
+            let missing: i64 = transaction.query_row(
+                "SELECT COUNT(*) FROM projects p
+                 LEFT JOIN annals_project_cursors a ON a.project_id = p.id
+                 WHERE p.status != 'retired' AND a.project_id IS NULL",
+                [],
+                |row| row.get(0),
+            )?;
+            if mismatch != 0 || missing != 0 {
+                return Err(Error::domain(
+                    "annals_activation_conflict",
+                    "Annals feed activation was already recorded with different cursor state",
+                ));
+            }
+            return Ok(());
+        }
+        let activated_at = now();
+        transaction.execute(
+            "INSERT INTO annals_project_cursors
+                (project_id, activation_cursor, scan_cursor, activated_at)
+             SELECT id, ?1, ?1, ?2 FROM projects WHERE status != 'retired'",
+            params![watermark, activated_at],
+        )?;
+        transaction.execute(
+            "UPDATE project_paths SET annals_activation_cursor = ?1
+             WHERE closed_at IS NULL",
+            [watermark],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn legacy_cutover_snapshot(
+        &self,
+        final_decisions_watermark: &str,
+    ) -> Result<Vec<Correlation>> {
+        validate_final_decisions_watermark(final_decisions_watermark)?;
+        let connection = self.connection()?;
+        let projects: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM projects WHERE status != 'retired'",
+            [],
+            |row| row.get(0),
+        )?;
+        if projects == 0 {
+            return Err(Error::domain(
+                "annals_activation_not_required",
+                "no active or paused legacy project requires Annals feed activation",
+            ));
+        }
+        let already_active: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM annals_feed_identity)
+                 OR EXISTS(SELECT 1 FROM annals_project_cursors)",
+            [],
+            |row| row.get(0),
+        )?;
+        if already_active {
+            return Err(Error::domain(
+                "annals_activation_already_complete",
+                "the Annals decisions feed is already activated",
+            ));
+        }
+        require_legacy_cutover_state(&connection, final_decisions_watermark)?;
+        legacy_correlations_with_connection(&connection)
+    }
+
+    pub fn activate_account_feed_after_legacy_cutover(
+        &self,
+        library_id: &str,
+        watermark: &str,
+        final_decisions_watermark: &str,
+        proven_correlations: &[Correlation],
+    ) -> Result<()> {
+        validate_final_decisions_watermark(final_decisions_watermark)?;
+        if watermark.trim().is_empty() {
+            return Err(Error::domain(
+                "annals_cursor_invalid",
+                "Annals activation watermark must not be blank",
+            ));
+        }
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        require_legacy_cutover_state(&transaction, final_decisions_watermark)?;
+        let current_correlations = legacy_correlations_with_connection(&transaction)?;
+        if current_correlations != proven_correlations {
+            return Err(Error::domain(
+                "legacy_correlation_changed",
+                "legacy Nucleus correlation state changed after cutover proof",
+            ));
+        }
+        let identity_exists: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM annals_feed_identity WHERE singleton = 1)",
+            [],
+            |row| row.get(0),
+        )?;
+        let cursor_count: i64 =
+            transaction.query_row("SELECT COUNT(*) FROM annals_project_cursors", [], |row| {
+                row.get(0)
+            })?;
+        if identity_exists || cursor_count != 0 {
+            return Err(Error::domain(
+                "annals_activation_already_complete",
+                "the Annals decisions feed is already activated",
+            ));
+        }
+        require_or_install_feed_identity(&transaction, library_id)?;
+        let activated_at = now();
+        transaction.execute(
+            "INSERT INTO annals_project_cursors
+                (project_id, activation_cursor, scan_cursor, activated_at)
+             SELECT id, ?1, ?1, ?2 FROM projects WHERE status != 'retired'",
+            params![watermark, activated_at],
+        )?;
+        transaction.execute(
+            "UPDATE project_paths SET annals_activation_cursor = ?1
+             WHERE closed_at IS NULL AND project_id IN
+                 (SELECT id FROM projects WHERE status != 'retired')",
+            [watermark],
         )?;
         transaction.commit()?;
         Ok(())
@@ -97,9 +311,12 @@ impl Store {
         let mut statement = connection.prepare(
             "SELECT p.id, p.status, p.current_path, p.activation_cursor, p.scan_cursor,
                     p.next_concept_number,
-                    COALESCE(MAX(r.revision), 0)
+                    COALESCE(MAX(r.revision), 0), f.library_id,
+                    a.activation_cursor, a.scan_cursor
              FROM projects p
              LEFT JOIN semantic_revisions r ON r.project_id = p.id
+             LEFT JOIN annals_project_cursors a ON a.project_id = p.id
+             LEFT JOIN annals_feed_identity f ON f.singleton = 1
              GROUP BY p.id
              ORDER BY p.id",
         )?;
@@ -117,7 +334,7 @@ impl Store {
         let connection = self.connection()?;
         let project = project_with_connection(&connection, id)?;
         let mut statement = connection.prepare(
-            "SELECT path, activation_cursor, opened_at, closed_at
+            "SELECT path, activation_cursor, annals_activation_cursor, opened_at, closed_at
              FROM project_paths WHERE project_id = ?1
              ORDER BY opened_at, rowid",
         )?;
@@ -126,8 +343,9 @@ impl Store {
                 Ok(PathHistory {
                     path: row.get(0)?,
                     activation_cursor: row.get(1)?,
-                    opened_at: row.get(2)?,
-                    closed_at: row.get(3)?,
+                    annals_activation_cursor: row.get(2)?,
+                    opened_at: row.get(3)?,
+                    closed_at: row.get(4)?,
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -161,9 +379,15 @@ impl Store {
         )?;
         transaction.execute(
             "INSERT INTO project_paths
-                (project_id, path, activation_cursor, opened_at, closed_at)
-             VALUES (?1, ?2, ?3, ?4, NULL)",
-            params![id, root, project.activation_cursor, now],
+                (project_id, path, activation_cursor, annals_activation_cursor, opened_at, closed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, NULL)",
+            params![
+                id,
+                root,
+                project.activation_cursor,
+                project.annals_activation_cursor,
+                now
+            ],
         )?;
         transaction.commit()?;
         Ok(())
@@ -194,13 +418,21 @@ impl Store {
             ));
         }
         if status == ProjectStatus::Retired {
-            let outstanding: i64 = transaction.query_row(
+            let legacy_outstanding: i64 = transaction.query_row(
                 "SELECT COUNT(*) FROM intake_events
                  WHERE project_id = ?1
                    AND status IN ('pending', 'awaiting_review', 'paused', 'processing', 'failed')",
                 [id],
                 |row| row.get(0),
             )?;
+            let account_outstanding: i64 = transaction.query_row(
+                "SELECT COUNT(*) FROM account_intake_events
+                 WHERE project_id = ?1
+                   AND status IN ('pending', 'paused', 'processing', 'failed')",
+                [id],
+                |row| row.get(0),
+            )?;
+            let outstanding = legacy_outstanding + account_outstanding;
             if outstanding != 0 {
                 return Err(Error::domain(
                     "project_intake_outstanding",
@@ -221,11 +453,21 @@ impl Store {
         }
         if status == ProjectStatus::Paused {
             transaction.execute(
+                "UPDATE account_intake_events SET status = 'paused', updated_at = ?2
+                 WHERE project_id = ?1 AND status = 'pending'",
+                params![id, now()],
+            )?;
+            transaction.execute(
                 "UPDATE intake_events SET status = 'paused', updated_at = ?2
                  WHERE project_id = ?1 AND status = 'pending'",
                 params![id, now()],
             )?;
         } else if status == ProjectStatus::Active {
+            transaction.execute(
+                "UPDATE account_intake_events SET status = 'pending', updated_at = ?2
+                 WHERE project_id = ?1 AND status = 'paused'",
+                params![id, now()],
+            )?;
             transaction.execute(
                 "UPDATE intake_events SET status = 'pending', updated_at = ?2
                  WHERE project_id = ?1 AND status = 'paused'",
@@ -302,6 +544,339 @@ impl Store {
                 format!("scan cursor for project {project_id} changed concurrently"),
             ));
         }
+        Ok(())
+    }
+
+    pub fn record_account_observation(
+        &self,
+        scanner_project_id: &str,
+        from_cursor: &str,
+        event: &DecisionAccountEvent,
+        project_id: Option<&str>,
+        routing_outcome: AccountRoutingOutcome,
+        retain: bool,
+    ) -> Result<bool> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let expected_library: String = transaction
+            .query_row(
+                "SELECT library_id FROM annals_feed_identity WHERE singleton = 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| {
+                Error::domain(
+                    "annals_feed_inactive",
+                    "the Annals decisions feed has not been activated",
+                )
+            })?;
+        if event.library_id != expected_library {
+            return Err(Error::domain(
+                "annals_library_mismatch",
+                "decision account came from a different Annals library",
+            ));
+        }
+        let current_cursor: String = transaction
+            .query_row(
+                "SELECT scan_cursor FROM annals_project_cursors WHERE project_id = ?1",
+                [scanner_project_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| {
+                Error::domain(
+                    "annals_project_inactive",
+                    format!("project {scanner_project_id} has no Annals feed cursor"),
+                )
+            })?;
+        if current_cursor != from_cursor {
+            return Err(Error::domain(
+                "annals_scan_cursor_conflict",
+                format!("Annals scan cursor for project {scanner_project_id} changed concurrently"),
+            ));
+        }
+        let account_json = serde_json::to_string(event)?;
+        let persisted = transaction
+            .query_row(
+                "SELECT library_id, account_id, source_cursor, project_id, status,
+                        routing_outcome, account_json
+                 FROM account_intake_events WHERE event_id = ?1",
+                [&event.event_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                        row.get::<_, String>(6)?,
+                    ))
+                },
+            )
+            .optional()?;
+        if let Some((library, account, cursor, _, _, _, envelope)) = &persisted
+            && (library != &event.library_id
+                || account != &event.account_id
+                || cursor != &event.cursor
+                || envelope != &account_json)
+        {
+            return Err(Error::domain(
+                "account_intake_replay_conflict",
+                format!(
+                    "Annals event {} was replayed with different immutable data",
+                    event.event_id
+                ),
+            ));
+        }
+        let mut inserted = false;
+        if retain || persisted.is_some() {
+            let effective_project = match project_id {
+                Some(id)
+                    if project_with_connection(&transaction, id)?.status
+                        == ProjectStatus::Active =>
+                {
+                    Some(id)
+                }
+                Some(id)
+                    if project_with_connection(&transaction, id)?.status
+                        == ProjectStatus::Paused =>
+                {
+                    Some(id)
+                }
+                _ => None,
+            };
+            let status = match effective_project {
+                Some(id)
+                    if project_with_connection(&transaction, id)?.status
+                        == ProjectStatus::Paused =>
+                {
+                    IntakeStatus::Paused
+                }
+                Some(_) => IntakeStatus::Pending,
+                None => IntakeStatus::Unassigned,
+            };
+            let routing_error = account_routing_error(routing_outcome);
+            if let Some((_, _, _, assigned, persisted_status, persisted_outcome, _)) = persisted {
+                let routing_matches = assigned.as_deref() == effective_project
+                    && persisted_outcome == routing_outcome.as_str();
+                if !routing_matches {
+                    let may_converge = persisted_status == IntakeStatus::Unassigned.as_str()
+                        && assigned.is_none()
+                        && effective_project.is_some()
+                        && routing_outcome == AccountRoutingOutcome::ProjectAssigned;
+                    if may_converge {
+                        let correlated: bool = transaction.query_row(
+                            "SELECT EXISTS(
+                                SELECT 1 FROM account_request_correlations WHERE event_id = ?1
+                             )",
+                            [&event.event_id],
+                            |row| row.get(0),
+                        )?;
+                        if correlated {
+                            return Err(Error::domain(
+                                "account_intake_replay_conflict",
+                                "routed account intake gained a Nucleus correlation before convergence",
+                            ));
+                        }
+                        let project_id = effective_project.ok_or_else(|| {
+                            Error::domain(
+                                "account_intake_replay_conflict",
+                                "automatic routing convergence lost its selected project",
+                            )
+                        })?;
+                        let changed = transaction.execute(
+                            "UPDATE account_intake_events
+                             SET project_id = ?2, status = ?3,
+                                 routing_outcome = 'project_assigned', last_error = NULL,
+                                 updated_at = ?4
+                             WHERE event_id = ?1 AND status = 'unassigned'
+                               AND project_id IS NULL",
+                            params![event.event_id, project_id, status.as_str(), now()],
+                        )?;
+                        if changed != 1 {
+                            return Err(Error::domain(
+                                "account_intake_replay_conflict",
+                                "automatic routing convergence changed concurrently",
+                            ));
+                        }
+                        let ordinal: i64 = transaction.query_row(
+                            "SELECT COALESCE(MAX(ordinal), 0) + 1
+                             FROM account_intake_assignments WHERE event_id = ?1",
+                            [&event.event_id],
+                            |row| row.get(0),
+                        )?;
+                        transaction.execute(
+                            "INSERT INTO account_intake_assignments
+                                (event_id, ordinal, previous_project_id, project_id, assigned_at)
+                             VALUES (?1, ?2, NULL, ?3, ?4)",
+                            params![event.event_id, ordinal, project_id, now()],
+                        )?;
+                    }
+                }
+            } else {
+                let changed = transaction.execute(
+                    "INSERT INTO account_intake_events
+                    (event_id, library_id, account_id, source_cursor, project_id, status,
+                     routing_outcome, host_id, thread_id, turn_id, item_id, account_json,
+                     attempts, last_error, terminal_reason, applied_revision, created_at,
+                     updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0,
+                         ?13, NULL, NULL, ?14, ?14)",
+                    params![
+                        event.event_id,
+                        event.library_id,
+                        event.account_id,
+                        event.cursor,
+                        effective_project,
+                        status.as_str(),
+                        routing_outcome.as_str(),
+                        event.authority.host_id,
+                        event.authority.thread_id,
+                        event.authority.turn_id,
+                        event.authority.item_id,
+                        account_json,
+                        routing_error,
+                        now(),
+                    ],
+                )?;
+                debug_assert_eq!(changed, 1);
+                inserted = true;
+            }
+        }
+        let changed = transaction.execute(
+            "UPDATE annals_project_cursors SET scan_cursor = ?3
+             WHERE project_id = ?1 AND scan_cursor = ?2",
+            params![scanner_project_id, from_cursor, event.cursor],
+        )?;
+        if changed != 1 {
+            return Err(Error::domain(
+                "annals_scan_cursor_conflict",
+                format!("Annals scan cursor for project {scanner_project_id} changed concurrently"),
+            ));
+        }
+        transaction.commit()?;
+        Ok(inserted)
+    }
+
+    pub fn list_account_intake(&self, status: Option<IntakeStatus>) -> Result<Vec<AccountIntake>> {
+        let connection = self.connection()?;
+        let sql = if status.is_some() {
+            "SELECT event_id, source_cursor, project_id, status, routing_outcome, account_json,
+                    attempts, last_error, applied_revision, terminal_reason
+             FROM account_intake_events WHERE status = ?1 ORDER BY rowid"
+        } else {
+            "SELECT event_id, source_cursor, project_id, status, routing_outcome, account_json,
+                    attempts, last_error, applied_revision, terminal_reason
+             FROM account_intake_events ORDER BY rowid"
+        };
+        let mut statement = connection.prepare(sql)?;
+        let mut rows = match status {
+            Some(status) => statement.query([status.as_str()])?,
+            None => statement.query([])?,
+        };
+        let mut values = Vec::new();
+        while let Some(row) = rows.next()? {
+            values.push(account_intake_from_row(row)?);
+        }
+        Ok(values)
+    }
+
+    pub fn account_intake(&self, event_id: &str) -> Result<AccountIntake> {
+        let connection = self.connection()?;
+        connection
+            .query_row(
+                "SELECT event_id, source_cursor, project_id, status, routing_outcome, account_json,
+                        attempts, last_error, applied_revision, terminal_reason
+                 FROM account_intake_events WHERE event_id = ?1",
+                [event_id],
+                account_intake_from_row,
+            )
+            .optional()?
+            .ok_or_else(|| {
+                Error::domain(
+                    "account_intake_not_found",
+                    format!("decision-account intake {event_id} does not exist"),
+                )
+            })
+    }
+
+    pub fn has_account_intake(&self, event_id: &str) -> Result<bool> {
+        let connection = self.connection()?;
+        connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM account_intake_events WHERE event_id = ?1)",
+                [event_id],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    pub fn assign_account_intake(&self, event_id: &str, project_id: &str) -> Result<()> {
+        let project = self.project(project_id)?;
+        if project.status == ProjectStatus::Retired {
+            return Err(Error::domain(
+                "project_retired",
+                format!("cannot assign intake to retired project {project_id}"),
+            ));
+        }
+        let status = if project.status == ProjectStatus::Paused {
+            IntakeStatus::Paused
+        } else {
+            IntakeStatus::Pending
+        };
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let correlated: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM account_request_correlations WHERE event_id = ?1)",
+            [event_id],
+            |row| row.get(0),
+        )?;
+        if correlated {
+            return Err(Error::domain(
+                "intake_assignment_correlated",
+                "intake with a Nucleus correlation cannot be reassigned",
+            ));
+        }
+        let previous: Option<String> = transaction
+            .query_row(
+                "SELECT project_id FROM account_intake_events WHERE event_id = ?1",
+                [event_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| {
+                Error::domain(
+                    "account_intake_not_found",
+                    format!("decision-account intake {event_id} does not exist"),
+                )
+            })?;
+        let changed = transaction.execute(
+            "UPDATE account_intake_events
+             SET project_id = ?2, status = ?3, last_error = NULL, updated_at = ?4
+             WHERE event_id = ?1 AND status IN ('unassigned', 'failed', 'paused', 'pending')",
+            params![event_id, project_id, status.as_str(), now()],
+        )?;
+        if changed != 1 {
+            return Err(Error::domain(
+                "intake_not_assignable",
+                format!("intake event {event_id} cannot be assigned in its current state"),
+            ));
+        }
+        let ordinal: i64 = transaction.query_row(
+            "SELECT COALESCE(MAX(ordinal), 0) + 1 FROM account_intake_assignments
+             WHERE event_id = ?1",
+            [event_id],
+            |row| row.get(0),
+        )?;
+        transaction.execute(
+            "INSERT INTO account_intake_assignments
+                (event_id, ordinal, previous_project_id, project_id, assigned_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![event_id, ordinal, previous, project_id, now()],
+        )?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -1230,8 +1805,450 @@ impl Store {
         Ok(())
     }
 
-    fn initialize(&self) -> Result<()> {
+    pub fn next_pending_account_intake(&self) -> Result<Option<AccountIntake>> {
         let connection = self.connection()?;
+        connection
+            .query_row(
+                "SELECT i.event_id, i.source_cursor, i.project_id, i.status,
+                        i.routing_outcome,
+                        i.account_json, i.attempts, i.last_error, i.applied_revision,
+                        i.terminal_reason
+                 FROM account_intake_events i
+                 JOIN projects p ON p.id = i.project_id
+                 WHERE i.status IN ('pending', 'processing') AND p.status = 'active'
+                 ORDER BY i.rowid LIMIT 1",
+                [],
+                account_intake_from_row,
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn processing_account_intake(&self) -> Result<Option<AccountIntake>> {
+        let connection = self.connection()?;
+        connection
+            .query_row(
+                "SELECT event_id, source_cursor, project_id, status, routing_outcome,
+                        account_json,
+                        attempts, last_error, applied_revision, terminal_reason
+                 FROM account_intake_events WHERE status = 'processing'
+                 ORDER BY rowid LIMIT 1",
+                [],
+                account_intake_from_row,
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn mark_account_processing(&self, event_id: &str) -> Result<()> {
+        let connection = self.connection()?;
+        let changed = connection.execute(
+            "UPDATE account_intake_events
+             SET status = 'processing', attempts = attempts + 1, updated_at = ?2
+             WHERE event_id = ?1 AND status = 'pending'",
+            params![event_id, now()],
+        )?;
+        if changed == 0 {
+            let status: Option<String> = connection
+                .query_row(
+                    "SELECT status FROM account_intake_events WHERE event_id = ?1",
+                    [event_id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if status.as_deref() != Some("processing") {
+                return Err(Error::domain(
+                    "intake_not_processable",
+                    format!("intake event {event_id} is not pending or processing"),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn mark_account_failed(&self, event_id: &str, detail: &str) -> Result<()> {
+        if !matches!(
+            detail,
+            "nucleus_admission_rejected: Nucleus rejected the account reconciliation request"
+                | "nucleus_job_terminal_invalid: Nucleus completed without an accepted account reconciliation"
+                | "nucleus_job_terminal_failed: Nucleus account reconciliation ended unsuccessfully"
+                | "account_reconciliation_failed: account reconciliation ended without a semantic commit"
+        ) {
+            return Err(Error::domain(
+                "account_failure_detail_invalid",
+                "account failure detail must be a bounded product-owned value",
+            ));
+        }
+        let connection = self.connection()?;
+        let changed = connection.execute(
+            "UPDATE account_intake_events
+             SET status = 'failed', last_error = ?2, updated_at = ?3
+             WHERE event_id = ?1 AND status IN ('pending', 'processing')",
+            params![event_id, detail, now()],
+        )?;
+        if changed != 1 {
+            return Err(Error::domain(
+                "intake_not_failable",
+                format!("intake event {event_id} is not pending or processing"),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn record_account_processing_error(
+        &self,
+        event_id: &str,
+        detail: &str,
+    ) -> Result<()> {
+        if detail != "account_reconciliation_pending: awaiting a definitive Nucleus outcome" {
+            return Err(Error::domain(
+                "account_failure_detail_invalid",
+                "account processing detail must be a bounded product-owned value",
+            ));
+        }
+        let connection = self.connection()?;
+        let changed = connection.execute(
+            "UPDATE account_intake_events SET last_error = ?2, updated_at = ?3
+             WHERE event_id = ?1 AND status = 'processing'",
+            params![event_id, detail, now()],
+        )?;
+        if changed != 1 {
+            return Err(Error::domain(
+                "intake_not_processing",
+                format!("intake event {event_id} is not processing"),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn retry_account_intake(&self, event_id: &str) -> Result<()> {
+        let intake = self.account_intake(event_id)?;
+        let project_id = intake.project_id.ok_or_else(|| {
+            Error::domain(
+                "intake_unassigned",
+                format!("intake event {event_id} must be assigned before retry"),
+            )
+        })?;
+        if self.project(&project_id)?.status != ProjectStatus::Active {
+            return Err(Error::domain(
+                "project_not_active",
+                format!("project {project_id} must be active before retry"),
+            ));
+        }
+        if self.account_correlation(event_id)?.is_some() {
+            return Err(Error::domain(
+                "intake_retry_job_unresolved",
+                "the prior Nucleus correlation must be proven terminal before retry",
+            ));
+        }
+        self.reset_account_for_retry(event_id)
+    }
+
+    pub(crate) fn reset_account_retry_after_terminal(&self, event_id: &str) -> Result<()> {
+        self.reset_account_for_retry(event_id)
+    }
+
+    fn reset_account_for_retry(&self, event_id: &str) -> Result<()> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let changed = transaction.execute(
+            "UPDATE account_intake_events
+             SET status = 'pending', last_error = NULL, updated_at = ?2
+             WHERE event_id = ?1 AND status = 'failed'",
+            params![event_id, now()],
+        )?;
+        if changed != 1 {
+            return Err(Error::domain(
+                "intake_not_retryable",
+                format!("intake event {event_id} is not failed"),
+            ));
+        }
+        transaction.execute(
+            "DELETE FROM account_request_correlations WHERE event_id = ?1",
+            [event_id],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn put_account_correlation(&self, correlation: &Correlation) -> Result<Correlation> {
+        let connection = self.connection()?;
+        let tool_after = sql_u64(correlation.tool_after, "tool_after")?;
+        connection.execute(
+            "INSERT OR IGNORE INTO account_request_correlations
+                (event_id, requester_id, job_id, request_json, request_sha256,
+                 tool_after, admitted, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                correlation.event_id,
+                correlation.requester_id,
+                correlation.job_id,
+                correlation.request_json,
+                correlation.request_sha256,
+                tool_after,
+                correlation.admitted,
+                now(),
+            ],
+        )?;
+        let existing = self
+            .account_correlation(&correlation.event_id)?
+            .ok_or_else(|| Error::domain("correlation_missing", "failed to retain correlation"))?;
+        if existing.request_sha256 != correlation.request_sha256
+            || existing.request_json != correlation.request_json
+        {
+            return Err(Error::domain(
+                "correlation_conflict",
+                format!(
+                    "intake event {} already has different immutable request bytes",
+                    correlation.event_id
+                ),
+            ));
+        }
+        Ok(existing)
+    }
+
+    pub fn account_correlation(&self, event_id: &str) -> Result<Option<Correlation>> {
+        let connection = self.connection()?;
+        connection
+            .query_row(
+                "SELECT event_id, requester_id, job_id, request_json, request_sha256,
+                        tool_after, admitted
+                 FROM account_request_correlations WHERE event_id = ?1",
+                [event_id],
+                |row| {
+                    Ok(Correlation {
+                        event_id: row.get(0)?,
+                        requester_id: row.get(1)?,
+                        job_id: row.get(2)?,
+                        request_json: row.get(3)?,
+                        request_sha256: row.get(4)?,
+                        tool_after: row_u64(row, 5)?,
+                        admitted: row.get(6)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn mark_account_admitted(&self, event_id: &str) -> Result<()> {
+        let connection = self.connection()?;
+        connection.execute(
+            "UPDATE account_request_correlations SET admitted = 1 WHERE event_id = ?1",
+            [event_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn advance_account_tool_after(&self, event_id: &str, sequence: u64) -> Result<()> {
+        let connection = self.connection()?;
+        connection.execute(
+            "UPDATE account_request_correlations SET tool_after = MAX(tool_after, ?2)
+             WHERE event_id = ?1",
+            params![event_id, sql_u64(sequence, "tool sequence")?],
+        )?;
+        Ok(())
+    }
+
+    pub fn account_mailbox_receipt(
+        &self,
+        job_id: &str,
+        call_id: &str,
+    ) -> Result<Option<MailboxReceipt>> {
+        let connection = self.connection()?;
+        account_mailbox_receipt_connection(&connection, job_id, call_id)
+    }
+
+    pub fn commit_account_mailbox_proposal(
+        &self,
+        event_id: &str,
+        job_id: &str,
+        call_id: &str,
+        arguments_sha256: &str,
+        project_id: &str,
+        proposal: &ReconciliationProposal,
+    ) -> Result<u64> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let (account_json, assigned_project, status, correlated_job): (
+            String,
+            Option<String>,
+            String,
+            String,
+        ) = transaction
+            .query_row(
+                "SELECT i.account_json, i.project_id, i.status, c.job_id
+                 FROM account_intake_events i
+                 JOIN account_request_correlations c ON c.event_id = i.event_id
+                 WHERE i.event_id = ?1",
+                [event_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()?
+            .ok_or_else(|| {
+                Error::domain(
+                    "intake_correlation_missing",
+                    format!("intake event {event_id} has no request correlation"),
+                )
+            })?;
+        if assigned_project.as_deref() != Some(project_id) || correlated_job != job_id {
+            return Err(Error::domain(
+                "intake_correlation_conflict",
+                "account intake project or job identity changed",
+            ));
+        }
+        if status != "processing" {
+            return Err(Error::domain(
+                "intake_not_processing",
+                format!("intake event {event_id} is {status}, not processing"),
+            ));
+        }
+        if let Some(receipt) = account_mailbox_receipt_connection(&transaction, job_id, call_id)? {
+            if receipt.arguments_sha256 != arguments_sha256 {
+                return Err(Error::domain(
+                    "mailbox_arguments_conflict",
+                    format!("tool call {call_id} was replayed with different arguments"),
+                ));
+            }
+            return receipt.committed_revision.ok_or_else(|| {
+                Error::domain(
+                    "mailbox_receipt_failed",
+                    format!("tool call {call_id} was previously rejected"),
+                )
+            });
+        }
+        let account: DecisionAccountEvent = serde_json::from_str(&account_json)?;
+        validate_account_proposal_provenance(&account, proposal)?;
+        let revision = commit_revision_tx(
+            &transaction,
+            project_id,
+            proposal.base_revision,
+            &proposal.summary,
+            Some(event_id),
+            &proposal.effects,
+        )?;
+        let result_json = serde_json::to_string(&serde_json::json!({
+            "accepted": true,
+            "revision": revision
+        }))?;
+        let revision_sql = sql_u64(revision, "semantic revision")?;
+        transaction.execute(
+            "INSERT INTO account_mailbox_receipts
+                (job_id, call_id, arguments_sha256, result_json, is_error,
+                 committed_revision, created_at)
+             VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6)",
+            params![
+                job_id,
+                call_id,
+                arguments_sha256,
+                result_json,
+                revision_sql,
+                now()
+            ],
+        )?;
+        let changed = transaction.execute(
+            "UPDATE account_intake_events
+             SET applied_revision = ?2, last_error = NULL, updated_at = ?3
+             WHERE event_id = ?1 AND status = 'processing' AND project_id = ?4",
+            params![event_id, revision_sql, now(), project_id],
+        )?;
+        if changed != 1 {
+            return Err(Error::domain(
+                "intake_commit_conflict",
+                format!("intake event {event_id} changed during semantic commit"),
+            ));
+        }
+        transaction.commit()?;
+        Ok(revision)
+    }
+
+    pub fn account_pending_committed_revision(
+        &self,
+        event_id: &str,
+        job_id: &str,
+    ) -> Result<Option<u64>> {
+        let connection = self.connection()?;
+        connection
+            .query_row(
+                "SELECT i.applied_revision
+                 FROM account_intake_events i
+                 JOIN account_request_correlations c ON c.event_id = i.event_id
+                 WHERE i.event_id = ?1 AND c.job_id = ?2 AND i.status = 'processing'",
+                params![event_id, job_id],
+                |row| row.get::<_, Option<i64>>(0),
+            )
+            .optional()?
+            .flatten()
+            .map(|revision| {
+                u64::try_from(revision).map_err(|_| {
+                    Error::domain("revision_invalid", "committed revision is negative")
+                })
+            })
+            .transpose()
+    }
+
+    pub fn finalize_account_applied(&self, event_id: &str, job_id: &str) -> Result<u64> {
+        let connection = self.connection()?;
+        let revision: i64 = connection
+            .query_row(
+                "SELECT i.applied_revision
+                 FROM account_intake_events i
+                 JOIN account_request_correlations c ON c.event_id = i.event_id
+                 WHERE i.event_id = ?1 AND c.job_id = ?2
+                   AND i.status = 'processing' AND i.applied_revision IS NOT NULL",
+                params![event_id, job_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| {
+                Error::domain(
+                    "intake_not_finalizable",
+                    format!("intake event {event_id} has no acknowledged domain commit"),
+                )
+            })?;
+        connection.execute(
+            "UPDATE account_intake_events SET status = 'applied', updated_at = ?2
+             WHERE event_id = ?1",
+            params![event_id, now()],
+        )?;
+        u64::try_from(revision)
+            .map_err(|_| Error::domain("revision_invalid", "committed revision is negative"))
+    }
+
+    pub fn record_account_mailbox_rejection(
+        &self,
+        job_id: &str,
+        call_id: &str,
+        arguments_sha256: &str,
+        result_json: &str,
+    ) -> Result<()> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        if let Some(receipt) = account_mailbox_receipt_connection(&transaction, job_id, call_id)? {
+            if receipt.arguments_sha256 != arguments_sha256
+                || receipt.result_json != result_json
+                || !receipt.is_error
+            {
+                return Err(Error::domain(
+                    "mailbox_rejection_conflict",
+                    format!("tool call {call_id} was replayed with different rejection bytes"),
+                ));
+            }
+            return Ok(());
+        }
+        transaction.execute(
+            "INSERT INTO account_mailbox_receipts
+                (job_id, call_id, arguments_sha256, result_json, is_error,
+                 committed_revision, created_at)
+             VALUES (?1, ?2, ?3, ?4, 1, NULL, ?5)",
+            params![job_id, call_id, arguments_sha256, result_json, now()],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    fn initialize(&self) -> Result<()> {
+        let mut connection = self.connection()?;
         let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
         if version > SCHEMA_VERSION {
             return Err(Error::domain(
@@ -1241,6 +2258,10 @@ impl Store {
         }
         if version == 0 {
             connection.execute_batch(SCHEMA)?;
+        } else if version == 1 {
+            connection.execute_batch(MIGRATION_1_TO_2)?;
+        } else if version == 2 {
+            normalize_schema_two_working_state(&mut connection)?;
         }
         Ok(())
     }
@@ -1251,6 +2272,66 @@ impl Store {
         connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;")?;
         Ok(connection)
     }
+}
+
+fn normalize_schema_two_working_state(connection: &mut Connection) -> Result<()> {
+    let has_routing_outcome =
+        table_has_column(connection, "account_intake_events", "routing_outcome")?;
+    let has_cwd = table_has_column(connection, "account_intake_events", "cwd")?;
+    if has_routing_outcome && !has_cwd {
+        return Ok(());
+    }
+    let transaction = connection.transaction()?;
+    if !has_routing_outcome {
+        transaction.execute(
+            "ALTER TABLE account_intake_events ADD COLUMN routing_outcome TEXT NOT NULL
+             DEFAULT 'cwd_unavailable'",
+            [],
+        )?;
+        transaction.execute(
+            "UPDATE account_intake_events
+             SET routing_outcome = CASE
+                 WHEN project_id IS NOT NULL THEN 'project_assigned'
+                 WHEN last_error = 'Conversations exact thread metadata has no cwd'
+                     THEN 'cwd_missing'
+                 WHEN last_error LIKE 'Project ownership is ambiguous:%'
+                     THEN 'project_ambiguous'
+                 ELSE 'cwd_unavailable'
+             END",
+            [],
+        )?;
+        transaction.execute(
+            "UPDATE account_intake_events
+             SET last_error = CASE
+                 WHEN status = 'unassigned' AND routing_outcome = 'cwd_missing'
+                     THEN 'routing_cwd_missing: account authority has no exact cwd'
+                 WHEN status = 'unassigned' AND routing_outcome = 'project_ambiguous'
+                     THEN 'routing_project_ambiguous: no unique project owner was selected'
+                 WHEN status = 'unassigned'
+                     THEN 'routing_cwd_unavailable: exact cwd lookup did not complete'
+                 WHEN status = 'failed'
+                     THEN 'account_reconciliation_failed: account reconciliation ended without a semantic commit'
+                 WHEN status = 'processing' AND last_error IS NOT NULL
+                     THEN 'account_reconciliation_pending: awaiting a definitive Nucleus outcome'
+                 ELSE NULL
+             END",
+            [],
+        )?;
+    }
+    if has_cwd {
+        transaction.execute("UPDATE account_intake_events SET cwd = NULL", [])?;
+        transaction.execute("ALTER TABLE account_intake_events DROP COLUMN cwd", [])?;
+    }
+    transaction.commit()?;
+    Ok(())
+}
+
+fn table_has_column(connection: &Connection, table: &str, column: &str) -> Result<bool> {
+    let mut statement = connection.prepare(&format!("PRAGMA table_info({table})"))?;
+    let names = statement
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(names.iter().any(|name| name == column))
 }
 
 fn commit_revision_tx(
@@ -1401,9 +2482,12 @@ fn project_with_connection(connection: &Connection, id: &str) -> Result<Project>
     connection
         .query_row(
             "SELECT p.id, p.status, p.current_path, p.activation_cursor, p.scan_cursor,
-                    p.next_concept_number, COALESCE(MAX(r.revision), 0)
+                    p.next_concept_number, COALESCE(MAX(r.revision), 0), f.library_id,
+                    a.activation_cursor, a.scan_cursor
              FROM projects p
              LEFT JOIN semantic_revisions r ON r.project_id = p.id
+             LEFT JOIN annals_project_cursors a ON a.project_id = p.id
+             LEFT JOIN annals_feed_identity f ON f.singleton = 1
              WHERE p.id = ?1 GROUP BY p.id",
             [id],
             project_from_row,
@@ -1429,6 +2513,9 @@ fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Project> {
         scan_cursor: row.get(4)?,
         next_concept_number: row_u64(row, 5)?,
         current_revision: row_u64(row, 6)?,
+        annals_library_id: row.get(7)?,
+        annals_activation_cursor: row.get(8)?,
+        annals_scan_cursor: row.get(9)?,
     })
 }
 
@@ -1463,6 +2550,143 @@ fn intake_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Intake> {
     })
 }
 
+fn account_intake_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AccountIntake> {
+    let status_text = row.get::<_, String>(3)?;
+    let status = IntakeStatus::from_str(&status_text).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            status_text.len(),
+            rusqlite::types::Type::Text,
+            Box::new(error),
+        )
+    })?;
+    let routing_outcome_text = row.get::<_, String>(4)?;
+    let routing_outcome = AccountRoutingOutcome::parse(&routing_outcome_text).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            routing_outcome_text.len(),
+            rusqlite::types::Type::Text,
+            Box::new(error),
+        )
+    })?;
+    let account_json = row.get::<_, String>(5)?;
+    let account = serde_json::from_str(&account_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            account_json.len(),
+            rusqlite::types::Type::Text,
+            Box::new(error),
+        )
+    })?;
+    Ok(AccountIntake {
+        event_id: row.get(0)?,
+        source_cursor: row.get(1)?,
+        project_id: row.get(2)?,
+        status,
+        routing_outcome,
+        account,
+        attempts: row_u64(row, 6)?,
+        last_error: row.get(7)?,
+        applied_revision: row_optional_u64(row, 8)?,
+        terminal_reason: row.get(9)?,
+    })
+}
+
+const fn account_routing_error(outcome: AccountRoutingOutcome) -> Option<&'static str> {
+    match outcome {
+        AccountRoutingOutcome::ProjectAssigned => None,
+        AccountRoutingOutcome::CwdMissing => {
+            Some("routing_cwd_missing: account authority has no exact cwd")
+        }
+        AccountRoutingOutcome::CwdUnavailable => {
+            Some("routing_cwd_unavailable: exact cwd lookup did not complete")
+        }
+        AccountRoutingOutcome::ProjectAmbiguous => {
+            Some("routing_project_ambiguous: no unique project owner was selected")
+        }
+    }
+}
+
+fn require_or_install_feed_identity(transaction: &Transaction<'_>, library_id: &str) -> Result<()> {
+    validate_annals_library_id(library_id)?;
+    transaction.execute(
+        "INSERT OR IGNORE INTO annals_feed_identity (singleton, library_id, installed_at)
+         VALUES (1, ?1, ?2)",
+        params![library_id, now()],
+    )?;
+    let existing: String = transaction.query_row(
+        "SELECT library_id FROM annals_feed_identity WHERE singleton = 1",
+        [],
+        |row| row.get(0),
+    )?;
+    if existing != library_id {
+        return Err(Error::domain(
+            "annals_library_conflict",
+            format!("Semantics is bound to Annals library {existing:?}"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_final_decisions_watermark(watermark: &str) -> Result<()> {
+    if watermark.trim().is_empty() || watermark.len() > 1_024 {
+        return Err(Error::domain(
+            "legacy_watermark_invalid",
+            "the final Decisions watermark must contain between 1 and 1024 bytes",
+        ));
+    }
+    Ok(())
+}
+
+fn require_legacy_cutover_state(
+    connection: &Connection,
+    final_decisions_watermark: &str,
+) -> Result<()> {
+    let cursor_mismatch: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM projects
+         WHERE status != 'retired' AND scan_cursor != ?1",
+        [final_decisions_watermark],
+        |row| row.get(0),
+    )?;
+    if cursor_mismatch != 0 {
+        return Err(Error::domain(
+            "legacy_watermark_not_drained",
+            "every active or paused project must equal the asserted final Decisions watermark",
+        ));
+    }
+    let unfinished: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM intake_events
+         WHERE status IN ('pending', 'paused', 'processing')",
+        [],
+        |row| row.get(0),
+    )?;
+    if unfinished != 0 {
+        return Err(Error::domain(
+            "legacy_intake_not_drained",
+            "legacy Decisions intake still has pending or processing work",
+        ));
+    }
+    Ok(())
+}
+
+fn legacy_correlations_with_connection(connection: &Connection) -> Result<Vec<Correlation>> {
+    let mut statement = connection.prepare(
+        "SELECT event_id, requester_id, job_id, request_json, request_sha256,
+                tool_after, admitted
+         FROM request_correlations ORDER BY event_id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(Correlation {
+            event_id: row.get(0)?,
+            requester_id: row.get(1)?,
+            job_id: row.get(2)?,
+            request_json: row.get(3)?,
+            request_sha256: row.get(4)?,
+            tool_after: row_u64(row, 5)?,
+            admitted: row.get(6)?,
+        })
+    })?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(Into::into)
+}
+
 fn mailbox_receipt_tx(
     transaction: &Transaction<'_>,
     job_id: &str,
@@ -1472,6 +2696,29 @@ fn mailbox_receipt_tx(
         .query_row(
             "SELECT arguments_sha256, result_json, is_error, committed_revision
              FROM mailbox_receipts WHERE job_id = ?1 AND call_id = ?2",
+            params![job_id, call_id],
+            |row| {
+                Ok(MailboxReceipt {
+                    arguments_sha256: row.get(0)?,
+                    result_json: row.get(1)?,
+                    is_error: row.get(2)?,
+                    committed_revision: row_optional_u64(row, 3)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(Into::into)
+}
+
+fn account_mailbox_receipt_connection(
+    connection: &Connection,
+    job_id: &str,
+    call_id: &str,
+) -> Result<Option<MailboxReceipt>> {
+    connection
+        .query_row(
+            "SELECT arguments_sha256, result_json, is_error, committed_revision
+             FROM account_mailbox_receipts WHERE job_id = ?1 AND call_id = ?2",
             params![job_id, call_id],
             |row| {
                 Ok(MailboxReceipt {
@@ -1632,6 +2879,48 @@ fn validate_proposal_provenance(
     Ok(())
 }
 
+fn validate_account_proposal_provenance(
+    account: &DecisionAccountEvent,
+    proposal: &ReconciliationProposal,
+) -> Result<()> {
+    let mut exact_ground = false;
+    for effect in &proposal.effects {
+        match effect {
+            SemanticEffect::Ground {
+                source:
+                    crate::domain::GroundingSource::AnnalsDecisionAccount {
+                        library_id,
+                        event_id,
+                        account_id,
+                    },
+                ..
+            } if library_id == &account.library_id
+                && event_id == &account.event_id
+                && account_id == &account.account_id =>
+            {
+                exact_ground = true;
+            }
+            SemanticEffect::Ground { .. } | SemanticEffect::Unground { .. } => {
+                return Err(Error::domain(
+                    "account_grounding_forbidden",
+                    "account reconciliation may only ground its exact Annals identities",
+                ));
+            }
+            _ => {}
+        }
+    }
+    if !exact_ground {
+        return Err(Error::domain(
+            "account_grounding_required",
+            format!(
+                "account event {} must ground its exact library, event, and account identities",
+                account.event_id
+            ),
+        ));
+    }
+    Ok(())
+}
+
 fn path_text(path: &Path) -> Result<String> {
     path.to_str().map(str::to_owned).ok_or_else(|| {
         Error::domain(
@@ -1706,6 +2995,7 @@ CREATE TABLE project_paths (
     project_id TEXT NOT NULL REFERENCES projects(id),
     path TEXT NOT NULL,
     activation_cursor TEXT NOT NULL,
+    annals_activation_cursor TEXT,
     opened_at TEXT NOT NULL,
     closed_at TEXT,
     PRIMARY KEY (project_id, path, opened_at)
@@ -1784,7 +3074,146 @@ CREATE TABLE mailbox_receipts (
     created_at TEXT NOT NULL,
     PRIMARY KEY (job_id, call_id)
 ) STRICT;
-PRAGMA user_version = 1;
+CREATE TABLE annals_feed_identity (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    library_id TEXT NOT NULL UNIQUE,
+    installed_at TEXT NOT NULL
+) STRICT;
+CREATE TABLE annals_project_cursors (
+    project_id TEXT PRIMARY KEY REFERENCES projects(id),
+    activation_cursor TEXT NOT NULL,
+    scan_cursor TEXT NOT NULL,
+    activated_at TEXT NOT NULL
+) STRICT;
+CREATE TABLE account_intake_events (
+    event_id TEXT PRIMARY KEY,
+    library_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    source_cursor TEXT NOT NULL,
+    project_id TEXT REFERENCES projects(id),
+    status TEXT NOT NULL CHECK (
+        status IN ('unassigned', 'pending', 'paused', 'processing', 'applied', 'ignored', 'failed')
+    ),
+    routing_outcome TEXT NOT NULL CHECK (
+        routing_outcome IN ('project_assigned', 'cwd_missing', 'cwd_unavailable', 'project_ambiguous')
+    ),
+    host_id TEXT NOT NULL,
+    thread_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    account_json TEXT NOT NULL,
+    attempts INTEGER NOT NULL CHECK (attempts >= 0),
+    last_error TEXT,
+    terminal_reason TEXT,
+    applied_revision INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (library_id, account_id),
+    FOREIGN KEY (project_id, applied_revision)
+        REFERENCES semantic_revisions(project_id, revision)
+) STRICT;
+CREATE TABLE account_request_correlations (
+    event_id TEXT PRIMARY KEY REFERENCES account_intake_events(event_id),
+    requester_id TEXT NOT NULL UNIQUE,
+    job_id TEXT NOT NULL UNIQUE,
+    request_json TEXT NOT NULL,
+    request_sha256 TEXT NOT NULL,
+    tool_after INTEGER NOT NULL CHECK (tool_after >= 0),
+    admitted INTEGER NOT NULL CHECK (admitted IN (0, 1)),
+    created_at TEXT NOT NULL
+) STRICT;
+CREATE TABLE account_intake_assignments (
+    event_id TEXT NOT NULL REFERENCES account_intake_events(event_id),
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 1),
+    previous_project_id TEXT REFERENCES projects(id),
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    assigned_at TEXT NOT NULL,
+    PRIMARY KEY (event_id, ordinal)
+) STRICT;
+CREATE TABLE account_mailbox_receipts (
+    job_id TEXT NOT NULL,
+    call_id TEXT NOT NULL,
+    arguments_sha256 TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    is_error INTEGER NOT NULL CHECK (is_error IN (0, 1)),
+    committed_revision INTEGER,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (job_id, call_id)
+) STRICT;
+PRAGMA user_version = 2;
+COMMIT;
+"#;
+
+const MIGRATION_1_TO_2: &str = r#"
+BEGIN IMMEDIATE;
+ALTER TABLE project_paths ADD COLUMN annals_activation_cursor TEXT;
+CREATE TABLE annals_feed_identity (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    library_id TEXT NOT NULL UNIQUE,
+    installed_at TEXT NOT NULL
+) STRICT;
+CREATE TABLE annals_project_cursors (
+    project_id TEXT PRIMARY KEY REFERENCES projects(id),
+    activation_cursor TEXT NOT NULL,
+    scan_cursor TEXT NOT NULL,
+    activated_at TEXT NOT NULL
+) STRICT;
+CREATE TABLE account_intake_events (
+    event_id TEXT PRIMARY KEY,
+    library_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    source_cursor TEXT NOT NULL,
+    project_id TEXT REFERENCES projects(id),
+    status TEXT NOT NULL CHECK (
+        status IN ('unassigned', 'pending', 'paused', 'processing', 'applied', 'ignored', 'failed')
+    ),
+    routing_outcome TEXT NOT NULL CHECK (
+        routing_outcome IN ('project_assigned', 'cwd_missing', 'cwd_unavailable', 'project_ambiguous')
+    ),
+    host_id TEXT NOT NULL,
+    thread_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    account_json TEXT NOT NULL,
+    attempts INTEGER NOT NULL CHECK (attempts >= 0),
+    last_error TEXT,
+    terminal_reason TEXT,
+    applied_revision INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (library_id, account_id),
+    FOREIGN KEY (project_id, applied_revision)
+        REFERENCES semantic_revisions(project_id, revision)
+) STRICT;
+CREATE TABLE account_request_correlations (
+    event_id TEXT PRIMARY KEY REFERENCES account_intake_events(event_id),
+    requester_id TEXT NOT NULL UNIQUE,
+    job_id TEXT NOT NULL UNIQUE,
+    request_json TEXT NOT NULL,
+    request_sha256 TEXT NOT NULL,
+    tool_after INTEGER NOT NULL CHECK (tool_after >= 0),
+    admitted INTEGER NOT NULL CHECK (admitted IN (0, 1)),
+    created_at TEXT NOT NULL
+) STRICT;
+CREATE TABLE account_intake_assignments (
+    event_id TEXT NOT NULL REFERENCES account_intake_events(event_id),
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 1),
+    previous_project_id TEXT REFERENCES projects(id),
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    assigned_at TEXT NOT NULL,
+    PRIMARY KEY (event_id, ordinal)
+) STRICT;
+CREATE TABLE account_mailbox_receipts (
+    job_id TEXT NOT NULL,
+    call_id TEXT NOT NULL,
+    arguments_sha256 TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    is_error INTEGER NOT NULL CHECK (is_error IN (0, 1)),
+    committed_revision INTEGER,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (job_id, call_id)
+) STRICT;
+PRAGMA user_version = 2;
 COMMIT;
 "#;
 
@@ -1792,14 +3221,16 @@ COMMIT;
 mod tests {
     use std::fs;
 
+    use rusqlite::params;
     use tempfile::TempDir;
 
     use crate::domain::{
-        DecisionAnchor, DecisionEvent, GroundingSource, IntakeStatus, ProjectStatus,
-        ReconciliationProposal, SemanticEffect,
+        AccountRoutingOutcome, DecisionAccountAnchor, DecisionAccountEvent, DecisionAnchor,
+        DecisionEvent, GroundingSource, IntakeStatus, ProjectStatus, ReconciliationProposal,
+        SemanticEffect,
     };
 
-    use super::{Correlation, Store, validate_proposal_provenance};
+    use super::{Correlation, SCHEMA, Store, validate_proposal_provenance};
 
     fn fixture() -> (TempDir, Store) {
         let temporary = TempDir::new().expect("temporary directory");
@@ -1861,6 +3292,30 @@ mod tests {
         }
     }
 
+    fn account_event() -> DecisionAccountEvent {
+        DecisionAccountEvent {
+            library_id: "0123456789abcdef0123456789abcdef".to_owned(),
+            cursor: "account-cursor-1".to_owned(),
+            event_id: "account-event-1".to_owned(),
+            account_id: "account-1".to_owned(),
+            account_schema_version: 1,
+            statement: "Use stable semantic identities.".to_owned(),
+            context: "A durable boundary is needed.".to_owned(),
+            action: "Applied the boundary.".to_owned(),
+            result: "The identity is stable.".to_owned(),
+            occurred_at: 1,
+            occurred_at_precision: "second".to_owned(),
+            authority: DecisionAccountAnchor {
+                host_id: "host".to_owned(),
+                thread_id: "thread".to_owned(),
+                turn_id: "turn".to_owned(),
+                item_id: "item".to_owned(),
+                span_start: 0,
+                span_end: 10,
+            },
+        }
+    }
+
     fn correlate(store: &Store, event_id: &str, job_id: &str) {
         store
             .put_correlation(&Correlation {
@@ -1886,6 +3341,119 @@ mod tests {
         assert!(detail.paths[0].closed_at.is_some());
         assert_eq!(detail.project.activation_cursor, "cursor-1");
         assert_eq!(detail.project.scan_cursor, "cursor-1");
+    }
+
+    #[test]
+    fn legacy_cutover_requires_exact_final_cursor_and_drained_intake() {
+        let (_temporary, store) = fixture();
+        let cursor_error = store
+            .legacy_cutover_snapshot("different-final-watermark")
+            .expect_err("mismatched project cursor");
+        assert_eq!(cursor_error.code(), "legacy_watermark_not_drained");
+
+        let event = decision_event(
+            "pending",
+            "decision-pending",
+            "decision_admitted",
+            "high",
+            None,
+        );
+        store
+            .insert_intake(&event, Some("cell"), None)
+            .expect("pending legacy intake");
+        let intake_error = store
+            .legacy_cutover_snapshot("cursor-1")
+            .expect_err("pending intake");
+        assert_eq!(intake_error.code(), "legacy_intake_not_drained");
+    }
+
+    #[test]
+    fn legacy_cutover_activation_is_atomic_and_preserves_history() {
+        let (_temporary, store) = fixture();
+        let event = decision_event(
+            "failed",
+            "decision-failed",
+            "decision_admitted",
+            "high",
+            None,
+        );
+        store
+            .insert_intake(&event, Some("cell"), None)
+            .expect("legacy intake");
+        store
+            .mark_failed("failed", "terminal fixture")
+            .expect("failed history");
+        let snapshot = store
+            .legacy_cutover_snapshot("cursor-1")
+            .expect("drained snapshot");
+        store
+            .activate_account_feed_after_legacy_cutover(
+                "0123456789abcdef0123456789abcdef",
+                "afe1_0000",
+                "cursor-1",
+                &snapshot,
+            )
+            .expect("cutover activation");
+        let project = store.project("cell").expect("project");
+        assert_eq!(project.scan_cursor, "cursor-1");
+        assert_eq!(
+            project.annals_activation_cursor.as_deref(),
+            Some("afe1_0000")
+        );
+        assert_eq!(project.annals_scan_cursor.as_deref(), Some("afe1_0000"));
+        let retained = store.intake("failed").expect("retained history");
+        assert_eq!(retained.status, IntakeStatus::Failed);
+        assert_eq!(retained.last_error.as_deref(), Some("terminal fixture"));
+    }
+
+    #[test]
+    fn legacy_cutover_rechecks_correlation_snapshot_inside_activation() {
+        let (_temporary, store) = fixture();
+        let event = decision_event(
+            "failed",
+            "decision-failed",
+            "decision_admitted",
+            "high",
+            None,
+        );
+        store
+            .insert_intake(&event, Some("cell"), None)
+            .expect("legacy intake");
+        store
+            .mark_failed("failed", "terminal fixture")
+            .expect("failed history");
+        store
+            .put_correlation(&Correlation {
+                event_id: "failed".to_owned(),
+                requester_id: "request-failed".to_owned(),
+                job_id: "job-failed".to_owned(),
+                request_json: "{}".to_owned(),
+                request_sha256: "digest".to_owned(),
+                tool_after: 0,
+                admitted: false,
+            })
+            .expect("correlation");
+        let snapshot = store
+            .legacy_cutover_snapshot("cursor-1")
+            .expect("cutover snapshot");
+        store.mark_admitted("failed").expect("correlation changed");
+        let error = store
+            .activate_account_feed_after_legacy_cutover(
+                "0123456789abcdef0123456789abcdef",
+                "afe1_0000",
+                "cursor-1",
+                &snapshot,
+            )
+            .expect_err("changed correlation must fail");
+        assert_eq!(error.code(), "legacy_correlation_changed");
+        assert!(store.account_feed_library_id().expect("identity").is_none());
+        assert!(
+            store
+                .project("cell")
+                .expect("project")
+                .annals_scan_cursor
+                .is_none()
+        );
     }
 
     #[test]
@@ -2381,5 +3949,296 @@ mod tests {
                 .code(),
             "decision_grounding_forbidden"
         );
+    }
+
+    #[test]
+    fn schema_one_migration_preserves_all_legacy_state_and_decoding() {
+        let temporary = TempDir::new().expect("temporary directory");
+        let database = temporary.path().join("semantics.db");
+        let legacy_prefix = SCHEMA
+            .split("CREATE TABLE annals_feed_identity")
+            .next()
+            .expect("schema prefix")
+            .replace("    annals_activation_cursor TEXT,\n", "");
+        let legacy_schema = format!("{legacy_prefix}PRAGMA user_version = 1;\nCOMMIT;");
+        let connection = rusqlite::Connection::open(&database).expect("legacy database");
+        connection
+            .execute_batch(&legacy_schema)
+            .expect("legacy schema");
+        let root = temporary.path().join("project");
+        fs::create_dir(&root).expect("project");
+        let root = root.to_str().expect("UTF-8 path");
+        connection
+            .execute(
+                "INSERT INTO projects VALUES
+                 ('cell','active',?1,'legacy-a','legacy-s',2,'created','updated')",
+                [root],
+            )
+            .expect("project");
+        connection
+            .execute(
+                "INSERT INTO project_paths VALUES
+                 ('cell',?1,'legacy-a','opened',NULL)",
+                [root],
+            )
+            .expect("path");
+        connection
+            .execute(
+                "INSERT INTO semantic_revisions VALUES
+                 ('cell',1,'Define concern','legacy-event','created')",
+                [],
+            )
+            .expect("revision");
+        let effect = SemanticEffect::Define {
+            concept_id: "c000001".to_owned(),
+            label: "Concern".to_owned(),
+            meaning: "A durable open question.".to_owned(),
+        };
+        connection
+            .execute(
+                "INSERT INTO semantic_effects VALUES ('cell',1,0,'define',?1)",
+                [serde_json::to_string(&effect).expect("effect JSON")],
+            )
+            .expect("effect");
+        let event = decision_event(
+            "legacy-event",
+            "legacy-decision",
+            "decision_admitted",
+            "high",
+            None,
+        );
+        connection
+            .execute(
+                "INSERT INTO intake_events VALUES
+                 (?1,?2,?3,'cell','applied',?4,'host','thread','turn',?5,?6,1,NULL,NULL,1,'created','updated')",
+                params![
+                    event.event_id,
+                    event.cursor,
+                    event.event_kind,
+                    root,
+                    event.decision_id,
+                    serde_json::to_string(&event).expect("event JSON"),
+                ],
+            )
+            .expect("intake");
+        connection
+            .execute(
+                "INSERT INTO request_correlations VALUES
+                 ('legacy-event','requester','job','{}','digest',4,1,'created')",
+                [],
+            )
+            .expect("correlation");
+        connection
+            .execute(
+                "INSERT INTO intake_assignments VALUES
+                 ('legacy-event',1,NULL,'cell','assigned')",
+                [],
+            )
+            .expect("assignment");
+        connection
+            .execute(
+                "INSERT INTO mailbox_receipts VALUES
+                 ('job','call','arguments','{\"accepted\":true}',0,1,'created')",
+                [],
+            )
+            .expect("receipt");
+        drop(connection);
+
+        let store = Store::open(&database).expect("migrated database");
+        assert_eq!(store.schema_version().expect("version"), 2);
+        let project = store.project("cell").expect("project");
+        assert_eq!(project.activation_cursor, "legacy-a");
+        assert_eq!(project.scan_cursor, "legacy-s");
+        assert!(project.annals_scan_cursor.is_none());
+        assert_eq!(
+            store
+                .intake("legacy-event")
+                .expect("legacy intake")
+                .decision,
+            event
+        );
+        assert_eq!(
+            store.repository("cell", None).expect("repository").revision,
+            1
+        );
+        let connection = store.connection().expect("connection");
+        for table in [
+            "projects",
+            "project_paths",
+            "semantic_revisions",
+            "semantic_effects",
+            "intake_events",
+            "request_correlations",
+            "intake_assignments",
+            "mailbox_receipts",
+        ] {
+            let count: i64 = connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .expect("legacy row count");
+            assert_eq!(count, 1, "legacy table {table}");
+        }
+    }
+
+    #[test]
+    fn schema_two_working_state_discards_account_cwd_and_bounds_routing_detail() {
+        let temporary = TempDir::new().expect("temporary directory");
+        let database = temporary.path().join("semantics.db");
+        let connection = rusqlite::Connection::open(&database).expect("working database");
+        connection
+            .execute_batch(
+                "CREATE TABLE account_intake_events (
+                    event_id TEXT PRIMARY KEY,
+                    library_id TEXT NOT NULL,
+                    account_id TEXT NOT NULL,
+                    source_cursor TEXT NOT NULL,
+                    project_id TEXT,
+                    status TEXT NOT NULL,
+                    cwd TEXT,
+                    host_id TEXT NOT NULL,
+                    thread_id TEXT NOT NULL,
+                    turn_id TEXT NOT NULL,
+                    item_id TEXT NOT NULL,
+                    account_json TEXT NOT NULL,
+                    attempts INTEGER NOT NULL,
+                    last_error TEXT,
+                    terminal_reason TEXT,
+                    applied_revision INTEGER,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                ) STRICT;
+                PRAGMA user_version = 2;",
+            )
+            .expect("working schema");
+        let event = account_event();
+        connection
+            .execute(
+                "INSERT INTO account_intake_events VALUES
+                 (?1,?2,?3,?4,NULL,'unassigned',?5,?6,?7,?8,?9,?10,0,?11,NULL,NULL,'created','updated')",
+                params![
+                    event.event_id,
+                    event.library_id,
+                    event.account_id,
+                    event.cursor,
+                    "/PRIVATE/project/path",
+                    event.authority.host_id,
+                    event.authority.thread_id,
+                    event.authority.turn_id,
+                    event.authority.item_id,
+                    serde_json::to_string(&event).expect("account JSON"),
+                    "Conversations exact cwd resolution failed: PRIVATE dependency payload",
+                ],
+            )
+            .expect("working intake");
+        drop(connection);
+
+        let store = Store::open(&database).expect("compatible schema two");
+        let intake = store
+            .account_intake(&event.event_id)
+            .expect("account intake");
+        assert_eq!(
+            intake.routing_outcome,
+            AccountRoutingOutcome::CwdUnavailable
+        );
+        assert_eq!(
+            intake.last_error.as_deref(),
+            Some("routing_cwd_unavailable: exact cwd lookup did not complete")
+        );
+        let exposed = serde_json::to_string(&intake).expect("serialized intake");
+        assert!(!exposed.contains("\"cwd\":"));
+        assert!(!exposed.contains("/PRIVATE/project/path"));
+        assert!(!exposed.contains("PRIVATE"));
+
+        let connection = rusqlite::Connection::open(&database).expect("normalized database");
+        let cwd_columns: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('account_intake_events')
+                 WHERE name = 'cwd'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("columns");
+        assert_eq!(cwd_columns, 0);
+    }
+
+    #[test]
+    fn account_commit_requires_and_replays_exact_annals_grounding() {
+        let (_temporary, store) = fixture();
+        store
+            .activate_account_feed("0123456789abcdef0123456789abcdef", "account-cursor-0")
+            .expect("activate feed");
+        let event = account_event();
+        store
+            .record_account_observation(
+                "cell",
+                "account-cursor-0",
+                &event,
+                Some("cell"),
+                AccountRoutingOutcome::ProjectAssigned,
+                true,
+            )
+            .expect("account intake");
+        store
+            .mark_account_processing(&event.event_id)
+            .expect("processing");
+        store
+            .put_account_correlation(&Correlation {
+                event_id: event.event_id.clone(),
+                requester_id: "account-requester".to_owned(),
+                job_id: "account-job".to_owned(),
+                request_json: "{}".to_owned(),
+                request_sha256: "digest".to_owned(),
+                tool_after: 0,
+                admitted: true,
+            })
+            .expect("correlation");
+        let proposal = ReconciliationProposal {
+            base_revision: 0,
+            summary: "Define and ground concern".to_owned(),
+            effects: vec![
+                SemanticEffect::Define {
+                    concept_id: "c000001".to_owned(),
+                    label: "Concern".to_owned(),
+                    meaning: "A durable open question.".to_owned(),
+                },
+                SemanticEffect::Ground {
+                    concept_id: "c000001".to_owned(),
+                    source: GroundingSource::AnnalsDecisionAccount {
+                        library_id: event.library_id.clone(),
+                        event_id: event.event_id.clone(),
+                        account_id: event.account_id.clone(),
+                    },
+                    statement: event.statement.clone(),
+                },
+            ],
+        };
+        let revision = store
+            .commit_account_mailbox_proposal(
+                &event.event_id,
+                "account-job",
+                "call-1",
+                "arguments",
+                "cell",
+                &proposal,
+            )
+            .expect("commit");
+        assert_eq!(revision, 1);
+        let replay = store
+            .commit_account_mailbox_proposal(
+                &event.event_id,
+                "account-job",
+                "call-1",
+                "arguments",
+                "cell",
+                &proposal,
+            )
+            .expect("replay");
+        assert_eq!(replay, 1);
+        let repository = store.repository("cell", None).expect("repository");
+        assert!(matches!(
+            repository.concepts["c000001"].grounds[0].source,
+            GroundingSource::AnnalsDecisionAccount { .. }
+        ));
     }
 }

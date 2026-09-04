@@ -1,6 +1,6 @@
 {
   "id": "annals.library.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -17,7 +17,7 @@
   ],
   "outcome": "A deterministic library read or atomic state transition whose revision, provenance, compatibility, and recovery consequences are explicit.",
   "effects": [
-    "Initialization creates revision zero; migration upgrades only supported prior schemas; backup creates a consistent SQLite copy without replacing its destination.",
+    "Initialization creates revision zero with one immutable general or decisions role; migration upgrades only supported prior schemas as general; backup creates a consistent SQLite copy without replacing its destination.",
     "Applying, shaking, or reverting creates an append-only commit and advances the corpus revision when it changes state.",
     "Direct reconciliation submission validates a projected state but does not apply it."
   ],
@@ -40,7 +40,7 @@
     "Choose a private explicit backup destination and preserve its access controls."
   ],
   "interfaces": [
-    {"label": "Initialize", "invocation": "/Users/joey/.local/bin/annals init"},
+    {"label": "Initialize", "invocation": "/Users/joey/.local/bin/annals init [--kind general|decisions]"},
     {"label": "Migrate", "invocation": "/Users/joey/.local/bin/annals migrate"},
     {"label": "Statistics", "invocation": "/Users/joey/.local/bin/annals stats"},
     {"label": "Backup", "invocation": "/Users/joey/.local/bin/annals backup <ABSENT_OUTPUT_PATH>"},
@@ -61,7 +61,7 @@
       {"status": "unsupported", "statement": "This capability is not ordinary source retention, model-assisted integration, inbox operation, direct row editing, or an implicit destructive fresh-state cutover."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The caller explicitly selects the target library and holds authority for the requested mutation; initialization and backup require absent destination paths."},
+      {"status": "declared", "statement": "The caller explicitly selects the target library and holds authority for the requested mutation; initialization and backup require absent destination paths, and initialization chooses the immutable library role explicitly with general as the default."},
       {"status": "declared", "statement": "Reconciliation application requires a valid pending result whose base is current HEAD, shake confirmation requires the exact preview context, and revert requires relevant facts not to have conflicted."}
     ],
     "inputs": [
@@ -72,12 +72,12 @@
       {"status": "declared", "statement": "The selected command reports the exact initialized or migrated library, statistics, backup result, reconciliation validation, shake plan or commit, revert commit, and resulting revision as applicable."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Initialization creates revision zero; application, confirmed nonempty shake, and successful revert append a commit and advance the corpus rather than rewriting prior history."},
+      {"status": "declared", "statement": "Initialization creates revision zero with an immutable general or decisions role; migration assigns prior version-3 and version-4 libraries the general role; application, confirmed nonempty shake, and successful revert append a commit and advance the corpus rather than rewriting prior history."},
       {"status": "declared", "statement": "Direct reconciliation submission resolves and validates a complete projected corpus state but does not apply it."},
       {"status": "declared", "statement": "Shake removes only direct parent edges already implied by longer paths, preserving reachability but not every direct-neighbor count or hop distance."}
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "The selected library, public cN concept IDs, normalized work labels, reconciliation identity, commit identity, and integer corpus revision are distinct selectors."},
+      {"status": "declared", "statement": "The selected library, its persistent ID and immutable role, public cN concept IDs, normalized work labels, reconciliation identity, commit identity, and integer corpus revision are distinct selectors."},
       {"status": "declared", "statement": "Backup paths identify filesystem copies, while statistics and shake plans report documented record and edge counts rather than usage or billing units."}
     ],
     "completeness_and_freshness": [
@@ -99,7 +99,7 @@
       {"status": "unspecified", "statement": "No maximum library, reconciliation, backup, or commit size, throughput, or wall-clock latency is promised here."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 2, provider release, library schema, reconciliation shape, and installed package generation are distinct; migrations cover only explicitly supported prior schemas."},
+      {"status": "declared", "statement": "Capability contract version 3, provider release, library schema, reconciliation shape, and installed package generation are distinct; migrations cover only explicitly supported prior schemas."},
       {"status": "declared", "statement": "Revert and commit history are append-only compatibility records; older history is not rewritten to current meaning."},
       {"status": "unspecified", "statement": "No universal forward-compatibility, migration window, or deprecation period is promised."}
     ],

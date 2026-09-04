@@ -1,314 +1,147 @@
 {
-  "id": "decisions.install.operate",
-  "contract_version": 4,
+  "id": "krisis.install.operate",
+  "contract_version": 1,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
-  "title": "Install or operate the continuous Decisions services",
-  "summary": "Deploy, inspect, recover, or uninstall the user-owned Decisions CLI, schema-3 lifecycle stream, write-once observer baseline, exact Codex Stop hook, Clockwork-activated 60-second observer and local 09:00 digest, retained SQLite state, and Chancery selector.",
+  "title": "Install or operate Krisis",
+  "summary": "Deploy, inspect, recover, or uninstall the user-owned krisis command, schema-4 migration-compatible state, exact Stop hook, and release-pinned krisis/observer Clockwork service while retiring Decisions schedules.",
   "use_when": [
-    "Decisions should be installed or updated for this macOS user.",
-    "The observer or daily Clockwork binding, Codex hook, activation baseline, logs, database, release selector, or recovery state should be inspected.",
-    "One observer-deferred Stop-hook source has been proven permanently unavailable and needs explicit audited closure."
+    "Krisis should be installed or updated for the current macOS user.",
+    "The observer binding, hook, baseline, logs, database, Annals configuration, release selector, or recovery state should be inspected.",
+    "A diagnosed terminal observation or one proven-unavailable unbound source requires guarded recovery."
   ],
   "do_not_use_when": [
-    "Only one manual build, preview, review, or send is requested.",
-    "A foreign user hooks.json should be merged or replaced automatically.",
-    "Retained state should be destroyed without a separate explicit destructive decision."
+    "Only an account should be searched or read; use Annals.",
+    "A foreign hooks file should be merged, live retained state deleted, or a release performed implicitly."
   ],
-  "outcome": "A validated content-addressed user installation with post-activation continuous enacted-decision observation, or an evidence-backed operational diagnosis.",
+  "outcome": "A validated current-user Krisis installation with one periodic observer, exact hook, preserved legacy Decisions state, explicit Annals decisions-library configuration, and retired digest/review schedules.",
   "effects": [
-    "Deployment engages a private release-independent maintenance gate, writes user application support plus CLI and Chancery symlinks, registers two immutable release-pinned Clockwork definitions, installs an exact Decisions-owned ~/.codex/hooks.json after recording the observer baseline once, switches two stable bindings, and removes the gate only after the durable cutover has committed.",
-    "Candidate doctor may transactionally migrate the Decisions database from schema version 1 or 2 to 3 after both existing services are quiesced, the public command is suspended, and a private database-plus-sidecars backup exists; version 3 preserves old rows and backfills lifecycle events.",
-    "Explicit unavailable-source recovery waits for the observer-processing lock and can change one previously pending, entirely unbound queued correlation to complete/not-eligible with a fixed audit marker.",
-    "The operator separately reviews and trusts the exact non-managed Stop hook through Codex; deployment never bypasses hook trust.",
-    "Deploy and uninstall serialize through one private installation update lock. Uninstall of a current release engages and retains the maintenance gate, disables only Clockwork bindings whose selected immutable definitions prove the exact current Decisions release, removes any exact legacy services, the exact owned hook, and public selectors, and retains Clockwork definitions and history plus the Decisions database, baseline, logs, and releases."
+    "Default preparation stages a content-addressed release and registers and verifies its Clockwork definition while retaining maintenance without selecting or activating public surfaces.",
+    "Explicit final cutover migrates the database to schema 4, publishes the krisis command and providers, installs the exact hook and target-bound observer ownership receipt, selects krisis/observer, and disables only proven-owned enabled legacy schedules.",
+    "Uninstall removes exact owned public Krisis surfaces and disables its observer while retaining the database, releases, logs, legacy history, and Clockwork history unless separately authorized for deletion."
   ],
   "authority": [
-    "The deployer owns content-addressed release switching, exact runner and legacy-service ownership, baseline cutover ordering, Clockwork handoff, and rollback.",
-    "Codex owns hook discovery, exact-definition trust, and Stop delivery on each client surface.",
-    "Clockwork owns immutable definition registration, stable binding selection, same-key admission, direct process supervision, and runtime history; launchd owns delivery of generated user timers.",
-    "Decisions SQLite remains observation and projection authority."
+    "The deployer owns release selection, exact artifact ownership, database migration ordering, maintenance gating, schedule handoff, and rollback.",
+    "Codex owns hook discovery and trust, Clockwork owns definition and runtime history, Annals owns its dedicated library, and Krisis owns observation and delivery state."
   ],
   "success": [
-    "The candidate version matches its provider bundle, doctor proves schema version 3 plus Conversations, Nucleus, and Email contract v2 readiness, selectors resolve inside the current release, and Clockwork accepts both exact definitions and switches the daily then observer binding only after baseline activation.",
-    "The exact user Stop hook is visible and trusted in /hooks and one deliberate post-baseline effectful turn appears in decisions observe status on the actual Codex surface in use.",
-    "Unavailable-source abandonment is accepted only for a previously observer-deferred pending level-0 row with a retry time but no not-completed marker, source, job, authority, verdict, or candidate.",
-    "The routine 09:00 path projects already-observed results without model work; only missed-observation catch-up invokes Nucleus."
+    "Preparation reports the candidate release and definition digest, retains maintenance, and leaves release, hook, command, provider, and binding selectors unchanged.",
+    "Final cutover reports krisis 0.4.0-compatible identity, provider releases match, doctor proves schema 4 and exact Conversations, Nucleus, and Annals readiness, and selectors resolve inside one validated release.",
+    "The write-once baseline exists before hook and krisis/observer publication, old daily and observer schedules are disabled, and a deliberate post-baseline completed user turn appears in observer coverage.",
+    "Routine observer logs remain body-free and account delivery reaches only the configured dedicated Annals library."
   ],
   "failure_and_recovery": [
-    "A provable failed update restores prior selectors, exact hook bytes, quiescent database and sidecars, any prior selected Clockwork definition digest and enabled state, and exact prior legacy plist bytes and loaded state; an absent binding may become an inert disabled tombstone, while Clockwork's guarded disabled-selection recovery restores an inactive digest without loading its schedule.",
-    "If rollback cannot prove complete restoration, including after a formerly unselected binding was switched, Decisions retains its maintenance gate and private transaction backup, attempts Clockwork and legacy scheduler cleanup, reports only proven maintenance and public-command evidence, and does not claim either external scheduler was disabled.",
-    "The baseline is stored once in SQLite, survives redeploy/uninstall/reinstall, and is removed only with separately authorized retained-state deletion.",
-    "Foreign or ambiguous selectors, selected Clockwork definitions, legacy plists, loaded labels, hooks, or modified owned hooks are refused rather than replaced or removed; an absent or unselected disabled binding has no executable authority and is left inert by uninstall.",
-    "Definition ownership is a point-in-time inspection rather than a Clockwork compare-and-swap; Decisions serializes its own deploy and uninstall, while concurrent direct same-user mutation of either stable key is unsupported and may require maintenance-gated recovery.",
-    "A missed hook is recovered with decisions observe reconcile, which enqueues content-free turn correlations without classifying; decisions observe process remains serial.",
-    "Processing resumes an in-flight row first, skips queued rows until their retry time, and orders ready queued work by retry-ready time so a deferred source yields to later ready work.",
-    "Only after explicit recovery authorization and proof that the exact source is permanently unavailable may decisions observe abandon OBSERVATION_ID --source-unavailable close its unbound pending correlation; a merely unfinished turn or changed row is refused, exact repetition is idempotent, and later completed-root reconciliation fails closed.",
-    "Inspect body-free observer/daily stderr logs, decisions doctor, decisions observe status, Clockwork binding and runtime history, generated launchd state, and Codex hook trust before retrying."
+    "A provable failed update restores prior owned selectors, hook bytes, database and sidecars, and schedule selection; an unprovable rollback retains the private maintenance gate and transaction backup.",
+    "Foreign, symbolic, hard-linked, modified, or ambiguous releases, databases, selectors, hooks, paths, selected definitions, ownership receipts, or loaded labels are refused rather than replaced.",
+    "Missed hooks recover with observe reconcile; pending Annals delivery retries before classification; terminal observation retry and unavailable-source abandonment require explicit guarded commands."
   ],
   "privacy": [
-    "State can contain normalized decision text and source identifiers, but hook bodies, transcripts, paths, diffs, and tool output are not stored.",
-    "Unavailable-source abandonment stores no caller-provided reason and creates no verdict, candidate, classification receipt, or lifecycle event.",
-    "Observer and daily logs must not contain email bodies, conversation text, hook bodies, or credentials; the empty maintenance marker contains no domain data.",
-    "Clockwork definitions contain only literal non-secret environment and no output body; both pinned Decisions runners create scrubbed environments and contain no Email credential key."
+    "State and logs remain in the existing private Decisions application-support and log directories for migration compatibility; logs contain no account bodies, transcript text, prompts, or credentials.",
+    "The observer runner uses a scrubbed environment containing only explicit local paths, source configuration, and the expected Annals library identity.",
+    "Retired Decisions history is preserved locally and is not sent to Annals."
   ],
   "dependencies": [
-    {
-      "id": "conversations.history.explore",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
-    },
-    {
-      "id": "nucleus.execution.operate",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
-    },
-    {
-      "id": "email.message.send",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
-    },
-    {
-      "id": "clockwork.schedule.operate",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
-    }
+    {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
+    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "annals.decision-account.exchange", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read the matching installation document and inspect Decisions, Clockwork, Conversations, Nucleus, Email, Codex hooks, and Chancery readiness.",
-    "Build a green candidate, then run the content-addressed deployer with the exact user home, candidate path, and compatible Clockwork frontend.",
-    "Verify doctor, observer status and baseline, current release/provider selectors, both Clockwork bindings and histories, generated LaunchAgents, body-free logs, and that the maintenance gate was removed after commit.",
-    "For one permanently unavailable deferred source, obtain explicit recovery authorization and invoke observe abandon with --source-unavailable; never edit SQLite or use it for a merely unfinished turn.",
-    "Open /hooks, review and trust the exact user Stop hook, then canary one new post-baseline effectful turn on the actual Codex surface in use.",
-    "For uninstall, engage the maintenance gate, inspect each selected definition and disable only an exact current-release Decisions binding, refuse foreign or ambiguous selected definitions, remove exact legacy services plus the exact owned hook and public selectors, and report that the gate, Clockwork history, database, baseline, releases, and logs remain."
+    "Read the installation manual and inspect candidate, current owned artifacts, dependency contracts, exact Annals config and expected library ID, hook trust, and Clockwork state.",
+    "Run the release-owned deployer without --final-cutover to prepare and verify the exact candidate while retaining maintenance.",
+    "After external Annals and semantic activation proof, rerun the same exact inputs with --final-cutover.",
+    "Verify doctor, observer status, baseline, provider and release selectors, krisis/observer history, disabled Decisions bindings, body-free logs, and maintenance-gate removal.",
+    "Review and trust the exact Stop hook, then perform a separately authorized synthetic post-baseline canary on the actual Codex surface.",
+    "For uninstall, disable only exact owned Krisis state and retain database, releases, logs, and legacy history."
   ],
   "checkpoints": [
-    "Existing releases pass canonical content-manifest and hash checks before reuse.",
-    "Unavailable-source abandonment is serialized with observation processing, preserves the baseline, and is limited to a deferred pending correlation with no bound source or classification state.",
-    "The private current-user-owned mode-0600 non-hard-linked maintenance marker is present before either scheduler is mutated, future Clockwork admission is disabled, any exact legacy services are stopped, and the public hook command is suspended for its bounded timeout before lsof proves database quiescence for the migration backup and schema-3 outbox backfill; existing product log files are accepted only as current-user-owned non-hard-linked regular files and restricted to mode 0600 without truncation before definition registration; default activation stores the next whole Unix second after release/selector staging and before the hook, command, or observer binding is published, so the cutover second and all pre-baseline authority are excluded.",
-    "Every release-pinned runner invocation checks the valid maintenance marker before dependency resolution or domain work and becomes a successful no-op when it observes the gate; the marker does not terminate an invocation already past that check. Deployment holds it through both binding switches and the committed durable cutover, removes it only afterward, removes a marker it created only after proven rollback, and retains it when rollback is unprovable.",
-    "A legacy plist is attributable only when it byte-matches the complete current format-2 release-local rendered template and is current-user-owned mode 0644; it is rechecked before stop, removal, restoration, and bootstrap.",
-    "Foreign hook files are never merged, overwritten, or removed; a provable failed activation restores prior executable authority, while an unprovable rollback retains maintenance gating and the private transaction backup, attempts scheduler cleanup, and reports without claiming external scheduler state.",
-    "Both Clockwork definitions pin exact release runners and explicit interpreter digests with no secret or mutable selector; Clockwork's contract limits generated plist ProgramArguments to its absolute frontend path, private entry, and stable key and both schedules lack RunAtLoad, while the observer uses 60 seconds and the digest uses local 09:00 with separate private body-free Decisions logs."
+    "The public executable and command are krisis; provider is krisis; active Clockwork key is krisis/observer; daily and review schedules are absent or disabled.",
+    "Persistent database and log paths stay under Library/Application Support/Decisions and Library/Logs/Decisions for migration compatibility.",
+    "The Annals executable and config are absolute, expected library ID is exact lowercase 32-hex, and doctor validates decision-feed watermark contract and library identity.",
+    "A private release-independent maintenance marker gates the runner during quiescence, migration, selector switching, hook replacement, and schedule handoff.",
+    "The prior database plus sidecars is backed up only after exact owned writers are stopped and quiescence is proven; migration is sequential through schema 4.",
+    "No release, deploy, canary, live account acceptance, trust change, or retained-state deletion occurs without separate authority."
   ],
   "adaptation": [
-    "Use explicit home and launchctl overrides only for a deliberate alternate-user test boundary; home must be an absolute current-user-owned nonsymbolic directory and cannot contain XML/TOML schedule-rendering metacharacters, including double quote or backslash.",
-    "A nonzero queued count can consist only of deferred rows not yet ready; inspect retry state and source evidence before considering explicit abandonment.",
-    "Canary Desktop or another client directly; do not infer cross-surface Stop delivery from the installed file or CLI alone.",
-    "Diagnose dependency readiness at its owning product instead of adding a fallback inside Decisions."
+    "Use alternate home and launchctl values only for explicit current-user test boundaries.",
+    "Diagnose dependency readiness at its owning product and never add direct fallbacks.",
+    "Treat retained Decisions lifecycle reads as compatibility only, not proof of Krisis or Annals readiness."
   ],
   "stop_when": [
-    "The candidate, provider release, Nucleus requester contract, Codex source/hooks surface, Conversations activity contract, or Email CLI is incompatible or unavailable.",
-    "A selector, hook, service, or state path is foreign, symbolic where a regular path is required, or cannot be safely rolled back.",
-    "The baseline is missing after attempted activation or an observer service could run before it.",
-    "Permanent source unavailability is not proven, the turn is merely unfinished, or any source or classification state has been bound to the proposed abandonment target.",
-    "The requested action would delete retained state without separate explicit authorization."
+    "Candidate, provider, schema, Conversations, Nucleus, Annals, Clockwork, or hook boundary is incompatible or unavailable.",
+    "A selector, hook, service, config, or state path is foreign or cannot be safely recovered.",
+    "The expected Annals library ID cannot be proven or a requested action would delete retained state without separate authority."
   ],
   "interfaces": [
-    {"label": "Deploy", "invocation": "decisions/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH --clockwork ABSOLUTE_PATH"},
-    {"label": "Doctor", "invocation": "/Users/joey/.local/bin/decisions doctor"},
-    {"label": "Observer status", "invocation": "/Users/joey/.local/bin/decisions observe status"},
-    {"label": "Abandon one proven-unavailable source", "invocation": "/Users/joey/.local/bin/decisions observe abandon OBSERVATION_ID --source-unavailable"},
-    {"label": "Uninstall and retain state", "invocation": "decisions/packaging/macos/uninstall-user.sh --clockwork ABSOLUTE_PATH"}
+    {"label": "Prepare", "invocation": "decisions/packaging/macos/deploy-user.sh --binary ABSOLUTE_KRISIS --clockwork ABSOLUTE_CLOCKWORK --annals ABSOLUTE_ANNALS --annals-config ABSOLUTE_CONFIG --annals-library-id LOWERCASE_32_HEX"},
+    {"label": "Final cutover", "invocation": "decisions/packaging/macos/deploy-user.sh --binary ABSOLUTE_KRISIS --clockwork ABSOLUTE_CLOCKWORK --annals ABSOLUTE_ANNALS --annals-config ABSOLUTE_CONFIG --annals-library-id LOWERCASE_32_HEX --final-cutover"},
+    {"label": "Doctor", "invocation": "/Users/joey/.local/bin/krisis doctor"},
+    {"label": "Observer status", "invocation": "/Users/joey/.local/bin/krisis observe status"},
+    {"label": "Uninstall retaining state", "invocation": "decisions/packaging/macos/uninstall-user.sh --clockwork ABSOLUTE_PATH"}
   ],
   "does_not_authorize": [
-    "Deleting retained state or logs.",
-    "Abandoning a source without explicit recovery authorization or bypassing the command's unbound pending-source guard.",
-    "Replacing or merging a foreign Codex hooks file.",
-    "Bypassing Codex hook trust, resetting the observer baseline, or changing Nucleus, Codex, Email, or Gmail configuration."
+    "Releasing, deploying, trusting a hook, executing a canary, invoking live account acceptance, or deleting retained state without separate authorization.",
+    "Replacing a foreign hook, changing Annals library identity, resetting the observer baseline, or restoring retired digest/review schedules."
   ],
   "promise": {
     "consumers": [
-      {
-        "status": "declared",
-        "statement": "The current macOS user or an authorized operator may install, update, inspect, recover, or uninstall the user-owned Decisions release and its Clockwork-activated continuous observer and daily services."
-      },
-      {
-        "status": "unsupported",
-        "statement": "The operation is not a general Codex-hook manager, cross-user deployment surface, retained-state deletion command, digest-send authority, or direct database repair path."
-      }
+      {"status": "declared", "statement": "The current macOS user or authorized operator may install, update, inspect, recover, or uninstall the user-owned Krisis release and observer."},
+      {"status": "unsupported", "statement": "This is not a cross-user deployment, general hook manager, Annals library creator, retained-state deletion, or release operation."}
     ],
     "preconditions": [
-      {
-        "status": "declared",
-        "statement": "Deployment requires a green candidate binary and release-matched provider bundle, compatible Conversations, Nucleus, and Email contracts, owned or absent selectors and service artifacts, and an exact supported Codex hooks boundary."
-      },
-      {
-        "status": "declared",
-        "statement": "Before candidate doctor opens persistent state, both Decisions services are quiesced, the public hook command is suspended for its timeout, and a private backup contains the database and every SQLite sidecar."
-      },
-      {
-        "status": "declared",
-        "statement": "Hook trust, source-unavailable abandonment, retained-state deletion, and real send or canary effects each require their separately documented authority."
-      }
+      {"status": "declared", "statement": "Deployment requires a green exact krisis binary and matching provider, compatible dependencies, explicit valid Annals configuration, and owned or absent selectors and service artifacts."},
+      {"status": "declared", "statement": "Before migration, exact product writers are maintenance-gated and quiesced and a private database-plus-sidecars backup exists."},
+      {"status": "declared", "statement": "Hook trust, real canary, live deployment, and retained-state deletion each require separate authority."}
     ],
     "inputs": [
-      {
-        "status": "declared",
-        "statement": "Deploy consumes one absolute candidate binary, one compatible absolute Clockwork frontend, the product-owned deployer and exact provider tree, current-user home, Clockwork binding and legacy launchd state, owned release and selector state, exact hook bytes, and current Decisions database state."
-      },
-      {
-        "status": "declared",
-        "statement": "Diagnosis and guarded recovery accept supported doctor, observer, launchctl, log, exact observation-ID, and uninstall invocations; alternate home or launchctl values are deliberate test-boundary inputs only."
-      },
-      {
-        "status": "unsupported",
-        "statement": "A foreign hooks file, ambiguous selector or loaded label, direct SQLite edit, caller-provided abandonment reason, arbitrary service definition, or unapproved retention deletion is not accepted."
-      }
+      {"status": "declared", "statement": "Deploy consumes absolute Krisis, Clockwork, Annals, and Annals config paths, exact lowercase expected library ID, product-owned package/provider bytes, current-user home, and current owned installation state."},
+      {"status": "unsupported", "statement": "Foreign hook files, ambiguous selectors, direct SQLite edits, arbitrary library fallback, uppercase IDs, and unapproved state deletion are not accepted."}
     ],
     "outputs": [
-      {
-        "status": "declared",
-        "statement": "Successful deployment selects one validated content-addressed release for the public Decisions command and Chancery provider, installs the exact owned Stop hook, registers two immutable exact-release definitions, switches the daily then observer Clockwork binding, preserves or migrates state, records activation once, and reports operational verification."
-      },
-      {
-        "status": "declared",
-        "statement": "Supported reads expose candidate doctor, observer counts and baseline, Clockwork binding/runtime plus generated launchd and log evidence; guarded source abandonment records one complete/not-eligible audit state, and uninstall disables only definition-proven current-release bindings and removes the hook and public selectors while retaining state and Clockwork history."
-      }
+      {"status": "declared", "statement": "Successful preparation installs and verifies one content-addressed release and definition while retaining maintenance and leaving active selectors unchanged."},
+      {"status": "declared", "statement": "Successful explicit final cutover selects one validated content-addressed release for krisis and both providers, migrates schema 4, installs the exact Stop hook, and enables only krisis/observer."},
+      {"status": "declared", "statement": "Uninstall removes exact public selectors and disables the owned observer while retaining migration-compatible state, releases, logs, and scheduler history."}
     ],
     "data_semantics": [
-      {
-        "status": "declared",
-        "statement": "The observer baseline is a write-once authority-time cutover stored in Decisions SQLite; default activation is the next whole Unix second and permanently excludes the cutover second and all earlier authority from continuous projection."
-      },
-      {
-        "status": "declared",
-        "statement": "The Stop hook is only a durable session-and-turn wake correlation, the observer owns later source resolution and classification, and a deferred queue row is not a failure or proof that its source is unavailable."
-      },
-      {
-        "status": "declared",
-        "statement": "A content-addressed release binds exact binary, deployer, hook, runner, Clockwork definition-template, and provider bytes; the concrete registered definition additionally pins the release ID/root, interpreter, runner, process context, schedule, and output paths, while selectors identify deployment state rather than domain success."
-      }
+      {"status": "declared", "statement": "The observer baseline is a write-once user-authority cutover; the Stop hook is only a wake correlation, and pending Annals delivery remains incomplete capture."},
+      {"status": "declared", "statement": "Content release, provider release, schema, binding key and definition digest, expected Annals library ID, and decision-feed watermark are distinct identities."}
     ],
     "identity_and_units": [
-      {
-        "status": "declared",
-        "statement": "Release content hash, Clockwork definition digest, stable binding key, provider release, entry contract version, database schema version, hook bytes, generated LaunchAgent label, Decisions observation ID, and activation identity are separate identities and compatibility axes."
-      },
-      {
-        "status": "declared",
-        "statement": "The observer interval is 60 seconds, the daily service schedules at 09:00 machine-local time, and the public hook timeout and suspension drain are three seconds."
-      },
-      {
-        "status": "not_applicable",
-        "statement": "Installation publishes no usage, pricing, or billing unit."
-      }
+      {"status": "declared", "statement": "Public binary/provider are krisis, active Clockwork key is krisis/observer, schema is 4, and retained filesystem roots keep the Decisions name solely for compatibility."},
+      {"status": "declared", "statement": "Observer interval is 60 seconds and hook timeout is three seconds; library ID is 32 lowercase hexadecimal characters."},
+      {"status": "not_applicable", "statement": "Installation publishes no usage or billing unit."}
     ],
     "completeness_and_freshness": [
-      {
-        "status": "declared",
-        "statement": "Deployment verifies exact candidate and provider versions, content manifests, state schema, dependency surfaces, owned selectors, exact hook and legacy-service bytes, activation order, and both selected Clockwork bindings before declaring the installation successful."
-      },
-      {
-        "status": "declared",
-        "statement": "Doctor and installed files establish current local installation state, while actual hook delivery and trust on each Codex client surface require a deliberate new post-baseline canary."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No service-availability, hook-delivery, observation-latency, release-retention, log-retention, or repair-time objective is promised."
-      }
+      {"status": "declared", "statement": "Preparation verifies exact versions, content, definition fields, and library routing without activation; final cutover additionally verifies schema, dependencies, owned selectors, baseline ordering, owned legacy binding retirement, and active observer selection."},
+      {"status": "unspecified", "statement": "No service availability, hook delivery, observation latency, release retention, log retention, or repair-time objective is promised."}
     ],
     "access": [
-      {
-        "status": "declared",
-        "statement": "The supported boundary is the current user's local filesystem, Decisions CLI and deployer, launchctl user domain, exact user-level Codex hooks file, and product-owned application-support and log paths."
-      },
-      {
-        "status": "declared",
-        "statement": "Codex separately requires attended review and trust for the exact non-managed Stop hook; the installer cannot write or bypass that trust state."
-      },
-      {
-        "status": "unsupported",
-        "statement": "Foreign, symbolic, modified, ambiguous, or unowned selectors, hooks, legacy plists, state files, selected Clockwork definitions, or loaded labels are refused rather than merged, replaced, removed, or followed; matching a legacy label or runner without exact rendered bytes, current UID, and mode 0644 is insufficient, and uninstall leaves absent and unselected disabled bindings unchanged."
-      }
+      {"status": "declared", "statement": "Supported operation is current-user local filesystem and shell access through exact product, Clockwork, Annals, and launchctl surfaces."},
+      {"status": "unsupported", "statement": "Foreign, symbolic, modified, ambiguous, or unowned artifacts are refused rather than followed, merged, or replaced."}
     ],
     "lifecycle_and_consistency": [
-      {
-        "status": "declared",
-        "statement": "An update validates selectors, complete rendered legacy plist identity, and selected Clockwork definitions against the exact current-release manifests, engages the stable maintenance gate, registers inactive definitions, disables both bindings and stops any exact legacy services, suspends and drains the hook, backs up quiescent SQLite state, migrates sequentially to schema 3, stages the release and selectors, records activation once, then publishes the hook and command, switches bindings with observer last, commits, and removes the gate."
-      },
-      {
-        "status": "declared",
-        "statement": "Provable failure restores selectors, exact hook and legacy-plist bytes, database and sidecars, prior selected Clockwork definition digests/enabled states, and prior legacy loaded states without loading a previously disabled selection; an absent binding may become an inert tombstone. If full restoration cannot be proved, the stable maintenance gate and private transaction backup remain, scheduler cleanup is attempted, maintenance and public-command evidence is reported only when proven, and no claim is made that either external scheduler was disabled."
-      },
-      {
-        "status": "declared",
-        "statement": "Uninstall of a current release first engages and then retains the maintenance gate, removes only exact owned public surfaces, and preserves the database, write-once baseline, releases, and logs until a separate destructive decision."
-      }
+      {"status": "declared", "statement": "Preparation validates and registers the candidate while retaining maintenance; explicit final cutover revalidates closed release trees, private database files, definitions, and the target-bound ownership receipt, disables only proven-owned enabled schedules, drains the hook, backs up quiescent SQLite state, migrates, stages selectors, proves doctor, activates the baseline once, publishes hook and command, verifies krisis/observer, commits, and clears the gate."},
+      {"status": "declared", "statement": "Provable failure restores prior state; unprovable rollback retains maintenance gating and backup and does not claim external scheduler success."},
+      {"status": "declared", "statement": "Uninstall retains database, baseline, receipt ledger, legacy history, releases, logs, and scheduler history pending separate destructive authority."}
     ],
     "operational_limits": [
-      {
-        "status": "declared",
-        "statement": "The standard operation supports one current macOS user, exactly two stable Clockwork bindings and one exact user Stop hook, a content-addressed release pair, explicit schema-1-or-2-to-3 migration, and serialized observation processing."
-      },
-      {
-        "status": "declared",
-        "statement": "Stop on incompatible dependency or candidate versions, foreign or unsafe paths, unprovable rollback, missing activation, premature observer execution, untrusted hook behavior, or unapproved destructive retention changes."
-      },
-      {
-        "status": "unsupported",
-        "statement": "The operation provides no hook-file merge, trust bypass, baseline reset, direct SQLite repair, parallel observer, implicit source abandonment, arbitrary recipient configuration, or cross-user service installation."
-      }
+      {"status": "declared", "statement": "Standard operation supports one current macOS user, one krisis/observer binding, one exact Stop hook, explicit schema migration to 4, and serial observation."},
+      {"status": "unsupported", "statement": "No hook merge, trust bypass, baseline reset, direct repair, parallel observer, daily digest schedule, review schedule, or arbitrary Annals library is supported."}
     ],
     "compatibility_and_evolution": [
-      {
-        "status": "declared",
-        "statement": "Candidate program version and provider release match exactly, schema versions 1 and 2 migrate sequentially to schema 3 with retained rows and lifecycle backfill, and an incompatible installed artifact is refused before selector publication."
-      },
-      {
-        "status": "declared",
-        "statement": "The prior complete release remains selected through previous for rollback, but restoration never crosses a database schema that the prior binary cannot read."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No universal release retention count beyond current and previous, downgrade window, future migration path, or deprecation period is promised."
-      }
+      {"status": "declared", "statement": "Krisis 0.4.0 and SQLite schema 4 preserve legacy Decisions rows and read decoding; public command/provider and active schedule move to Krisis identity."},
+      {"status": "unspecified", "statement": "No release-retention count, downgrade window, future migration path, or deprecation deadline is promised."}
     ],
     "reliances": [
-      {
-        "status": "declared",
-        "statement": "Candidate doctor and continuous source operation rely on Conversations' supported normalized completed-turn and activity contract.",
-        "target": "conversations",
-        "kind": "readiness",
-        "contract": "conversations.history.explore"
-      },
-      {
-        "status": "declared",
-        "statement": "Classification readiness and exceptional catch-up rely on Nucleus's compatible bounded execution service without transferring Decisions domain authority.",
-        "target": "nucleus",
-        "kind": "readiness",
-        "contract": "nucleus.execution.operate"
-      },
-      {
-        "status": "declared",
-        "statement": "The daily send path relies on Email's compatible immediate-send contract and external acceptance result, while the service runner itself retains no Email credential.",
-        "target": "email",
-        "kind": "readiness",
-        "contract": "email.message.send"
-      },
-      {
-        "status": "declared",
-        "statement": "The installed hook and real surface canary rely on Codex's client-specific hook discovery, exact-definition trust, and Stop delivery; no installed Chancery contract covers that external behavior.",
-        "target": "codex",
-        "kind": "external"
-      },
-      {
-        "status": "declared",
-        "statement": "Definition registration, stable binding selection, same-key admission, direct supervision, and runtime history rely on Clockwork without transferring Decisions domain authority.",
-        "target": "clockwork",
-        "kind": "control",
-        "contract": "clockwork.schedule.operate"
-      },
-      {
-        "status": "declared",
-        "statement": "Clockwork-generated observer and daily timer delivery ultimately relies on macOS launchd; no installed Chancery contract covers launchd availability or timing.",
-        "target": "launchd",
-        "kind": "readiness"
-      }
+      {"status": "declared", "statement": "Doctor and source operation rely on Conversations normalized history.", "target": "conversations", "kind": "readiness", "contract": "conversations.history.explore"},
+      {"status": "declared", "statement": "Classification readiness relies on Nucleus exact bounded execution.", "target": "nucleus", "kind": "readiness", "contract": "nucleus.execution.operate"},
+      {"status": "declared", "statement": "Doctor and delivery rely on the exact Annals decision-account exchange and configured dedicated library.", "target": "annals", "kind": "readiness", "contract": "annals.decision-account.exchange"},
+      {"status": "declared", "statement": "Observer definition registration, selection, supervision, and history rely on Clockwork.", "target": "clockwork", "kind": "control", "contract": "clockwork.schedule.operate"},
+      {"status": "declared", "statement": "Hook discovery and trust rely on Codex, for which no installed Chancery contract is declared.", "target": "codex", "kind": "external"}
     ]
   },
   "manual": "manuals/install-operate.md"

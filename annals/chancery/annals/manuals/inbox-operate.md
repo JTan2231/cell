@@ -14,6 +14,28 @@ terminal envelopes back to the queue, or infer delivery state from processes.
 /Users/joey/.local/bin/annals inbox enqueue --priority <FILE>
 ```
 
+A configured decisions library also has a producer-specific admission path:
+
+```sh
+/Users/joey/.local/bin/annals --config DECISIONS_CONFIG inbox accept \
+  --producer krisis --key DECISION_ID ACCOUNT.md
+```
+
+It publishes one complete unstarted envelope and immutable acceptance event,
+but no source-delivery row or model attempt. Exact key-and-byte replay returns
+the original job; changed bytes conflict. This path requires the explicit
+decisions config and its expected persistent library ID and never falls back to
+the primary library.
+
+That config rejects direct work add or integration, generic enqueue, ordinary
+incoming registration, and backlog import. Its dispatcher binds or verifies
+the dedicated spool, ignores `incoming/`, and accepts only producer envelopes
+or explicit retry children. The generic admission behavior below applies when
+`[decision_feed]` is absent and the database's immutable role is `general`.
+Decision-config operations require a `decisions` database; generic admission
+and dispatch require a `general` database, so changing configs, spools, or a
+direct library selector cannot bypass the split.
+
 Registration moves settled top-level files from `incoming/` into complete
 queued envelopes. It creates no database source-delivery record. Direct
 enqueue copies explicit regular files into complete envelopes and leaves the

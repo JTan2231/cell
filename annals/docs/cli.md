@@ -36,29 +36,96 @@ process working directory.
 `--quiet` suppresses successful human mutation messages. `-v` prints the
 resolved library path on stderr in human mode.
 
+Decision-account acceptance and feed reads are intentionally stricter. They
+require an explicit `--config`, reject `--library`, ignore `ANNALS_LIBRARY`,
+and use only that file's `library`, `inbox.root`, and
+`decision_feed.expected_library_id`. Missing or mismatched identities fail
+closed rather than selecting the primary Annals library.
+Every version-5 database also carries one immutable `general` or `decisions`
+library kind. Decision acceptance, feed reads, and a decision-config run
+require `decisions`; generic source-producing commands and a generic inbox run
+require `general`. Configuration, spool selection, or a direct `--library`
+override cannot reclassify or bypass that database identity.
+When `[decision_feed]` is configured, `work add`, direct `integrate`,
+`inbox enqueue`, `inbox register`, and the hidden backlog importer fail with
+`decision_feed_accept_required`.
+`inbox run` binds and verifies the dedicated spool identity, dispatches only
+producer-accepted originals or their explicit retry children, and leaves files
+in `incoming/` unregistered. A generic config also cannot admit to or run a
+spool that already carries the decision-library binding. The primary inbox
+keeps its existing behavior.
+
 ## Library operations
 
 ```text
-annals init
+annals init [--kind general|decisions]
 annals migrate
 annals stats
 annals backup OUTPUT
 ```
 
-`init` creates revision zero and refuses to replace an existing library.
-`migrate` upgrades a version-3 library to version 4 by adding bounded inbox
-retry provenance; it does not reinterpret works, deliveries, reconciliations,
-or corpus history. Version 3 remains the deliberate fresh-state boundary, so
+`init` creates revision zero, returns its persistent `library_id` and immutable
+kind, and refuses to replace an existing library. The default is `general`;
+only the decisions provisioner or an equally explicit dedicated-library setup
+uses `--kind decisions`. `migrate` upgrades a version-3 or version-4 library to
+version 5 by assigning the existing library the `general` kind, adding bounded
+inbox retry provenance when needed, and adding the decision-account acceptance
+feed; it does not reinterpret works, deliveries, reconciliations, or corpus
+history. Version 3 remains the
+deliberate fresh-state boundary, so
 the command rejects libraries older than version 3 without mutating them and
 refuses libraries created by a newer executable. Repeating `migrate` on a
-version-4 library is an idempotent current-format check. Use the macOS
+version-5 library is an idempotent current-format check. Use the macOS
 deployer's guarded `--fresh-state` cutover when replacing a pre-version-3
-installed library. The version-3-to-4 migration is one transaction; failure
-leaves the library at version 3 without partial retry tables.
+installed library. The additive migration is one transaction; failure
+leaves the library at its prior version without partial tables.
 `stats` reports revision and corpus, graph, work, reconciliation, history,
 model-run, and database-size information.
 
 `backup` makes a consistent SQLite copy and refuses to replace its destination.
+
+## Krisis decision-account exchange
+
+```text
+annals --config DECISIONS_CONFIG inbox accept --producer krisis --key ID FILE
+annals --config DECISIONS_CONFIG decision-feed watermark
+annals --config DECISIONS_CONFIG decision-feed page \
+  --watermark TOKEN --after CURSOR [--limit N]
+```
+
+`accept` takes exactly one regular non-symbolic, nonblank UTF-8 Markdown file
+of at most 1 MiB. Its sections are exactly `# Decision`, `## Authority`,
+`## Context`, `## Action`, `## Result`, and `## Source`. Authority is a Markdown
+quotation. Source is one fenced JSON object containing schema version 1, the
+same decision ID, Unix occurrence time and precision, capture-rule version,
+and one host/thread/turn/item/nonempty-span anchor. Unknown metadata fields are
+rejected.
+
+On first acceptance, Annals computes SHA-256, derives work label
+`Krisis decision ID`, durably publishes one queue envelope, and commits one
+feed event. JSON reports contract and library identity, producer, `key`, digest,
+stable job, acceptance time, and `acceptance` as `created`. Submitting the same
+key and bytes reports the original values with `acceptance` `replayed` and
+creates no job or delivery. Different bytes return
+`decision_account_key_conflict`. Acceptance is valid while dispatch is paused,
+but maintenance, storage reserve, schema, config, or identity failure leaves no
+new acceptance.
+
+The decisions library has one supported source-admission route: validated
+`inbox accept --producer krisis`. Direct work retention or integration,
+generic enqueue, ordinary incoming-file registration, and fresh-state backlog
+import fail even when a caller selects the decisions database directly with
+`--library`; they are not recovery routes for a rejected or failed account. Status,
+pause, priority, interrupt, dispatch, and bounded retry operations remain
+available for accepted jobs.
+
+`watermark` returns an opaque token for the current committed acceptance
+prefix. `page` requires that watermark and a prior watermark or item cursor,
+returns at most 200 ascending events, echoes both requested tokens, and uses
+the last event cursor as `next_cursor`. With no events it returns the exact
+`--after` token unchanged. Events contain no raw Markdown, transcript, path,
+confidence, review, disposition, or supersession data. The feed records no
+consumer acknowledgement.
 
 ## Immutable works
 

@@ -60,14 +60,14 @@ separately maintained discovery catalog.
 | --- | --- | --- | --- |
 | Todo | An actionable concern or follow-up should be researched and retained for later. | Concern provenance, routing and its explicit decisions, stable todo identities, dated situation assessments, proposed or accepted designs, open/done state, and working notes. | Work requested for immediate completion, general knowledge, implementation execution, or shared runtime policy. |
 | CRM | Employment-relevant people, opportunities, and contemplated contact should be retained as evidence-grounded cases. | Its local SQLite library, queued steward runs, immutable case revisions, evidence, and advisory review notes. | Sending or authorizing outreach, scheduled intake, treating an advisory as a gate, or storing CRM domain state in Nucleus. |
-| Annals | Immutable source material should be retained or reconciled with an evidence-grounded conceptual corpus, or that corpus should be searched or explored. | Retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, or account telemetry. |
+| Annals | Immutable source material should be retained or reconciled with an evidence-grounded conceptual corpus, or that corpus should be searched or explored. | Each selected physical library's retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, cross-library federation, or account telemetry. |
 | Weaver | Authored repository inputs should become the current five-stage public-facing narrative outputs. | Current-run admission, stage order and input snapshots, repository output writes, validation, cancellation intent, and recovery. | Publishing, editing a public profile, treating generated text as factual authority, or general job orchestration. |
 | Email | A plain-text email should be sent to the single fixed recipient. | The synchronous Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, or agent execution. |
 | Conversations | Codex tasks on this Mac should be listed, inspected, or searched. | A read-only normalized view over the normal user's Codex App Server. | Decision classification, durable projections, live-process supervision, or Nucleus's isolated job history. |
-| Decisions | Post-activation explicit user settlements enacted by a same-turn completed file change should be retained, reviewed, or delivered as a daily digest. | The observer baseline, completed-turn coverage, decision candidates, source anchors, review state, cutoff-bounded daily projections, frozen digest renders, and delivery attempts. | Raw transcript export, decisions without same-turn effects, treating file activity or assistant behavior as authority, arbitrary email, or Nucleus execution history. |
-| Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from Decisions lifecycle events. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, intake policy, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, transcript storage, or replacing Decisions review authority. |
+| Krisis | Attributable decisions in completed root user turns should be identified and delivered as immutable accounts to the dedicated Annals decisions library. | The observation baseline and coverage, bounded classification, source anchors, account projection, durable outbox, Annals acceptance receipts, and recovery. | Judging truth, importance, applicability, enactment, current force, review state, supersession, retaining the canonical account library, or sending a digest. |
+| Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from accepted accounts in the dedicated Annals decisions library. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, decision-feed intake, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, transcript storage, or interpreting Annals retention as semantic truth. |
 | Geste | A prior bounded work episode should be found by problem shape or manually recorded with its source basis. | Episode identity, immutable account revisions, authored interpretation, source anchors, coverage gaps, and read-time search, report, and graph projections. | Source-system truth, current policy, automatic episode ingestion, or deciding that a precedent applies. |
-| Pratica | A proposed entrant needs exact negotiated terms from several independently stewarded systems. | Integration and track identity, immutable offers, current assent, agreement seals, steward bases, bounded requester attempts, composition reviews, and conformance reviews. | Implementing or changing target systems, automatically discovering every concern, treating review prose as assent, or proving deployment readiness. |
+| Pratica | A proposed entrant needs exact negotiated terms from several independently stewarded systems. | Integration and track identity, immutable offers, current assent, agreement seals, steward bases, caller-keyed ingress receipts, bounded requester attempts, composition reviews, and conformance reviews. | Implementing or changing target systems, automatically discovering every concern, treating review prose as assent, or proving deployment readiness. |
 | Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, harness validation and supervision, credential serialization, cancellation, exact harness-stdout observations, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, requester retry policy, or reporting materializations. |
 | Annals Usage | Annals-attributed model consumption, account allowance, login, or the Annals-to-Nucleus execution path must be inspected. | Live calculation over Annals attribution and Nucleus output atoms, plus Annals-facing budget and diagnostic commands. | Nucleus runtime authority, durable reporting projections, Codex credential storage, Annals corpus success, or general job orchestration. |
 | Codex | Nucleus needs an inspected harness and account protocol implementation. | Its executable and app-server behavior. | Requester domain policy or a second credential authority for Nucleus jobs. |
@@ -84,7 +84,7 @@ Typical routing examples:
 - “What does this project mean by grounding?” is a Semantics query when that
   folder is registered.
 - “Have we already solved something shaped like this?” is a Geste query.
-- “What does Decisions promise a lifecycle consumer?” starts with Chancery
+- “What does Krisis promise an account consumer?” starts with Chancery
   discovery and exact-ID promise resolution.
 - “Negotiate the exact CRM terms with each independently stewarded system
   before implementation” is a Pratica negotiation.
@@ -110,7 +110,7 @@ todo --version
 crm --version
 email --version
 conversations --version
-decisions --version
+krisis --version
 semantics --version
 geste --version
 pratica --version
@@ -138,7 +138,7 @@ Todo research -----\
 CRM steward --------+
 Annals -------------+
 Weaver -------------+--> Nucleus ----------> isolated Codex app-server --> account
-Decisions observer -+
+Krisis observer ----+
 Semantics worker ---+
 Pratica reviews ----/
    |                  |                        |
@@ -156,10 +156,10 @@ CRM SQLite <-------- CRM's queued intake and validated case revisions
 Weaver outputs <---- Weaver's detached repository worker
 Email -------------> Resend
 Conversations ------> normal-user Codex app-server
-Codex Stop hook ----> Decisions SQLite observation queue
-Decisions observer -> Conversations
-Decisions daily ----> Decisions SQLite ----> Email ----> Resend
-Decisions lifecycle --> Semantics --> Conversations exact cwd
+Codex Stop hook ----> Krisis SQLite observation queue
+Krisis observer ----> Conversations
+Krisis observer ----> Annals decisions-library acceptance
+Annals decision feed -> Semantics --> Conversations exact cwd
 Semantics -----------> registered project semantic repositories
 Pratica CLI ---------> Pratica SQLite offers, assent, seals, and reviews
 
@@ -207,46 +207,52 @@ Server. It is deliberately separate from Nucleus's isolated per-job Codex home
 and does not infer process liveness from persisted task status. Each invocation
 owns and terminates a private process group for its selected Codex command and
 inherited App Server descendants; unrelated Codex processes remain outside
-that cleanup scope. Decisions' synchronous Codex `Stop` hook persists only a
-session/turn correlation. Its single-worker LaunchAgent resolves one completed
-root turn at a time through Conversations and uses Nucleus only for bounded
-candidate classification. A successfully completed nonempty file change makes
-the turn eligible, but only an explicit user settlement is authority. Initial
-classification sees a bounded slice containing all eligible current-turn user
-authorities, the immediately preceding assistant proposal needed to interpret
-them when one exists, and at most the final assistant result—not the whole turn
-or thread. Prior normalized context is disclosed only for one validated
-expansion. Decisions makes observation and projection success authoritative in
-its own SQLite database. The observer's one-shot release runner is activated by
-the `decisions/observer` Clockwork binding after the separately authorized
-schedule cutover; pre-cutover installations still use the legacy Decisions
-LaunchAgent. Source-resolution deferrals yield to other ready work
-by requester-owned retry time while processing remains serial. After explicit
-recovery authorization and proof of permanent unavailability, Decisions alone
-may use `observe abandon OBSERVATION_ID --source-unavailable` to close one
-previously deferred, entirely unbound pending correlation as audited not
-eligible; merely unfinished or bound sources are refused, no Nucleus job or
-decision lifecycle event is created, and later completed-root reconciliation
-fails closed. Its 09:00 sender normally projects already-observed results with
-no model work, invoking Email only after complete post-baseline coverage as of a
-durable turn-completion cutoff and a frozen render. A turn completing later can
-enter a manual rebuild of its authority day, but does not auto-amend an accepted
-scheduled delivery or carry into another day.
-Exceptional missed-hook catch-up can still invoke Nucleus serially. The
-schedule and recurring-disclosure policy remain Decisions concerns.
+that cleanup scope. Krisis' synchronous Codex `Stop` hook persists only a
+session/turn correlation. Its single worker resolves each eligible completed
+root turn through Conversations and uses Nucleus only for bounded account
+classification. Every nonempty user authority in the turn receives a final
+binary decision or no-decision coverage result; a file change is neither an
+eligibility gate nor decision authority. Initial classification contains the
+current-turn authorities, the nearest preceding nonempty assistant message for
+each, and the final nonempty assistant message in the turn. One context
+expansion may add earlier normalized messages, but either scope is capped at 64
+whole messages and 262,144 UTF-8 text bytes and never truncates a message. An
+oversized mandatory slice, incomplete source, ambiguous anchor, or failed read
+is deferred or failed closed rather than recorded as no decision.
+
+For each identified decision, Krisis records enough operational state to retry
+one deterministic Markdown account containing context, decision statement,
+observed action, observed result, and one exact user-authority source span.
+Unobserved context, action, or result is represented explicitly; it is not
+inferred. Krisis retains observation coverage, classifier correlation, its
+outbox, and Annals acceptance receipts, but the dedicated Annals decisions
+library is the durable account collection. Once the receipt commits, Krisis
+retires its local account prose, quotation, and non-authority support anchors;
+only the delivery ledger, digest, binary coverage, job correlation, and exact
+authority anchor remain. Idempotent Annals acceptance is the delivery boundary.
+Krisis does not retain an active candidate-review lifecycle,
+send a digest, or judge confidence, disposition, truth, relevance, importance,
+applicability, supersession, enactment, or current force. Its one-shot runner is
+activated by the independent `krisis/observer` Clockwork binding only after a
+separately authorized cutover; legacy Decisions schedules and lifecycle history
+remain disabled, readable compatibility state.
 
 Semantics is a project registry and one serial decision-reconciliation worker.
-Registration starts at a captured Decisions lifecycle watermark and requires an
-exact `Semantics-Project: ID` line in the registered root's `AGENTS.md`. The
-worker resolves the event's authority task through Conversations, routes its
-exact cwd to the deepest registered root, and retains only participating or
-genuinely unattributable intake. High-confidence admissions reconcile
-immediately; medium-confidence admissions wait for Decisions review. Semantics
-submits only normalized decision data and the selected repository snapshot to
-Nucleus, with workspace access `none`, no shell, and no web. Its SQLite commit,
-not Nucleus completion or generated prose, is semantic authority. Chancery
-documents how agents discover and query that repository but is not a runtime
-dependency.
+Existing projects start the new intake at one explicitly captured watermark in
+the dedicated Annals decisions-library feed; new projects capture the current
+feed watermark at registration. An exact `Semantics-Project: ID` line in the
+registered root's `AGENTS.md` still establishes participation. The worker
+resolves each accepted account's authority task through Conversations and routes
+its exact cwd to the deepest registered root. A known cwd outside every root is
+irrelevant; missing or non-unique authority and routing data remains explicit
+unassigned intake. Every valid accepted account is eligible without confidence
+or review gates. Semantics submits only its minimized account projection and the
+selected repository snapshot to Nucleus, with workspace access `none`, no shell,
+and no web. Its SQLite commit, not Annals retention, Nucleus completion, or
+generated prose, is semantic authority. Legacy Decisions cursors, intake,
+groundings, and correlations remain decodable history in a distinct namespace.
+Chancery documents how agents discover and query the repository but is not a
+runtime dependency.
 
 Nucleus is a per-user execution coordinator, not a project registry or workflow
 engine, capability directory, or documentation service. A requester submits one
@@ -258,8 +264,9 @@ Geste is a short-lived manual casebook CLI. The interactive agent independently
 consults source products through their installed contracts and gives Geste
 stable locators, optional revisions or digests, and an authored complete
 episode account. The Geste process calls no source product, Chancery, Nucleus,
-or model. A verified settlement requires a Decisions lifecycle authority
-anchor, but Decisions remains settlement authority. Geste search returns
+or model. A historically verified settlement may still cite a retained legacy
+Decisions lifecycle authority anchor; Geste has no automatic dependency on the
+new Annals decision feed. Geste search returns
 lexical precedent candidates; the agent checks applicability and current
 contracts before reuse.
 
@@ -274,11 +281,11 @@ it does not implement a target system, prove runtime behavior, discover every
 concern, or authorize deployment.
 
 Nucleus, Annals, Annals Usage, Todo, Chancery, Weaver, Email, Conversations,
-Decisions, Semantics, Geste, Pratica, Clockwork, and CRM share the Cell source
+Krisis, Semantics, Geste, Pratica, Clockwork, and CRM share the Cell source
 repository, Cargo workspace, and lockfile. That source layout does not
 merge their release, installation, state, backup, recovery, or domain-success
 boundaries. Product runtimes do not call Chancery. Their installers only
-co-stage owned documentation and publish one provider selector.
+co-stage owned documentation and publish their owned provider selectors.
 
 The following distinctions are operationally important:
 
@@ -319,7 +326,7 @@ The following distinctions are operationally important:
 ~/.local/libexec/nucleusd
 ~/.local/bin/email
 ~/.local/bin/conversations
-~/.local/bin/decisions
+~/.local/bin/krisis
 ~/.local/bin/semantics
 ~/.local/bin/geste
 ~/.local/bin/pratica
@@ -328,16 +335,16 @@ The following distinctions are operationally important:
 ~/.codex/hooks.json
 ~/Library/LaunchAgents/org.nucleus.daemon.plist
 ~/Library/LaunchAgents/org.clockwork.annals.inbox.plist
-~/Library/LaunchAgents/org.clockwork.decisions.daily-email.plist
-~/Library/LaunchAgents/org.clockwork.decisions.observer.plist
+~/Library/LaunchAgents/org.clockwork.annals.decisions-inbox.plist
+~/Library/LaunchAgents/org.clockwork.krisis.observer.plist
 ~/Library/LaunchAgents/org.clockwork.semantics.worker.plist
 
 ~/Library/Application Support/Chancery/providers/
   PROVIDER_ID -> owning product's current release share/chancery/PROVIDER_ID
 
 Use `chancery doctor` for the current complete provider set. One product
-release may publish multiple independently versioned providers, as Annals and
-Annals Usage do.
+release may publish multiple providers, as Annals/Annals Usage and
+Krisis/retained Decisions compatibility do.
 
 ~/Library/Application Support/Nucleus/
   install/
@@ -357,13 +364,18 @@ Annals Usage do.
   nucleusd.stdout.log
   nucleusd.stderr.log
 
+~/Library/Application Support/Annals/decisions/
+  config.toml
+  annals.db
+  spool/
+  log/inbox.stdout.log
+  log/inbox.stderr.log
+
 ~/Library/Application Support/Decisions/
   decisions.db
   install/
 
 ~/Library/Logs/Decisions/
-  daily-email.stdout.log
-  daily-email.stderr.log
   observer.stdout.log
   observer.stderr.log
 
@@ -416,13 +428,21 @@ Chancery readiness.
 
 Annals, Todo, and Weaver have their own state, installation, backup, and recovery
 boundaries. Do not infer their state from Nucleus or copy their detailed
-procedures into this manual. Clockwork owns Annals' successor 300-second,
-run-at-load `annals/inbox` activation binding and runtime history, while Annals
-continues to own its durable spool, locks, retries, maintenance/pause gates,
-logs, and domain outcomes; the pre-cutover Annals scheduler remains installed
-truth until a separately authorized handoff. `annals inbox pause` remains the
-Nucleus-quiescence gate because it prevents Annals domain admission regardless
-of which scheduler delivers a wake. Todo's optional
+procedures into this manual. The primary Annals library and dedicated decisions
+library are separate databases, spools, configs, logs, histories, and recovery
+units under the same product. Clockwork owns independent 300-second,
+run-at-load `annals/inbox` and `annals/decisions-inbox` activation bindings and
+their runtime histories, while Annals owns each selected library's durable
+spool, locks, retries, maintenance/pause gates, logs, and domain outcomes. The
+primary Annals deployer does not create the decisions library. Annals'
+supported decisions provisioner must be invoked from an exact format-4 content
+release; that release independently hashes the provisioner and both decisions
+templates. It creates or migrates only the dedicated config, database, spool,
+logs, and `annals/decisions-inbox` binding. Use its `--keep-maintenance`
+handoff while the outer Krisis/Semantics cutover establishes the feed watermark
+and consumer activation. The pre-cutover primary Annals scheduler remains
+installed truth until a separately authorized handoff. Pause each active Annals
+config independently when its domain admission must stop. Todo's optional
 `~/Library/LaunchAgents/org.todo.daily-email.plist` is a separate user service:
 launchd invokes Todo at 09:00 machine-local time, its zsh runner sources
 `RESEND_API_KEY` from `~/.zshrc`, and its logs live under
@@ -430,42 +450,48 @@ launchd invokes Todo at 09:00 machine-local time, its zsh runner sources
 credential lease.
 
 Conversations has a content-addressed installation but no application database.
-Decisions owns its schema-version-3 database, write-once activation baseline,
-installed releases, provider selector, exact user `Stop` hook, release-local
-observer and daily runners, and body-free logs. Clockwork owns their successor
-60-second `decisions/observer` and local-09:00 `decisions/daily-email` schedule
-bindings and process history; a pre-cutover Decisions release still owns the
-two legacy LaunchAgents. The
+Krisis owns its additive schema-version-4 database, write-once activation
+baseline, observation coverage, Nucleus correlations, account outbox, Annals
+receipts, installed releases, provider selector, exact user `Stop` hook,
+release-local observer runner, and body-free logs. The database and logs retain
+their historical `Decisions` filesystem locations so the rename does not split
+persistent history. Clockwork owns the successor 60-second `krisis/observer`
+binding and process history; a pre-cutover Decisions release still owns the two
+legacy `decisions/observer` and `decisions/daily-email` schedule projections,
+whether Clockwork bindings or older LaunchAgents, which are disabled rather
+than renamed during the separately authorized cutover. The
 deployer refuses any pre-existing foreign `~/.codex/hooks.json`; it never merges,
 overwrites, removes, or trusts one. Codex owns exact-definition review through
-`/hooks`, and the actual client surface must be canaried after trust. Both
-scheduled runners can become Nucleus requesters—the observer routinely and the daily
-runner only during exceptional missed-observation catch-up—so quiesce both for
-Nucleus maintenance. A Decisions schema cutover additionally suspends its public
-hook command and drains the three-second hook timeout before the SQLite backup.
+`/hooks`, and the actual client surface must be canaried after trust. The Krisis
+observer is a Nucleus requester, so quiesce it for Nucleus maintenance. A
+Krisis schema cutover additionally suspends its public hook command and drains
+the three-second hook timeout before the SQLite backup.
 Default write-once activation stores the next whole Unix second, excluding the
 cutover second; only after that durable boundary does deployment publish the
 live hook, command, bindings, and services. Missed events are reconciled
 afterward. If rollback cannot prove database quiescence or restore every
 artifact, its release-independent maintenance gate remains, scheduler cleanup
 is attempted, and the public command is removed when that can be proved while
-the private transaction backup is retained. Email still owns the Resend
-credential and immediate transport.
+the private transaction backup is retained. Legacy Decisions review and digest
+state stays readable history; Krisis does not call Email.
 
 Semantics owns its content-addressed installation, provider selector,
-schema-version-1 database, body-free worker logs, and release-local worker
+schema-version-2 database, body-free worker logs, and release-local worker
 runner. Clockwork owns the successor 60-second `semantics/worker` schedule
 binding and process history; a pre-cutover Semantics release still owns its
 legacy LaunchAgent. The worker is the only automatic reconciler and admits at most one
 Nucleus job at a time. Deployment stops that worker, proves database
 quiescence, preserves the database and sidecars for rollback, validates the
-candidate against installed Decisions, Conversations, and Nucleus, then
+candidate against the exact Annals decisions library, Conversations, and
+Nucleus, and refuses the worker switch whenever an active or paused project
+lacks the selected feed identity or both Annals cursors. A pending feed
+activation is ready only when no such project exists. Deployment then
 publishes its selectors and schedule binding. Project folders contain only the participation
 marker; they do not contain or own Semantics database state.
 
 Clockwork is a separate non-agent scheduling product, not a Nucleus job mode.
 It records immutable launch definitions, binding state, and direct process
-outcomes only. Decisions and Semantics retain their domain queues, locks,
+outcomes only. Annals, Krisis, and Semantics retain their domain queues, locks,
 retry/idempotency rules, secrets, logs, and meanings of success; Nucleus remains
 the agent-execution dependency those products may call. Clockwork program
 deployment requires a separately supplied candidate Chancery reader to
@@ -484,13 +510,18 @@ deployer selected by `install/previous`; do not rewrite selectors or episode
 state by hand.
 
 Pratica owns its content-addressed CLI installation, provider selector, and
-schema-version-1 negotiation database. Deployment switches only immutable
-program and provider selectors and never opens or migrates the database;
-`pratica init` is separate. There is no daemon, LaunchAgent, schedule, runtime
-Chancery dependency, source crawler, direct Codex path, automatic retry, or
-version-0.1 uninstaller. Explicit steward, composition, and conformance
-commands synchronously use Nucleus. Rollback changes only program/provider
-selection and is safe only when the retained database schema remains readable.
+schema-version-2 negotiation database, including caller-keyed ingress receipts.
+Deployment switches only immutable program and provider selectors and never
+opens or migrates the database; `pratica init` is separate. The only supported
+schema upgrade is an explicit, quiescent version-1-to-version-2 migration that
+refuses active attempts and first writes a caller-selected private SQLite
+backup. Rollback after that migration requires the retained version-1 backup
+with the old binary; switching program/provider selectors alone is insufficient.
+There is no daemon, LaunchAgent, schedule, runtime Chancery dependency, source
+crawler, direct Codex path, automatic retry, or version-0.1 uninstaller.
+Explicit steward, composition, and conformance commands synchronously use
+Nucleus; stdin transport and caller-file ownership remain entirely Pratica and
+caller concerns.
 
 CRM owns its content-addressed CLI installation, provider selector, and local
 SQLite library. All CRM-owned content is stored as database `TEXT`. Deployment
@@ -557,28 +588,30 @@ Nucleus has no global drain mode. Quiescence is established at its requesters:
 
 1. Do not start a synchronous Todo creation, invoke `crm tell`, start a new
    Weaver submission, run a Pratica steward/composition/conformance review,
-   invoke `decisions observe process`, or start another manual requester job.
+   invoke `krisis observe process`, or start another manual requester job.
 2. If Weaver has a nonterminal current run, select its exact run ID and let it
    settle through `weaver wait RUN_ID`.
-3. Pause Annals and wait for its active delivery to settle:
+3. Pause both Annals library inboxes that are active and wait for their
+   independent deliveries to settle:
 
    ```sh
    annals inbox pause
    annals inbox status
+   annals --config "$HOME/Library/Application Support/Annals/decisions/config.toml" inbox pause
+   annals --config "$HOME/Library/Application Support/Annals/decisions/config.toml" inbox status
    ```
 
-4. Stop both Decisions schedules and the Semantics worker so periodic work
+4. Stop the Krisis observer and the Semantics worker so periodic work
    cannot admit new jobs. On a Clockwork-cut-over installation, first capture
    each selected digest **and enabled state** with `binding show`, then disable
    only keys that were enabled. Leave an already disabled or absent key
-   unchanged. On a legacy installation, boot out the three product labels instead.
+   unchanged. On a legacy installation, boot out the three old product labels instead.
    Never operate both scheduler forms for one runner. The `Stop` hook may still
    enqueue a content-free correlation, which is safe to process after
    maintenance:
 
    ```sh
-   clockwork binding show decisions/observer
-   clockwork binding show decisions/daily-email
+   clockwork binding show krisis/observer
    clockwork binding show semantics/worker
    # Repeat only for each key whose show result says enabled=true:
    clockwork binding disable OWNER/NAME
@@ -601,8 +634,8 @@ Nucleus has no global drain mode. Quiescence is established at its requesters:
    ```
 
 7. Perform the service, storage, or harness operation.
-8. Verify Nucleus and requester canaries before resuming Annals, both Decisions
-   schedules, the Semantics worker, or new Weaver or CRM work. For Clockwork,
+8. Verify Nucleus and requester canaries before resuming the Annals inboxes,
+   Krisis observer, Semantics worker, or new Weaver or CRM work. For Clockwork,
    switch only a key that step 4 recorded as enabled back to its exact captured
    digest; leave every originally disabled or absent key unchanged. For a
    legacy install, bootstrap only the exact previously loaded owned product
@@ -611,12 +644,12 @@ Nucleus has no global drain mode. Quiescence is established at its requesters:
 Stopping or replacing `nucleusd` while a job is active makes that attempt
 `lost`. The requester—not Nucleus—decides whether a new domain attempt is safe.
 The Todo daily-email LaunchAgent is not a Nucleus requester and does not need
-to be paused to establish Nucleus quiescence. Decisions' observer can start a
-classification job every 60 seconds; its daily runner can do so when
-reconciling a missed observation. Semantics can start one reconciliation job
-every 60 seconds. Restore all three schedule bindings or legacy services only after Nucleus is
-ready. Do not disable or reset the Decisions baseline or Semantics scan cursors:
-their durable queues are the intended recovery path.
+to be paused to establish Nucleus quiescence. Krisis' observer can start a
+classification job every 60 seconds, and Semantics can start one reconciliation
+job every 60 seconds. Restore only the bindings or legacy services captured as
+enabled after Nucleus is ready. Do not reset the Krisis baseline, observation
+coverage or outbox, or either Semantics cursor namespace: their durable state is
+the intended recovery path.
 
 ### Authentication recovery
 
@@ -831,17 +864,24 @@ submission and atomically commits the revision in its own SQLite database. The
 tool cannot send contact, schedule work, or turn an advisory note into an
 authorization or blocker.
 
-Decisions' current immutable requester toolset is
-`decisions/turn-classification/1`. It returns complete per-authority decision or
-no-decision verdicts for one serial observation scope. The historical
-`decisions/daily-classification/1` registration and decoder remain available
-for retained `legacy_scan` recovery; new daily projections do not submit that
-whole-thread job.
+Krisis' current immutable requester toolset is
+`krisis/decision-account-classification/1`. Its sole managed tool,
+`submit_decision_account_classification`, returns complete per-authority
+decision or no-decision verdicts and the normalized account projections for one
+serial observation scope. Context expansion is an operational nonterminal
+result, not a third verdict. The historical `decisions/turn-classification/1`
+and `decisions/daily-classification/1` registrations and decoders remain
+immutable only for retained legacy recovery; Krisis creates no new review or
+daily-classification work.
 
-Semantics' current immutable requester toolset is
-`semantics/semantic-reconciliation/1`. Its one managed call validates and
-atomically appends a project semantic revision; it cannot read the project
-filesystem, use shell or web tools, or change Decisions review state.
+Semantics uses the successor immutable
+`semantics/semantic-account-reconciliation/1` toolset for new Annals accounts.
+Its one managed call, `commit_account_semantic_reconciliation`, validates and
+atomically appends a project semantic revision with exact library, event, and
+account grounding. Historical Decisions correlations continue to use the
+immutable `semantics/semantic-reconciliation/1` decoder. Neither toolset can
+read the project filesystem, use shell or web tools, or mutate Annals or Krisis
+state.
 
 Pratica's immutable requester toolsets are `pratica/steward-response/1`,
 `pratica/composition-review/1`, and `pratica/conformance-review/1`. Each exposes
@@ -935,7 +975,7 @@ Mark each claim declared, unsupported, unspecified, or not applicable. Keep
 documentation-contract dependencies distinct from runtime, data, authority,
 readiness, and external reliance; do not mechanically reinterpret old edges.
 
-Make the product installer own its one Chancery provider selector. Validate
+Make the product installer own each Chancery provider selector it publishes. Validate
 the source bundle in product CI and prove installed list/show discovery and
 exact-ID resolution during deployment. A resolver gap is an owning-product
 contract gap, not permission to infer a promise from code or schema.
@@ -951,13 +991,13 @@ provider registry or documentation storage.
 | --- | --- | --- |
 | Todo concerns, routing and explicit decisions, identities, assessments, designs, lifecycle, provenance, database, email delivery, or deployment | Todo | Preserve its Nucleus adapter contract when affected; the direct Resend path does not become a Nucleus job, and Nucleus does not gain Todo fields. |
 | CRM intake, cases, evidence, revisions, advisories, queued steward runs, database, or deployment | CRM | Preserve its bounded Nucleus adapter and prominent nonblocking advisories; Nucleus gains no CRM fields, domain success, scheduling, or retry authority. |
-| Annals works, concepts, evidence, reconciliation, inbox, retry, or corpus migration | Annals | Preserve job correlation and adapter behavior when affected; Nucleus does not gain Annals workflow state. |
+| Annals works, physical-library identity, concepts, evidence, reconciliation, inbox, producer acceptance, decision feed, retry, or corpus migration | Annals | Keep primary and decisions libraries isolated; preserve job correlation and adapter behavior when affected; Nucleus does not gain Annals workflow state. |
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
 | Weaver workflow state, stage prompts, repository inputs or outputs, validation, cancellation, recovery, or deployment | Weaver | Preserve its Nucleus invocation and correlation contract; Nucleus does not gain narrative repository authority or retry policy. |
 | Email content, delivery, Resend access, fixed addresses, or deployment | Email | Keep the direct Resend path independent of Nucleus; Nucleus gains no email fields, credential, or delivery authority. |
 | Codex task enumeration, normalized transcript reads, App Server compatibility, or Conversations deployment | Conversations | Keep it read-only and separate from Nucleus's private Codex home; consumers must not treat persisted status as live-process proof. |
-| Decision semantics, candidates, reviews, daily completeness, digest rendering, schedule, or Decisions deployment | Decisions | Preserve source anchors and Nucleus job correlation; Nucleus gains no decision fields, and Email gains no schedule or digest state. |
-| Project registration, semantic concepts, grounding, revision history, decision intake, reconciliation policy, or Semantics deployment | Semantics | Preserve Decisions event identity, exact Conversations cwd routing, and Nucleus job correlation; no upstream gains Semantics state or success authority. |
+| Decision identification, observation coverage, account projection, source anchors, Annals delivery, or Krisis deployment | Krisis | Preserve exact user authority, deterministic account identity, Annals acceptance receipts, and Nucleus correlation; no downstream consumer gains classification authority and Nucleus gains no decision fields. |
+| Project registration, semantic concepts, grounding, revision history, Annals decision-account intake, reconciliation policy, or Semantics deployment | Semantics | Preserve Annals library/event/account identities, exact Conversations cwd routing, both legacy and new cursor histories, and Nucleus correlation; no upstream gains Semantics state or success authority. |
 | Geste episode identity, revisions, settlement grounding, search, report, graph, database, or deployment | Geste | Preserve source-system authority and immutable locators; no source gains episode state, and Geste gains no automatic source read or policy authority. |
 | Pratica steward scopes, offers, assent, agreement seals, bases, attempts, composition, conformance, database, or deployment | Pratica | Preserve exact opaque Markdown, target-system authority, frozen source disclosure, and Nucleus correlation; neither Nucleus nor a review gains party, implementation, or retry authority. |
 | New portable invocation meaning or HTTP behavior | Nucleus core/client/daemon | Version the public contract, update examples/tests/docs, then update affected requesters in compatible order. |
@@ -968,7 +1008,7 @@ provider registry or documentation storage.
 | Credential or credential-lease behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and canary every requester. |
 | Nucleus service layout or installer | Nucleus CLI/packaging | Preserve state/log ownership, rollback, launchd behavior, and requester configuration. |
 | Chancery bundle schema, catalog, contract reader, exact-ID resolver, or directory installation | Chancery | Preserve read-only behavior, failure isolation, exact basis, explicit gaps, complete installed inventory, and provider-owned selectors; do not introduce semantic matching or a product runtime dependency. |
-| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the fourteen-provider source graph, and update only that product's Chancery selector. |
+| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the fifteen-provider source graph, and update only that product's Chancery selectors. |
 
 ## Guarded change playbooks
 
@@ -1160,24 +1200,26 @@ Sending or previewing Todo's email digest does not exercise Nucleus and is not
 a requester canary. A Weaver canary replaces the selected narrative's current
 outputs; use a deliberate fixture or repository and validate the five persisted
 files rather than relying on Nucleus completion.
-For Decisions, canary only after its write-once baseline exists. Create one
-deliberate effectful root turn whose user message explicitly settles a choice,
-then verify the completed observation, source span, candidate, and correlated
-`decisions/turn-classification/1` job. A routine morning build over already
-observed coverage creates no Nucleus job and is not a requester canary. Use an
-isolated Decisions database when a durable canary record would be misleading.
+For Krisis, canary only after its write-once baseline and exact Annals decisions
+library identity exist. Create one deliberate root turn whose user message
+explicitly settles a choice, then verify binary authority coverage, the exact
+source span, deterministic account and outbox bytes, correlated
+`krisis/decision-account-classification/1` job, Annals acceptance receipt, and
+one matching decision-feed event. A turn need not change a file to qualify. Use
+isolated Krisis and Annals decisions-library state when durable canary records
+would be misleading.
 Conversations inspection alone is read-only and is not a Nucleus canary.
-For Semantics, register only an intended folder at the current Decisions
-watermark. A seed proves repository replay without creating a Nucleus job. A
-requester canary requires a new qualifying decision after activation: verify
-the intake receipt and committed semantic revision, not merely a terminal
-Nucleus job. Do not fabricate a durable decision or semantic revision solely to
-make a canary green; use an isolated database when no real project decision is
-available.
+For Semantics, register only an intended folder at the current Annals decisions
+feed watermark. A seed proves repository replay without creating a Nucleus job.
+A requester canary requires a newly accepted decision account after activation:
+verify the Annals event identity, intake receipt, exact grounding, and committed
+semantic revision, not merely a terminal Nucleus job. Do not fabricate a durable
+decision account or semantic revision solely to make a canary green; use
+isolated databases when no real project decision is available.
 For Geste, initialize state explicitly after deployment, then create a real
 episode and prove search, historical show, report, and graph from the installed
-database. Do not fabricate a Decisions event merely to label a settlement
-verified. If the effectful turn's admission is not yet available, retain a
+database. Do not fabricate a legacy Decisions event merely to label a
+settlement verified. If the intended source admission is not yet available, retain a
 provenance-bearing Todo for the later self-episode.
 For CRM, use an isolated database and deliberate `crm tell` content. Verify the
 durable queued run, one committed case revision, the correlated `crm` Nucleus
@@ -1301,7 +1343,7 @@ directory.
 - [CLI contract](/Users/joey/rust/cell/conversations/docs/cli.md)
 - [User-owned installation](/Users/joey/rust/cell/conversations/docs/system-installation.md)
 
-### Decisions
+### Krisis
 
 - [Documentation index](/Users/joey/rust/cell/decisions/docs/README.md)
 - [Architecture](/Users/joey/rust/cell/decisions/docs/architecture.md)

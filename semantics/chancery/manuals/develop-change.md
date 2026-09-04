@@ -1,19 +1,20 @@
 # Change Semantics safely
 
-Read `semantics/AGENTS.md`, architecture, data model, the affected Decisions and
-Conversations contracts, both Nucleus requester and operator manuals, and the
+Read `semantics/AGENTS.md`, architecture, data model, the affected Annals
+decision-account and Conversations contracts, both Nucleus requester and operator manuals, and the
 Clockwork schedule contract before
 changing persistent state, the toolset, service lifecycle, or packaging.
 
 ## Invariants
 
 - Project and concept IDs survive moves and wording changes.
-- Registration uses the current opaque Decisions watermark; moves preserve
-  activation and scan cursors.
+- Registration uses the current opaque Annals decisions-feed watermark; moves
+  preserve Annals and legacy Decisions activation and scan histories.
 - Repository state is replayed from contiguous immutable revisions and typed
   effects. Version one has no mutable concept projection.
-- Each effective admission or confirmation grounds its exact event and decision.
-  Dismissal appends `unground`; it never deletes provenance.
+- Each new account-derived revision grounds its exact Annals library, event,
+  and account identity without confidence or review behavior. Legacy
+  admission/review effects remain decodable and append-only.
 - Active normalized canonical labels are unique, new concept IDs are strictly
   sequential, and an entire revision validates before any effect commits.
 - Nucleus uses a neutral cwd, workspace `none`, no shell, no web, exactly one
@@ -26,7 +27,7 @@ changing persistent state, the toolset, service lifecycle, or packaging.
 
 ## Testing
 
-Use synthetic Decisions pages and Conversations cwd values. Nucleus integration
+Use synthetic Annals accepted-account pages and Conversations cwd values. Nucleus integration
 tests use the fake local server and immutable schemas; never connect CI to the
 live service. Packaging tests use fake candidate binaries, fake Clockwork, and fake launchctl in
 an isolated home. Fixtures contain no real user content, credentials, or

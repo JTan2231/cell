@@ -58,6 +58,9 @@ pub struct Project {
     pub current_path: String,
     pub activation_cursor: String,
     pub scan_cursor: String,
+    pub annals_library_id: Option<String>,
+    pub annals_activation_cursor: Option<String>,
+    pub annals_scan_cursor: Option<String>,
     pub next_concept_number: u64,
     pub current_revision: u64,
 }
@@ -66,6 +69,7 @@ pub struct Project {
 pub struct PathHistory {
     pub path: String,
     pub activation_cursor: String,
+    pub annals_activation_cursor: Option<String>,
     pub opened_at: String,
     pub closed_at: Option<String>,
 }
@@ -139,6 +143,11 @@ pub enum GroundingSource {
     Decision {
         event_id: String,
         decision_id: String,
+    },
+    AnnalsDecisionAccount {
+        library_id: String,
+        event_id: String,
+        account_id: String,
     },
     Seed {
         source_label: String,
@@ -344,14 +353,16 @@ impl Repository {
             } => {
                 validate_grounding_source(source)?;
                 validate_text("statement", statement)?;
-                if matches!(source, GroundingSource::Decision { .. })
-                    && self.concepts.values().any(|concept| {
-                        concept
-                            .grounds
-                            .iter()
-                            .any(|grounding| grounding.active && grounding.source == *source)
-                    })
-                {
+                if matches!(
+                    source,
+                    GroundingSource::Decision { .. }
+                        | GroundingSource::AnnalsDecisionAccount { .. }
+                ) && self.concepts.values().any(|concept| {
+                    concept
+                        .grounds
+                        .iter()
+                        .any(|grounding| grounding.active && grounding.source == *source)
+                }) {
                     return Err(Error::domain(
                         "grounding_already_active",
                         "the source already grounds an active concept",
@@ -576,6 +587,80 @@ pub struct DecisionEvent {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct DecisionAccountAnchor {
+    pub host_id: String,
+    pub thread_id: String,
+    pub turn_id: String,
+    pub item_id: String,
+    pub span_start: u64,
+    pub span_end: u64,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct DecisionAccountEvent {
+    pub library_id: String,
+    pub cursor: String,
+    pub event_id: String,
+    pub account_id: String,
+    pub account_schema_version: u32,
+    pub statement: String,
+    pub context: String,
+    pub action: String,
+    pub result: String,
+    pub occurred_at: i64,
+    pub occurred_at_precision: String,
+    pub authority: DecisionAccountAnchor,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AccountRoutingOutcome {
+    ProjectAssigned,
+    CwdMissing,
+    CwdUnavailable,
+    ProjectAmbiguous,
+}
+
+impl AccountRoutingOutcome {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ProjectAssigned => "project_assigned",
+            Self::CwdMissing => "cwd_missing",
+            Self::CwdUnavailable => "cwd_unavailable",
+            Self::ProjectAmbiguous => "project_ambiguous",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self> {
+        match value {
+            "project_assigned" => Ok(Self::ProjectAssigned),
+            "cwd_missing" => Ok(Self::CwdMissing),
+            "cwd_unavailable" => Ok(Self::CwdUnavailable),
+            "project_ambiguous" => Ok(Self::ProjectAmbiguous),
+            _ => Err(Error::domain(
+                "account_routing_outcome_invalid",
+                "stored account routing outcome is invalid",
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AccountIntake {
+    pub event_id: String,
+    pub source_cursor: String,
+    pub project_id: Option<String>,
+    pub status: IntakeStatus,
+    pub routing_outcome: AccountRoutingOutcome,
+    pub account: DecisionAccountEvent,
+    pub attempts: u64,
+    pub last_error: Option<String>,
+    pub terminal_reason: Option<String>,
+    pub applied_revision: Option<u64>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Intake {
     pub event_id: String,
     pub source_cursor: String,
@@ -610,6 +695,20 @@ pub fn validate_project_id(project_id: &str) -> Result<()> {
         return Err(Error::domain(
             "project_id_invalid",
             "project IDs must start with a lowercase letter and contain only lowercase ASCII letters, digits, and '-'",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_annals_library_id(library_id: &str) -> Result<()> {
+    let valid = library_id.len() == 32
+        && library_id
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+    if !valid {
+        return Err(Error::domain(
+            "annals_library_invalid",
+            "Annals library identity must be exactly 32 lowercase hexadecimal characters",
         ));
     }
     Ok(())
@@ -697,6 +796,15 @@ fn validate_grounding_source(source: &GroundingSource) -> Result<()> {
         } => {
             validate_text("event_id", event_id)?;
             validate_text("decision_id", decision_id)
+        }
+        GroundingSource::AnnalsDecisionAccount {
+            library_id,
+            event_id,
+            account_id,
+        } => {
+            validate_annals_library_id(library_id)?;
+            validate_text("event_id", event_id)?;
+            validate_text("account_id", account_id)
         }
         GroundingSource::Seed {
             source_label,

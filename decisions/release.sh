@@ -26,6 +26,7 @@ workspace_manifest=Cargo.toml
 lockfile_path=Cargo.lock
 manifest_path=decisions/crates/decisions/Cargo.toml
 provider_path=decisions/chancery/provider.json
+legacy_provider_path=decisions/chancery-legacy/provider.json
 ci_path=decisions/ci.sh
 
 for tool in awk git grep; do
@@ -47,6 +48,7 @@ command -v cargo >/dev/null 2>&1 || fail 'required tool not found: cargo'
 [ -f "$lockfile_path" ] || fail 'root Cargo.lock not found'
 [ -f "$manifest_path" ] || fail "package manifest not found: $manifest_path"
 [ -f "$provider_path" ] || fail "provider manifest not found: $provider_path"
+[ -f "$legacy_provider_path" ] || fail "provider manifest not found: $legacy_provider_path"
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
     || fail 'the workspace is not a Git worktree'
@@ -88,7 +90,7 @@ case "$bump" in
     major) major=$((major + 1)); minor=0; patch=0 ;;
 esac
 new_version="$major.$minor.$patch"
-tag="decisions-v$new_version"
+tag="krisis-v$new_version"
 local_revision=$(git rev-parse HEAD)
 
 git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null \
@@ -110,15 +112,16 @@ fi
 
 manifest_tmp="$manifest_path.release.$$"
 provider_tmp="$provider_path.release.$$"
+legacy_provider_tmp="$legacy_provider_path.release.$$"
 rollback_version_files=false
 cleanup() {
     status=$?
     trap - EXIT HUP INT TERM
     set +e
-    rm -f "$manifest_tmp" "$provider_tmp"
+    rm -f "$manifest_tmp" "$provider_tmp" "$legacy_provider_tmp"
     if [ "$rollback_version_files" = true ]; then
         git restore --staged --worktree -- \
-            "$manifest_path" "$lockfile_path" "$provider_path"
+            "$manifest_path" "$lockfile_path" "$provider_path" "$legacy_provider_path"
         printf 'release.sh: restored version files after failure\n' >&2
     fi
     exit "$status"
@@ -156,6 +159,18 @@ awk -v old="$current_version" -v new="$new_version" '
     || fail "unable to update $provider_path"
 mv "$provider_tmp" "$provider_path"
 
+awk -v old="$current_version" -v new="$new_version" '
+    BEGIN { changed = 0 }
+    index($0, "\"release\": \"" old "\"") {
+        sub("\"release\": \"" old "\"", "\"release\": \"" new "\"")
+        changed++
+    }
+    { print }
+    END { if (changed != 1) exit 1 }
+' "$legacy_provider_path" >"$legacy_provider_tmp" \
+    || fail "unable to update $legacy_provider_path"
+mv "$legacy_provider_tmp" "$legacy_provider_path"
+
 cargo metadata --manifest-path "$workspace_manifest" \
     --offline --format-version 1 >/dev/null \
     || fail 'unable to refresh Cargo.lock'
@@ -164,9 +179,9 @@ cargo metadata --manifest-path "$workspace_manifest" \
     || fail 'the bumped manifest and lockfile are not synchronized'
 "$ci_path"
 
-reported_version=$(target/release/decisions --version) \
+reported_version=$(target/release/krisis --version) \
     || fail 'unable to read release binary version'
-[ "$reported_version" = "decisions $new_version" ] \
+[ "$reported_version" = "krisis $new_version" ] \
     || fail "release binary reported an unexpected version: $reported_version"
 [ -z "$(git diff --cached --name-only)" ] \
     || fail 'the index changed while running release checks'
@@ -174,12 +189,12 @@ reported_version=$(target/release/decisions --version) \
     || fail 'untracked files appeared while running release checks'
 changed_files=$(git diff --name-only)
 expected_files=$(printf '%s\n' \
-    "$lockfile_path" "$provider_path" "$manifest_path")
+    "$lockfile_path" "$legacy_provider_path" "$provider_path" "$manifest_path")
 [ "$changed_files" = "$expected_files" ] \
     || fail 'files other than the package, provider, and lockfile changed'
 git diff --check
 
-git add -- "$manifest_path" "$lockfile_path" "$provider_path"
+git add -- "$manifest_path" "$lockfile_path" "$provider_path" "$legacy_provider_path"
 git diff --cached --check
 git commit -m "Release $tag"
 rollback_version_files=false
@@ -187,7 +202,7 @@ trap - EXIT HUP INT TERM
 
 [ -z "$(git status --porcelain --untracked-files=all)" ] \
     || fail 'the worktree changed while creating the release commit'
-if ! git tag -a "$tag" -m "Decisions v$new_version"; then
+if ! git tag -a "$tag" -m "Krisis v$new_version"; then
     printf 'release.sh: tagging failed; commit preserved; retry tag %s\n' \
         "$tag" >&2
     exit 1
@@ -199,4 +214,4 @@ if ! git push --atomic --set-upstream origin \
     exit 1
 fi
 
-printf 'Released Decisions %s\n' "$new_version"
+printf 'Released Krisis %s\n' "$new_version"

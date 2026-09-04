@@ -7,18 +7,20 @@ use std::time::Duration;
 use rusqlite::{Connection, OptionalExtension as _, TransactionBehavior, params};
 use sha2::{Digest as _, Sha256};
 
+use crate::account::{self, AnnalsReceipt, PendingAccount};
 use crate::error::{AppError, AppResult, Context as _};
 use crate::model::{
-    Candidate, DecisionEventAuthoritySpan, DecisionEventDecision, DecisionEventEnvelope,
-    DecisionEventReview, Delivery, DigestSnapshot, Observation, ObservationClassification,
-    ObservationFailure, ObservationStatus, PersistedCandidate, PersistedObservationClassification,
-    Run, SourceMessage, StoredCandidate, StoredSource,
+    AccountSource, Candidate, DecisionAccount, DecisionEventAuthoritySpan, DecisionEventDecision,
+    DecisionEventEnvelope, DecisionEventReview, Delivery, DigestSnapshot, Observation,
+    ObservationClassification, ObservationFailure, ObservationStatus, PersistedCandidate,
+    PersistedObservationClassification, Run, SourceMessage, StoredCandidate, StoredSource,
 };
 
 const SCHEMA: &str = include_str!("../schema.sql");
 const MIGRATION_2: &str = include_str!("../migration_2.sql");
 const MIGRATION_3: &str = include_str!("../migration_3.sql");
-const SCHEMA_VERSION: i64 = 3;
+const MIGRATION_4: &str = include_str!("../migration_4.sql");
+const SCHEMA_VERSION: i64 = 4;
 const EVENT_STREAM: &str = "decisions.lifecycle";
 const EVENT_ENVELOPE_VERSION: i64 = 1;
 
@@ -156,7 +158,7 @@ impl Store {
             0 => {
                 connection.execute_batch(SCHEMA).context(
                     "database_schema_failed",
-                    "unable to initialize Decisions schema",
+                    "unable to initialize Krisis schema",
                 )?;
                 connection
                     .execute(
@@ -176,6 +178,12 @@ impl Store {
                         [now_unix()],
                     )
                     .context("database_schema_failed", "unable to record schema migration")?;
+                connection
+                    .execute(
+                        "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(4, ?1)",
+                        [now_unix()],
+                    )
+                    .context("database_schema_failed", "unable to record schema migration")?;
             }
             1 => {
                 connection.execute_batch(MIGRATION_2).context(
@@ -183,8 +191,18 @@ impl Store {
                     "unable to migrate Decisions schema from version 1 to version 2",
                 )?;
                 migrate_v2_to_v3(&mut connection)?;
+                verify_legacy_observation_jobs_terminal(&connection)?;
+                migrate_v3_to_v4(&mut connection)?;
             }
-            2 => migrate_v2_to_v3(&mut connection)?,
+            2 => {
+                migrate_v2_to_v3(&mut connection)?;
+                verify_legacy_observation_jobs_terminal(&connection)?;
+                migrate_v3_to_v4(&mut connection)?;
+            }
+            3 => {
+                verify_legacy_observation_jobs_terminal(&connection)?;
+                migrate_v3_to_v4(&mut connection)?;
+            }
             SCHEMA_VERSION => {}
             newer if newer > SCHEMA_VERSION => {
                 return Err(AppError::new(
@@ -257,7 +275,7 @@ impl Store {
             .open(&lock_path)
             .context(
                 "observation_lock_failed",
-                "unable to open the private Decisions observation lock",
+                "unable to open the private Krisis observation lock",
             )?;
         inspect_private_database_file(&lock_path, true)?;
         let lock_result = if wait {
@@ -273,9 +291,9 @@ impl Store {
                     "observation_busy"
                 },
                 if wait {
-                    "unable to wait for the active Decisions observation"
+                    "unable to wait for the active Krisis observation"
                 } else {
-                    "another Decisions observation is being processed"
+                    "another Krisis observation is being processed"
                 },
             )
         })?;
@@ -556,6 +574,7 @@ impl Store {
         self.observation_status_window(None)
     }
 
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn observation_status_window(
         &self,
         window: Option<(i64, i64)>,
@@ -636,12 +655,29 @@ impl Store {
                     "unable to decode failed observation status",
                 )?
         };
+        let (accounts_pending_annals, accounts_accepted_by_annals): (i64, i64) = self
+            .connection
+            .query_row(
+                "SELECT
+                    COALESCE(SUM(status='pending'), 0),
+                    COALESCE(SUM(status='accepted'), 0)
+                 FROM decision_account_outbox",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .context(
+                "database_read_failed",
+                "unable to read Krisis account delivery status",
+            )?;
         Ok(ObservationStatus {
             observer_baseline_at: self.observer_baseline_at()?,
             queued: counts[0],
             processing: counts[1],
             complete: counts[2],
             failed: counts[3],
+            accounts_pending_annals: usize::try_from(accounts_pending_annals).unwrap_or(usize::MAX),
+            accounts_accepted_by_annals: usize::try_from(accounts_accepted_by_annals)
+                .unwrap_or(usize::MAX),
             failures,
         })
     }
@@ -1059,6 +1095,57 @@ impl Store {
         transaction.commit().context(
             "database_write_failed",
             "unable to commit the completed-turn source admission",
+        )
+    }
+
+    pub(crate) fn bind_observation_annals_target(
+        &mut self,
+        id: &str,
+        library_id: &str,
+        config_path: &str,
+    ) -> AppResult<()> {
+        if library_id.len() != 32
+            || !library_id
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            || !config_path.starts_with('/')
+        {
+            return Err(AppError::new(
+                "annals_configuration_invalid",
+                "the observation target requires a lowercase 32-hex library ID and absolute config path",
+            ));
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .context(
+                "database_write_failed",
+                "unable to lock the observation Annals target",
+            )?;
+        let changed = transaction
+            .execute(
+                "UPDATE observations SET
+                    annals_target_library_id=COALESCE(annals_target_library_id, ?2),
+                    annals_target_config_path=COALESCE(annals_target_config_path, ?3),
+                    updated_at=?4
+                 WHERE id=?1 AND status IN ('queued', 'processing')
+                   AND (annals_target_library_id IS NULL OR annals_target_library_id=?2)
+                   AND (annals_target_config_path IS NULL OR annals_target_config_path=?3)",
+                params![id, library_id, config_path, now_unix()],
+            )
+            .context(
+                "database_write_failed",
+                "unable to bind the observation Annals target",
+            )?;
+        if changed != 1 {
+            return Err(AppError::new(
+                "annals_target_conflict",
+                "the observation is already bound to a different Annals target",
+            ));
+        }
+        transaction.commit().context(
+            "database_write_failed",
+            "unable to commit the observation Annals target",
         )
     }
 
@@ -2044,10 +2131,12 @@ impl Store {
         &self,
         nucleus_job_id: &str,
         call_id: &str,
+        call_arguments_sha256: &str,
     ) -> AppResult<Option<ObservationClassificationReceipt>> {
         self.connection
             .query_row(
-                "SELECT result_json, is_error, classification_json
+                "SELECT result_json, is_error, classification_json,
+                        call_arguments_sha256
                  FROM observation_classification_receipts
                  WHERE nucleus_job_id=?1 AND call_id=?2",
                 params![nucleus_job_id, call_id],
@@ -2056,6 +2145,7 @@ impl Store {
                         row.get::<_, String>(0)?,
                         row.get::<_, i64>(1)?,
                         row.get::<_, Option<String>>(2)?,
+                        row.get::<_, Option<String>>(3)?,
                     ))
                 },
             )
@@ -2064,16 +2154,29 @@ impl Store {
                 "database_read_failed",
                 "unable to read observation classification receipt",
             )?
-            .map(|(result_json, is_error, classification_json)| {
-                let classification = classification_json
-                    .map(|value| decode_observation_classification(&value))
-                    .transpose()?;
-                Ok(ObservationClassificationReceipt {
-                    result_json,
-                    is_error: is_error != 0,
-                    classification,
-                })
-            })
+            .map(
+                |(result_json, is_error, classification_json, stored_arguments_sha256)| {
+                    if stored_arguments_sha256.as_deref() != Some(call_arguments_sha256)
+                        && (stored_arguments_sha256.is_some()
+                            || nucleus_job_id.starts_with("krisis-observe-"))
+                    {
+                        return Err(AppError::new(
+                            "classification_receipt_conflict",
+                            format!(
+                                "tool call {call_id} was replayed with different argument bytes"
+                            ),
+                        ));
+                    }
+                    let classification = classification_json
+                        .map(|value| decode_observation_classification(&value))
+                        .transpose()?;
+                    Ok(ObservationClassificationReceipt {
+                        result_json,
+                        is_error: is_error != 0,
+                        classification,
+                    })
+                },
+            )
             .transpose()
     }
 
@@ -2082,6 +2185,7 @@ impl Store {
         &mut self,
         nucleus_job_id: &str,
         call_id: &str,
+        call_arguments_sha256: &str,
         result_json: &str,
         is_error: bool,
         classification: Option<&ObservationClassification>,
@@ -2094,102 +2198,64 @@ impl Store {
                 "classification_receipt_invalid",
                 "unable to encode validated observation classification",
             )?;
-        let transaction = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .context(
-                "database_write_failed",
-                "unable to lock observation classification receipt",
-            )?;
-        if !is_error && classification_json.is_some() {
-            let job_status: String = transaction
+        if let Some(classification) = classification.filter(|value| !value.needs_context) {
+            if is_error {
+                return Err(AppError::new(
+                    "classification_receipt_invalid",
+                    "an error receipt cannot carry a terminal Krisis classification",
+                ));
+            }
+            let observation_id: String = self
+                .connection
                 .query_row(
-                    "SELECT status FROM observation_jobs WHERE nucleus_job_id=?1",
+                    "SELECT observation_id FROM observation_jobs WHERE nucleus_job_id=?1",
                     [nucleus_job_id],
                     |row| row.get(0),
                 )
                 .context(
                     "database_read_failed",
-                    "unable to verify observation classification winner",
+                    "unable to resolve the classified Krisis observation",
                 )?;
-            if job_status == "failed" {
-                return Err(AppError::new(
-                    "classification_receipt_late",
-                    "accepted classification arrived after terminal failure was committed",
-                ));
-            }
-        }
-        transaction
-            .execute(
-                "INSERT OR IGNORE INTO observation_classification_receipts(
-                    nucleus_job_id, call_id, result_json, is_error,
-                    classification_json, created_at
-                 ) VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
-                params![
+            self.complete_observation_with(&observation_id, classification, |transaction| {
+                persist_observation_classification_receipt_in(
+                    transaction,
                     nucleus_job_id,
                     call_id,
+                    call_arguments_sha256,
                     result_json,
-                    i64::from(is_error),
-                    classification_json,
-                    now_unix()
-                ],
-            )
-            .context(
-                "database_write_failed",
-                "unable to persist observation classification receipt",
-            )?;
-        let stored = transaction
-            .query_row(
-                "SELECT result_json, is_error, classification_json
-                 FROM observation_classification_receipts
-                 WHERE nucleus_job_id=?1 AND call_id=?2",
-                params![nucleus_job_id, call_id],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, i64>(1)?,
-                        row.get::<_, Option<String>>(2)?,
-                    ))
-                },
-            )
-            .context(
-                "database_read_failed",
-                "unable to verify observation classification receipt",
-            )?;
-        if stored.0 != result_json
-            || stored.1 != i64::from(is_error)
-            || stored.2 != classification_json
-        {
-            return Err(AppError::new(
-                "classification_receipt_conflict",
-                format!("tool call {call_id} already has different durable result bytes"),
-            ));
-        }
-        if stored.1 == 0 && stored.2.is_some() {
-            transaction
-                .execute(
-                    "UPDATE observation_jobs SET status='complete', failure_detail=NULL
-                     WHERE nucleus_job_id=?1 AND status NOT IN ('complete', 'failed')",
-                    [nucleus_job_id],
+                    false,
+                    classification_json.as_deref(),
                 )
+            })?;
+        } else {
+            let transaction = self
+                .connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
                 .context(
                     "database_write_failed",
-                    "unable to preserve accepted observation classification state",
+                    "unable to lock observation classification receipt",
                 )?;
+            persist_observation_classification_receipt_in(
+                &transaction,
+                nucleus_job_id,
+                call_id,
+                call_arguments_sha256,
+                result_json,
+                is_error,
+                classification_json.as_deref(),
+            )?;
+            transaction.commit().context(
+                "database_write_failed",
+                "unable to commit observation classification receipt",
+            )?;
         }
-        transaction.commit().context(
-            "database_write_failed",
-            "unable to commit observation classification receipt",
-        )?;
-        let classification = stored
-            .2
-            .map(|value| decode_observation_classification(&value))
-            .transpose()?;
-        Ok(ObservationClassificationReceipt {
-            result_json: stored.0,
-            is_error: stored.1 != 0,
-            classification,
-        })
+        self.observation_classification_receipt(nucleus_job_id, call_id, call_arguments_sha256)?
+            .ok_or_else(|| {
+                AppError::new(
+                    "classification_receipt_invalid",
+                    "durable observation classification receipt disappeared after commit",
+                )
+            })
     }
 
     pub(crate) fn persisted_observation_classification(
@@ -2215,16 +2281,81 @@ impl Store {
             .transpose()
     }
 
+    pub(crate) fn complete_observation_for_job(
+        &mut self,
+        nucleus_job_id: &str,
+        classification: &ObservationClassification,
+    ) -> AppResult<()> {
+        let observation_id: String = self
+            .connection
+            .query_row(
+                "SELECT observation_id FROM observation_jobs WHERE nucleus_job_id=?1",
+                [nucleus_job_id],
+                |row| row.get(0),
+            )
+            .context(
+                "database_read_failed",
+                "unable to resolve the classified Krisis observation",
+            )?;
+        self.complete_observation_if_needed(&observation_id, classification)
+    }
+
+    pub(crate) fn complete_observation_if_needed(
+        &mut self,
+        observation_id: &str,
+        classification: &ObservationClassification,
+    ) -> AppResult<()> {
+        let status: String = self
+            .connection
+            .query_row(
+                "SELECT status FROM observations WHERE id=?1",
+                [observation_id],
+                |row| row.get(0),
+            )
+            .context(
+                "database_read_failed",
+                "unable to inspect the classified Krisis observation",
+            )?;
+        if status == "complete" {
+            return Ok(());
+        }
+        self.complete_observation(observation_id, classification)
+    }
+
     #[allow(clippy::too_many_lines)]
     pub(crate) fn complete_observation(
         &mut self,
         observation_id: &str,
         classification: &ObservationClassification,
     ) -> AppResult<()> {
+        self.complete_observation_with(observation_id, classification, |_transaction| Ok(()))
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn complete_observation_with<F>(
+        &mut self,
+        observation_id: &str,
+        classification: &ObservationClassification,
+        persist_receipt: F,
+    ) -> AppResult<()>
+    where
+        F: FnOnce(&rusqlite::Transaction<'_>) -> AppResult<()>,
+    {
         if classification.needs_context {
             return Err(AppError::new(
                 "classification_incomplete",
                 "a context-expansion request cannot complete an observation",
+            ));
+        }
+        let rendered_accounts = classification
+            .accounts
+            .iter()
+            .map(|decision| account::render(decision).map(|markdown| (decision, markdown)))
+            .collect::<AppResult<Vec<_>>>()?;
+        if !classification.accounts.is_empty() && !classification.candidates.is_empty() {
+            return Err(AppError::new(
+                "classification_contract_conflict",
+                "an observation cannot mix Krisis accounts with legacy Decisions candidates",
             ));
         }
         let transaction = self
@@ -2234,12 +2365,30 @@ impl Store {
                 "database_write_failed",
                 "unable to lock observation completion",
             )?;
-        let (status, host_id, thread_id, turn_id): (String, String, String, String) = transaction
+        persist_receipt(&transaction)?;
+        let (status, host_id, thread_id, turn_id, target_library_id, target_config_path): (
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+        ) = transaction
             .query_row(
-                "SELECT status, host_id, thread_id, turn_id
+                "SELECT status, host_id, thread_id, turn_id,
+                        annals_target_library_id, annals_target_config_path
                  FROM observations WHERE id=?1",
                 [observation_id],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
             )
             .context(
                 "database_read_failed",
@@ -2249,6 +2398,14 @@ impl Store {
             return Err(AppError::new(
                 "observation_state_conflict",
                 format!("observation {observation_id} is not awaiting completion"),
+            ));
+        }
+        if !classification.accounts.is_empty()
+            && (target_library_id.is_none() || target_config_path.is_none())
+        {
+            return Err(AppError::new(
+                "annals_target_missing",
+                "a decision account cannot be created before its Annals target is bound",
             ));
         }
         let expected = {
@@ -2316,31 +2473,70 @@ impl Store {
                     "the classification authority set differs from the admitted user items",
                 ));
             }
-            let candidate_count = classification
-                .candidates
+            let account_count = classification
+                .accounts
                 .iter()
-                .filter(|candidate| candidate.authority.item_id == authority.item_id)
-                .count();
-            if (verdict.verdict == crate::model::AuthorityVerdict::Decision && candidate_count == 0)
+                .filter(|account| account.authority.item_id == authority.item_id)
+                .count()
+                + classification
+                    .candidates
+                    .iter()
+                    .filter(|candidate| candidate.authority.item_id == authority.item_id)
+                    .count();
+            if (verdict.verdict == crate::model::AuthorityVerdict::Decision && account_count == 0)
                 || (verdict.verdict == crate::model::AuthorityVerdict::NoDecision
-                    && candidate_count != 0)
+                    && account_count != 0)
             {
                 return Err(AppError::new(
                     "classification_coverage_invalid",
-                    "an authority verdict disagrees with its decision candidates",
+                    "an authority verdict disagrees with its decision accounts",
                 ));
             }
         }
-        if classification.candidates.iter().any(|candidate| {
-            !submitted.iter().any(|verdict| {
-                verdict.verdict == crate::model::AuthorityVerdict::Decision
-                    && verdict.authority.item_id == candidate.authority.item_id
+        if classification
+            .accounts
+            .iter()
+            .map(|account| account.authority.item_id.as_str())
+            .chain(
+                classification
+                    .candidates
+                    .iter()
+                    .map(|candidate| candidate.authority.item_id.as_str()),
+            )
+            .any(|item_id| {
+                !submitted.iter().any(|verdict| {
+                    verdict.verdict == crate::model::AuthorityVerdict::Decision
+                        && verdict.authority.item_id == item_id
+                })
             })
-        }) {
+        {
             return Err(AppError::new(
                 "classification_coverage_invalid",
-                "a decision candidate has no matching decision verdict",
+                "a decision account has no matching decision verdict",
             ));
+        }
+        for (decision, markdown) in rendered_accounts {
+            persist_decision_account_in(
+                &transaction,
+                decision,
+                &markdown,
+                target_library_id.as_deref().ok_or_else(|| {
+                    AppError::new("annals_target_missing", "Annals target library disappeared")
+                })?,
+                target_config_path.as_deref().ok_or_else(|| {
+                    AppError::new("annals_target_missing", "Annals target config disappeared")
+                })?,
+            )?;
+            transaction
+                .execute(
+                    "INSERT OR IGNORE INTO observation_accounts(observation_id, account_id)
+                     VALUES(?1, ?2)",
+                    params![observation_id, decision.id],
+                )
+                .context(
+                    "database_write_failed",
+                    "unable to attach decision account to observation",
+                )?;
         }
         if classification
             .candidates
@@ -2349,7 +2545,7 @@ impl Store {
         {
             return Err(AppError::new(
                 "classification_confidence_invalid",
-                "observation decisions must use high or medium confidence",
+                "legacy observation candidates must use high or medium confidence",
             ));
         }
         for candidate in &classification.candidates {
@@ -2365,7 +2561,7 @@ impl Store {
                 )
                 .context(
                     "database_write_failed",
-                    "unable to attach candidate to observation",
+                    "unable to attach a legacy candidate to an observation",
                 )?;
         }
         for verdict in &submitted {
@@ -3322,6 +3518,253 @@ impl Store {
             )),
         }
     }
+
+    pub(crate) fn pending_account(&self) -> AppResult<Option<PendingAccount>> {
+        self.connection
+            .query_row(
+                "SELECT account_id, account_markdown, source_sha256,
+                        target_library_id, target_config_path
+                 FROM decision_account_outbox
+                 WHERE status='pending'
+                 ORDER BY created_at, account_id LIMIT 1",
+                [],
+                |row| {
+                    Ok(PendingAccount {
+                        account_id: row.get(0)?,
+                        markdown: row.get(1)?,
+                        source_sha256: row.get(2)?,
+                        target_library_id: row.get(3)?,
+                        target_config_path: row.get(4)?,
+                    })
+                },
+            )
+            .optional()
+            .context(
+                "database_read_failed",
+                "unable to read the Krisis delivery outbox",
+            )
+    }
+
+    pub(crate) fn record_annals_acceptance(
+        &mut self,
+        pending: &PendingAccount,
+        receipt: &AnnalsReceipt,
+    ) -> AppResult<()> {
+        if receipt.contract_version != 1
+            || receipt.library_id != pending.target_library_id
+            || receipt.producer != "krisis"
+            || receipt.producer_key != pending.account_id
+            || receipt.source_sha256 != pending.source_sha256
+            || receipt.job_id.trim().is_empty()
+            || receipt.accepted_at.trim().is_empty()
+            || !matches!(receipt.acceptance.as_str(), "created" | "replayed")
+        {
+            return Err(AppError::new(
+                "annals_receipt_invalid",
+                "Annals receipt does not match the target-bound pending account",
+            ));
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .context(
+                "database_write_failed",
+                "unable to lock the Krisis delivery receipt",
+            )?;
+        let changed = transaction
+            .execute(
+                "UPDATE decision_account_outbox
+                 SET status='accepted', account_markdown=NULL,
+                     annals_contract_version=?2, annals_library_id=?3,
+                     annals_job_id=?4, annals_accepted_at=?5,
+                     annals_acceptance=?6, accepted_at=?7
+                 WHERE account_id=?1 AND producer='krisis' AND producer_key=?1
+                   AND status='pending' AND source_sha256=?8
+                   AND account_markdown=?9 AND target_library_id=?10
+                   AND target_config_path=?11",
+                params![
+                    pending.account_id,
+                    receipt.contract_version,
+                    receipt.library_id,
+                    receipt.job_id,
+                    receipt.accepted_at,
+                    receipt.acceptance,
+                    now_unix(),
+                    pending.source_sha256,
+                    pending.markdown,
+                    pending.target_library_id,
+                    pending.target_config_path
+                ],
+            )
+            .context(
+                "database_write_failed",
+                "unable to record the Annals acceptance receipt",
+            )?;
+        if changed != 1 {
+            return Err(AppError::new(
+                "account_outbox_conflict",
+                "pending decision-account delivery changed before receipt commit",
+            ));
+        }
+        transaction
+            .execute(
+                "UPDATE decision_accounts
+                 SET statement=NULL, authority_quote=NULL, context=NULL,
+                     action=NULL, result=NULL
+                 WHERE id=?1",
+                [&pending.account_id],
+            )
+            .context(
+                "database_write_failed",
+                "unable to retire accepted Krisis account fields",
+            )?;
+        transaction
+            .execute(
+                "DELETE FROM decision_account_sources
+                 WHERE account_id=?1 AND source_role!='authority'",
+                [&pending.account_id],
+            )
+            .context(
+                "database_write_failed",
+                "unable to retire accepted Krisis support anchors",
+            )?;
+        transaction
+            .execute(
+                "UPDATE observation_classification_receipts
+                 SET classification_json=NULL
+                 WHERE nucleus_job_id LIKE 'krisis-observe-%'
+                   AND nucleus_job_id IN (
+                    SELECT jobs.nucleus_job_id
+                    FROM observation_jobs jobs
+                    JOIN observation_accounts accounts
+                      ON accounts.observation_id=jobs.observation_id
+                    WHERE accounts.account_id=?1
+                 )",
+                [&pending.account_id],
+            )
+            .context(
+                "database_write_failed",
+                "unable to retire accepted Krisis classification fields",
+            )?;
+        transaction.commit().context(
+            "database_write_failed",
+            "unable to commit the Annals acceptance receipt",
+        )
+    }
+
+    pub(crate) fn state_directory(&self) -> &Path {
+        self.database_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+    }
+}
+
+fn persist_observation_classification_receipt_in(
+    transaction: &rusqlite::Transaction<'_>,
+    nucleus_job_id: &str,
+    call_id: &str,
+    call_arguments_sha256: &str,
+    result_json: &str,
+    is_error: bool,
+    classification_json: Option<&str>,
+) -> AppResult<()> {
+    if call_arguments_sha256.len() != 64
+        || !call_arguments_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(AppError::new(
+            "classification_receipt_invalid",
+            "tool-call argument digest must be lowercase SHA-256",
+        ));
+    }
+    if !is_error && classification_json.is_some() {
+        let job_status: String = transaction
+            .query_row(
+                "SELECT status FROM observation_jobs WHERE nucleus_job_id=?1",
+                [nucleus_job_id],
+                |row| row.get(0),
+            )
+            .context(
+                "database_read_failed",
+                "unable to verify observation classification winner",
+            )?;
+        if job_status == "failed" {
+            return Err(AppError::new(
+                "classification_receipt_late",
+                "accepted classification arrived after terminal failure was committed",
+            ));
+        }
+    }
+    transaction
+        .execute(
+            "INSERT OR IGNORE INTO observation_classification_receipts(
+                nucleus_job_id, call_id, call_arguments_sha256, result_json,
+                is_error, classification_json, created_at
+             ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                nucleus_job_id,
+                call_id,
+                call_arguments_sha256,
+                result_json,
+                i64::from(is_error),
+                classification_json,
+                now_unix()
+            ],
+        )
+        .context(
+            "database_write_failed",
+            "unable to persist observation classification receipt",
+        )?;
+    let stored = transaction
+        .query_row(
+            "SELECT result_json, is_error, classification_json,
+                    call_arguments_sha256
+             FROM observation_classification_receipts
+             WHERE nucleus_job_id=?1 AND call_id=?2",
+            params![nucleus_job_id, call_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            },
+        )
+        .context(
+            "database_read_failed",
+            "unable to verify observation classification receipt",
+        )?;
+    if stored.0 != result_json
+        || stored.1 != i64::from(is_error)
+        || stored.2.as_deref() != classification_json
+        || stored.3.as_deref() != Some(call_arguments_sha256)
+    {
+        return Err(AppError::new(
+            "classification_receipt_conflict",
+            format!("tool call {call_id} already has different durable result bytes"),
+        ));
+    }
+    if stored.1 == 0 && stored.2.is_some() {
+        let changed = transaction
+            .execute(
+                "UPDATE observation_jobs SET status='complete', failure_detail=NULL
+                 WHERE nucleus_job_id=?1 AND status NOT IN ('complete', 'failed')",
+                [nucleus_job_id],
+            )
+            .context(
+                "database_write_failed",
+                "unable to preserve accepted observation classification state",
+            )?;
+        if changed > 1 {
+            return Err(AppError::new(
+                "job_state_conflict",
+                "accepted classification matched multiple Krisis job correlations",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn delivery_for_occurrence_in(
@@ -3568,7 +4011,7 @@ fn migrate_v2_to_v3_with_schema(connection: &mut Connection, schema: &str) -> Ap
             "unable to record Decisions schema migration version 3",
         )?;
     transaction
-        .pragma_update(None, "user_version", SCHEMA_VERSION)
+        .pragma_update(None, "user_version", 3_i64)
         .context(
             "database_schema_failed",
             "unable to record Decisions schema version 3",
@@ -3577,6 +4020,57 @@ fn migrate_v2_to_v3_with_schema(connection: &mut Connection, schema: &str) -> Ap
         "database_schema_failed",
         "unable to commit Decisions schema migration from version 2 to version 3",
     )
+}
+
+fn migrate_v3_to_v4(connection: &mut Connection) -> AppResult<()> {
+    connection.execute_batch(MIGRATION_4).context(
+        "database_schema_failed",
+        "unable to migrate Decisions history to Krisis schema version 4",
+    )
+}
+
+fn verify_legacy_observation_jobs_terminal(connection: &Connection) -> AppResult<()> {
+    let has_observation_jobs: bool = connection
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM sqlite_master
+                WHERE type='table' AND name='observation_jobs'
+             )",
+            [],
+            |row| row.get(0),
+        )
+        .context(
+            "database_schema_failed",
+            "unable to inspect the legacy Decisions observation schema",
+        )?;
+    if !has_observation_jobs {
+        return Ok(());
+    }
+    let unsettled: i64 = connection
+        .query_row(
+            "SELECT COUNT(*)
+             FROM observation_jobs jobs
+             JOIN observations ON observations.id=jobs.observation_id
+             WHERE jobs.nucleus_job_id LIKE 'decisions-observe-%'
+               AND (
+                    jobs.status NOT IN ('complete', 'failed')
+                    OR observations.status NOT IN ('complete', 'failed')
+                    OR (jobs.status='complete' AND observations.status!='complete')
+               )",
+            [],
+            |row| row.get(0),
+        )
+        .context(
+            "database_schema_failed",
+            "unable to inspect legacy Decisions observation correlations",
+        )?;
+    if unsettled != 0 {
+        return Err(AppError::new(
+            "legacy_observation_unsettled",
+            "Krisis migration requires every legacy Decisions observation correlation to be terminal and every accepted classification to be domain-committed",
+        ));
+    }
+    Ok(())
 }
 
 fn append_admission_event(
@@ -3636,6 +4130,290 @@ fn append_review_event(
         }),
     };
     insert_decision_event(transaction, decision_id, Some(review_id), &envelope)
+}
+
+#[allow(clippy::too_many_lines)]
+fn persist_decision_account_in(
+    transaction: &rusqlite::Transaction<'_>,
+    decision: &DecisionAccount,
+    markdown: &str,
+    target_library_id: &str,
+    target_config_path: &str,
+) -> AppResult<()> {
+    let authority_start = i64::try_from(decision.authority_start).map_err(|_| {
+        AppError::new(
+            "account_span_invalid",
+            "decision authority start exceeds the supported range",
+        )
+    })?;
+    let authority_end = i64::try_from(decision.authority_end).map_err(|_| {
+        AppError::new(
+            "account_span_invalid",
+            "decision authority end exceeds the supported range",
+        )
+    })?;
+    let inserted = transaction
+        .execute(
+            "INSERT OR IGNORE INTO decision_accounts(
+                id, schema_version, occurred_at, timestamp_precision, statement,
+                authority_quote, context, action, result, authority_start,
+                authority_end, capture_rule_version, created_at
+             ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            params![
+                decision.id,
+                account::ACCOUNT_SCHEMA_VERSION,
+                decision.occurred_at,
+                decision.precision.as_str(),
+                decision.statement,
+                decision.authority_quote,
+                decision.context,
+                decision.action,
+                decision.result,
+                authority_start,
+                authority_end,
+                account::CAPTURE_RULE_VERSION,
+                now_unix()
+            ],
+        )
+        .context(
+            "database_write_failed",
+            "unable to persist a decision account",
+        )?;
+    let stored = transaction
+        .query_row(
+            "SELECT schema_version, occurred_at, timestamp_precision, statement,
+                    authority_quote, context, action, result, authority_start,
+                    authority_end, capture_rule_version
+             FROM decision_accounts WHERE id=?1",
+            [&decision.id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                    row.get::<_, i64>(8)?,
+                    row.get::<_, i64>(9)?,
+                    row.get::<_, String>(10)?,
+                ))
+            },
+        )
+        .context(
+            "database_read_failed",
+            "unable to verify a decision account",
+        )?;
+    if stored.0 != account::ACCOUNT_SCHEMA_VERSION
+        || stored.1 != decision.occurred_at
+        || stored.2 != decision.precision.as_str()
+        || stored.3.as_deref() != Some(decision.statement.as_str())
+        || stored.4.as_deref() != Some(decision.authority_quote.as_str())
+        || stored.5 != decision.context
+        || stored.6 != decision.action
+        || stored.7 != decision.result
+        || stored.8 != authority_start
+        || stored.9 != authority_end
+        || stored.10 != account::CAPTURE_RULE_VERSION
+    {
+        return Err(AppError::new(
+            "account_identity_conflict",
+            "decision identity already has different account content",
+        ));
+    }
+    if inserted == 1 {
+        persist_account_source_in(
+            transaction,
+            &decision.id,
+            "authority",
+            0,
+            &decision.authority,
+        )?;
+        for (role, sources) in [
+            ("context", &decision.context_sources),
+            ("action", &decision.action_sources),
+            ("result", &decision.result_sources),
+        ] {
+            for (order, source) in sources.iter().enumerate() {
+                persist_account_source_in(transaction, &decision.id, role, order, source)?;
+            }
+        }
+    }
+    verify_account_sources_in(transaction, decision)?;
+    let digest = account::sha256(markdown);
+    transaction
+        .execute(
+            "INSERT OR IGNORE INTO decision_account_outbox(
+                account_id, producer, producer_key, account_markdown,
+                source_sha256, target_library_id, target_config_path,
+                status, created_at
+             ) VALUES(?1, 'krisis', ?1, ?2, ?3, ?4, ?5, 'pending', ?6)",
+            params![
+                decision.id,
+                markdown,
+                digest,
+                target_library_id,
+                target_config_path,
+                now_unix()
+            ],
+        )
+        .context(
+            "database_write_failed",
+            "unable to enqueue a decision account for Annals",
+        )?;
+    let outbox: (String, String, String, Option<String>, String, String) = transaction
+        .query_row(
+            "SELECT producer, source_sha256, status, account_markdown,
+                    target_library_id, target_config_path
+             FROM decision_account_outbox WHERE account_id=?1 AND producer_key=?1",
+            [&decision.id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .context(
+            "database_read_failed",
+            "unable to verify a decision account outbox record",
+        )?;
+    if outbox.0 != "krisis"
+        || outbox.1 != digest
+        || !matches!(outbox.2.as_str(), "pending" | "accepted")
+        || (outbox.2 == "pending" && outbox.3.as_deref() != Some(markdown))
+        || (outbox.2 == "accepted" && outbox.3.is_some())
+        || outbox.4 != target_library_id
+        || outbox.5 != target_config_path
+    {
+        return Err(AppError::new(
+            "account_outbox_conflict",
+            "decision identity already has different delivery state",
+        ));
+    }
+    Ok(())
+}
+
+fn persist_account_source_in(
+    transaction: &rusqlite::Transaction<'_>,
+    account_id: &str,
+    role: &str,
+    order: usize,
+    source: &AccountSource,
+) -> AppResult<()> {
+    let order = i64::try_from(order).map_err(|_| {
+        AppError::new(
+            "account_source_invalid",
+            "decision account has too many supporting sources",
+        )
+    })?;
+    transaction
+        .execute(
+            "INSERT INTO decision_account_sources(
+                account_id, source_role, source_order, host_id, thread_id,
+                turn_id, item_id, message_role, occurred_at, timestamp_precision
+             ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                account_id,
+                role,
+                order,
+                source.host_id,
+                source.thread_id,
+                source.turn_id,
+                source.item_id,
+                source.role.as_str(),
+                source.occurred_at,
+                source.precision.as_str()
+            ],
+        )
+        .context(
+            "database_write_failed",
+            "unable to persist a decision account source",
+        )?;
+    Ok(())
+}
+
+fn verify_account_sources_in(
+    transaction: &rusqlite::Transaction<'_>,
+    decision: &DecisionAccount,
+) -> AppResult<()> {
+    let expected = std::iter::once(("authority", 0_usize, &decision.authority))
+        .chain(
+            [
+                ("context", &decision.context_sources),
+                ("action", &decision.action_sources),
+                ("result", &decision.result_sources),
+            ]
+            .into_iter()
+            .flat_map(|(role, sources)| {
+                sources
+                    .iter()
+                    .enumerate()
+                    .map(move |(order, source)| (role, order, source))
+            }),
+        )
+        .collect::<Vec<_>>();
+    let actual_count: i64 = transaction
+        .query_row(
+            "SELECT COUNT(*) FROM decision_account_sources WHERE account_id=?1",
+            [&decision.id],
+            |row| row.get(0),
+        )
+        .context(
+            "database_read_failed",
+            "unable to verify decision account sources",
+        )?;
+    if usize::try_from(actual_count).ok() != Some(expected.len()) {
+        return Err(AppError::new(
+            "account_identity_conflict",
+            "decision identity already has different source anchors",
+        ));
+    }
+    for (role, order, source) in expected {
+        let order = i64::try_from(order).map_err(|_| {
+            AppError::new(
+                "account_source_invalid",
+                "decision account has too many supporting sources",
+            )
+        })?;
+        let count: i64 = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM decision_account_sources
+                 WHERE account_id=?1 AND source_role=?2 AND source_order=?3
+                   AND host_id=?4 AND thread_id=?5 AND turn_id=?6 AND item_id=?7
+                   AND message_role=?8 AND occurred_at=?9 AND timestamp_precision=?10",
+                params![
+                    decision.id,
+                    role,
+                    order,
+                    source.host_id,
+                    source.thread_id,
+                    source.turn_id,
+                    source.item_id,
+                    source.role.as_str(),
+                    source.occurred_at,
+                    source.precision.as_str()
+                ],
+                |row| row.get(0),
+            )
+            .context(
+                "database_read_failed",
+                "unable to verify a decision account source",
+            )?;
+        if count != 1 {
+            return Err(AppError::new(
+                "account_identity_conflict",
+                "decision identity already has different source anchors",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn insert_decision_event(
@@ -4001,9 +4779,11 @@ mod tests {
     use std::fs;
     use std::os::unix::fs::{PermissionsExt as _, symlink};
 
+    use crate::account::AnnalsReceipt;
     use crate::model::{
-        AuthorityMessageVerdict, AuthorityVerdict, Candidate, Confidence, Disposition, MessageRole,
-        ObservationClassification, Precision, SourceMessage,
+        AccountSource, AuthorityMessageVerdict, AuthorityVerdict, Candidate, Confidence,
+        DecisionAccount, Disposition, MessageRole, ObservationClassification, Precision,
+        SourceMessage,
     };
 
     use rusqlite::Connection;
@@ -4012,6 +4792,47 @@ mod tests {
         MIGRATION_2, MIGRATION_3, Store, database_sidecars, encode_event_cursor,
         migrate_v2_to_v3_with_schema, now_unix, run_operation_lock_path,
     };
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct RetainedAnnalsReceipt {
+        status: String,
+        account_markdown: Option<String>,
+        contract_version: i64,
+        library_id: String,
+        producer: String,
+        producer_key: String,
+        source_sha256: String,
+        job_id: String,
+        accepted_at: String,
+        acceptance: String,
+    }
+
+    fn retained_annals_receipt(
+        store: &Store,
+        account_id: &str,
+    ) -> rusqlite::Result<RetainedAnnalsReceipt> {
+        store.connection.query_row(
+            "SELECT status, account_markdown, annals_contract_version,
+                    annals_library_id, producer, producer_key, source_sha256,
+                    annals_job_id, annals_accepted_at, annals_acceptance
+             FROM decision_account_outbox WHERE account_id=?1",
+            [account_id],
+            |row| {
+                Ok(RetainedAnnalsReceipt {
+                    status: row.get(0)?,
+                    account_markdown: row.get(1)?,
+                    contract_version: row.get(2)?,
+                    library_id: row.get(3)?,
+                    producer: row.get(4)?,
+                    producer_key: row.get(5)?,
+                    source_sha256: row.get(6)?,
+                    job_id: row.get(7)?,
+                    accepted_at: row.get(8)?,
+                    acceptance: row.get(9)?,
+                })
+            },
+        )
+    }
 
     const V1_FIXTURE: &str = r"
         PRAGMA foreign_keys=ON;
@@ -4113,6 +4934,49 @@ mod tests {
             reviewed_at INTEGER NOT NULL,
             review_source TEXT NOT NULL
         );
+        CREATE TABLE observations(
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            turn_id TEXT NOT NULL,
+            host_id TEXT,
+            thread_id TEXT,
+            status TEXT NOT NULL,
+            scope_level INTEGER NOT NULL DEFAULT 0,
+            attempt_epoch INTEGER NOT NULL DEFAULT 0,
+            outcome TEXT,
+            source_digest TEXT,
+            source_completed_at INTEGER,
+            source_not_completed_at INTEGER,
+            next_attempt_at INTEGER,
+            file_change_count INTEGER NOT NULL DEFAULT 0,
+            authority_occurred_at INTEGER,
+            failure_code TEXT,
+            failure_detail TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            completed_at INTEGER,
+            UNIQUE(session_id, turn_id)
+        );
+        CREATE TABLE observation_jobs(
+            observation_id TEXT NOT NULL REFERENCES observations(id) ON DELETE CASCADE,
+            scope_level INTEGER NOT NULL,
+            attempt INTEGER NOT NULL,
+            nucleus_job_id TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL,
+            request_digest TEXT,
+            admitted_at INTEGER,
+            failure_detail TEXT,
+            PRIMARY KEY(observation_id, scope_level, attempt)
+        );
+        CREATE TABLE observation_classification_receipts(
+            nucleus_job_id TEXT NOT NULL REFERENCES observation_jobs(nucleus_job_id) ON DELETE CASCADE,
+            call_id TEXT NOT NULL,
+            result_json TEXT NOT NULL,
+            is_error INTEGER NOT NULL,
+            classification_json TEXT,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY(nucleus_job_id, call_id)
+        );
         INSERT INTO candidates(
             id, decided_at, timestamp_precision, statement, disposition,
             confidence, rationale, supersedes_id, authority_start, authority_end,
@@ -4170,6 +5034,25 @@ mod tests {
         }
     }
 
+    fn decision_account(authority: &SourceMessage) -> DecisionAccount {
+        DecisionAccount {
+            id: "d_0123456789abcdef0123".to_owned(),
+            occurred_at: authority.occurred_at,
+            precision: authority.precision,
+            statement: "Use the dedicated decisions library.".to_owned(),
+            authority_quote: "Use the selected design.".to_owned(),
+            context: Some("Decision records need a scoped home.".to_owned()),
+            action: None,
+            result: None,
+            authority_start: 0,
+            authority_end: "Use the selected design.".len(),
+            authority: AccountSource::from_source(authority),
+            context_sources: Vec::new(),
+            action_sources: Vec::new(),
+            result_sources: Vec::new(),
+        }
+    }
+
     fn authority(thread_id: &str, turn_id: &str, item_id: &str, occurred_at: i64) -> SourceMessage {
         SourceMessage {
             host_id: "host".to_owned(),
@@ -4189,9 +5072,154 @@ mod tests {
         let state = directory.path().join("state");
         let database = state.join("decisions.db");
         let store = Store::open(&database)?;
-        assert_eq!(store.schema_version()?, 3);
+        assert_eq!(store.schema_version()?, 4);
         assert_eq!(fs::metadata(&state)?.permissions().mode() & 0o777, 0o700);
         assert_eq!(fs::metadata(&database)?.permissions().mode() & 0o777, 0o600);
+        Ok(())
+    }
+
+    #[test]
+    fn account_completion_atomically_creates_and_retires_outbox_body()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let mut store = Store::open(&directory.path().join("decisions.db"))?;
+        let observation = store.ingest_observation("session", "turn")?;
+        let authority = authority("thread", "turn", "item", 10);
+        store.bind_observation_source(
+            &observation.id,
+            "host",
+            "thread",
+            15,
+            "digest",
+            0,
+            std::slice::from_ref(&authority),
+        )?;
+        store.bind_observation_annals_target(
+            &observation.id,
+            "0123456789abcdef0123456789abcdef",
+            "/tmp/annals-decisions.toml",
+        )?;
+        let account = decision_account(&authority);
+        store.complete_observation(
+            &observation.id,
+            &ObservationClassification {
+                accounts: vec![account.clone()],
+                candidates: Vec::new(),
+                authority_verdicts: vec![AuthorityMessageVerdict {
+                    authority,
+                    verdict: AuthorityVerdict::Decision,
+                }],
+                needs_context: false,
+            },
+        )?;
+        let pending = store.pending_account()?.ok_or("missing account outbox")?;
+        assert_eq!(pending.account_id, account.id);
+        assert_eq!(
+            pending.target_library_id,
+            "0123456789abcdef0123456789abcdef"
+        );
+        assert_eq!(pending.target_config_path, "/tmp/annals-decisions.toml");
+        assert!(pending.markdown.starts_with("# Decision\n"));
+        let legacy_candidates: i64 =
+            store
+                .connection
+                .query_row("SELECT COUNT(*) FROM candidates", [], |row| row.get(0))?;
+        assert_eq!(legacy_candidates, 0);
+        store.record_annals_acceptance(
+            &pending,
+            &AnnalsReceipt {
+                contract_version: 1,
+                library_id: "0123456789abcdef0123456789abcdef".to_owned(),
+                producer: "krisis".to_owned(),
+                producer_key: account.id.clone(),
+                source_sha256: pending.source_sha256.clone(),
+                job_id: "job-1".to_owned(),
+                accepted_at: "2026-09-03T12:00:00Z".to_owned(),
+                acceptance: "created".to_owned(),
+            },
+        )?;
+        assert!(store.pending_account()?.is_none());
+        let retained = retained_annals_receipt(&store, &account.id)?;
+        assert_eq!(
+            retained,
+            RetainedAnnalsReceipt {
+                status: "accepted".to_owned(),
+                account_markdown: None,
+                contract_version: 1,
+                library_id: "0123456789abcdef0123456789abcdef".to_owned(),
+                producer: "krisis".to_owned(),
+                producer_key: account.id.clone(),
+                source_sha256: pending.source_sha256.clone(),
+                job_id: "job-1".to_owned(),
+                accepted_at: "2026-09-03T12:00:00Z".to_owned(),
+                acceptance: "created".to_owned(),
+            }
+        );
+        let retired_fields: (Option<String>, Option<String>) = store.connection.query_row(
+            "SELECT statement, authority_quote FROM decision_accounts WHERE id=?1",
+            [&account.id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        assert_eq!(retired_fields, (None, None));
+        Ok(())
+    }
+
+    #[test]
+    fn pending_account_replay_rejects_a_changed_annals_target()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let database = directory.path().join("decisions.db");
+        let observation_id;
+        {
+            let mut store = Store::open(&database)?;
+            let observation = store.ingest_observation("session", "turn")?;
+            observation_id = observation.id.clone();
+            let authority = authority("thread", "turn", "item", 10);
+            store.bind_observation_source(
+                &observation.id,
+                "host",
+                "thread",
+                15,
+                "digest",
+                0,
+                std::slice::from_ref(&authority),
+            )?;
+            store.bind_observation_annals_target(
+                &observation.id,
+                "0123456789abcdef0123456789abcdef",
+                "/tmp/annals-decisions.toml",
+            )?;
+            let account = decision_account(&authority);
+            store.complete_observation(
+                &observation.id,
+                &ObservationClassification {
+                    accounts: vec![account],
+                    candidates: Vec::new(),
+                    authority_verdicts: vec![AuthorityMessageVerdict {
+                        authority,
+                        verdict: AuthorityVerdict::Decision,
+                    }],
+                    needs_context: false,
+                },
+            )?;
+        }
+
+        let mut reopened = Store::open(&database)?;
+        let pending = reopened
+            .pending_account()?
+            .ok_or("missing pending account")?;
+        assert_eq!(pending.target_config_path, "/tmp/annals-decisions.toml");
+        assert_eq!(
+            reopened
+                .bind_observation_annals_target(
+                    &observation_id,
+                    "fedcba9876543210fedcba9876543210",
+                    "/tmp/other-annals.toml",
+                )
+                .err()
+                .map(|error| error.code),
+            Some("annals_target_conflict")
+        );
         Ok(())
     }
 
@@ -4238,7 +5266,7 @@ mod tests {
             assert_eq!(metadata_tables, 0);
         }
         let store = Store::open(&database)?;
-        assert_eq!(store.schema_version()?, 3);
+        assert_eq!(store.schema_version()?, 4);
         let legacy_kind: String = store.connection.query_row(
             "SELECT run_kind FROM runs WHERE id='legacy'",
             [],
@@ -4273,7 +5301,7 @@ mod tests {
         }
 
         let store = Store::open(&database)?;
-        assert_eq!(store.schema_version()?, 3);
+        assert_eq!(store.schema_version()?, 4);
         let page = store.read_events(&encode_event_cursor(0), 100)?;
         assert_eq!(page.events.len(), 3);
         assert!(!page.has_more);
@@ -4317,6 +5345,65 @@ mod tests {
     }
 
     #[test]
+    fn krisis_migration_refuses_unsettled_legacy_observation_correlations()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for (name, job_status, with_receipt) in [
+            ("planned", "planned", false),
+            ("submitted", "submitted", false),
+            ("receipt-bearing", "complete", true),
+        ] {
+            let directory = tempfile::tempdir()?;
+            let database = directory.path().join(format!("{name}.db"));
+            {
+                let mut connection = Connection::open(&database)?;
+                connection.execute_batch(V1_FIXTURE)?;
+                connection.execute_batch(MIGRATION_2)?;
+                migrate_v2_to_v3_with_schema(&mut connection, MIGRATION_3)?;
+                connection.execute(
+                    "INSERT INTO observations(
+                        id, session_id, turn_id, host_id, thread_id, status,
+                        source_digest, source_completed_at, created_at, updated_at
+                     ) VALUES('o_legacy', 'session', 'turn', 'host', 'thread',
+                              'processing', 'digest', 10, 1, 1)",
+                    [],
+                )?;
+                connection.execute(
+                    "INSERT INTO observation_jobs(
+                        observation_id, scope_level, attempt, nucleus_job_id,
+                        status, request_digest, admitted_at
+                     ) VALUES('o_legacy', 0, 0, 'decisions-observe-legacy', ?1,
+                              'request-digest', 2)",
+                    [job_status],
+                )?;
+                if with_receipt {
+                    connection.execute(
+                        "INSERT INTO observation_classification_receipts(
+                            nucleus_job_id, call_id, result_json, is_error,
+                            classification_json, created_at
+                         ) VALUES(
+                            'decisions-observe-legacy', 'call',
+                            '{\"accepted\":true,\"candidate_count\":0}', 0,
+                            '[]', 3
+                         )",
+                        [],
+                    )?;
+                }
+            }
+            assert_eq!(
+                Store::open(&database).err().map(|error| error.code),
+                Some("legacy_observation_unsettled"),
+                "migration accepted {name} legacy state"
+            );
+            let connection = Connection::open(&database)?;
+            assert_eq!(
+                connection.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))?,
+                3
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn lifecycle_stream_is_ordered_private_and_cursor_idempotent()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
@@ -4338,6 +5425,7 @@ mod tests {
         store.complete_observation(
             &observation.id,
             &ObservationClassification {
+                accounts: Vec::new(),
                 candidates: vec![admitted.clone()],
                 authority_verdicts: vec![AuthorityMessageVerdict {
                     authority,
@@ -4417,6 +5505,7 @@ mod tests {
                 .complete_observation(
                     &observation.id,
                     &ObservationClassification {
+                        accounts: Vec::new(),
                         candidates: vec![admitted.clone()],
                         authority_verdicts: vec![AuthorityMessageVerdict {
                             authority,
@@ -4463,6 +5552,7 @@ mod tests {
             &authorities,
         )?;
         let incomplete = ObservationClassification {
+            accounts: Vec::new(),
             candidates: Vec::new(),
             authority_verdicts: vec![AuthorityMessageVerdict {
                 authority: authorities[0].clone(),
@@ -4484,6 +5574,7 @@ mod tests {
         )?;
         assert_eq!(persisted, 0);
         let complete = ObservationClassification {
+            accounts: Vec::new(),
             candidates: Vec::new(),
             authority_verdicts: authorities
                 .iter()
@@ -4509,6 +5600,105 @@ mod tests {
     }
 
     #[test]
+    fn observation_receipt_is_atomic_and_replay_binds_exact_arguments()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const ARGUMENTS_SHA256: &str =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const OTHER_ARGUMENTS_SHA256: &str =
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+        let directory = tempfile::tempdir()?;
+        let mut store = Store::open(&directory.path().join("decisions.db"))?;
+        let observation = store.ingest_observation("session", "turn")?;
+        let authority = authority("thread", "turn", "item", 10);
+        store.bind_observation_source(
+            &observation.id,
+            "host",
+            "thread",
+            15,
+            "digest",
+            0,
+            std::slice::from_ref(&authority),
+        )?;
+        store.plan_observation_job(&observation.id, 0, 0, "krisis-observe-job")?;
+        store.begin_job_admission("krisis-observe-job")?;
+
+        let incomplete = ObservationClassification {
+            accounts: Vec::new(),
+            candidates: Vec::new(),
+            authority_verdicts: Vec::new(),
+            needs_context: false,
+        };
+        assert_eq!(
+            store
+                .persist_observation_classification_receipt(
+                    "krisis-observe-job",
+                    "call",
+                    ARGUMENTS_SHA256,
+                    r#"{"accepted":true,"account_count":0,"needs_context":false}"#,
+                    false,
+                    Some(&incomplete),
+                )
+                .err()
+                .map(|error| error.code),
+            Some("classification_coverage_invalid")
+        );
+        let receipts: i64 = store.connection.query_row(
+            "SELECT COUNT(*) FROM observation_classification_receipts",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(receipts, 0);
+        assert_eq!(store.observation(&observation.id)?.status, "processing");
+        assert_eq!(store.job_status("krisis-observe-job")?, "submitted");
+
+        let complete = ObservationClassification {
+            accounts: Vec::new(),
+            candidates: Vec::new(),
+            authority_verdicts: vec![AuthorityMessageVerdict {
+                authority,
+                verdict: AuthorityVerdict::NoDecision,
+            }],
+            needs_context: false,
+        };
+        let result_json = r#"{"accepted":true,"account_count":0,"needs_context":false}"#;
+        let receipt = store.persist_observation_classification_receipt(
+            "krisis-observe-job",
+            "call",
+            ARGUMENTS_SHA256,
+            result_json,
+            false,
+            Some(&complete),
+        )?;
+        assert_eq!(receipt.result_json, result_json);
+        assert_eq!(store.observation(&observation.id)?.status, "complete");
+        assert_eq!(store.job_status("krisis-observe-job")?, "complete");
+        assert_eq!(
+            store
+                .observation_classification_receipt(
+                    "krisis-observe-job",
+                    "call",
+                    ARGUMENTS_SHA256,
+                )?
+                .ok_or("missing exact replay receipt")?
+                .result_json,
+            result_json
+        );
+        assert_eq!(
+            store
+                .observation_classification_receipt(
+                    "krisis-observe-job",
+                    "call",
+                    OTHER_ARGUMENTS_SHA256,
+                )
+                .err()
+                .map(|error| error.code),
+            Some("classification_receipt_conflict")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn observation_rejects_low_confidence_instead_of_silently_dropping_it()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
@@ -4529,6 +5719,7 @@ mod tests {
         candidate.authority = authority.clone();
         candidate.confidence = Confidence::Low;
         let classification = ObservationClassification {
+            accounts: Vec::new(),
             candidates: vec![candidate],
             authority_verdicts: vec![AuthorityMessageVerdict {
                 authority,
@@ -4934,6 +6125,7 @@ mod tests {
         store.complete_observation(
             &admitted.id,
             &ObservationClassification {
+                accounts: Vec::new(),
                 candidates: Vec::new(),
                 authority_verdicts: vec![AuthorityMessageVerdict {
                     authority: admitted_authority,

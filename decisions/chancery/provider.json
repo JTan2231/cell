@@ -1,48 +1,47 @@
 {
   "schema_version": 3,
   "provider": {
-    "id": "decisions",
-    "name": "Decisions",
-    "release": "0.3.4"
+    "id": "krisis",
+    "name": "Krisis",
+    "release": "0.4.0"
   },
   "promise_scope": {
     "authoritative_for": [
-      "Decisions owns its durable runs, observations, admitted candidates, normalized candidate meaning, source anchors, append-only reviews, lifecycle-event order and envelopes, daily projections and snapshots, and delivery attempts.",
-      "Decisions SQLite is authoritative for those records and their domain transitions."
+      "Krisis owns eligible completed-turn observation, binary per-authority classification coverage, stable decision-account identity and rendering, its durable delivery outbox, and its Annals acceptance receipts.",
+      "The migration-compatible Krisis SQLite projection is authoritative for those operational records and retains retired Decisions history without making Krisis a decision library."
     ],
     "not_authoritative_for": [
-      "Only the cited user message supplies decision authority; file activity selects an enacted turn but does not make a decision.",
-      "Conversations owns normalized conversation-source resolution, Nucleus owns bounded execution and retained request and output records, Email owns transport acceptance, and lifecycle consumers own their copied state, cursor, policy, retry, retention, and domain success."
+      "Only the cited user message supplies decision authority; Krisis does not judge correctness, importance, enactment, current force, relevance, or materiality.",
+      "Conversations owns normalized conversation resolution, Nucleus owns bounded execution evidence, and Annals owns the accepted decision library and its search and retrieval behavior."
     ],
     "inventory": {
       "covers": [
-        "All supported public Decisions CLI outcomes, supported local-product consumer surfaces, installation and recovery operations, and development operations in this release."
+        "All supported public Krisis capture outcomes, installation and recovery operations, and development operations in this release."
       ],
       "completeness": "complete",
       "excludes": [
-        "Help and version display, implementation primitives, direct SQLite access, upstream product capabilities, client-side hook trust, current runtime readiness, and downstream consumer behavior are outside this inventory claim."
+        "Help and version display, implementation primitives, direct SQLite access, retired digest and review operations, upstream product capabilities, current runtime readiness, and downstream Annals behavior are outside this inventory claim."
       ]
     },
     "shared_access_and_trust": [
-      "Decisions interfaces are local-user surfaces; each entry separately declares whether it reads, writes, or invokes another product.",
-      "A published read surface does not authorize direct SQLite access, mutation through that surface, or downstream interpretation as Decisions authority."
+      "Krisis interfaces are local-current-user surfaces; each entry declares its reads, writes, and cross-product invocations.",
+      "Catalog presence does not authorize deployment, live state changes, direct database access, or interpretation of model output as decision authority."
     ],
     "shared_privacy_and_retention": [
-      "Decisions state is private local-user state and may contain normalized decision text and machine-local source anchors.",
-      "A capability may disclose or invoke another product only where its own entry explicitly says so; no general disclosure or retention promise follows from provider installation."
+      "Krisis state is private local-user state and may temporarily contain bounded normalized conversation text and pending decision-account prose.",
+      "After Annals acceptance Krisis retains minimal correlation, coverage, anchor, digest, and receipt records; Nucleus and Annals own their separately documented retention."
     ],
     "compatibility_and_retirement": [
-      "Provider release identifies these exact bundle bytes, and entry contract versions identify documented semantic compatibility.",
-      "No additional cross-release support, migration window, or deprecation period is promised unless an entry declares it."
+      "Provider release identifies these exact bundle bytes, while entry contracts, SQLite schema 4, classifier schemas, and downstream contracts are separate compatibility axes.",
+      "Retired Decisions state remains migration-decodable and its lifecycle stream remains read-only for existing consumers; digest, review, email, and daily scheduling are disabled."
     ],
     "operational_limits": [
-      "Inventory completeness concerns published interfaces and operations, not live service readiness, downstream availability, or unlimited throughput and retention.",
-      "Per-entry contracts own command bounds, failure behavior, recovery, and any narrower non-guarantees."
+      "Observation is serial and each classification scope is bounded to 64 messages, 262144 UTF-8 bytes, and 100 accounts.",
+      "No availability, latency, throughput, output, or retention service-level objective is promised."
     ]
   },
   "entries": [
-    "entries/daily-digest.json",
-    "entries/lifecycle-consume.json",
+    "entries/decision-capture.json",
     "entries/install-operate.json",
     "entries/develop-change.json"
   ]

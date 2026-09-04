@@ -41,7 +41,7 @@ pub struct Cli {
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
     /// Create a new library without replacing an existing file.
-    Init,
+    Init(InitArgs),
     /// Upgrade an existing library to the current schema.
     Migrate,
     /// Report storage, workflow, and history statistics.
@@ -67,6 +67,9 @@ pub enum Command {
     /// Process and inspect the configured filesystem inbox.
     #[command(subcommand)]
     Inbox(InboxCommand),
+    /// Read the accepted Krisis decision-account feed.
+    #[command(name = "decision-feed", subcommand)]
+    DecisionFeed(DecisionFeedCommand),
     /// Submit, inspect, validate, and apply coherent corpus reconciliations.
     #[command(subcommand)]
     Change(ChangeCommand),
@@ -80,6 +83,19 @@ pub enum Command {
     Diff(DiffArgs),
     /// Create a new commit that inverses an earlier commit.
     Revert(RevertArgs),
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct InitArgs {
+    /// Immutable library role selected at creation.
+    #[arg(long, value_enum, default_value_t = CliLibraryKind::General)]
+    pub kind: CliLibraryKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CliLibraryKind {
+    General,
+    Decisions,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -236,6 +252,8 @@ pub enum InboxCommand {
     Register(InboxRunArgs),
     /// Copy explicit files into durable queued jobs.
     Enqueue(InboxEnqueueArgs),
+    /// Idempotently accept one Krisis decision account.
+    Accept(InboxAcceptArgs),
     /// Move queued jobs into the priority lane.
     Prioritize(InboxPriorityArgs),
     /// Return queued jobs to the normal lane.
@@ -254,6 +272,27 @@ pub enum InboxCommand {
     Retry(InboxRetryCommand),
     /// Report queued, active, completed, duplicate, and failed inbox state.
     Status,
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum DecisionFeedCommand {
+    /// Freeze and report the current accepted-account watermark.
+    Watermark,
+    /// Read one bounded page fixed to a previously returned watermark.
+    Page(DecisionFeedPageArgs),
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct DecisionFeedPageArgs {
+    /// Opaque accepted-account watermark.
+    #[arg(long, value_name = "TOKEN")]
+    pub watermark: String,
+    /// Opaque cursor after which the page starts.
+    #[arg(long, value_name = "TOKEN")]
+    pub after: String,
+    /// Maximum number of accepted accounts in the page.
+    #[arg(long, value_name = "N", default_value_t = 100)]
+    pub limit: usize,
 }
 
 #[derive(Debug, Clone, Subcommand)]
@@ -342,6 +381,19 @@ pub struct InboxEnqueueArgs {
     /// Dispatch these jobs before normal queued jobs.
     #[arg(long)]
     pub priority: bool,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct InboxAcceptArgs {
+    /// Producer identity. Version one accepts only `krisis`.
+    #[arg(long, value_name = "PRODUCER")]
+    pub producer: String,
+    /// Stable producer-scoped decision identifier.
+    #[arg(long, value_name = "ID")]
+    pub key: String,
+    /// Complete immutable decision-account Markdown file.
+    #[arg(value_name = "FILE")]
+    pub input: PathBuf,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -484,8 +536,9 @@ mod tests {
     use clap::Parser;
 
     use super::{
-        ChangeCommand, Cli, Command, ConceptCommand, InboxCommand, InboxInterruptDisposition,
-        InboxRetryCommand, IngestionChannel, IngestionStatus, LatelyTime, WorkCommand,
+        ChangeCommand, Cli, CliLibraryKind, Command, ConceptCommand, DecisionFeedCommand,
+        InboxCommand, InboxInterruptDisposition, InboxRetryCommand, IngestionChannel,
+        IngestionStatus, InitArgs, LatelyTime, WorkCommand,
     };
 
     #[test]
@@ -567,6 +620,39 @@ mod tests {
     }
 
     #[test]
+    fn decision_account_exchange_commands_parse() {
+        assert!(matches!(
+            Cli::try_parse_from([
+                "annals",
+                "inbox",
+                "accept",
+                "--producer",
+                "krisis",
+                "--key",
+                "d1",
+                "account.md",
+            ])
+            .map(|cli| cli.command),
+            Ok(Command::Inbox(InboxCommand::Accept(_)))
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "annals",
+                "decision-feed",
+                "page",
+                "--watermark",
+                "opaque",
+                "--after",
+                "cursor",
+                "--limit",
+                "20",
+            ])
+            .map(|cli| cli.command),
+            Ok(Command::DecisionFeed(DecisionFeedCommand::Page(_)))
+        ));
+    }
+
+    #[test]
     fn lately_filters_parse() {
         for basis in ["created", "modified", "first-seen", "ingested", "completed"] {
             assert!(Cli::try_parse_from(["annals", "lately", "--by", basis]).is_ok());
@@ -601,6 +687,23 @@ mod tests {
         assert!(Cli::try_parse_from(["annals", "integrate"]).is_err());
         assert!(Cli::try_parse_from(["annals", "integrate", "paper.txt"]).is_ok());
         assert!(Cli::try_parse_from(["annals", "integrate", "--work", "Existing paper"]).is_ok());
+    }
+
+    #[test]
+    fn init_defaults_to_general_and_accepts_decisions_kind() {
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "init"]).map(|cli| cli.command),
+            Ok(Command::Init(InitArgs {
+                kind: CliLibraryKind::General
+            }))
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["annals", "init", "--kind", "decisions"]).map(|cli| cli.command),
+            Ok(Command::Init(InitArgs {
+                kind: CliLibraryKind::Decisions
+            }))
+        ));
+        assert!(Cli::try_parse_from(["annals", "init", "--kind", "archive"]).is_err());
     }
 
     #[test]

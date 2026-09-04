@@ -110,6 +110,44 @@ pub(crate) struct SubmittedObservationClassification {
     pub(crate) complete: bool,
 }
 
+/// The only model-authored positive payload in the active Krisis contract.
+///
+/// Source aliases are resolved to private local anchors after validation; the
+/// model never sees or supplies real host, thread, turn, or item identifiers.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SubmittedDecisionAccount {
+    pub(crate) authority_source_id: String,
+    pub(crate) authority_quote: String,
+    #[serde(default)]
+    pub(crate) context_source_ids: Vec<String>,
+    #[serde(default)]
+    pub(crate) action_source_ids: Vec<String>,
+    #[serde(default)]
+    pub(crate) result_source_ids: Vec<String>,
+    pub(crate) statement: String,
+    pub(crate) context: Option<String>,
+    pub(crate) action: Option<String>,
+    pub(crate) result: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SubmittedAccountClassification {
+    pub(crate) verdicts: Vec<SubmittedAccountVerdict>,
+    pub(crate) needs_context: bool,
+    pub(crate) complete: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SubmittedAccountVerdict {
+    pub(crate) authority_source_id: String,
+    pub(crate) verdict: AuthorityVerdict,
+    #[serde(default)]
+    pub(crate) accounts: Vec<SubmittedDecisionAccount>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SubmittedAuthorityVerdict {
@@ -143,9 +181,54 @@ pub(crate) struct AuthorityMessageVerdict {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ObservationClassification {
+    pub(crate) accounts: Vec<DecisionAccount>,
+    /// Version-two/three receipt payload retained only for upgrade recovery.
     pub(crate) candidates: Vec<Candidate>,
     pub(crate) authority_verdicts: Vec<AuthorityMessageVerdict>,
     pub(crate) needs_context: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct AccountSource {
+    pub(crate) host_id: String,
+    pub(crate) thread_id: String,
+    pub(crate) turn_id: String,
+    pub(crate) item_id: String,
+    pub(crate) role: MessageRole,
+    pub(crate) occurred_at: i64,
+    pub(crate) precision: Precision,
+}
+
+impl AccountSource {
+    pub(crate) fn from_source(source: &SourceMessage) -> Self {
+        Self {
+            host_id: source.host_id.clone(),
+            thread_id: source.thread_id.clone(),
+            turn_id: source.turn_id.clone(),
+            item_id: source.item_id.clone(),
+            role: source.role,
+            occurred_at: source.occurred_at,
+            precision: source.precision,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct DecisionAccount {
+    pub(crate) id: String,
+    pub(crate) occurred_at: i64,
+    pub(crate) precision: Precision,
+    pub(crate) statement: String,
+    pub(crate) authority_quote: String,
+    pub(crate) context: Option<String>,
+    pub(crate) action: Option<String>,
+    pub(crate) result: Option<String>,
+    pub(crate) authority_start: usize,
+    pub(crate) authority_end: usize,
+    pub(crate) authority: AccountSource,
+    pub(crate) context_sources: Vec<AccountSource>,
+    pub(crate) action_sources: Vec<AccountSource>,
+    pub(crate) result_sources: Vec<AccountSource>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -286,6 +369,9 @@ pub(crate) struct PersistedAuthorityVerdict {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct PersistedObservationClassification {
+    #[serde(default)]
+    accounts: Vec<DecisionAccount>,
+    #[serde(default)]
     candidates: Vec<PersistedCandidate>,
     authority_verdicts: Vec<PersistedAuthorityVerdict>,
     needs_context: bool,
@@ -294,6 +380,7 @@ pub(crate) struct PersistedObservationClassification {
 impl PersistedObservationClassification {
     pub(crate) fn from_classification(classification: &ObservationClassification) -> Self {
         Self {
+            accounts: classification.accounts.clone(),
             candidates: classification
                 .candidates
                 .iter()
@@ -313,6 +400,7 @@ impl PersistedObservationClassification {
 
     pub(crate) fn into_classification(self) -> ObservationClassification {
         ObservationClassification {
+            accounts: self.accounts,
             candidates: self
                 .candidates
                 .into_iter()
@@ -430,6 +518,8 @@ pub(crate) struct ObservationStatus {
     pub(crate) processing: usize,
     pub(crate) complete: usize,
     pub(crate) failed: usize,
+    pub(crate) accounts_pending_annals: usize,
+    pub(crate) accounts_accepted_by_annals: usize,
     pub(crate) failures: Vec<ObservationFailure>,
 }
 

@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
-use std::io;
+use std::io::{self, Write as _};
 use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::{
     DirBuilderExt as _, MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _,
@@ -18,9 +18,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::{read_utf8, work_label};
 use crate::cli::{
-    InboxEnqueueArgs, InboxInterruptArgs, InboxInterruptDisposition, InboxPriorityArgs,
-    InboxRetryContinueArgs, InboxRetryStartArgs, InboxRetryStatusArgs, InboxRetryWindowArgs,
-    InboxRunArgs,
+    InboxAcceptArgs, InboxEnqueueArgs, InboxInterruptArgs, InboxInterruptDisposition,
+    InboxPriorityArgs, InboxRetryContinueArgs, InboxRetryStartArgs, InboxRetryStatusArgs,
+    InboxRetryWindowArgs, InboxRunArgs,
 };
 use crate::config::Config;
 use crate::corpus::{
@@ -31,12 +31,14 @@ use crate::db;
 use crate::error::AppError;
 use crate::model_runner::{ModelSettings, Runner};
 use crate::render::{CommandOutput, render_terminal_text};
-use crate::{inbox_retry_store, ingestion, liaison, resolver};
+use crate::{decision_feed, inbox_retry_store, ingestion, liaison, resolver};
 
 const QUEUE_VERSION: u32 = 4;
 const RECEIPT_VERSION: u32 = 6;
 const INTERRUPT_VERSION: u32 = 1;
 const MAX_INTERRUPT_REASON_CHARACTERS: usize = 1_000;
+const PRODUCER_RECEIPT_VERSION: u32 = 1;
+const DECISION_ACCOUNT_MAX_BYTES: u64 = 1_048_576;
 
 #[derive(Debug)]
 struct Spool {
@@ -53,6 +55,7 @@ struct Spool {
     control_lock: PathBuf,
     paused: PathBuf,
     maintenance: PathBuf,
+    decision_library: PathBuf,
 }
 
 impl Spool {
@@ -71,6 +74,7 @@ impl Spool {
             control_lock: root.join(".control.lock"),
             paused: root.join(".paused"),
             maintenance: root.join(".maintenance"),
+            decision_library: root.join(".decision-feed-library.json"),
         }
     }
 
@@ -174,6 +178,42 @@ impl Spool {
             "maintenance",
         )
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DecisionLibraryIdentity {
+    version: u32,
+    library_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProducerReceipt {
+    version: u32,
+    producer: String,
+    key: String,
+    source_sha256: String,
+    job_id: String,
+    accepted_at: String,
+    work_label: String,
+}
+
+#[derive(Debug, Serialize)]
+struct AcceptanceSummary {
+    contract_version: u32,
+    library_id: String,
+    producer: String,
+    key: String,
+    source_sha256: String,
+    job_id: String,
+    accepted_at: String,
+    acceptance: &'static str,
+}
+
+struct AcceptedSource {
+    source_sha256: String,
+    account: decision_feed::AccountProjection,
 }
 
 fn marker_requested(
@@ -872,6 +912,7 @@ pub(crate) fn run(
     let spool = Spool::new(&inbox.root);
     spool.create()?;
     let _lock = spool.acquire_lock()?;
+    let decisions_library = prepare_dispatch_boundary(library, config, &spool)?;
     let started = Instant::now();
     let recovered_envelopes = if spool.maintenance_requested()? {
         let index = read_index(&spool)?;
@@ -885,6 +926,9 @@ pub(crate) fn run(
     let recovered = recovered_envelopes.len();
     let mut queue = BTreeMap::new();
     for envelope in recovered_envelopes {
+        if decisions_library {
+            validate_decision_dispatch_envelope(library, &envelope)?;
+        }
         insert_queued(&mut queue, envelope)?;
     }
 
@@ -936,12 +980,21 @@ pub(crate) fn run(
             summary.stopped_for_maintenance = true;
             break;
         }
-        let registered = register_settled_locked(&spool, settle_seconds)?;
+        let registered = if decisions_library {
+            Vec::new()
+        } else {
+            register_settled_locked(&spool, settle_seconds)?
+        };
         summary.registered = summary.registered.saturating_add(registered.len());
         for envelope in registered {
             insert_queued(&mut queue, envelope)?;
         }
         refresh_queued(&spool, &mut queue)?;
+        if decisions_library {
+            for envelope in queue.values() {
+                validate_decision_dispatch_envelope(library, envelope)?;
+            }
+        }
         if spool.maintenance_requested()? {
             summary.stopped_for_maintenance = true;
             break;
@@ -1037,6 +1090,7 @@ pub(crate) fn run(
 }
 
 pub(crate) fn register(config: &Config, args: &InboxRunArgs) -> Result<CommandOutput, AppError> {
+    reject_generic_decision_admission(config)?;
     let inbox = config.inbox()?;
     let settle_seconds = args.settle_seconds.unwrap_or(inbox.settle_seconds);
     let spool = Spool::new(&inbox.root);
@@ -1086,6 +1140,7 @@ pub(crate) fn register(config: &Config, args: &InboxRunArgs) -> Result<CommandOu
 }
 
 pub(crate) fn enqueue(config: &Config, args: &InboxEnqueueArgs) -> Result<CommandOutput, AppError> {
+    reject_generic_decision_admission(config)?;
     let inbox = config.inbox()?;
     let spool = Spool::new(&inbox.root);
     spool.create()?;
@@ -1151,6 +1206,619 @@ pub(crate) fn enqueue(config: &Config, args: &InboxEnqueueArgs) -> Result<Comman
         let _ = write!(human, "\n{}  {}", job.id, job.source_name);
     }
     Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
+}
+
+pub(crate) fn accept(
+    library: &Path,
+    config: &Config,
+    args: &InboxAcceptArgs,
+) -> Result<CommandOutput, AppError> {
+    if args.producer != "krisis" {
+        return Err(AppError::invalid(
+            "unsupported_decision_account_producer",
+            "decision-account acceptance version 1 permits producer krisis only",
+        ));
+    }
+    if !decision_feed::valid_producer_key(&args.key) {
+        return Err(AppError::invalid(
+            "invalid_decision_account_key",
+            "the producer key must be a nonblank single-line value of at most 512 bytes",
+        ));
+    }
+    let source = read_accepted_source(&args.input, &args.key)?;
+    let connection = db::open_read(library)?;
+    let library_id = decision_feed::require_expected_library(&connection, config)?;
+    if let Some(record) = decision_feed::find_acceptance(&connection, &args.producer, &args.key)? {
+        let spool = Spool::new(&config.inbox()?.root);
+        let _control = spool.acquire_control_lock()?;
+        require_decision_library_binding(&spool, &library_id)?;
+        let (producer_receipt, _) = find_published_acceptance(&spool, &args.producer, &args.key)?
+            .ok_or_else(|| {
+            AppError::unexpected(
+                "decision_account_material_missing",
+                "the accepted decision-account envelope is missing",
+            )
+        })?;
+        if producer_receipt.job_id != record.job_id
+            || producer_receipt.accepted_at != record.accepted_at
+            || producer_receipt.source_sha256 != record.source_sha256
+        {
+            return Err(AppError::unexpected(
+                "decision_account_acceptance_mismatch",
+                "the accepted decision-account ledger does not match its envelope",
+            ));
+        }
+        return acceptance_output(
+            &library_id,
+            &args.producer,
+            &args.key,
+            &source.source_sha256,
+            record,
+            false,
+        );
+    }
+    drop(connection);
+
+    let inbox = config.inbox()?;
+    let spool = Spool::new(&inbox.root);
+    spool.create()?;
+    let staged = stage_enqueue_source(&spool, &args.input, 0, inbox.minimum_available_bytes)?;
+    let result = accept_staged_source(
+        library,
+        &spool,
+        &staged,
+        &library_id,
+        &args.producer,
+        &args.key,
+        &source,
+    );
+    cleanup_staged_enqueue(std::slice::from_ref(&staged));
+    let (record, created) = result?;
+    acceptance_output(
+        &library_id,
+        &args.producer,
+        &args.key,
+        &source.source_sha256,
+        record,
+        created,
+    )
+}
+
+fn read_accepted_source(path: &Path, key: &str) -> Result<AcceptedSource, AppError> {
+    let before = fs::symlink_metadata(path).map_err(|error| {
+        if error.kind() == io::ErrorKind::NotFound {
+            AppError::not_found(
+                "decision_account_source_not_found",
+                "the decision-account source file was not found",
+            )
+        } else {
+            AppError::unexpected(
+                "decision_account_source_read_failed",
+                "unable to inspect the decision-account source file",
+            )
+        }
+    })?;
+    if !before.file_type().is_file() {
+        return Err(AppError::invalid(
+            "invalid_decision_account_source",
+            "the decision-account source must be one regular non-symbolic file",
+        ));
+    }
+    if before.len() > DECISION_ACCOUNT_MAX_BYTES {
+        return Err(AppError::invalid(
+            "decision_account_too_large",
+            "the decision-account source exceeds 1 MiB",
+        ));
+    }
+    let before_identity = FileIdentity::from(&before);
+    let bytes = fs::read(path).map_err(|_| {
+        AppError::unexpected(
+            "decision_account_source_read_failed",
+            "unable to read the decision-account source file",
+        )
+    })?;
+    let after = fs::symlink_metadata(path).map_err(|_| {
+        AppError::conflict(
+            "decision_account_source_changed",
+            "the decision-account source changed while it was read",
+        )
+    })?;
+    if !after.file_type().is_file() || before_identity != FileIdentity::from(&after) {
+        return Err(AppError::conflict(
+            "decision_account_source_changed",
+            "the decision-account source changed while it was read",
+        ));
+    }
+    let text = std::str::from_utf8(&bytes).map_err(|_| {
+        AppError::invalid(
+            "decision_account_not_utf8",
+            "the decision-account source must be valid UTF-8",
+        )
+    })?;
+    if text.trim().is_empty() {
+        return Err(AppError::invalid(
+            "blank_decision_account",
+            "the decision-account source must not be blank",
+        ));
+    }
+    Ok(AcceptedSource {
+        source_sha256: sha256_hex(&bytes),
+        account: decision_feed::parse_account(text, key)?,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn accept_staged_source(
+    library: &Path,
+    spool: &Spool,
+    staged: &StagedEnqueue,
+    library_id: &str,
+    producer: &str,
+    key: &str,
+    source: &AcceptedSource,
+) -> Result<(decision_feed::AcceptanceRecord, bool), AppError> {
+    let staged_bytes = fs::read(&staged.source)?;
+    if sha256_hex(&staged_bytes) != source.source_sha256 {
+        return Err(AppError::conflict(
+            "decision_account_source_changed",
+            "the decision-account source changed while it was copied",
+        ));
+    }
+    let _control = spool.acquire_control_lock()?;
+    if spool.maintenance_requested()? {
+        return Err(AppError::conflict(
+            "inbox_maintenance_active",
+            "inbox maintenance prevents accepting decision accounts",
+        ));
+    }
+    bind_decision_library(spool, library_id)?;
+    let mut connection = db::open_write(library)?;
+    connection.pragma_update(None, "synchronous", "FULL")?;
+    let transaction =
+        connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    if let Some(record) = decision_feed::find_acceptance(&transaction, producer, key)? {
+        ensure_same_accepted_bytes(&record.source_sha256, &source.source_sha256)?;
+        transaction.commit()?;
+        return Ok((record, false));
+    }
+    if let Some((receipt, recovered_account)) = find_published_acceptance(spool, producer, key)? {
+        ensure_same_accepted_bytes(&receipt.source_sha256, &source.source_sha256)?;
+        decision_feed::insert_acceptance(
+            &transaction,
+            producer,
+            key,
+            &receipt.source_sha256,
+            &receipt.job_id,
+            &receipt.accepted_at,
+            &recovered_account,
+        )?;
+        transaction.commit()?;
+        return Ok((
+            decision_feed::AcceptanceRecord {
+                source_sha256: receipt.source_sha256,
+                job_id: receipt.job_id,
+                accepted_at: receipt.accepted_at,
+            },
+            true,
+        ));
+    }
+
+    let mut index = read_index(spool)?;
+    repair_sequence_high_water(spool, &mut index)?;
+    let sequence = index.next_sequence;
+    index.next_sequence = sequence.checked_add(1).ok_or_else(|| {
+        AppError::unexpected("inbox_sequence_overflow", "inbox sequence is exhausted")
+    })?;
+    write_index(&spool.index, &index)?;
+    let id = available_job_id(spool, sequence);
+    let receipt = new_receipt(&id, sequence, &staged.name, &staged.metadata)?;
+    let envelope = Envelope {
+        id: id.clone(),
+        directory: staged.directory.clone(),
+        source: staged.source.clone(),
+        expected_identity: Some(FileIdentity::from(&fs::symlink_metadata(&staged.source)?)),
+        receipt,
+        recovered: false,
+    };
+    let accepted_at = now()?;
+    let producer_receipt = ProducerReceipt {
+        version: PRODUCER_RECEIPT_VERSION,
+        producer: producer.to_owned(),
+        key: key.to_owned(),
+        source_sha256: source.source_sha256.clone(),
+        job_id: id.clone(),
+        accepted_at: accepted_at.clone(),
+        work_label: format!("Krisis decision {key}"),
+    };
+    write_receipt(&envelope)?;
+    write_json_atomic(
+        &envelope.directory.join("producer.json"),
+        &producer_receipt,
+        "producer receipt",
+    )?;
+    sync_acceptance_envelope(&envelope)?;
+    let target = spool.queued.join(&id);
+    fs::rename(&envelope.directory, &target).map_err(|error| {
+        AppError::unexpected(
+            "decision_account_publish_failed",
+            format!("unable to publish decision-account job: {error}"),
+        )
+    })?;
+    sync_directory(&spool.queued)?;
+    // Publication is the irreversible acceptance boundary. A SQLite commit
+    // error can be ambiguous, so the durable envelope must remain queued for
+    // exact replay or reconciliation regardless of the database outcome.
+    decision_feed::insert_acceptance(
+        &transaction,
+        producer,
+        key,
+        &source.source_sha256,
+        &id,
+        &accepted_at,
+        &source.account,
+    )?;
+    transaction.commit()?;
+    Ok((
+        decision_feed::AcceptanceRecord {
+            source_sha256: source.source_sha256.clone(),
+            job_id: id,
+            accepted_at,
+        },
+        true,
+    ))
+}
+
+fn acceptance_output(
+    library_id: &str,
+    producer: &str,
+    key: &str,
+    submitted_sha256: &str,
+    record: decision_feed::AcceptanceRecord,
+    created: bool,
+) -> Result<CommandOutput, AppError> {
+    ensure_same_accepted_bytes(&record.source_sha256, submitted_sha256)?;
+    let summary = AcceptanceSummary {
+        contract_version: decision_feed::CONTRACT_VERSION,
+        library_id: library_id.to_owned(),
+        producer: producer.to_owned(),
+        key: key.to_owned(),
+        source_sha256: record.source_sha256,
+        job_id: record.job_id,
+        accepted_at: record.accepted_at,
+        acceptance: if created { "created" } else { "replayed" },
+    };
+    let human = format!(
+        "{} Krisis decision account {} as job {}",
+        if created { "Accepted" } else { "Replayed" },
+        render_terminal_text(key, false),
+        summary.job_id
+    );
+    Ok(CommandOutput::new(serde_json::to_value(summary)?, human).mutation())
+}
+
+fn ensure_same_accepted_bytes(stored: &str, submitted: &str) -> Result<(), AppError> {
+    if stored == submitted {
+        Ok(())
+    } else {
+        Err(AppError::conflict(
+            "decision_account_key_conflict",
+            "this producer key is already bound to different source bytes",
+        ))
+    }
+}
+
+fn reject_generic_decision_admission(config: &Config) -> Result<(), AppError> {
+    if config.decision_feed.is_some() {
+        return Err(AppError::conflict(
+            "decision_feed_accept_required",
+            "a decisions library admits new jobs only through inbox accept --producer krisis",
+        ));
+    }
+    let spool = Spool::new(&config.inbox()?.root);
+    match fs::symlink_metadata(&spool.decision_library) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Ok(_) => Err(AppError::conflict(
+            "decision_feed_accept_required",
+            "this spool is bound to a decisions library and admits only Krisis acceptances",
+        )),
+        Err(_) => Err(AppError::unexpected(
+            "decision_feed_spool_identity_read_failed",
+            "unable to inspect the decision-feed spool identity",
+        )),
+    }
+}
+
+fn prepare_dispatch_boundary(
+    library: &Path,
+    config: &Config,
+    spool: &Spool,
+) -> Result<bool, AppError> {
+    if config.decision_feed.is_some() {
+        let connection = db::open_read(library)?;
+        let library_id = decision_feed::require_expected_library(&connection, config)?;
+        drop(connection);
+        let _control = spool.acquire_control_lock()?;
+        if spool.maintenance_requested()? && !spool.decision_library.exists() {
+            return Err(AppError::conflict(
+                "inbox_maintenance_active",
+                "inbox maintenance prevents initializing the decision-feed spool identity",
+            ));
+        }
+        bind_decision_library(spool, &library_id)?;
+        return Ok(true);
+    }
+
+    match fs::symlink_metadata(&spool.decision_library) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Ok(_) => Err(AppError::conflict(
+            "decision_feed_config_required",
+            "this spool is bound to a decisions library and requires its decision-feed config",
+        )),
+        Err(_) => Err(AppError::unexpected(
+            "decision_feed_spool_identity_read_failed",
+            "unable to inspect the decision-feed spool identity",
+        )),
+    }
+}
+
+fn validate_decision_dispatch_envelope(
+    library: &Path,
+    envelope: &Envelope,
+) -> Result<(), AppError> {
+    if envelope.receipt.retry_event_id.is_some() {
+        return Ok(());
+    }
+    let receipt = read_envelope_producer_receipt(envelope)?.ok_or_else(|| {
+        AppError::conflict(
+            "decision_feed_accept_required",
+            "a decisions library cannot dispatch an envelope without a Krisis acceptance receipt",
+        )
+    })?;
+    let text = read_envelope_text(envelope)?;
+    ensure_same_accepted_bytes(&receipt.source_sha256, &sha256_hex(text.as_bytes()))?;
+    let acceptance =
+        decision_feed::find_acceptance(&db::open_read(library)?, &receipt.producer, &receipt.key)?
+            .ok_or_else(|| {
+                AppError::conflict(
+                    "decision_account_acceptance_incomplete",
+                    "a published decision-account envelope has no committed acceptance",
+                )
+            })?;
+    if acceptance.job_id != receipt.job_id
+        || acceptance.accepted_at != receipt.accepted_at
+        || acceptance.source_sha256 != receipt.source_sha256
+    {
+        return Err(AppError::conflict(
+            "decision_account_acceptance_mismatch",
+            "the decision-account envelope does not match its committed acceptance",
+        ));
+    }
+    Ok(())
+}
+
+fn bind_decision_library(spool: &Spool, library_id: &str) -> Result<(), AppError> {
+    let expected = DecisionLibraryIdentity {
+        version: 1,
+        library_id: library_id.to_owned(),
+    };
+    match fs::symlink_metadata(&spool.decision_library) {
+        Ok(metadata) if metadata.file_type().is_file() => {
+            let bytes = fs::read(&spool.decision_library).map_err(|_| {
+                AppError::unexpected(
+                    "decision_feed_spool_identity_read_failed",
+                    "unable to read the decision-feed spool identity",
+                )
+            })?;
+            let actual: DecisionLibraryIdentity = serde_json::from_slice(&bytes).map_err(|_| {
+                AppError::conflict(
+                    "invalid_decision_feed_spool_identity",
+                    "the decision-feed spool identity is invalid",
+                )
+            })?;
+            if actual.version != expected.version || actual.library_id != expected.library_id {
+                return Err(AppError::conflict(
+                    "unexpected_decision_feed_spool",
+                    "the configured spool belongs to a different decision-feed library",
+                ));
+            }
+            Ok(())
+        }
+        Ok(_) => Err(AppError::conflict(
+            "invalid_decision_feed_spool_identity",
+            "the decision-feed spool identity is not a regular file",
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            ensure_fresh_decision_spool(spool)?;
+            write_json_create_new(&spool.decision_library, &expected, "decision-feed identity")?;
+            sync_file(&spool.decision_library)?;
+            sync_directory(&spool.root)
+        }
+        Err(_) => Err(AppError::unexpected(
+            "decision_feed_spool_identity_read_failed",
+            "unable to read the decision-feed spool identity",
+        )),
+    }
+}
+
+fn ensure_fresh_decision_spool(spool: &Spool) -> Result<(), AppError> {
+    for directory in [
+        &spool.incoming,
+        &spool.queued,
+        &spool.processing,
+        &spool.done,
+        &spool.duplicates,
+        &spool.failed,
+        &spool.skipped,
+    ] {
+        if fs::read_dir(directory)?.next().transpose()?.is_some() {
+            return Err(AppError::conflict(
+                "decision_feed_spool_not_fresh",
+                "a decision-feed identity can be established only on an empty spool",
+            ));
+        }
+    }
+    if !path_is_missing(&spool.index) {
+        let index = read_index(spool)?;
+        if index.next_sequence != 1 || !index.entries.is_empty() {
+            return Err(AppError::conflict(
+                "decision_feed_spool_not_fresh",
+                "a decision-feed identity can be established only on a fresh queue index",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn require_decision_library_binding(spool: &Spool, library_id: &str) -> Result<(), AppError> {
+    let metadata = fs::symlink_metadata(&spool.decision_library).map_err(|_| {
+        AppError::unexpected(
+            "decision_feed_spool_uninitialized",
+            "the decision-feed spool has no readable persistent library identity",
+        )
+    })?;
+    if !metadata.file_type().is_file() {
+        return Err(AppError::conflict(
+            "invalid_decision_feed_spool_identity",
+            "the decision-feed spool identity is not a regular file",
+        ));
+    }
+    let bytes = fs::read(&spool.decision_library).map_err(|_| {
+        AppError::unexpected(
+            "decision_feed_spool_uninitialized",
+            "the decision-feed spool has no readable persistent library identity",
+        )
+    })?;
+    let actual: DecisionLibraryIdentity = serde_json::from_slice(&bytes).map_err(|_| {
+        AppError::conflict(
+            "invalid_decision_feed_spool_identity",
+            "the decision-feed spool identity is invalid",
+        )
+    })?;
+    if actual.version != 1 || actual.library_id != library_id {
+        return Err(AppError::conflict(
+            "unexpected_decision_feed_spool",
+            "the configured spool belongs to a different decision-feed library",
+        ));
+    }
+    Ok(())
+}
+
+fn find_published_acceptance(
+    spool: &Spool,
+    producer: &str,
+    key: &str,
+) -> Result<Option<(ProducerReceipt, decision_feed::AccountProjection)>, AppError> {
+    let mut matched = None;
+    for parent in [
+        &spool.queued,
+        &spool.processing,
+        &spool.done,
+        &spool.duplicates,
+        &spool.failed,
+        &spool.skipped,
+    ] {
+        if !parent.exists() {
+            continue;
+        }
+        for entry in fs::read_dir(parent)? {
+            let entry = entry?;
+            if !entry.file_type()?.is_dir() {
+                continue;
+            }
+            let receipt_path = entry.path().join("producer.json");
+            let bytes = match fs::read(&receipt_path) {
+                Ok(bytes) => bytes,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+            };
+            let receipt: ProducerReceipt = serde_json::from_slice(&bytes).map_err(|_| {
+                AppError::unexpected(
+                    "invalid_producer_receipt",
+                    "an inbox producer receipt is invalid",
+                )
+            })?;
+            validate_producer_receipt(&receipt, &entry.file_name().to_string_lossy())?;
+            if receipt.producer != producer || receipt.key != key {
+                continue;
+            }
+            if matched.is_some() {
+                return Err(AppError::unexpected(
+                    "duplicate_producer_acceptance",
+                    "the inbox contains multiple jobs for one producer key",
+                ));
+            }
+            let material = entry.path().join("material");
+            let source_path = sole_material(&material)?.ok_or_else(|| {
+                AppError::unexpected(
+                    "invalid_job_envelope",
+                    "a producer job has no source material",
+                )
+            })?;
+            let recovered = read_accepted_source(&source_path, key)?;
+            ensure_same_accepted_bytes(&receipt.source_sha256, &recovered.source_sha256)?;
+            matched = Some((receipt, recovered.account));
+        }
+    }
+    Ok(matched)
+}
+
+fn validate_producer_receipt(receipt: &ProducerReceipt, job_id: &str) -> Result<(), AppError> {
+    if receipt.version != PRODUCER_RECEIPT_VERSION
+        || receipt.producer != "krisis"
+        || receipt.job_id != job_id
+        || !decision_feed::valid_producer_key(&receipt.key)
+        || receipt.source_sha256.len() != 64
+        || !receipt
+            .source_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        || receipt.accepted_at.trim().is_empty()
+        || receipt.work_label != format!("Krisis decision {}", receipt.key)
+    {
+        return Err(AppError::unexpected(
+            "invalid_producer_receipt",
+            "an inbox producer receipt does not match its envelope",
+        ));
+    }
+    Ok(())
+}
+
+fn sync_acceptance_envelope(envelope: &Envelope) -> Result<(), AppError> {
+    sync_file(&envelope.source)?;
+    sync_file(&envelope.directory.join("job.json"))?;
+    sync_file(&envelope.directory.join("producer.json"))?;
+    sync_directory(&envelope.directory.join("material"))?;
+    sync_directory(&envelope.directory)
+}
+
+fn sync_file(path: &Path) -> Result<(), AppError> {
+    File::open(path)?.sync_all().map_err(AppError::from)
+}
+
+fn sync_directory(path: &Path) -> Result<(), AppError> {
+    File::open(path)?.sync_all().map_err(AppError::from)
+}
+
+fn write_json_create_new(
+    path: &Path,
+    value: &impl Serialize,
+    description: &str,
+) -> Result<(), AppError> {
+    let bytes = serde_json::to_vec_pretty(value)?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
+        .map_err(|error| {
+            AppError::unexpected(
+                "inbox_state_write_failed",
+                format!("unable to write {description}: {error}"),
+            )
+        })?;
+    file.write_all(&bytes)?;
+    file.sync_all()?;
+    Ok(())
 }
 
 pub(crate) fn retry_preview(
@@ -2257,6 +2925,7 @@ pub(crate) fn import_backlog(
     config: &Config,
     source_root: &Path,
 ) -> Result<CommandOutput, AppError> {
+    reject_generic_decision_admission(config)?;
     let inbox = config.inbox()?;
     let destination = Spool::new(&inbox.root);
     destination.create()?;
@@ -2817,7 +3486,14 @@ fn process_work(
     forward_progress: bool,
 ) -> Result<WorkProcessing, AppError> {
     let text = read_envelope_text(envelope)?;
-    let label = work_label(&envelope.source, None).ok();
+    let producer_receipt = read_envelope_producer_receipt(envelope)?;
+    if let Some(receipt) = &producer_receipt {
+        ensure_same_accepted_bytes(&receipt.source_sha256, &sha256_hex(text.as_bytes()))?;
+    }
+    let label = producer_receipt
+        .as_ref()
+        .map(|receipt| receipt.work_label.clone())
+        .or_else(|| work_label(&envelope.source, None).ok());
     let mut connection = db::open_write(library)?;
     let stored = store_ingested_work_with_optional_label(
         &mut connection,
@@ -2893,6 +3569,25 @@ fn process_work(
         &cancellation_requested,
     )?;
     Ok(WorkProcessing::Reconciliation(record))
+}
+
+fn read_envelope_producer_receipt(
+    envelope: &Envelope,
+) -> Result<Option<ProducerReceipt>, AppError> {
+    let path = envelope.directory.join("producer.json");
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let receipt: ProducerReceipt = serde_json::from_slice(&bytes).map_err(|_| {
+        AppError::unexpected(
+            "invalid_producer_receipt",
+            "the inbox producer receipt is invalid",
+        )
+    })?;
+    validate_producer_receipt(&receipt, &envelope.id)?;
+    Ok(Some(receipt))
 }
 
 fn read_envelope_text(envelope: &Envelope) -> Result<String, AppError> {

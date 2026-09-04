@@ -1,12 +1,12 @@
 {
-  "description": "Decisions records completed Codex turns for incremental enacted-decision observation.",
+  "description": "Krisis records completed Codex turns for decision-account capture.",
   "hooks": {
     "Stop": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.local/bin/decisions\" observe ingest",
+            "command": "\"$HOME/.local/bin/krisis\" observe ingest",
             "timeout": 3
           }
         ]

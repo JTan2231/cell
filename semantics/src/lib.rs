@@ -9,6 +9,7 @@
 )]
 #![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
+pub mod account_worker;
 pub mod adapters;
 pub mod domain;
 pub mod error;

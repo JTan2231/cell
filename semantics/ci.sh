@@ -50,7 +50,7 @@ cargo run --manifest-path "$WORKSPACE_DIR/Cargo.toml" --package chancery --locke
 registry=$(mktemp -d)
 trap 'rm -rf "$registry"' EXIT HUP INT TERM
 ln -s "$SCRIPT_DIR/chancery" "$registry/semantics"
-ln -s "$WORKSPACE_DIR/decisions/chancery" "$registry/decisions"
+ln -s "$WORKSPACE_DIR/annals/chancery/annals" "$registry/annals"
 ln -s "$WORKSPACE_DIR/conversations/chancery" "$registry/conversations"
 ln -s "$WORKSPACE_DIR/nucleus/chancery" "$registry/nucleus"
 ln -s "$WORKSPACE_DIR/clockwork/chancery" "$registry/clockwork"

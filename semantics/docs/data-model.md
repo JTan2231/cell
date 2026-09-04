@@ -1,22 +1,26 @@
 # Data model
 
-Semantics uses SQLite schema version 1. The database is the sole writable
+Semantics uses SQLite schema version 2. The database is the sole writable
 authority; registered project folders contain only their participation marker
 and ordinary project-owned material.
 
 ## Project registry
 
-`projects` stores the stable ID, lifecycle status, canonical current path,
-activation cursor, scan cursor, next sequential concept number, and timestamps.
-`project_paths` is append-only path history with exactly one open path per
-non-retired project. A move closes the old path and opens the new one without
-changing identity or cursor history.
+`projects` retains the stable ID, lifecycle status, canonical current path,
+legacy Decisions activation and scan cursors, next sequential concept number,
+and timestamps. `annals_feed_identity` binds the database to one persistent
+decisions-library ID. `annals_project_cursors` stores a distinct activation and
+scan cursor for each participating project; Annals and legacy cursor bytes are
+never interchanged. `project_paths` is append-only path history with exactly
+one open path per non-retired project and records both activation histories.
+A move closes the old path and opens the new one without changing identity or
+either cursor history.
 
 ## Repository
 
 `semantic_revisions` has a contiguous per-project revision number, summary,
 optional source event ID, and commit time. `semantic_effects` orders typed JSON
-effects within the revision. HEAD is obtained by replay; schema 1 deliberately
+effects within the revision. HEAD is obtained by replay; schema 2 deliberately
 has no mutable concept projection.
 
 Effects are:
@@ -26,7 +30,8 @@ Effects are:
 - `differentiate`: record its durable distinction from another active concept.
 - `retire`: close a concept, optionally naming an active replacement.
 - `reopen`: make a retired concept active again.
-- `ground`: cite an exact Decisions event/decision pair or a hashed seed source.
+- `ground`: cite an exact Annals library/event/account triple, a legacy
+  Decisions event/decision pair, or a hashed seed source.
 - `unground`: append the withdrawal of a prior decision grounding while
   retaining both its original and withdrawal provenance.
 
@@ -38,18 +43,27 @@ revision.
 
 ## Intake and reconciliation
 
-`intake_events` durably copies each normalized lifecycle envelope selected for
-the project, its opaque source cursor, exact routing metadata, state, attempts,
-failure, and optional applied revision. It stores no transcript, diff, command,
-tool output, or raw project content. `intake_assignments` appends manual routing
-history. A review first reuses the existing non-retired project binding for its
-decision ID; its cwd is deliberately null because historical cwd is no longer
-a routing fact. First or otherwise unbound events use exact current cwd and the
-deepest current registered root.
+`account_intake_events` durably copies each normalized accepted-account
+projection selected for the project, its exact Annals identities, opaque item
+cursor, project assignment, fixed routing outcome, state, attempts, bounded
+failure, and optional applied revision. It stores no resolved cwd, raw
+Markdown, authority quotation, transcript, path, diff, command, tool output,
+or project content. Account event insertion or an irrelevance decision and the
+scanner project's Annals cursor advance are one transaction.
+`account_intake_assignments` appends manual routing history. Every new account
+uses exact current cwd transiently for deepest-root ownership; it has no
+confidence or review state.
 
-`request_correlations` stores exactly one requester/job identity, immutable
-request bytes and digest, admission state, and mailbox cursor for an attempt.
-`mailbox_receipts` caches each tool call's argument digest and exact result.
+The schema-one `intake_events`, `intake_assignments`, lifecycle envelope bytes,
+statuses, Decisions cursors, and review behavior remain intact for historical
+inspection and exact recovery of a legacy in-flight job. They are no longer a
+future scan source.
+
+`account_request_correlations` stores exactly one successor requester/job
+identity, immutable request bytes and digest, admission state, and mailbox
+cursor for an account attempt. `account_mailbox_receipts` caches each successor
+tool call's argument digest and exact result. The legacy tables retain their
+old bytes and schema/tool identities.
 Identical redelivery is idempotent; conflicting redelivery is rejected. A
 successful callback stores the receipt and semantic revision in one domain
 transaction before the result is acknowledged to Nucleus.
@@ -78,5 +92,13 @@ candidate cannot be cleared back to a prior null selection, its exact private
 unprovable paths remove it.
 Semantics retains the exact release bytes referenced by every registered
 immutable definition; pruning is a separate explicit lifecycle operation.
-Schema changes must preserve this boundary and add
-explicit migration and rollback tests.
+Migration 1-to-2 only adds the Annals feed identity/cursor, account intake,
+assignment, correlation, and mailbox tables plus the nullable Annals path
+activation field. It does not populate Annals cursors or reinterpret legacy
+rows. Unreleased schema-two working databases that used an account `cwd`
+column are normalized at open: a fixed routing outcome is derived, free-form
+new-path failures are bounded, and the cwd column is removed without changing
+the schema version. Controlled cutover captures one Annals watermark after
+legacy draining; new projects capture their own current watermark. Schema
+changes must preserve this boundary and add explicit migration and rollback
+tests.

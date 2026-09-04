@@ -88,6 +88,61 @@ and restoration additionally require the complete file to match Annals'
 rendered template, expected owner, and mode. A familiar label or executable is
 not ownership, and an extra launchd key is treated as foreign.
 
+## Provision the decisions library
+
+The dedicated decisions account library is a separate, explicitly authorized
+installation surface. After the primary installer has produced a verified
+immutable content release, run as the current (non-root) user:
+
+```sh
+release="$HOME/Library/Application Support/Annals/install/releases/<64-hex-release-id>"
+"$release/package/provision-decisions-user.sh" \
+  --release-root "$release" \
+  --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock" \
+  --clockwork /Users/joey/.local/bin/clockwork
+```
+
+The provisioner and both of its unrendered templates are separate members of
+the format-four release identity. The invoked provisioner must match the
+selected release's recorded hash; a source sibling, mutable selector, or
+tampered package member is rejected before state or binding mutation.
+
+This authorizes creation or supported migration only under
+`$HOME/Library/Application Support/Annals/decisions` and registration or
+switching only of `annals/decisions-inbox`. It does not deploy release bytes,
+change Nucleus, or inspect or mutate the primary `annals/inbox` binding. It
+shares Annals' product-wide `install/.update-lock`, so it cannot race the
+primary deployer.
+
+The provisioner validates the complete content release and complete selected
+prior definition, creates and binds fresh state off-path, establishes
+maintenance before a run-at-load definition can be selected, registers the
+candidate inactive, drains an enabled owned prior, takes a consistent backup
+before migration, proves inbox and feed readiness, then switches the exact
+definition. Fresh state is initialized with the immutable `decisions` role;
+an existing or migrated `general` database fails readiness even if its
+persistent ID matches the config. Foreign or concurrently changed state fails
+closed. A pre-commit
+failure restores captured state and the exact enabled or disabled-selected
+prior without activating a prior-disabled schedule. If an exact restoration
+cannot be proved, the dedicated library remains maintenance-gated and only an
+attributable candidate is disabled; retained transaction material is reported
+for recovery.
+
+Before opening existing state, the provisioner requires its config, database
+and SQLite sidecars, spool identity and control files, and maintenance files to
+be operator-owned `0600` regular files with one hard link. It creates or
+validates distinct private stdout and stderr log files before selection. A
+symbolic link, extra hard link, foreign owner, or broader mode fails closed.
+
+Success emits a single JSON envelope whose `data` contains contract version,
+absolute config path, persistent library ID, Clockwork key and definition
+digest, selected/enabled booleans, maintenance state, and release ID. With
+`--keep-maintenance`, an Annals-owned receipt leaves the decisions gate engaged
+for an outer Krisis/Semantics cutover. A later successful invocation without
+that option clears only that matching owned hold. A pre-existing unreceipted
+maintenance gate remains engaged.
+
 ## Fresh-state cutover
 
 `--fresh-state` is a distinct destructive operation for a documented schema

@@ -72,7 +72,7 @@
       {"status": "unsupported", "statement": "This is not a manual one-work integration path, direct receipt editor, unbounded retry mechanism, or authorization for storage cleanup."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "Registration, enqueue, and status require the configured private Annals library and spool; dispatch additionally requires available configured reserve, a readable probe, and compatible authenticated Nucleus readiness."},
+      {"status": "declared", "statement": "Registration and enqueue require a configured private general Annals library and spool; decision-config operation requires a decisions library; dispatch additionally requires the matching immutable role, available configured reserve, a readable probe, and compatible authenticated Nucleus readiness."},
       {"status": "declared", "statement": "Retry start requires an exact inclusive failed-delivery interval, paused quiescence, no processing job, no unfinished retry event, and no deployment maintenance."},
       {"status": "declared", "statement": "Interruption names one exact processing job, and prioritize or deprioritize names one queued ordinary job."}
     ],

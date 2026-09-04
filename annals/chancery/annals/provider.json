@@ -3,11 +3,11 @@
   "provider": {
     "id": "annals",
     "name": "Annals",
-    "release": "0.14.2"
+    "release": "0.15.0"
   },
   "promise_scope": {
     "authoritative_for": [
-      "Annals owns retained works and source deliveries, the revisioned corpus of concepts, explicit parent edges and evidence links, examinations, reconciliations, commits, inbox jobs and retry events, and its installed library and spool state.",
+      "Annals owns retained works and source deliveries, producer-accepted decision accounts, their bounded feed, the revisioned corpus of concepts, explicit parent edges and evidence links, examinations, reconciliations, commits, inbox jobs and retry events, and its installed library and spool state.",
       "The selected Annals library and canonical reducer are authoritative for those records and domain transitions."
     ],
     "not_authoritative_for": [
@@ -43,6 +43,7 @@
   "entries": [
     "entries/work-retain.json",
     "entries/work-integrate.json",
+    "entries/decision-account-exchange.json",
     "entries/corpus-explore.json",
     "entries/inbox-operate.json",
     "entries/library-operate.json",

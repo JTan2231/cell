@@ -8,10 +8,26 @@ use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 use crate::error::AppError;
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 4;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 5;
 const FRESH_STATE_SCHEMA_VERSION: i64 = 3;
 const SCHEMA: &str = include_str!("../schema.sql");
 const MIGRATION_3_TO_4: &str = include_str!("../migrations/3-to-4.sql");
+const MIGRATION_4_TO_5: &str = include_str!("../migrations/4-to-5.sql");
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LibraryKind {
+    General,
+    Decisions,
+}
+
+impl LibraryKind {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::General => "general",
+            Self::Decisions => "decisions",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MigrationResult {
@@ -22,8 +38,13 @@ pub struct MigrationResult {
 
 /// Create and initialize a fresh Annals library without replacing a path.
 pub fn init(path: &Path) -> Result<Connection, AppError> {
+    init_with_kind(path, LibraryKind::General)
+}
+
+/// Create a fresh library with one immutable role.
+pub(crate) fn init_with_kind(path: &Path, kind: LibraryKind) -> Result<Connection, AppError> {
     reserve_new_file(path, "library_exists", "library")?;
-    match initialize_reserved_file(path) {
+    match initialize_reserved_file(path, kind) {
         Ok(connection) => Ok(connection),
         Err(error) => {
             // This call exclusively created the path, so cleanup cannot remove
@@ -32,6 +53,52 @@ pub fn init(path: &Path) -> Result<Connection, AppError> {
             Err(error)
         }
     }
+}
+
+pub(crate) fn library_kind(connection: &Connection) -> Result<LibraryKind, AppError> {
+    let kind = connection
+        .query_row(
+            "SELECT kind FROM library_profile WHERE singleton = 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(|error| {
+            AppError::database(
+                "invalid_library_profile",
+                format!("library has no valid immutable profile: {error}"),
+            )
+        })?;
+    match kind.as_str() {
+        "general" => Ok(LibraryKind::General),
+        "decisions" => Ok(LibraryKind::Decisions),
+        _ => Err(AppError::database(
+            "invalid_library_profile",
+            "library has an unsupported immutable profile",
+        )),
+    }
+}
+
+pub(crate) fn require_library_kind(
+    connection: &Connection,
+    expected: LibraryKind,
+) -> Result<(), AppError> {
+    let actual = library_kind(connection)?;
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(AppError::conflict(
+            "library_kind_mismatch",
+            format!(
+                "this operation requires a {} library; the selected library is {}",
+                expected.as_str(),
+                actual.as_str()
+            ),
+        ))
+    }
+}
+
+pub(crate) fn require_path_kind(path: &Path, expected: LibraryKind) -> Result<(), AppError> {
+    require_library_kind(&open_read(path)?, expected)
 }
 
 /// Open a current-format library for reads without changing journal mode.
@@ -54,6 +121,9 @@ pub fn open_backup_source(path: &Path) -> Result<Connection, AppError> {
     if version > CURRENT_SCHEMA_VERSION {
         return Err(schema_too_new(version));
     }
+    if version == CURRENT_SCHEMA_VERSION {
+        library_kind(&connection)?;
+    }
     Ok(connection)
 }
 
@@ -66,7 +136,7 @@ pub fn open_write(path: &Path) -> Result<Connection, AppError> {
     Ok(connection)
 }
 
-/// Migrate a version 3 library to the current additive format.
+/// Migrate a version 3 or 4 library to the current additive format.
 ///
 /// Version 3 remains the deliberate fresh-state boundary. `migrate` never
 /// reinterprets a library older than that boundary.
@@ -87,12 +157,22 @@ pub fn migrate(path: &Path) -> Result<MigrationResult, AppError> {
             if locked_version == CURRENT_SCHEMA_VERSION {
                 transaction.commit()?;
                 false
-            } else if locked_version == FRESH_STATE_SCHEMA_VERSION {
-                transaction.execute_batch(MIGRATION_3_TO_4).map_err(|error| {
+            } else if matches!(locked_version, 3 | 4) {
+                if locked_version == 3 {
+                    transaction.execute_batch(MIGRATION_3_TO_4).map_err(|error| {
+                        AppError::database(
+                            "schema_migration_failed",
+                            format!(
+                                "unable to migrate library schema from version 3 to version 4: {error}"
+                            ),
+                        )
+                    })?;
+                }
+                transaction.execute_batch(MIGRATION_4_TO_5).map_err(|error| {
                     AppError::database(
                         "schema_migration_failed",
                         format!(
-                            "unable to migrate library schema from version {locked_version} to version {CURRENT_SCHEMA_VERSION}: {error}"
+                            "unable to migrate library schema from version 4 to version 5: {error}"
                         ),
                     )
                 })?;
@@ -129,7 +209,7 @@ pub fn backup(source: &Connection, output: &Path) -> Result<(), AppError> {
     result
 }
 
-fn initialize_reserved_file(path: &Path) -> Result<Connection, AppError> {
+fn initialize_reserved_file(path: &Path, kind: LibraryKind) -> Result<Connection, AppError> {
     let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
         .map_err(|error| open_error(path, &error))?;
     configure_connection(&connection)?;
@@ -139,6 +219,17 @@ fn initialize_reserved_file(path: &Path) -> Result<Connection, AppError> {
             format!("unable to create the library schema: {error}"),
         )
     })?;
+    connection
+        .execute(
+            "INSERT INTO library_profile(singleton, kind) VALUES(1, ?1)",
+            [kind.as_str()],
+        )
+        .map_err(|error| {
+            AppError::database(
+                "schema_creation_failed",
+                format!("unable to establish the library profile: {error}"),
+            )
+        })?;
     require_current_schema(&connection)?;
     enable_wal(&connection)?;
     Ok(connection)
@@ -185,7 +276,10 @@ fn schema_version(connection: &Connection) -> Result<i64, AppError> {
 fn require_current_schema(connection: &Connection) -> Result<(), AppError> {
     let version = schema_version(connection)?;
     match version.cmp(&CURRENT_SCHEMA_VERSION) {
-        std::cmp::Ordering::Equal => Ok(()),
+        std::cmp::Ordering::Equal => {
+            library_kind(connection)?;
+            Ok(())
+        }
         std::cmp::Ordering::Greater => Err(schema_too_new(version)),
         std::cmp::Ordering::Less if version < FRESH_STATE_SCHEMA_VERSION => {
             Err(schema_incompatible(version))
@@ -288,10 +382,25 @@ mod tests {
         let path = directory.path().join("annals.db");
         let connection = init(&path)?;
         assert_eq!(schema_version(&connection)?, CURRENT_SCHEMA_VERSION);
+        assert_eq!(library_kind(&connection)?, LibraryKind::General);
         assert_eq!(head_revision(&connection)?, 0);
         drop(connection);
         assert_eq!(head_revision(&open_read(&path)?)?, 0);
         assert_eq!(head_revision(&open_write(&path)?)?, 0);
+
+        let decisions_path = directory.path().join("decisions.db");
+        let decisions = init_with_kind(&decisions_path, LibraryKind::Decisions)?;
+        assert_eq!(library_kind(&decisions)?, LibraryKind::Decisions);
+        assert!(
+            decisions
+                .execute("UPDATE library_profile SET kind = 'general'", [])
+                .is_err()
+        );
+        assert!(
+            decisions
+                .execute("DELETE FROM library_profile", [])
+                .is_err()
+        );
         Ok(())
     }
 
@@ -350,7 +459,9 @@ mod tests {
             [],
         )?;
         connection.execute_batch(
-            "DROP TABLE inbox_retry_items;
+            "DROP TABLE library_profile;
+             DROP TABLE decision_account_acceptances;
+             DROP TABLE inbox_retry_items;
              DROP TABLE inbox_retry_events;
              PRAGMA user_version = 3;",
         )?;
@@ -382,6 +493,7 @@ mod tests {
         );
         let connection = open_read(&path)?;
         assert_eq!(schema_version(&connection)?, CURRENT_SCHEMA_VERSION);
+        assert_eq!(library_kind(&connection)?, LibraryKind::General);
         assert_eq!(
             connection.query_row(
                 "SELECT error_code FROM ingestions WHERE id = 1",
@@ -390,7 +502,12 @@ mod tests {
             )?,
             "model_runner_failed"
         );
-        for table in ["inbox_retry_events", "inbox_retry_items"] {
+        for table in [
+            "library_profile",
+            "inbox_retry_events",
+            "inbox_retry_items",
+            "decision_account_acceptances",
+        ] {
             assert!(connection.query_row(
                 "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?1)",
                 [table],
@@ -406,7 +523,9 @@ mod tests {
         let path = directory.path().join("annals.db");
         let connection = init(&path)?;
         connection.execute_batch(
-            "DROP TABLE inbox_retry_items;
+            "DROP TABLE library_profile;
+             DROP TABLE decision_account_acceptances;
+             DROP TABLE inbox_retry_items;
              DROP TABLE inbox_retry_events;
              CREATE TABLE inbox_retry_events(blocker TEXT);
              PRAGMA user_version = 3;",
@@ -429,6 +548,43 @@ mod tests {
         );
         assert!(!connection.query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name = 'inbox_retry_items')",
+            [],
+            |row| row.get::<_, bool>(0)
+        )?);
+        Ok(())
+    }
+
+    #[test]
+    fn migrates_version_four_additively() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("annals.db");
+        let connection = init(&path)?;
+        connection.execute(
+            "INSERT INTO works(label, normalized_label, text, sha256, created_at)
+             VALUES('work', 'work', 'source', ?1, 'now')",
+            ["0".repeat(64)],
+        )?;
+        connection.execute_batch(
+            "DROP TABLE library_profile;
+             DROP TABLE decision_account_acceptances;
+             PRAGMA user_version = 4;",
+        )?;
+        drop(connection);
+
+        let result = migrate(&path)?;
+        assert_eq!(result.from_version, 4);
+        assert_eq!(result.to_version, CURRENT_SCHEMA_VERSION);
+        let connection = open_read(&path)?;
+        assert_eq!(library_kind(&connection)?, LibraryKind::General);
+        assert_eq!(
+            connection.query_row("SELECT COUNT(*) FROM works", [], |row| row.get::<_, i64>(0))?,
+            1
+        );
+        assert!(connection.query_row(
+            "SELECT EXISTS(
+                 SELECT 1 FROM sqlite_schema
+                 WHERE type = 'table' AND name = 'decision_account_acceptances'
+             )",
             [],
             |row| row.get::<_, bool>(0)
         )?);

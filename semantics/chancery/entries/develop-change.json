@@ -1,6 +1,6 @@
 {
   "id": "semantics.develop.change",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -12,11 +12,11 @@
   "effects": ["May change source, tests, docs, SQLite migrations, immutable schemas/toolsets, packaging, or Chancery contracts; deployment and release remain separate explicit actions."],
   "authority": [
     "Semantics source and docs own project routing and semantic-domain behavior.",
-    "Decisions, Conversations, and Nucleus contracts own their respective upstream and requester boundaries.",
+    "Annals, Conversations, and Nucleus contracts own their respective upstream and requester boundaries; preserved Decisions state is legacy compatibility data.",
     "The shared Nucleus operator manual owns cross-product requester and service-maintenance procedures."
   ],
   "success": [
-    "semantics/ci.sh finishes green offline without contacting live Nucleus, Decisions, Conversations, Clockwork, launchd, or Chancery state.",
+    "semantics/ci.sh finishes green offline without contacting live Nucleus, Annals, Conversations, Clockwork, launchd, or Chancery state.",
     "Schema and effect changes retain historical replay or add explicit migration and rollback proofs.",
     "Changed registered tool meaning uses a new immutable schema ID or toolset version and old correlations remain recoverable."
   ],
@@ -27,7 +27,7 @@
   ],
   "privacy": ["Fixtures must not contain real decisions, conversation text, project content, credentials, personal paths, prompts, diffs, commands, or tool payloads in logs."],
   "dependencies": [
-    {"id": "decisions.lifecycle.consume", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "annals.decision-account.exchange", "min_contract": 1, "max_contract_exclusive": 2},
     {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
     {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 2},
     {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 2},
@@ -45,8 +45,8 @@
   ],
   "checkpoints": [
     "Repository meaning is always derived by replaying immutable contiguous revisions and typed effects; v1 has no mutable concept projection.",
-    "Project moves preserve stable ID and activation/scan cursors; exact root markers and deepest-root routing remain mandatory.",
-    "Effective admissions and confirmations ground the exact current event and decision; dismissals append unground effects instead of deleting history.",
+    "Project moves preserve stable ID and separate Annals and legacy Decisions activation/scan cursors; exact root markers and deepest-root routing remain mandatory.",
+    "Every new account-derived revision grounds its exact Annals library, event, and account identity without confidence or review behavior; legacy admission/review effects remain decodable.",
     "Nucleus has a neutral cwd, workspace none, no shell/web, one immutable managed tool, and no authority outside Semantics validation and transaction.",
     "Mailbox commit/receipt is atomic, redelivery is idempotent, conflicting replay is rejected, and unsafe retry is refused.",
     "CI and packaging tests are offline, use fakes, and produce body-free logs."
@@ -54,7 +54,7 @@
   "adaptation": [
     "Publish a new immutable schema or toolset version whenever registered meaning changes.",
     "Add a versioned SQLite migration and full database-plus-sidecars rollback proof for schema changes.",
-    "Scale event fixtures across admission confidence, confirmations, dismissals, moves, pauses, transport ambiguity, and duplicate delivery when those boundaries change."
+    "Scale account fixtures across watermark activation, fixed pages, duplicates, identity conflicts, moves, pauses, routing failure, transport ambiguity, and legacy decoding when those boundaries change."
   ],
   "stop_when": [
     "An upstream fact cannot be obtained through its published read-only contract.",

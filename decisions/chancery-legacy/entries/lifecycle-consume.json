@@ -1,0 +1,103 @@
+{
+  "id": "decisions.lifecycle.consume",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Read the retired Decisions lifecycle stream",
+  "summary": "Preserve the version-one opaque-cursor read surface for existing consumers of retained Decisions admissions and reviews; Krisis does not append new lifecycle events.",
+  "use_when": [
+    "An existing local consumer must resume reading already-retained Decisions lifecycle events.",
+    "A compatibility consumer needs its current legacy watermark during migration."
+  ],
+  "do_not_use_when": [
+    "New Krisis decisions or Annals accounts are wanted; this stream does not carry them.",
+    "Historical replay before a consumer's activation watermark, mutation, acknowledgement, or direct database access is wanted."
+  ],
+  "outcome": "A current opaque legacy watermark or one bounded ordered page of immutable retained Decisions version-one lifecycle envelopes.",
+  "effects": [
+    "Watermark and read are local read-only operations over retained migration-compatible state.",
+    "They perform no Krisis classification, Annals delivery, review, digest, email, or lifecycle append."
+  ],
+  "authority": [
+    "The retained SQLite history is authoritative for legacy event bytes and append order only.",
+    "Legacy admissions and reviews retain their original Decisions semantics; this surface does not reinterpret them as Krisis accounts or Annals state.",
+    "Consumers own copied state, cursor durability, policy, retry, retention, and domain success."
+  ],
+  "success": [
+    "Watermark returns a valid opaque cursor for the retained stream end, including an empty stream.",
+    "Read returns events strictly after the supplied cursor in append order, up to the validated limit, with one cursor per item and replay-stable bytes."
+  ],
+  "failure_and_recovery": [
+    "Persist an event and its item cursor atomically, then resume strictly after the last durably copied cursor.",
+    "Malformed, noncanonical, checksum-invalid, ahead-of-stream cursors and limits outside 1 through 1000 fail closed.",
+    "No new lifecycle events will repair a lost consumer cursor; consumers must preserve their own activation and progress state."
+  ],
+  "privacy": [
+    "Legacy envelopes may contain normalized candidate statement, rationale, disposition, confidence, review state, and machine-local source anchors.",
+    "They contain no transcript export, file diff, command, reasoning, approval payload, prompt, or tool output."
+  ],
+  "interfaces": [
+    {"label": "Legacy watermark", "invocation": "/Users/joey/.local/bin/krisis events watermark --json"},
+    {"label": "Legacy page", "invocation": "/Users/joey/.local/bin/krisis events read --after OPAQUE_CURSOR --limit 1000 --json"}
+  ],
+  "does_not_authorize": [
+    "Reading or mutating SQLite directly, invoking retired review/digest behavior, or treating a legacy event as a Krisis or Annals account.",
+    "Manufacturing cursors or expecting events for decisions captured after Krisis activation."
+  ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "Existing local Decisions lifecycle consumers may continue bounded read-only access to retained events."},
+      {"status": "unsupported", "statement": "New consumers, new Krisis capture, historical import, mutation, and acknowledgement are not supported through this compatibility surface."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The consumer already owns a valid activation or item cursor and persists each received event with its cursor atomically."},
+      {"status": "declared", "statement": "The migration-compatible Krisis database containing retained Decisions lifecycle state is locally available."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Watermark takes no domain input; read requires one canonical opaque after cursor and accepts a limit from 1 through 1000, defaulting to 100."},
+      {"status": "unsupported", "statement": "Historical origins, filters, acknowledgements, mutation, and manufactured cursors are not accepted."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "Watermark returns stream, envelope_version, and opaque cursor; read returns fixed-watermark pagination fields and ordered immutable version-one event items."},
+      {"status": "declared", "statement": "Legacy event bodies retain their original admission or review identity, times, candidate fields, and source anchors."},
+      {"status": "unsupported", "statement": "No Krisis account, Annals receipt, decision-feed watermark, or new post-cutover lifecycle event is returned."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "decision_admitted and decision_reviewed retain the Decisions meanings they had when originally committed."},
+      {"status": "declared", "statement": "A cursor is a legacy transport position, not decision identity, authority, or current-force evidence."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "event_id, legacy decision_id, review_id, and cursor identify distinct retained records; append position defines order."},
+      {"status": "declared", "statement": "Legacy event times preserve their recorded units and timestamp precision."},
+      {"status": "not_applicable", "statement": "The stream publishes no usage or accounting unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "The stream preserves every retained legacy event after a consumer's valid cursor and is frozen with respect to new Krisis capture."},
+      {"status": "unsupported", "statement": "Historical replay before activation and post-cutover Krisis event publication are unsupported."},
+      {"status": "unspecified", "statement": "No perpetual retention horizon or consumer migration deadline is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The supported surface is the local current-user krisis CLI reading retained state; direct database access is unsupported."},
+      {"status": "unspecified", "statement": "No network protocol or access-control mechanism beyond the local-product boundary is promised."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "The retained append order and event bytes are immutable; repeating a valid cursor returns the same retained prefix."},
+      {"status": "declared", "statement": "There is no provider acknowledgement or consumer-specific offset, and Krisis appends no new lifecycle events."},
+      {"status": "unsupported", "statement": "Lost cursors cannot be parsed, inferred, or manufactured from other identities."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Page limit defaults to 100 and is bounded from 1 through 1000 events."},
+      {"status": "unspecified", "statement": "No polling, throughput, latency, or retention service-level objective is promised."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Capability contract 1, lifecycle envelope 1, and event version 1 are preserved as a read-only bridge in Krisis 0.4.0 and SQLite schema 4."},
+      {"status": "declared", "statement": "The public executable is krisis; old Decisions command, review, digest, and schedule identities are retired even though their persisted history remains decodable."},
+      {"status": "unspecified", "statement": "No later compatibility window or removal date is promised."}
+    ],
+    "reliances": [
+      {"status": "not_applicable", "statement": "Legacy watermark and read invoke no other product and create no cross-product runtime reliance."}
+    ]
+  },
+  "manual": "manuals/lifecycle-consume.md"
+}

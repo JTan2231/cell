@@ -1,0 +1,67 @@
+#!/bin/sh
+
+set -eu
+umask 077
+
+script_dir=${0%/*}
+release_dir=${script_dir%/*}
+krisis_path="$release_dir/libexec/krisis"
+maintenance="$HOME/Library/Application Support/Decisions/.clockwork-maintenance"
+
+if [ -L "$maintenance" ] || { [ -e "$maintenance" ] && [ ! -f "$maintenance" ]; }; then
+    printf '%s\n' 'krisis observer: maintenance gate is invalid' >&2
+    exit 1
+fi
+if [ -f "$maintenance" ]; then
+    if [ "$(/usr/bin/stat -f '%u' "$maintenance")" -ne "$(/usr/bin/id -u)" ] \
+        || [ "$(/usr/bin/stat -f '%Lp' "$maintenance")" != 600 ] \
+        || [ "$(/usr/bin/stat -f '%l' "$maintenance")" -ne 1 ]; then
+        printf '%s\n' 'krisis observer: maintenance gate is not private' >&2
+        exit 1
+    fi
+    printf '%s\n' 'krisis observer: maintenance gate is active' >&2
+    exit 0
+fi
+
+[ -x "$krisis_path" ] || {
+    printf '%s\n' 'krisis observer: release-owned Krisis executable is unavailable' >&2
+    exit 1
+}
+[ -x "${KRISIS_ANNALS_BINARY:-}" ] || {
+    printf '%s\n' 'krisis observer: configured Annals executable is unavailable' >&2
+    exit 1
+}
+case "${KRISIS_ANNALS_CONFIG:-}" in /*) ;; *)
+    printf '%s\n' 'krisis observer: Annals config is not absolute' >&2
+    exit 1
+esac
+case "${KRISIS_ANNALS_LIBRARY_ID:-}" in
+    [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+    *) printf '%s\n' 'krisis observer: expected Annals library ID is invalid' >&2; exit 1 ;;
+esac
+
+if [ -x /opt/homebrew/bin/codex ]; then
+    codex_path=/opt/homebrew/bin/codex
+elif [ -x "$HOME/.local/bin/codex" ]; then
+    codex_path="$HOME/.local/bin/codex"
+else
+    printf '%s\n' 'krisis observer: Codex executable is unavailable' >&2
+    exit 1
+fi
+
+set +e
+/usr/bin/env -i \
+    HOME="$HOME" \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    CONVERSATIONS_CODEX="$codex_path" \
+    KRISIS_DATABASE="$HOME/Library/Application Support/Decisions/decisions.db" \
+    KRISIS_ANNALS_BINARY="$KRISIS_ANNALS_BINARY" \
+    KRISIS_ANNALS_CONFIG="$KRISIS_ANNALS_CONFIG" \
+    KRISIS_ANNALS_LIBRARY_ID="$KRISIS_ANNALS_LIBRARY_ID" \
+    "$krisis_path" observe process 2>/dev/null
+child_status=$?
+set -e
+if [ "$child_status" -ne 0 ]; then
+    printf '%s\n' 'krisis observer: processing failed' >&2
+fi
+exit "$child_status"

@@ -72,12 +72,18 @@ cp "$SCRIPT_DIR/annals-user" "$package/annals-user"
 cp "$SCRIPT_DIR/annals-inbox" "$package/annals-inbox"
 cp "$SCRIPT_DIR/annals-inbox.clockwork.toml.in" \
     "$package/annals-inbox.clockwork.toml.in"
+cp "$SCRIPT_DIR/annals-decisions.toml.in" \
+    "$package/annals-decisions.toml.in"
+cp "$SCRIPT_DIR/annals-decisions-inbox.clockwork.toml.in" \
+    "$package/annals-decisions-inbox.clockwork.toml.in"
+cp "$SCRIPT_DIR/provision-decisions-user.sh" \
+    "$package/provision-decisions-user.sh"
 cp "$SCRIPT_DIR/org.annals.inbox.agent.plist" \
     "$package/org.annals.inbox.agent.plist"
 cp -R "$SCRIPT_DIR/../../chancery/annals" "$package_share/annals"
 cp -R "$SCRIPT_DIR/../../chancery/annals-usage" "$package_share/annals-usage"
 chmod 0755 "$package/deploy-user.sh" "$package/annals-user" \
-    "$package/annals-inbox"
+    "$package/annals-inbox" "$package/provision-decisions-user.sh"
 
 cat >"$candidate_template" <<'EOF'
 #!/bin/sh
@@ -439,6 +445,9 @@ usage_provider="$chancery_providers/annals-usage"
 grep -Fx 'umask 077' "$state/install/current/bin/annals-inbox" >/dev/null
 [ -x "$state/install/current/package/annals-inbox" ]
 [ -f "$state/install/current/package/annals-inbox.clockwork.toml.in" ]
+[ -f "$state/install/current/package/annals-decisions.toml.in" ]
+[ -f "$state/install/current/package/annals-decisions-inbox.clockwork.toml.in" ]
+[ -x "$state/install/current/package/provision-decisions-user.sh" ]
 [ -f "$state/install/current/package/org.annals.inbox.agent.plist" ]
 [ -f "$state/install/current/share/chancery/annals/provider.json" ]
 [ -f "$state/install/current/share/chancery/annals-usage/provider.json" ]
@@ -451,7 +460,7 @@ grep -Fx 'umask 077' "$state/install/current/bin/annals-inbox" >/dev/null
 [ -f "$annals_provider/provider.json" ]
 [ -f "$usage_provider/provider.json" ]
 [ "$(sed -n 's/^  "format": \([0-9][0-9]*\),$/\1/p' \
-    "$state/install/current/manifest.json")" -eq 3 ]
+    "$state/install/current/manifest.json")" -eq 4 ]
 [ -f "$state/annals.db" ]
 [ -d "$state/spool/queued" ]
 [ -d "$state/spool/duplicates" ]
@@ -499,6 +508,18 @@ grep -Fx "  \"usage_binary_sha256\": \"$usage_candidate_hash\"," \
 legacy_agent_plist_hash=$(shasum -a 256 \
     "$SCRIPT_DIR/org.annals.inbox.agent.plist" | awk '{print $1}')
 grep -Fx "  \"legacy_agent_plist_sha256\": \"$legacy_agent_plist_hash\"," \
+    "$state/install/current/manifest.json" >/dev/null
+decisions_config_hash=$(shasum -a 256 \
+    "$SCRIPT_DIR/annals-decisions.toml.in" | awk '{print $1}')
+decisions_definition_hash=$(shasum -a 256 \
+    "$SCRIPT_DIR/annals-decisions-inbox.clockwork.toml.in" | awk '{print $1}')
+decisions_provisioner_hash=$(shasum -a 256 \
+    "$SCRIPT_DIR/provision-decisions-user.sh" | awk '{print $1}')
+grep -Fx "  \"decisions_config_template_sha256\": \"$decisions_config_hash\"," \
+    "$state/install/current/manifest.json" >/dev/null
+grep -Fx "  \"decisions_clockwork_template_sha256\": \"$decisions_definition_hash\"," \
+    "$state/install/current/manifest.json" >/dev/null
+grep -Fx "  \"decisions_provisioner_sha256\": \"$decisions_provisioner_hash\"," \
     "$state/install/current/manifest.json" >/dev/null
 printf '%s\n' preserved >"$state/spool/duplicates/preserved"
 printf '%s\n' skipped >"$state/spool/skipped/preserved"
@@ -603,6 +624,17 @@ deploy --no-start >/dev/null
 [ "$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')" = "$usage_config_hash" ]
 backup_count=$(find "$state/backups" -type f -maxdepth 1 | wc -l | tr -d ' ')
 [ "$backup_count" -eq 1 ]
+
+printf '%s\n' '# tampered' \
+    >>"$state/install/current/package/annals-decisions.toml.in"
+if deploy --no-start >"$temporary/tampered-decisions.out" \
+    2>"$temporary/tampered-decisions.err"
+then
+    printf '%s\n' 'deployment unexpectedly accepted a tampered decisions template' >&2
+    exit 1
+fi
+install -m 0600 "$package/annals-decisions.toml.in" \
+    "$state/install/current/package/annals-decisions.toml.in"
 
 printf '%s\n' '# tampered' >>"$state/install/current/package/deploy-user.sh"
 if deploy --no-start >"$temporary/tampered.out" 2>"$temporary/tampered.err"; then

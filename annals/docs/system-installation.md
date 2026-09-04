@@ -616,6 +616,110 @@ or queue-drain deadlines. Clockwork records the selected definition and process
 outcome, while Annals status and run reports remain authoritative for inbox,
 delivery, and corpus success; Clockwork does not ingest Annals log bodies.
 
+### Provision the dedicated decisions library
+
+Krisis decision accounts use a second physical Annals library, never the
+primary paths above. Annals owns the supported per-user provisioner and its
+`packaging/launchd/annals-decisions.toml.in` and
+`annals-decisions-inbox.clockwork.toml.in` inputs. Nothing invokes the
+provisioner implicitly, and the ordinary primary-library deployer does not
+activate this second library. After an Annals content release has been
+installed and verified, an authorized current-user operator invokes it
+explicitly:
+
+```sh
+release="$HOME/Library/Application Support/Annals/install/releases/<64-hex-release-id>"
+"$release/package/provision-decisions-user.sh" \
+  --release-root "$release" \
+  --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock" \
+  --clockwork /Users/joey/.local/bin/clockwork
+```
+
+`--release-root` must name the immutable content-addressed directory itself,
+never `current`, and the invoked provisioner must be its exact independently
+hashed package member. `--home` is a test/operator override. The caller authorizes
+creation or supported migration of only the private decisions state below and
+registration or switching of only Clockwork key
+`annals/decisions-inbox`. The provisioner never inspects, disables, or selects
+`annals/inbox`, and it neither deploys a release nor changes Nucleus.
+
+The provisioner shares the primary deployer's product-wide
+`install/.update-lock`. It validates the complete release and any selected
+prior decisions definition, stages a fresh database and fresh spool off-path,
+binds their persistent library identity, publishes them maintenance-gated,
+registers the candidate definition inactive, disables and drains an enabled
+owned prior binding, backs up and migrates existing state, proves feed and
+inbox readiness, and switches the exact digest. Foreign, changed, or ambiguous
+same-key state stops untouched. Pre-commit failure restores an enabled or
+disabled-selected prior without transiently enabling prior-disabled work and
+restores captured database and config bytes. If exact scheduler restoration
+cannot be proved, it keeps decisions maintenance, disables only an attributable
+candidate, and retains the recovery transaction.
+
+Before it opens or migrates existing decisions state, it requires the config,
+database and SQLite sidecars, spool identity and control files, and maintenance
+receipt or markers to be operator-owned private regular files with exactly one
+hard link. It also creates or validates distinct `0600` stdout and stderr log
+files before their Clockwork definition can be selected. Symbolic, hard-linked,
+foreign-owned, or overly broad mutable files fail the handoff closed.
+
+Success prints one body-free machine envelope:
+
+```json
+{"ok":true,"data":{"contract_version":1,"config":"/absolute/decisions/config.toml","library_id":"32-lowercase-hex","clockwork_key":"annals/decisions-inbox","clockwork_definition":"64-lowercase-hex","selected":true,"enabled":true,"maintenance":false,"release_id":"64-lowercase-hex"}}
+```
+
+By default the provisioner clears only a maintenance gate it owns after the
+binding commits. `--keep-maintenance` records an Annals-owned hold and leaves
+that gate engaged for an outer Krisis/Semantics cutover; a later successful
+invocation without the option releases that exact owned hold. A pre-existing
+maintenance marker without the provisioner's matching receipt is preserved,
+not claimed or cleared. The per-user rendering is:
+
+```text
+$HOME/Library/Application Support/Annals/decisions/
+|-- config.toml
+|-- annals.db
+|-- log/
+|   |-- inbox.stdout.log
+|   `-- inbox.stderr.log
+|-- backups/
+`-- spool/
+    |-- .decision-feed-library.json
+    |-- queued/
+    |-- processing/
+    |-- done/
+    |-- duplicates/
+    |-- failed/
+    `-- skipped/
+```
+
+Provision revision zero with `annals init --kind decisions` and copy the
+returned `library_id` into `decision_feed.expected_library_id`; the provisioner
+performs both steps and never infers, replaces, or reclassifies the immutable
+database identity. An ordinary or migrated `general` database is rejected even
+when its persistent ID matches the decisions config.
+The template uses Clockwork key `annals/decisions-inbox`, the existing
+release-local `annals-inbox` runner, a 300-second run-at-load interval, and the
+dedicated config and log paths. It neither replaces nor joins `annals/inbox`.
+Its first empty run binds the fresh, empty spool to the expected library and
+fails rather than claiming existing inbox state. That run and all later
+scheduled runs leave `incoming/` untouched; only validated
+`inbox accept --producer krisis` calls admit original jobs. Generic register,
+enqueue, backlog import, work add, and direct integration are rejected for this
+config and by the selected database's immutable decisions role, so a direct
+`--library` selection or alternate generic spool cannot bypass the boundary.
+
+Acceptance and consumer reads always pass the decisions config explicitly, so
+the installed frontend's primary-config default and `ANNALS_LIBRARY` cannot
+redirect them.
+
+`ci.sh` checks the templates and runner and exercises the provisioner with
+absent, enabled, disabled-null, disabled-selected, and foreign prior schedule
+state, failed-switch rollback, normal completion, and a maintenance-held
+handoff. These are package tests only; they do not register or switch live
+state.
+
 The underlying per-user launchd projection is available only while the user is logged in. It resumes at
 the next login after a logout or restart. A service that must run at the login
 window needs a system LaunchDaemon and cannot also be fully maintained by an
@@ -700,11 +804,12 @@ under the Cell root target directory:
 
 That same command is the normal unattended update operation. It preflights the
 candidate binaries, configuration, and library before cutover.
-Complete program releases contain Annals, the telemetry companion, frontend,
-release-local inbox runner, unrendered Clockwork definition template, the
-former LaunchAgent template retained only for exact ownership checks, updater,
-both product-owned Chancery provider bundles, and a hash manifest. The runner,
-templates, and both bundle hashes participate in release identity. Only after
+Complete format-four program releases contain Annals, the telemetry companion,
+frontend, release-local inbox runner, both unrendered Clockwork definitions,
+the decisions config template and provisioner, the former LaunchAgent template
+retained only for exact ownership checks, updater, both product-owned Chancery
+provider bundles, and a hash manifest. The runner, provisioner, templates, and
+both bundle hashes participate independently in release identity. Only after
 that identity exists does the deployer render absolute release paths and exact
 interpreter/runner hashes and register the definition inactive.
 The `annals` and `annals-usage` provider selectors point through the one Annals
@@ -761,11 +866,14 @@ Nucleus state is outside this rollback and remains forward-only. Pre-commit
 failures continue to restore the configuration artifacts automatically from
 the live transaction.
 
-The version-4 deploy path invokes the candidate's additive `migrate` after the
-backup and while the service is quiescent. It adds retry-event provenance to a
-version-3 library without replacing its works, deliveries, reconciliations,
-commits, spool, or archives. The rollback transaction retains the pre-migration
-backup if candidate migration or cutover fails.
+The version-5 deploy path invokes the candidate's additive `migrate` after the
+backup and while the service is quiescent. It adds retry-event provenance when
+upgrading a version-3 library and the decision-account acceptance ledger when
+upgrading a version-3 or version-4 library, and assigns every migrated library
+the immutable `general` role, without replacing its works, deliveries,
+reconciliations, commits, spool, or archives. The rollback
+transaction retains the pre-migration backup if candidate migration or cutover
+fails.
 
 No operator timing or manual service stop is required. It is safe to run the
 same deployment command while a delivery is in progress; by default the
@@ -782,9 +890,9 @@ binding or legacy launchd state; it is not the complete scheduled-installation
 outcome.
 
 Schema version 3 established the intentional boundary that cannot open an
-older library. Version 4 migrates version 3 additively; it does not change the
-older boundary. For a pre-version-3 installation, use the guarded fresh-state
-operation after `ci.sh` is green:
+older library. Versions 4 and 5 migrate supported older versions additively;
+they do not change the older boundary. For a pre-version-3 installation, use
+the guarded fresh-state operation after `ci.sh` is green:
 
 ```sh
 ./packaging/launchd/deploy-user.sh \

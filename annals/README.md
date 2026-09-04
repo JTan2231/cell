@@ -4,6 +4,20 @@ Annals is a local CLI for maintaining an evidence-grounded conceptual corpus.
 Source works are retained unchanged. Corpus concepts belong to the library, may
 be supported by many works, and change only through atomic revision commits.
 
+Annals can also host a physically separate decisions library. Krisis
+idempotently hands one immutable decision account to that library; Annals owns
+the accepted bytes, ordinary inbox dispatch, interpretation, and a bounded
+read-only accepted-account feed. This producer boundary is additive and does
+not mix decision accounts into the primary conversation-export library.
+Schema version 5 records that physical separation as an immutable database
+kind, so configuration or direct path selection cannot turn a decisions
+library into a general source inlet.
+The explicit macOS provisioner, shipped and hashed as
+`package/provision-decisions-user.sh` in each content release, creates or
+updates that private library and only its independent
+`annals/decisions-inbox` Clockwork binding; it never changes the primary
+`annals/inbox` schedule.
+
 The public interface uses work labels, durable concept IDs such as `c42`, and
 exact quotations. Concepts form an unordered directed acyclic graph: an edge
 points from a broader concept to a narrower one, and a concept may have several
@@ -274,9 +288,12 @@ authenticated dispatch preflight. Pause Annals, run `annals-usage login
 --device-auth` (which delegates to `nucleus auth login --device-auth`), verify
 with `annals-usage doctor`, canary, and resume.
 
-The current schema is version 4. Normal deployment additively migrates a
-version-3 library to add bounded retry-event provenance while retaining its
-contents and spool. Version 3 remains the intentional fresh-state boundary;
+The current schema is version 5. Normal deployment additively migrates a
+version-3 or version-4 library to add bounded retry-event provenance when
+needed and the decision-account acceptance feed, and assigns the migrated
+database the immutable `general` kind, while retaining its contents and spool.
+Fresh dedicated state is created with `annals init --kind decisions`. Version
+3 remains the intentional fresh-state boundary;
 the one-time cutover from an older schema adds `--fresh-state` to the command
 above. That mode archives the old library, its sidecars, and the spool
 as one rollback generation, verifies the empty replacement, imports the

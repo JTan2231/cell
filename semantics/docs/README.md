@@ -2,7 +2,7 @@
 
 - [Architecture](architecture.md): authority, event routing, and reconciliation.
 - [CLI](cli.md): project, repository, intake, and readiness commands.
-- [Data model](data-model.md): schema 1, revisions, effects, and recovery state.
+- [Data model](data-model.md): schema 2, revisions, effects, and recovery state.
 - [System installation](system-installation.md): macOS deployment, Clockwork schedule
   operation, rollback, and uninstall.
 
