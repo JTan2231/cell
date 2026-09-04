@@ -990,7 +990,7 @@ dependencies = [
 
 [[package]]
 name = "nucleus-cli"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "clap",
  "fs2",
@@ -1007,7 +1007,7 @@ dependencies = [
 
 [[package]]
 name = "nucleus-client"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "nucleus-core",
  "reqwest",
@@ -1020,7 +1020,7 @@ dependencies = [
 
 [[package]]
 name = "nucleus-codex"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "base64",
  "fs2",
@@ -1035,7 +1035,7 @@ dependencies = [
 
 [[package]]
 name = "nucleus-core"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "serde",
  "serde_json",
@@ -1044,7 +1044,7 @@ dependencies = [
 
 [[package]]
 name = "nucleus-daemon"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "axum",
  "base64",
@@ -1068,7 +1068,7 @@ dependencies = [
 
 [[package]]
 name = "nucleus-store"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "rusqlite",
  "sha2",
