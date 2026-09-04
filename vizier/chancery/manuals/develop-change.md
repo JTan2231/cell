@@ -8,9 +8,7 @@ boundary changes.
 
 Keep changes inside Vizier authority. Meaning-bearing documents remain exact
 opaque Markdown. Structure only identity, digest, lineage, packet edges, roles,
-jobs, workspaces, candidates, dispositions, gates, and lifecycle. An
-implementor or integrator cannot accept its own edits; remediation gets a
-targeted recheck, not another broad audit.
+jobs, workspaces, candidates, dispositions, gates, and lifecycle. An implementor or integrator cannot accept its own edits; plan review concerns the assembled delegation, packet graph, and current packet plans rather than provisional unit plans. Persisted scope and lineage constrain remediation and its targeted recheck, not another broad audit. Every Vizier-created Nucleus role request explicitly persists requester-owned `gpt-5.6-sol` with reasoning effort `max`.
 
 Preserve the central proof rule: a model response or terminal Nucleus job is
 not Vizier success. Planning, implementation, review, integration, and gates

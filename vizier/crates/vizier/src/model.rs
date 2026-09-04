@@ -337,6 +337,14 @@ pub struct ReviewSubmission {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReviewScopeView {
+    pub review_attempt_id: String,
+    pub review_document_id: String,
+    pub affected_packet_keys: Vec<String>,
+    pub contract_unit_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HandoffSubmission {
     pub outcome: HandoffOutcome,
     pub markdown: String,

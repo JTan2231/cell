@@ -1332,8 +1332,7 @@ requester. For CRM, inspect the queued run and revision first; a committed case
 revision remains success even when the steward job later fails, while a
 terminal job without that revision is not CRM success. For Vizier, inspect
 `run show` and the relevant `attempt show` before recovery. Use `run wait` or
-`run resume` to continue persisted work; use `attempt retry` only when the prior
-attempt is positively terminal and Vizier accepts a successor as safe. Treat a
+`run resume` to continue nonterminal persisted work; `needs_attention` is terminal and both commands return its durable result without creating work. Use `attempt retry` only when the prior attempt is positively terminal, is Vizier's current resultless leaf, and Vizier accepts a successor as safe. Review a cited document with `vizier document show DOCUMENT_ID`; routine run views do not expose document bodies. Treat a
 cancelled, timed-out, or lost writer's worktree as suspect until Vizier inspects
 or quarantines it. Cancellation and Nucleus loss do not undo committed Vizier
 records or source mutations.
@@ -1402,7 +1401,7 @@ small real contract-bounded change. Verify the frozen document digests, planner
 and assembled delegation records, distinct implementor and reviewer
 invocations, disjoint writer worktrees when work is concurrent, accepted packet
 candidates, configured gate evidence, and independent final acceptance of the
-same exact integrated candidate. Also verify requester program `vizier`, that
+same exact integrated candidate. Packet implementors run packet-local checks only; configured product/root gates run later through the host CI broker against that integrated candidate. Also verify requester program `vizier`, that
 the caller's branch did not move, and that a terminal Nucleus job without the
 required Vizier record is not run success.
 

@@ -46,9 +46,10 @@ supplied value is a positive finite upper bound. Submit drives the run
 synchronously and reports its durable run identity even when the process is
 later interrupted.
 
-## Inspect and recover a run
+## Inspect documents, runs, and recovery
 
 ```sh
+vizier [--database ABS] [--json] document show DOCUMENT_ID
 vizier [--database ABS] [--json] run list
 vizier [--database ABS] [--json] run show RUN_ID
 vizier [--database ABS] [--json] run status RUN_ID
@@ -57,11 +58,11 @@ vizier [--database ABS] [--json] run resume RUN_ID
 vizier [--database ABS] [--json] run cancel RUN_ID
 ```
 
-`show` and `status` select the exact durable run. `wait` observes and services
-recoverable in-flight work. `resume` continues the stored request after an
-interrupted coordinator, without changing its frozen documents or Git basis.
+`document show` is the explicit document read: without `--json` it emits the exact retained Markdown bytes, and with `--json` it emits supported metadata plus those exact bytes. Unknown document IDs fail without changing state. Routine run list, show, and status views remain body-free summaries. `show` and `status` select the exact durable run. `wait` observes and services recoverable in-flight work. `resume` continues the stored request after an interrupted coordinator, from the latest durable current revision, without changing its frozen documents or Git basis.
 `cancel` records intent and requests cancellation of correlated active jobs;
 it cannot undo an already committed Vizier record or source mutation.
+
+`needs_attention` is terminal: `run wait` and `run resume` return its durable result without creating attempts or restarting an earlier review round.
 
 Run states are `queued`, `planning`, `assembling`, `plan_review`,
 `implementing`, `packet_review`, `integrating`, `gates`, `final_review`,
@@ -77,9 +78,7 @@ vizier [--database ABS] [--json] attempt retry ATTEMPT_ID
 Inspect both Vizier and correlated Nucleus evidence before retrying. An
 ambiguous admission reuses only the byte-equivalent persisted request and same
 Nucleus job ID. `attempt retry` is an explicit successor attempt and is allowed
-only when durable evidence makes another attempt safe. It never turns a
-terminal Nucleus result into Vizier success and never creates an unbounded
-retry loop.
+only when durable evidence makes another attempt safe and it is the current resultless leaf. It never reopens a terminal run, turns a terminal Nucleus result into Vizier success, or creates an unbounded retry loop.
 
 ## Exit and proof boundary
 

@@ -19,8 +19,8 @@
   "outcome": "One durable succeeded Vizier run bound to an exact integrated Git candidate whose accepted delegation, independently accepted packet candidates, configured gates, and independent integrated review all apply to the same frozen input basis, or an explicit needs-attention or cancelled outcome.",
   "effects": [
     "Copies exact caller-selected Markdown into the private ledger, resolves the selected Git source, creates and mutates Vizier-owned isolated worktrees, freezes Git candidates, and records workflow transitions and evidence.",
-    "Submits bounded planner, assembler, plan-reviewer, implementor, packet-reviewer, integrator, and integrated-reviewer jobs to Nucleus and may consume Codex account allowance.",
-    "Runs caller-supplied gate commands against the exact integrated candidate when that stage is reached and binds every result to that candidate.",
+    "Submits bounded planner, assembler, plan-reviewer, implementor, packet-reviewer, integrator, and integrated-reviewer jobs to Nucleus, each explicitly requesting requester-owned `gpt-5.6-sol` with reasoning effort `max`, and may consume Codex account allowance.",
+    "Gives packet implementors packet-local checks only, then runs caller-supplied configured gates after packet review and integration through the host CI broker against the exact integrated candidate and binds every result to that candidate.",
     "Does not move the caller's branch, apply the candidate there, push, release, deploy, amend requirements, or mutate Pratica or Semantics."
   ],
   "authority": [
@@ -36,7 +36,7 @@
   "failure_and_recovery": [
     "After interruption, inspect the exact run and use wait or resume; Vizier reuses only persisted requests and committed managed-tool results.",
     "A blocking finding must cite an existing contract or accepted packet criterion. Unstated requirements, missing authority or evidence, and wider scope leave needs-attention rather than becoming code.",
-    "Changes requested create only a bounded successor of the same review-subject type and a targeted recheck bound to that successor. Exhaustion, an unsafe worktree, unresolvable integration conflict, failed gate, lost attempt, or invalid result remains explicit and never triggers an unbounded retry or direct-Codex fallback."
+    "Changes requested create only a bounded successor of the same review-subject type and a targeted recheck bound to that successor and persisted submitted scope; it cannot silently widen into unrelated packets or contract units. Exhaustion, an unsafe worktree, unresolvable integration conflict, failed gate, lost attempt, or invalid result remains explicit and never triggers an unbounded retry or direct-Codex fallback."
   ],
   "privacy": [
     "The ledger, worktrees, Git objects, and correlated Nucleus state may contain complete private implementation and repository material.",
@@ -90,11 +90,11 @@
       {"status": "unsupported", "statement": "Direct SQLite access, direct Codex fallback, hidden repository discovery, credential access, remote service control, and shared writable worktrees are unsupported."}
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Run admission atomically binds exact inputs before execution; managed-tool results commit idempotently before acknowledgement; every review names an exact immutable review subject, with plan review bound to the assembled delegation and plan revision and packet or integrated review bound to a Git candidate; and restart recovery resumes persisted work rather than reconstructing it from model prose."},
+      {"status": "declared", "statement": "Run admission atomically binds exact inputs before execution; managed-tool results commit idempotently before acknowledgement; every review names an exact immutable review subject, with plan review bound to the assembled delegation overview, packet graph, and current packet-plan revision rather than provisional unit plans, and packet or integrated review bound to a Git candidate; and restart recovery resumes persisted work rather than reconstructing it from model prose."},
       {"status": "declared", "statement": "Automatic remediation is finite, cancellation records intent without undoing committed state, and terminal needs-attention preserves evidence for explicit caller recovery."}
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "One run has one broad plan-set review, one broad review for each packet candidate, one broad integrated review, and at most the submitted remediation rounds of targeted recheck; ready jobs share Nucleus's eight global slots without reservation."},
+      {"status": "declared", "statement": "One run has one broad review of the assembled delegation, packet graph, and current packet plans, one broad review for each packet candidate, one broad integrated review, and at most the submitted remediation rounds of persisted-scope targeted recheck; ready jobs share Nucleus's eight global slots without reservation."},
       {"status": "unspecified", "statement": "No planning quality, model quality, start time, completion time, throughput, repository size, retained-state size, gate duration, or availability objective is promised."}
     ],
     "compatibility_and_evolution": [

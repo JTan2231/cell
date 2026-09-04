@@ -19,7 +19,7 @@
   "outcome": "An explicitly initialized healthy ledger, an exact observed or safely advanced workflow state, a recorded cancellation or eligible successor attempt, or one coherent current-user Vizier binary and provider installation.",
   "effects": [
     "Init creates or idempotently accepts the selected supported private ledger; doctor checks storage and strict Nucleus readiness without submitting implementation work.",
-    "List, show, status, and attempt show are observational; wait or resume may service durable tool calls and continue stored work; cancel records intent and asks Nucleus to cancel correlated jobs; attempt retry creates one explicit successor only when allowed.",
+    "List, show, status, and attempt show are body-free observations; document show explicitly reads one retained document; wait or resume may service durable nonterminal work; cancel records intent and asks Nucleus to cancel correlated jobs; attempt retry creates one explicit successor only when allowed.",
     "The selector-only deployer stages a content-addressed release and changes the Vizier command and providers/vizier selectors together, but never initializes the ledger, calls Nucleus, runs a canary, or installs a daemon or schedule."
   ],
   "authority": [
@@ -34,7 +34,7 @@
   ],
   "failure_and_recovery": [
     "After uncertain operation, inspect the exact run and attempt before using wait, resume, or retry; never reconstruct success from final prose.",
-    "Cancellation cannot undo committed documents or worktree mutations. Unsafe workspaces, ambiguous Nucleus state, or exhausted remediation remain needs-attention.",
+    "Cancellation cannot undo committed documents or worktree mutations. Unsafe workspaces, ambiguous Nucleus state, or exhausted remediation remain needs-attention; needs-attention wait and resume return the durable result without creating work, and retry is limited to the current resultless leaf.",
     "A failed selector-only deployment restores the prior coherent selectors or detaches Vizier's public selectors fail-closed; rollback requires ledger compatibility and never authorizes state deletion."
   ],
   "privacy": [
@@ -67,6 +67,7 @@
   "interfaces": [
     {"label": "Initialize ledger", "invocation": "/Users/joey/.local/bin/vizier [--database ABS] [--json] init"},
     {"label": "Diagnose ledger and requester", "invocation": "/Users/joey/.local/bin/vizier [--database ABS] [--json] doctor"},
+    {"label": "Read exact retained document", "invocation": "/Users/joey/.local/bin/vizier [--database ABS] [--json] document show DOCUMENT_ID"},
     {"label": "List or inspect runs", "invocation": "/Users/joey/.local/bin/vizier [--database ABS] [--json] run list | run show RUN_ID | run status RUN_ID"},
     {"label": "Wait, resume, or cancel", "invocation": "/Users/joey/.local/bin/vizier [--database ABS] [--json] run wait RUN_ID | run resume RUN_ID | run cancel RUN_ID"},
     {"label": "Inspect or retry attempt", "invocation": "/Users/joey/.local/bin/vizier [--database ABS] [--json] attempt show ATTEMPT_ID | attempt retry ATTEMPT_ID"},
@@ -93,7 +94,7 @@
       {"status": "unsupported", "statement": "Edited ledger rows, mutable document replacements, arbitrary process IDs, foreign selectors, implicit retry content, and destructive cleanup are unsupported."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Outputs are exact initialization and readiness evidence, run and attempt state, one guarded recovery transition, or one coherent content-addressed command/provider installation."}
+      {"status": "declared", "statement": "Outputs are exact initialization and readiness evidence, run and attempt state, one guarded recovery transition, or one coherent content-addressed command/provider installation; document show emits exact retained Markdown by default and supported metadata plus exact Markdown with --json, while unknown IDs fail without state change."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Show and status are observations; wait may observe and service persisted work; resume continues the frozen run; cancel is durable intent plus individual runtime requests; retry is a new explicit attempt, never replayed success."},
@@ -111,7 +112,7 @@
       {"status": "unsupported", "statement": "Direct SQLite or Nucleus-state access, credential access, remote operation, foreign-selector takeover, and direct Codex execution are unsupported."}
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Initialization is idempotent for supported state; recovery preserves exact requests and idempotent tool results; retry requires positive terminal evidence and a new identity; cancellation does not erase history."},
+      {"status": "declared", "statement": "Initialization is idempotent for supported state; recovery preserves exact requests and idempotent tool results; retry requires positive terminal evidence, the current resultless leaf, and a new identity; interrupted multi-round remediation resumes from the latest durable revision; cancellation does not erase history."},
       {"status": "declared", "statement": "Deployment stages immutable bytes, serializes product and catalog publication, switches command and provider together, and restores both or detaches fail-closed before returning failure."}
     ],
     "operational_limits": [

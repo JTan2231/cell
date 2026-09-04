@@ -57,3 +57,8 @@ Rollback changes the binary and provider selectors together and is safe only
 while the retained ledger remains compatible with the selected binary. Removing
 selectors or releases does not authorize deleting the private ledger,
 worktrees, Git candidates, or correlated Nucleus records.
+
+The packaged bundle is validated with the compatible Chancery reader before
+selector publication. Installed `chancery doctor`, `list`, `show`, and exact-ID
+`resolve` prove only provider presentation, discovery, and dossier assembly;
+they do not prove Vizier or Nucleus readiness or Vizier run success.

@@ -35,11 +35,11 @@ successor run.
    frozen input set and exact Git basis.
 2. One assembler produces a many-to-many packet graph. Contract units are not
    assumed to be implementation packets.
-3. One independent plan reviewer checks the assembled plan set.
-4. Ready packets are implemented in disjoint Vizier-owned Git worktrees.
+3. One independent plan reviewer checks the assembled delegation overview, mechanical packet graph, and current packet-plan Markdown. Provisional contract-unit plans are assembly inputs, not the review subject.
+4. Ready packets are implemented in disjoint Vizier-owned Git worktrees with packet-local checks only.
 5. A different invocation independently reviews each frozen packet candidate.
 6. Accepted packet candidates are integrated into one exact candidate.
-7. Caller-supplied gates run against that candidate.
+7. Caller-supplied configured gates run later against that exact integrated candidate through the host CI broker.
 8. One independent integrated reviewer checks the complete frozen contract set
    and exact integrated candidate.
 
@@ -57,11 +57,7 @@ Review routing has three mechanical dispositions:
 - `blocked` returns authority ambiguity, an unstated requirement, missing
   evidence, or wider scope to the caller.
 
-The review body remains Markdown. Advisories do not create work. Remediation is
-limited to the cited finding, changed code, and affected seams, followed by a
-targeted recheck rather than a new broad audit. Automatic remediation is
-bounded by the submitted positive round limit and defaults to one round;
-exhaustion leaves the run `needs_attention`.
+The review body remains Markdown, while each submitted review retains its mechanical affected packet keys, contract-unit IDs, and lineage. Advisories do not create work. Remediation and its targeted recheck use that persisted scope and may narrow it, but cannot silently widen it into unrelated work or a new broad audit; required wider scope leaves `needs_attention`. Automatic remediation is bounded by the submitted positive round limit and defaults to one round; exhaustion leaves the run `needs_attention`.
 
 ## Candidate and success
 

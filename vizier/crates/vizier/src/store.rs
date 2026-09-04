@@ -14,7 +14,7 @@ use crate::git::{scopes_overlap, validate_scopes};
 use crate::model::{
     AttemptState, AttemptView, CandidateView, DelegationSubmission, Disposition, DocumentView,
     GateResult, GateSpec, HandoffOutcome, NewRun, OpaqueMarkdown, PacketState, PacketView,
-    PathScope, Role, RunState, RunView, sha256_hex,
+    PathScope, ReviewScopeView, Role, RunState, RunView, sha256_hex,
 };
 
 const SCHEMA: &str = r"
@@ -98,6 +98,13 @@ CREATE TABLE IF NOT EXISTS attempts (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS attempts_subject_idx
   ON attempts(run_id, role, subject_id, round, created_at);
+
+CREATE TABLE IF NOT EXISTS review_scopes (
+  review_attempt_id TEXT PRIMARY KEY REFERENCES attempts(id),
+  review_document_id TEXT NOT NULL UNIQUE REFERENCES documents(id),
+  affected_packet_keys_json TEXT NOT NULL,
+  contract_unit_ids_json TEXT NOT NULL
+) STRICT;
 
 CREATE TABLE IF NOT EXISTS candidates (
   id TEXT PRIMARY KEY,
@@ -223,13 +230,21 @@ impl Store {
     }
 
     pub fn check_ready(&self) -> AppResult<()> {
+        self.check_ready_inner(true)
+    }
+
+    pub fn check_ready_readonly(&self) -> AppResult<()> {
+        self.check_ready_inner(false)
+    }
+
+    fn check_ready_inner(&self, migrate: bool) -> AppResult<()> {
         if !self.path.is_file() {
             return Err(AppError::new(
                 "database_not_initialized",
                 format!("run `vizier --database {} init` first", self.path.display()),
             ));
         }
-        let connection = self.connect()?;
+        let mut connection = self.connect()?;
         let version: String = connection.query_row(
             "SELECT value FROM meta WHERE key='schema_version'",
             [],
@@ -240,6 +255,16 @@ impl Store {
                 "database_schema_unsupported",
                 format!("unsupported Vizier schema version {version}"),
             ));
+        }
+        if migrate {
+            // Additive scope storage is safe for existing ledgers and never rewrites documents.
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            transaction.execute_batch("CREATE TABLE IF NOT EXISTS review_scopes (review_attempt_id TEXT PRIMARY KEY REFERENCES attempts(id), review_document_id TEXT NOT NULL UNIQUE REFERENCES documents(id), affected_packet_keys_json TEXT NOT NULL, contract_unit_ids_json TEXT NOT NULL) STRICT;")?;
+            // Historical reviews predate mechanical scope. Preserve their documents and
+            // identities while initializing the only safe legacy scope: no expansion.
+            transaction.execute("INSERT OR IGNORE INTO review_scopes(review_attempt_id,review_document_id,affected_packet_keys_json,contract_unit_ids_json) SELECT attempts.id,attempts.domain_document_id,'[]','[]' FROM attempts JOIN documents ON documents.id=attempts.domain_document_id WHERE attempts.role IN ('plan_reviewer','packet_reviewer','integrated_reviewer') AND attempts.domain_document_id IS NOT NULL", [])?;
+            transaction.commit()?;
         }
         Ok(())
     }
@@ -449,6 +474,43 @@ impl Store {
             params![document_id],
             row_document,
         ).optional()?.ok_or_else(|| AppError::new("document_not_found", "document does not exist"))
+    }
+
+    pub fn review_scope_for_attempt(
+        &self,
+        review_attempt_id: &str,
+    ) -> AppResult<Option<ReviewScopeView>> {
+        let connection = self.connect()?;
+        let document: Option<String> = connection
+            .query_row(
+                "SELECT review_document_id FROM review_scopes WHERE review_attempt_id=?",
+                params![review_attempt_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        document
+            .map(|id| self.review_scope(&id))
+            .transpose()
+            .map(Option::flatten)
+    }
+
+    pub fn review_scope(&self, review_document_id: &str) -> AppResult<Option<ReviewScopeView>> {
+        let connection = self.connect()?;
+        let value: Option<(String, String, String, String)> = connection.query_row(
+            "SELECT review_attempt_id,review_document_id,affected_packet_keys_json,contract_unit_ids_json FROM review_scopes WHERE review_document_id=?",
+            params![review_document_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        ).optional()?;
+        value
+            .map(|(attempt, document, packets, contracts)| {
+                Ok(ReviewScopeView {
+                    review_attempt_id: attempt,
+                    review_document_id: document,
+                    affected_packet_keys: serde_json::from_str(&packets)?,
+                    contract_unit_ids: serde_json::from_str(&contracts)?,
+                })
+            })
+            .transpose()
     }
 
     pub fn record_document(
@@ -936,6 +998,10 @@ impl Store {
                     &markdown,
                     now(),
                 )?;
+                transaction.execute(
+                    "INSERT INTO review_scopes(review_attempt_id,review_document_id,affected_packet_keys_json,contract_unit_ids_json) VALUES(?,?,?,?)",
+                    params![attempt.id, id, serde_json::to_string(&value.affected_packet_keys)?, serde_json::to_string(&value.contract_unit_ids)?],
+                )?;
                 (
                     id,
                     kind,
@@ -1043,6 +1109,24 @@ impl Store {
             )
             .optional()?
             .ok_or_else(|| AppError::new("candidate_not_found", "candidate does not exist"))
+    }
+
+    pub fn candidate_at_round(
+        &self,
+        run_id: &str,
+        subject_id: &str,
+        kind: &str,
+        round: u32,
+    ) -> AppResult<Option<CandidateView>> {
+        let connection = self.connect()?;
+        connection
+            .query_row(
+                &candidate_select("WHERE run_id=? AND subject_id=? AND kind=? AND round=?"),
+                params![run_id, subject_id, kind, round],
+                row_candidate,
+            )
+            .optional()
+            .map_err(Into::into)
     }
 
     pub fn latest_candidate(
@@ -1380,6 +1464,41 @@ fn validate_review(
             "review_scope_invalid",
             "a packet review cannot route changes into another packet",
         ));
+    }
+    if attempt.targeted && attempt.round > 0 {
+        let kind = match attempt.role {
+            Role::PlanReviewer => "plan_review",
+            Role::PacketReviewer => "packet_review",
+            Role::IntegratedReviewer => "integrated_review",
+            _ => unreachable!(),
+        };
+        let previous: Option<(String, String)> = transaction.query_row(
+            "SELECT affected_packet_keys_json,contract_unit_ids_json FROM review_scopes scopes JOIN documents documents ON documents.id=scopes.review_document_id WHERE documents.run_id=? AND documents.kind=? AND documents.subject_id=? AND documents.ordinal=?",
+            params![attempt.run_id, kind, attempt.subject_id, attempt.round - 1],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional()?;
+        let Some((packets, contracts)) = previous else {
+            return Err(AppError::new(
+                "review_scope_lineage_missing",
+                "targeted review has no persisted prior scope",
+            ));
+        };
+        let prior_packets: std::collections::BTreeSet<String> = serde_json::from_str(&packets)?;
+        let prior_contracts: std::collections::BTreeSet<String> = serde_json::from_str(&contracts)?;
+        if review
+            .affected_packet_keys
+            .iter()
+            .any(|key| !prior_packets.contains(key))
+            || review
+                .contract_unit_ids
+                .iter()
+                .any(|id| !prior_contracts.contains(id))
+        {
+            return Err(AppError::new(
+                "review_scope_expanded",
+                "targeted review scope may only preserve or narrow the prior submitted scope",
+            ));
+        }
     }
     Ok(())
 }
@@ -1727,7 +1846,10 @@ mod tests {
     use super::{NewAttempt, Receipt, Store};
     use crate::contracts::ManagedSubmission;
     use crate::error::{AppError, AppResult};
-    use crate::model::{NewRun, OpaqueMarkdown, Role};
+    use crate::model::{
+        DelegationSubmission, Disposition, NewRun, OpaqueMarkdown, PacketSubmission, PathScope,
+        ReviewSubmission, Role, RunState,
+    };
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -1823,6 +1945,67 @@ mod tests {
     }
 
     #[test]
+    fn persists_review_scope_without_rewriting_review_markdown() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let store = Store::new(directory.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: "run-review-scope".to_owned(),
+            request_key: None,
+            repository: "/tmp/repo".to_owned(),
+            source_commit: "source".to_owned(),
+            brief: markdown("# Brief\n")?,
+            terminology: markdown("# Terms\n")?,
+            contracts: vec![("unit".to_owned(), markdown("# Contract\n")?)],
+            gates: Vec::new(),
+            remediation_limit: 1,
+        })?;
+        store.set_run_state(&run.id, RunState::PlanReview, None)?;
+        let attempt = store.create_attempt(&NewAttempt {
+            run_id: &run.id,
+            role: Role::PlanReviewer,
+            subject_id: "plan-set",
+            round: 0,
+            targeted: false,
+            nucleus_job_id: "job-review-scope",
+            request_bytes: b"{}",
+            request_sha256: "digest",
+            toolset_name: "review",
+            workspace_path: "/tmp/repo",
+            base_commit: Some("source"),
+            allowed_scopes: &[],
+            predecessor_attempt_id: None,
+        })?;
+        store.commit_managed_submission(
+            &attempt.id,
+            "job-review-scope",
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Review(ReviewSubmission {
+                disposition: Disposition::ChangesRequested,
+                affected_packet_keys: Vec::new(),
+                contract_unit_ids: vec!["unit".to_owned()],
+                markdown: "# Exact review\r\n".to_owned(),
+            }),
+        )?;
+        let document_id = store
+            .attempt(&attempt.id)?
+            .domain_document_id
+            .ok_or("review document missing")?;
+        assert_eq!(
+            store.document(&document_id)?.markdown.as_bytes(),
+            b"# Exact review\r\n"
+        );
+        let scope = store
+            .review_scope(&document_id)?
+            .ok_or("review scope missing")?;
+        assert_eq!(scope.review_attempt_id, attempt.id);
+        assert_eq!(scope.contract_unit_ids, ["unit"]);
+        Ok(())
+    }
+
+    #[test]
     fn request_keys_require_the_same_exact_input_bundle() -> TestResult {
         let directory = tempfile::tempdir()?;
         let store = Store::new(directory.path().join("vizier.db"));
@@ -1848,6 +2031,187 @@ mod tests {
             "changed request-key reuse unexpectedly succeeded",
         )?;
         assert_eq!(error.code(), "request_key_conflict");
+        Ok(())
+    }
+
+    #[test]
+    fn targeted_packet_and_integrated_reviews_reject_scope_expansion() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let store = Store::new(directory.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: "run-scope-expansion".to_owned(),
+            request_key: None,
+            repository: "/tmp/repo".to_owned(),
+            source_commit: "source".to_owned(),
+            brief: markdown("# Brief\n")?,
+            terminology: markdown("# Terms\n")?,
+            contracts: vec![
+                ("unit".to_owned(), markdown("# Contract\n")?),
+                ("unit-two".to_owned(), markdown("# Contract two\n")?),
+            ],
+            gates: Vec::new(),
+            remediation_limit: 1,
+        })?;
+        store.set_run_state(&run.id, RunState::Assembling, None)?;
+        let assembler = store.create_attempt(&NewAttempt {
+            run_id: &run.id,
+            role: Role::Assembler,
+            subject_id: "delegation",
+            round: 0,
+            targeted: false,
+            nucleus_job_id: "job-assembler",
+            request_bytes: b"{}",
+            request_sha256: "digest",
+            toolset_name: "delegation-plan",
+            workspace_path: "/tmp",
+            base_commit: None,
+            allowed_scopes: &[],
+            predecessor_attempt_id: None,
+        })?;
+        store.commit_managed_submission(
+            &assembler.id,
+            "job-assembler",
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Delegation(DelegationSubmission {
+                overview_markdown: "# Delegation\n".to_owned(),
+                packets: vec![
+                    PacketSubmission {
+                        packet_key: "packet".to_owned(),
+                        contract_unit_ids: vec!["unit".to_owned()],
+                        depends_on: Vec::new(),
+                        path_scopes: vec![PathScope {
+                            path: "src".to_owned(),
+                            recursive: true,
+                        }],
+                        plan_markdown: "# Packet\n".to_owned(),
+                    },
+                    PacketSubmission {
+                        packet_key: "packet-two".to_owned(),
+                        contract_unit_ids: vec!["unit-two".to_owned()],
+                        depends_on: vec!["packet".to_owned()],
+                        path_scopes: vec![PathScope {
+                            path: "tests".to_owned(),
+                            recursive: true,
+                        }],
+                        plan_markdown: "# Packet two\n".to_owned(),
+                    },
+                ],
+            }),
+        )?;
+
+        for role in [Role::PacketReviewer, Role::IntegratedReviewer] {
+            store.set_run_state(&run.id, RunState::PacketReview, None)?;
+            if role == Role::PacketReviewer {
+                store.set_packet_state(
+                    &run.id,
+                    "packet",
+                    crate::model::PacketState::Reviewing,
+                    None,
+                    0,
+                )?;
+            }
+            let subject = if role == Role::PacketReviewer {
+                "packet"
+            } else {
+                "integration"
+            };
+            let state = if role == Role::PacketReviewer {
+                RunState::PacketReview
+            } else {
+                RunState::FinalReview
+            };
+            store.set_run_state(&run.id, state, None)?;
+            let first = store.create_attempt(&NewAttempt {
+                run_id: &run.id,
+                role,
+                subject_id: subject,
+                round: 0,
+                targeted: false,
+                nucleus_job_id: if role == Role::PacketReviewer {
+                    "job-packet-0"
+                } else {
+                    "job-integrated-0"
+                },
+                request_bytes: b"{}",
+                request_sha256: "digest",
+                toolset_name: "review",
+                workspace_path: "/tmp",
+                base_commit: Some("source"),
+                allowed_scopes: &[],
+                predecessor_attempt_id: None,
+            })?;
+            store.commit_managed_submission(
+                &first.id,
+                &first.nucleus_job_id,
+                "call-0",
+                "args-0",
+                "result",
+                &ManagedSubmission::Review(ReviewSubmission {
+                    disposition: Disposition::ChangesRequested,
+                    affected_packet_keys: vec!["packet".to_owned()],
+                    contract_unit_ids: vec!["unit".to_owned()],
+                    markdown: "# First\n".to_owned(),
+                }),
+            )?;
+            let scope = store
+                .review_scope_for_attempt(&first.id)?
+                .ok_or("review scope missing")?;
+            assert_eq!(scope.affected_packet_keys, ["packet"]);
+            assert_eq!(scope.contract_unit_ids, ["unit"]);
+            let second = store.create_attempt(&NewAttempt {
+                run_id: &run.id,
+                role,
+                subject_id: subject,
+                round: 1,
+                targeted: true,
+                nucleus_job_id: if role == Role::PacketReviewer {
+                    "job-packet-1"
+                } else {
+                    "job-integrated-1"
+                },
+                request_bytes: b"{}",
+                request_sha256: "digest",
+                toolset_name: "review",
+                workspace_path: "/tmp",
+                base_commit: Some("source"),
+                allowed_scopes: &[],
+                predecessor_attempt_id: Some(&first.id),
+            })?;
+            let attempts_before_widening = store.attempts(&run.id)?.len();
+            let error = require_error(
+                store.commit_managed_submission(
+                    &second.id,
+                    &second.nucleus_job_id,
+                    "call-1",
+                    "args-1",
+                    "result",
+                    &ManagedSubmission::Review(ReviewSubmission {
+                        disposition: Disposition::ChangesRequested,
+                        affected_packet_keys: if role == Role::PacketReviewer {
+                            vec!["packet".to_owned()]
+                        } else {
+                            vec!["packet", "packet-two"]
+                                .into_iter()
+                                .map(str::to_owned)
+                                .collect()
+                        },
+                        contract_unit_ids: vec!["unit", "unit-two"]
+                            .into_iter()
+                            .map(str::to_owned)
+                            .collect(),
+                        markdown: "# Wider\n".to_owned(),
+                    }),
+                ),
+                "targeted review unexpectedly widened scope",
+            )?;
+            assert_eq!(error.code(), "review_scope_expanded");
+            assert!(store.attempt(&second.id)?.domain_document_id.is_none());
+            assert!(store.review_scope_for_attempt(&second.id)?.is_none());
+            assert_eq!(store.attempts(&run.id)?.len(), attempts_before_widening);
+        }
         Ok(())
     }
 

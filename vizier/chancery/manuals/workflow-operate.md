@@ -12,11 +12,11 @@ Inspection is the first recovery step:
 ```sh
 vizier run list
 vizier run show RUN_ID
+vizier document show DOCUMENT_ID
 vizier attempt show ATTEMPT_ID
 ```
 
-Use `run wait` to observe and service durable in-flight work. Use `run resume`
-after a coordinator interruption. Both preserve the frozen run inputs. Cancel
+Use `run wait` to observe and service durable in-flight work. Use `run resume` after a coordinator interruption; multi-round recovery resumes from the latest durable revision. Both preserve the frozen run inputs. `needs_attention` is terminal, and wait or resume returns its durable result without creating attempts or restarting a prior review round. `document show` reads exact retained Markdown by default, or supported metadata plus the exact Markdown with `--json`; list/show/status stay body-free. Cancel
 only with explicit authority; cancellation records intent and asks Nucleus to
 cancel individual jobs but cannot undo committed documents or repository
 mutations.
@@ -28,7 +28,7 @@ vizier run cancel RUN_ID
 ```
 
 `attempt retry` creates an explicit successor only after Vizier can establish
-that the prior attempt is terminal and replacement is safe. Ambiguous
+that the prior attempt is terminal, is the current resultless leaf, and replacement is safe. Ambiguous
 admission instead reuses the byte-identical persisted request and job ID.
 There is no automatic terminal retry or direct-Codex fallback.
 

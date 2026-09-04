@@ -24,7 +24,7 @@ use crate::error::{AppError, AppResult};
 use crate::model::{AttemptState, AttemptView, PathScope, Role, RunView};
 use crate::store::{NewAttempt, Receipt, Store};
 
-pub const MODEL: &str = "gpt-5.6-terra";
+pub const MODEL: &str = "gpt-5.6-sol";
 pub const TIMEOUT_SECONDS: u64 = 20 * 60;
 const TRANSPORT_RETRY_DELAY: Duration = Duration::from_millis(100);
 
@@ -107,7 +107,7 @@ impl AgentRunner {
             },
             TimeoutSeconds::new(TIMEOUT_SECONDS),
         );
-        invocation.reasoning_effort = Some(ReasoningEffort::Medium);
+        invocation.reasoning_effort = Some(ReasoningEffort::Max);
         invocation.toolset = Some(registration.toolset);
         let mut request = JobRequestV1::new(
             JobId::new(&job_id),
@@ -549,7 +549,7 @@ fn persisted_request(attempt: &AttemptView) -> AppResult<JobRequestV1> {
         || request.developer_instructions.as_deref() != Some(DEVELOPER_INSTRUCTIONS)
         || request.invocation.harness.as_str() != "codex"
         || request.invocation.model.as_str() != MODEL
-        || request.invocation.reasoning_effort != Some(ReasoningEffort::Medium)
+        || request.invocation.reasoning_effort != Some(ReasoningEffort::Max)
         || request.invocation.cwd.as_path() != Path::new(&attempt.workspace_path)
         || request.invocation.workspace_access != workspace_access
         || request.invocation.builtin_tools.local_execution != local_execution
@@ -646,4 +646,81 @@ fn client_error(error: ClientError) -> AppError {
     let message = error.to_string();
     drop(error);
     AppError::new("nucleus_error", message)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use nucleus_core::{JobRequestV1, ReasoningEffort};
+
+    use super::{AgentRunner, AttemptSpec, persisted_request};
+    use crate::model::{NewRun, OpaqueMarkdown, Role};
+    use crate::store::Store;
+
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
+    #[test]
+    fn every_role_persists_sol_with_max_reasoning() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let store = Store::new(directory.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: "run-requester-policy".to_owned(),
+            request_key: None,
+            repository: directory.path().display().to_string(),
+            source_commit: "source".to_owned(),
+            brief: OpaqueMarkdown::from_text("# Brief\n")?,
+            terminology: OpaqueMarkdown::from_text("# Terminology\n")?,
+            contracts: vec![(
+                "policy".to_owned(),
+                OpaqueMarkdown::from_text("# Policy\n")?,
+            )],
+            gates: Vec::new(),
+            remediation_limit: 1,
+        })?;
+        let runner = AgentRunner::for_current_user();
+        let workspace = directory.path();
+
+        for role in [
+            Role::Planner,
+            Role::Assembler,
+            Role::PlanReviewer,
+            Role::Implementor,
+            Role::PacketReviewer,
+            Role::Integrator,
+            Role::IntegratedReviewer,
+        ] {
+            let attempt = runner.prepare_attempt(
+                &store,
+                &AttemptSpec {
+                    run: &run,
+                    role,
+                    subject_id: role.as_str(),
+                    round: 0,
+                    targeted: false,
+                    prompt: "# Exact prompt\n",
+                    workspace: Path::new(workspace),
+                    base_commit: None,
+                    allowed_scopes: &[],
+                    predecessor_attempt_id: None,
+                },
+            )?;
+            let request: JobRequestV1 = serde_json::from_slice(&attempt.request_bytes)?;
+            assert_eq!(
+                request.invocation.model.as_str(),
+                "gpt-5.6-sol",
+                "{}",
+                role.as_str()
+            );
+            assert_eq!(
+                request.invocation.reasoning_effort,
+                Some(ReasoningEffort::Max),
+                "{}",
+                role.as_str()
+            );
+            persisted_request(&attempt)?;
+        }
+        Ok(())
+    }
 }

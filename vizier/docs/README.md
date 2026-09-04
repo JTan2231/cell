@@ -1,9 +1,9 @@
 # Vizier documentation
 
 - [Architecture](architecture.md) describes authority and workflow boundaries.
-- [CLI and operation](cli.md) documents supported commands and outcomes.
+- [CLI and operation](cli.md) documents supported commands, exact document reads, and terminal recovery outcomes.
 - [Persistence and recovery](persistence.md) describes the private ledger,
-  candidate identity, retries, and restart behavior.
+  review scope and lineage, candidate identity, retries, and restart behavior.
 - [macOS installation](system-installation.md) describes the selector-only
   deployment boundary.
 - [Vocabulary](vocabulary.md) is the project-local Semantics seed.

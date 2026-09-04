@@ -10,7 +10,7 @@ use crate::error::{AppError, AppResult};
 use crate::git;
 use crate::model::{
     AttemptView, DocumentView, MAX_CONTRACT_UNITS, MAX_INPUT_BUNDLE_BYTES, NewRun, OpaqueMarkdown,
-    PacketView, RunView,
+    PacketView, ReviewScopeView, RunView,
 };
 use crate::nucleus::{AgentRunner, HealthSummary};
 use crate::store::Store;
@@ -39,10 +39,24 @@ enum Command {
     Init,
     /// Check the ledger, Git, and exact Nucleus requester capabilities.
     Doctor,
+    /// Read one retained exact Markdown document.
+    Document(DocumentArgs),
     /// Submit, inspect, recover, or cancel a run.
     Run(RunArgs),
     /// Inspect or explicitly retry one Nucleus-backed attempt.
     Attempt(AttemptArgs),
+}
+
+#[derive(Debug, Args)]
+struct DocumentArgs {
+    #[command(subcommand)]
+    command: DocumentCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum DocumentCommand {
+    /// Emit the exact retained Markdown body and supported metadata in JSON.
+    Show { document_id: String },
 }
 
 #[derive(Debug, Args)]
@@ -134,6 +148,17 @@ struct DocumentSummary {
 }
 
 #[derive(Debug, Serialize)]
+struct DocumentOutput {
+    id: String,
+    run_id: String,
+    kind: String,
+    subject_id: Option<String>,
+    ordinal: u32,
+    sha256: String,
+    markdown: String,
+}
+
+#[derive(Debug, Serialize)]
 struct AttemptSummary {
     id: String,
     run_id: String,
@@ -149,6 +174,7 @@ struct AttemptSummary {
     disposition: Option<String>,
     predecessor_attempt_id: Option<String>,
     detail: Option<String>,
+    review_scope: Option<ReviewScopeView>,
 }
 
 pub fn run() -> AppResult<()> {
@@ -183,6 +209,14 @@ pub fn run() -> AppResult<()> {
                 },
                 &format!("ready: {git}"),
             )
+        }
+        Command::Document(arguments) => {
+            store.check_ready_readonly()?;
+            match arguments.command {
+                DocumentCommand::Show { document_id } => {
+                    emit_document(&store.document(&document_id)?, cli.json)
+                }
+            }
         }
         Command::Run(arguments) => {
             store.check_ready()?;
@@ -239,7 +273,7 @@ fn run_command(store: &Store, command: RunCommand, json: bool) -> AppResult<()> 
 fn attempt_command(store: &Store, command: AttemptCommand, json: bool) -> AppResult<()> {
     match command {
         AttemptCommand::Show { attempt_id } => {
-            let attempt = attempt_summary(store.attempt(&attempt_id)?);
+            let attempt = attempt_summary(store, store.attempt(&attempt_id)?)?;
             emit(
                 json,
                 &attempt,
@@ -359,6 +393,24 @@ fn read_markdown(locator: &str, stdin_used: &mut bool) -> AppResult<OpaqueMarkdo
     OpaqueMarkdown::new(bytes)
 }
 
+fn emit_document(document: &DocumentView, json: bool) -> AppResult<()> {
+    if json {
+        emit_json(&DocumentOutput {
+            id: document.id.clone(),
+            run_id: document.run_id.clone(),
+            kind: document.kind.clone(),
+            subject_id: document.subject_id.clone(),
+            ordinal: document.ordinal,
+            sha256: document.sha256.clone(),
+            markdown: document.markdown.as_str().to_owned(),
+        })
+    } else {
+        // Exact body output intentionally adds no newline or formatting.
+        print!("{}", document.markdown.as_str());
+        Ok(())
+    }
+}
+
 fn emit_run_status(store: &Store, run_id: &str, json: bool) -> AppResult<()> {
     let run = store.run(run_id)?;
     let output = RunStatusOutput {
@@ -368,8 +420,8 @@ fn emit_run_status(store: &Store, run_id: &str, json: bool) -> AppResult<()> {
         attempts: store
             .attempts(run_id)?
             .into_iter()
-            .map(attempt_summary)
-            .collect(),
+            .map(|attempt| attempt_summary(store, attempt))
+            .collect::<AppResult<Vec<_>>>()?,
     };
     emit(
         json,
@@ -419,8 +471,9 @@ fn document_summary(document: DocumentView) -> DocumentSummary {
     }
 }
 
-fn attempt_summary(attempt: AttemptView) -> AttemptSummary {
-    AttemptSummary {
+fn attempt_summary(store: &Store, attempt: AttemptView) -> AppResult<AttemptSummary> {
+    let review_scope = store.review_scope_for_attempt(&attempt.id)?;
+    Ok(AttemptSummary {
         id: attempt.id,
         run_id: attempt.run_id,
         role: attempt.role.as_str().to_owned(),
@@ -435,7 +488,8 @@ fn attempt_summary(attempt: AttemptView) -> AttemptSummary {
         disposition: attempt.disposition.map(|value| value.as_str().to_owned()),
         predecessor_attempt_id: attempt.predecessor_attempt_id,
         detail: attempt.detail,
-    }
+        review_scope,
+    })
 }
 
 fn split_assignment<'a>(
@@ -526,7 +580,12 @@ fn emit_json<T: Serialize>(value: &T) -> AppResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{split_assignment, validate_identifier, validate_remediation_rounds};
+    use super::{
+        DocumentOutput, RunCommand, emit_document, run_command, split_assignment,
+        validate_identifier, validate_remediation_rounds,
+    };
+    use crate::model::{NewRun, OpaqueMarkdown, RunState};
+    use crate::store::Store;
 
     #[test]
     fn mechanical_assignments_preserve_command_tail() -> Result<(), Box<dyn std::error::Error>> {
@@ -549,5 +608,87 @@ mod tests {
         assert!(validate_remediation_rounds(1).is_ok());
         assert!(validate_remediation_rounds(8).is_ok());
         assert!(validate_remediation_rounds(9).is_err());
+    }
+
+    #[test]
+    fn document_show_keeps_raw_bytes_and_json_body_while_missing_reads_do_not_mutate()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let store = Store::new(directory.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: "run-document-cli".to_owned(),
+            request_key: None,
+            repository: "/tmp/repo".to_owned(),
+            source_commit: "source".to_owned(),
+            brief: OpaqueMarkdown::from_text("# Brief\r\n")?,
+            terminology: OpaqueMarkdown::from_text("# Terms\n")?,
+            contracts: vec![(
+                "unit".to_owned(),
+                OpaqueMarkdown::from_text("# Contract\n")?,
+            )],
+            gates: Vec::new(),
+            remediation_limit: 1,
+        })?;
+        let mut documents = store.documents(&run.id, "brief")?;
+        let document = documents.remove(0);
+        // The raw command has no formatter or trailing newline path.
+        emit_document(&document, false)?;
+        let json = serde_json::to_value(DocumentOutput {
+            id: document.id.clone(),
+            run_id: document.run_id.clone(),
+            kind: document.kind.clone(),
+            subject_id: document.subject_id.clone(),
+            ordinal: document.ordinal,
+            sha256: document.sha256.clone(),
+            markdown: document.markdown.as_str().to_owned(),
+        })?;
+        assert_eq!(json["markdown"], "# Brief\r\n");
+        assert_eq!(
+            store.document(&document.id)?.markdown.as_bytes(),
+            b"# Brief\r\n"
+        );
+        let before = store.documents(&run.id, "brief")?.len();
+        let Err(error) = store.document("document-missing") else {
+            return Err("missing document unexpectedly resolved".into());
+        };
+        assert_eq!(error.code(), "document_not_found");
+        assert_eq!(store.documents(&run.id, "brief")?.len(), before);
+        Ok(())
+    }
+
+    #[test]
+    fn terminal_wait_and_resume_are_dispatch_noops() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let store = Store::new(directory.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: "run-terminal-cli".to_owned(),
+            request_key: None,
+            repository: "/tmp/repo".to_owned(),
+            source_commit: "source".to_owned(),
+            brief: OpaqueMarkdown::from_text("# Brief\n")?,
+            terminology: OpaqueMarkdown::from_text("# Terms\n")?,
+            contracts: vec![(
+                "unit".to_owned(),
+                OpaqueMarkdown::from_text("# Contract\n")?,
+            )],
+            gates: Vec::new(),
+            remediation_limit: 1,
+        })?;
+        store.set_run_state(&run.id, RunState::NeedsAttention, Some("durable blocker"))?;
+        for command in [
+            RunCommand::Wait {
+                run_id: run.id.clone(),
+            },
+            RunCommand::Resume {
+                run_id: run.id.clone(),
+            },
+        ] {
+            run_command(&store, command, true)?;
+        }
+        assert_eq!(store.run(&run.id)?.state, RunState::NeedsAttention);
+        assert!(store.attempts(&run.id)?.is_empty());
+        Ok(())
     }
 }

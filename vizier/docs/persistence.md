@@ -6,7 +6,8 @@ Vizier stores its workflow authority in one caller-selected private SQLite
 ledger. The ledger records mechanical facts: runs, exact Markdown documents and
 digests, contract ordering, packet and dependency links, invocation roles,
 Nucleus jobs and attempts, workspace leases, Git bases and candidates, review
-dispositions, remediation lineage, gate results, and terminal state.
+dispositions, submitted review scope (affected packet keys and contract-unit IDs),
+review lineage, gate results, and terminal state.
 
 It does not turn Markdown headings, requirements, plan steps, review findings,
 severity, or rationale into structured domain fields. Documents are immutable
@@ -23,10 +24,7 @@ editing is unsupported.
 A run binds the ordered document digests, resolved Git source identity,
 repository, policy, and request key. A Nucleus job ID binds one exact persisted
 request. A candidate binds an exact base, resulting Git identity, producing
-attempt, packet or integration subject, and handoff document. A review always
-names one exact review subject: plan review binds the exact assembled
-delegation and plan revision, while packet and integrated review bind an exact
-Git candidate.
+attempt, packet or integration subject, and handoff document. A review always names one exact review subject: plan review binds the exact assembled delegation overview, mechanical packet graph, and current packet-plan revision (not provisional unit-plan Markdown), while packet and integrated review bind an exact Git candidate. Each review preserves its submitted mechanical scope and lineage; targeted remediation and recheck reuse it and reject unsupported widening.
 
 Vizier validates a managed-tool call against the expected run, role, subject,
 candidate, and state before committing it. Identical redelivery returns the
@@ -41,12 +39,11 @@ After a Vizier process interruption:
 2. use `run wait RUN_ID` to observe or service the stored in-flight work;
 3. use `run resume RUN_ID` when the durable run is recoverable;
 4. use `attempt retry ATTEMPT_ID` only after the prior attempt is positively
-   terminal and Vizier accepts a successor as safe.
+   terminal, is the current resultless leaf, and Vizier accepts a successor as safe.
 
 Vizier rediscovers durable pending Nucleus tool calls and posts only the
 previously committed result. A Nucleus restart can leave unfinished attempts
-`lost`; Codex execution cannot resume. A replacement receives a new job
-identity unless it is the byte-identical retry of ambiguous admission.
+`lost`; Codex execution cannot resume. A replacement receives a new job identity unless it is the byte-identical retry of ambiguous admission. Interrupted multi-round remediation derives and resumes the latest durable current delegation/review revision rather than replaying revision zero.
 
 An interrupted, cancelled, timed-out, or lost writer may leave worktree
 changes. Vizier inspects or quarantines that workspace before another writer is
@@ -56,7 +53,7 @@ admitted. It never assumes that cancellation rolled source changes back.
 
 `changes_requested` may create only a bounded successor of the same
 review-subject type and a targeted recheck bound to that successor.
-An exhausted remediation allowance, unanchored finding, missing authority,
+`needs_attention` is terminal: wait and resume return the durable result without creating work. An exhausted remediation allowance, unanchored finding, missing authority,
 merge conflict outside an accepted packet, unsafe workspace, failed gate, or
 unrecoverable execution leaves explicit `needs_attention` rather than silently
 expanding scope or retrying forever.

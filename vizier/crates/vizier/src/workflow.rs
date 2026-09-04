@@ -139,7 +139,7 @@ impl Workflow {
 
     async fn drive_locked(&self, run_id: &str) -> AppResult<RunView> {
         let run = self.store.run(run_id)?;
-        if run.state == RunState::Succeeded || run.state == RunState::Cancelled {
+        if run.state.is_terminal() {
             return Ok(run);
         }
         if run.cancel_requested {
@@ -241,14 +241,29 @@ impl Workflow {
     }
 
     async fn run_plan_review(&self, run: &RunView) -> AppResult<()> {
-        let mut round = 0;
+        // Recovery begins at the latest durable assembled revision, never at a
+        // historical round that the ledger has already superseded.
+        let mut round = self.latest_delegation_revision(run)?;
         loop {
             if round > 0 {
                 self.run_assembler_revision(run, round).await?;
             }
             self.store
                 .set_run_state(&run.id, RunState::PlanReview, None)?;
-            let prompt = self.plan_review_prompt(run, round)?;
+            let current_review_is_complete = self
+                .store
+                .latest_attempt(&run.id, Role::PlanReviewer, PLAN_REVIEW_SUBJECT, round)?
+                .is_some_and(|attempt| {
+                    attempt.domain_document_id.is_some() && attempt.state.is_terminal()
+                });
+            // A retained current review needs no reconstructed prompt: execute_attempt
+            // reuses its durable result. This permits interrupted recovery to begin at
+            // a later assembled revision even when no historical review was retained.
+            let prompt = if current_review_is_complete {
+                String::new()
+            } else {
+                self.plan_review_prompt(run, round)?
+            };
             let attempt = self
                 .execute_attempt(
                     run,
@@ -542,57 +557,55 @@ impl Workflow {
         for round in 0..=run.remediation_limit {
             self.store
                 .set_run_state(&run.id, RunState::Integrating, None)?;
-            let candidate =
-                match self
-                    .store
-                    .latest_candidate(&run.id, "integration", "integration")?
-                {
-                    Some(candidate) if candidate.round == round => candidate,
-                    _ => {
-                        let base = if round == 0 {
-                            assembled.clone()
-                        } else {
-                            self.store
-                                .latest_candidate(&run.id, "integration", "integration")?
-                                .ok_or_else(|| {
-                                    AppError::new(
-                                        "integration_basis_missing",
-                                        "prior integrated candidate is missing",
-                                    )
-                                })?
-                                .commit_oid
-                        };
-                        let prompt = self.integration_prompt(run, &packets, round > 0)?;
-                        let attempt = self
-                            .execute_attempt(
-                                run,
-                                Role::Integrator,
-                                "integration",
-                                round,
-                                round > 0,
-                                &prompt,
-                                Some(&base),
-                                &scopes,
+            let candidate = if let Some(candidate) =
+                self.store
+                    .candidate_at_round(&run.id, "integration", "integration", round)?
+            {
+                candidate
+            } else {
+                let base = if round == 0 {
+                    assembled.clone()
+                } else {
+                    self.store
+                        .latest_candidate(&run.id, "integration", "integration")?
+                        .ok_or_else(|| {
+                            AppError::new(
+                                "integration_basis_missing",
+                                "prior integrated candidate is missing",
                             )
-                            .await?;
-                        if attempt.disposition == Some(Disposition::Blocked) {
-                            self.store.set_run_state(
-                                &run.id,
-                                RunState::NeedsAttention,
-                                Some("integrator reported a blocker"),
-                            )?;
-                            return Ok(());
-                        }
-                        self.freeze_writer_candidate(
-                            run,
-                            &attempt,
-                            "integration",
-                            "integration",
-                            round,
-                            &base,
-                        )?
-                    }
+                        })?
+                        .commit_oid
                 };
+                let prompt = self.integration_prompt(run, &packets, round > 0)?;
+                let attempt = self
+                    .execute_attempt(
+                        run,
+                        Role::Integrator,
+                        "integration",
+                        round,
+                        round > 0,
+                        &prompt,
+                        Some(&base),
+                        &scopes,
+                    )
+                    .await?;
+                if attempt.disposition == Some(Disposition::Blocked) {
+                    self.store.set_run_state(
+                        &run.id,
+                        RunState::NeedsAttention,
+                        Some("integrator reported a blocker"),
+                    )?;
+                    return Ok(());
+                }
+                self.freeze_writer_candidate(
+                    run,
+                    &attempt,
+                    "integration",
+                    "integration",
+                    round,
+                    &base,
+                )?
+            };
             self.run_gates(run, &candidate, round)?;
             if self.store.run(&run.id)?.state == RunState::NeedsAttention {
                 return Ok(());
@@ -707,9 +720,6 @@ impl Workflow {
         base_commit: Option<&str>,
         scopes: &[PathScope],
     ) -> AppResult<AttemptView> {
-        let predecessor = plan_predecessor_round(role, subject_id, round)
-            .map(|previous_round| self.require_round_attempt(run, role, subject_id, previous_round))
-            .transpose()?;
         let attempt = if let Some(attempt) = self
             .store
             .latest_attempt(&run.id, role, subject_id, round)?
@@ -728,39 +738,15 @@ impl Workflow {
             }
             attempt
         } else {
-            bounded_prompt(prompt)?;
-            let hint = format!("workspace-{}", Uuid::now_v7());
-            let workspace = if role == Role::Assembler {
-                neutral_workspace(&self.state_root, &hint)?
-            } else {
-                let base = base_commit.ok_or_else(|| {
-                    AppError::new(
-                        "attempt_basis_missing",
-                        "repository role requires an exact Git candidate",
-                    )
-                })?;
-                git::prepare_worktree(
-                    Path::new(&run.repository),
-                    &self.state_root,
-                    &run.id,
-                    &hint,
-                    base,
-                )?
-            };
-            self.runner.prepare_attempt(
-                &self.store,
-                &AttemptSpec {
-                    run,
-                    role,
-                    subject_id,
-                    round,
-                    targeted,
-                    prompt,
-                    workspace: &workspace,
-                    base_commit,
-                    allowed_scopes: scopes,
-                    predecessor_attempt_id: predecessor.as_ref().map(|attempt| attempt.id.as_str()),
-                },
+            self.prepare_attempt(
+                run,
+                role,
+                subject_id,
+                round,
+                targeted,
+                prompt,
+                base_commit,
+                scopes,
             )?
         };
         let result = self.runner.run_attempt(&self.store, &attempt.id).await?;
@@ -783,6 +769,59 @@ impl Workflow {
             }
         }
         Ok(result)
+    }
+
+    /// Persist the exact managed request before it is admitted to Nucleus.
+    /// Keeping this construction on the workflow boundary lets recovery and
+    /// tests inspect the same request that execution will admit.
+    fn prepare_attempt(
+        &self,
+        run: &RunView,
+        role: Role,
+        subject_id: &str,
+        round: u32,
+        targeted: bool,
+        prompt: &str,
+        base_commit: Option<&str>,
+        scopes: &[PathScope],
+    ) -> AppResult<AttemptView> {
+        let predecessor = plan_predecessor_round(role, subject_id, round)
+            .map(|previous_round| self.require_round_attempt(run, role, subject_id, previous_round))
+            .transpose()?;
+        bounded_prompt(prompt)?;
+        let hint = format!("workspace-{}", Uuid::now_v7());
+        let workspace = if role == Role::Assembler {
+            neutral_workspace(&self.state_root, &hint)?
+        } else {
+            let base = base_commit.ok_or_else(|| {
+                AppError::new(
+                    "attempt_basis_missing",
+                    "repository role requires an exact Git candidate",
+                )
+            })?;
+            git::prepare_worktree(
+                Path::new(&run.repository),
+                &self.state_root,
+                &run.id,
+                &hint,
+                base,
+            )?
+        };
+        self.runner.prepare_attempt(
+            &self.store,
+            &AttemptSpec {
+                run,
+                role,
+                subject_id,
+                round,
+                targeted,
+                prompt,
+                workspace: &workspace,
+                base_commit,
+                allowed_scopes: scopes,
+                predecessor_attempt_id: predecessor.as_ref().map(|attempt| attempt.id.as_str()),
+            },
+        )
     }
 
     fn require_round_attempt(
@@ -820,6 +859,16 @@ impl Workflow {
             .documents(run_id, kind)?
             .into_iter()
             .find(|document| document.ordinal == round))
+    }
+
+    fn latest_delegation_revision(&self, run: &RunView) -> AppResult<u32> {
+        Ok(self
+            .store
+            .documents(&run.id, "delegation_plan")?
+            .into_iter()
+            .map(|document| document.ordinal)
+            .max()
+            .unwrap_or(0))
     }
 
     fn plan_documents_at_round(
@@ -970,6 +1019,9 @@ impl Workflow {
         append_packet_manifest(&mut prompt, &self.store.packets(&run.id)?);
         prompt.push_str("\n## Exact prior plan-review feedback\n");
         append_document(&mut prompt, feedback);
+        if let Some(scope) = self.store.review_scope(&feedback.id)? {
+            append_review_scope(&mut prompt, &scope);
+        }
         prompt.push_str("\nSubmit one complete successor delegation overview and packet manifest. Every packet must cover existing contract IDs, use safe repository-relative path scopes, and form an acyclic dependency graph. Overlapping scopes must be ordered by dependency.\n");
         bounded_prompt(&prompt)?;
         Ok(prompt)
@@ -978,7 +1030,7 @@ impl Workflow {
     fn plan_review_prompt(&self, run: &RunView, round: u32) -> AppResult<String> {
         let targeted = round > 0;
         let mut prompt = format!(
-            "# Vizier {} assembled-plan review\n\nRun: `{}`\nReview subject: `{PLAN_REVIEW_SUBJECT}`\nReview round: `{round}`\n{}\n\n",
+            "# Vizier {} assembled-plan review\n\nRun: `{}`\nReview subject ID: `{PLAN_REVIEW_SUBJECT}`\nReview subject: the current assembled delegation overview, current mechanical packet graph, and current packet-plan Markdown documents. Provisional unit-plan Markdown is not review material.\nReview round: `{round}`\n{}\n\n",
             if targeted { "targeted" } else { "one broad" },
             run.id,
             if targeted {
@@ -988,7 +1040,7 @@ impl Workflow {
             }
         );
         self.append_base_bundle(run, &mut prompt, None)?;
-        append_documents(&mut prompt, &self.store.documents(&run.id, "unit_plan")?);
+        // Unit plans are provisional assembler inputs, not plan-review material.
         let delegation = self
             .plan_document_at_round(&run.id, "delegation_plan", round)?
             .ok_or_else(|| {
@@ -1015,6 +1067,9 @@ impl Workflow {
                 })?;
             prompt.push_str("\n## Exact prior plan-review feedback\n");
             append_document(&mut prompt, &feedback);
+            if let Some(scope) = self.store.review_scope(&feedback.id)? {
+                append_review_scope(&mut prompt, &scope);
+            }
         }
         bounded_prompt(&prompt)?;
         Ok(prompt)
@@ -1051,6 +1106,9 @@ impl Workflow {
             )?
         {
             append_document(&mut prompt, &review);
+            if let Some(scope) = self.store.review_scope(&review.id)? {
+                append_review_scope(&mut prompt, &scope);
+            }
         }
         append_candidate_context(&mut prompt, &self.store, run, packet)?;
         bounded_prompt(&prompt)?;
@@ -1086,6 +1144,9 @@ impl Workflow {
             )?
         {
             append_document(&mut prompt, &previous);
+            if let Some(scope) = self.store.review_scope(&previous.id)? {
+                append_review_scope(&mut prompt, &scope);
+            }
         }
         bounded_prompt(&prompt)?;
         Ok(prompt)
@@ -1133,6 +1194,9 @@ impl Workflow {
             )?
         {
             append_document(&mut prompt, &previous);
+            if let Some(scope) = self.store.review_scope(&previous.id)? {
+                append_review_scope(&mut prompt, &scope);
+            }
         }
         bounded_prompt(&prompt)?;
         Ok(prompt)
@@ -1169,6 +1233,9 @@ impl Workflow {
             )?
         {
             append_document(&mut prompt, &previous);
+            if let Some(scope) = self.store.review_scope(&previous.id)? {
+                append_review_scope(&mut prompt, &scope);
+            }
         }
         bounded_prompt(&prompt)?;
         Ok(prompt)
@@ -1235,7 +1302,7 @@ fn require_domain_result(attempt: &AttemptView, label: &str) -> AppResult<()> {
 
 fn validate_retry_target(store: &Store, run: &RunView, attempt: &AttemptView) -> AppResult<()> {
     if run.cancel_requested
-        || matches!(run.state, RunState::Succeeded | RunState::Cancelled)
+        || run.state.is_terminal()
         || run.final_candidate_id.is_some()
         || run.final_ref.is_some()
     {
@@ -1346,6 +1413,17 @@ fn append_document(prompt: &mut String, document: &DocumentView) {
     prompt.push_str("\n</vizier-exact-markdown>\n");
 }
 
+fn append_review_scope(prompt: &mut String, scope: &crate::model::ReviewScopeView) {
+    let _ = writeln!(
+        prompt,
+        "\n## Persisted mechanical review scope\n\n- review attempt: `{}`\n- review document: `{}`\n- affected packets: {:?}\n- contract units: {:?}",
+        scope.review_attempt_id,
+        scope.review_document_id,
+        scope.affected_packet_keys,
+        scope.contract_unit_ids
+    );
+}
+
 fn append_packet_manifest(prompt: &mut String, packets: &[PacketView]) {
     prompt.push_str("\n## Mechanical packet manifest\n\n");
     for packet in packets {
@@ -1409,11 +1487,16 @@ fn private_directory(path: &Path) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        DELEGATION_SUBJECT, PLAN_REVIEW_SUBJECT, PlanReviewRoute, plan_predecessor_round,
+        DELEGATION_SUBJECT, PLAN_REVIEW_SUBJECT, PlanReviewRoute, Workflow, plan_predecessor_round,
         route_plan_review, validate_retry_target,
     };
+    use crate::contracts::ManagedSubmission;
     use crate::error::{AppError, AppResult};
-    use crate::model::{AttemptState, Disposition, NewRun, OpaqueMarkdown, Role, RunState};
+    use crate::model::{
+        AttemptState, DelegationSubmission, Disposition, NewRun, OpaqueMarkdown, PacketSubmission,
+        PathScope, ReviewSubmission, Role, RunState,
+    };
+    use crate::nucleus::AgentRunner;
     use crate::store::{NewAttempt, Store};
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -1426,6 +1509,116 @@ mod tests {
         match result {
             Err(error) => Ok(error),
             Ok(_) => Err(message.to_owned().into()),
+        }
+    }
+
+    fn attempt<'a>(
+        run: &'a crate::model::RunView,
+        role: Role,
+        subject_id: &'a str,
+        round: u32,
+        targeted: bool,
+        job: &'a str,
+    ) -> NewAttempt<'a> {
+        NewAttempt {
+            run_id: &run.id,
+            role,
+            subject_id,
+            round,
+            targeted,
+            nucleus_job_id: job,
+            request_bytes: b"{}",
+            request_sha256: "digest",
+            toolset_name: "test",
+            workspace_path: "/tmp",
+            base_commit: Some("source"),
+            allowed_scopes: &[],
+            predecessor_attempt_id: None,
+        }
+    }
+
+    fn complete(store: &Store, id: &str) -> TestResult {
+        store.set_attempt_runtime(id, AttemptState::Completed, None)?;
+        Ok(())
+    }
+
+    fn assert_persisted_request_scope(
+        attempt: &crate::model::AttemptView,
+        scope: &crate::model::ReviewScopeView,
+    ) -> TestResult {
+        let request: nucleus_core::JobRequestV1 = serde_json::from_slice(&attempt.request_bytes)?;
+        let actual = request
+            .prompt
+            .rsplit_once("\n## Persisted mechanical review scope\n\n")
+            .ok_or("persisted request has no review scope")?
+            .1
+            .trim_end();
+        let expected = format!(
+            "- review attempt: `{}`\n- review document: `{}`\n- affected packets: {:?}\n- contract units: {:?}",
+            scope.review_attempt_id,
+            scope.review_document_id,
+            scope.affected_packet_keys,
+            scope.contract_unit_ids,
+        );
+        assert_eq!(actual, expected);
+        Ok(())
+    }
+
+    fn test_repository() -> TestResult<(tempfile::TempDir, String)> {
+        let directory = tempfile::tempdir()?;
+        for arguments in [
+            vec!["init", "-q"],
+            vec!["config", "user.email", "vizier-test@example.invalid"],
+            vec!["config", "user.name", "Vizier Test"],
+        ] {
+            let status = std::process::Command::new("git")
+                .args(arguments)
+                .current_dir(directory.path())
+                .status()?;
+            if !status.success() {
+                return Err("unable to initialize test Git repository".into());
+            }
+        }
+        std::fs::write(directory.path().join("README.md"), "test\n")?;
+        if !std::process::Command::new("git")
+            .args(["add", "README.md"])
+            .current_dir(directory.path())
+            .status()?
+            .success()
+            || !std::process::Command::new("git")
+                .args(["commit", "-qm", "test source"])
+                .current_dir(directory.path())
+                .status()?
+                .success()
+        {
+            return Err("unable to commit test Git source".into());
+        }
+        let output = std::process::Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(directory.path())
+            .output()?;
+        if !output.status.success() {
+            return Err("unable to identify test Git source".into());
+        }
+        Ok((
+            directory,
+            String::from_utf8(output.stdout)?.trim().to_owned(),
+        ))
+    }
+
+    fn delegation(round: u32) -> DelegationSubmission {
+        DelegationSubmission {
+            overview_markdown: format!("# Assembled revision {round}\n"),
+            packets: vec![PacketSubmission {
+                packet_key: "packet".to_owned(),
+                contract_unit_ids: vec!["unit".to_owned()],
+                depends_on: Vec::new(),
+                path_scopes: vec![PathScope {
+                    path: "src".to_owned(),
+                    recursive: true,
+                }],
+                plan_markdown: format!("# Packet revision {round}\n"),
+            }],
         }
     }
 
@@ -1467,6 +1660,467 @@ mod tests {
             route_plan_review(Disposition::Blocked, 0, 1),
             PlanReviewRoute::NeedsAttention { .. }
         ));
+    }
+
+    #[test]
+    fn interrupted_plan_remediation_resumes_latest_assembled_revision() -> TestResult {
+        let (repository, source_commit) = test_repository()?;
+        let store = Store::new(repository.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: "run-plan-subject".to_owned(),
+            request_key: None,
+            repository: repository.path().to_string_lossy().into_owned(),
+            source_commit,
+            brief: markdown("# Brief\n")?,
+            terminology: markdown("# Terms\n")?,
+            contracts: vec![("unit".to_owned(), markdown("# Contract\n")?)],
+            gates: Vec::new(),
+            remediation_limit: 1,
+        })?;
+        store.record_document(
+            &run.id,
+            "unit_plan",
+            Some("unit"),
+            0,
+            &markdown("# Cast-shaped planner marker\n")?,
+        )?;
+        store.set_run_state(&run.id, RunState::Assembling, None)?;
+        for round in 0..=1 {
+            let assembler = store.create_attempt(&attempt(
+                &run,
+                Role::Assembler,
+                DELEGATION_SUBJECT,
+                round,
+                round > 0,
+                &format!("assembler-{round}"),
+            ))?;
+            store.commit_managed_submission(
+                &assembler.id,
+                &assembler.nucleus_job_id,
+                &format!("call-{round}"),
+                "args",
+                "result",
+                &ManagedSubmission::Delegation(delegation(round)),
+            )?;
+            complete(&store, &assembler.id)?;
+        }
+        // Recovery starts with the current durable revision and its completed
+        // review. There deliberately is no historical round-zero reviewer.
+        store.set_run_state(&run.id, RunState::PlanReview, None)?;
+        let review_workspace = crate::git::prepare_worktree(
+            repository.path(),
+            repository.path(),
+            &run.id,
+            "review-one",
+            &run.source_commit,
+        )?;
+        let review_workspace = review_workspace.to_string_lossy().into_owned();
+        let review = store.create_attempt(&NewAttempt {
+            workspace_path: &review_workspace,
+            ..attempt(
+                &run,
+                Role::PlanReviewer,
+                PLAN_REVIEW_SUBJECT,
+                1,
+                false,
+                "review-1",
+            )
+        })?;
+        store.commit_managed_submission(
+            &review.id,
+            &review.nucleus_job_id,
+            "call-1",
+            "args",
+            "result",
+            &ManagedSubmission::Review(ReviewSubmission {
+                disposition: Disposition::Accepted,
+                affected_packet_keys: vec!["packet".to_owned()],
+                contract_unit_ids: vec!["unit".to_owned()],
+                markdown: "# Revision one accepted\n".to_owned(),
+            }),
+        )?;
+        complete(&store, &review.id)?;
+
+        let workflow = Workflow::new(store.clone(), AgentRunner::for_current_user());
+        tokio::runtime::Runtime::new()?.block_on(workflow.run_plan_review(&run))?;
+        assert!(
+            store
+                .latest_attempt(&run.id, Role::PlanReviewer, PLAN_REVIEW_SUBJECT, 0)?
+                .is_none()
+        );
+        let Some(revision_one) =
+            store.latest_attempt(&run.id, Role::PlanReviewer, PLAN_REVIEW_SUBJECT, 1)?
+        else {
+            return Err("revision-one review attempt is missing".into());
+        };
+        assert_eq!(revision_one.id, review.id);
+        assert_eq!(workflow.latest_delegation_revision(&run)?, 1);
+        assert_eq!(
+            store
+                .document(&store.packet(&run.id, "packet")?.plan_document_id)?
+                .ordinal,
+            1
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn provisional_cast_prose_cannot_route_an_assembler_remediation() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let store = Store::new(directory.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: "run-provisional-cast".to_owned(),
+            request_key: None,
+            repository: "/tmp/repository".to_owned(),
+            source_commit: "source".to_owned(),
+            brief: markdown("# Brief\n")?,
+            terminology: markdown("# Terms\n")?,
+            contracts: vec![("unit".to_owned(), markdown("# Contract\n")?)],
+            gates: Vec::new(),
+            remediation_limit: 1,
+        })?;
+        store.record_document(
+            &run.id,
+            "unit_plan",
+            Some("unit"),
+            0,
+            &markdown("# Cast-shaped planner marker\n")?,
+        )?;
+        store.set_run_state(&run.id, RunState::Assembling, None)?;
+        let assembler = store.create_attempt(&attempt(
+            &run,
+            Role::Assembler,
+            DELEGATION_SUBJECT,
+            0,
+            false,
+            "assembler",
+        ))?;
+        store.commit_managed_submission(
+            &assembler.id,
+            "assembler",
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Delegation(delegation(0)),
+        )?;
+        complete(&store, &assembler.id)?;
+        store.set_run_state(&run.id, RunState::PlanReview, None)?;
+        let review = store.create_attempt(&attempt(
+            &run,
+            Role::PlanReviewer,
+            PLAN_REVIEW_SUBJECT,
+            0,
+            false,
+            "review",
+        ))?;
+        store.commit_managed_submission(
+            &review.id,
+            "review",
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Review(ReviewSubmission {
+                disposition: Disposition::Accepted,
+                affected_packet_keys: Vec::new(),
+                contract_unit_ids: Vec::new(),
+                markdown: "# Assembled subject accepted\n".to_owned(),
+            }),
+        )?;
+        complete(&store, &review.id)?;
+        let workflow = Workflow::new(store.clone(), AgentRunner::for_current_user());
+        assert!(
+            !workflow
+                .plan_review_prompt(&run, 0)?
+                .contains("Cast-shaped planner marker")
+        );
+        tokio::runtime::Runtime::new()?.block_on(workflow.run_plan_review(&run))?;
+        assert!(
+            store
+                .latest_attempt(&run.id, Role::Assembler, DELEGATION_SUBJECT, 1)?
+                .is_none()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn packet_and_integrated_scope_reach_remediation_and_targeted_recheck() -> TestResult {
+        let (repository, source_commit) = test_repository()?;
+        let store = Store::new(repository.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: "run-scope-managed-paths".to_owned(),
+            request_key: None,
+            repository: repository.path().to_string_lossy().into_owned(),
+            source_commit,
+            brief: markdown("# Brief\n")?,
+            terminology: markdown("# Terms\n")?,
+            contracts: vec![("unit".to_owned(), markdown("# Contract\n")?)],
+            gates: Vec::new(),
+            remediation_limit: 1,
+        })?;
+        store.set_run_state(&run.id, RunState::Assembling, None)?;
+        let assembler = store.create_attempt(&attempt(
+            &run,
+            Role::Assembler,
+            DELEGATION_SUBJECT,
+            0,
+            false,
+            "assembler",
+        ))?;
+        store.commit_managed_submission(
+            &assembler.id,
+            "assembler",
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Delegation(delegation(0)),
+        )?;
+        complete(&store, &assembler.id)?;
+        let workflow = Workflow::new(
+            store.clone(),
+            AgentRunner::with_socket(repository.path().join("unavailable-nucleus.sock")),
+        );
+
+        // A durable packet-review result routes remediation through run_packets.
+        store.set_run_state(&run.id, RunState::PacketReview, None)?;
+        store.set_packet_state(
+            &run.id,
+            "packet",
+            crate::model::PacketState::Reviewing,
+            None,
+            0,
+        )?;
+        let packet_review = store.create_attempt(&attempt(
+            &run,
+            Role::PacketReviewer,
+            "packet",
+            0,
+            false,
+            "packet-review-0",
+        ))?;
+        store.commit_managed_submission(
+            &packet_review.id,
+            "packet-review-0",
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Review(ReviewSubmission {
+                disposition: Disposition::ChangesRequested,
+                affected_packet_keys: vec!["packet".to_owned()],
+                contract_unit_ids: vec!["unit".to_owned()],
+                markdown: "# Exact packet scope\n".to_owned(),
+            }),
+        )?;
+        complete(&store, &packet_review.id)?;
+        let packet_handoff = store.record_document(
+            &run.id,
+            "implementation_handoff",
+            Some("packet"),
+            0,
+            &markdown("# Packet handoff\n")?,
+        )?;
+        let packet_writer = store.create_attempt(&attempt(
+            &run,
+            Role::Implementor,
+            "packet",
+            0,
+            false,
+            "packet-writer-0",
+        ))?;
+        let packet_candidate = store.record_candidate(
+            &run.id,
+            "packet",
+            "packet",
+            0,
+            &run.source_commit,
+            &run.source_commit,
+            "refs/test/packet/0",
+            &packet_handoff.id,
+            &packet_writer.id,
+        )?;
+        store.set_packet_state(
+            &run.id,
+            "packet",
+            crate::model::PacketState::Planned,
+            Some(&packet_candidate.id),
+            1,
+        )?;
+        let _ = require_error(
+            tokio::runtime::Runtime::new()?.block_on(workflow.run_packets(&run)),
+            "unavailable Nucleus must stop after managed implementor preparation",
+        )?;
+        let packet_remediation = store
+            .latest_attempt(&run.id, Role::Implementor, "packet", 1)?
+            .ok_or("managed packet remediation was not prepared")?;
+        let packet_handoff_1 = store.record_document(
+            &run.id,
+            "implementation_handoff",
+            Some("packet"),
+            1,
+            &markdown("# Packet handoff 1\n")?,
+        )?;
+        let packet_candidate_1 = store.record_candidate(
+            &run.id,
+            "packet",
+            "packet",
+            1,
+            &run.source_commit,
+            &run.source_commit,
+            "refs/test/packet/1",
+            &packet_handoff_1.id,
+            &packet_remediation.id,
+        )?;
+        store.set_packet_state(
+            &run.id,
+            "packet",
+            crate::model::PacketState::Planned,
+            Some(&packet_candidate_1.id),
+            1,
+        )?;
+        let _ = require_error(
+            tokio::runtime::Runtime::new()?.block_on(workflow.run_packets(&run)),
+            "unavailable Nucleus must stop after managed packet recheck preparation",
+        )?;
+        let packet_recheck = store
+            .latest_attempt(&run.id, Role::PacketReviewer, "packet", 1)?
+            .ok_or("managed packet recheck was not prepared")?;
+
+        // The integration path reuses its durable round-zero review, then
+        // prepares round-one remediation and recheck through run_integration.
+        store.set_packet_state(
+            &run.id,
+            "packet",
+            crate::model::PacketState::Accepted,
+            Some(&packet_candidate_1.id),
+            1,
+        )?;
+        store.set_run_state(&run.id, RunState::FinalReview, None)?;
+        let integration_workspace = crate::git::prepare_worktree(
+            repository.path(),
+            repository.path(),
+            &run.id,
+            "integration-review-zero",
+            &run.source_commit,
+        )?;
+        let integration_workspace = integration_workspace.to_string_lossy().into_owned();
+        let integration_review = store.create_attempt(&NewAttempt {
+            workspace_path: &integration_workspace,
+            ..attempt(
+                &run,
+                Role::IntegratedReviewer,
+                "integration",
+                0,
+                false,
+                "integration-review-0",
+            )
+        })?;
+        store.commit_managed_submission(
+            &integration_review.id,
+            "integration-review-0",
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Review(ReviewSubmission {
+                disposition: Disposition::ChangesRequested,
+                affected_packet_keys: vec!["packet".to_owned()],
+                contract_unit_ids: vec!["unit".to_owned()],
+                markdown: "# Exact integration scope\n".to_owned(),
+            }),
+        )?;
+        complete(&store, &integration_review.id)?;
+        let integration_handoff = store.record_document(
+            &run.id,
+            "integration_handoff",
+            Some("integration"),
+            0,
+            &markdown("# Integration handoff\n")?,
+        )?;
+        let integration_writer = store.create_attempt(&attempt(
+            &run,
+            Role::Integrator,
+            "integration",
+            0,
+            false,
+            "integration-writer-0",
+        ))?;
+        let integration_candidate = store.record_candidate(
+            &run.id,
+            "integration",
+            "integration",
+            0,
+            &run.source_commit,
+            &run.source_commit,
+            "refs/test/integration/0",
+            &integration_handoff.id,
+            &integration_writer.id,
+        )?;
+        let _ = require_error(
+            tokio::runtime::Runtime::new()?.block_on(workflow.run_integration(&run)),
+            "unavailable Nucleus must stop after managed integrator preparation",
+        )?;
+        let integration_remediation = store
+            .latest_attempt(&run.id, Role::Integrator, "integration", 1)?
+            .ok_or("managed integration remediation was not prepared")?;
+        let integration_handoff_1 = store.record_document(
+            &run.id,
+            "integration_handoff",
+            Some("integration"),
+            1,
+            &markdown("# Integration handoff 1\n")?,
+        )?;
+        let _integration_candidate_1 = store.record_candidate(
+            &run.id,
+            "integration",
+            "integration",
+            1,
+            &run.source_commit,
+            &run.source_commit,
+            "refs/test/integration/1",
+            &integration_handoff_1.id,
+            &integration_remediation.id,
+        )?;
+        let _ = integration_candidate;
+        let _ = require_error(
+            tokio::runtime::Runtime::new()?.block_on(workflow.run_integration(&run)),
+            "unavailable Nucleus must stop after managed integrated recheck preparation",
+        )?;
+        let integration_recheck = store
+            .latest_attempt(&run.id, Role::IntegratedReviewer, "integration", 1)?
+            .ok_or("managed integrated recheck was not prepared")?;
+
+        let packet_review = store.attempt(&packet_review.id)?;
+        let packet_scope = store
+            .review_scope(
+                packet_review
+                    .domain_document_id
+                    .as_deref()
+                    .ok_or("packet review has no persisted document")?,
+            )?
+            .ok_or("packet review has no persisted scope")?;
+        assert_eq!(packet_scope.affected_packet_keys, ["packet"]);
+        assert_eq!(packet_scope.contract_unit_ids, ["unit"]);
+        let integration_review = store.attempt(&integration_review.id)?;
+        let integration_scope = store
+            .review_scope(
+                integration_review
+                    .domain_document_id
+                    .as_deref()
+                    .ok_or("integrated review has no persisted document")?,
+            )?
+            .ok_or("integrated review has no persisted scope")?;
+        assert_eq!(integration_scope.affected_packet_keys, ["packet"]);
+        assert_eq!(integration_scope.contract_unit_ids, ["unit"]);
+        for persisted in [&packet_remediation, &packet_recheck] {
+            assert!(persisted.targeted);
+            assert_persisted_request_scope(persisted, &packet_scope)?;
+        }
+        for persisted in [&integration_remediation, &integration_recheck] {
+            assert!(persisted.targeted);
+            assert_persisted_request_scope(persisted, &integration_scope)?;
+        }
+        Ok(())
     }
 
     #[test]

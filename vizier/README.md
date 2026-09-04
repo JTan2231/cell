@@ -8,7 +8,8 @@ independent reviews; and returns an exact reviewed Git candidate.
 
 Vizier coordinates work. It does not interpret Markdown requirements, approve
 its own edits, move the caller's branch, push, release, deploy, or change
-Pratica or Semantics.
+Pratica or Semantics. Every Vizier-created Nucleus role request explicitly
+uses requester-owned `gpt-5.6-sol` with reasoning effort `max`.
 
 ## Basic use
 
@@ -28,7 +29,9 @@ vizier run submit \
 `run submit` drives the run synchronously. If the process is interrupted, use
 `vizier run show RUN_ID` and `vizier run resume RUN_ID`. A successful run is
 bound to the exact integrated candidate that passed its configured gates and
-independent final review.
+independent final review. Use `vizier document show DOCUMENT_ID` to read an
+exact retained document referenced by a run or attempt; routine run views do
+not print document bodies.
 
 See [docs/README.md](docs/README.md) for the public contracts and operating
 guides.

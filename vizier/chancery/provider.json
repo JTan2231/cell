@@ -36,7 +36,7 @@
       "Incompatible workflow, state, requester, or installation meaning requires successor contracts and recovery proof before older behavior is retired."
     ],
     "operational_limits": [
-      "Vizier coordinates finite implementation runs with one broad plan review, one broad review per packet candidate, one broad integrated review, and bounded targeted rechecks; it is not a daemon, general scheduler, workflow engine, requirements parser, deployment orchestrator, or release gate.",
+      "Vizier coordinates finite implementation runs with one broad review of the assembled delegation, packet graph, and current packet plans, one broad review per packet candidate, one broad integrated review, and persisted-scope bounded targeted rechecks; it is not a daemon, general scheduler, workflow engine, requirements parser, deployment orchestrator, or release gate.",
       "No run duration, queue time, model quality, repository size, retained-history, throughput, release, deployment, or availability objective is promised."
     ]
   },
