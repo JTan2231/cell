@@ -2531,6 +2531,9 @@ fn set_file_private(_path: &Path) -> AppResult<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::process::Command;
+
     use super::{NewAttempt, Receipt, Store};
     use crate::contracts::ManagedSubmission;
     use crate::error::{AppError, AppResult};
@@ -2544,6 +2547,50 @@ mod tests {
 
     fn markdown(value: &str) -> TestResult<OpaqueMarkdown> {
         Ok(OpaqueMarkdown::from_text(value)?)
+    }
+
+    fn git(repository: &std::path::Path, arguments: &[&str]) -> TestResult {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repository)
+            .args(arguments)
+            .output()?;
+        if !output.status.success() {
+            return Err(std::io::Error::other(format!(
+                "git command {arguments:?} failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ))
+            .into());
+        }
+        Ok(())
+    }
+
+    fn retained_repository(
+        directory: &std::path::Path,
+    ) -> TestResult<(std::path::PathBuf, String)> {
+        let repository = directory.join("repository");
+        fs::create_dir(&repository)?;
+        git(&repository, &["init", "-q"])?;
+        git(&repository, &["config", "user.name", "Vizier test"])?;
+        git(
+            &repository,
+            &["config", "user.email", "vizier@example.test"],
+        )?;
+        fs::write(repository.join("tracked.txt"), "initial\n")?;
+        git(&repository, &["add", "."])?;
+        git(&repository, &["commit", "-qm", "initial"])?;
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(&repository)
+            .args(["rev-parse", "HEAD"])
+            .output()?;
+        if !output.status.success() {
+            return Err("could not resolve test repository HEAD".into());
+        }
+        Ok((
+            repository,
+            String::from_utf8(output.stdout)?.trim().to_owned(),
+        ))
     }
 
     fn require_error<T>(result: AppResult<T>, message: &str) -> TestResult<AppError> {
@@ -2768,6 +2815,199 @@ mod tests {
         Ok(())
     }
 
+    fn insert_retained_candidate(
+        store: &Store,
+        run_id: &str,
+        candidate_id: &str,
+        attempt_id: &str,
+        document_id: &str,
+        commit_oid: &str,
+    ) -> TestResult {
+        insert_attempt_and_document(
+            store,
+            run_id,
+            attempt_id,
+            document_id,
+            Role::Integrator,
+            None,
+        )?;
+        let connection = store.connect()?;
+        connection.execute(
+            "INSERT INTO candidates(id,run_id,subject_id,kind,round,base_commit,commit_oid,ref_name,handoff_document_id,attempt_id,predecessor_candidate_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,NULL,?)",
+            params![candidate_id, run_id, "integration", "integration", 0_u32, commit_oid, commit_oid, format!("refs/vizier/{candidate_id}"), document_id, attempt_id, 0_i64],
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn continuable_admission_is_replay_safe_linear_and_inherits_the_frozen_basis() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let (repository, commit) = retained_repository(directory.path())?;
+        git(
+            &repository,
+            &["update-ref", "refs/vizier/candidate-parent", &commit],
+        )?;
+        let database = directory.path().join("vizier.db");
+        let store = Store::new(&database);
+        store.initialize()?;
+        let parent = store.create_run(&NewRun {
+            id: "run-continuation-parent".to_owned(),
+            request_key: None,
+            repository: repository.to_string_lossy().into_owned(),
+            source_commit: commit.clone(),
+            brief: markdown("# Brief\n")?,
+            terminology: markdown("# Terms\n")?,
+            contracts: vec![("unit".to_owned(), markdown("# Contract\n")?)],
+            gates: vec![("check".to_owned(), "true".to_owned())],
+            remediation_limit: 1,
+        })?;
+        store.record_delegation(
+            &parent.id,
+            &DelegationSubmission {
+                overview_markdown: "# Delegation\n".to_owned(),
+                packets: vec![PacketSubmission {
+                    packet_key: "packet".to_owned(),
+                    contract_unit_ids: vec!["unit".to_owned()],
+                    depends_on: Vec::new(),
+                    path_scopes: vec![PathScope {
+                        path: "tracked.txt".to_owned(),
+                        recursive: false,
+                    }],
+                    plan_markdown: "# Packet\n".to_owned(),
+                }],
+            },
+        )?;
+        insert_retained_candidate(
+            &store,
+            &parent.id,
+            "candidate-parent",
+            "parent-writer",
+            "parent-handoff",
+            &commit,
+        )?;
+        insert_attempt_and_document(
+            &store,
+            &parent.id,
+            "parent-review",
+            "parent-review-document",
+            Role::IntegratedReviewer,
+            Some(Disposition::ChangesRequested),
+        )?;
+        let connection = store.connect()?;
+        connection.execute(
+            "INSERT INTO review_bindings(review_attempt_id,candidate_id,plan_document_id) VALUES(?,?,NULL)",
+            params!["parent-review", "candidate-parent"],
+        )?;
+        drop(connection);
+        store.terminalize_needs_attention(&RecoveryEnvelope {
+            version: 1,
+            run_id: parent.id.clone(),
+            checkpoint_id: "continuable-checkpoint".to_owned(),
+            continuable: true,
+            cause: RecoveryCause::IntegratedReviewExhausted,
+            frontier: Some(crate::model::RecoveryFrontier::IntegratedCandidate),
+            responsible_role: Some(Role::Integrator),
+            subject_id: Some("integration".to_owned()),
+            failed_packet_keys: Vec::new(),
+            evidence_ids: vec!["parent-review-document".to_owned()],
+            permitted_scopes: Vec::new(),
+            invalidated_checks: vec!["check".to_owned()],
+            candidate_id: Some("candidate-parent".to_owned()),
+            reviewed_candidate_id: Some("candidate-parent".to_owned()),
+            predecessor_candidate_id: None,
+            review_attempt_id: Some("parent-review".to_owned()),
+            gate_result_ids: Vec::new(),
+            canonical_basis_digest: parent.input_bundle_sha256.clone(),
+        })?;
+
+        // Reopening the store models a process restart before an idempotent replay.
+        let reopened = Store::new(&database);
+        reopened.initialize()?;
+        let child = reopened.admit_continuation(&parent.id, "continuation-key", 2)?;
+        assert_eq!(child.parent_run_id.as_deref(), Some(parent.id.as_str()));
+        assert_eq!(
+            child.recovery_checkpoint_id.as_deref(),
+            Some("continuable-checkpoint")
+        );
+        assert_eq!(child.remediation_limit, 2);
+        assert_eq!(reopened.run(&parent.id)?.state, RunState::NeedsAttention);
+        assert_eq!(reopened.attempts(&child.id)?.len(), 0);
+        assert!(
+            reopened
+                .attempts(&child.id)?
+                .iter()
+                .all(|attempt| attempt.round == 0 && attempt.role != Role::Planner)
+        );
+        assert_eq!(reopened.packets(&child.id)?[0].remediation_round, 0);
+        assert_eq!(
+            reopened.packets(&child.id)?[0].state,
+            crate::model::PacketState::Planned
+        );
+        for kind in [
+            "brief",
+            "terminology",
+            "contract_unit",
+            "delegation_plan",
+            "packet_plan",
+        ] {
+            let parent_markdown = reopened
+                .documents(&parent.id, kind)?
+                .into_iter()
+                .map(|document| document.markdown.as_str().to_owned())
+                .collect::<Vec<_>>();
+            let child_markdown = reopened
+                .documents(&child.id, kind)?
+                .into_iter()
+                .map(|document| document.markdown.as_str().to_owned())
+                .collect::<Vec<_>>();
+            assert_eq!(child_markdown, parent_markdown, "did not inherit {kind}");
+        }
+        assert_eq!(
+            reopened
+                .gates(&child.id)?
+                .into_iter()
+                .map(|gate| (gate.ordinal, gate.name, gate.command))
+                .collect::<Vec<_>>(),
+            reopened
+                .gates(&parent.id)?
+                .into_iter()
+                .map(|gate| (gate.ordinal, gate.name, gate.command))
+                .collect::<Vec<_>>()
+        );
+        let inherited: i64 = reopened.connect()?.query_row(
+            "SELECT count(*) FROM inherited_evidence WHERE child_run_id=? AND evidence_kind='checkpoint' AND evidence_id=?",
+            params![child.id, "parent-review-document"],
+            |row| row.get(0),
+        )?;
+        assert_eq!(inherited, 1);
+
+        assert_eq!(
+            reopened
+                .admit_continuation(&parent.id, "continuation-key", 2)?
+                .id,
+            child.id
+        );
+        let count_before_conflicts = reopened.list_runs()?.len();
+        assert_eq!(
+            require_error(
+                reopened.admit_continuation(&parent.id, "continuation-key", 3),
+                "conflicting continuation replay succeeded",
+            )?
+            .code(),
+            "continuation_request_key_conflict"
+        );
+        assert_eq!(
+            require_error(
+                reopened.admit_continuation(&parent.id, "second-continuation-key", 2),
+                "second direct continuation succeeded",
+            )?
+            .code(),
+            "continuation_child_exists"
+        );
+        assert_eq!(reopened.list_runs()?.len(), count_before_conflicts);
+        Ok(())
+    }
+
     #[test]
     fn admission_revalidates_exact_review_candidate_binding_before_writing() -> TestResult {
         let directory = tempfile::tempdir()?;
@@ -2929,6 +3169,49 @@ mod tests {
         assert_eq!(
             child.predecessor_candidate_id.as_deref(),
             Some("parent-candidate")
+        );
+
+        // Insert a separate lineage directly: normal creation intentionally
+        // permits only one active run, which is unrelated to this lineage seam.
+        let connection = store.connect()?;
+        connection.execute(
+            "INSERT INTO runs(id,repository,source_commit,state,contract_set_sha256,input_bundle_sha256,brief_document_id,terminology_document_id,remediation_limit,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            params!["run-unrelated", "/tmp/repo", "source", "queued", parent.contract_set_sha256, parent.input_bundle_sha256, "unrelated-brief", "unrelated-terms", 1_u32, 0_i64, 0_i64],
+        )?;
+        insert_candidate(
+            &store,
+            "run-unrelated",
+            "unrelated-candidate",
+            "unrelated-writer",
+            "unrelated-handoff",
+            None,
+        )?;
+        insert_attempt_and_document(
+            &store,
+            "run-child",
+            "unrelated-predecessor-writer",
+            "unrelated-predecessor-handoff",
+            Role::Integrator,
+            None,
+        )?;
+        assert_eq!(
+            require_error(
+                store.record_candidate_with_predecessor(
+                    "run-child",
+                    "integration-two",
+                    "integration",
+                    1,
+                    "base",
+                    "oid",
+                    "refs/vizier/child-unrelated",
+                    "unrelated-predecessor-handoff",
+                    "unrelated-predecessor-writer",
+                    Some("unrelated-candidate"),
+                ),
+                "unrelated predecessor was accepted",
+            )?
+            .code(),
+            "candidate_predecessor_invalid"
         );
         Ok(())
     }
