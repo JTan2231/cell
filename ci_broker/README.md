@@ -16,8 +16,8 @@ python3 ci_broker/client.py run --gate cell.root -- ./path/to/private-ci-body
 The body runs from the worktree root unless `--cwd` is supplied. Its output is
 left attached to the caller. A normal pass returns zero without adding a JSON
 receipt; failures print the durable receipt. Add `--verbose-receipt` to print a
-receipt on success too. `--attribution-json` can carry Vizier run, packet, and
-candidate IDs without changing execution identity.
+receipt on success too. `--attribution-json` can carry caller-owned correlation metadata without
+changing execution identity.
 
 ## Admission and identity
 

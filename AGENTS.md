@@ -23,24 +23,6 @@ Semantics-Project: cell
   Preserve unsupported, unspecified, not-applicable, undeclared, dependency,
   and readiness outcomes as reported; never fill a gap from schemas or
   implementation code.
-- When the user authorizes a Git implementation whose brief, applicable
-  terminology, complete contract units, source basis, and validation gates are
-  settled—and the work would otherwise be decomposed among implementation or
-  review subagents—use the installed `vizier.implementation.delegate`
-  capability instead of spawning ad hoc subagents. Freeze the caller-owned
-  inputs and let Vizier plan, implement, independently review, integrate, and
-  run the gates.
-- Prefer exact sealed Pratica exports when they exist; otherwise freeze
-  already-approved design and acceptance text without inventing requirements.
-  If inputs are materially unsettled, Vizier is unavailable, or a run returns
-  `needs_attention`, stop at the applicable design, Pratica, caller, or Vizier
-  recovery boundary; do not silently fall back to direct implementation
-  subagents.
-- Treat an authorized implementation request as permission to apply Vizier's
-  exact successful candidate only when the caller branch still matches the
-  run's source basis and the relevant worktree is clean. Stop for reconciliation
-  if it has advanced or contains relevant changes. Push, release, and deployment
-  remain separate actions requiring their own authority.
 - Before changing the public contract, harness compatibility, persistent state,
   authentication or service lifecycle, deployment, or a requester integration,
   run `/Users/joey/.local/bin/nucleus manual`. If it is unavailable, read
@@ -48,19 +30,4 @@ Semantics-Project: cell
 - Update `nucleus/docs/operator-manual.md` in the same change when shared
   operational facts, boundaries, or procedures change.
 - Preserve product-scoped instructions in nested `AGENTS.md` files.
-- The caller performs applicable Semantics discovery and query before
-  delegation. A delegated Vizier unit planner, assembler, reviewer, packet
-  implementor, or integrator uses the caller-supplied exact frozen terminology
-  snapshot as that query evidence and MUST NOT attempt a live Semantics query
-  or another live administrative-service query.
-- Those delegated Vizier roles work in isolated Nucleus workspaces and run only
-  bounded checks compatible with that sandbox. They MUST NOT invoke
-  caller-configured host/broker gates, including root `./ci.sh` and
-  `./vizier/ci.sh`. Submit `ready` when scoped work and sandbox-compatible
-  checks pass; inability to access the host CI broker is expected and is not a
-  product blocker. After the integrator submits `ready`, the Vizier coordinator
-  runs the configured gates on the exact frozen integrated candidate; required
-  independent review remains separate.
 - Every code change must leave `./ci.sh` green.
-  For an isolated Vizier role, the coordinator's configured root gate satisfies
-  this obligation rather than duplicating the command in the sandbox.

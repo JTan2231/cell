@@ -68,7 +68,6 @@ separately maintained discovery catalog.
 | Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from accepted accounts in the dedicated Annals decisions library. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, decision-feed intake, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, transcript storage, or interpreting Annals retention as semantic truth. |
 | Geste | A prior bounded work episode should be found by problem shape or manually recorded with its source basis. | Episode identity, immutable account revisions, authored interpretation, source anchors, coverage gaps, and read-time search, report, and graph projections. | Source-system truth, current policy, automatic episode ingestion, or deciding that a precedent applies. |
 | Pratica | A proposed entrant needs exact negotiated terms from several independently stewarded systems. | Integration and track identity, immutable offers, current assent, agreement seals, steward bases, caller-keyed ingress receipts, bounded requester attempts, composition reviews, and conformance reviews. | Implementing or changing target systems, automatically discovering every concern, treating review prose as assent, or proving deployment readiness. |
-| Vizier | A finite implementation against settled, caller-enumerated contracts needs planned delegation and independent review. | Frozen Markdown inputs, planning and packet graphs, Nucleus correlations, isolated Git candidates, review dispositions, bounded remediation, gate evidence, recovery, and run success. | Negotiating or changing requirements, general scheduling, moving the caller's branch, releasing, deploying, or treating model prose as acceptance. |
 | Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, eight-slot harness supervision, single-authority credential coordination, cancellation, exact harness-stdout observations, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, requester retry policy, or reporting materializations. |
 | Annals Usage | Annals-attributed model consumption, account allowance, login, or the Annals-to-Nucleus execution path must be inspected. | Live calculation over Annals attribution and Nucleus output atoms, plus Annals-facing budget and diagnostic commands. | Nucleus runtime authority, durable reporting projections, Codex credential storage, Annals corpus success, or general job orchestration. |
 | Codex | Nucleus needs an inspected harness and account protocol implementation. | Its executable and app-server behavior. | Requester domain policy or a second credential authority for Nucleus jobs. |
@@ -89,8 +88,6 @@ Typical routing examples:
   discovery and exact-ID promise resolution.
 - “Negotiate the exact CRM terms with each independently stewarded system
   before implementation” is a Pratica negotiation.
-- “Implement these settled contract units with independent review” is a Vizier
-  run.
 - “Could this new local project use an agent?” starts with the new-requester
   checklist in this manual.
 - “Fix this now” is ordinary immediate work, not automatically a Todo.
@@ -111,7 +108,6 @@ annals --version
 annals-usage --version
 todo --version
 crm --version
-vizier --version
 email --version
 conversations --version
 krisis --version
@@ -145,8 +141,7 @@ Annals -------------+
 Weaver -------------+--> Nucleus ----------> isolated Codex app-server --> account
 Krisis observer ----+
 Semantics worker ---+
-Pratica reviews ----+
-Vizier roles -------/
+Pratica reviews ----/
    |                  |                        |
    |                  |                        `-- isolated job process
    |                  |
@@ -168,7 +163,6 @@ Krisis observer ----> Annals decisions-library acceptance
 Annals decision feed -> Semantics --> Conversations exact cwd
 Semantics -----------> registered project semantic repositories
 Pratica CLI ---------> Pratica SQLite offers, assent, seals, and reviews
-Vizier CLI ----------> Vizier SQLite workflow ledger and isolated Git candidates
 
 interactive agent -- manual source anchors --> Geste SQLite episode revisions
 Geste CLI ----------------------------------> Geste SQLite read projections
@@ -287,23 +281,9 @@ agent prose—is negotiation success. A seal proves exact assent on one basis;
 it does not implement a target system, prove runtime behavior, discover every
 concern, or authorize deployment.
 
-Vizier is a short-lived finite implementation coordinator and Nucleus
-requester. The caller supplies one exact brief, terminology snapshot, ordered
-contract-unit set, Git basis, and optional gate commands. Vizier records exact
-opaque Markdown and workflow mechanics; it does not parse requirements or call
-Pratica, Semantics, or Chancery at runtime. Separate planner, assembler,
-plan-review, packet-implementation, packet-review, integration, and final-review
-invocations produce and inspect exact Git candidates. An implementor or
-integrator cannot accept its own edits. Vizier domain success requires its
-durable accepted delegation, independently accepted packet candidates, passing
-configured gates, and independent acceptance of the exact integrated candidate;
-a terminal Nucleus job or model message is only evidence. Every Nucleus request
-uses program `vizier`, the stable Vizier run ID as `requester.id`, and one
-durably persisted job ID for the exact request.
-
 Nucleus, Annals, Annals Usage, Todo, Chancery, Weaver, Email, Conversations,
-Krisis, Semantics, Geste, Pratica, Clockwork, CRM, and Vizier share the Cell
-source repository, Cargo workspace, and lockfile. That source layout does not
+Krisis, Semantics, Geste, Pratica, Clockwork, and CRM share the Cell source
+repository, Cargo workspace, and lockfile. That source layout does not
 merge their release, installation, state, backup, recovery, or domain-success
 boundaries. Product runtimes do not call Chancery. Their installers only
 co-stage owned documentation and publish their owned provider selectors.
@@ -339,11 +319,6 @@ The following distinctions are operationally important:
    supplied candidate snapshot without testing, changing, or deploying it.
 9. **A CRM advisory is not a gate.** It remains conspicuous wherever the case
    is consumed, but it cannot block or authorize any operation.
-10. **A Vizier review is finite and contract-bounded.** One broad plan review,
-    one broad review per packet candidate, and one broad integrated review are
-    followed only by bounded remediation and targeted rechecks. An unanchored
-    finding, new requirement, missing authority, or wider scope returns to the
-    caller instead of silently creating implementation work.
 
 ### Shared CI, release, and deployment coordination
 
@@ -369,7 +344,7 @@ checkout for diagnosis.
 The root `./ci.sh` first records one exact source key, passes that expected key
 to each independently scheduled product gate, and rejects the plan with exit
 75 if the worktree changes. A complete run then rebuilds Chancery for that same
-candidate and validates the integrated sixteen-provider, 55-entry source graph.
+candidate and validates the integrated fifteen-provider, 52-entry source graph.
 This aggregate evidence does not merge product release authority or turn one
 product gate into another's gate.
 
@@ -383,7 +358,7 @@ one.
 Deployment remains product-owned. Every deployer takes its existing product or
 update lock before the shared Chancery catalog-writer lock and holds the catalog
 lock through selector cutover, smoke, and rollback. Generated selector-only
-deployers for Conversations, Geste, Pratica, CRM, and Vizier stage immutable bytes
+deployers for Conversations, Geste, Pratica, and CRM stage immutable bytes
 before the short catalog critical section, publish command and provider through
 one atomic product `current` selector, and reject a changed observed or explicit
 `--expected-current absent|releases/HASH` precondition. Stateful deployers keep
@@ -404,7 +379,6 @@ CI success, and release preparation grant no deployment authority.
 ~/.local/bin/pratica
 ~/.local/bin/clockwork
 ~/.local/bin/crm
-~/.local/bin/vizier
 ~/.codex/hooks.json
 ~/Library/LaunchAgents/org.nucleus.daemon.plist
 ~/Library/LaunchAgents/org.clockwork.annals.inbox.plist
@@ -466,10 +440,6 @@ Krisis/retained Decisions compatibility do.
 
 ~/Library/Application Support/CRM/
   crm.db
-  install/
-
-~/Library/Application Support/Vizier/
-  vizier.db
   install/
 
 ~/Library/Logs/Semantics/
@@ -613,15 +583,6 @@ switches immutable program and provider selectors without adding a daemon or
 schedule. `crm tell` queues an asynchronous steward run, which uses Nucleus and
 never falls back to a direct Codex invocation.
 
-Vizier owns its content-addressed CLI installation, provider selector, and local
-SQLite workflow ledger. Deployment switches only immutable program and provider
-selectors and never opens, initializes, or migrates that database; `vizier init`
-is a separate operation. Vizier has no daemon or LaunchAgent. Only an explicit
-Vizier workflow command submits bounded jobs to Nucleus, and there is no direct
-Codex fallback. Ready roles share Nucleus's eight global slots without a Vizier
-reservation; every concurrent writer uses a disjoint Vizier-owned Git worktree,
-and Vizier—not Nucleus—enforces packet dependencies and workspace leases.
-
 ## Compatibility model
 
 | Axis | Authority | How to inspect | Change consequence |
@@ -690,10 +651,10 @@ is invalid.
 Nucleus has no global drain mode. Quiescence is established at its requesters:
 
 1. Do not start a synchronous Todo creation, invoke `crm tell`, start a new
-   Weaver or Vizier run, run a Pratica steward/composition/conformance review,
+   Weaver submission, run a Pratica steward/composition/conformance review,
    invoke `krisis observe process`, or start another manual requester job.
-2. If Weaver or Vizier has a nonterminal current run, select its exact run ID
-   and let it settle through `weaver wait RUN_ID` or `vizier run wait RUN_ID`.
+2. If Weaver has a nonterminal current run, select its exact run ID and let it
+   settle through `weaver wait RUN_ID`.
 3. Pause both Annals library inboxes that are active and wait for their
    independent deliveries to settle:
 
@@ -1019,31 +980,6 @@ symlinks, sensitive or binary/control content, files over 4 MiB, and aggregate
 content over 32 MiB. Pratica validates and commits the typed response; none of
 these tools can implement a target system or make model prose authoritative.
 
-Vizier registers immutable version-one toolsets under provider `vizier` for
-unit-plan submission, assembled delegation plus its mechanical packet manifest,
-implementation or integration handoff, and candidate review. Semantic payloads
-remain exact Markdown; only packet keys, contract links, dependency edges, and
-the `accepted`, `changes_requested`, or `blocked` disposition are structured.
-The initial invocation profiles are:
-
-| Role | Workspace access | Local execution | Web search | Launch context |
-| --- | --- | --- | --- | --- |
-| Contract-unit planner | Read-only exact source basis | Enabled | Disabled | None |
-| Delegation assembler | None | Disabled | Disabled | None |
-| Plan-set reviewer | Read-only exact source basis | Enabled | Disabled | None |
-| Implementor | Read-write isolated packet worktree | Enabled | Disabled | None |
-| Packet reviewer | Read-only exact candidate checkout | Enabled | Disabled | None |
-| Integrator | Read-write isolated integration worktree | Enabled | Disabled | None |
-| Integrated reviewer | Read-only exact integrated candidate | Enabled | Disabled | None |
-
-Every Vizier request also records an explicit supported model, reasoning effort,
-absolute working directory, positive timeout, builtin-tool policy, and optional
-toolset; it relies on no invocation default. Independent ready jobs may run
-concurrently in Nucleus's eight shared slots. Vizier services their mailboxes
-concurrently, gives every writer a disjoint worktree, and serializes any shared
-non-worktree mutation target. A waiting-on-requester role still holds its
-Nucleus slot.
-
 ### 6. Implement the lifecycle
 
 A normal requester flow is:
@@ -1160,7 +1096,6 @@ provider registry or documentation storage.
 | Project registration, semantic concepts, grounding, revision history, Annals decision-account intake, reconciliation policy, or Semantics deployment | Semantics | Preserve Annals library/event/account identities, exact Conversations cwd routing, both legacy and new cursor histories, and Nucleus correlation; no upstream gains Semantics state or success authority. |
 | Geste episode identity, revisions, settlement grounding, search, report, graph, database, or deployment | Geste | Preserve source-system authority and immutable locators; no source gains episode state, and Geste gains no automatic source read or policy authority. |
 | Pratica steward scopes, offers, assent, agreement seals, bases, attempts, composition, conformance, database, or deployment | Pratica | Preserve exact opaque Markdown, target-system authority, frozen source disclosure, and Nucleus correlation; neither Nucleus nor a review gains party, implementation, or retry authority. |
-| Vizier briefs, contract units, plans, packets, candidates, reviews, remediation, gates, ledger, or deployment | Vizier | Preserve exact opaque Markdown, candidate identity, independent acceptance, finite review bounds, and Nucleus correlation; Nucleus gains no workflow, source, gate, or domain-success authority. |
 | New portable invocation meaning or HTTP behavior | Nucleus core/client/daemon | Version the public contract, update examples/tests/docs, then update affected requesters in compatible order. |
 | Codex executable or app-server semantics | Nucleus Codex adapter | Prove the exact version, deploy Nucleus, then run generic and requester canaries. |
 | Nucleus database schema or retention | Nucleus store | Quiesce, back up, migrate and validate, and define database-aware rollback before deployment. |
@@ -1169,7 +1104,7 @@ provider registry or documentation storage.
 | Managed-authentication, canonical-refresh, or attended-login behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and canary every requester. |
 | Nucleus service layout or installer | Nucleus CLI/packaging | Preserve state/log ownership, rollback, launchd behavior, and requester configuration. |
 | Chancery bundle schema, catalog, contract reader, exact-ID resolver, or directory installation | Chancery | Preserve read-only behavior, failure isolation, exact basis, explicit gaps, complete installed inventory, and provider-owned selectors; do not introduce semantic matching or a product runtime dependency. |
-| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the sixteen-provider source graph, and update only that product's Chancery selectors. |
+| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the fifteen-provider source graph, and update only that product's Chancery selectors. |
 
 ## Guarded change playbooks
 
@@ -1335,12 +1270,7 @@ receipts. For Todo, inspect the Todo database/result first; a committed creation
 wins over later runtime failure. Detailed recovery policy remains in each
 requester. For CRM, inspect the queued run and revision first; a committed case
 revision remains success even when the steward job later fails, while a
-terminal job without that revision is not CRM success. For Vizier, inspect
-`run show` and the relevant `attempt show` before recovery. Use `run wait` or
-`run resume` to continue nonterminal persisted work; `needs_attention` is terminal and both commands return its durable result without creating work. Use `attempt retry` only when the prior attempt is positively terminal, is Vizier's current resultless leaf, and Vizier accepts a successor as safe. Review a cited document with `vizier document show DOCUMENT_ID`; routine run views do not expose document bodies. Treat a
-cancelled, timed-out, or lost writer's worktree as suspect until Vizier inspects
-or quarantines it. Cancellation and Nucleus loss do not undo committed Vizier
-records or source mutations.
+terminal job without that revision is not CRM success.
 
 ## Canaries and resumption
 
@@ -1401,14 +1331,6 @@ seal the exact bilateral agreements, retain a composition review, and verify
 Pratica domain records plus correlated Nucleus jobs. It must create no CRM
 source, database, migration, API, UI, deployment, or release. A terminal job,
 unsealed offer, or advisory review alone is not a requester canary.
-For Vizier, use an isolated ledger and disposable Git repository containing a
-small real contract-bounded change. Verify the frozen document digests, planner
-and assembled delegation records, distinct implementor and reviewer
-invocations, disjoint writer worktrees when work is concurrent, accepted packet
-candidates, configured gate evidence, and independent final acceptance of the
-same exact integrated candidate. Packet implementors run packet-local checks only; configured product/root gates run later through the host CI broker against that integrated candidate. Also verify requester program `vizier`, that
-the caller's branch did not move, and that a terminal Nucleus job without the
-required Vizier record is not run success.
 
 ## Where facts and changes belong
 
@@ -1497,14 +1419,6 @@ directory.
 - [CLI contract](/Users/joey/rust/cell/crm/docs/cli.md)
 - [Data model](/Users/joey/rust/cell/crm/docs/data-model.md)
 - [User-owned installation](/Users/joey/rust/cell/crm/docs/system-installation.md)
-
-### Vizier
-
-- [Documentation index](/Users/joey/rust/cell/vizier/docs/README.md)
-- [Architecture](/Users/joey/rust/cell/vizier/docs/architecture.md)
-- [CLI contract](/Users/joey/rust/cell/vizier/docs/cli.md)
-- [Persistence and recovery](/Users/joey/rust/cell/vizier/docs/persistence.md)
-- [User-owned installation](/Users/joey/rust/cell/vizier/docs/system-installation.md)
 
 ### Weaver
 
