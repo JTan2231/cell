@@ -3,7 +3,7 @@
   "provider": {
     "id": "decisions",
     "name": "Decisions compatibility",
-    "release": "0.4.4"
+    "release": "0.4.5"
   },
   "promise_scope": {
     "authoritative_for": [
