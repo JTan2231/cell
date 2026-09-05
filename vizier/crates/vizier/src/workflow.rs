@@ -2314,22 +2314,137 @@ mod tests {
 
     #[test]
     fn gate_continuation_review_mode_follows_persisted_candidate_ancestry() -> TestResult {
-        let (_repository, store, run, candidate) =
-            integration_fixture("run-gate-ancestry", Vec::new(), 1)?;
+        let (repository, store, run, reviewed_candidate) = integration_fixture(
+            "run-gate-ancestry",
+            vec![("gate".to_owned(), "test -f fixed || exit 7".to_owned())],
+            1,
+        )?;
+        let baseline = Workflow::new(store.clone(), AgentRunner::for_current_user());
+        assert!(!baseline.integrated_review_in_candidate_lineage(&reviewed_candidate)?);
+        assert!(
+            baseline
+                .integrated_review_prompt(&run, &reviewed_candidate, false)?
+                .starts_with("# Vizier one broad integrated review")
+        );
         let review = store.record_document(
             &run.id,
             "integrated_review",
             Some("integration"),
-            candidate.round,
+            reviewed_candidate.round,
             &markdown("# Earlier integrated review\n")?,
         )?;
-        let workflow = Workflow::new(store, AgentRunner::for_current_user());
+        let parent_handoff = store.record_document(
+            &run.id,
+            "integration_handoff",
+            Some("integration"),
+            1,
+            &markdown("# Gate-failing successor\n")?,
+        )?;
+        let parent_writer = store.create_attempt(&attempt(
+            &run,
+            Role::Integrator,
+            "integration",
+            1,
+            true,
+            "gate-successor-writer",
+        ))?;
+        let status = Command::new("git")
+            .args([
+                "update-ref",
+                "refs/test/integration/gate-successor",
+                &reviewed_candidate.commit_oid,
+            ])
+            .current_dir(repository.path())
+            .status()?;
+        assert!(status.success());
+        let gate_candidate = store.record_candidate_with_predecessor(
+            &run.id,
+            "integration",
+            "integration",
+            1,
+            &reviewed_candidate.commit_oid,
+            &reviewed_candidate.commit_oid,
+            "refs/test/integration/gate-successor",
+            &parent_handoff.id,
+            &parent_writer.id,
+            Some(&reviewed_candidate.id),
+        )?;
+        let workflow = Workflow::new(
+            store.clone(),
+            AgentRunner::with_socket(repository.path().join("unavailable-nucleus.sock")),
+        );
+        assert!(workflow.run_gates(&run, &gate_candidate, 1)?);
+        workflow.terminalize_gate_exhausted(&run, &gate_candidate)?;
+        let child = store.admit_continuation(&run.id, "gate-ancestry-child", 1)?;
 
-        // A gate checkpoint can name a successor of this candidate.  The
-        // continuation must recheck it rather than starting another audit.
-        assert!(workflow.integrated_review_in_candidate_lineage(&candidate)?);
-        let prompt = workflow.integrated_review_prompt(&run, &candidate, true)?;
-        assert!(prompt.contains(review.markdown.as_str()));
+        // The linked child starts with its counted round-zero integrator.
+        let _ = require_error(
+            tokio::runtime::Runtime::new()?.block_on(workflow.run_integrated_continuation(&child)),
+            "unavailable Nucleus must leave the first child integrator durable",
+        )?;
+        let child_writer = store
+            .latest_attempt(&child.id, Role::Integrator, "integration", 0)?
+            .ok_or("child did not begin at the integrator")?;
+
+        std::fs::write(repository.path().join("fixed"), "fixed\n")?;
+        let status = Command::new("git")
+            .args(["add", "fixed"])
+            .current_dir(repository.path())
+            .status()?;
+        assert!(status.success());
+        let status = Command::new("git")
+            .args(["commit", "-qm", "fix child gate"])
+            .current_dir(repository.path())
+            .status()?;
+        assert!(status.success());
+        let output = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(repository.path())
+            .output()?;
+        let child_commit = String::from_utf8(output.stdout)?.trim().to_owned();
+        store.commit_managed_submission(
+            &child_writer.id,
+            &child_writer.nucleus_job_id,
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Handoff(HandoffSubmission {
+                outcome: HandoffOutcome::Ready,
+                markdown: "# Child handoff\n".to_owned(),
+            }),
+        )?;
+        complete(&store, &child_writer.id)?;
+        let child_handoff = store
+            .attempt(&child_writer.id)?
+            .domain_document_id
+            .ok_or("child handoff was not recorded")?;
+        store.record_candidate_with_predecessor(
+            &child.id,
+            "integration",
+            "integration",
+            0,
+            &gate_candidate.commit_oid,
+            &child_commit,
+            "refs/test/integration/child",
+            &child_handoff,
+            &child_writer.id,
+            Some(&gate_candidate.id),
+        )?;
+
+        // Its gates now pass, so the first reviewer dispatch proves that the
+        // gate checkpoint followed the reviewed predecessor across the run
+        // boundary rather than choosing a mode from the round number.
+        let _ = require_error(
+            tokio::runtime::Runtime::new()?.block_on(workflow.run_integrated_continuation(&child)),
+            "unavailable Nucleus must leave the child review durable",
+        )?;
+        let child_review = store
+            .latest_attempt(&child.id, Role::IntegratedReviewer, "integration", 0)?
+            .ok_or("child did not dispatch its independent review")?;
+        assert!(child_review.targeted);
+        let request: nucleus_core::JobRequestV1 =
+            serde_json::from_slice(&child_review.request_bytes)?;
+        assert!(request.prompt.contains(review.markdown.as_str()));
         Ok(())
     }
 
