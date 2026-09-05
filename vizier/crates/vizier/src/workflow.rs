@@ -841,7 +841,7 @@ impl Workflow {
             subject_id: Some("integration".to_owned()),
             failed_packet_keys: Vec::new(),
             evidence_ids: vec![candidate.handoff_document_id.clone()],
-            permitted_scopes: Vec::new(),
+            permitted_scopes: union_scopes(&self.store.packets(&run.id)?),
             invalidated_checks: results
                 .iter()
                 .map(|result| result.gate_id.clone())
@@ -883,7 +883,7 @@ impl Workflow {
             subject_id: Some("integration".to_owned()),
             failed_packet_keys: Vec::new(),
             evidence_ids: vec![evidence],
-            permitted_scopes: Vec::new(),
+            permitted_scopes: union_scopes(&self.store.packets(&run.id)?),
             invalidated_checks: Vec::new(),
             candidate_id: Some(candidate.id.clone()),
             reviewed_candidate_id: Some(candidate.id.clone()),
@@ -1960,6 +1960,7 @@ mod tests {
     };
     use crate::nucleus::AgentRunner;
     use crate::store::{NewAttempt, Store};
+    use std::path::Path;
     use std::process::Command;
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -2313,25 +2314,40 @@ mod tests {
     }
 
     #[test]
-    fn gate_continuation_review_mode_follows_persisted_candidate_ancestry() -> TestResult {
+    fn gate_continuation_executes_child_writer_freeze_with_ancestry_review() -> TestResult {
         let (repository, store, run, reviewed_candidate) = integration_fixture(
             "run-gate-ancestry",
-            vec![("gate".to_owned(), "test -f fixed || exit 7".to_owned())],
+            vec![("gate".to_owned(), "test -f src/fixed || exit 7".to_owned())],
             1,
         )?;
-        let baseline = Workflow::new(store.clone(), AgentRunner::for_current_user());
-        assert!(!baseline.integrated_review_in_candidate_lineage(&reviewed_candidate)?);
-        assert!(
-            baseline
-                .integrated_review_prompt(&run, &reviewed_candidate, false)?
-                .starts_with("# Vizier one broad integrated review")
-        );
-        let review = store.record_document(
-            &run.id,
-            "integrated_review",
-            Some("integration"),
-            reviewed_candidate.round,
-            &markdown("# Earlier integrated review\n")?,
+        store.set_run_state(&run.id, RunState::FinalReview, None)?;
+        let review_attempt = store.create_attempt(&attempt(
+            &run,
+            Role::IntegratedReviewer,
+            "integration",
+            0,
+            false,
+            "earlier-integrated-review",
+        ))?;
+        store.commit_managed_submission(
+            &review_attempt.id,
+            "earlier-integrated-review",
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Review(ReviewSubmission {
+                disposition: Disposition::ChangesRequested,
+                affected_packet_keys: vec!["packet".to_owned()],
+                contract_unit_ids: vec!["unit".to_owned()],
+                markdown: "# Earlier exact integrated review\n".to_owned(),
+            }),
+        )?;
+        complete(&store, &review_attempt.id)?;
+        let review = store.document(
+            &store
+                .attempt(&review_attempt.id)?
+                .domain_document_id
+                .ok_or("prior integrated review was not recorded")?,
         )?;
         let parent_handoff = store.record_document(
             &run.id,
@@ -2375,9 +2391,18 @@ mod tests {
         );
         assert!(workflow.run_gates(&run, &gate_candidate, 1)?);
         workflow.terminalize_gate_exhausted(&run, &gate_candidate)?;
+        let envelope = store
+            .recovery_envelope(&run.id)?
+            .ok_or("gate exhaustion did not persist a recovery envelope")?;
+        assert_eq!(
+            envelope.permitted_scopes,
+            vec![PathScope {
+                path: "src".to_owned(),
+                recursive: true,
+            }]
+        );
         let child = store.admit_continuation(&run.id, "gate-ancestry-child", 1)?;
 
-        // The linked child starts with its counted round-zero integrator.
         let _ = require_error(
             tokio::runtime::Runtime::new()?.block_on(workflow.run_integrated_continuation(&child)),
             "unavailable Nucleus must leave the first child integrator durable",
@@ -2385,23 +2410,12 @@ mod tests {
         let child_writer = store
             .latest_attempt(&child.id, Role::Integrator, "integration", 0)?
             .ok_or("child did not begin at the integrator")?;
-
-        std::fs::write(repository.path().join("fixed"), "fixed\n")?;
-        let status = Command::new("git")
-            .args(["add", "fixed"])
-            .current_dir(repository.path())
-            .status()?;
-        assert!(status.success());
-        let status = Command::new("git")
-            .args(["commit", "-qm", "fix child gate"])
-            .current_dir(repository.path())
-            .status()?;
-        assert!(status.success());
-        let output = Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .current_dir(repository.path())
-            .output()?;
-        let child_commit = String::from_utf8(output.stdout)?.trim().to_owned();
+        assert_eq!(child_writer.allowed_scopes, envelope.permitted_scopes);
+        std::fs::create_dir_all(Path::new(&child_writer.workspace_path).join("src"))?;
+        std::fs::write(
+            Path::new(&child_writer.workspace_path).join("src/fixed"),
+            "fixed\n",
+        )?;
         store.commit_managed_submission(
             &child_writer.id,
             &child_writer.nucleus_job_id,
@@ -2414,30 +2428,27 @@ mod tests {
             }),
         )?;
         complete(&store, &child_writer.id)?;
-        let child_handoff = store
-            .attempt(&child_writer.id)?
-            .domain_document_id
-            .ok_or("child handoff was not recorded")?;
-        store.record_candidate_with_predecessor(
-            &child.id,
-            "integration",
-            "integration",
-            0,
-            &gate_candidate.commit_oid,
-            &child_commit,
-            "refs/test/integration/child",
-            &child_handoff,
-            &child_writer.id,
-            Some(&gate_candidate.id),
-        )?;
 
-        // Its gates now pass, so the first reviewer dispatch proves that the
-        // gate checkpoint followed the reviewed predecessor across the run
-        // boundary rather than choosing a mode from the round number.
+        // Resuming uses the normal writer snapshot/freezing path; the only
+        // manually supplied evidence is the integrator's managed handoff.
         let _ = require_error(
             tokio::runtime::Runtime::new()?.block_on(workflow.run_integrated_continuation(&child)),
             "unavailable Nucleus must leave the child review durable",
         )?;
+        let child_candidate = store
+            .candidate_at_round(&child.id, "integration", "integration", 0)?
+            .ok_or("child writer handoff was not frozen into a candidate")?;
+        assert_eq!(
+            child_candidate.predecessor_candidate_id.as_deref(),
+            Some(gate_candidate.id.as_str())
+        );
+        for gate in store.gates(&child.id)? {
+            let result = store
+                .gate_result(&gate.id, &child_candidate.id)?
+                .ok_or("child candidate did not rerun every configured gate")?;
+            assert_eq!(result.candidate_id, child_candidate.id);
+            assert_eq!(result.exit_code, 0);
+        }
         let child_review = store
             .latest_attempt(&child.id, Role::IntegratedReviewer, "integration", 0)?
             .ok_or("child did not dispatch its independent review")?;
@@ -2445,6 +2456,23 @@ mod tests {
         let request: nucleus_core::JobRequestV1 =
             serde_json::from_slice(&child_review.request_bytes)?;
         assert!(request.prompt.contains(review.markdown.as_str()));
+        assert!(
+            request
+                .prompt
+                .contains("## Persisted mechanical review scope")
+        );
+        assert!(request.prompt.contains("affected packets: [\"packet\"]"));
+
+        // Without exact prior review evidence, the equivalent child review is
+        // broad even though it crosses the same continuation boundary.
+        let (_repository, baseline_store, baseline_run, baseline_candidate) =
+            integration_fixture("run-gate-broad-ancestry", Vec::new(), 1)?;
+        let baseline = Workflow::new(baseline_store, AgentRunner::for_current_user());
+        assert!(
+            baseline
+                .integrated_review_prompt(&baseline_run, &baseline_candidate, false)?
+                .starts_with("# Vizier one broad integrated review")
+        );
         Ok(())
     }
 
@@ -2478,6 +2506,16 @@ mod tests {
         let review = store.attempt(&review.id)?;
         let workflow = Workflow::new(store.clone(), AgentRunner::for_current_user());
         workflow.terminalize_integrated_review_exhausted(&run, &candidate, &review)?;
+        assert_eq!(
+            store
+                .recovery_envelope(&run.id)?
+                .ok_or("integrated-review exhaustion did not persist a recovery envelope")?
+                .permitted_scopes,
+            vec![PathScope {
+                path: "src".to_owned(),
+                recursive: true,
+            }]
+        );
         let child = store.admit_continuation(&run.id, "inherited-review-key", 1)?;
 
         let prompt = workflow.integration_prompt(&child, &[], true, 0)?;
