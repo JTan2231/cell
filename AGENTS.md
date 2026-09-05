@@ -48,4 +48,19 @@ Semantics-Project: cell
 - Update `nucleus/docs/operator-manual.md` in the same change when shared
   operational facts, boundaries, or procedures change.
 - Preserve product-scoped instructions in nested `AGENTS.md` files.
+- The caller performs applicable Semantics discovery and query before
+  delegation. A delegated Vizier unit planner, assembler, reviewer, packet
+  implementor, or integrator uses the caller-supplied exact frozen terminology
+  snapshot as that query evidence and MUST NOT attempt a live Semantics query
+  or another live administrative-service query.
+- Those delegated Vizier roles work in isolated Nucleus workspaces and run only
+  bounded checks compatible with that sandbox. They MUST NOT invoke
+  caller-configured host/broker gates, including root `./ci.sh` and
+  `./vizier/ci.sh`. Submit `ready` when scoped work and sandbox-compatible
+  checks pass; inability to access the host CI broker is expected and is not a
+  product blocker. After the integrator submits `ready`, the Vizier coordinator
+  runs the configured gates on the exact frozen integrated candidate; required
+  independent review remains separate.
 - Every code change must leave `./ci.sh` green.
+  For an isolated Vizier role, the coordinator's configured root gate satisfies
+  this obligation rather than duplicating the command in the sandbox.
