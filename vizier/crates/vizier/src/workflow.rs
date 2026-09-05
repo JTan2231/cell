@@ -741,11 +741,10 @@ impl Workflow {
             }
             self.store
                 .set_run_state(&run.id, RunState::FinalReview, None)?;
-            // A checkpointed integrated-review finding is always rechecked
-            // against its persisted parent review. Subsequent child reviews
-            // use their own durable predecessor.
-            let targeted =
-                checkpoint.cause == RecoveryCause::IntegratedReviewExhausted || round > 0;
+            // Review mode is a property of the exact candidate lineage, not
+            // of the frontier that happened to exhaust.  In particular, a
+            // gate frontier may be a successor of a reviewed candidate.
+            let targeted = self.integrated_review_in_candidate_lineage(&predecessor)?;
             let review = self
                 .execute_attempt(
                     run,
@@ -1454,6 +1453,7 @@ impl Workflow {
         if targeted {
             self.append_gate_remediation_evidence(run, round, &mut prompt)?;
             self.append_inherited_gate_remediation_evidence(run, round, &mut prompt)?;
+            self.append_inherited_integrated_review_remediation_evidence(run, round, &mut prompt)?;
         }
         if targeted
             && let Some(previous) = self.store.document_for_subject(
@@ -1472,6 +1472,53 @@ impl Workflow {
         }
         bounded_prompt(&prompt)?;
         Ok(prompt)
+    }
+
+    /// Adds the exact parent review finding to the first child correction.
+    /// The child deliberately does not copy private parent documents, so the
+    /// checkpoint is the durable authority for this cross-run reference.
+    fn append_inherited_integrated_review_remediation_evidence(
+        &self,
+        run: &RunView,
+        round: u32,
+        prompt: &mut String,
+    ) -> AppResult<()> {
+        if round != 0 {
+            return Ok(());
+        }
+        let Some(parent_id) = run.parent_run_id.as_deref() else {
+            return Ok(());
+        };
+        let Some(checkpoint) = self.store.recovery_envelope(parent_id)? else {
+            return Ok(());
+        };
+        if checkpoint.cause != RecoveryCause::IntegratedReviewExhausted {
+            return Ok(());
+        }
+        let attempt_id = checkpoint.review_attempt_id.as_deref().ok_or_else(|| {
+            AppError::new(
+                "continuation_evidence_missing",
+                "review checkpoint lacks review attempt",
+            )
+        })?;
+        let attempt = self.store.attempt(attempt_id)?;
+        let document_id = attempt.domain_document_id.as_deref().ok_or_else(|| {
+            AppError::new(
+                "continuation_evidence_missing",
+                "review checkpoint lacks review document",
+            )
+        })?;
+        let document = self.store.document(document_id)?;
+        prompt.push_str("\n## Exact inherited integrated-review feedback\n");
+        append_document(prompt, &document);
+        let scope = self.store.review_scope(document_id)?.ok_or_else(|| {
+            AppError::new(
+                "continuation_evidence_missing",
+                "review checkpoint lacks persisted review scope",
+            )
+        })?;
+        append_review_scope(prompt, &scope);
+        Ok(())
     }
 
     fn append_gate_remediation_evidence(
@@ -1608,10 +1655,10 @@ impl Workflow {
                         None => None,
                     }
                 } else {
-                    None
+                    self.integrated_review_document_in_candidate_lineage(candidate)?
                 }
             } else {
-                None
+                self.integrated_review_document_in_candidate_lineage(candidate)?
             };
             if let Some(previous) = previous {
                 append_document(&mut prompt, &previous);
@@ -1622,6 +1669,37 @@ impl Workflow {
         }
         bounded_prompt(&prompt)?;
         Ok(prompt)
+    }
+
+    fn integrated_review_in_candidate_lineage(&self, candidate: &CandidateView) -> AppResult<bool> {
+        Ok(self
+            .integrated_review_document_in_candidate_lineage(candidate)?
+            .is_some())
+    }
+
+    /// Finds persisted review evidence by following the explicit candidate
+    /// predecessor links, including links that cross into a parent run.
+    fn integrated_review_document_in_candidate_lineage(
+        &self,
+        candidate: &CandidateView,
+    ) -> AppResult<Option<DocumentView>> {
+        let mut current = Some(candidate.clone());
+        while let Some(value) = current {
+            if let Some(review) = self.store.document_for_subject(
+                &value.run_id,
+                "integrated_review",
+                "integration",
+                value.round,
+            )? {
+                return Ok(Some(review));
+            }
+            current = value
+                .predecessor_candidate_id
+                .as_deref()
+                .map(|id| self.store.candidate(id))
+                .transpose()?;
+        }
+        Ok(None)
     }
 
     fn append_base_bundle(
@@ -2104,6 +2182,11 @@ mod tests {
             false,
             "integrator-zero",
         ))?;
+        let status = Command::new("git")
+            .args(["update-ref", "refs/test/integration/0", &source_commit])
+            .current_dir(repository.path())
+            .status()?;
+        assert!(status.success());
         let candidate = store.record_candidate(
             &run.id,
             "integration",
@@ -2111,7 +2194,7 @@ mod tests {
             0,
             &source_commit,
             &source_commit,
-            &source_commit,
+            "refs/test/integration/0",
             &handoff.id,
             &writer.id,
         )?;
@@ -2226,6 +2309,66 @@ mod tests {
             .gate_result(&gates[0].id, &successor.id)?
             .ok_or("successor gate result was not recorded")?;
         assert_ne!(predecessor_result.id, successor_result.id);
+        Ok(())
+    }
+
+    #[test]
+    fn gate_continuation_review_mode_follows_persisted_candidate_ancestry() -> TestResult {
+        let (_repository, store, run, candidate) =
+            integration_fixture("run-gate-ancestry", Vec::new(), 1)?;
+        let review = store.record_document(
+            &run.id,
+            "integrated_review",
+            Some("integration"),
+            candidate.round,
+            &markdown("# Earlier integrated review\n")?,
+        )?;
+        let workflow = Workflow::new(store, AgentRunner::for_current_user());
+
+        // A gate checkpoint can name a successor of this candidate.  The
+        // continuation must recheck it rather than starting another audit.
+        assert!(workflow.integrated_review_in_candidate_lineage(&candidate)?);
+        let prompt = workflow.integrated_review_prompt(&run, &candidate, true)?;
+        assert!(prompt.contains(review.markdown.as_str()));
+        Ok(())
+    }
+
+    #[test]
+    fn integrated_review_continuation_first_integrator_gets_exact_parent_feedback() -> TestResult {
+        let (_repository, store, run, candidate) =
+            integration_fixture("run-inherited-review-feedback", Vec::new(), 1)?;
+        store.set_run_state(&run.id, RunState::FinalReview, None)?;
+        let review = store.create_attempt(&attempt(
+            &run,
+            Role::IntegratedReviewer,
+            "integration",
+            0,
+            false,
+            "integrated-review",
+        ))?;
+        store.commit_managed_submission(
+            &review.id,
+            "integrated-review",
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Review(ReviewSubmission {
+                disposition: Disposition::ChangesRequested,
+                affected_packet_keys: vec!["packet".to_owned()],
+                contract_unit_ids: vec!["unit".to_owned()],
+                markdown: "# Exact inherited finding\n".to_owned(),
+            }),
+        )?;
+        complete(&store, &review.id)?;
+        let review = store.attempt(&review.id)?;
+        let workflow = Workflow::new(store.clone(), AgentRunner::for_current_user());
+        workflow.terminalize_integrated_review_exhausted(&run, &candidate, &review)?;
+        let child = store.admit_continuation(&run.id, "inherited-review-key", 1)?;
+
+        let prompt = workflow.integration_prompt(&child, &[], true, 0)?;
+        assert!(prompt.contains("# Exact inherited finding"));
+        assert!(prompt.contains("## Persisted mechanical review scope"));
+        assert!(prompt.contains("affected packets: [\"packet\"]"));
         Ok(())
     }
 
