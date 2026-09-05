@@ -1,0 +1,141 @@
+{
+  "id": "usher.develop.change",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change Usher recognition and contracts",
+  "summary": "Change the deterministic Cell membership report, evidence readers, CI gate, packaging, or contracts while preserving the declaration-only boundary.",
+  "use_when": [
+    "Usher code, tests, membership rules, CLI, JSON, packaging, or contracts must change."
+  ],
+  "do_not_use_when": [
+    "Only a report or a correction to another product declaration is needed."
+  ],
+  "outcome": "A tested change whose source, contracts, recognition criteria, and CI behavior agree.",
+  "effects": [
+    "Changes product-owned code, tests, docs and packaging, plus the Cell gate when necessary.",
+    "Does not run agents or mutate service state as part of recognition."
+  ],
+  "authority": [
+    "Usher owns its recognition contract; Cell owns membership policy and products own their declarations."
+  ],
+  "success": [
+    "Synthetic false-positive/false-negative tests and the root ./ci.sh pass; documentation states the exact evidence and proof boundaries."
+  ],
+  "failure_and_recovery": [
+    "Keep failures visible and fix their source. Do not relax membership rules or hide products to make CI pass."
+  ],
+  "privacy": [
+    "Release documentation contains no secrets or live records. Recognition metadata remains caller-owned output."
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read Usher instructions and maintained terminology through Semantics, using Cell while usher registration remains absent.",
+    "Implement the smallest change and update exact product contracts and shared operational documentation.",
+    "Run the root ./ci.sh, inspect Usher findings, and keep release/deployment separate from development."
+  ],
+  "checkpoints": [
+    "Recognition remains a read-only deterministic declaration check.",
+    "Global collisions and incomplete inventory evidence remain visible; other relationships and quality remain outside Usher."
+  ],
+  "adaptation": [
+    "Add a universal membership condition only through an explicit Cell policy change, not by discovering an implementation dependency."
+  ],
+  "stop_when": [
+    "The change would silently claim actual registration, installation, quality, conformance, or another system relationship."
+  ],
+  "does_not_authorize": [
+    "Release publication, deployment, or operations on other systems."
+  ],
+  "manual": "manuals/develop-change.md",
+  "dependencies": [
+    {
+      "id": "semantics.repository.explore",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local contributors may change Usher under Cell product authority."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The intended recognition behavior and affected ownership boundaries are explicit."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Product source, tests, instructions, current contracts, and requested behavior."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "A tested change whose source, contracts, recognition criteria, and CI behavior agree."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Recognition validity describes explicit repository declarations; domain quality and other relationships remain outside the result."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Product release version and content-addressed release identity are separate from capability contract and JSON schema versions."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "The change is validated against the exact candidate source through Cell CI."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Product-owned source and local CI; no direct service database access."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Source changes and their exact contracts are kept together. Root CI rejects source changes during a plan."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Recognition remains entirely code and does not invoke agents, services, shells, or network."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Changed recognition or JSON meaning is explicitly versioned and tested; no silent reinterpretation of prior output."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Development reads maintained project terminology through the registered Semantics repository while code and contracts remain behavior authority.",
+        "target": "semantics",
+        "kind": "authority",
+        "contract": "semantics.repository.explore"
+      }
+    ]
+  }
+}

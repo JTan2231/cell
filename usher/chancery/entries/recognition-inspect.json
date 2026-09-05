@@ -1,0 +1,136 @@
+{
+  "id": "usher.recognition.inspect",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Report declared Cell membership",
+  "summary": "Report product identity, Semantics participation, and Chancery presence from repository declarations, or fail a CI check for missing, invalid, or unassessable introductions.",
+  "use_when": [
+    "A caller wants to know which Cell products have declared the essentials for recognition.",
+    "CI should require valid identity, Semantics, and Chancery introduction evidence in the candidate checkout."
+  ],
+  "do_not_use_when": [
+    "Actual registration, installation, vocabulary quality, capability coverage, implementation conformance, or runtime readiness must be established.",
+    "The task concerns Pratica agreements or any other inter-system affair."
+  ],
+  "outcome": "A deterministic, evidence-bearing membership report for all inventoried products or one selected product, and a check exit status based solely on required declarations.",
+  "effects": [
+    "Reads the selected checkout inventory, root participation markers, provider manifests, indexed entry identity fields, and indexed manuals.",
+    "Prints the report and exits; writes no file, state, registry, or service record and invokes no shell, agent, service, or network."
+  ],
+  "authority": [
+    "Cell owns the membership essentials; each product owns its declarations. Usher owns only interpretation of those declarations and the report/check result.",
+    "Semantics and Chancery retain their own registration, content, validation, and installed-state authority."
+  ],
+  "success": [
+    "All inventoried descriptors remain represented even when introductions are missing or malformed.",
+    "A complete product has unambiguous identity and declared Semantics and Chancery findings. Every finding identifies evidence or issues.",
+    "Report exits 0 when it can emit findings; check exits 1 for any incomplete selected product. Both exit 2 for command or inventory errors."
+  ],
+  "failure_and_recovery": [
+    "Correct the source declarations and rerun. Missing evidence is distinct from invalid evidence and unassessable input.",
+    "Unknown schemas, unsupported descriptor syntax, unreadable files, or size limits never become successful declarations.",
+    "An absent or empty inventory is a fatal error; an unknown or ambiguous product selection is refused."
+  ],
+  "privacy": [
+    "IDs, aliases and relative paths may be sensitive local metadata; report output is caller-owned disclosure. No document body is printed or retained."
+  ],
+  "interfaces": [
+    {
+      "label": "Report membership",
+      "invocation": "/Users/joey/.local/bin/usher report ROOT [--product ID_OR_ALIAS]"
+    },
+    {
+      "label": "Require membership",
+      "invocation": "/Users/joey/.local/bin/usher check ROOT [--product ID_OR_ALIAS]"
+    },
+    {
+      "label": "JSON report",
+      "invocation": "/Users/joey/.local/bin/usher --json report ROOT"
+    }
+  ],
+  "does_not_authorize": [
+    "Registration, deployment, automatic repairs, vocabulary changes, agreement creation, or other product operations.",
+    "Interpreting a complete report as runtime readiness, installation, complete outward promises, or verified relationship quality."
+  ],
+  "manual": "manuals/recognition-inspect.md",
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local contributors and CI may report or require repository-level Cell membership."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The caller selects a stable readable Cell checkout with pipeline/products/*.sh descriptors; selection defaults to the current directory."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "A checkout root and optional exact descriptor ID or declared alias. Inputs are schema-one literal descriptors, root AGENTS.md markers, and Chancery provider schemas one through three."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "JSON schema one or deterministic text lists each product, three findings, declaration IDs, evidence, issues, complete flag, and complete/incomplete totals. Fatal JSON errors have schema_version and error."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Declared means recognized introduction evidence. Missing, invalid, and unassessed remain distinct. Only identity, Semantics participation, and Chancery presence determine membership; all other relationships are outside the report."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Descriptor filename and PRODUCT_ID identify a product; PRODUCT_DIR identifies its root. Semantic project and provider IDs are separate namespaces and need not equal the product ID. Limits count UTF-8 bytes, descriptors, and indexed entries."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Every descriptor is examined in filename order, including broken descriptors. Global root, alias, semantic-project, and provider collisions are checked before filtering. The same unchanged inputs and Usher version produce the same report."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The report does not prove actual registration, installation, freshness, vocabulary quality, full Chancery schema validity, exhaustive capabilities, or other relationships."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Usher reads only local regular UTF-8 evidence under the selected checkout and product/bundle roots. It parses descriptors as data, rejects symbolic evidence and path escapes, and invokes no represented interface."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "One command reads inputs, calculates findings in memory, emits the report, and exits without retained state. Reads are not an atomic filesystem snapshot; the caller keeps source stable and root CI independently rejects source changes."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "At most 256 descriptors, 512 indexed entries per provider, and 1 MiB per file. Unsupported shell syntax is never executed. No daemon, database, subprocess, agent, network, service query, or automatic repair exists."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Usher contract one, JSON schema one, provider schemas one through three, and pipeline schema one are separate. Incompatible recognition or output meaning requires an explicit versioned change."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "The recognition command reads caller-owned repository declarations only. It has no runtime reliance on installed Semantics, Chancery, or any represented system."
+      }
+    ]
+  }
+}

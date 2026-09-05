@@ -66,6 +66,7 @@ separately maintained discovery catalog.
 | Conversations | Codex tasks on this Mac should be listed, inspected, or searched. | A read-only normalized view over the normal user's Codex App Server. | Decision classification, durable projections, live-process supervision, or Nucleus's isolated job history. |
 | Krisis | Attributable decisions in completed root user turns should be identified and delivered as immutable accounts to the dedicated Annals decisions library. | The observation baseline and coverage, bounded classification, source anchors, account projection, durable outbox, Annals acceptance receipts, and recovery. | Judging truth, importance, applicability, enactment, current force, review state, supersession, retaining the canonical account library, or sending a digest. |
 | Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from accepted accounts in the dedicated Annals decisions library. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, decision-feed intake, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, transcript storage, or interpreting Annals retention as semantic truth. |
+| Usher | A Cell checkout's declared membership should be reported or required in CI. | Deterministic recognition of product identity, Semantics participation, and Chancery introduction evidence. | Actual registration or installation, relationship quality, readiness, or any other inter-system affair. |
 | Geste | A prior bounded work episode should be found by problem shape or manually recorded with its source basis. | Episode identity, immutable account revisions, authored interpretation, source anchors, coverage gaps, and read-time search, report, and graph projections. | Source-system truth, current policy, automatic episode ingestion, or deciding that a precedent applies. |
 | Pratica | A proposed entrant needs exact negotiated terms from several independently stewarded systems. | Integration and track identity, immutable offers, current assent, agreement seals, steward bases, caller-keyed ingress receipts, bounded requester attempts, composition reviews, and conformance reviews. | Implementing or changing target systems, automatically discovering every concern, treating review prose as assent, or proving deployment readiness. |
 | Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, eight-slot harness supervision, single-authority credential coordination, cancellation, exact harness-stdout observations, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, requester retry policy, or reporting materializations. |
@@ -282,7 +283,7 @@ it does not implement a target system, prove runtime behavior, discover every
 concern, or authorize deployment.
 
 Nucleus, Annals, Annals Usage, Todo, Chancery, Weaver, Email, Conversations,
-Krisis, Semantics, Geste, Pratica, Clockwork, and CRM share the Cell source
+Krisis, Semantics, Geste, Pratica, Clockwork, CRM, and Usher share the Cell source
 repository, Cargo workspace, and lockfile. That source layout does not
 merge their release, installation, state, backup, recovery, or domain-success
 boundaries. Product runtimes do not call Chancery. Their installers only
@@ -341,12 +342,24 @@ no crash or stale result becomes green. The journal is under
 `python3 ci_broker/client.py status EXECUTION_ID` or `recover` from a Cell
 checkout for diagnosis.
 
-The root `./ci.sh` first records one exact source key, passes that expected key
-to each independently scheduled product gate, and rejects the plan with exit
-75 if the worktree changes. A complete run then rebuilds Chancery for that same
-candidate and validates the integrated fifteen-provider, 52-entry source graph.
+The root `./ci.sh` first records one exact source key and runs a candidate Usher
+recognition check in the broker's heavy lane, including for selected-product
+runs. It passes the expected source key to that check and each independently
+scheduled product gate, and rejects the plan with exit 75 if the worktree
+changes. A complete run then rebuilds Chancery for that same candidate and
+validates the integrated sixteen-provider, 55-entry source graph.
 This aggregate evidence does not merge product release authority or turn one
 product gate into another's gate.
+
+Usher reads every `pipeline/products/*.sh` descriptor as literal data and
+requires an unambiguous product identity/root, an exact root Semantics marker,
+and recognizable product-owned Chancery introduction material. Its report
+keeps missing, invalid, and unassessed evidence visible. A declaration does not
+prove Semantics registration, vocabulary quality, Chancery installation, full
+bundle validity, capability completeness, or runtime readiness. Other systems'
+relationships are outside Usher's jurisdiction. Root CI's source check is
+read-only; it never queries or registers live services. See
+[`usher/README.md`](../../usher/README.md) for exact evidence rules and exit codes.
 
 Each product release entry point uses its checked-in descriptor but remains a
 separate release unit. It holds one Git-common-directory publication lock
@@ -1104,7 +1117,7 @@ provider registry or documentation storage.
 | Managed-authentication, canonical-refresh, or attended-login behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and canary every requester. |
 | Nucleus service layout or installer | Nucleus CLI/packaging | Preserve state/log ownership, rollback, launchd behavior, and requester configuration. |
 | Chancery bundle schema, catalog, contract reader, exact-ID resolver, or directory installation | Chancery | Preserve read-only behavior, failure isolation, exact basis, explicit gaps, complete installed inventory, and provider-owned selectors; do not introduce semantic matching or a product runtime dependency. |
-| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the fifteen-provider source graph, and update only that product's Chancery selectors. |
+| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the sixteen-provider source graph, and update only that product's Chancery selectors. |
 
 ## Guarded change playbooks
 

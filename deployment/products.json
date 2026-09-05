@@ -58,6 +58,20 @@
       "manifest_product_line": true,
       "print_state_path": false,
       "completion_note": "Database: not initialized by deployment; run `crm init` separately"
+    },
+    {
+      "product_id": "usher",
+      "display_name": "Usher",
+      "application_support_name": "Usher",
+      "binary_name": "usher",
+      "provider_id": "usher",
+      "usage_description": [
+        "Install or update the current user's stateless Usher CLI and product-owned",
+        "Chancery provider. No semantic registration or service state is changed."
+      ],
+      "manifest_product_line": true,
+      "print_state_path": false,
+      "completion_note": "Recognition reads repository declarations only."
     }
   ]
 }

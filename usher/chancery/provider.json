@@ -1,0 +1,43 @@
+{
+  "schema_version": 3,
+  "provider": {
+    "id": "usher",
+    "name": "Usher",
+    "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Usher owns the deterministic interpretation of declared Cell membership and the report/check outcome over a selected checkout."
+    ],
+    "not_authoritative_for": [
+      "Products own their identity and provider declarations; Semantics owns actual project registration and vocabulary, and Chancery owns complete bundle validation and installed discovery.",
+      "Each system owns its affairs with other systems. Usher has no authority over agreement coverage, relationship quality, implementation conformance, installation, or readiness."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported Usher recognition report/check outcomes and its installation and development operations."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Actual Semantics registration, Chancery installation checks, relationship graphs, repair, release publication, other inter-system relationships, and live service queries."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Local CLI reading explicitly selected checkout files. Repository descriptors are parsed as literal data and never executed."
+    ],
+    "shared_privacy_and_retention": [
+      "Reports expose product IDs, aliases, semantic project IDs, provider IDs, relative paths, and bounded diagnostics, never document bodies. Usher retains no state or report and makes no network or model call."
+    ],
+    "compatibility_and_retirement": [
+      "Provider release, capability contract version, and JSON output schema are separate. Recognition rule changes require explicit product contract review."
+    ],
+    "operational_limits": [
+      "At most 256 descriptors, 512 entries per provider, and 1 MiB per regular UTF-8 evidence file. Reads reject paths escaping owning roots and symbolic evidence; callers keep the checkout stable."
+    ]
+  },
+  "entries": [
+    "entries/recognition-inspect.json",
+    "entries/install-operate.json",
+    "entries/develop-change.json"
+  ]
+}

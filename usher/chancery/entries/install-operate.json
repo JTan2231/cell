@@ -1,0 +1,138 @@
+{
+  "id": "usher.install.operate",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install or recover Usher",
+  "summary": "Deploy or recover the stateless Usher CLI and its version-matched Chancery selector without changing semantic registration or any product runtime.",
+  "use_when": [
+    "Usher should be installed, updated, or recovered for the current macOS user."
+  ],
+  "do_not_use_when": [
+    "Only membership should be reported; use usher.recognition.inspect.",
+    "A foreign selector should be adopted or another product should be changed."
+  ],
+  "outcome": "A version-matched immutable release with coherent Usher CLI and provider selectors.",
+  "effects": [
+    "Stages an immutable Usher release, holds product and catalog writer locks, and advances owned CLI and provider selectors through one current release.",
+    "No service state or semantic registration is touched."
+  ],
+  "authority": [
+    "Usher owns its release and selectors. Cell products retain all domain and declaration authority."
+  ],
+  "success": [
+    "Candidate/provider versions match; installed help/version and release integrity checks pass; owned selectors follow current."
+  ],
+  "failure_and_recovery": [
+    "Refuse foreign, tampered, stale, or unprovable selections. On failed publication restore prior selectors; use the exact retained previous release deployer and binary for deliberate recovery."
+  ],
+  "privacy": [
+    "Release documentation contains no secrets or live records. Recognition metadata remains caller-owned output."
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Build a green candidate with ./ci.sh usher.",
+    "Run the product deployer with the exact binary and optional expected current selector.",
+    "Verify version, help, immutable release, and owned Chancery selector."
+  ],
+  "checkpoints": [
+    "Version, integrity, ownership, and prior selection are established before advancing selectors.",
+    "Deployment creates no semantic project, database, worker, or schedule."
+  ],
+  "adaptation": [
+    "Use --expected-current absent|releases/HASH to bind deployment to an observed selection. Use --home only for an intentional isolated or alternate-user boundary."
+  ],
+  "stop_when": [
+    "A candidate or selector is foreign, stale, tampered, or cannot be restored coherently."
+  ],
+  "does_not_authorize": [
+    "Release publication, foreign-selector takeover, retained-release deletion, or semantic registration."
+  ],
+  "manual": "manuals/install-operate.md",
+  "interfaces": [
+    {
+      "label": "Deploy candidate",
+      "invocation": "usher/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH [--expected-current absent|releases/HASH]"
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current operator may install or recover Usher."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "A green version-matched candidate and owned coherent prior release/selector basis."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Exact release binary, product deployer and bundle, optional expected current, and optional isolated home."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "A version-matched immutable release with coherent Usher CLI and provider selectors."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Release selectors establish installed bytes, not Cell membership or runtime readiness."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Product release version and content-addressed release identity are separate from capability contract and JSON schema versions."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "The operation covers the selected candidate and exact prior release basis."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Current-user local filesystem and shell, bounded to product-owned files and selectors."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Product lock precedes catalog writer lock. One atomic current selector selects program and documentation; failed publication restores prior selectors."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "No daemon, schedule, database, semantic registration, or other product runtime is operated."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Generated selector-only deployment profile v1, product version, provider release, and entry contract version remain distinct."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "Deployment uses the product-owned generated local deployer; it does not invoke represented products."
+      }
+    ]
+  }
+}

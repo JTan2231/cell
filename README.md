@@ -33,6 +33,11 @@ and optimistic `current` checks are generated from the
 [deployment profile](deployment/README.md); stateful products retain their own
 lifecycle logic.
 
+[Usher](usher/README.md) checks declared Cell membership: product identity,
+Semantics participation, and Chancery presence. Every root CI invocation runs
+the check. After building, `target/release/usher report .` shows each product's
+evidence and any missing introductions.
+
 ## Further documentation
 
 Each product directory has its own README and more specific documentation. For

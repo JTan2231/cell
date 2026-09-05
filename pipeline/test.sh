@@ -14,6 +14,7 @@ for script_path in \
     pipeline/generate.sh \
     pipeline/test.sh \
     pipeline/integrated.sh \
+    pipeline/recognition.sh \
     pipeline/extras/deployment-generated.sh \
     pipeline/extras/decisions-catalog.sh \
     pipeline/extras/semantics-catalog.sh \

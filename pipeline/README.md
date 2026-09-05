@@ -18,6 +18,13 @@ deployment conflict keys. Product-specific catalog regressions remain small
 scripts under `extras/`; arbitrary release or deployment hooks are not part of
 the shared format.
 
+The descriptor files themselves are the product inventory. Usher reads their
+literal assignments without executing them and checks each product's identity,
+Semantics marker, and Chancery introduction evidence. Root CI runs
+`pipeline/recognition.sh` as a brokered heavy body against its exact source
+candidate before the selected product gates. Full Chancery validation remains
+in the existing product and integrated catalog gates.
+
 Product `ci.sh` files are synchronous clients of the host-scoped CI broker.
 The broker invokes `pipeline/ci.sh` as the private body. Public product entry
 points always request admission; an inherited environment flag cannot bypass
