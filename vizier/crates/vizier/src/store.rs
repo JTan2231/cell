@@ -2924,6 +2924,9 @@ mod tests {
         let reopened = Store::new(&database);
         reopened.initialize()?;
         let child = reopened.admit_continuation(&parent.id, "continuation-key", 2)?;
+        assert_eq!(child.repository, parent.repository);
+        assert_eq!(child.source_commit, parent.source_commit);
+        assert_eq!(child.input_bundle_sha256, parent.input_bundle_sha256);
         assert_eq!(child.parent_run_id.as_deref(), Some(parent.id.as_str()));
         assert_eq!(
             child.recovery_checkpoint_id.as_deref(),
