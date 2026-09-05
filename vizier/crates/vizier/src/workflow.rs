@@ -2463,16 +2463,61 @@ mod tests {
         );
         assert!(request.prompt.contains("affected packets: [\"packet\"]"));
 
-        // Without exact prior review evidence, the equivalent child review is
-        // broad even though it crosses the same continuation boundary.
-        let (_repository, baseline_store, baseline_run, baseline_candidate) =
-            integration_fixture("run-gate-broad-ancestry", Vec::new(), 1)?;
-        let baseline = Workflow::new(baseline_store, AgentRunner::for_current_user());
-        assert!(
-            baseline
-                .integrated_review_prompt(&baseline_run, &baseline_candidate, false)?
-                .starts_with("# Vizier one broad integrated review")
+        // Without exact prior review evidence, the equivalent child dispatch
+        // is broad even though it crosses the same continuation boundary.
+        let (baseline_repository, baseline_store, baseline_run, baseline_candidate) =
+            integration_fixture(
+                "run-gate-broad-ancestry",
+                vec![("gate".to_owned(), "test -f src/fixed || exit 7".to_owned())],
+                1,
+            )?;
+        let baseline = Workflow::new(
+            baseline_store.clone(),
+            AgentRunner::with_socket(baseline_repository.path().join("unavailable-nucleus.sock")),
         );
+        assert!(baseline.run_gates(&baseline_run, &baseline_candidate, 0)?);
+        baseline.terminalize_gate_exhausted(&baseline_run, &baseline_candidate)?;
+        let baseline_child =
+            baseline_store.admit_continuation(&baseline_run.id, "gate-broad-ancestry-child", 1)?;
+        let _ = require_error(
+            tokio::runtime::Runtime::new()?
+                .block_on(baseline.run_integrated_continuation(&baseline_child)),
+            "unavailable Nucleus must leave the baseline child integrator durable",
+        )?;
+        let baseline_writer = baseline_store
+            .latest_attempt(&baseline_child.id, Role::Integrator, "integration", 0)?
+            .ok_or("baseline child did not begin at the integrator")?;
+        std::fs::create_dir_all(Path::new(&baseline_writer.workspace_path).join("src"))?;
+        std::fs::write(
+            Path::new(&baseline_writer.workspace_path).join("src/fixed"),
+            "fixed\n",
+        )?;
+        baseline_store.commit_managed_submission(
+            &baseline_writer.id,
+            &baseline_writer.nucleus_job_id,
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Handoff(HandoffSubmission {
+                outcome: HandoffOutcome::Ready,
+                markdown: "# Baseline child handoff\n".to_owned(),
+            }),
+        )?;
+        complete(&baseline_store, &baseline_writer.id)?;
+        let _ = require_error(
+            tokio::runtime::Runtime::new()?
+                .block_on(baseline.run_integrated_continuation(&baseline_child)),
+            "unavailable Nucleus must leave the broad baseline review durable",
+        )?;
+        let baseline_review = baseline_store
+            .latest_attempt(
+                &baseline_child.id,
+                Role::IntegratedReviewer,
+                "integration",
+                0,
+            )?
+            .ok_or("baseline child did not dispatch its independent review")?;
+        assert!(!baseline_review.targeted);
         Ok(())
     }
 
