@@ -1216,10 +1216,17 @@ impl Store {
                     |row| row.get(0),
                 )
                 .optional()?;
-            if predecessor_run.as_deref() != Some(run_id) {
+            let retained = if predecessor_run.as_deref() == Some(run_id) {
+                true
+            } else if let Some(ancestor) = predecessor_run.as_deref() {
+                run_has_ancestor(&connection, run_id, ancestor)?
+            } else {
+                false
+            };
+            if !retained {
                 return Err(AppError::new(
                     "candidate_predecessor_invalid",
-                    "candidate predecessor is not retained by this run",
+                    "candidate predecessor must belong to this run or a linked ancestor",
                 ));
             }
         }
@@ -1474,6 +1481,10 @@ impl Store {
                 "terminal checkpoint basis no longer matches frozen inputs",
             ));
         }
+        // Revalidate the complete typed evidence graph at admission.  The
+        // checkpoint is immutable, but continuation must not trust a shape
+        // check in place of exact candidate/review/gate bindings.
+        validate_recovery_evidence(&transaction, &parent, &envelope)?;
         // Validate retained Git identities while admission is still write-free.
         // A checkpoint is not safe merely because it names a candidate row.
         for candidate_id in [
@@ -1869,7 +1880,6 @@ fn validate_recovery_evidence(
     for candidate_id in [
         envelope.candidate_id.as_deref(),
         envelope.reviewed_candidate_id.as_deref(),
-        envelope.predecessor_candidate_id.as_deref(),
     ]
     .into_iter()
     .flatten()
@@ -1884,6 +1894,22 @@ fn validate_recovery_evidence(
             return Err(AppError::new(
                 "recovery_evidence_invalid",
                 "checkpoint candidate belongs to another run",
+            ));
+        }
+    }
+    if let Some(predecessor_id) = envelope.predecessor_candidate_id.as_deref() {
+        let predecessor = candidate_tx(connection, predecessor_id)?.ok_or_else(|| {
+            AppError::new(
+                "recovery_evidence_missing",
+                "checkpoint predecessor candidate is missing",
+            )
+        })?;
+        if predecessor.run_id != run.id
+            && !run_has_ancestor(connection, &run.id, &predecessor.run_id)?
+        {
+            return Err(AppError::new(
+                "recovery_evidence_invalid",
+                "checkpoint predecessor belongs outside the linked lineage",
             ));
         }
     }
@@ -1954,10 +1980,12 @@ fn validate_recovery_evidence(
                 ));
             };
             if let Some(reviewed) = envelope.reviewed_candidate_id.as_deref() {
-                if bound_candidate.as_deref() != Some(reviewed) {
+                if bound_candidate.as_deref() != Some(reviewed)
+                    || envelope.candidate_id.as_deref() != Some(reviewed)
+                {
                     return Err(AppError::new(
                         "recovery_binding_invalid",
-                        "reviewed candidate differs from the review binding",
+                        "failed candidate and review binding must name the same exact candidate",
                     ));
                 }
             } else if envelope.cause != RecoveryCause::PlanReviewExhausted || bound_plan.is_none() {
@@ -2011,6 +2039,22 @@ fn validate_recovery_evidence(
         _ => unreachable!(),
     }
     Ok(())
+}
+
+/// Returns whether `ancestor_run_id` is in the immutable parent chain of `run_id`.
+/// Candidate predecessors may cross only that durable continuation lineage.
+fn run_has_ancestor(
+    connection: &Connection,
+    run_id: &str,
+    ancestor_run_id: &str,
+) -> AppResult<bool> {
+    connection
+        .query_row(
+            "WITH RECURSIVE lineage(id) AS (SELECT parent_run_id FROM runs WHERE id=? UNION ALL SELECT runs.parent_run_id FROM runs JOIN lineage ON runs.id=lineage.id WHERE lineage.id IS NOT NULL) SELECT EXISTS(SELECT 1 FROM lineage WHERE id=?)",
+            params![run_id, ancestor_run_id],
+            |row| row.get(0),
+        )
+        .map_err(Into::into)
 }
 
 fn candidate_tx(connection: &Connection, candidate_id: &str) -> AppResult<Option<CandidateView>> {
@@ -2494,6 +2538,7 @@ mod tests {
         DelegationSubmission, Disposition, NewRun, OpaqueMarkdown, PacketSubmission, PathScope,
         RecoveryCause, RecoveryEnvelope, ReviewSubmission, Role, RunState,
     };
+    use rusqlite::params;
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -2675,6 +2720,216 @@ mod tests {
             "changed request-key reuse unexpectedly succeeded",
         )?;
         assert_eq!(error.code(), "request_key_conflict");
+        Ok(())
+    }
+
+    fn insert_attempt_and_document(
+        store: &Store,
+        run_id: &str,
+        attempt_id: &str,
+        document_id: &str,
+        role: Role,
+        disposition: Option<Disposition>,
+    ) -> TestResult {
+        let connection = store.connect()?;
+        connection.execute(
+            "INSERT INTO documents(id,run_id,kind,subject_id,ordinal,markdown,sha256,created_at) VALUES(?,?,?,?,?,?,?,?)",
+            params![document_id, run_id, format!("evidence-{document_id}"), "subject", 0_u32, "# evidence\n", "digest", 0_i64],
+        )?;
+        connection.execute(
+            "INSERT INTO attempts(id,run_id,role,subject_id,round,targeted,state,nucleus_job_id,request_bytes,request_sha256,toolset_name,workspace_path,allowed_scopes_json,domain_document_id,disposition,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            params![attempt_id, run_id, role.as_str(), "subject", 0_u32, 0_i64, "completed", format!("job-{attempt_id}"), Vec::<u8>::new(), "digest", "test", "/tmp", "[]", document_id, disposition.map(Disposition::as_str), 0_i64, 0_i64],
+        )?;
+        Ok(())
+    }
+
+    fn insert_candidate(
+        store: &Store,
+        run_id: &str,
+        candidate_id: &str,
+        attempt_id: &str,
+        document_id: &str,
+        predecessor: Option<&str>,
+    ) -> TestResult {
+        insert_attempt_and_document(
+            store,
+            run_id,
+            attempt_id,
+            document_id,
+            Role::Integrator,
+            None,
+        )?;
+        let connection = store.connect()?;
+        let round = u32::from(candidate_id.ends_with("-b"));
+        connection.execute(
+            "INSERT INTO candidates(id,run_id,subject_id,kind,round,base_commit,commit_oid,ref_name,handoff_document_id,attempt_id,predecessor_candidate_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            params![candidate_id, run_id, "integration", "integration", round, "base", "0000000000000000000000000000000000000000", format!("refs/vizier/{candidate_id}"), document_id, attempt_id, predecessor, 0_i64],
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn admission_revalidates_exact_review_candidate_binding_before_writing() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let store = Store::new(directory.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: "run-admission-binding".to_owned(),
+            request_key: None,
+            repository: "/not-a-repository".to_owned(),
+            source_commit: "source".to_owned(),
+            brief: markdown("# Brief\n")?,
+            terminology: markdown("# Terms\n")?,
+            contracts: vec![("unit".to_owned(), markdown("# Contract\n")?)],
+            gates: Vec::new(),
+            remediation_limit: 1,
+        })?;
+        insert_candidate(
+            &store,
+            &run.id,
+            "candidate-a",
+            "writer-a",
+            "handoff-a",
+            None,
+        )?;
+        insert_candidate(
+            &store,
+            &run.id,
+            "candidate-b",
+            "writer-b",
+            "handoff-b",
+            None,
+        )?;
+        insert_attempt_and_document(
+            &store,
+            &run.id,
+            "review",
+            "review-doc",
+            Role::IntegratedReviewer,
+            Some(Disposition::ChangesRequested),
+        )?;
+        let connection = store.connect()?;
+        connection.execute("INSERT INTO review_bindings(review_attempt_id,candidate_id,plan_document_id) VALUES(?,?,NULL)", params!["review", "candidate-b"])?;
+        connection.execute(
+            "UPDATE runs SET state='needs_attention' WHERE id=?",
+            params![run.id],
+        )?;
+        connection.execute("INSERT INTO recovery_envelopes(checkpoint_id,run_id,version,continuable,cause,frontier,responsible_role,subject_id,failed_packet_keys_json,evidence_ids_json,permitted_scopes_json,invalidated_checks_json,candidate_id,reviewed_candidate_id,predecessor_candidate_id,review_attempt_id,gate_result_ids_json,canonical_basis_digest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", params!["checkpoint", run.id, 1_u32, 1_i64, "integrated_review_exhausted", "integrated_candidate", "integrator", "integration", "[]", "[\"review-doc\"]", "[]", "[]", "candidate-a", "candidate-b", Option::<String>::None, "review", "[]", run.input_bundle_sha256])?;
+        let error = require_error(
+            store.admit_continuation(&run.id, "key", 1),
+            "mismatched review admitted",
+        )?;
+        assert_eq!(error.code(), "recovery_binding_invalid");
+        assert_eq!(store.list_runs()?.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn unsafe_retained_git_rejects_terminalization_without_a_checkpoint() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let store = Store::new(directory.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: "run-unsafe-git".to_owned(),
+            request_key: None,
+            repository: "/not-a-repository".to_owned(),
+            source_commit: "source".to_owned(),
+            brief: markdown("# Brief\n")?,
+            terminology: markdown("# Terms\n")?,
+            contracts: vec![("unit".to_owned(), markdown("# Contract\n")?)],
+            gates: Vec::new(),
+            remediation_limit: 1,
+        })?;
+        insert_candidate(&store, &run.id, "candidate-a", "writer", "handoff", None)?;
+        insert_attempt_and_document(
+            &store,
+            &run.id,
+            "review",
+            "review-doc",
+            Role::IntegratedReviewer,
+            Some(Disposition::ChangesRequested),
+        )?;
+        let connection = store.connect()?;
+        connection.execute(
+            "INSERT INTO review_bindings(review_attempt_id,candidate_id,plan_document_id) VALUES(?,?,NULL)",
+            params!["review", "candidate-a"],
+        )?;
+        let checkpoint = RecoveryEnvelope {
+            version: 1,
+            run_id: run.id.clone(),
+            checkpoint_id: "unsafe-checkpoint".to_owned(),
+            continuable: true,
+            cause: RecoveryCause::IntegratedReviewExhausted,
+            frontier: Some(crate::model::RecoveryFrontier::IntegratedCandidate),
+            responsible_role: Some(Role::Integrator),
+            subject_id: Some("integration".to_owned()),
+            failed_packet_keys: Vec::new(),
+            evidence_ids: vec!["review-doc".to_owned()],
+            permitted_scopes: Vec::new(),
+            invalidated_checks: Vec::new(),
+            candidate_id: Some("candidate-a".to_owned()),
+            reviewed_candidate_id: Some("candidate-a".to_owned()),
+            predecessor_candidate_id: None,
+            review_attempt_id: Some("review".to_owned()),
+            gate_result_ids: Vec::new(),
+            canonical_basis_digest: run.input_bundle_sha256.clone(),
+        };
+        assert!(store.terminalize_needs_attention(&checkpoint).is_err());
+        assert_eq!(store.run(&run.id)?.state, RunState::Queued);
+        assert!(store.recovery_envelope(&run.id)?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn candidate_predecessor_allows_only_linked_ancestor_runs() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let store = Store::new(directory.path().join("vizier.db"));
+        store.initialize()?;
+        let parent = store.create_run(&NewRun {
+            id: "run-parent".to_owned(),
+            request_key: None,
+            repository: "/tmp/repo".to_owned(),
+            source_commit: "source".to_owned(),
+            brief: markdown("# Brief\n")?,
+            terminology: markdown("# Terms\n")?,
+            contracts: vec![("unit".to_owned(), markdown("# Contract\n")?)],
+            gates: Vec::new(),
+            remediation_limit: 1,
+        })?;
+        insert_candidate(
+            &store,
+            &parent.id,
+            "parent-candidate",
+            "parent-writer",
+            "parent-handoff",
+            None,
+        )?;
+        let connection = store.connect()?;
+        connection.execute("INSERT INTO runs(id,repository,source_commit,state,contract_set_sha256,input_bundle_sha256,brief_document_id,terminology_document_id,remediation_limit,created_at,updated_at,parent_run_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", params!["run-child", "/tmp/repo", "source", "queued", parent.contract_set_sha256, parent.input_bundle_sha256, "child-brief", "child-terms", 1_u32, 0_i64, 0_i64, parent.id])?;
+        insert_attempt_and_document(
+            &store,
+            "run-child",
+            "child-writer",
+            "child-handoff",
+            Role::Integrator,
+            None,
+        )?;
+        let child = store.record_candidate_with_predecessor(
+            "run-child",
+            "integration",
+            "integration",
+            0,
+            "base",
+            "oid",
+            "refs/vizier/child",
+            "child-handoff",
+            "child-writer",
+            Some("parent-candidate"),
+        )?;
+        assert_eq!(
+            child.predecessor_candidate_id.as_deref(),
+            Some("parent-candidate")
+        );
         Ok(())
     }
 
