@@ -271,6 +271,57 @@ impl RecoveryEnvelope {
                 "packet recovery requires exact failed packets",
             ));
         }
+        if self.continuable {
+            let expected = match self.cause {
+                RecoveryCause::PlanReviewExhausted => {
+                    (RecoveryFrontier::AssembledPlan, Role::Assembler)
+                }
+                RecoveryCause::PacketReviewExhausted => {
+                    (RecoveryFrontier::Packets, Role::Implementor)
+                }
+                RecoveryCause::GateFailureExhausted | RecoveryCause::IntegratedReviewExhausted => {
+                    (RecoveryFrontier::IntegratedCandidate, Role::Integrator)
+                }
+                _ => unreachable!(),
+            };
+            if self.frontier != Some(expected.0) || self.responsible_role != Some(expected.1) {
+                return Err(AppError::new(
+                    "recovery_envelope_incomplete",
+                    "recovery cause has an invalid frontier or responsible role",
+                ));
+            }
+            if matches!(
+                self.cause,
+                RecoveryCause::PacketReviewExhausted
+                    | RecoveryCause::GateFailureExhausted
+                    | RecoveryCause::IntegratedReviewExhausted
+            ) && self.candidate_id.is_none()
+            {
+                return Err(AppError::new(
+                    "recovery_envelope_incomplete",
+                    "candidate frontier recovery requires its exact candidate",
+                ));
+            }
+            if matches!(
+                self.cause,
+                RecoveryCause::PlanReviewExhausted
+                    | RecoveryCause::PacketReviewExhausted
+                    | RecoveryCause::IntegratedReviewExhausted
+            ) && self.review_attempt_id.is_none()
+            {
+                return Err(AppError::new(
+                    "recovery_envelope_incomplete",
+                    "review recovery requires its exact review attempt",
+                ));
+            }
+            if self.cause == RecoveryCause::GateFailureExhausted && self.gate_result_ids.is_empty()
+            {
+                return Err(AppError::new(
+                    "recovery_envelope_incomplete",
+                    "gate recovery requires complete exact gate evidence",
+                ));
+            }
+        }
         Ok(())
     }
 }

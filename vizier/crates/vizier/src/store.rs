@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::contracts::ManagedSubmission;
 use crate::error::{AppError, AppResult};
-use crate::git::{scopes_overlap, validate_scopes};
+use crate::git::{scopes_overlap, validate_retained_candidate, validate_scopes};
 use crate::model::{
     AttemptState, AttemptView, CandidateView, DelegationSubmission, Disposition, DocumentView,
     GateResult, GateSpec, HandoffOutcome, NewRun, OpaqueMarkdown, PacketState, PacketView,
@@ -1095,6 +1095,31 @@ impl Store {
                     "INSERT INTO review_scopes(review_attempt_id,review_document_id,affected_packet_keys_json,contract_unit_ids_json) VALUES(?,?,?,?)",
                     params![attempt.id, id, serde_json::to_string(&value.affected_packet_keys)?, serde_json::to_string(&value.contract_unit_ids)?],
                 )?;
+                // A review is evidence about an immutable subject, never merely its
+                // human-readable subject label.  Keep that binding separately from
+                // the review Markdown so recovery never has to interpret Markdown.
+                let (candidate_id, plan_document_id): (Option<String>, Option<String>) =
+                    match attempt.role {
+                        Role::PlanReviewer => (None, transaction.query_row(
+                            "SELECT id FROM documents WHERE run_id=? AND kind='delegation_plan' ORDER BY ordinal DESC,id DESC LIMIT 1",
+                            params![attempt.run_id], |row| row.get(0),
+                        ).optional()?),
+                        Role::PacketReviewer => (transaction.query_row(
+                            "SELECT current_candidate_id FROM packets WHERE run_id=? AND packet_key=?",
+                            params![attempt.run_id, attempt.subject_id], |row| row.get(0),
+                        ).optional()?.flatten(), None),
+                        Role::IntegratedReviewer => (transaction.query_row(
+                            "SELECT id FROM candidates WHERE run_id=? AND kind='integration' ORDER BY round DESC,created_at DESC LIMIT 1",
+                            params![attempt.run_id], |row| row.get(0),
+                        ).optional()?, None),
+                        _ => unreachable!(),
+                    };
+                if candidate_id.is_some() || plan_document_id.is_some() {
+                    transaction.execute(
+                        "INSERT INTO review_bindings(review_attempt_id,candidate_id,plan_document_id) VALUES(?,?,?)",
+                        params![attempt.id, candidate_id, plan_document_id],
+                    )?;
+                }
                 (
                     id,
                     kind,
@@ -1151,11 +1176,56 @@ impl Store {
         handoff_document_id: &str,
         attempt_id: &str,
     ) -> AppResult<CandidateView> {
+        self.record_candidate_with_predecessor(
+            run_id,
+            subject_id,
+            kind,
+            round,
+            base_commit,
+            commit_oid,
+            ref_name,
+            handoff_document_id,
+            attempt_id,
+            None,
+        )
+    }
+
+    /// Records a candidate with its exact predecessor when it replaces one.
+    /// The older convenience API is retained for historical callers that create
+    /// an initial candidate; successors must use this explicit linkage API.
+    pub fn record_candidate_with_predecessor(
+        &self,
+        run_id: &str,
+        subject_id: &str,
+        kind: &str,
+        round: u32,
+        base_commit: &str,
+        commit_oid: &str,
+        ref_name: &str,
+        handoff_document_id: &str,
+        attempt_id: &str,
+        predecessor_candidate_id: Option<&str>,
+    ) -> AppResult<CandidateView> {
         let id = format!("candidate-{}", Uuid::now_v7());
         let connection = self.connect()?;
+        if let Some(predecessor) = predecessor_candidate_id {
+            let predecessor_run: Option<String> = connection
+                .query_row(
+                    "SELECT run_id FROM candidates WHERE id=?",
+                    params![predecessor],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if predecessor_run.as_deref() != Some(run_id) {
+                return Err(AppError::new(
+                    "candidate_predecessor_invalid",
+                    "candidate predecessor is not retained by this run",
+                ));
+            }
+        }
         connection.execute(
-            "INSERT INTO candidates(id,run_id,subject_id,kind,round,base_commit,commit_oid,ref_name,handoff_document_id,attempt_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(attempt_id) DO NOTHING",
-            params![id,run_id,subject_id,kind,round,base_commit,commit_oid,ref_name,handoff_document_id,attempt_id,now()],
+            "INSERT INTO candidates(id,run_id,subject_id,kind,round,base_commit,commit_oid,ref_name,handoff_document_id,attempt_id,predecessor_candidate_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(attempt_id) DO NOTHING",
+            params![id,run_id,subject_id,kind,round,base_commit,commit_oid,ref_name,handoff_document_id,attempt_id,predecessor_candidate_id,now()],
         )?;
         self.candidate_for_attempt(attempt_id)?
             .ok_or_else(|| AppError::new("candidate_record_failed", "candidate was not recorded"))
@@ -1307,6 +1377,27 @@ impl Store {
                 "terminal runs cannot be changed or assigned a checkpoint",
             ));
         }
+        validate_recovery_evidence(&transaction, &run, envelope)?;
+        for candidate_id in [
+            envelope.candidate_id.as_deref(),
+            envelope.reviewed_candidate_id.as_deref(),
+            envelope.predecessor_candidate_id.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let candidate = candidate_tx(&transaction, candidate_id)?.ok_or_else(|| {
+                AppError::new(
+                    "recovery_evidence_missing",
+                    "checkpoint candidate is missing",
+                )
+            })?;
+            validate_retained_candidate(
+                Path::new(&run.repository),
+                &candidate.commit_oid,
+                &candidate.ref_name,
+            )?;
+        }
         transaction.execute("INSERT INTO recovery_envelopes(checkpoint_id,run_id,version,continuable,cause,frontier,responsible_role,subject_id,failed_packet_keys_json,evidence_ids_json,permitted_scopes_json,invalidated_checks_json,candidate_id,reviewed_candidate_id,predecessor_candidate_id,review_attempt_id,gate_result_ids_json,canonical_basis_digest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", params![envelope.checkpoint_id,envelope.run_id,envelope.version,i64::from(envelope.continuable),envelope.cause.as_str(),envelope.frontier.map(RecoveryFrontier::as_str),envelope.responsible_role.map(Role::as_str),envelope.subject_id,serde_json::to_string(&envelope.failed_packet_keys)?,serde_json::to_string(&envelope.evidence_ids)?,serde_json::to_string(&envelope.permitted_scopes)?,serde_json::to_string(&envelope.invalidated_checks)?,envelope.candidate_id,envelope.reviewed_candidate_id,envelope.predecessor_candidate_id,envelope.review_attempt_id,serde_json::to_string(&envelope.gate_result_ids)?,envelope.canonical_basis_digest])?;
         let count=transaction.execute("UPDATE runs SET state='needs_attention',recovery_checkpoint_id=?,updated_at=? WHERE id=? AND state NOT IN ('succeeded','needs_attention','cancelled')", params![envelope.checkpoint_id,now(),envelope.run_id])?;
         if count != 1 {
@@ -1382,6 +1473,28 @@ impl Store {
                 "continuation_basis_conflict",
                 "terminal checkpoint basis no longer matches frozen inputs",
             ));
+        }
+        // Validate retained Git identities while admission is still write-free.
+        // A checkpoint is not safe merely because it names a candidate row.
+        for candidate_id in [
+            envelope.candidate_id.as_deref(),
+            envelope.reviewed_candidate_id.as_deref(),
+            envelope.predecessor_candidate_id.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let candidate = candidate_tx(&transaction, candidate_id)?.ok_or_else(|| {
+                AppError::new(
+                    "continuation_evidence_missing",
+                    "checkpoint candidate is not retained",
+                )
+            })?;
+            validate_retained_candidate(
+                Path::new(&parent.repository),
+                &candidate.commit_oid,
+                &candidate.ref_name,
+            )?;
         }
         let id = format!("run-{}", Uuid::now_v7());
         let at = now();
@@ -1709,6 +1822,206 @@ fn reaches(
         }
     }
     !require_edge && from == target
+}
+
+/// Checks the durable, typed portion of a checkpoint.  This deliberately
+/// accepts no inference from `runs.detail` or review Markdown.
+fn validate_recovery_evidence(
+    connection: &Connection,
+    run: &RunView,
+    envelope: &RecoveryEnvelope,
+) -> AppResult<()> {
+    if !envelope.continuable {
+        return Ok(());
+    }
+    let expected = match envelope.cause {
+        RecoveryCause::PlanReviewExhausted => (RecoveryFrontier::AssembledPlan, Role::Assembler),
+        RecoveryCause::PacketReviewExhausted => (RecoveryFrontier::Packets, Role::Implementor),
+        RecoveryCause::GateFailureExhausted | RecoveryCause::IntegratedReviewExhausted => {
+            (RecoveryFrontier::IntegratedCandidate, Role::Integrator)
+        }
+        _ => {
+            return Err(AppError::new(
+                "recovery_evidence_invalid",
+                "unsupported recovery cause cannot be continuable",
+            ));
+        }
+    };
+    if envelope.frontier != Some(expected.0) || envelope.responsible_role != Some(expected.1) {
+        return Err(AppError::new(
+            "recovery_evidence_invalid",
+            "checkpoint frontier and responsible role do not match its cause",
+        ));
+    }
+    for evidence_id in &envelope.evidence_ids {
+        let exists: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM documents WHERE id=? AND run_id=?)",
+            params![evidence_id, run.id],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            return Err(AppError::new(
+                "recovery_evidence_missing",
+                "checkpoint cites evidence not retained by its run",
+            ));
+        }
+    }
+    for candidate_id in [
+        envelope.candidate_id.as_deref(),
+        envelope.reviewed_candidate_id.as_deref(),
+        envelope.predecessor_candidate_id.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let candidate = candidate_tx(connection, candidate_id)?.ok_or_else(|| {
+            AppError::new(
+                "recovery_evidence_missing",
+                "checkpoint candidate is missing",
+            )
+        })?;
+        if candidate.run_id != run.id {
+            return Err(AppError::new(
+                "recovery_evidence_invalid",
+                "checkpoint candidate belongs to another run",
+            ));
+        }
+    }
+    if let (Some(candidate_id), Some(predecessor_id)) = (
+        envelope.candidate_id.as_deref(),
+        envelope.predecessor_candidate_id.as_deref(),
+    ) {
+        let candidate = candidate_tx(connection, candidate_id)?.ok_or_else(|| {
+            AppError::new(
+                "recovery_evidence_missing",
+                "checkpoint candidate is missing",
+            )
+        })?;
+        if candidate.predecessor_candidate_id.as_deref() != Some(predecessor_id) {
+            return Err(AppError::new(
+                "recovery_lineage_invalid",
+                "candidate does not retain its declared predecessor linkage",
+            ));
+        }
+    }
+    match envelope.cause {
+        RecoveryCause::PlanReviewExhausted
+        | RecoveryCause::PacketReviewExhausted
+        | RecoveryCause::IntegratedReviewExhausted => {
+            let attempt_id = envelope.review_attempt_id.as_deref().ok_or_else(|| {
+                AppError::new(
+                    "recovery_evidence_missing",
+                    "review checkpoint lacks its exact review attempt",
+                )
+            })?;
+            let attempt: Option<(String, String, Option<String>, Option<String>)> = connection
+                .query_row(
+                    "SELECT run_id,role,domain_document_id,disposition FROM attempts WHERE id=?",
+                    params![attempt_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )
+                .optional()?;
+            let Some((attempt_run, role, document_id, disposition)) = attempt else {
+                return Err(AppError::new(
+                    "recovery_evidence_missing",
+                    "review attempt is not retained",
+                ));
+            };
+            let expected_role = match envelope.cause {
+                RecoveryCause::PlanReviewExhausted => Role::PlanReviewer,
+                RecoveryCause::PacketReviewExhausted => Role::PacketReviewer,
+                _ => Role::IntegratedReviewer,
+            };
+            if attempt_run != run.id
+                || Role::parse(&role) != Some(expected_role)
+                || disposition.as_deref() != Some(Disposition::ChangesRequested.as_str())
+                || document_id
+                    .as_ref()
+                    .is_none_or(|id| !envelope.evidence_ids.contains(id))
+            {
+                return Err(AppError::new(
+                    "recovery_evidence_invalid",
+                    "checkpoint review is not the exact changes-requested evidence",
+                ));
+            }
+            let binding: Option<(Option<String>, Option<String>)> = connection.query_row(
+                "SELECT candidate_id,plan_document_id FROM review_bindings WHERE review_attempt_id=?", params![attempt_id], |row| Ok((row.get(0)?, row.get(1)?)),
+            ).optional()?;
+            let Some((bound_candidate, bound_plan)) = binding else {
+                return Err(AppError::new(
+                    "recovery_binding_missing",
+                    "review has no exact retained subject binding",
+                ));
+            };
+            if let Some(reviewed) = envelope.reviewed_candidate_id.as_deref() {
+                if bound_candidate.as_deref() != Some(reviewed) {
+                    return Err(AppError::new(
+                        "recovery_binding_invalid",
+                        "reviewed candidate differs from the review binding",
+                    ));
+                }
+            } else if envelope.cause != RecoveryCause::PlanReviewExhausted || bound_plan.is_none() {
+                return Err(AppError::new(
+                    "recovery_binding_invalid",
+                    "checkpoint omits its exact reviewed subject",
+                ));
+            }
+        }
+        RecoveryCause::GateFailureExhausted => {
+            let candidate_id = envelope.candidate_id.as_deref().ok_or_else(|| {
+                AppError::new(
+                    "recovery_evidence_missing",
+                    "gate checkpoint lacks candidate",
+                )
+            })?;
+            if envelope.gate_result_ids.is_empty() {
+                return Err(AppError::new(
+                    "recovery_evidence_missing",
+                    "gate checkpoint lacks complete gate evidence",
+                ));
+            }
+            let gate_count: i64 = connection.query_row(
+                "SELECT count(*) FROM gate_specs WHERE run_id=?",
+                params![run.id],
+                |row| row.get(0),
+            )?;
+            let matching: i64 = connection.query_row(
+                "SELECT count(*) FROM gate_results results JOIN gate_specs gates ON gates.id=results.gate_id WHERE gates.run_id=? AND results.candidate_id=? AND results.id IN (SELECT value FROM json_each(?)) AND results.output_truncated=0",
+                params![run.id, candidate_id, serde_json::to_string(&envelope.gate_result_ids)?], |row| row.get(0),
+            )?;
+            if matching != gate_count
+                || usize::try_from(matching).ok() != Some(envelope.gate_result_ids.len())
+            {
+                return Err(AppError::new(
+                    "recovery_evidence_invalid",
+                    "checkpoint does not retain every complete gate result for its candidate",
+                ));
+            }
+            let failures: i64 = connection.query_row(
+                "SELECT count(*) FROM gate_results WHERE candidate_id=? AND id IN (SELECT value FROM json_each(?)) AND exit_code != 0",
+                params![candidate_id, serde_json::to_string(&envelope.gate_result_ids)?], |row| row.get(0),
+            )?;
+            if failures == 0 {
+                return Err(AppError::new(
+                    "recovery_evidence_invalid",
+                    "gate checkpoint has no executed nonzero result",
+                ));
+            }
+        }
+        _ => unreachable!(),
+    }
+    Ok(())
+}
+
+fn candidate_tx(connection: &Connection, candidate_id: &str) -> AppResult<Option<CandidateView>> {
+    connection
+        .query_row(
+            &candidate_select("WHERE id=?"),
+            params![candidate_id],
+            row_candidate,
+        )
+        .optional()
+        .map_err(Into::into)
 }
 
 fn validate_review(
@@ -2179,7 +2492,7 @@ mod tests {
     use crate::error::{AppError, AppResult};
     use crate::model::{
         DelegationSubmission, Disposition, NewRun, OpaqueMarkdown, PacketSubmission, PathScope,
-        ReviewSubmission, Role, RunState,
+        RecoveryCause, RecoveryEnvelope, ReviewSubmission, Role, RunState,
     };
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -2362,6 +2675,63 @@ mod tests {
             "changed request-key reuse unexpectedly succeeded",
         )?;
         assert_eq!(error.code(), "request_key_conflict");
+        Ok(())
+    }
+
+    #[test]
+    fn terminal_checkpoint_is_immutable_and_noncontinuable_fails_closed() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let store = Store::new(directory.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: "run-terminal".to_owned(),
+            request_key: None,
+            repository: "/tmp/repo".to_owned(),
+            source_commit: "source".to_owned(),
+            brief: markdown("# Brief\n")?,
+            terminology: markdown("# Terms\n")?,
+            contracts: vec![("unit".to_owned(), markdown("# Contract\n")?)],
+            gates: Vec::new(),
+            remediation_limit: 1,
+        })?;
+        let checkpoint = RecoveryEnvelope {
+            version: 1,
+            run_id: run.id.clone(),
+            checkpoint_id: "checkpoint-terminal".to_owned(),
+            continuable: false,
+            cause: RecoveryCause::Blocked,
+            frontier: None,
+            responsible_role: None,
+            subject_id: None,
+            failed_packet_keys: Vec::new(),
+            evidence_ids: Vec::new(),
+            permitted_scopes: Vec::new(),
+            invalidated_checks: Vec::new(),
+            candidate_id: None,
+            reviewed_candidate_id: None,
+            predecessor_candidate_id: None,
+            review_attempt_id: None,
+            gate_result_ids: Vec::new(),
+            canonical_basis_digest: run.input_bundle_sha256.clone(),
+        };
+        store.terminalize_needs_attention(&checkpoint)?;
+        assert_eq!(store.run(&run.id)?.state, RunState::NeedsAttention);
+        assert_eq!(
+            require_error(
+                store.terminalize_needs_attention(&checkpoint),
+                "terminal checkpoint was rewritten",
+            )?
+            .code(),
+            "terminal_run_immutable"
+        );
+        assert_eq!(
+            require_error(
+                store.admit_continuation(&run.id, "continuation-key", 1),
+                "noncontinuable terminal admitted a child",
+            )?
+            .code(),
+            "continuation_noncontinuable"
+        );
         Ok(())
     }
 
