@@ -598,11 +598,7 @@ impl Workflow {
                     )
                     .await?;
                 if attempt.disposition == Some(Disposition::Blocked) {
-                    self.store.set_run_state(
-                        &run.id,
-                        RunState::NeedsAttention,
-                        Some("integrator reported a blocker"),
-                    )?;
+                    self.terminalize_noncontinuable(run, RecoveryCause::Blocked)?;
                     return Ok(());
                 }
                 self.freeze_writer_candidate(
@@ -619,6 +615,9 @@ impl Workflow {
                     continue;
                 }
                 self.terminalize_gate_exhausted(run, &candidate)?;
+                return Ok(());
+            }
+            if self.store.run(&run.id)?.state == RunState::NeedsAttention {
                 return Ok(());
             }
             self.store
@@ -647,8 +646,12 @@ impl Workflow {
                     return Ok(());
                 }
                 Disposition::ChangesRequested if round < run.remediation_limit => {}
-                Disposition::ChangesRequested | Disposition::Blocked => {
+                Disposition::ChangesRequested => {
                     self.terminalize_integrated_review_exhausted(run, &candidate, &review)?;
+                    return Ok(());
+                }
+                Disposition::Blocked => {
+                    self.terminalize_noncontinuable(run, RecoveryCause::Blocked)?;
                     return Ok(());
                 }
             }
@@ -678,13 +681,13 @@ impl Workflow {
                 "this continuation frontier is not executable",
             ));
         }
-        let predecessor = checkpoint.candidate_id.as_deref().ok_or_else(|| {
+        let predecessor_id = checkpoint.candidate_id.as_deref().ok_or_else(|| {
             AppError::new(
                 "continuation_evidence_missing",
                 "checkpoint has no exact candidate",
             )
         })?;
-        let predecessor = self.store.candidate(predecessor)?;
+        let predecessor = self.store.candidate(predecessor_id)?;
         for round in 0..run.remediation_limit {
             self.store
                 .set_run_state(&run.id, RunState::Integrating, None)?;
@@ -727,12 +730,22 @@ impl Workflow {
                 &base,
             )?;
             if self.run_gates(run, &candidate, round)? {
+                if round + 1 == run.remediation_limit {
+                    self.terminalize_gate_exhausted(run, &candidate)?;
+                    return self.store.run(&run.id);
+                }
                 continue;
+            }
+            if self.store.run(&run.id)?.state == RunState::NeedsAttention {
+                return self.store.run(&run.id);
             }
             self.store
                 .set_run_state(&run.id, RunState::FinalReview, None)?;
-            let targeted = checkpoint.cause == RecoveryCause::IntegratedReviewExhausted
-                || checkpoint.review_attempt_id.is_some();
+            // A checkpointed integrated-review finding is always rechecked
+            // against its persisted parent review. Subsequent child reviews
+            // use their own durable predecessor.
+            let targeted =
+                checkpoint.cause == RecoveryCause::IntegratedReviewExhausted || round > 0;
             let review = self
                 .execute_attempt(
                     run,
@@ -755,6 +768,10 @@ impl Workflow {
                     self.store.finish_run(&run.id, &candidate.id, &reference)?;
                     return self.store.run(&run.id);
                 }
+                Disposition::ChangesRequested if round + 1 == run.remediation_limit => {
+                    self.terminalize_integrated_review_exhausted(run, &candidate, &review)?;
+                    return self.store.run(&run.id);
+                }
                 Disposition::ChangesRequested => {}
                 Disposition::Blocked => {
                     self.terminalize_noncontinuable(run, RecoveryCause::Blocked)?;
@@ -762,6 +779,8 @@ impl Workflow {
                 }
             }
         }
+        // The exclusive range is deliberately exhaustive; this is only
+        // reachable for an invalid zero allowance, which admission rejects.
         self.terminalize_noncontinuable(run, RecoveryCause::MixedFrontier)?;
         self.store.run(&run.id)
     }
@@ -882,6 +901,10 @@ impl Workflow {
         let mut failed = false;
         for gate in self.store.gates(&run.id)? {
             if let Some(result) = self.store.gate_result(&gate.id, &candidate.id)? {
+                if result.output_truncated {
+                    self.terminalize_noncontinuable(run, RecoveryCause::AmbiguousEvidence)?;
+                    return Ok(false);
+                }
                 if result.exit_code != 0 {
                     failed = true;
                 }
@@ -911,6 +934,7 @@ impl Workflow {
                 })?;
             let mut raw = output.stdout;
             raw.extend_from_slice(&output.stderr);
+            let signaled = output.status.code().is_none();
             let exit_code = output.status.code().unwrap_or(1);
             let (output, truncated) = bounded_output(&raw);
             let result = GateResult {
@@ -927,6 +951,10 @@ impl Workflow {
             git::remove_worktree(Path::new(&run.repository), &worktree)?;
             clean?;
             self.store.record_gate_result(&result)?;
+            if signaled || truncated {
+                self.terminalize_noncontinuable(run, RecoveryCause::AmbiguousEvidence)?;
+                return Ok(false);
+            }
             if exit_code != 0 {
                 failed = true;
             }
@@ -1425,6 +1453,7 @@ impl Workflow {
         }
         if targeted {
             self.append_gate_remediation_evidence(run, round, &mut prompt)?;
+            self.append_inherited_gate_remediation_evidence(run, round, &mut prompt)?;
         }
         if targeted
             && let Some(previous) = self.store.document_for_subject(
@@ -1483,6 +1512,53 @@ impl Workflow {
         Ok(())
     }
 
+    fn append_inherited_gate_remediation_evidence(
+        &self,
+        run: &RunView,
+        round: u32,
+        prompt: &mut String,
+    ) -> AppResult<()> {
+        if round != 0 {
+            return Ok(());
+        }
+        let Some(parent_id) = run.parent_run_id.as_deref() else {
+            return Ok(());
+        };
+        let Some(checkpoint) = self.store.recovery_envelope(parent_id)? else {
+            return Ok(());
+        };
+        if checkpoint.cause != RecoveryCause::GateFailureExhausted {
+            return Ok(());
+        }
+        let candidate_id = checkpoint.candidate_id.as_deref().ok_or_else(|| {
+            AppError::new(
+                "continuation_evidence_missing",
+                "gate checkpoint lacks candidate",
+            )
+        })?;
+        let candidate = self.store.candidate(candidate_id)?;
+        for gate in self.store.gates(parent_id)? {
+            let Some(result) = self.store.gate_result(&gate.id, &candidate.id)? else {
+                continue;
+            };
+            if checkpoint.gate_result_ids.contains(&result.id) && result.exit_code != 0 {
+                let _ = writeln!(
+                    prompt,
+                    "\n## Inherited executed gate remediation evidence\n\n- predecessor candidate: `{}` (commit `{}`)\n- gate name: `{}`\n- command identity: `{}`\n- exit code: `{}`\n- output truncated: `{}`\n- round: `{}`\n\nBounded exact output:\n```text\n{}\n```",
+                    candidate.id,
+                    candidate.commit_oid,
+                    gate.name,
+                    gate.command,
+                    result.exit_code,
+                    result.output_truncated,
+                    result.round,
+                    result.output
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn integrated_review_prompt(
         &self,
         run: &RunView,
@@ -1505,17 +1581,43 @@ impl Workflow {
         ] {
             append_documents(&mut prompt, &self.store.documents(&run.id, kind)?);
         }
-        if targeted
-            && let Some(previous) = self.store.document_for_subject(
-                &run.id,
-                "integrated_review",
-                "integration",
-                candidate.round - 1,
-            )?
-        {
-            append_document(&mut prompt, &previous);
-            if let Some(scope) = self.store.review_scope(&previous.id)? {
-                append_review_scope(&mut prompt, &scope);
+        if targeted {
+            let previous = if candidate.round > 0 {
+                self.store.document_for_subject(
+                    &run.id,
+                    "integrated_review",
+                    "integration",
+                    candidate.round - 1,
+                )?
+            } else if let Some(parent_id) = run.parent_run_id.as_deref() {
+                let checkpoint = self.store.recovery_envelope(parent_id)?;
+                if checkpoint.as_ref().is_some_and(|checkpoint| {
+                    checkpoint.cause == RecoveryCause::IntegratedReviewExhausted
+                }) {
+                    let attempt_id = checkpoint
+                        .and_then(|checkpoint| checkpoint.review_attempt_id)
+                        .ok_or_else(|| {
+                            AppError::new(
+                                "continuation_evidence_missing",
+                                "review checkpoint lacks review attempt",
+                            )
+                        })?;
+                    let attempt = self.store.attempt(&attempt_id)?;
+                    match attempt.domain_document_id {
+                        Some(id) => Some(self.store.document(&id)?),
+                        None => None,
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            if let Some(previous) = previous {
+                append_document(&mut prompt, &previous);
+                if let Some(scope) = self.store.review_scope(&previous.id)? {
+                    append_review_scope(&mut prompt, &scope);
+                }
             }
         }
         bounded_prompt(&prompt)?;
