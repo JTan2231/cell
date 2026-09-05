@@ -32,6 +32,7 @@ pub struct Workflow {
     store: Store,
     runner: AgentRunner,
     state_root: PathBuf,
+    gate_shell: PathBuf,
 }
 
 impl Workflow {
@@ -46,13 +47,22 @@ impl Workflow {
             store,
             runner,
             state_root,
+            gate_shell: PathBuf::from("/bin/sh"),
         }
+    }
+
+    #[cfg(test)]
+    fn with_gate_shell(store: Store, runner: AgentRunner, gate_shell: impl Into<PathBuf>) -> Self {
+        let mut workflow = Self::new(store, runner);
+        workflow.gate_shell = gate_shell.into();
+        workflow
     }
 
     pub async fn drive(&self, run_id: &str) -> AppResult<RunView> {
         let _lock = self.acquire_driver_lock()?;
         let result = self.drive_locked(run_id).await;
         if let Err(error) = &result
+            && error.code() != "gate_launch_failed"
             && let Ok(run) = self.store.run(run_id)
             && !matches!(run.state, RunState::Succeeded | RunState::Cancelled)
         {
@@ -576,7 +586,7 @@ impl Workflow {
                         })?
                         .commit_oid
                 };
-                let prompt = self.integration_prompt(run, &packets, round > 0)?;
+                let prompt = self.integration_prompt(run, &packets, round > 0, round)?;
                 let attempt = self
                     .execute_attempt(
                         run,
@@ -606,8 +616,15 @@ impl Workflow {
                     &base,
                 )?
             };
-            self.run_gates(run, &candidate, round)?;
-            if self.store.run(&run.id)?.state == RunState::NeedsAttention {
+            if self.run_gates(run, &candidate, round)? {
+                if round < run.remediation_limit {
+                    continue;
+                }
+                self.store.set_run_state(
+                    &run.id,
+                    RunState::NeedsAttention,
+                    Some("configured gate failed after the bounded integration remediation allowance"),
+                )?;
                 return Ok(());
             }
             self.store
@@ -645,17 +662,14 @@ impl Workflow {
         unreachable!("bounded integration loop always returns")
     }
 
-    fn run_gates(&self, run: &RunView, candidate: &CandidateView, round: u32) -> AppResult<()> {
+    /// Returns whether an executed configured gate failed for this candidate.
+    fn run_gates(&self, run: &RunView, candidate: &CandidateView, round: u32) -> AppResult<bool> {
         self.store.set_run_state(&run.id, RunState::Gates, None)?;
+        let mut failed = false;
         for gate in self.store.gates(&run.id)? {
             if let Some(result) = self.store.gate_result(&gate.id, &candidate.id)? {
                 if result.exit_code != 0 {
-                    self.store.set_run_state(
-                        &run.id,
-                        RunState::NeedsAttention,
-                        Some(&format!("gate {} failed", gate.name)),
-                    )?;
-                    return Ok(());
+                    failed = true;
                 }
                 continue;
             }
@@ -667,18 +681,23 @@ impl Workflow {
                 &hint,
                 &candidate.commit_oid,
             )?;
-            let output = Command::new("/bin/sh")
+            let output = Command::new(&self.gate_shell)
                 .args(["-lc", &gate.command])
                 .current_dir(&worktree)
-                .output();
-            let (exit_code, raw) = match output {
-                Ok(output) => {
-                    let mut raw = output.stdout;
-                    raw.extend_from_slice(&output.stderr);
-                    (output.status.code().unwrap_or(1), raw)
-                }
-                Err(error) => (127, error.to_string().into_bytes()),
-            };
+                .output()
+                .map_err(|error| {
+                    let cleanup = git::remove_worktree(Path::new(&run.repository), &worktree);
+                    let detail = match cleanup {
+                        Ok(()) => error.to_string(),
+                        Err(cleanup) => {
+                            format!("{error}; temporary gate worktree cleanup failed: {cleanup}")
+                        }
+                    };
+                    AppError::new("gate_launch_failed", detail)
+                })?;
+            let mut raw = output.stdout;
+            raw.extend_from_slice(&output.stderr);
+            let exit_code = output.status.code().unwrap_or(1);
             let (output, truncated) = bounded_output(&raw);
             let result = GateResult {
                 id: format!("gate-result-{}", Uuid::now_v7()),
@@ -695,18 +714,10 @@ impl Workflow {
             clean?;
             self.store.record_gate_result(&result)?;
             if exit_code != 0 {
-                self.store.set_run_state(
-                    &run.id,
-                    RunState::NeedsAttention,
-                    Some(&format!(
-                        "gate {} failed with exit code {exit_code}",
-                        gate.name
-                    )),
-                )?;
-                return Ok(());
+                failed = true;
             }
         }
-        Ok(())
+        Ok(failed)
     }
 
     async fn execute_attempt(
@@ -1157,6 +1168,7 @@ impl Workflow {
         run: &RunView,
         packets: &[PacketView],
         targeted: bool,
+        round: u32,
     ) -> AppResult<String> {
         let mut prompt = format!(
             "# Vizier integration {}\n\nRun: `{}`\nMode: `{}`\nIntegrate accepted packet candidates and make only necessary seam changes inside the union of packet scopes.\n\n",
@@ -1183,6 +1195,9 @@ impl Workflow {
                 );
             }
         }
+        if targeted {
+            self.append_gate_remediation_evidence(run, round, &mut prompt)?;
+        }
         if targeted
             && let Some(previous) = self.store.document_for_subject(
                 &run.id,
@@ -1200,6 +1215,44 @@ impl Workflow {
         }
         bounded_prompt(&prompt)?;
         Ok(prompt)
+    }
+
+    fn append_gate_remediation_evidence(
+        &self,
+        run: &RunView,
+        round: u32,
+        prompt: &mut String,
+    ) -> AppResult<()> {
+        let Some(previous) = round.checked_sub(1) else {
+            return Ok(());
+        };
+        let Some(predecessor) =
+            self.store
+                .candidate_at_round(&run.id, "integration", "integration", previous)?
+        else {
+            return Ok(());
+        };
+        for gate in self.store.gates(&run.id)? {
+            let Some(result) = self.store.gate_result(&gate.id, &predecessor.id)? else {
+                continue;
+            };
+            if result.exit_code == 0 {
+                continue;
+            }
+            let _ = writeln!(
+                prompt,
+                "\n## Executed gate remediation evidence\n\n- predecessor candidate: `{}` (commit `{}`)\n- gate name: `{}`\n- command identity: `{}`\n- exit code: `{}`\n- output truncated: `{}`\n- round: `{}`\n\nBounded exact output:\n```text\n{}\n```",
+                predecessor.id,
+                predecessor.commit_oid,
+                gate.name,
+                gate.command,
+                result.exit_code,
+                result.output_truncated,
+                result.round,
+                result.output,
+            );
+        }
+        Ok(())
     }
 
     fn integrated_review_prompt(
@@ -1493,11 +1546,13 @@ mod tests {
     use crate::contracts::ManagedSubmission;
     use crate::error::{AppError, AppResult};
     use crate::model::{
-        AttemptState, DelegationSubmission, Disposition, NewRun, OpaqueMarkdown, PacketSubmission,
-        PathScope, ReviewSubmission, Role, RunState,
+        AttemptState, CandidateView, DelegationSubmission, Disposition, HandoffOutcome,
+        HandoffSubmission, NewRun, OpaqueMarkdown, PacketSubmission, PathScope, ReviewSubmission,
+        Role, RunState,
     };
     use crate::nucleus::AgentRunner;
     use crate::store::{NewAttempt, Store};
+    use std::process::Command;
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -1620,6 +1675,414 @@ mod tests {
                 plan_markdown: format!("# Packet revision {round}\n"),
             }],
         }
+    }
+
+    fn integration_fixture(
+        run_id: &str,
+        gates: Vec<(String, String)>,
+        remediation_limit: u32,
+    ) -> TestResult<(
+        tempfile::TempDir,
+        Store,
+        crate::model::RunView,
+        CandidateView,
+    )> {
+        let (repository, source_commit) = test_repository()?;
+        let store = Store::new(repository.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: run_id.to_owned(),
+            request_key: None,
+            repository: repository.path().to_string_lossy().into_owned(),
+            source_commit: source_commit.clone(),
+            brief: markdown("# Brief\n")?,
+            terminology: markdown("# Terms\n")?,
+            contracts: vec![("unit".to_owned(), markdown("# Contract\n")?)],
+            gates,
+            remediation_limit,
+        })?;
+        store.record_document(
+            &run.id,
+            "unit_plan",
+            Some("unit"),
+            0,
+            &markdown("# Plan\n")?,
+        )?;
+        store.set_run_state(&run.id, RunState::Assembling, None)?;
+        let assembler = store.create_attempt(&attempt(
+            &run,
+            Role::Assembler,
+            DELEGATION_SUBJECT,
+            0,
+            false,
+            "assembler",
+        ))?;
+        store.commit_managed_submission(
+            &assembler.id,
+            "assembler",
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Delegation(delegation(0)),
+        )?;
+        complete(&store, &assembler.id)?;
+        let packet_handoff = store.record_document(
+            &run.id,
+            "implementation_handoff",
+            Some("packet"),
+            0,
+            &markdown("# Packet handoff\n")?,
+        )?;
+        let packet_writer = store.create_attempt(&attempt(
+            &run,
+            Role::Implementor,
+            "packet",
+            0,
+            false,
+            "packet-writer",
+        ))?;
+        let packet_candidate = store.record_candidate(
+            &run.id,
+            "packet",
+            "packet",
+            0,
+            &source_commit,
+            &source_commit,
+            "refs/test/packet/0",
+            &packet_handoff.id,
+            &packet_writer.id,
+        )?;
+        store.set_packet_state(
+            &run.id,
+            "packet",
+            crate::model::PacketState::Accepted,
+            Some(&packet_candidate.id),
+            0,
+        )?;
+        let handoff = store.record_document(
+            &run.id,
+            "integration_handoff",
+            Some("integration"),
+            0,
+            &markdown("# Integration handoff\n")?,
+        )?;
+        let writer = store.create_attempt(&attempt(
+            &run,
+            Role::Integrator,
+            "integration",
+            0,
+            false,
+            "integrator-zero",
+        ))?;
+        let candidate = store.record_candidate(
+            &run.id,
+            "integration",
+            "integration",
+            0,
+            &source_commit,
+            &source_commit,
+            "refs/test/integration/0",
+            &handoff.id,
+            &writer.id,
+        )?;
+        Ok((repository, store, run, candidate))
+    }
+
+    #[test]
+    fn executed_gate_failure_is_candidate_bound_remediation_evidence() -> TestResult {
+        let (repository, source_commit) = test_repository()?;
+        let store = Store::new(repository.path().join("vizier.db"));
+        store.initialize()?;
+        let run = store.create_run(&NewRun {
+            id: "run-gate-remediation".to_owned(),
+            request_key: None,
+            repository: repository.path().to_string_lossy().into_owned(),
+            source_commit: source_commit.clone(),
+            brief: markdown("# Brief\n")?,
+            terminology: markdown("# Terms\n")?,
+            contracts: vec![("unit".to_owned(), markdown("# Contract\n")?)],
+            gates: vec![
+                ("compile".to_owned(), "printf first; exit 7".to_owned()),
+                ("test".to_owned(), "printf second".to_owned()),
+            ],
+            remediation_limit: 1,
+        })?;
+        let handoff = store.record_document(
+            &run.id,
+            "integration_handoff",
+            Some("integration"),
+            0,
+            &markdown("# Handoff\n")?,
+        )?;
+        let writer = store.create_attempt(&attempt(
+            &run,
+            Role::Integrator,
+            "integration",
+            0,
+            false,
+            "integrator-zero",
+        ))?;
+        let predecessor = store.record_candidate(
+            &run.id,
+            "integration",
+            "integration",
+            0,
+            &source_commit,
+            &source_commit,
+            "refs/test/integration/0",
+            &handoff.id,
+            &writer.id,
+        )?;
+        let workflow = Workflow::new(store.clone(), AgentRunner::for_current_user());
+        assert!(workflow.run_gates(&run, &predecessor, 0)?);
+        let gates = store.gates(&run.id)?;
+        let failure = store
+            .gate_result(&gates[0].id, &predecessor.id)?
+            .ok_or("failed gate result was not recorded")?;
+        assert_eq!(failure.exit_code, 7);
+        assert_eq!(failure.output, "first");
+        assert!(store.gate_result(&gates[1].id, &predecessor.id)?.is_some());
+
+        let prompt = workflow.integration_prompt(&run, &[], true, 1)?;
+        for expected in [
+            &format!("predecessor candidate: `{}`", predecessor.id),
+            "gate name: `compile`",
+            "command identity: `printf first; exit 7`",
+            "exit code: `7`",
+            "output truncated: `false`",
+            "round: `0`",
+            "first",
+        ] {
+            assert!(prompt.contains(expected), "prompt lacks {expected}");
+        }
+
+        let successor_handoff = store.record_document(
+            &run.id,
+            "integration_handoff",
+            Some("integration"),
+            1,
+            &markdown("# Successor handoff\n")?,
+        )?;
+        let successor_writer = store.create_attempt(&attempt(
+            &run,
+            Role::Integrator,
+            "integration",
+            1,
+            true,
+            "integrator-one",
+        ))?;
+        let successor = store.record_candidate(
+            &run.id,
+            "integration",
+            "integration",
+            1,
+            &source_commit,
+            &source_commit,
+            "refs/test/integration/1",
+            &successor_handoff.id,
+            &successor_writer.id,
+        )?;
+        assert!(workflow.run_gates(&run, &successor, 1)?);
+        for gate in &gates {
+            let result = store
+                .gate_result(&gate.id, &successor.id)?
+                .ok_or("successor did not rerun every configured gate")?;
+            assert_eq!(result.candidate_id, successor.id);
+        }
+        let predecessor_result = store
+            .gate_result(&gates[0].id, &predecessor.id)?
+            .ok_or("predecessor gate result was not recorded")?;
+        let successor_result = store
+            .gate_result(&gates[0].id, &successor.id)?
+            .ok_or("successor gate result was not recorded")?;
+        assert_ne!(predecessor_result.id, successor_result.id);
+        Ok(())
+    }
+
+    #[test]
+    fn gate_failure_prepares_successor_then_reruns_all_gates_before_independent_recheck()
+    -> TestResult {
+        let (repository, store, run, predecessor) = integration_fixture(
+            "run-gate-workflow",
+            vec![
+                (
+                    "compile".to_owned(),
+                    "test -f fixed && printf repaired || { printf broken; exit 7; }".to_owned(),
+                ),
+                ("test".to_owned(), "printf second".to_owned()),
+            ],
+            1,
+        )?;
+        let workflow = Workflow::new(
+            store.clone(),
+            AgentRunner::with_socket(repository.path().join("unavailable-nucleus.sock")),
+        );
+
+        let error = require_error(
+            tokio::runtime::Runtime::new()?.block_on(workflow.run_integration(&run)),
+            "unavailable Nucleus must stop after preparing gate remediation",
+        )?;
+        assert_ne!(error.code(), "gate_launch_failed");
+        assert_ne!(store.run(&run.id)?.state, RunState::NeedsAttention);
+        let gates = store.gates(&run.id)?;
+        let failure = store
+            .gate_result(&gates[0].id, &predecessor.id)?
+            .ok_or("failed predecessor gate was not recorded")?;
+        assert_eq!(failure.exit_code, 7);
+        assert_eq!(failure.output, "broken");
+        assert!(store.gate_result(&gates[1].id, &predecessor.id)?.is_some());
+        let remediation = store
+            .latest_attempt(&run.id, Role::Integrator, "integration", 1)?
+            .ok_or("gate failure did not prepare an integrator successor")?;
+        assert!(remediation.targeted);
+        assert_ne!(remediation.nucleus_job_id, "integrator-zero");
+        let request: nucleus_core::JobRequestV1 =
+            serde_json::from_slice(&remediation.request_bytes)?;
+        for field in [
+            &format!("predecessor candidate: `{}`", predecessor.id),
+            "gate name: `compile`",
+            "command identity: `test -f fixed && printf repaired || { printf broken; exit 7; }`",
+            "exit code: `7`",
+            "output truncated: `false`",
+            "round: `0`",
+            "broken",
+        ] {
+            assert!(
+                request.prompt.contains(field),
+                "remediation prompt lacks {field}"
+            );
+        }
+
+        std::fs::write(repository.path().join("fixed"), "fixed\n")?;
+        let status = Command::new("git")
+            .args(["add", "fixed"])
+            .current_dir(repository.path())
+            .status()?;
+        assert!(status.success());
+        let status = Command::new("git")
+            .args(["commit", "-qm", "fix gate"])
+            .current_dir(repository.path())
+            .status()?;
+        assert!(status.success());
+        let output = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(repository.path())
+            .output()?;
+        let successor_commit = String::from_utf8(output.stdout)?.trim().to_owned();
+        let handoff = store.record_document(
+            &run.id,
+            "integration_handoff",
+            Some("integration"),
+            1,
+            &markdown("# Fixed integration handoff\n")?,
+        )?;
+        let successor = store.record_candidate(
+            &run.id,
+            "integration",
+            "integration",
+            1,
+            &predecessor.commit_oid,
+            &successor_commit,
+            "refs/test/integration/1",
+            &handoff.id,
+            &remediation.id,
+        )?;
+
+        let _ = require_error(
+            tokio::runtime::Runtime::new()?.block_on(workflow.run_integration(&run)),
+            "unavailable Nucleus must stop after preparing independent recheck",
+        )?;
+        for gate in &gates {
+            let result = store
+                .gate_result(&gate.id, &successor.id)?
+                .ok_or("successor did not rerun every declared gate")?;
+            assert_eq!(result.candidate_id, successor.id);
+            assert_eq!(result.round, 1);
+            assert_eq!(result.exit_code, 0);
+        }
+        let recheck = store
+            .latest_attempt(&run.id, Role::IntegratedReviewer, "integration", 1)?
+            .ok_or("successor was not independently rechecked")?;
+        assert!(recheck.targeted);
+        assert_ne!(recheck.role, remediation.role);
+        Ok(())
+    }
+
+    #[test]
+    fn gate_failure_exhaustion_and_integrator_blocker_need_attention() -> TestResult {
+        let (_repository, store, run, _candidate) = integration_fixture(
+            "run-gate-exhaustion",
+            vec![("gate".to_owned(), "exit 9".to_owned())],
+            0,
+        )?;
+        let workflow = Workflow::new(store.clone(), AgentRunner::for_current_user());
+        tokio::runtime::Runtime::new()?.block_on(workflow.run_integration(&run))?;
+        assert_eq!(store.run(&run.id)?.state, RunState::NeedsAttention);
+
+        let (repository, store, run, _candidate) = integration_fixture(
+            "run-gate-blocked",
+            vec![("gate".to_owned(), "exit 9".to_owned())],
+            1,
+        )?;
+        let workflow = Workflow::new(
+            store.clone(),
+            AgentRunner::with_socket(repository.path().join("unavailable-nucleus.sock")),
+        );
+        let _ = require_error(
+            tokio::runtime::Runtime::new()?.block_on(workflow.run_integration(&run)),
+            "gate failure must prepare the remediation integrator",
+        )?;
+        let integrator = store
+            .latest_attempt(&run.id, Role::Integrator, "integration", 1)?
+            .ok_or("missing remediation integrator")?;
+        store.commit_managed_submission(
+            &integrator.id,
+            &integrator.nucleus_job_id,
+            "call",
+            "args",
+            "result",
+            &ManagedSubmission::Handoff(HandoffSubmission {
+                outcome: HandoffOutcome::Blocked,
+                markdown: "# blocked\n".to_owned(),
+            }),
+        )?;
+        complete(&store, &integrator.id)?;
+        tokio::runtime::Runtime::new()?.block_on(workflow.run_integration(&run))?;
+        assert_eq!(store.run(&run.id)?.state, RunState::NeedsAttention);
+        Ok(())
+    }
+
+    #[test]
+    fn gate_launch_failure_is_recoverable_without_candidate_diagnostics() -> TestResult {
+        let (repository, store, run, candidate) = integration_fixture(
+            "run-gate-launch-failure",
+            vec![("gate".to_owned(), "printf never-runs".to_owned())],
+            1,
+        )?;
+        let workflow = Workflow::with_gate_shell(
+            store.clone(),
+            AgentRunner::for_current_user(),
+            repository.path().join("missing-shell"),
+        );
+        for _ in 0..2 {
+            let error = require_error(
+                tokio::runtime::Runtime::new()?.block_on(workflow.run_integration(&run)),
+                "missing gate shell must be a recoverable launch failure",
+            )?;
+            assert_eq!(error.code(), "gate_launch_failed");
+            assert_ne!(store.run(&run.id)?.state, RunState::NeedsAttention);
+            assert!(
+                store
+                    .gate_result(&store.gates(&run.id)?[0].id, &candidate.id)?
+                    .is_none()
+            );
+            assert!(
+                store
+                    .latest_attempt(&run.id, Role::Integrator, "integration", 1)?
+                    .is_none()
+            );
+        }
+        Ok(())
     }
 
     #[test]
