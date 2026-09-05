@@ -14,7 +14,8 @@ use crate::git::{scopes_overlap, validate_scopes};
 use crate::model::{
     AttemptState, AttemptView, CandidateView, DelegationSubmission, Disposition, DocumentView,
     GateResult, GateSpec, HandoffOutcome, NewRun, OpaqueMarkdown, PacketState, PacketView,
-    PathScope, ReviewScopeView, Role, RunState, RunView, sha256_hex,
+    PathScope, RecoveryCause, RecoveryEnvelope, RecoveryFrontier, ReviewScopeView, Role, RunState,
+    RunView, sha256_hex,
 };
 
 const SCHEMA: &str = r"
@@ -41,7 +42,9 @@ CREATE TABLE IF NOT EXISTS runs (
   cancel_requested INTEGER NOT NULL DEFAULT 0 CHECK(cancel_requested IN (0,1)),
   detail TEXT,
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  parent_run_id TEXT REFERENCES runs(id),
+  recovery_checkpoint_id TEXT
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS documents (
@@ -117,6 +120,7 @@ CREATE TABLE IF NOT EXISTS candidates (
   ref_name TEXT NOT NULL UNIQUE,
   handoff_document_id TEXT NOT NULL REFERENCES documents(id),
   attempt_id TEXT NOT NULL UNIQUE REFERENCES attempts(id),
+  predecessor_candidate_id TEXT REFERENCES candidates(id),
   created_at INTEGER NOT NULL,
   UNIQUE(run_id, subject_id, kind, round)
 ) STRICT;
@@ -143,6 +147,50 @@ CREATE TABLE IF NOT EXISTS gate_results (
   UNIQUE(gate_id, candidate_id)
 ) STRICT;
 
+CREATE TABLE IF NOT EXISTS recovery_envelopes (
+  checkpoint_id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL UNIQUE REFERENCES runs(id),
+  version INTEGER NOT NULL,
+  continuable INTEGER NOT NULL CHECK(continuable IN (0,1)),
+  cause TEXT NOT NULL,
+  frontier TEXT,
+  responsible_role TEXT,
+  subject_id TEXT,
+  failed_packet_keys_json TEXT NOT NULL,
+  evidence_ids_json TEXT NOT NULL,
+  permitted_scopes_json TEXT NOT NULL,
+  invalidated_checks_json TEXT NOT NULL,
+  candidate_id TEXT REFERENCES candidates(id),
+  reviewed_candidate_id TEXT REFERENCES candidates(id),
+  predecessor_candidate_id TEXT REFERENCES candidates(id),
+  review_attempt_id TEXT REFERENCES attempts(id),
+  gate_result_ids_json TEXT NOT NULL,
+  canonical_basis_digest TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS continuation_requests (
+  parent_run_id TEXT NOT NULL REFERENCES runs(id),
+  request_key TEXT NOT NULL UNIQUE,
+  remediation_rounds INTEGER NOT NULL CHECK(remediation_rounds BETWEEN 1 AND 8),
+  child_run_id TEXT NOT NULL UNIQUE REFERENCES runs(id),
+  checkpoint_id TEXT NOT NULL REFERENCES recovery_envelopes(checkpoint_id),
+  PRIMARY KEY(parent_run_id, request_key)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS inherited_evidence (
+  child_run_id TEXT NOT NULL REFERENCES runs(id),
+  evidence_kind TEXT NOT NULL,
+  evidence_id TEXT NOT NULL,
+  PRIMARY KEY(child_run_id, evidence_kind, evidence_id)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS review_bindings (
+  review_attempt_id TEXT PRIMARY KEY REFERENCES attempts(id),
+  candidate_id TEXT REFERENCES candidates(id),
+  plan_document_id TEXT REFERENCES documents(id),
+  CHECK((candidate_id IS NULL) != (plan_document_id IS NULL))
+) STRICT;
+
 CREATE TABLE IF NOT EXISTS tool_receipts (
   job_id TEXT NOT NULL,
   call_id TEXT NOT NULL,
@@ -153,6 +201,52 @@ CREATE TABLE IF NOT EXISTS tool_receipts (
   created_at INTEGER NOT NULL,
   PRIMARY KEY(job_id, call_id)
 ) STRICT;
+";
+
+const RECOVERY_SCHEMA: &str = r"CREATE TABLE IF NOT EXISTS recovery_envelopes (
+  checkpoint_id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL UNIQUE REFERENCES runs(id),
+  version INTEGER NOT NULL,
+  continuable INTEGER NOT NULL CHECK(continuable IN (0,1)),
+  cause TEXT NOT NULL,
+  frontier TEXT,
+  responsible_role TEXT,
+  subject_id TEXT,
+  failed_packet_keys_json TEXT NOT NULL,
+  evidence_ids_json TEXT NOT NULL,
+  permitted_scopes_json TEXT NOT NULL,
+  invalidated_checks_json TEXT NOT NULL,
+  candidate_id TEXT REFERENCES candidates(id),
+  reviewed_candidate_id TEXT REFERENCES candidates(id),
+  predecessor_candidate_id TEXT REFERENCES candidates(id),
+  review_attempt_id TEXT REFERENCES attempts(id),
+  gate_result_ids_json TEXT NOT NULL,
+  canonical_basis_digest TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS continuation_requests (
+  parent_run_id TEXT NOT NULL REFERENCES runs(id),
+  request_key TEXT NOT NULL UNIQUE,
+  remediation_rounds INTEGER NOT NULL CHECK(remediation_rounds BETWEEN 1 AND 8),
+  child_run_id TEXT NOT NULL UNIQUE REFERENCES runs(id),
+  checkpoint_id TEXT NOT NULL REFERENCES recovery_envelopes(checkpoint_id),
+  PRIMARY KEY(parent_run_id, request_key)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS inherited_evidence (
+  child_run_id TEXT NOT NULL REFERENCES runs(id),
+  evidence_kind TEXT NOT NULL,
+  evidence_id TEXT NOT NULL,
+  PRIMARY KEY(child_run_id, evidence_kind, evidence_id)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS review_bindings (
+  review_attempt_id TEXT PRIMARY KEY REFERENCES attempts(id),
+  candidate_id TEXT REFERENCES candidates(id),
+  plan_document_id TEXT REFERENCES documents(id),
+  CHECK((candidate_id IS NULL) != (plan_document_id IS NULL))
+) STRICT;
+
 ";
 
 #[derive(Clone, Debug)]
@@ -221,10 +315,11 @@ impl Store {
         let connection = self.connect_unchecked()?;
         connection.execute_batch(SCHEMA)?;
         connection.execute(
-            "INSERT INTO meta(key, value) VALUES('schema_version', '1') ON CONFLICT(key) DO NOTHING",
+            "INSERT INTO meta(key, value) VALUES('schema_version', '2') ON CONFLICT(key) DO NOTHING",
             [],
         )?;
         drop(connection);
+        self.check_ready()?;
         self.secure_files()?;
         Ok(())
     }
@@ -250,20 +345,18 @@ impl Store {
             [],
             |row| row.get(0),
         )?;
-        if version != "1" {
+        if version != "1" && version != "2" {
             return Err(AppError::new(
                 "database_schema_unsupported",
                 format!("unsupported Vizier schema version {version}"),
             ));
         }
-        if migrate {
-            // Additive scope storage is safe for existing ledgers and never rewrites documents.
+        if migrate && version == "1" {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            transaction.execute_batch("CREATE TABLE IF NOT EXISTS review_scopes (review_attempt_id TEXT PRIMARY KEY REFERENCES attempts(id), review_document_id TEXT NOT NULL UNIQUE REFERENCES documents(id), affected_packet_keys_json TEXT NOT NULL, contract_unit_ids_json TEXT NOT NULL) STRICT;")?;
-            // Historical reviews predate mechanical scope. Preserve their documents and
-            // identities while initializing the only safe legacy scope: no expansion.
-            transaction.execute("INSERT OR IGNORE INTO review_scopes(review_attempt_id,review_document_id,affected_packet_keys_json,contract_unit_ids_json) SELECT attempts.id,attempts.domain_document_id,'[]','[]' FROM attempts JOIN documents ON documents.id=attempts.domain_document_id WHERE attempts.role IN ('plan_reviewer','packet_reviewer','integrated_reviewer') AND attempts.domain_document_id IS NOT NULL", [])?;
+            transaction.execute_batch("ALTER TABLE runs ADD COLUMN parent_run_id TEXT REFERENCES runs(id); ALTER TABLE runs ADD COLUMN recovery_checkpoint_id TEXT; ALTER TABLE candidates ADD COLUMN predecessor_candidate_id TEXT REFERENCES candidates(id);")?;
+            transaction.execute_batch(RECOVERY_SCHEMA)?;
+            transaction.execute("UPDATE meta SET value='2' WHERE key='schema_version'", [])?;
             transaction.commit()?;
         }
         Ok(())
@@ -410,7 +503,7 @@ impl Store {
     pub fn request_cancel(&self, run_id: &str) -> AppResult<()> {
         let connection = self.connect()?;
         let count = connection.execute(
-            "UPDATE runs SET cancel_requested=1,state='cancelled',detail='cancellation requested',updated_at=? WHERE id=? AND state NOT IN ('succeeded','cancelled')",
+            "UPDATE runs SET cancel_requested=1,state='cancelled',detail='cancellation requested',updated_at=? WHERE id=? AND state NOT IN ('succeeded','needs_attention','cancelled')",
             params![now(), run_id],
         )?;
         if count == 0 {
@@ -428,7 +521,7 @@ impl Store {
     pub fn finish_run(&self, run_id: &str, candidate_id: &str, final_ref: &str) -> AppResult<()> {
         let connection = self.connect()?;
         let count = connection.execute(
-            "UPDATE runs SET state='succeeded',final_candidate_id=?,final_ref=?,detail=NULL,updated_at=? WHERE id=? AND cancel_requested=0",
+            "UPDATE runs SET state='succeeded',final_candidate_id=?,final_ref=?,detail=NULL,updated_at=? WHERE id=? AND cancel_requested=0 AND state NOT IN ('succeeded','needs_attention','cancelled')",
             params![candidate_id, final_ref, now(), run_id],
         )?;
         require_changed(
@@ -1176,7 +1269,200 @@ impl Store {
             "INSERT INTO gate_results(id,gate_id,candidate_id,round,exit_code,output,output_truncated,created_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(gate_id,candidate_id) DO NOTHING",
             params![result.id,result.gate_id,result.candidate_id,result.round,result.exit_code,result.output,i64::from(result.output_truncated),result.created_at],
         )?;
+        let persisted = self
+            .gate_result(&result.gate_id, &result.candidate_id)?
+            .ok_or_else(|| {
+                AppError::new(
+                    "gate_result_missing",
+                    "gate result was not readable after insert",
+                )
+            })?;
+        if persisted.round != result.round
+            || persisted.exit_code != result.exit_code
+            || persisted.output != result.output
+            || persisted.output_truncated != result.output_truncated
+        {
+            return Err(AppError::new(
+                "gate_result_replay_conflict",
+                "replayed gate evidence differs from exact retained evidence",
+            ));
+        }
         Ok(())
+    }
+
+    pub fn recovery_envelope(&self, run_id: &str) -> AppResult<Option<RecoveryEnvelope>> {
+        let connection = self.connect()?;
+        connection.query_row("SELECT checkpoint_id,run_id,version,continuable,cause,frontier,responsible_role,subject_id,failed_packet_keys_json,evidence_ids_json,permitted_scopes_json,invalidated_checks_json,candidate_id,reviewed_candidate_id,predecessor_candidate_id,review_attempt_id,gate_result_ids_json,canonical_basis_digest FROM recovery_envelopes WHERE run_id=?", params![run_id], row_recovery_envelope).optional().map_err(Into::into)
+    }
+
+    pub fn terminalize_needs_attention(&self, envelope: &RecoveryEnvelope) -> AppResult<()> {
+        envelope.validate()?;
+        let mut connection = self.connect()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let run = query_run(&transaction, "WHERE id=?", params![envelope.run_id])?
+            .ok_or_else(|| AppError::new("run_not_found", "run does not exist"))?;
+        if run.state.is_terminal() {
+            return Err(AppError::new(
+                "terminal_run_immutable",
+                "terminal runs cannot be changed or assigned a checkpoint",
+            ));
+        }
+        transaction.execute("INSERT INTO recovery_envelopes(checkpoint_id,run_id,version,continuable,cause,frontier,responsible_role,subject_id,failed_packet_keys_json,evidence_ids_json,permitted_scopes_json,invalidated_checks_json,candidate_id,reviewed_candidate_id,predecessor_candidate_id,review_attempt_id,gate_result_ids_json,canonical_basis_digest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", params![envelope.checkpoint_id,envelope.run_id,envelope.version,i64::from(envelope.continuable),envelope.cause.as_str(),envelope.frontier.map(RecoveryFrontier::as_str),envelope.responsible_role.map(Role::as_str),envelope.subject_id,serde_json::to_string(&envelope.failed_packet_keys)?,serde_json::to_string(&envelope.evidence_ids)?,serde_json::to_string(&envelope.permitted_scopes)?,serde_json::to_string(&envelope.invalidated_checks)?,envelope.candidate_id,envelope.reviewed_candidate_id,envelope.predecessor_candidate_id,envelope.review_attempt_id,serde_json::to_string(&envelope.gate_result_ids)?,envelope.canonical_basis_digest])?;
+        let count=transaction.execute("UPDATE runs SET state='needs_attention',recovery_checkpoint_id=?,updated_at=? WHERE id=? AND state NOT IN ('succeeded','needs_attention','cancelled')", params![envelope.checkpoint_id,now(),envelope.run_id])?;
+        if count != 1 {
+            return Err(AppError::new(
+                "terminal_run_immutable",
+                "terminal runs cannot be changed",
+            ));
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn admit_continuation(
+        &self,
+        parent_run_id: &str,
+        request_key: &str,
+        remediation_rounds: u32,
+    ) -> AppResult<RunView> {
+        if request_key.is_empty()
+            || request_key.len() > 256
+            || request_key
+                .bytes()
+                .any(|b| b.is_ascii_whitespace() || b == 0)
+        {
+            return Err(AppError::new(
+                "continuation_request_key_invalid",
+                "continuation request key must be a bounded canonical nonblank identity",
+            ));
+        }
+        if !(1..=8).contains(&remediation_rounds) {
+            return Err(AppError::new(
+                "remediation_rounds_invalid",
+                "continuation remediation rounds must be between 1 and 8",
+            ));
+        }
+        let mut connection = self.connect()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        if let Some((child, rounds))=transaction.query_row("SELECT child_run_id,remediation_rounds FROM continuation_requests WHERE request_key=?",params![request_key],|r|Ok((r.get::<_,String>(0)?,r.get::<_,u32>(1)?))).optional()? { let child=query_run(&transaction,"WHERE id=?",params![child])?.ok_or_else(||AppError::new("continuation_missing","continuation child is missing"))?; if child.parent_run_id.as_deref()==Some(parent_run_id) && rounds==remediation_rounds { transaction.commit()?; return Ok(child); } return Err(AppError::new("continuation_request_key_conflict","request key already names a different continuation request")); }
+        let parent = query_run(&transaction, "WHERE id=?", params![parent_run_id])?
+            .ok_or_else(|| AppError::new("run_not_found", "run does not exist"))?;
+        if parent.state != RunState::NeedsAttention || parent.cancel_requested {
+            return Err(AppError::new(
+                "continuation_parent_ineligible",
+                "only an immutable noncancelled needs_attention run may continue",
+            ));
+        }
+        if transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM continuation_requests WHERE parent_run_id=?)",
+            params![parent_run_id],
+            |r| r.get::<_, bool>(0),
+        )? {
+            return Err(AppError::new(
+                "continuation_child_exists",
+                "terminal lineage leaf already has a direct child",
+            ));
+        }
+        let envelope =
+            Self::recovery_envelope_tx(&transaction, parent_run_id)?.ok_or_else(|| {
+                AppError::new(
+                    "continuation_legacy_terminal",
+                    "legacy terminal has no exact recovery envelope",
+                )
+            })?;
+        envelope.validate()?;
+        if !envelope.continuable {
+            return Err(AppError::new(
+                "continuation_noncontinuable",
+                "terminal checkpoint is not continuable",
+            ));
+        }
+        if parent.input_bundle_sha256 != envelope.canonical_basis_digest {
+            return Err(AppError::new(
+                "continuation_basis_conflict",
+                "terminal checkpoint basis no longer matches frozen inputs",
+            ));
+        }
+        let id = format!("run-{}", Uuid::now_v7());
+        let at = now();
+        let brief = document_id();
+        let terminology = document_id();
+        transaction.execute("INSERT INTO runs(id,request_key,repository,source_commit,state,contract_set_sha256,input_bundle_sha256,brief_document_id,terminology_document_id,remediation_limit,created_at,updated_at,parent_run_id,recovery_checkpoint_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",params![id,request_key,parent.repository,parent.source_commit,"queued",parent.contract_set_sha256,parent.input_bundle_sha256,brief,terminology,remediation_rounds,at,at,parent_run_id,envelope.checkpoint_id])?;
+        for kind in [
+            "brief",
+            "terminology",
+            "contract_unit",
+            "delegation_plan",
+            "packet_plan",
+        ] {
+            let mut q=transaction.prepare("SELECT subject_id,ordinal,markdown FROM documents WHERE run_id=? AND kind=? ORDER BY ordinal,id")?;
+            for row in q.query_map(params![parent_run_id, kind], |r| {
+                Ok((
+                    r.get::<_, Option<String>>(0)?,
+                    r.get::<_, u32>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })? {
+                let (subject, ordinal, text) = row?;
+                let doc = if kind == "brief" {
+                    brief.clone()
+                } else if kind == "terminology" {
+                    terminology.clone()
+                } else {
+                    document_id()
+                };
+                insert_document(
+                    &transaction,
+                    &doc,
+                    &id,
+                    kind,
+                    subject.as_deref(),
+                    ordinal,
+                    &OpaqueMarkdown::from_text(text)?,
+                    at,
+                )?;
+            }
+        }
+        for row in transaction.prepare("SELECT packet_key,ordinal,contract_ids_json,depends_on_json,path_scopes_json,remediation_round FROM packets WHERE run_id=? ORDER BY ordinal")?.query_map(params![parent_run_id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,u32>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,u32>(5)?)))? {
+            let (key, ordinal, contracts, dependencies, scopes, _parent_round) = row?;
+            let plan_id: String = transaction.query_row("SELECT id FROM documents WHERE run_id=? AND kind='packet_plan' AND subject_id=? ORDER BY ordinal DESC,id DESC LIMIT 1", params![id,key], |r| r.get(0))?;
+            transaction.execute("INSERT INTO packets(run_id,packet_key,ordinal,state,contract_ids_json,depends_on_json,path_scopes_json,plan_document_id,current_candidate_id,remediation_round) VALUES(?,?,?,?,?,?,?,?,NULL,0)", params![id,key,ordinal,PacketState::Planned.as_str(),contracts,dependencies,scopes,plan_id])?;
+        }
+        for row in transaction
+            .prepare("SELECT ordinal,name,command FROM gate_specs WHERE run_id=? ORDER BY ordinal")?
+            .query_map(params![parent_run_id], |r| {
+                Ok((
+                    r.get::<_, u32>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })?
+        {
+            let (ordinal, name, command) = row?;
+            transaction.execute(
+                "INSERT INTO gate_specs(id,run_id,ordinal,name,command) VALUES(?,?,?,?,?)",
+                params![
+                    format!("gate-{}", Uuid::now_v7()),
+                    id,
+                    ordinal,
+                    name,
+                    command
+                ],
+            )?;
+        }
+        for evidence in &envelope.evidence_ids {
+            transaction.execute("INSERT INTO inherited_evidence(child_run_id,evidence_kind,evidence_id) VALUES(?,?,?)",params![id,"checkpoint",evidence])?;
+        }
+        transaction.execute("INSERT INTO continuation_requests(parent_run_id,request_key,remediation_rounds,child_run_id,checkpoint_id) VALUES(?,?,?,?,?)",params![parent_run_id,request_key,remediation_rounds,id,envelope.checkpoint_id])?;
+        transaction.commit()?;
+        self.run(&id)
+    }
+
+    fn recovery_envelope_tx(
+        connection: &Connection,
+        run_id: &str,
+    ) -> AppResult<Option<RecoveryEnvelope>> {
+        connection.query_row("SELECT checkpoint_id,run_id,version,continuable,cause,frontier,responsible_role,subject_id,failed_packet_keys_json,evidence_ids_json,permitted_scopes_json,invalidated_checks_json,candidate_id,reviewed_candidate_id,predecessor_candidate_id,review_attempt_id,gate_result_ids_json,canonical_basis_digest FROM recovery_envelopes WHERE run_id=?",params![run_id],row_recovery_envelope).optional().map_err(Into::into)
     }
 
     pub fn secure_files(&self) -> AppResult<()> {
@@ -1606,7 +1892,7 @@ fn run_by_request_key(connection: &Connection, key: &str) -> AppResult<Option<Ru
 
 fn run_select(clause: &str) -> String {
     format!(
-        "SELECT id,repository,source_commit,state,contract_set_sha256,input_bundle_sha256,remediation_limit,final_candidate_id,final_ref,cancel_requested,detail,created_at,updated_at FROM runs {clause}"
+        "SELECT id,repository,source_commit,state,contract_set_sha256,input_bundle_sha256,remediation_limit,parent_run_id,recovery_checkpoint_id,final_candidate_id,final_ref,cancel_requested,detail,created_at,updated_at FROM runs {clause}"
     )
 }
 
@@ -1621,12 +1907,56 @@ fn row_run(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunView> {
         contract_set_sha256: row.get(4)?,
         input_bundle_sha256: row.get(5)?,
         remediation_limit: row.get(6)?,
-        final_candidate_id: row.get(7)?,
-        final_ref: row.get(8)?,
-        cancel_requested: row.get::<_, i64>(9)? != 0,
-        detail: row.get(10)?,
-        created_at: row.get(11)?,
-        updated_at: row.get(12)?,
+        parent_run_id: row.get(7)?,
+        recovery_checkpoint_id: row.get(8)?,
+        final_candidate_id: row.get(9)?,
+        final_ref: row.get(10)?,
+        cancel_requested: row.get::<_, i64>(11)? != 0,
+        detail: row.get(12)?,
+        created_at: row.get(13)?,
+        updated_at: row.get(14)?,
+    })
+}
+
+fn row_recovery_envelope(row: &rusqlite::Row<'_>) -> rusqlite::Result<RecoveryEnvelope> {
+    let cause: String = row.get(4)?;
+    let frontier: Option<String> = row.get(5)?;
+    let role: Option<String> = row.get(6)?;
+    Ok(RecoveryEnvelope {
+        checkpoint_id: row.get(0)?,
+        run_id: row.get(1)?,
+        version: row.get(2)?,
+        continuable: row.get::<_, i64>(3)? != 0,
+        cause: RecoveryCause::parse(&cause)
+            .ok_or_else(|| invalid_enum_value(4, "recovery cause"))?,
+        frontier: match frontier {
+            Some(value) => Some(
+                RecoveryFrontier::parse(&value)
+                    .ok_or_else(|| invalid_enum_value(5, "recovery frontier"))?,
+            ),
+            None => None,
+        },
+        responsible_role: match role {
+            Some(value) => {
+                Some(Role::parse(&value).ok_or_else(|| invalid_enum_value(6, "recovery role"))?)
+            }
+            None => None,
+        },
+        subject_id: row.get(7)?,
+        failed_packet_keys: serde_json::from_str(&row.get::<_, String>(8)?)
+            .map_err(json_sql_error)?,
+        evidence_ids: serde_json::from_str(&row.get::<_, String>(9)?).map_err(json_sql_error)?,
+        permitted_scopes: serde_json::from_str(&row.get::<_, String>(10)?)
+            .map_err(json_sql_error)?,
+        invalidated_checks: serde_json::from_str(&row.get::<_, String>(11)?)
+            .map_err(json_sql_error)?,
+        candidate_id: row.get(12)?,
+        reviewed_candidate_id: row.get(13)?,
+        predecessor_candidate_id: row.get(14)?,
+        review_attempt_id: row.get(15)?,
+        gate_result_ids: serde_json::from_str(&row.get::<_, String>(16)?)
+            .map_err(json_sql_error)?,
+        canonical_basis_digest: row.get(17)?,
     })
 }
 
@@ -1709,7 +2039,7 @@ fn row_attempt(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttemptView> {
 
 fn candidate_select(clause: &str) -> String {
     format!(
-        "SELECT id,run_id,subject_id,kind,round,base_commit,commit_oid,ref_name,handoff_document_id,attempt_id,created_at FROM candidates {clause}"
+        "SELECT id,run_id,subject_id,kind,round,base_commit,commit_oid,ref_name,handoff_document_id,attempt_id,predecessor_candidate_id,created_at FROM candidates {clause}"
     )
 }
 
@@ -1725,7 +2055,8 @@ fn row_candidate(row: &rusqlite::Row<'_>) -> rusqlite::Result<CandidateView> {
         ref_name: row.get(7)?,
         handoff_document_id: row.get(8)?,
         attempt_id: row.get(9)?,
-        created_at: row.get(10)?,
+        predecessor_candidate_id: row.get(10)?,
+        created_at: row.get(11)?,
     })
 }
 

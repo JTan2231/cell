@@ -48,6 +48,36 @@ pub fn resolve_commit(repository: &Path, revision: &str) -> AppResult<String> {
     Ok(oid)
 }
 
+/// Confirms that a retained candidate identity still names the exact commit in the repository.
+/// This is intentionally mechanical: it does not infer safety from a worktree or prose.
+pub fn validate_retained_candidate(
+    repository: &Path,
+    commit_oid: &str,
+    ref_name: &str,
+) -> AppResult<()> {
+    let commit = resolve_commit(repository, commit_oid)?;
+    if commit != commit_oid {
+        return Err(AppError::new(
+            "candidate_commit_not_exact",
+            "candidate commit identity is not canonical",
+        ));
+    }
+    if ref_name.is_empty() || !ref_name.starts_with("refs/") || ref_name.contains('\0') {
+        return Err(AppError::new(
+            "candidate_ref_invalid",
+            "candidate ref is not a safe full Git ref",
+        ));
+    }
+    let referenced = resolve_commit(repository, ref_name)?;
+    if referenced != commit_oid {
+        return Err(AppError::new(
+            "candidate_ref_mismatch",
+            "retained candidate ref no longer names its exact commit",
+        ));
+    }
+    Ok(())
+}
+
 pub fn require_git() -> AppResult<String> {
     let output = Command::new("git")
         .arg("--version")

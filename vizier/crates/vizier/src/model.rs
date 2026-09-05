@@ -178,6 +178,110 @@ string_enum!(Disposition {
     Blocked => "blocked",
 });
 
+string_enum!(RecoveryCause {
+    PlanReviewExhausted => "plan_review_exhausted",
+    PacketReviewExhausted => "packet_review_exhausted",
+    GateFailureExhausted => "gate_failure_exhausted",
+    IntegratedReviewExhausted => "integrated_review_exhausted",
+    Blocked => "blocked",
+    OperationalError => "operational_error",
+    AmbiguousEvidence => "ambiguous_evidence",
+    Cancelled => "cancelled",
+    UnsafeGit => "unsafe_git",
+    MissingAuthorityOrEvidence => "missing_authority_or_evidence",
+    ActiveOrResultlessAttempt => "active_or_resultless_attempt",
+    MixedFrontier => "mixed_frontier",
+});
+
+string_enum!(RecoveryFrontier {
+    AssembledPlan => "assembled_plan",
+    Packets => "packets",
+    IntegratedCandidate => "integrated_candidate",
+});
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct RecoveryEnvelope {
+    pub version: u32,
+    pub run_id: String,
+    pub checkpoint_id: String,
+    pub continuable: bool,
+    pub cause: RecoveryCause,
+    pub frontier: Option<RecoveryFrontier>,
+    pub responsible_role: Option<Role>,
+    pub subject_id: Option<String>,
+    #[serde(default)]
+    pub failed_packet_keys: Vec<String>,
+    #[serde(default)]
+    pub evidence_ids: Vec<String>,
+    #[serde(default)]
+    pub permitted_scopes: Vec<PathScope>,
+    #[serde(default)]
+    pub invalidated_checks: Vec<String>,
+    pub candidate_id: Option<String>,
+    pub reviewed_candidate_id: Option<String>,
+    pub predecessor_candidate_id: Option<String>,
+    pub review_attempt_id: Option<String>,
+    pub gate_result_ids: Vec<String>,
+    pub canonical_basis_digest: String,
+}
+
+impl RecoveryEnvelope {
+    pub fn validate(&self) -> AppResult<()> {
+        let supported = matches!(
+            self.cause,
+            RecoveryCause::PlanReviewExhausted
+                | RecoveryCause::PacketReviewExhausted
+                | RecoveryCause::GateFailureExhausted
+                | RecoveryCause::IntegratedReviewExhausted
+        );
+        if self.version != 1
+            || self.checkpoint_id.is_empty()
+            || self.canonical_basis_digest.len() != 64
+            || !self
+                .canonical_basis_digest
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit())
+        {
+            return Err(AppError::new(
+                "recovery_envelope_invalid",
+                "recovery envelope is not a complete versioned mechanical checkpoint",
+            ));
+        }
+        if self.continuable != supported {
+            return Err(AppError::new(
+                "recovery_envelope_invalid",
+                "continuability must exactly match a supported exhausted frontier",
+            ));
+        }
+        if self.continuable
+            && (self.frontier.is_none()
+                || self.responsible_role.is_none()
+                || self.subject_id.as_deref().unwrap_or_default().is_empty()
+                || self.evidence_ids.is_empty())
+        {
+            return Err(AppError::new(
+                "recovery_envelope_incomplete",
+                "a continuable recovery envelope needs exact frontier, responsibility, subject, and evidence",
+            ));
+        }
+        if self.cause == RecoveryCause::PacketReviewExhausted && self.failed_packet_keys.is_empty()
+        {
+            return Err(AppError::new(
+                "recovery_envelope_incomplete",
+                "packet recovery requires exact failed packets",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ContinuationRequest {
+    pub parent_run_id: String,
+    pub request_key: String,
+    pub remediation_rounds: u32,
+}
+
 string_enum!(PacketState {
     Planned => "planned",
     Implementing => "implementing",
@@ -195,6 +299,8 @@ pub struct RunView {
     pub contract_set_sha256: String,
     pub input_bundle_sha256: String,
     pub remediation_limit: u32,
+    pub parent_run_id: Option<String>,
+    pub recovery_checkpoint_id: Option<String>,
     pub final_candidate_id: Option<String>,
     pub final_ref: Option<String>,
     pub cancel_requested: bool,
@@ -274,6 +380,7 @@ pub struct CandidateView {
     pub ref_name: String,
     pub handoff_document_id: String,
     pub attempt_id: String,
+    pub predecessor_candidate_id: Option<String>,
     pub created_at: i64,
 }
 
