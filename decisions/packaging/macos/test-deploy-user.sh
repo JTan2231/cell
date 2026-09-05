@@ -20,6 +20,7 @@ trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 home="$temporary/Home"
 candidate="$temporary/krisis"
 clockwork="$temporary/clockwork"
+codex="$temporary/codex"
 annals="$temporary/annals"
 launchctl="$temporary/launchctl"
 config="$temporary/decisions.toml"
@@ -77,6 +78,7 @@ if [ "$command" = definition ] && [ "$operation" = show ]; then
     script=$(value script)
     script_sha256=$(value script_sha256)
     env_home=$(value HOME)
+    conversations_codex=$(value CONVERSATIONS_CODEX)
     annals_binary=$(value KRISIS_ANNALS_BINARY)
     annals_config=$(value KRISIS_ANNALS_CONFIG)
     library_id=$(value KRISIS_ANNALS_LIBRARY_ID)
@@ -93,7 +95,11 @@ if [ "$command" = definition ] && [ "$operation" = show ]; then
             ;;
         krisis/observer)
             schedule_json='{"kind":"interval","seconds":60,"run_at_load":false}'
-            environment_json="{\"HOME\":\"$env_home\",\"KRISIS_ANNALS_BINARY\":\"$annals_binary\",\"KRISIS_ANNALS_CONFIG\":\"$annals_config\",\"KRISIS_ANNALS_LIBRARY_ID\":\"$library_id\"}"
+            if [ -n "$conversations_codex" ]; then
+                environment_json="{\"HOME\":\"$env_home\",\"CONVERSATIONS_CODEX\":\"$conversations_codex\",\"KRISIS_ANNALS_BINARY\":\"$annals_binary\",\"KRISIS_ANNALS_CONFIG\":\"$annals_config\",\"KRISIS_ANNALS_LIBRARY_ID\":\"$library_id\"}"
+            else
+                environment_json="{\"HOME\":\"$env_home\",\"KRISIS_ANNALS_BINARY\":\"$annals_binary\",\"KRISIS_ANNALS_CONFIG\":\"$annals_config\",\"KRISIS_ANNALS_LIBRARY_ID\":\"$library_id\"}"
+            fi
             ;;
         *) exit 1 ;;
     esac
@@ -159,6 +165,10 @@ cat >"$annals" <<'EOF'
 #!/bin/sh
 exit 0
 EOF
+cat >"$codex" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
 cat >"$launchctl" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"$KRISIS_LAUNCHCTL_CAPTURE"
@@ -169,7 +179,7 @@ cat >"$home/.local/bin/codex" <<'EOF'
 exit 0
 EOF
 printf '%s\n' '[decision_feed]' 'expected_library_id = "0123456789abcdef0123456789abcdef"' >"$config"
-chmod 0755 "$candidate" "$clockwork" "$annals" "$launchctl" "$home/.local/bin/codex"
+chmod 0755 "$candidate" "$clockwork" "$codex" "$annals" "$launchctl" "$home/.local/bin/codex"
 
 deploy_for() {
     test_home=$1
@@ -180,7 +190,7 @@ deploy_for() {
         KRISIS_LAUNCHCTL_CAPTURE="$launchctl_capture" \
         KRISIS_CANDIDATE_CAPTURE="$candidate_capture" \
         /bin/sh "$SCRIPT_DIR/deploy-user.sh" \
-        --binary "$candidate" --clockwork "$clockwork" --annals "$annals" \
+        --binary "$candidate" --clockwork "$clockwork" --codex "$codex" --annals "$annals" \
         --annals-config "$config" --annals-library-id 0123456789abcdef0123456789abcdef \
         --home "$test_home" --launchctl "$launchctl" "$@"
 }
@@ -188,6 +198,32 @@ deploy_for() {
 deploy() {
     deploy_for "$home" "$clockwork_state" "$@"
 }
+
+if HOME="$home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" \
+    KRISIS_CLOCKWORK_STATE="$clockwork_state" \
+    /bin/sh "$SCRIPT_DIR/deploy-user.sh" \
+    --binary "$candidate" --clockwork "$clockwork" --annals "$annals" \
+    --annals-config "$config" --annals-library-id 0123456789abcdef0123456789abcdef \
+    --home "$home" --launchctl "$launchctl" >/dev/null 2>"$temporary/missing-codex.err"; then
+    printf '%s\n' 'deployer accepted a missing Codex executable' >&2
+    exit 1
+fi
+grep -F 'all binary, config, home, and launchctl paths must be absolute' \
+    "$temporary/missing-codex.err" >/dev/null
+if deploy_for "$home" "$clockwork_state" --codex relative \
+    >/dev/null 2>"$temporary/relative-codex.err"; then
+    printf '%s\n' 'deployer accepted a relative Codex executable' >&2
+    exit 1
+fi
+grep -F 'all binary, config, home, and launchctl paths must be absolute' \
+    "$temporary/relative-codex.err" >/dev/null
+if deploy_for "$home" "$clockwork_state" --codex "$temporary/missing-codex" \
+    >/dev/null 2>"$temporary/unavailable-codex.err"; then
+    printf '%s\n' 'deployer accepted an unavailable Codex executable' >&2
+    exit 1
+fi
+grep -F "executable is unavailable: $temporary/missing-codex" \
+    "$temporary/unavailable-codex.err" >/dev/null
 
 # A valid but unrelated same-user gate is not adopted, rewritten, or removed.
 unrelated_home="$temporary/UnrelatedHome"
@@ -226,12 +262,16 @@ grep -F 'definition show' "$clockwork_capture" >/dev/null
 
 prepared_release_id=$(sed -n '3s/^release_id=//p' \
     "$home/Library/Application Support/Decisions/install/krisis-maintenance-hold.txt")
+prepared_definition_digest=$(sed -n '4s/^definition_digest=//p' \
+    "$home/Library/Application Support/Decisions/install/krisis-maintenance-hold.txt")
 prepared_release="$home/Library/Application Support/Decisions/install/releases/$prepared_release_id"
 [ -x "$prepared_release/package/krisis" ]
 [ -x "$prepared_release/package/krisis-observer" ]
 cmp -s "$prepared_release/bin/krisis" "$prepared_release/package/krisis"
 cmp -s "$prepared_release/bin/krisis-observer" \
     "$prepared_release/package/krisis-observer"
+grep -Fx "CONVERSATIONS_CODEX = \"$codex\"" \
+    "$clockwork_state/definitions/$prepared_definition_digest.toml" >/dev/null
 
 installed_deploy() {
     HOME="$home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" \
@@ -239,7 +279,7 @@ installed_deploy() {
         KRISIS_LAUNCHCTL_CAPTURE="$launchctl_capture" \
         KRISIS_CANDIDATE_CAPTURE="$candidate_capture" \
         /bin/sh "$prepared_release/package/deploy-user.sh" \
-        --binary "$candidate" --clockwork "$clockwork" --annals "$annals" \
+        --binary "$candidate" --clockwork "$clockwork" --codex "$codex" --annals "$annals" \
         --annals-config "$config" \
         --annals-library-id 0123456789abcdef0123456789abcdef \
         --home "$home" --launchctl "$launchctl" "$@"
@@ -297,6 +337,100 @@ tail -n "+$((release_lines + 1))" "$clockwork_capture" \
         printf '%s\n' 'idempotent maintenance release mutated a binding' >&2
         exit 1
     }
+
+# The current source deployer and uninstaller remain compatible with the
+# predecessor format-4 definition, which did not record CONVERSATIONS_CODEX.
+old_home="$temporary/OldKrisisHome"
+old_state="$old_home/Library/Application Support/Decisions"
+old_install="$old_state/install"
+old_logs="$old_home/Library/Logs/Decisions"
+old_clockwork_state="$temporary/old-krisis-clockwork-state"
+old_stage="$old_install/release-stage"
+mkdir -p "$old_home/.local/bin" "$old_home/.codex" \
+    "$old_home/Library/Application Support/Chancery/providers" \
+    "$old_install/releases" "$old_logs" "$old_clockwork_state/definitions" \
+    "$old_clockwork_state/bindings"
+cp -R "$first_release" "$old_stage"
+sed '/^CONVERSATIONS_CODEX = "__CONVERSATIONS_CODEX__"$/d' \
+    "$old_stage/package/krisis-observer.clockwork.toml.in" \
+    >"$temporary/old-format4-template.toml"
+install -m 0644 "$temporary/old-format4-template.toml" \
+    "$old_stage/package/krisis-observer.clockwork.toml.in"
+old_binary_hash=$(sed -n '4s/^binary_sha256=//p' "$old_stage/manifest.txt")
+old_frontend_hash=$(sed -n '5s/^frontend_sha256=//p' "$old_stage/manifest.txt")
+old_runner_hash=$(sed -n '6s/^observer_runner_sha256=//p' "$old_stage/manifest.txt")
+old_definition_hash=$(shasum -a 256 \
+    "$old_stage/package/krisis-observer.clockwork.toml.in" | awk '{print $1}')
+old_hooks_hash=$(sed -n '8s/^hooks_sha256=//p' "$old_stage/manifest.txt")
+old_deployer_hash=$(sed -n '9s/^deployer_sha256=//p' "$old_stage/manifest.txt")
+old_uninstaller_hash=$(sed -n '10s/^uninstaller_sha256=//p' "$old_stage/manifest.txt")
+old_provider_hash=$(sed -n '11s/^krisis_chancery_sha256=//p' "$old_stage/manifest.txt")
+old_legacy_provider_hash=$(sed -n '12s/^decisions_chancery_sha256=//p' "$old_stage/manifest.txt")
+old_release_id=$(printf '%s\n' "$old_binary_hash" "$old_frontend_hash" \
+    "$old_runner_hash" "$old_definition_hash" "$old_hooks_hash" \
+    "$old_deployer_hash" "$old_uninstaller_hash" "$old_provider_hash" \
+    "$old_legacy_provider_hash" | shasum -a 256 | awk '{print $1}')
+awk -v release_id="$old_release_id" -v definition_hash="$old_definition_hash" '
+    NR == 2 { print "release_id=" release_id; next }
+    NR == 7 { print "observer_clockwork_definition_sha256=" definition_hash; next }
+    { print }
+' "$old_stage/manifest.txt" >"$temporary/old-format4-manifest.txt"
+install -m 0444 "$temporary/old-format4-manifest.txt" "$old_stage/manifest.txt"
+old_release="$old_install/releases/$old_release_id"
+mv "$old_stage" "$old_release"
+ln -s "releases/$old_release_id" "$old_install/current"
+old_current="$old_install/current"
+ln -s "$old_current/bin/krisis" "$old_home/.local/bin/krisis"
+ln -s "$old_current/share/chancery/krisis" \
+    "$old_home/Library/Application Support/Chancery/providers/krisis"
+ln -s "$old_current/share/chancery/decisions" \
+    "$old_home/Library/Application Support/Chancery/providers/decisions"
+install -m 0600 "$old_release/package/hooks.json" "$old_home/.codex/hooks.json"
+old_interpreter_hash=$(shasum -a 256 /bin/sh | awk '{print $1}')
+old_definition="$temporary/old-format4-definition.toml"
+sed -e "s|__RELEASE_ID__|$old_release_id|g" \
+    -e "s|__RELEASE_ROOT__|$old_release|g" \
+    -e "s|__KRISIS_STATE__|$old_state|g" \
+    -e "s|__KRISIS_HOME__|$old_home|g" \
+    -e "s|__KRISIS_LOGS__|$old_logs|g" \
+    -e "s|__KRISIS_ANNALS_BINARY__|$annals|g" \
+    -e "s|__KRISIS_ANNALS_CONFIG__|$config|g" \
+    -e 's|__KRISIS_ANNALS_LIBRARY_ID__|0123456789abcdef0123456789abcdef|g' \
+    -e "s|__INTERPRETER_SHA256__|$old_interpreter_hash|g" \
+    -e "s|__RUNNER_SHA256__|$old_runner_hash|g" \
+    "$old_release/package/krisis-observer.clockwork.toml.in" >"$old_definition"
+old_digest=$(shasum -a 256 "$old_definition" | awk '{print $1}')
+install -m 0600 "$old_definition" \
+    "$old_clockwork_state/definitions/$old_digest.toml"
+printf 'true|%s\n' "$old_digest" \
+    >"$old_clockwork_state/bindings/krisis_observer.binding"
+{
+    printf '%s\n' 'format=1'
+    printf 'release_id=%s\n' "$old_release_id"
+    printf 'definition_digest=%s\n' "$old_digest"
+    printf 'annals_binary=%s\n' "$annals"
+    printf 'annals_config=%s\n' "$config"
+    printf '%s\n' 'annals_library_id=0123456789abcdef0123456789abcdef'
+} >"$old_install/krisis-observer-binding.txt"
+chmod 0600 "$old_install/krisis-observer-binding.txt"
+if KRISIS_FAIL_AFTER_DISABLE_KEY=krisis/observer \
+    deploy_for "$old_home" "$old_clockwork_state" --final-cutover \
+    >"$temporary/old-format4-deploy.out" \
+    2>"$temporary/old-format4-deploy.err"; then
+    printf '%s\n' 'deployer ignored a failure while upgrading the old format-4 definition' >&2
+    exit 1
+fi
+unset KRISIS_FAIL_AFTER_DISABLE_KEY
+[ "$(cat "$old_clockwork_state/bindings/krisis_observer.binding")" = "true|$old_digest" ]
+[ "$(readlink "$old_install/current")" = "releases/$old_release_id" ]
+[ ! -e "$old_state/.clockwork-maintenance" ]
+HOME="$old_home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" \
+    KRISIS_CLOCKWORK_STATE="$old_clockwork_state" \
+    /bin/sh "$SCRIPT_DIR/uninstall-user.sh" --clockwork "$clockwork" \
+    --home "$old_home" >"$temporary/old-format4-uninstall.out"
+grep -F 'uninstalled Krisis public surfaces' \
+    "$temporary/old-format4-uninstall.out" >/dev/null
+[ "$(cat "$old_clockwork_state/bindings/krisis_observer.binding")" = "false|$old_digest" ]
 
 # Existing content-addressed releases are closed regular-file trees. A
 # byte-identical external symlink or an uncommitted extra path is rejected by
@@ -709,7 +843,7 @@ bad_home="$temporary/BadHome"
 mkdir "$bad_home"
 if HOME="$bad_home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" KRISIS_CLOCKWORK_STATE="$clockwork_state" \
     /bin/sh "$SCRIPT_DIR/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" \
-    --annals "$annals" --annals-config "$config" \
+    --codex "$codex" --annals "$annals" --annals-config "$config" \
     --annals-library-id ABCDEF0123456789abcdef0123456789 \
     --home "$bad_home" --launchctl "$launchctl" >/dev/null 2>"$temporary/bad.err"; then
     printf '%s\n' 'deployer accepted an uppercase Annals library ID' >&2

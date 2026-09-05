@@ -535,7 +535,12 @@ receipts, installed releases, provider selector, exact user `Stop` hook,
 release-local observer runner, and body-free logs. The database and logs retain
 their historical `Decisions` filesystem locations so the rename does not split
 persistent history. Clockwork owns the successor 60-second `krisis/observer`
-binding and process history; a pre-cutover Decisions release still owns the two
+binding and process history. Its immutable definition records one explicitly
+selected absolute Codex executable, and the release-local observer passes that
+path as `CONVERSATIONS_CODEX` instead of discovering another installation at
+runtime. Final-cutover doctor uses the same path; interactive Krisis commands
+that read Conversations must receive it explicitly because they do not inherit
+the observer environment. A pre-cutover Decisions release still owns the two
 legacy `decisions/observer` and `decisions/daily-email` schedule projections,
 whether Clockwork bindings or older LaunchAgents, which are disabled rather
 than renamed during the separately authorized cutover. The

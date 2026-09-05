@@ -213,6 +213,15 @@ if [ -n "$active_digest" ]; then
     definition="$transaction/active-definition.json"
     HOME="$install_home" "$clockwork_path" --json definition show "$active_digest" >"$definition" 2>"$definition.stderr" || fail 'unable to inspect the active Krisis definition'
     interpreter_hash=$(shasum -a 256 /bin/sh | awk '{print $1}')
+    if grep -F 'CONVERSATIONS_CODEX = "__CONVERSATIONS_CODEX__"' \
+        "$release/package/krisis-observer.clockwork.toml.in" >/dev/null; then
+        definition_codex=$(plutil -extract data.manifest.environment.CONVERSATIONS_CODEX raw "$definition" 2>/dev/null) \
+            || fail 'active Clockwork definition has no Codex executable'
+        case "$definition_codex" in /*) ;; *) fail 'active Clockwork Codex executable is not absolute' ;; esac
+        expected_environment_count=5
+    else
+        expected_environment_count=4
+    fi
     [ "$(plutil -extract ok raw "$definition" 2>/dev/null)" = true ] \
         && [ "$(plutil -extract data.digest raw "$definition" 2>/dev/null)" = "$active_digest" ] \
         && [ "$(plutil -extract data.key raw "$definition" 2>/dev/null)" = "$ACTIVE_CLOCKWORK_KEY" ] \
@@ -249,7 +258,7 @@ if [ -n "$active_digest" ]; then
     [ "$(direct_key_count data.manifest)" -eq 12 ] \
         && [ "$(direct_key_count data.manifest.schedule)" -eq 3 ] \
         && [ "$(direct_key_count data.manifest.launch)" -eq 5 ] \
-        && [ "$(direct_key_count data.manifest.environment)" -eq 4 ] \
+        && [ "$(direct_key_count data.manifest.environment)" -eq "$expected_environment_count" ] \
         && [ "$(direct_key_count data.manifest.output)" -eq 2 ] \
         || fail 'active Clockwork definition contains foreign manifest fields'
     if plutil -extract data.manifest.arguments.0 raw "$definition" >/dev/null 2>&1 \
@@ -257,7 +266,7 @@ if [ -n "$active_digest" ]; then
         fail 'active Clockwork definition contains unsupported arguments or timeout'
     fi
     environment_count=$(plutil -extract data.manifest.environment xml1 -o - "$definition" 2>/dev/null | awk '/<key>/{count++} END {print count+0}')
-    [ "$environment_count" -eq 4 ] || fail 'active Clockwork definition contains foreign environment entries'
+    [ "$environment_count" -eq "$expected_environment_count" ] || fail 'active Clockwork definition contains foreign environment entries'
 fi
 
 if [ -L "$MAINTENANCE_MARKER" ] || { [ -e "$MAINTENANCE_MARKER" ] && [ ! -f "$MAINTENANCE_MARKER" ]; }; then fail 'maintenance gate is invalid'; fi

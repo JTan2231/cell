@@ -27,6 +27,7 @@ fi
 
 binary_path=
 clockwork_path=
+codex_path=
 annals_path=
 annals_config=
 annals_library_id=
@@ -42,7 +43,7 @@ fail() {
 }
 
 usage() {
-    printf '%s\n' 'Usage: deploy-user.sh --binary ABSOLUTE_KRISIS --clockwork ABSOLUTE_CLOCKWORK --annals ABSOLUTE_ANNALS --annals-config ABSOLUTE_CONFIG --annals-library-id LOWERCASE_32_HEX [--home ABSOLUTE_HOME] [--launchctl ABSOLUTE_LAUNCHCTL] [--final-cutover [--keep-maintenance] | --release-maintenance]'
+    printf '%s\n' 'Usage: deploy-user.sh --binary ABSOLUTE_KRISIS --clockwork ABSOLUTE_CLOCKWORK --codex ABSOLUTE_CODEX --annals ABSOLUTE_ANNALS --annals-config ABSOLUTE_CONFIG --annals-library-id LOWERCASE_32_HEX [--home ABSOLUTE_HOME] [--launchctl ABSOLUTE_LAUNCHCTL] [--final-cutover [--keep-maintenance] | --release-maintenance]'
     printf '%s\n' 'Without --final-cutover, installs and registers the candidate while retaining the maintenance gate.'
     printf '%s\n' '--release-maintenance idempotently releases only the exact authenticated hold created for the current installation.'
 }
@@ -51,6 +52,7 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         --binary) [ "$#" -ge 2 ] || fail '--binary requires a path'; binary_path=$2; shift 2 ;;
         --clockwork) [ "$#" -ge 2 ] || fail '--clockwork requires a path'; clockwork_path=$2; shift 2 ;;
+        --codex) [ "$#" -ge 2 ] || fail '--codex requires a path'; codex_path=$2; shift 2 ;;
         --annals) [ "$#" -ge 2 ] || fail '--annals requires a path'; annals_path=$2; shift 2 ;;
         --annals-config) [ "$#" -ge 2 ] || fail '--annals-config requires a path'; annals_config=$2; shift 2 ;;
         --annals-library-id) [ "$#" -ge 2 ] || fail '--annals-library-id requires an ID'; annals_library_id=$2; shift 2 ;;
@@ -69,20 +71,20 @@ done
 [ "$release_maintenance" -eq 0 ] || { [ "$final_cutover" -eq 0 ] && [ "$keep_maintenance" -eq 0 ]; } \
     || fail '--release-maintenance cannot be combined with final-cutover options'
 
-for named_path in "$binary_path" "$clockwork_path" "$annals_path" "$annals_config" "$install_home" "$launchctl_path"; do
+for named_path in "$binary_path" "$clockwork_path" "$codex_path" "$annals_path" "$annals_config" "$install_home" "$launchctl_path"; do
     case "$named_path" in /*) ;; *) fail 'all binary, config, home, and launchctl paths must be absolute' ;; esac
 done
 case "$annals_library_id" in
     [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
     *) fail 'annals library ID must be exactly 32 lowercase hexadecimal characters' ;;
 esac
-case "$install_home$annals_path$annals_config" in *'"'*|*'\'*|*'|'*|*'&'*|*'
-'*) fail 'home and Annals paths contain characters unsupported by manifest rendering' ;; esac
+case "$install_home$codex_path$annals_path$annals_config" in *'"'*|*'\'*|*'|'*|*'&'*|*'
+'*) fail 'home, Codex, and Annals paths contain characters unsupported by manifest rendering' ;; esac
 operator_uid=$(id -u)
 [ "$operator_uid" -ne 0 ] || fail 'run as the Krisis operator, not root'
 [ -d "$install_home" ] && [ ! -L "$install_home" ] || fail 'home is not a regular directory'
 [ "$(stat -f '%u' "$install_home")" -eq "$operator_uid" ] || fail 'home is not owned by the operator'
-for executable in "$binary_path" "$clockwork_path" "$annals_path"; do
+for executable in "$binary_path" "$clockwork_path" "$codex_path" "$annals_path"; do
     [ -f "$executable" ] && [ ! -L "$executable" ] && [ -x "$executable" ] || fail "executable is unavailable: $executable"
 done
 [ -f "$annals_config" ] && [ ! -L "$annals_config" ] || fail 'Annals config is not a regular file'
@@ -710,6 +712,7 @@ sed -e "s|__RELEASE_ID__|$release_id|g" \
     -e "s|__KRISIS_STATE__|$STATE_DIR|g" \
     -e "s|__KRISIS_HOME__|$install_home|g" \
     -e "s|__KRISIS_LOGS__|$LOG_DIR|g" \
+    -e "s|__CONVERSATIONS_CODEX__|$codex_path|g" \
     -e "s|__KRISIS_ANNALS_BINARY__|$annals_path|g" \
     -e "s|__KRISIS_ANNALS_CONFIG__|$annals_config|g" \
     -e "s|__KRISIS_ANNALS_LIBRARY_ID__|$annals_library_id|g" \
@@ -803,8 +806,21 @@ prove_definition() {
             && [ "$(plutil -extract data.manifest.environment.KRISIS_ANNALS_CONFIG raw "$proof_file" 2>/dev/null)" = "$annals_config" ] \
             && [ "$(plutil -extract data.manifest.environment.KRISIS_ANNALS_LIBRARY_ID raw "$proof_file" 2>/dev/null)" = "$annals_library_id" ] \
             || fail 'active Clockwork Annals target differs from this cutover'
+        if grep -F 'CONVERSATIONS_CODEX = "__CONVERSATIONS_CODEX__"' \
+            "$proof_release/package/krisis-observer.clockwork.toml.in" >/dev/null; then
+            proof_codex_path=$(plutil -extract data.manifest.environment.CONVERSATIONS_CODEX raw "$proof_file" 2>/dev/null) \
+                || fail 'active Clockwork definition has no Codex executable'
+            case "$proof_codex_path" in /*) ;; *) fail 'active Clockwork Codex executable is not absolute' ;; esac
+            if [ "$proof_digest" = "$candidate_definition_digest" ]; then
+                [ "$proof_codex_path" = "$codex_path" ] \
+                    || fail 'active Clockwork Codex executable differs from this cutover'
+            fi
+            expected_environment_count=5
+        else
+            expected_environment_count=4
+        fi
         environment_count=$(plutil -extract data.manifest.environment xml1 -o - "$proof_file" 2>/dev/null | awk '/<key>/{count++} END {print count+0}')
-        [ "$environment_count" -eq 4 ] || fail 'active Clockwork definition contains foreign environment entries'
+        [ "$environment_count" -eq "$expected_environment_count" ] || fail 'active Clockwork definition contains foreign environment entries'
     else
         [ "$(plutil -extract data.manifest.environment.HOME raw "$proof_file" 2>/dev/null)" = "$install_home" ] || fail "$proof_kind HOME differs"
         environment_count=$(plutil -extract data.manifest.environment xml1 -o - "$proof_file" 2>/dev/null | awk '/<key>/{count++} END {print count+0}')
@@ -991,8 +1007,6 @@ if [ "$release_maintenance" -eq 1 ]; then
     printf 'released authenticated Krisis maintenance hold for %s (%s)\n' "$version" "$release_id"
     exit 0
 fi
-
-if [ -x /opt/homebrew/bin/codex ]; then codex_path=/opt/homebrew/bin/codex; elif [ -x "$install_home/.local/bin/codex" ]; then codex_path="$install_home/.local/bin/codex"; else fail 'Codex executable is unavailable'; fi
 
 validate_existing_database_paths
 mutation_started=1

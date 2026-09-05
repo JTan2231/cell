@@ -33,13 +33,16 @@ untouched. Retained legacy database rows and Clockwork history are not deleted.
 ## Dependency configuration
 
 The observer needs exact absolute paths to Codex, Annals, and the dedicated
-Annals decisions config, plus that library's persistent ID. A packaged prepare
-accepts:
+Annals decisions config, plus that library's persistent ID. The Codex path is
+selected by the operator and recorded in the immutable Clockwork definition;
+the observer never discovers a different installation at runtime. A packaged
+prepare accepts:
 
 ```text
 deploy-user.sh \
   --binary /absolute/path/to/krisis \
   --clockwork /absolute/path/to/clockwork \
+  --codex /absolute/path/to/codex \
   --annals /absolute/path/to/annals \
   --annals-config "/absolute/path/to/Annals/decisions/config.toml" \
   --annals-library-id 0123456789abcdef0123456789abcdef
@@ -68,12 +71,17 @@ schedules, suspends the old hook command for its timeout, proves SQLite
 quiescence, and saves the database and sidecars. It then selects the prepared
 release, migrates through schema 4, and runs doctor in a scrubbed environment.
 
-Doctor checks Conversations, exact Nucleus capabilities and requester contract,
-and:
+Doctor uses the same explicitly selected Codex executable as the observer and
+checks Conversations, exact Nucleus capabilities and requester contract, and:
 
 ```text
 annals --config CONFIG --json decision-feed watermark
 ```
+
+For an interactive `krisis doctor`, `observe process`, or `observe reconcile`,
+set `CONVERSATIONS_CODEX` to that same path; the installed command does not
+inherit Clockwork's observer environment. Doctor and process also require the
+complete explicit Annals arguments documented in the CLI contract.
 
 It accepts only the standard success envelope with contract version 1 and the
 configured library ID. The baseline is created once during explicit final
@@ -83,10 +91,12 @@ switch, proves the exact candidate is enabled and the legacy schedules are not,
 then removes the maintenance marker.
 
 The observer definition runs every 60 seconds with `run_at_load = false`, pins
-the exact release-local runner and interpreter digest, and uses a scrubbed
-environment. The scheduled wrapper suppresses detailed child errors and emits
-only a fixed failure message, so it writes body-free output to the existing
-Decisions log path. Interactive `krisis` diagnostics remain detailed.
+the exact release-local runner and interpreter digest, records the selected
+Codex executable as `CONVERSATIONS_CODEX`, and uses a scrubbed environment. The
+scheduled wrapper refuses a missing, relative, symbolic, or non-executable
+Codex path. It suppresses detailed child errors and emits only a fixed failure
+message, so it writes body-free output to the existing Decisions log path.
+Interactive `krisis` diagnostics remain detailed.
 
 ## Verification
 

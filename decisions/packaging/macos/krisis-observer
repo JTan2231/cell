@@ -27,6 +27,19 @@ fi
     printf '%s\n' 'krisis observer: release-owned Krisis executable is unavailable' >&2
     exit 1
 }
+[ -n "${CONVERSATIONS_CODEX:-}" ] || {
+    printf '%s\n' 'krisis observer: configured Codex executable is unavailable' >&2
+    exit 1
+}
+case "$CONVERSATIONS_CODEX" in /*) ;; *)
+    printf '%s\n' 'krisis observer: Codex executable path is not absolute' >&2
+    exit 1
+esac
+[ -f "$CONVERSATIONS_CODEX" ] && [ ! -L "$CONVERSATIONS_CODEX" ] \
+    && [ -x "$CONVERSATIONS_CODEX" ] || {
+    printf '%s\n' 'krisis observer: configured Codex executable is unavailable' >&2
+    exit 1
+}
 [ -x "${KRISIS_ANNALS_BINARY:-}" ] || {
     printf '%s\n' 'krisis observer: configured Annals executable is unavailable' >&2
     exit 1
@@ -40,20 +53,11 @@ case "${KRISIS_ANNALS_LIBRARY_ID:-}" in
     *) printf '%s\n' 'krisis observer: expected Annals library ID is invalid' >&2; exit 1 ;;
 esac
 
-if [ -x /opt/homebrew/bin/codex ]; then
-    codex_path=/opt/homebrew/bin/codex
-elif [ -x "$HOME/.local/bin/codex" ]; then
-    codex_path="$HOME/.local/bin/codex"
-else
-    printf '%s\n' 'krisis observer: Codex executable is unavailable' >&2
-    exit 1
-fi
-
 set +e
 /usr/bin/env -i \
     HOME="$HOME" \
     PATH=/usr/bin:/bin:/usr/sbin:/sbin \
-    CONVERSATIONS_CODEX="$codex_path" \
+    CONVERSATIONS_CODEX="$CONVERSATIONS_CODEX" \
     KRISIS_DATABASE="$HOME/Library/Application Support/Decisions/decisions.db" \
     KRISIS_ANNALS_BINARY="$KRISIS_ANNALS_BINARY" \
     KRISIS_ANNALS_CONFIG="$KRISIS_ANNALS_CONFIG" \
