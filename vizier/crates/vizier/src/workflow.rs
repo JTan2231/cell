@@ -17,8 +17,8 @@ use crate::error::{AppError, AppResult};
 use crate::git;
 use crate::model::{
     AttemptState, AttemptView, CandidateView, Disposition, DocumentView, GateResult,
-    MAX_GATE_OUTPUT_BYTES, MAX_INPUT_BUNDLE_BYTES, PacketState, PacketView, PathScope, Role,
-    RunState, RunView,
+    MAX_GATE_OUTPUT_BYTES, MAX_INPUT_BUNDLE_BYTES, PacketState, PacketView, PathScope,
+    RecoveryCause, RecoveryEnvelope, RecoveryFrontier, Role, RunState, RunView,
 };
 use crate::nucleus::{AgentRunner, AttemptSpec, neutral_workspace};
 use crate::store::Store;
@@ -61,16 +61,11 @@ impl Workflow {
     pub async fn drive(&self, run_id: &str) -> AppResult<RunView> {
         let _lock = self.acquire_driver_lock()?;
         let result = self.drive_locked(run_id).await;
-        if let Err(error) = &result
-            && error.code() != "gate_launch_failed"
+        if let Err(_error) = &result
             && let Ok(run) = self.store.run(run_id)
             && !matches!(run.state, RunState::Succeeded | RunState::Cancelled)
         {
-            let _ = self.store.set_run_state(
-                run_id,
-                RunState::NeedsAttention,
-                Some(&format!("{}: {}", error.code(), error.message())),
-            );
+            let _ = self.terminalize_noncontinuable(&run, RecoveryCause::OperationalError);
         }
         result
     }
@@ -155,6 +150,9 @@ impl Workflow {
         if run.cancel_requested {
             self.runner.cancel_run(&self.store, run_id).await?;
             return self.store.run(run_id);
+        }
+        if run.parent_run_id.is_some() && run.recovery_checkpoint_id.is_some() {
+            return self.run_integrated_continuation(&run).await;
         }
         self.run_planners(&run).await?;
         self.run_assembler(&run).await?;
@@ -620,11 +618,7 @@ impl Workflow {
                 if round < run.remediation_limit {
                     continue;
                 }
-                self.store.set_run_state(
-                    &run.id,
-                    RunState::NeedsAttention,
-                    Some("configured gate failed after the bounded integration remediation allowance"),
-                )?;
+                self.terminalize_gate_exhausted(run, &candidate)?;
                 return Ok(());
             }
             self.store
@@ -654,12 +648,232 @@ impl Workflow {
                 }
                 Disposition::ChangesRequested if round < run.remediation_limit => {}
                 Disposition::ChangesRequested | Disposition::Blocked => {
-                    self.store.set_run_state(&run.id, RunState::NeedsAttention, Some("integrated candidate was not accepted within the bounded remediation policy"))?;
+                    self.terminalize_integrated_review_exhausted(run, &candidate, &review)?;
                     return Ok(());
                 }
             }
         }
         unreachable!("bounded integration loop always returns")
+    }
+
+    /// Linked children deliberately enter only at the durable integrated
+    /// frontier.  Their local round zero is their first (and counted)
+    /// integrator correction.
+    async fn run_integrated_continuation(&self, run: &RunView) -> AppResult<RunView> {
+        let parent_id = run.parent_run_id.as_deref().ok_or_else(|| {
+            AppError::new("continuation_parent_missing", "linked child has no parent")
+        })?;
+        let checkpoint = self.store.recovery_envelope(parent_id)?.ok_or_else(|| {
+            AppError::new(
+                "continuation_checkpoint_missing",
+                "linked child has no checkpoint",
+            )
+        })?;
+        if !matches!(
+            checkpoint.cause,
+            RecoveryCause::GateFailureExhausted | RecoveryCause::IntegratedReviewExhausted
+        ) {
+            return Err(AppError::new(
+                "continuation_frontier_unsupported",
+                "this continuation frontier is not executable",
+            ));
+        }
+        let predecessor = checkpoint.candidate_id.as_deref().ok_or_else(|| {
+            AppError::new(
+                "continuation_evidence_missing",
+                "checkpoint has no exact candidate",
+            )
+        })?;
+        let predecessor = self.store.candidate(predecessor)?;
+        for round in 0..run.remediation_limit {
+            self.store
+                .set_run_state(&run.id, RunState::Integrating, None)?;
+            let prompt = self.integration_prompt(run, &[], true, round)?;
+            let base = if round == 0 {
+                predecessor.commit_oid.clone()
+            } else {
+                self.store
+                    .latest_candidate(&run.id, "integration", "integration")?
+                    .ok_or_else(|| {
+                        AppError::new(
+                            "integration_basis_missing",
+                            "prior child candidate is missing",
+                        )
+                    })?
+                    .commit_oid
+            };
+            let attempt = self
+                .execute_attempt(
+                    run,
+                    Role::Integrator,
+                    "integration",
+                    round,
+                    true,
+                    &prompt,
+                    Some(&base),
+                    &checkpoint.permitted_scopes,
+                )
+                .await?;
+            if attempt.disposition == Some(Disposition::Blocked) {
+                self.terminalize_noncontinuable(run, RecoveryCause::Blocked)?;
+                return self.store.run(&run.id);
+            }
+            let candidate = self.freeze_writer_candidate(
+                run,
+                &attempt,
+                "integration",
+                "integration",
+                round,
+                &base,
+            )?;
+            if self.run_gates(run, &candidate, round)? {
+                continue;
+            }
+            self.store
+                .set_run_state(&run.id, RunState::FinalReview, None)?;
+            let targeted = checkpoint.cause == RecoveryCause::IntegratedReviewExhausted
+                || checkpoint.review_attempt_id.is_some();
+            let review = self
+                .execute_attempt(
+                    run,
+                    Role::IntegratedReviewer,
+                    "integration",
+                    round,
+                    targeted,
+                    &self.integrated_review_prompt(run, &candidate, targeted)?,
+                    Some(&candidate.commit_oid),
+                    &[],
+                )
+                .await?;
+            match require_review_result(&review)? {
+                Disposition::Accepted => {
+                    let reference = git::publish_final_ref(
+                        Path::new(&run.repository),
+                        &run.id,
+                        &candidate.commit_oid,
+                    )?;
+                    self.store.finish_run(&run.id, &candidate.id, &reference)?;
+                    return self.store.run(&run.id);
+                }
+                Disposition::ChangesRequested => {}
+                Disposition::Blocked => {
+                    self.terminalize_noncontinuable(run, RecoveryCause::Blocked)?;
+                    return self.store.run(&run.id);
+                }
+            }
+        }
+        self.terminalize_noncontinuable(run, RecoveryCause::MixedFrontier)?;
+        self.store.run(&run.id)
+    }
+
+    fn terminalize_noncontinuable(&self, run: &RunView, cause: RecoveryCause) -> AppResult<()> {
+        let envelope = RecoveryEnvelope {
+            version: 1,
+            run_id: run.id.clone(),
+            checkpoint_id: format!("checkpoint-{}", Uuid::now_v7()),
+            continuable: false,
+            cause,
+            frontier: None,
+            responsible_role: None,
+            subject_id: None,
+            failed_packet_keys: Vec::new(),
+            evidence_ids: Vec::new(),
+            permitted_scopes: Vec::new(),
+            invalidated_checks: Vec::new(),
+            candidate_id: None,
+            reviewed_candidate_id: None,
+            predecessor_candidate_id: None,
+            review_attempt_id: None,
+            gate_result_ids: Vec::new(),
+            canonical_basis_digest: run.input_bundle_sha256.clone(),
+        };
+        self.store.terminalize_needs_attention(&envelope)
+    }
+
+    fn terminalize_gate_exhausted(
+        &self,
+        run: &RunView,
+        candidate: &CandidateView,
+    ) -> AppResult<()> {
+        let results = self
+            .store
+            .gates(&run.id)?
+            .into_iter()
+            .map(|gate| {
+                self.store
+                    .gate_result(&gate.id, &candidate.id)?
+                    .ok_or_else(|| {
+                        AppError::new("gate_evidence_missing", "configured gate result is missing")
+                    })
+            })
+            .collect::<AppResult<Vec<_>>>()?;
+        if results.iter().any(|result| result.output_truncated)
+            || !results.iter().any(|result| result.exit_code != 0)
+        {
+            return self.terminalize_noncontinuable(run, RecoveryCause::AmbiguousEvidence);
+        }
+        let envelope = RecoveryEnvelope {
+            version: 1,
+            run_id: run.id.clone(),
+            checkpoint_id: format!("checkpoint-{}", Uuid::now_v7()),
+            continuable: true,
+            cause: RecoveryCause::GateFailureExhausted,
+            frontier: Some(RecoveryFrontier::IntegratedCandidate),
+            responsible_role: Some(Role::Integrator),
+            subject_id: Some("integration".to_owned()),
+            failed_packet_keys: Vec::new(),
+            evidence_ids: vec![candidate.handoff_document_id.clone()],
+            permitted_scopes: Vec::new(),
+            invalidated_checks: results
+                .iter()
+                .map(|result| result.gate_id.clone())
+                .collect(),
+            candidate_id: Some(candidate.id.clone()),
+            reviewed_candidate_id: None,
+            predecessor_candidate_id: candidate.predecessor_candidate_id.clone(),
+            review_attempt_id: None,
+            gate_result_ids: results.into_iter().map(|result| result.id).collect(),
+            canonical_basis_digest: run.input_bundle_sha256.clone(),
+        };
+        if self.store.terminalize_needs_attention(&envelope).is_err() {
+            self.terminalize_noncontinuable(run, RecoveryCause::UnsafeGit)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn terminalize_integrated_review_exhausted(
+        &self,
+        run: &RunView,
+        candidate: &CandidateView,
+        review: &AttemptView,
+    ) -> AppResult<()> {
+        let evidence = review.domain_document_id.clone().ok_or_else(|| {
+            AppError::new(
+                "review_evidence_missing",
+                "integrated review has no document",
+            )
+        })?;
+        self.store.terminalize_needs_attention(&RecoveryEnvelope {
+            version: 1,
+            run_id: run.id.clone(),
+            checkpoint_id: format!("checkpoint-{}", Uuid::now_v7()),
+            continuable: true,
+            cause: RecoveryCause::IntegratedReviewExhausted,
+            frontier: Some(RecoveryFrontier::IntegratedCandidate),
+            responsible_role: Some(Role::Integrator),
+            subject_id: Some("integration".to_owned()),
+            failed_packet_keys: Vec::new(),
+            evidence_ids: vec![evidence],
+            permitted_scopes: Vec::new(),
+            invalidated_checks: Vec::new(),
+            candidate_id: Some(candidate.id.clone()),
+            reviewed_candidate_id: Some(candidate.id.clone()),
+            predecessor_candidate_id: candidate.predecessor_candidate_id.clone(),
+            review_attempt_id: Some(review.id.clone()),
+            gate_result_ids: Vec::new(),
+            canonical_basis_digest: run.input_bundle_sha256.clone(),
+        })
     }
 
     /// Returns whether an executed configured gate failed for this candidate.
@@ -956,7 +1170,20 @@ impl Workflow {
             &reference,
             &format!("Vizier run {} {kind} {subject} round {round}", run.id),
         )?;
-        let candidate = self.store.record_candidate(
+        let predecessor = if kind == "integration" {
+            self.store
+                .latest_candidate(&run.id, "integration", "integration")?
+                .map(|candidate| candidate.id)
+                .or_else(|| {
+                    run.parent_run_id
+                        .as_ref()
+                        .and_then(|parent| self.store.recovery_envelope(parent).ok().flatten())
+                        .and_then(|checkpoint| checkpoint.candidate_id)
+                })
+        } else {
+            None
+        };
+        let candidate = self.store.record_candidate_with_predecessor(
             &run.id,
             subject,
             kind,
@@ -966,6 +1193,7 @@ impl Workflow {
             &reference,
             handoff,
             &attempt.id,
+            predecessor.as_deref(),
         )?;
         git::remove_worktree(
             Path::new(&run.repository),
@@ -1151,7 +1379,7 @@ impl Workflow {
                 &run.id,
                 "packet_review",
                 &packet.key,
-                candidate.round - 1,
+                candidate.round.saturating_sub(1),
             )?
         {
             append_document(&mut prompt, &previous);
@@ -1748,7 +1976,7 @@ mod tests {
             0,
             &source_commit,
             &source_commit,
-            "refs/test/packet/0",
+            "HEAD",
             &packet_handoff.id,
             &packet_writer.id,
         )?;
@@ -1781,7 +2009,7 @@ mod tests {
             0,
             &source_commit,
             &source_commit,
-            "refs/test/integration/0",
+            &source_commit,
             &handoff.id,
             &writer.id,
         )?;

@@ -10,7 +10,7 @@ use crate::error::{AppError, AppResult};
 use crate::git;
 use crate::model::{
     AttemptView, DocumentView, MAX_CONTRACT_UNITS, MAX_INPUT_BUNDLE_BYTES, NewRun, OpaqueMarkdown,
-    PacketView, ReviewScopeView, RunView,
+    PacketView, RecoveryEnvelope, ReviewScopeView, RunView,
 };
 use crate::nucleus::{AgentRunner, HealthSummary};
 use crate::store::Store;
@@ -79,8 +79,19 @@ enum RunCommand {
     Wait { run_id: String },
     /// Resume the exact persisted workflow after interruption.
     Resume { run_id: String },
+    /// Create and synchronously drive one explicitly requested linked child.
+    Continue(ContinueArgs),
     /// Record cancellation intent and cancel correlated active Nucleus jobs.
     Cancel { run_id: String },
+}
+
+#[derive(Debug, Args)]
+struct ContinueArgs {
+    run_id: String,
+    #[arg(long)]
+    request_key: String,
+    #[arg(long)]
+    remediation_rounds: u32,
 }
 
 #[derive(Debug, Args)]
@@ -132,6 +143,7 @@ struct DoctorOutput {
 #[derive(Debug, Serialize)]
 struct RunStatusOutput {
     run: RunView,
+    recovery: Option<RecoveryEnvelope>,
     documents: Vec<DocumentSummary>,
     packets: Vec<PacketView>,
     attempts: Vec<AttemptSummary>,
@@ -236,6 +248,17 @@ fn run_command(store: &Store, command: RunCommand, json: bool) -> AppResult<()> 
             let run = store.create_run(&input)?;
             let workflow = Workflow::new(store.clone(), AgentRunner::for_current_user());
             let result = runtime()?.block_on(workflow.drive(&run.id))?;
+            emit_run_status(store, &result.id, json)
+        }
+        RunCommand::Continue(arguments) => {
+            validate_remediation_rounds(arguments.remediation_rounds)?;
+            let child = store.admit_continuation(
+                &arguments.run_id,
+                &arguments.request_key,
+                arguments.remediation_rounds,
+            )?;
+            let workflow = Workflow::new(store.clone(), AgentRunner::for_current_user());
+            let result = runtime()?.block_on(workflow.drive(&child.id))?;
             emit_run_status(store, &result.id, json)
         }
         RunCommand::List => {
@@ -415,6 +438,7 @@ fn emit_run_status(store: &Store, run_id: &str, json: bool) -> AppResult<()> {
     let run = store.run(run_id)?;
     let output = RunStatusOutput {
         run: run.clone(),
+        recovery: store.recovery_envelope(run_id)?,
         documents: all_document_summaries(store, run_id)?,
         packets: store.packets(run_id)?,
         attempts: store
