@@ -5,7 +5,7 @@
   "mode": "operate",
   "support": "supported",
   "title": "Install or operate Krisis",
-  "summary": "Deploy, inspect, recover, or uninstall the user-owned krisis command, schema-4 migration-compatible state, exact Stop hook, explicitly selected Codex history reader, and release-pinned krisis/observer Clockwork service while retiring Decisions schedules.",
+  "summary": "Deploy, inspect, maintenance-hold, recover, or uninstall the user-owned krisis command, schema-4 state, exact Stop hook, explicit Codex and Annals pins, and krisis/observer service while retiring Decisions schedules.",
   "use_when": [
     "Krisis should be installed or updated for the current macOS user.",
     "The observer binding, hook, baseline, logs, database, Annals configuration, release selector, or recovery state should be inspected.",
@@ -17,6 +17,7 @@
   ],
   "outcome": "A validated current-user Krisis installation with one periodic observer, exact hook, explicit Codex history reader, preserved legacy Decisions state, explicit Annals decisions-library configuration, and retired digest/review schedules.",
   "effects": [
+    "The Cell product adapter composes preparation and explicit final cutover under run-owned CLI admission, preserves the write-once baseline and prior schedule enabled booleans, and retains existing product-owned installer and recovery boundaries.",
     "Default preparation stages a content-addressed release and registers and verifies its Clockwork definition, including the explicit Codex reader path, while retaining maintenance without selecting or activating public surfaces.",
     "Explicit final cutover migrates the database to schema 4, publishes the krisis command and providers, installs the exact hook and target-bound observer ownership receipt, selects krisis/observer, and disables only proven-owned enabled legacy schedules.",
     "Uninstall removes exact owned public Krisis surfaces and disables its observer while retaining the database, releases, logs, legacy history, and Clockwork history unless separately authorized for deletion."
@@ -32,6 +33,7 @@
     "Routine observer logs remain body-free and account delivery reaches only the configured dedicated Annals library."
   ],
   "failure_and_recovery": [
+    "Coordinated inspection stops before effects if an installed CLI lacks maintenance support; bootstrap its compatibility release through the existing deployer and writer-quiescence procedure. Adapter recovery stops on retained product-installer maintenance or unfinished transactions without clearing their evidence or another owner's hold.",
     "A provable failed update restores prior owned selectors, hook bytes, database and sidecars, and schedule selection; an unprovable rollback retains the private maintenance gate and transaction backup.",
     "Foreign, symbolic, hard-linked, modified, or ambiguous releases, databases, selectors, hooks, paths, selected definitions, ownership receipts, or loaded labels are refused rather than replaced.",
     "Missed hooks recover with observe reconcile; pending Annals delivery retries before classification; terminal observation retry and unavailable-source abandonment require explicit guarded commands."
@@ -77,6 +79,9 @@
     "The expected Annals library ID cannot be proven or a requested action would delete retained state without separate authority."
   ],
   "interfaces": [
+    {"label": "Inspect deployment admission", "invocation": "/Users/joey/.local/bin/krisis --database ABSOLUTE_DATABASE --json maintenance status"},
+    {"label": "Hold deployment admission", "invocation": "/Users/joey/.local/bin/krisis --database ABSOLUTE_DATABASE --json maintenance hold RUN_ID"},
+    {"label": "Release own deployment hold", "invocation": "/Users/joey/.local/bin/krisis --database ABSOLUTE_DATABASE --json maintenance release RUN_ID"},
     {"label": "Prepare", "invocation": "decisions/packaging/macos/deploy-user.sh --binary ABSOLUTE_KRISIS --clockwork ABSOLUTE_CLOCKWORK --codex ABSOLUTE_CODEX --annals ABSOLUTE_ANNALS --annals-config ABSOLUTE_CONFIG --annals-library-id LOWERCASE_32_HEX"},
     {"label": "Final cutover", "invocation": "decisions/packaging/macos/deploy-user.sh --binary ABSOLUTE_KRISIS --clockwork ABSOLUTE_CLOCKWORK --codex ABSOLUTE_CODEX --annals ABSOLUTE_ANNALS --annals-config ABSOLUTE_CONFIG --annals-library-id LOWERCASE_32_HEX --final-cutover"},
     {"label": "Doctor", "invocation": "CONVERSATIONS_CODEX=ABSOLUTE_CODEX /Users/joey/.local/bin/krisis --annals-binary ABSOLUTE_ANNALS --annals-config ABSOLUTE_CONFIG --annals-library-id LOWERCASE_32_HEX doctor"},
@@ -93,15 +98,18 @@
       {"status": "unsupported", "statement": "This is not a cross-user deployment, general hook manager, Annals library creator, retained-state deletion, or release operation."}
     ],
     "preconditions": [
+      {"status": "declared", "statement": "Coordinated updates first prove the currently installed affected executables support maintenance, establish all affected run-owned holds, and prove product and dependency drain before applying selected candidates. Candidate support alone cannot fence an older public executable."},
       {"status": "declared", "statement": "Deployment requires a green exact krisis binary and matching provider, one explicit compatible Codex executable, compatible dependencies, explicit valid Annals configuration, and owned or absent selectors and service artifacts."},
       {"status": "declared", "statement": "Before migration, exact product writers are maintenance-gated and quiesced and a private database-plus-sidecars backup exists."},
       {"status": "declared", "statement": "Hook trust, real canary, live deployment, and retained-state deletion each require separate authority."}
     ],
     "inputs": [
+      {"status": "declared", "statement": "Maintenance accepts the selected database and one run ID of 1–128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. Controlled commands use CELL_DEPLOYMENT_RUN_ID only under the same sole hold and exclusive drained activity; without a hold, they use ordinary admission."},
       {"status": "declared", "statement": "Deploy consumes absolute Krisis, Clockwork, Codex, Annals, and Annals config paths, exact lowercase expected library ID, product-owned package/provider bytes, current-user home, and current owned installation state."},
       {"status": "unsupported", "statement": "Foreign hook files, ambiguous selectors, direct SQLite edits, arbitrary library fallback, uppercase IDs, and unapproved state deletion are not accepted."}
     ],
     "outputs": [
+      {"status": "declared", "statement": "Maintenance returns protocol_version 1, contract_version 1, holds, and drained without opening, initializing, or migrating SQLite; status leaves an absent gate absent. Drained covers participating live commands and does not alone prove durable observations or Nucleus jobs terminal."},
       {"status": "declared", "statement": "Successful preparation installs and verifies one content-addressed release and definition containing the explicit Codex reader while retaining maintenance and leaving active selectors unchanged."},
       {"status": "declared", "statement": "Successful explicit final cutover selects one validated content-addressed release for krisis and both providers, migrates schema 4, installs the exact Stop hook, and enables only krisis/observer."},
       {"status": "declared", "statement": "Uninstall removes exact public selectors and disables the owned observer while retaining migration-compatible state, releases, logs, and scheduler history."}
@@ -124,6 +132,8 @@
       {"status": "unsupported", "statement": "Foreign, symbolic, modified, ambiguous, or unowned artifacts are refused rather than followed, merged, or replaced."}
     ],
     "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "The durable gate is the private sibling <database>.cell-maintenance. Hold atomically fences every other public CLI command and typed client before database access, including reads and doctor because opening state can migrate it. Existing commands may settle; holds survive process exit. Repeated hold and release are idempotent, and release removes only its owner without changing baseline or another hold."},
+      {"status": "declared", "statement": "Ordinary Annals binary or config pin transitions prove the complete prior definition against its release and private receipt's old target, require the unchanged persistent decisions-library ID, and validate the new target with candidate doctor. Foreign ownership or a changed library ID stops the update. Ordinary coordinated updates do not choose a legacy activation watermark."},
       {"status": "declared", "statement": "Preparation validates and registers the candidate with one explicit Codex reader while retaining maintenance; explicit final cutover revalidates closed release trees, private database files, definitions, and the target-bound ownership receipt, disables only proven-owned enabled schedules, drains the hook, backs up quiescent SQLite state, migrates, stages selectors, proves doctor with that same reader, activates the baseline once, publishes hook and command, verifies krisis/observer, commits, and clears the gate."},
       {"status": "declared", "statement": "Provable failure restores prior state; unprovable rollback retains maintenance gating and backup and does not claim external scheduler success."},
       {"status": "declared", "statement": "Uninstall retains database, baseline, receipt ledger, legacy history, releases, logs, and scheduler history pending separate destructive authority."}
@@ -133,6 +143,7 @@
       {"status": "unsupported", "statement": "No hook merge, trust bypass, baseline reset, direct repair, parallel observer, daily digest schedule, review schedule, or arbitrary Annals library is supported."}
     ],
     "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Only doctor may use the typed Nucleus health_for_deployment proof for the same sole run hold with runtime drain, authentication, and harness readiness; Krisis still checks required capabilities and protocol. Ordinary observation processing requires public Nucleus admission."},
       {"status": "declared", "statement": "Krisis 0.4.0 and SQLite schema 4 preserve legacy Decisions rows and read decoding; public command/provider and active schedule move to Krisis identity."},
       {"status": "unspecified", "statement": "No release-retention count, downgrade window, future migration path, or deprecation deadline is promised."}
     ],

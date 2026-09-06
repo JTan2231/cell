@@ -55,6 +55,45 @@ in `incoming/` unregistered. A generic config also cannot admit to or run a
 spool that already carries the decision-library binding. The primary inbox
 keeps its existing behavior.
 
+## Deployment maintenance
+
+```text
+annals --library DATABASE --json maintenance status
+annals --library DATABASE --json maintenance hold RUN_ID
+annals --library DATABASE --json maintenance release RUN_ID
+```
+
+The usual explicit config or library selection chooses the maintenance boundary.
+Its private durable gate is the sibling directory
+`<canonical-database>.cell-maintenance`; each library has its own gate. These commands do
+not open, initialize, or migrate the database. Status also leaves an absent
+gate absent. The standard success envelope contains `protocol_version: 1`,
+`contract_version: 1`, all `holds`, and `drained`. Drain reports whether live
+participating commands have released admission; deployment must separately
+account for durable unfinished work and dependency jobs.
+
+`hold` atomically prevents new mutating commands while already admitted work
+settles. Repeating the same hold is idempotent; holds survive process exit.
+`release` removes only the named hold and is idempotent when it is absent.
+Run IDs contain 1–128 ASCII letters, digits, hyphens, underscores, or periods
+and cannot start with a period. Invalid IDs and unprovable gate state fail
+with `deployment_maintenance`.
+
+Public CLI clients use the same boundary. Writes such as `init`, `migrate`,
+`work add`, account acceptance, and dispatch fail before database access when
+held. Read-only corpus and decision-feed commands remain available. Inbox
+pause and interrupt remain available; hold and release never clear operator
+pause, and ordinary `inbox resume` is fenced.
+
+An installer may set `CELL_DEPLOYMENT_RUN_ID=RUN_ID` for a controlled command.
+When holds exist, this requires exactly that sole owner and exclusive access
+after existing activity drains. Another owner or active command prevents it.
+With no hold, the command follows ordinary admission. This environment value
+does not resume schedules or create blanket bypass authority. Annals Usage
+doctor may accept an intentionally held Nucleus only after its typed
+deployment-health interface proves the same sole owner, runtime drain,
+authentication, and harness readiness; public Nucleus admission stays held.
+
 ## Library operations
 
 ```text
@@ -937,3 +976,8 @@ Exit categories are:
 | 5 | SQLite, integrity, or history failure |
 
 Human rendering escapes control characters from retained text and labels.
+
+Deployment gate identity follows the canonical database path (including a
+symlink alias), or the canonical existing ancestor for a new database.
+Hardlinked databases are rejected before admission. Maintenance status still
+does not open or initialize the database.

@@ -10,7 +10,8 @@
     "CRM should be installed or updated for this macOS user.",
     "The installed binary, provider selector, database integrity, Nucleus/toolset readiness, or hidden update state should be diagnosed.",
     "An empty CRM database should be explicitly initialized or queued steward work explicitly resumed or retried under its state guards.",
-    "An existing schema-one database should be explicitly upgraded to schema two with a private SQLite-aware backup."
+    "An existing schema-one database should be explicitly upgraded to schema two with a private SQLite-aware backup.",
+    "A deployment must durably hold new admissions, observe actual runtime settlement, release only its own hold, or run the predefined isolated verification canary."
   ],
   "do_not_use_when": [
     "The task is ordinary profile maintenance or case creation, telling, searching, or reading.",
@@ -22,7 +23,8 @@
     "Deployment stages immutable binary, deployer, manifest, and CRM-owned Chancery bundle bytes under private application support, then changes the current release selected by both public surfaces under product and shared Chancery catalog-writer locks.",
     "Deployment writes ~/.local/bin/crm and exactly one Chancery provider selector but starts no daemon, worker, schedule, or database operation.",
     "A separate crm init creates schema two or idempotently accepts an existing supported schema; doctor checks storage/readiness and idempotently registers the immutable Nucleus schemas/toolset; resume processes one queued, running, or applied-but-runtime-unsettled update synchronously and retry queues a successor before launching a hidden child.",
-    "A separate crm migrate --backup PATH adds the profile table and advances schema markers from one to two transactionally after a private SQLite-aware backup; deployment never performs this effect."
+    "A separate crm migrate --backup PATH adds the profile table and advances schema markers from one to two transactionally after a private SQLite-aware backup; deployment never performs this effect.",
+    "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. The explicit canary uses real Nucleus execution and retains private synthetic verification evidence."
   ],
   "authority": [
     "CRM's deployer owns its content-addressed releases, current and previous selectors, command selector, and only providers/crm.",
@@ -43,7 +45,8 @@
     "An absent database after deployment is expected; init is a separate intentional and idempotent-on-supported-schema effect.",
     "If Nucleus or a hidden worker is unavailable, retain queued work, diagnose exact readiness and attempt state, resume recoverable work, and retry only after positive terminal evidence.",
     "Stop new CRM work before migration. An existing backup target is refused; a schema change failure before commit leaves schema one intact. On schema two migration is unchanged and creates no backup. Before restoring schema one, quiesce use and preserve newer database/sidecar state; never pair the old database with newer WAL/SHM.",
-    "After an ambiguous migration result, inspect schema before retrying. Backup failure may leave its destination; inspect it and choose a fresh path instead of overwriting it."
+    "After an ambiguous migration result, inspect schema before retrying. Backup failure may leave its destination; inspect it and choose a fresh path instead of overwriting it.",
+    "An incomplete drain, foreign hold, unavailable runtime, or failed canary never becomes success; retain the named holds and durable job/domain evidence and follow the owning recovery contract."
   ],
   "privacy": [
     "Release/provider bytes contain no case data; the private CRM database and correlated Nucleus state may contain sensitive employment, contact, source, prompt, advisory, and tool-result text.",
@@ -104,6 +107,22 @@
     {
       "label": "Inspect or recover an update",
       "invocation": "/Users/joey/.local/bin/crm update show UPDATE_ID | wait UPDATE_ID | resume UPDATE_ID | retry UPDATE_ID"
+    },
+    {
+      "label": "Hold deployment admission",
+      "invocation": "/Users/joey/.local/bin/crm maintenance hold RUN_ID"
+    },
+    {
+      "label": "Observe deployment drain",
+      "invocation": "/Users/joey/.local/bin/crm maintenance status"
+    },
+    {
+      "label": "Release only deployment owner",
+      "invocation": "/Users/joey/.local/bin/crm maintenance release RUN_ID"
+    },
+    {
+      "label": "Run predefined real deployment canary",
+      "invocation": "/Users/joey/.local/bin/crm maintenance canary --directory ABSOLUTE_PRIVATE_DIRECTORY"
     }
   ],
   "does_not_authorize": [
@@ -141,6 +160,10 @@
       {
         "status": "declared",
         "statement": "Deployment selects one content-addressed release for both public selectors; init creates or idempotently accepts schema two; doctor reports storage/requester readiness; recovery preserves or creates the exact allowed update. Migration reports changed, from_schema_version, and schema_version, preserves old rows, and creates an independently readable schema-one backup; a schema-two no-op creates no backup. The JSON backup is an absolute path when changed or null when unchanged."
+      },
+      {
+        "status": "declared",
+        "statement": "Maintenance status reports protocol_version 1, holds and drained with product-specific runtime evidence; the explicit predefined canary reports verified only after real runtime execution and its product-owned required result."
       }
     ],
     "data_semantics": [
@@ -179,6 +202,10 @@
       {
         "status": "declared",
         "statement": "Migration reserves writes, refuses live workers and active unsettled updates, snapshots committed SQLite state including WAL content, adds the empty profile table and advances schema markers transactionally with integrity validation. Program rollback never downgrades storage."
+      },
+      {
+        "status": "declared",
+        "statement": "Deployment maintenance protocol version 1 durably owns each hold by run ID, prevents new admission atomically, permits already-admitted work to settle, reports product-owned durable work in drain status, and releases only the named owner; independent operator pauses remain intact."
       }
     ],
     "operational_limits": [

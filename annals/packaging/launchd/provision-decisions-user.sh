@@ -322,6 +322,7 @@ render_definition() {
 
 run_annals() {
     /usr/bin/env -i \
+        CELL_DEPLOYMENT_RUN_ID="${CELL_DEPLOYMENT_RUN_ID:-}" \
         HOME="$install_home" USER="$operator" LOGNAME="$operator" PATH="$PATH" \
         "$@"
 }
@@ -760,6 +761,14 @@ else
     state_published=1
     validate_decisions_mutable_files
     prepare_output_files
+    # The fresh directory is published under this provisioner's own spool
+    # hold. Establish the outer run hold before exposing any scheduled writer;
+    # pre-creating it at the final path would break atomic fresh publication.
+    if [ -n "${CELL_DEPLOYMENT_RUN_ID:-}" ]; then
+        run_annals "$release_root/libexec/annals" --config "$CONFIG_PATH" --json \
+            maintenance hold "$CELL_DEPLOYMENT_RUN_ID" >/dev/null \
+            || fail 'unable to establish deployment admission for the new decisions library'
+    fi
 fi
 
 if [ ! -e "$MAINTENANCE_MARKER" ]; then

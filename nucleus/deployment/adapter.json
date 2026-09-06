@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "product": "nucleus",
+  "application": "Nucleus",
+  "dependencies": [],
+  "description": "Product-owned ordinary Nucleus installation update.",
+  "deployer": "nucleus/packaging/macos/deploy-user.sh",
+  "expected_current": true,
+  "proofs": {
+    "binary_sha256": "bin/nucleus",
+    "daemon_sha256": "libexec/nucleusd",
+    "deployer_sha256": "package/deploy-user.sh"
+  },
+  "maintenance_products": [
+    "annals",
+    "krisis",
+    "semantics",
+    "crm",
+    "todo",
+    "weaver"
+  ],
+  "bundle_key": "chancery_bundle_sha256",
+  "copied_commands": {
+    ".local/bin/nucleus": "bin/nucleus",
+    ".local/libexec/nucleusd": "libexec/nucleusd"
+  },
+  "source_proofs": {
+    "deployer_sha256": "nucleus/packaging/macos/deploy-user.sh"
+  },
+  "candidate_proofs": {
+    "binary_sha256": "nucleus",
+    "daemon_sha256": "nucleusd"
+  },
+  "bundle_source": "nucleus/chancery"
+}

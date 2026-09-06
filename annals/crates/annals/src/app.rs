@@ -97,7 +97,13 @@ fn resolve_library_path(
 }
 
 pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> {
+    let _admission = if crate::maintenance::mutates(&cli.command) {
+        Some(crate::maintenance::enter(path)?)
+    } else {
+        None
+    };
     match &cli.command {
+        Command::Maintenance(command) => crate::maintenance::command(path, command),
         Command::Init(args) => initialize(path, args),
         Command::Migrate => migrate_library(path),
         Command::Stats => stats(path),

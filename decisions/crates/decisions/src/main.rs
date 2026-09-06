@@ -59,6 +59,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Hold or restore deployment admission without changing observer history.
+    Maintenance {
+        #[command(subcommand)]
+        command: MaintenanceCommand,
+    },
     /// Check the database, Codex source, Nucleus, and Annals prerequisites.
     Doctor,
     /// Retired Decisions digest surface; retained only to give an explicit failure.
@@ -85,6 +90,54 @@ enum Command {
         #[command(subcommand)]
         command: ReviewCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum MaintenanceCommand {
+    Hold { run_id: String },
+    Status,
+    Release { run_id: String },
+}
+
+fn deployment_gate(database: &Path) -> AppResult<cell_maintenance::Gate> {
+    let canonical =
+        cell_maintenance::canonical_database_path(database).map_err(maintenance_error)?;
+    let mut path = canonical.as_os_str().to_os_string();
+    path.push(".cell-maintenance");
+    Ok(cell_maintenance::Gate::new(PathBuf::from(path)))
+}
+
+// Result::map_err hands ownership to this product error translation.
+#[allow(clippy::needless_pass_by_value)]
+fn maintenance_error(error: cell_maintenance::Error) -> AppError {
+    AppError::new("deployment_maintenance", error.to_string())
+}
+
+fn maintenance_command(database: &Path, command: MaintenanceCommand) -> AppResult<()> {
+    let gate = deployment_gate(database)?;
+    let status = match command {
+        MaintenanceCommand::Hold { run_id } => gate.hold(&run_id),
+        MaintenanceCommand::Status => gate.status(),
+        MaintenanceCommand::Release { run_id } => gate.release(&run_id),
+    }
+    .map_err(maintenance_error)?;
+    print_json(
+        &json!({"protocol_version": 1, "contract_version": status.contract_version,
+        "holds": status.holds, "drained": status.drained}),
+    )
+}
+
+fn deployment_admission(database: &Path) -> AppResult<cell_maintenance::Admission> {
+    let gate = deployment_gate(database)?;
+    let result = match std::env::var("CELL_DEPLOYMENT_RUN_ID") {
+        Ok(owner)
+            if !owner.is_empty() && !gate.status().map_err(maintenance_error)?.holds.is_empty() =>
+        {
+            gate.enter_for(&owner)
+        }
+        _ => gate.enter(),
+    };
+    result.map_err(maintenance_error)
 }
 
 #[derive(Debug, Subcommand)]
@@ -187,8 +240,15 @@ fn main() {
 #[allow(clippy::too_many_lines)]
 fn run(cli: Cli) -> AppResult<()> {
     let database = cli.database.map_or_else(default_database_path, Ok)?;
+    if let Command::Maintenance { command } = cli.command {
+        return maintenance_command(&database, command);
+    }
+    // Store::open may migrate persistent state even for a diagnostic/read.
+    // The maintenance status command remains available without opening it.
+    let _admission = deployment_admission(&database)?;
     let annals = annals_configuration(cli.annals_binary, cli.annals_config, cli.annals_library_id)?;
     match cli.command {
+        Command::Maintenance { .. } => unreachable!("maintenance returned before opening state"),
         Command::Doctor => doctor(&database, annals.as_ref(), cli.json),
         Command::Daily { command: _ } => Err(AppError::new(
             "legacy_surface_retired",

@@ -143,6 +143,44 @@ for an outer Krisis/Semantics cutover. A later successful invocation without
 that option clears only that matching owned hold. A pre-existing unreceipted
 maintenance gate remains engaged.
 
+## Run-owned deployment admission
+
+```text
+annals --library DATABASE --json maintenance status
+annals --library DATABASE --json maintenance hold RUN_ID
+annals --library DATABASE --json maintenance release RUN_ID
+```
+
+These commands use the private sibling `<database>.cell-maintenance` without
+opening, initializing, or migrating the database. Status leaves an absent
+gate absent. Its standard `ok/data` envelope contains `protocol_version: 1`,
+`contract_version: 1`, all `holds`, and `drained`. Drain describes live command
+admission; the product adapter must also prove durable work and dependency
+jobs are settled before relying on domain quiescence.
+
+Holds atomically fence new mutations and survive process exit. Existing
+commands may finish. Hold and release are idempotent, and release removes
+only its named owner. Read-only corpus/feed commands and inbox pause or
+interrupt remain available. Operator pause is never cleared by deployment.
+Run IDs have 1–128 ASCII letters, digits, hyphens, underscores, or periods and
+cannot begin with a period. Invalid IDs or unprovable admission fail closed.
+
+A controlled installer command can set `CELL_DEPLOYMENT_RUN_ID` only for the
+same sole hold and exclusive drained activity; with no hold, the command uses
+ordinary admission. Annals Usage doctor can prove intentionally held Nucleus
+readiness for this same owner through the typed deployment-health interface;
+that proof does not enable normal Nucleus job submission.
+
+The Cell adapter explicitly composes the primary deployer and this exact
+release's decisions provisioner, preserves operator pauses and prior schedule
+enabled booleans, and does not choose a legacy activation watermark. It first
+requires maintenance support from the installed CLI. Unsupported old binaries
+stop coordinated inspection before effects and need one compatibility update
+through the existing deployers and quiescence procedure; the new candidate
+cannot fence an old binary. Recovery stops on retained product-installer
+maintenance or an unfinished transaction and retains the outer run hold for
+the documented product recovery procedure.
+
 ## Fresh-state cutover
 
 `--fresh-state` is a distinct destructive operation for a documented schema
@@ -194,3 +232,10 @@ There is no supported raw path-only retirement sequence. A shared Clockwork
 key, launchd label, command pathname, or provider pathname is not ownership;
 leave it intact unless a product-owned operation has proved the exact current
 definition, fully rendered legacy plist, and selector targets before mutation.
+
+The deployment adapter retains its private isolated canary state under the
+run directory on success and failure; it does not remove that evidence. A
+verified response identifies the canary directory. Annals exercises local
+retention, Krisis durable baseline replay, and Semantics repository mutation
+and replay, alongside each product's dependency doctor. These checks do not
+claim a live model-backed domain integration.

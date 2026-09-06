@@ -744,6 +744,13 @@ prove_definition() {
     proof_runner=$5
     proof_runner_hash=$6
     proof_kind=$7
+    # The prior definition is proved against its private ownership receipt,
+    # while the candidate is proved against the explicitly requested target.
+    # Dependency executable/configuration pins may change without replacing
+    # the persistent decisions library.
+    proof_annals_path=${8:-$annals_path}
+    proof_annals_config=${9:-$annals_config}
+    proof_annals_library_id=${10:-$annals_library_id}
     proof_file="$TRANSACTION/$proof_kind-definition.json"
     HOME="$install_home" "$clockwork_path" --json definition show "$proof_digest" >"$proof_file" 2>"$proof_file.stderr" || fail "unable to inspect $proof_kind Clockwork definition"
     [ "$(plutil -extract ok raw "$proof_file" 2>/dev/null)" = true ] \
@@ -802,10 +809,10 @@ prove_definition() {
     [ "$(plutil -extract data.manifest.schedule.run_at_load raw "$proof_file" 2>/dev/null)" = false ] || fail "$proof_kind run-at-load changed"
     if [ "$proof_kind" = active ]; then
         [ "$(plutil -extract data.manifest.environment.HOME raw "$proof_file" 2>/dev/null)" = "$install_home" ] \
-            && [ "$(plutil -extract data.manifest.environment.KRISIS_ANNALS_BINARY raw "$proof_file" 2>/dev/null)" = "$annals_path" ] \
-            && [ "$(plutil -extract data.manifest.environment.KRISIS_ANNALS_CONFIG raw "$proof_file" 2>/dev/null)" = "$annals_config" ] \
-            && [ "$(plutil -extract data.manifest.environment.KRISIS_ANNALS_LIBRARY_ID raw "$proof_file" 2>/dev/null)" = "$annals_library_id" ] \
-            || fail 'active Clockwork Annals target differs from this cutover'
+            && [ "$(plutil -extract data.manifest.environment.KRISIS_ANNALS_BINARY raw "$proof_file" 2>/dev/null)" = "$proof_annals_path" ] \
+            && [ "$(plutil -extract data.manifest.environment.KRISIS_ANNALS_CONFIG raw "$proof_file" 2>/dev/null)" = "$proof_annals_config" ] \
+            && [ "$(plutil -extract data.manifest.environment.KRISIS_ANNALS_LIBRARY_ID raw "$proof_file" 2>/dev/null)" = "$proof_annals_library_id" ] \
+            || fail 'active Clockwork Annals target differs from its proved ownership'
         if grep -F 'CONVERSATIONS_CODEX = "__CONVERSATIONS_CODEX__"' \
             "$proof_release/package/krisis-observer.clockwork.toml.in" >/dev/null; then
             proof_codex_path=$(plutil -extract data.manifest.environment.CONVERSATIONS_CODEX raw "$proof_file" 2>/dev/null) \
@@ -905,19 +912,24 @@ assert_binding_state() {
 }
 
 if [ -n "$prior_active_digest" ]; then
+    [ -n "$old_binding_receipt" ] || fail 'selected Krisis binding has no installed ownership receipt'
+    prior_annals_path=$(sed -n '4s/^annals_binary=//p' "$old_binding_receipt")
+    prior_annals_config=$(sed -n '5s/^annals_config=//p' "$old_binding_receipt")
+    prior_annals_library_id=$(sed -n '6s/^annals_library_id=//p' "$old_binding_receipt")
+    case "$prior_annals_path" in /*) ;; *) fail 'prior Annals executable pin is not absolute' ;; esac
+    case "$prior_annals_config" in /*) ;; *) fail 'prior Annals configuration pin is not absolute' ;; esac
+    [ "$prior_annals_library_id" = "$annals_library_id" ] \
+        || fail 'an ordinary update cannot change the Annals decisions-library identity'
     if [ "$prior_active_digest" = "$candidate_definition_digest" ]; then
         prove_definition "$ACTIVE_CLOCKWORK_KEY" "$prior_active_digest" "$release" "$release_id" "$release/bin/krisis-observer" "$runner_hash" active
     elif [ "$old_release_format" = 4 ]; then
-        prove_definition "$ACTIVE_CLOCKWORK_KEY" "$prior_active_digest" "$old_release" "$old_release_id" "$old_release/bin/krisis-observer" "$old_observer_runner_hash" active
+        prove_definition "$ACTIVE_CLOCKWORK_KEY" "$prior_active_digest" "$old_release" "$old_release_id" "$old_release/bin/krisis-observer" "$old_observer_runner_hash" active \
+            "$prior_annals_path" "$prior_annals_config" "$prior_annals_library_id"
     else
         fail 'selected Krisis binding is foreign to the candidate and current release'
     fi
-    [ -n "$old_binding_receipt" ] || fail 'selected Krisis binding has no installed ownership receipt'
     [ "$(sed -n '2s/^release_id=//p' "$old_binding_receipt")" = "$old_release_id" ] \
         && [ "$(sed -n '3s/^definition_digest=//p' "$old_binding_receipt")" = "$prior_active_digest" ] \
-        && [ "$(sed -n '4s/^annals_binary=//p' "$old_binding_receipt")" = "$annals_path" ] \
-        && [ "$(sed -n '5s/^annals_config=//p' "$old_binding_receipt")" = "$annals_config" ] \
-        && [ "$(sed -n '6s/^annals_library_id=//p' "$old_binding_receipt")" = "$annals_library_id" ] \
         || fail 'selected Krisis binding differs from its installed ownership receipt'
 fi
 if [ "$prior_legacy_observer_enabled" -eq 1 ]; then
@@ -1038,11 +1050,11 @@ atomic_symlink "releases/$release_id" "$CURRENT_LINK"
 atomic_symlink "$CURRENT_LINK/share/chancery/krisis" "$PROVIDER_LINK"
 atomic_symlink "$CURRENT_LINK/share/chancery/decisions" "$LEGACY_PROVIDER_LINK"
 database_touched=1
-doctor_output=$(/usr/bin/env -i HOME="$install_home" PATH=/usr/bin:/bin:/usr/sbin:/sbin CONVERSATIONS_CODEX="$codex_path" "$release/libexec/krisis" --database "$DATABASE_PATH" --annals-binary "$annals_path" --annals-config "$annals_config" --annals-library-id "$annals_library_id" --json doctor) || fail 'candidate doctor failed'
+doctor_output=$(/usr/bin/env -i HOME="$install_home" CELL_DEPLOYMENT_RUN_ID="${CELL_DEPLOYMENT_RUN_ID:-}" PATH=/usr/bin:/bin:/usr/sbin:/sbin CONVERSATIONS_CODEX="$codex_path" "$release/libexec/krisis" --database "$DATABASE_PATH" --annals-binary "$annals_path" --annals-config "$annals_config" --annals-library-id "$annals_library_id" --json doctor) || fail 'candidate doctor failed'
 doctor_compact=$(printf '%s' "$doctor_output" | tr -d '[:space:]')
 printf '%s\n' "$doctor_compact" | grep -F '"schema_version":4' >/dev/null || fail 'doctor did not prove schema 4'
 printf '%s\n' "$doctor_compact" | grep -F "\"annals_library_id\":\"$annals_library_id\"" >/dev/null || fail 'doctor did not prove the dedicated Annals target'
-/usr/bin/env -i HOME="$install_home" PATH=/usr/bin:/bin:/usr/sbin:/sbin CONVERSATIONS_CODEX="$codex_path" "$release/libexec/krisis" --database "$DATABASE_PATH" observe activate >/dev/null || fail 'unable to activate the Krisis baseline'
+/usr/bin/env -i HOME="$install_home" CELL_DEPLOYMENT_RUN_ID="${CELL_DEPLOYMENT_RUN_ID:-}" PATH=/usr/bin:/bin:/usr/sbin:/sbin CONVERSATIONS_CODEX="$codex_path" "$release/libexec/krisis" --database "$DATABASE_PATH" observe activate >/dev/null || fail 'unable to activate the Krisis baseline'
 validate_private_database_file "$DATABASE_PATH" database
 for suffix in wal shm journal; do [ ! -f "$DATABASE_PATH-$suffix" ] || validate_private_database_file "$DATABASE_PATH-$suffix" "database $suffix sidecar"; done
 install -m 0600 "$release/package/hooks.json" "$HOOKS_PATH"

@@ -961,7 +961,7 @@ pub(crate) fn run(
     };
 
     loop {
-        if spool.maintenance_requested()? {
+        if spool.maintenance_requested()? || crate::maintenance::held(library)? {
             summary.stopped_for_maintenance = true;
             break;
         }

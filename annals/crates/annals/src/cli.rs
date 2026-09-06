@@ -40,6 +40,9 @@ pub struct Cli {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
+    /// Hold or restore admission for one deployment without changing inbox pause.
+    #[command(subcommand)]
+    Maintenance(crate::maintenance::MaintenanceCommand),
     /// Create a new library without replacing an existing file.
     Init(InitArgs),
     /// Upgrade an existing library to the current schema.

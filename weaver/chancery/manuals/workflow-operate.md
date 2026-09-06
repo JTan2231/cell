@@ -67,7 +67,7 @@ Weaver maintenance and lets an active workflow settle before changing
 selectors. It then removes only the exact superseded
 `org.weaver.worker` prototype service and plist when present, switches the
 installed release and command, publishes only Chancery's `providers/weaver`
-selector, validates the installed CLI, and ends maintenance. Weaver runtime
+selector, validates the installed CLI, and releases only the deployment-owned maintenance it established. Weaver runtime
 code never calls Chancery, and installation remains useful when the Chancery
 reader is absent.
 
@@ -84,3 +84,46 @@ WEAVER_STATE_DIR="$HOME/Library/Application Support/Weaver" \
 Weaver current state may contain complete active input snapshots, and Nucleus
 retains complete requests and raw protocol output. Preserve both private state
 roots and all retained release material during diagnosis and recovery.
+
+## Run-owned deployment maintenance
+
+```sh
+weaver maintenance hold RUN_ID
+weaver maintenance status
+weaver maintenance drain
+weaver maintenance ready RUN_ID
+weaver maintenance release RUN_ID
+weaver maintenance canary --directory /absolute/private/canary-directory
+```
+
+The selected private state root owns `deployment-maintenance/`. These durable
+run-owned holds are independent of legacy operator `.maintenance`. They block
+new submit admission, while the already admitted current workflow may finish
+or recover through wait, worker run, or maintenance drain using its exact
+persisted requests. Recovery owns a shared activity guard. Legacy operator
+maintenance continues to block claims; deployment never clears it to force
+progress.
+
+These commands emit JSON with `protocol_version: 1`, `holds`, `drained`,
+`nonterminal_run`, `worker_active`, and `operator_maintenance`. Drain requires
+no admitted operation, no current nonterminal run, and no worker run lock.
+`ready RUN_ID` additionally proves the sole matching owner and exclusive
+activity availability. Release changes only the named deployment hold.
+
+The macOS deployer accepts `--expected-current absent|releases/HASH` under its
+update lock. With `CELL_DEPLOYMENT_RUN_ID`, it validates the sole drained hold
+and leaves the operator marker untouched throughout success and recovery.
+Standalone legacy deployment retains a preexisting operator marker. Doctor
+can prove held Nucleus readiness for the named deployment while normal workflow
+admission remains strict. The older begin/end commands retain their legacy
+meaning and do not release deployment holds.
+
+The canary creates or resumes a product-marked, private, synthetic repository
+and separate workflow state. It executes the actual five model stages, runs
+the ordinary output validator, and compares all five persisted files with
+their correlated terminal Nucleus results. It returns `protocol_version`,
+`verified`, `directory`, `run_id`, `job_ids`, and `outputs_verified: 5`. No real
+narrative is overwritten or published. A terminal failed canary is retained
+without another attempt. Run it after Nucleus admission is restored while
+production Weaver holds remain. Its model jobs and synthetic output consume
+ordinary account allowance and remain retained private verification evidence.

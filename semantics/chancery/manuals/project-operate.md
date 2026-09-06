@@ -76,6 +76,45 @@ Annals check fails whenever an active or paused project lacks the selected
 decisions-library identity or its activation and scan cursors; only a database
 with no such projects may remain activation-pending.
 
+## Run-owned deployment admission
+
+```text
+semantics --database DATABASE --json maintenance status
+semantics --database DATABASE --json maintenance hold RUN_ID
+semantics --database DATABASE --json maintenance release RUN_ID
+```
+
+The private sibling `<database>.cell-maintenance` is separate from the
+installer's marker and receipt. These commands do not open, initialize, or
+migrate SQLite; status leaves an absent gate absent. They return
+`protocol_version: 1`, `contract_version: 1`, `holds`, and `drained`. Drain
+describes participating live commands, so durable intake and dependency jobs
+still require separate product-owned quiescence evidence.
+
+A hold fences every other public CLI and typed client command before SQLite
+access, including reads and doctor because opening state may migrate it.
+Existing commands may settle and holds survive process exit. Hold and release
+are idempotent; release removes only its named owner and preserves project
+pause, activation, and cursors. IDs contain 1–128 ASCII letters, digits,
+hyphens, underscores, or periods and cannot begin with a period.
+
+Controlled installer commands set `CELL_DEPLOYMENT_RUN_ID` only for the same
+sole hold with exclusive drained activity. With no hold, they use ordinary
+admission. Only doctor can prove deliberately held Nucleus readiness for that
+same run: runtime drain, authentication, harness, required Semantics
+capabilities, and protocol remain checked. Ordinary reconciliation still
+requires normal Nucleus admission.
+
+The Cell adapter composes the existing deployer while preserving project
+pause, activation and scan cursors, and captured schedule enabled booleans.
+Ordinary updates omit the legacy watermark operation below. It requires
+maintenance support from currently installed public binaries before effects;
+unsupported old binaries need a compatibility release through the documented
+deployer and quiescence procedure. A candidate gate cannot fence old commands.
+Recovery stops on retained product-installer maintenance, unfinished
+transactions, or unproved installation state and retains the outer hold for
+the existing product recovery procedure.
+
 ## Activate a migrated database
 
 Schema 2 preserves every legacy Decisions cursor, envelope, assignment,
@@ -192,3 +231,10 @@ Rust callers may use `semantics::api::Client` for the public project, seeding,
 intake, and diagnostic CLI operations with provider-owned return types. The
 client does not invoke hidden cutover or worker operations. Each explicit
 method retains the corresponding command's authorization and effect boundary.
+
+The deployment adapter retains its private isolated canary state under the
+run directory on success and failure; it does not remove that evidence. A
+verified response identifies the canary directory. Annals exercises local
+retention, Krisis durable baseline replay, and Semantics repository mutation
+and replay, alongside each product's dependency doctor. These checks do not
+claim a live model-backed domain integration.

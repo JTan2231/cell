@@ -17,6 +17,7 @@ candidate_template="$temporary/todo-candidate.template"
 launchctl="$temporary/launchctl"
 launchctl_log="$temporary/launchctl.log"
 launchctl_state="$temporary/launchctl.loaded"
+launchctl_disabled="$temporary/launchctl.disabled"
 launchctl_fail_bootstrap="$temporary/launchctl.fail-bootstrap"
 
 package_version=$(awk '
@@ -134,6 +135,24 @@ cat >"$launchctl" <<EOF
 set -eu
 printf '%s\n' "\$*" >>"$launchctl_log"
 case "\${1:-}" in
+    enable)
+        [ "\${2:-}" = "gui/$uid/org.todo.daily-email" ]
+        rm -f "$launchctl_disabled"
+        ;;
+    disable)
+        [ "\${2:-}" = "gui/$uid/org.todo.daily-email" ]
+        : >"$launchctl_disabled"
+        ;;
+    print-disabled)
+        [ "\${2:-}" = "gui/$uid" ]
+        printf 'disabled services = {\\n'
+        if [ -f "$launchctl_disabled" ]; then
+            printf '\\t"org.todo.daily-email" => true\\n'
+        else
+            printf '\\t"org.todo.daily-email" => false\\n'
+        fi
+        printf '}\\n'
+        ;;
     print)
         [ "\${2:-}" = "gui/$uid/org.todo.daily-email" ]
         [ -f "$launchctl_state" ]
@@ -146,6 +165,7 @@ case "\${1:-}" in
         [ "\${2:-}" = "gui/$uid" ]
         [ "\${3:-}" = "$home/Library/LaunchAgents/org.todo.daily-email.plist" ]
         plutil -lint "\$3" >/dev/null
+        [ ! -f "$launchctl_disabled" ]
         if [ -f "$launchctl_fail_bootstrap" ]; then
             rm -f "$launchctl_fail_bootstrap"
             exit 1
@@ -282,6 +302,43 @@ second_release=$(readlink "$state/install/current")
 [ "$(grep -c '^init$' "$state/commands.log")" -eq 1 ]
 grep -Fx '# preserve-email-config-on-update' "$state/config.toml" >/dev/null
 [ -f "$launchctl_state" ]
+
+# A disabled service cannot be reloaded by launchd. Refuse the still-loaded
+# case before bootout, without silently clearing the operator's override.
+service_target="gui/$uid/org.todo.daily-email"
+"$launchctl" disable "$service_target"
+bootouts_before=$(grep -c '^bootout ' "$launchctl_log")
+if deploy "$candidate" >"$temporary/loaded-disabled.out" \
+    2>"$temporary/loaded-disabled.err"
+then
+    printf '%s\n' 'deployment unexpectedly changed a loaded disabled service' >&2
+    exit 1
+fi
+[ -f "$launchctl_state" ]
+[ -f "$launchctl_disabled" ]
+[ "$(readlink "$state/install/current")" = "$second_release" ]
+[ "$(grep -c '^bootout ' "$launchctl_log")" -eq "$bootouts_before" ]
+
+# Preserve both disabled/unloaded and enabled/unloaded operator states. No
+# schedule starts and the installer never changes enable/disable overrides.
+"$launchctl" bootout "$service_target"
+bootstraps_before=$(grep -c '^bootstrap ' "$launchctl_log")
+controls_before=$(grep -Ec '^(enable|disable) ' "$launchctl_log")
+email_before=$(grep -c '^email$' "$state/commands.log")
+deploy "$candidate" >/dev/null
+[ ! -e "$launchctl_state" ]
+[ -f "$launchctl_disabled" ]
+[ "$(grep -c '^bootstrap ' "$launchctl_log")" -eq "$bootstraps_before" ]
+[ "$(grep -Ec '^(enable|disable) ' "$launchctl_log")" -eq "$controls_before" ]
+"$launchctl" enable "$service_target"
+controls_before=$(grep -Ec '^(enable|disable) ' "$launchctl_log")
+deploy "$candidate" >/dev/null
+[ ! -e "$launchctl_state" ]
+[ ! -e "$launchctl_disabled" ]
+[ "$(grep -c '^bootstrap ' "$launchctl_log")" -eq "$bootstraps_before" ]
+[ "$(grep -Ec '^(enable|disable) ' "$launchctl_log")" -eq "$controls_before" ]
+[ "$(grep -c '^email$' "$state/commands.log")" -eq "$email_before" ]
+"$launchctl" bootstrap "gui/$uid" "$agent_plist"
 
 nucleus_cli="$home/.local/bin/nucleus"
 cp "$nucleus_cli" "$temporary/nucleus-healthy"

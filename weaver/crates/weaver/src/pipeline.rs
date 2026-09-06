@@ -12,6 +12,10 @@ pub(crate) enum WorkerOutcome {
 }
 
 pub(crate) async fn run_worker(store: &StateStore) -> AppResult<WorkerOutcome> {
+    let _recovery = store
+        .deployment_gate()
+        .recover()
+        .map_err(|error| WeaverError::runtime(error.to_string()))?;
     let Some(_run_lock) = store.try_acquire_run_lock()? else {
         return Ok(WorkerOutcome::Busy);
     };

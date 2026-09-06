@@ -21,6 +21,10 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    Maintenance {
+        #[command(subcommand)]
+        command: MaintenanceCommand,
+    },
     Init,
     Migrate {
         #[arg(long)]
@@ -136,4 +140,22 @@ pub enum UpdateCommand {
 pub enum WorkerCommand {
     Drain,
     Resume { update: String },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MaintenanceCommand {
+    /// Exercise the real steward in a retained, synthetic, isolated database.
+    Canary {
+        #[arg(long)]
+        directory: PathBuf,
+    },
+    Hold {
+        run_id: String,
+    },
+    Status,
+    Release {
+        run_id: String,
+    },
+    /// Recover and settle already admitted work; never retries failed work.
+    Drain,
 }

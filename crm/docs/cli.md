@@ -226,3 +226,55 @@ Use the provider-owned `crm::api::Client`, `Request`, and `Data` for typed
 CLI calls. The client preserves the documented envelope and successful stderr
 diagnostics, performs no automatic retries, and uses the same command effects
 and recovery rules. See [Rust interface](rust-api.md) for the exported boundary.
+
+## Coordinated deployment maintenance
+
+```sh
+crm --json maintenance hold RUN_ID
+crm --json maintenance status
+crm --json maintenance drain
+crm --json maintenance release RUN_ID
+crm --json maintenance canary --directory /absolute/private/canary-directory
+```
+
+The selected database parent owns `deployment-maintenance/`; the standard
+location is `~/Library/Application Support/CRM/deployment-maintenance/`.
+Databases in the same parent share this gate. This directory stores only
+operational hold/lock metadata, never retained case or profile text.
+
+Holds are durable and independently owned. New case/profile mutations, tell,
+retry, and ordinary initialization/migration are rejected while held.
+Existing queued updates and running or applied-but-runtime-unsettled updates
+remain recoverable through the original hidden worker, wait, resume, or
+`maintenance drain`. Recovery holds a shared activity guard, so an installation
+cannot race a hidden drainer. It never creates a replacement model attempt.
+
+`--json` reports `data.maintenance` with `protocol_version: 1`, `holds`,
+`drained`, `unsettled_updates`, and `worker_alive`. Drain requires zero queued,
+running, or runtime-unsettled applied updates, no live worker lease, and no
+admitted operation. Schema-one maintenance observation is supported before
+its explicit migration. An unavailable or ambiguous worker is not assumed
+settled. Release removes only its exact owner's hold.
+
+The coordinator composes the existing program installer and separate
+`migrate --backup` command. Migration with `CELL_DEPLOYMENT_RUN_ID` acquires
+exclusive activity only under its sole matching hold; an arbitrary environment
+value never bypasses another owner or active work. The program installer still
+never opens or migrates CRM data. `doctor` can validate held Nucleus readiness
+for that exact deployment owner; normal steward admission remains strict.
+
+The canary creates or resumes one product-marked private synthetic database,
+uses the actual steward, and verifies one committed second revision, a visible
+advisory, the exact correlated `crm/case-steward/1` job, and runtime settlement.
+It returns `data.canary` with `protocol_version`, `verified`, database, case,
+update, and job identities. Existing foreign directories are refused; failed
+or uncertain work is retained and never automatically retried. It affects no
+production case and sends no contact. Restore Nucleus admission after its own
+verification before running requester canaries; production CRM holds remain.
+
+Deployment admission resolves the configured database to its canonical path and
+uses that database parent for `deployment-maintenance/`. Symbolic aliases share
+the same gate. Databases with multiple hard links are rejected because their
+state root cannot identify one authoritative admission gate. Database paths
+in command receipts use this canonical identity; backup receipts retain the
+caller-selected backup path.

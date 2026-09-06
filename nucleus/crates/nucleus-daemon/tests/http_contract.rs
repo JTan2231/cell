@@ -257,6 +257,176 @@ impl Drop for DaemonFixture {
 
 #[tokio::test]
 #[allow(clippy::too_many_lines)]
+async fn maintenance_fences_new_jobs_but_preserves_replay_cancellation_and_owned_holds() {
+    let fixture = DaemonFixture::start().await;
+    let request = fixture.request(
+        "maintenance-existing",
+        Requester {
+            program: "fixture".into(),
+            id: "maintenance".into(),
+        },
+        "WAIT_FOR_CANCEL",
+    );
+    fixture
+        .client
+        .submit_job(&request)
+        .await
+        .or_panic("admit existing job");
+    wait_for_state(&fixture, &request.id, JobState::Running).await;
+    let hold = fixture
+        .client
+        .maintenance_hold("rollout-one")
+        .await
+        .or_panic("hold admission");
+    assert_eq!(hold.protocol_version, 1);
+    assert!(!hold.drained);
+    assert_eq!(hold.nonterminal_jobs, 1);
+    assert!(
+        !fixture
+            .client
+            .health()
+            .await
+            .or_panic("held health")
+            .accepting_jobs
+    );
+    fixture
+        .client
+        .submit_job(&request)
+        .await
+        .or_panic("exact replay while held");
+    let fresh = fixture.request("maintenance-new", request.requester.clone(), "COMPLETE");
+    match fixture.client.submit_job(&fresh).await {
+        Err(ClientError::Api {
+            status: 503, code, ..
+        }) => assert_eq!(code, "deployment_maintenance"),
+        other => panic!("new work was not rejected under maintenance: {other:?}"),
+    }
+    fixture
+        .client
+        .maintenance_hold("operator-two")
+        .await
+        .or_panic("independent owner hold");
+    let released = fixture
+        .client
+        .maintenance_release("rollout-one")
+        .await
+        .or_panic("release only rollout");
+    assert_eq!(released.holds, ["operator-two"]);
+    fixture
+        .client
+        .cancel_job(&request.id)
+        .await
+        .or_panic("cancel existing job while held");
+    wait_for_state(&fixture, &request.id, JobState::Cancelled).await;
+    let deadline = Instant::now() + Duration::from_secs(8);
+    loop {
+        let status = fixture
+            .client
+            .maintenance_status()
+            .await
+            .or_panic("inspect final settlement");
+        if status.drained {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "maintenance did not observe terminal cleanup"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    fixture
+        .client
+        .health_for_deployment("operator-two")
+        .await
+        .or_panic("held readiness");
+    assert!(
+        fixture
+            .client
+            .health_for_deployment("wrong-owner")
+            .await
+            .is_err()
+    );
+    fixture
+        .client
+        .maintenance_release("operator-two")
+        .await
+        .or_panic("release final owner");
+    fixture
+        .client
+        .submit_job(&fresh)
+        .await
+        .or_panic("admit after release");
+    wait_for_state(&fixture, &fresh.id, JobState::Completed).await;
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn deployment_canary_retries_follow_the_same_durable_job() {
+    let fixture = DaemonFixture::start().await;
+    fixture
+        .client
+        .maintenance_hold("canary-one")
+        .await
+        .or_panic("hold first run");
+    let first = fixture
+        .client
+        .maintenance_canary("canary-one")
+        .await
+        .or_panic("admit canary");
+    let replay = fixture
+        .client
+        .maintenance_canary("canary-one")
+        .await
+        .or_panic("replay uncertain admission");
+    assert_eq!(first.job_id, replay.job_id);
+    wait_for_state(&fixture, &first.job_id, JobState::Completed).await;
+    let terminal = fixture
+        .client
+        .maintenance_canary("canary-one")
+        .await
+        .or_panic("replay terminal attempt");
+    assert_eq!(first.job_id, terminal.job_id);
+    assert_eq!(terminal.state, JobState::Completed);
+    let deadline = Instant::now() + Duration::from_secs(8);
+    while !fixture
+        .client
+        .maintenance_status()
+        .await
+        .or_panic("canary cleanup status")
+        .drained
+    {
+        assert!(Instant::now() < deadline, "canary cleanup did not drain");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    fixture
+        .client
+        .maintenance_release("canary-one")
+        .await
+        .or_panic("release first owner");
+    assert!(
+        fixture
+            .client
+            .maintenance_canary("canary-one")
+            .await
+            .is_err()
+    );
+    fixture
+        .client
+        .maintenance_hold("canary-two")
+        .await
+        .or_panic("hold second run");
+    let second = fixture
+        .client
+        .maintenance_canary("canary-two")
+        .await
+        .or_panic("admit second canary");
+    assert_ne!(first.job_id, second.job_id);
+    wait_for_state(&fixture, &second.job_id, JobState::Completed).await;
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn daemon_http_contract_is_strict_durable_and_attributed() {
     let fixture = DaemonFixture::start().await;
 
@@ -1100,7 +1270,7 @@ if [ "${1:-}" = "--version" ]; then
 fi
 
 if [ "${1:-}" = "debug" ] && [ "${2:-}" = "models" ]; then
-  printf '%s\n' '{"models":[{"slug":"fake-model","supported_reasoning_levels":[{"effort":"low"},{"effort":"medium"}],"default_reasoning_level":"low","shell_type":"shell_command","supports_search_tool":false}]}'
+  printf '%s\n' '{"models":[{"slug":"fake-model","supported_reasoning_levels":[{"effort":"low"},{"effort":"medium"}],"default_reasoning_level":"low","shell_type":"shell_command","supports_search_tool":false},{"slug":"gpt-5.6-terra","supported_reasoning_levels":[{"effort":"low"},{"effort":"medium"}],"default_reasoning_level":"low","shell_type":"shell_command","supports_search_tool":false}]}'
   exit 0
 fi
 

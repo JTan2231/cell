@@ -17,7 +17,9 @@ use std::time::Duration;
 
 use clap::Parser;
 use nucleus_client::{ClientError, NucleusClient};
-use nucleus_core::{AccountSnapshotQueryV1, JobState, ListJobsQueryV1, LogsQueryV1};
+use nucleus_core::{
+    AccountSnapshotQueryV1, HealthResponseV1, JobState, ListJobsQueryV1, LogsQueryV1,
+};
 use thiserror::Error;
 
 use crate::budget::BudgetReport;
@@ -115,6 +117,7 @@ fn run_budget(options: &BudgetOptions) -> Result<(), AppError> {
 
 fn run_doctor(options: &DoctorOptions) -> Result<(), AppError> {
     let config = UsageConfig::load(options.config.as_deref())?;
+    let deployment_run_id = std::env::var("CELL_DEPLOYMENT_RUN_ID").ok();
     let mut failures = Vec::new();
     for (name, path) in [
         ("Nucleus executable", &config.nucleus),
@@ -128,7 +131,7 @@ fn run_doctor(options: &DoctorOptions) -> Result<(), AppError> {
     let inspected = with_runtime_timeout(
         async {
             let client = nucleus_client(&config)?;
-            let health = client.health().await?;
+            let health = doctor_health(&client, deployment_run_id.as_deref()).await?;
             client
                 .account_snapshot(&AccountSnapshotQueryV1 {
                     include_usage: false,
@@ -143,10 +146,10 @@ fn run_doctor(options: &DoctorOptions) -> Result<(), AppError> {
     let mut nucleus_version = None;
     let mut codex_version = None;
     match inspected {
-        Ok(health) => {
+        Ok((health, deployment_proved)) => {
             nucleus_version = Some(health.daemon_version);
             codex_version = health.harness.map(|harness| harness.harness_version);
-            if !health.accepting_jobs {
+            if !health.accepting_jobs && !deployment_proved {
                 failures.push(
                     health
                         .detail
@@ -179,6 +182,21 @@ fn run_doctor(options: &DoctorOptions) -> Result<(), AppError> {
         return Ok(());
     }
     Err(AppError::Doctor(failures.join("; ")))
+}
+
+async fn doctor_health(
+    client: &NucleusClient,
+    deployment_run_id: Option<&str>,
+) -> Result<(HealthResponseV1, bool), AppError> {
+    let health = client.health().await?;
+    if !health.accepting_jobs
+        && let Some(run_id) = deployment_run_id.filter(|run_id| !run_id.is_empty())
+    {
+        // This proof permits installation checks only; public admission stays
+        // held and ordinary Usage requests do not use a deployment identity.
+        return Ok((client.health_for_deployment(run_id).await?, true));
+    }
+    Ok((health, false))
 }
 
 fn run_login(arguments: &[OsString]) -> Result<Outcome, AppError> {
@@ -437,6 +455,86 @@ mod tests {
         nucleus_http_request_with_timeout, output_requires_terminal_reload, with_runtime,
     };
     use nucleus_core::JobState;
+
+    async fn serve_doctor_response(
+        listener: &tokio::net::UnixListener,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> std::io::Result<()> {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+        let (mut connection, _) = listener.accept().await?;
+        let mut request = Vec::new();
+        loop {
+            let byte = connection.read_u8().await?;
+            request.push(byte);
+            if request.ends_with(b"\r\n\r\n") {
+                break;
+            }
+        }
+        assert!(String::from_utf8_lossy(&request).starts_with(&format!("GET {path} ")));
+        let body = body.to_string();
+        connection.write_all(format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+            body.len(),
+        ).as_bytes()).await
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn doctor_requires_exact_drained_hold_before_accepting_held_nucleus()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use serde_json::json;
+
+        for (owner, held_by, jobs, accepted) in [
+            (Some("run-a"), "run-a", 0, true),
+            (Some("run-a"), "run-b", 0, false),
+            (Some("run-a"), "run-a", 1, false),
+            (None, "run-a", 0, false),
+        ] {
+            let directory = tempfile::tempdir()?;
+            let socket = directory.path().join("nucleus.sock");
+            let listener = tokio::net::UnixListener::bind(&socket)?;
+            let server = tokio::spawn(async move {
+                let health = json!({
+                    "version": 1, "status": "degraded", "daemonVersion": "test",
+                    "acceptingJobs": false, "checkedAt": "2026-09-01T00:00:00Z",
+                    "supportedProtocolVersions": [1],
+                    "harness": {"harness": "codex", "harnessVersion": "test", "adapterVersion": "test"},
+                    "harnessExecutable": "/usr/bin/false",
+                    "authentication": {"codexHome": "/tmp/codex-home", "configured": true, "authenticated": true},
+                    "execution": {"maxActiveJobs": 1, "activeJobs": 0, "availableSlots": 1}
+                });
+                let health_requests = if owner.is_some() { 2 } else { 1 };
+                for _ in 0..health_requests {
+                    serve_doctor_response(&listener, "/v1/health", &health).await?;
+                }
+                if owner.is_some() {
+                    serve_doctor_response(
+                        &listener,
+                        "/v1/maintenance",
+                        &json!({
+                            "protocol_version": 1, "holds": [held_by], "drained": jobs == 0,
+                            "nonterminal_jobs": jobs,
+                        }),
+                    )
+                    .await?;
+                }
+                Ok::<_, std::io::Error>(())
+            });
+            let client = nucleus_client::NucleusClient::new(&socket)?;
+            let result = super::doctor_health(&client, owner).await;
+            assert_eq!(
+                result.as_ref().is_ok_and(|(_, proved)| *proved),
+                accepted,
+                "owner={owner:?}, held_by={held_by}, jobs={jobs}: {result:?}",
+            );
+            if owner.is_none() {
+                assert!(!result?.0.accepting_jobs);
+            }
+            server.await??;
+        }
+        Ok(())
+    }
 
     #[test]
     fn clap_subcommand_arguments_retain_their_values() {

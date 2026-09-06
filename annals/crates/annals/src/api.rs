@@ -34,6 +34,7 @@ pub use crate::inbox_retry_store::{
     RetrySummary,
 };
 pub use crate::ingestion::{IngestionErrorView, IngestionView, LatelyReport};
+pub use crate::maintenance::{MaintenanceCommand, MaintenanceStatus};
 pub use crate::model::{
     CommitView, ConceptDetail, ConceptId, ConceptReference, ConceptSummary, CorpusOverview,
     DiffEntry, DiffView, EvidenceView, FrontierEntry, GraphDirection, GraphEdge, GraphNode,

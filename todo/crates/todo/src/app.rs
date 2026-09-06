@@ -10,8 +10,9 @@ use serde_json::{Value, json};
 use crate::cli::{
     AssessArgs, Cli, Command, ConcernAddArgs, ConcernAssessArgs, ConcernCommand, ConcernListArgs,
     DesignAcceptArgs, DesignCommand, DesignCorrectArgs, DesignProposeArgs, DesignRejectArgs,
-    EmailCommand, EmailSendArgs, ListArgs, MigrateArgs, NewArgs, NoteAddArgs, NoteCommand,
-    RoutingAcceptArgs, RoutingCommand, RoutingRejectArgs, SearchArgs, SituationCommand,
+    EmailCommand, EmailSendArgs, ListArgs, MaintenanceCommand, MigrateArgs, NewArgs, NoteAddArgs,
+    NoteCommand, RoutingAcceptArgs, RoutingCommand, RoutingRejectArgs, SearchArgs,
+    SituationCommand,
 };
 use crate::config::Config;
 use crate::email::EmailPreview;
@@ -68,7 +69,44 @@ fn resolve_database_path(
 }
 
 pub(crate) fn run(cli: &Cli, config: &Config, database: &Path) -> AppResult<CommandOutput> {
+    let canonical_database = cell_maintenance::canonical_database_path(database)
+        .map_err(|error| AppError::conflict("deployment_maintenance", error.to_string()))?;
+    let database = canonical_database.as_path();
+    let gate = cell_maintenance::Gate::new(
+        database
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("deployment-maintenance"),
+    );
+    let admission_needed = !matches!(
+        &cli.command,
+        Command::Maintenance(_)
+            | Command::List(_)
+            | Command::Search(_)
+            | Command::Show(_)
+            | Command::Concern(ConcernCommand::List(_) | ConcernCommand::Show(_))
+            | Command::Routing(RoutingCommand::Show(_))
+            | Command::Situation(_)
+            | Command::Design(DesignCommand::Show(_))
+            | Command::Email(EmailCommand::Preview)
+    );
+    let _admission = if admission_needed {
+        let admission = if matches!(&cli.command, Command::Migrate(_))
+            && let Ok(owner) = std::env::var("CELL_DEPLOYMENT_RUN_ID")
+        {
+            gate.enter_for(&owner)
+        } else {
+            gate.enter()
+        };
+        Some(
+            admission
+                .map_err(|error| AppError::conflict("deployment_maintenance", error.to_string()))?,
+        )
+    } else {
+        None
+    };
     match &cli.command {
+        Command::Maintenance(command) => run_maintenance(&gate, database, command),
         Command::Init => initialize(database),
         Command::Migrate(args) => migrate(database, args),
         Command::Concern(command) => match command {
@@ -107,6 +145,54 @@ pub(crate) fn run(cli: &Cli, config: &Config, database: &Path) -> AppResult<Comm
         Command::Done(args) => done(database, args.id),
         Command::Reopen(args) => reopen(database, args.id),
     }
+}
+
+fn run_maintenance(
+    gate: &cell_maintenance::Gate,
+    database: &Path,
+    command: &MaintenanceCommand,
+) -> AppResult<CommandOutput> {
+    if let MaintenanceCommand::Canary { directory } = command {
+        let canary = crate::canary::run(directory)?;
+        return Ok(CommandOutput::new(
+            json!({ "canary": canary }),
+            serde_json::to_string(&canary)?,
+        ));
+    }
+    let status = match command {
+        MaintenanceCommand::Hold { run_id } => gate.hold(run_id),
+        MaintenanceCommand::Ready { run_id } => {
+            let status = gate
+                .status()
+                .map_err(|error| AppError::conflict("deployment_maintenance", error.to_string()))?;
+            if !status.drained || crate::maintenance::unfinished_runtime_jobs() != Some(0) {
+                return Err(AppError::conflict(
+                    "deployment_not_drained",
+                    "Todo admissions and runtime jobs must settle before installation readiness",
+                ));
+            }
+            let _install = gate
+                .enter_for(run_id)
+                .map_err(|error| AppError::conflict("deployment_maintenance", error.to_string()))?;
+            db::verify(database)?;
+            Ok(status)
+        }
+        MaintenanceCommand::Status => gate.status(),
+        MaintenanceCommand::Release { run_id } => gate.release(run_id),
+        MaintenanceCommand::Canary { .. } => unreachable!("canary is handled separately"),
+    }
+    .map_err(|error| AppError::conflict("deployment_maintenance", error.to_string()))?;
+    let nonterminal_jobs = crate::maintenance::unfinished_runtime_jobs();
+    let maintenance = crate::api::MaintenanceStatus {
+        protocol_version: 1,
+        holds: status.holds,
+        drained: status.drained && nonterminal_jobs == Some(0),
+        nonterminal_jobs,
+    };
+    Ok(CommandOutput::new(
+        json!({ "maintenance": maintenance }),
+        serde_json::to_string(&maintenance)?,
+    ))
 }
 
 fn migrate(database: &Path, args: &MigrateArgs) -> AppResult<CommandOutput> {

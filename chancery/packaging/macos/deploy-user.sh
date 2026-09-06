@@ -19,6 +19,7 @@ else
 fi
 
 binary_path=
+expected_current=
 install_home=${HOME:-}
 
 usage() {
@@ -29,6 +30,7 @@ Install or update the current user's Chancery CLI. Chancery has no service,
 database, authentication, model, network, or Nucleus dependency.
 
 Options:
+  --expected-current SELECTOR  Require the observed absent or releases/HASH selection
   --home ABSOLUTE_PATH  Override the operator home (primarily for tests)
 EOF
 }
@@ -43,6 +45,15 @@ while [ "$#" -gt 0 ]; do
         --binary)
             [ "$#" -ge 2 ] || fail '--binary requires a path'
             binary_path=$2
+            shift 2
+            ;;
+        --expected-current)
+            [ "$#" -ge 2 ] || fail '--expected-current requires a selector'
+            expected_current=$2
+            case "$expected_current" in
+                absent|releases/*) ;;
+                *) fail 'expected current must be absent or releases/HASH' ;;
+            esac
             shift 2
             ;;
         --home)
@@ -211,6 +222,11 @@ if [ -L "$CURRENT_LINK" ]; then
     old_current=$(readlink "$CURRENT_LINK")
 elif [ -e "$CURRENT_LINK" ]; then
     fail "$CURRENT_LINK must be a symbolic link"
+fi
+if [ -n "$expected_current" ]; then
+    observed_current=${old_current:-absent}
+    [ "$observed_current" = "$expected_current" ] \
+        || fail "installed current changed: expected $expected_current, observed $observed_current"
 fi
 if [ -L "$PREVIOUS_LINK" ]; then
     old_previous=$(readlink "$PREVIOUS_LINK")

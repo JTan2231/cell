@@ -25,6 +25,7 @@ use crate::cli::Command;
 /// introduce a new wire envelope; the CLI continues to emit its existing JSON.
 #[derive(Debug)]
 pub enum Response {
+    Maintenance(crate::maintenance::MaintenanceStatus),
     Initialized(InitializedLibrary),
     Migrated(MigratedLibrary),
     Stats(LibraryStats),
@@ -227,6 +228,20 @@ fn retry_window(arguments: &mut Vec<OsString>, value: &InboxRetryWindowArgs) {
 fn arguments(request: &Request) -> Result<Vec<OsString>, ClientError> {
     let mut a = Vec::new();
     match request {
+        Command::Maintenance(command) => {
+            a.push("maintenance".into());
+            match command {
+                crate::maintenance::MaintenanceCommand::Status => a.push("status".into()),
+                crate::maintenance::MaintenanceCommand::Hold { run_id } => {
+                    a.push("hold".into());
+                    a.push(run_id.into());
+                }
+                crate::maintenance::MaintenanceCommand::Release { run_id } => {
+                    a.push("release".into());
+                    a.push(run_id.into());
+                }
+            }
+        }
         Command::Init(v) => {
             a.push("init".into());
             enumeration(&mut a, "--kind", v.kind)?;
@@ -496,6 +511,7 @@ fn response(request: &Request, data: Value) -> Result<Response, ClientError> {
         };
     }
     match request {
+        Command::Maintenance(_) => decode!(Maintenance),
         Command::Init(_) => decode!(Initialized),
         Command::Migrate => decode!(Migrated),
         Command::Stats => decode!(Stats),

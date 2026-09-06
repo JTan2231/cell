@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "product": "geste",
+  "application": "Geste",
+  "dependencies": [],
+  "description": "Product-owned ordinary Geste installation update.",
+  "deployer": "geste/packaging/macos/deploy-user.sh",
+  "expected_current": true,
+  "proofs": {
+    "binary_sha256": "bin/geste",
+    "deployer_sha256": "package/deploy-user.sh"
+  },
+  "allow_absent": true,
+  "source_proofs": {
+    "deployer_sha256": "geste/packaging/macos/deploy-user.sh"
+  },
+  "candidate_proofs": {
+    "binary_sha256": "geste"
+  },
+  "bundle_source": "geste/chancery"
+}

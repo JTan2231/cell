@@ -4,6 +4,7 @@ version = "0.16.0"
 edition.workspace = true
 
 [dependencies]
+cell-maintenance.workspace = true
 annals-api.workspace = true
 krisis-api.workspace = true
 base64 = { workspace = true }

@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "product": "conversations",
+  "application": "Conversations",
+  "dependencies": [],
+  "description": "Product-owned ordinary Conversations installation update.",
+  "deployer": "conversations/packaging/macos/deploy-user.sh",
+  "expected_current": true,
+  "proofs": {
+    "binary_sha256": "bin/conversations",
+    "deployer_sha256": "package/deploy-user.sh"
+  },
+  "allow_absent": true,
+  "source_proofs": {
+    "deployer_sha256": "conversations/packaging/macos/deploy-user.sh"
+  },
+  "candidate_proofs": {
+    "binary_sha256": "conversations"
+  },
+  "bundle_source": "conversations/chancery"
+}

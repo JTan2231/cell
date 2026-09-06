@@ -37,10 +37,63 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    Maintenance {
+        #[command(subcommand)]
+        command: MaintenanceCommand,
+    },
     Project(ProjectArgs),
     Repository(RepositoryArgs),
     Intake(IntakeArgs),
     Doctor,
+}
+
+#[derive(Debug, Subcommand)]
+enum MaintenanceCommand {
+    Hold { run_id: String },
+    Status,
+    Release { run_id: String },
+}
+
+fn deployment_gate(database: &Path) -> Result<cell_maintenance::Gate> {
+    let canonical =
+        cell_maintenance::canonical_database_path(database).map_err(maintenance_error)?;
+    let mut path = canonical.as_os_str().to_os_string();
+    path.push(".cell-maintenance");
+    Ok(cell_maintenance::Gate::new(PathBuf::from(path)))
+}
+
+// Result::map_err hands ownership to this product error translation.
+#[allow(clippy::needless_pass_by_value)]
+fn maintenance_error(error: cell_maintenance::Error) -> Error {
+    Error::domain("deployment_maintenance", error.to_string())
+}
+
+fn maintenance_command(database: &Path, command: MaintenanceCommand) -> Result<()> {
+    let gate = deployment_gate(database)?;
+    let status = match command {
+        MaintenanceCommand::Hold { run_id } => gate.hold(&run_id),
+        MaintenanceCommand::Status => gate.status(),
+        MaintenanceCommand::Release { run_id } => gate.release(&run_id),
+    }
+    .map_err(maintenance_error)?;
+    print(
+        &json!({"protocol_version": 1, "contract_version": status.contract_version,
+        "holds": status.holds, "drained": status.drained}),
+        true,
+    )
+}
+
+fn deployment_admission(database: &Path) -> Result<cell_maintenance::Admission> {
+    let gate = deployment_gate(database)?;
+    let result = match std::env::var("CELL_DEPLOYMENT_RUN_ID") {
+        Ok(owner)
+            if !owner.is_empty() && !gate.status().map_err(maintenance_error)?.holds.is_empty() =>
+        {
+            gate.enter_for(&owner)
+        }
+        _ => gate.enter(),
+    };
+    result.map_err(maintenance_error)
 }
 
 #[derive(Debug, Args)]
@@ -195,8 +248,15 @@ fn render_error(error: &Error, json_output: bool, scheduled_worker: bool) -> Str
 
 fn run(cli: Cli) -> Result<()> {
     let database = cli.database.map_or_else(default_database, Ok)?;
+    if let Command::Maintenance { command } = cli.command {
+        return maintenance_command(&database, command);
+    }
+    // Opening the store may initialize or migrate it. Track this lifetime even
+    // for reads so installation cannot race a reader's automatic migration.
+    let _admission = deployment_admission(&database)?;
     let store = Store::open(database)?;
     match cli.command {
+        Command::Maintenance { .. } => unreachable!("maintenance returned before opening state"),
         Command::Project(arguments) => project_command(&store, arguments.command, cli.json),
         Command::Repository(arguments) => repository_command(&store, arguments.command, cli.json),
         Command::Intake(arguments) => intake_command(&store, arguments.command, cli.json),

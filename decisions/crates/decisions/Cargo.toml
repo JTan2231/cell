@@ -8,6 +8,7 @@ name = "krisis"
 path = "src/main.rs"
 
 [dependencies]
+cell-maintenance.workspace = true
 annals-api.workspace = true
 krisis-api.workspace = true
 clap.workspace = true

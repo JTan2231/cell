@@ -17,6 +17,7 @@ version = "0.16.0"
 dependencies = [
  "annals-api",
  "base64",
+ "cell-maintenance",
  "clap",
  "fs2",
  "krisis-api",
@@ -217,6 +218,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cell-maintenance"
+version = "0.1.0"
+dependencies = [
+ "fs2",
+ "libc",
+ "serde",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -340,6 +352,7 @@ dependencies = [
 name = "crm"
 version = "0.3.1"
 dependencies = [
+ "cell-maintenance",
  "clap",
  "nucleus-client",
  "nucleus-core",
@@ -369,6 +382,7 @@ name = "decisions"
 version = "0.5.0"
 dependencies = [
  "annals-api",
+ "cell-maintenance",
  "clap",
  "conversations",
  "fs2",
@@ -1019,6 +1033,7 @@ dependencies = [
 name = "nucleus-cli"
 version = "0.3.6"
 dependencies = [
+ "cell-maintenance",
  "clap",
  "fs2",
  "nucleus-client",
@@ -1075,6 +1090,7 @@ version = "0.3.6"
 dependencies = [
  "axum",
  "base64",
+ "cell-maintenance",
  "clap",
  "nucleus-client",
  "nucleus-codex",
@@ -1432,6 +1448,7 @@ name = "semantics"
 version = "0.3.0"
 dependencies = [
  "annals-api",
+ "cell-maintenance",
  "clap",
  "conversations",
  "fs2",
@@ -1751,6 +1768,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 name = "todo"
 version = "0.5.0"
 dependencies = [
+ "cell-maintenance",
  "clap",
  "nucleus-client",
  "nucleus-core",
@@ -2144,6 +2162,7 @@ dependencies = [
 name = "weaver"
 version = "0.2.0"
 dependencies = [
+ "cell-maintenance",
  "clap",
  "fs2",
  "nucleus-client",

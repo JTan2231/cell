@@ -330,7 +330,7 @@ recognition check in the broker's heavy lane, including for selected-product
 runs. It passes the expected source key to that check and each independently
 scheduled product gate, and rejects the plan with exit 75 if the worktree
 changes. A complete run then rebuilds Chancery for that same candidate and
-validates the integrated fifteen-provider, 51-entry source graph.
+validates the integrated fifteen-provider, 52-entry source graph.
 This aggregate evidence does not merge product release authority or turn one
 product gate into another's gate.
 
@@ -361,6 +361,95 @@ one atomic product `current` selector, and reject a changed observed or explicit
 their product-specific quiescence, migration, service, and recovery logic and
 are conservatively globally conflicting for orchestration. Catalog presence,
 CI success, and release preparation grant no deployment authority.
+
+### Selection-only Cell deployment
+
+[`deployment/README.md`](../../deployment/README.md) defines the coordinator and
+version-one product adapter boundary. From a Cell checkout, `./deploy.sh plan
+SYSTEM...` previews committed declarations; `./deploy.sh SYSTEM...` starts a
+detached deployment and returns its durable run identity. The requested names
+select new releases. Product-owned dependency declarations order those releases
+and discover affected installations to hold; they never silently upgrade an
+unselected system. Annals includes Usage, and `decisions` aliases `krisis`.
+
+The coordinator fixes local committed `main`, archives its deployment source,
+and uses a separate worktree for preparation. Every selected product passes its
+normal brokered gate. `ci.sh --stage-candidate ABSOLUTE_DIRECTORY` seals binary
+bytes while that gate still owns the heavy Cargo lease. A passed receipt and
+matching source/artifact identity are required before any maintenance. The
+shared target directory is never the deployment artifact store. This version
+does not reuse completed CI evidence between runs, change version policy, or
+commit, tag or push Git releases.
+
+The host process owns preparation, ordering, operation checkpoints and reports;
+it does not depend on a Nucleus job or a live agent conversation. Product adapters
+own the installation proof, configuration, dependencies, maintenance, migrations,
+service lifecycle, domain canaries and recovery. Private run journals and sealed
+candidates live under `~/Library/Application Support/Cell/deployments`. One
+deployment lock prevents conflicting coordinator runs; product and catalog locks
+still protect coexistence with direct deployment commands. Updated custom
+installers accept an observed-current precondition under their product lock.
+
+Nucleus, Annals, Krisis, Semantics, CRM, Todo and Weaver expose durable holds
+owned by the deployment run identity. A hold blocks new admission while already
+admitted work settles. Product status combines live admission locks with its
+durable domain work; an empty process list alone is not a drain proof. Holds
+survive process exit and do not expire. Releasing one owner leaves every other
+owner and pre-existing operator pause intact. The shared `cell-maintenance`
+crate implements only hold/admission mechanics; products select the gate path
+and decide what constitutes admitted and settled work.
+
+After all affected products are held and drained, the coordinator applies
+selected candidates in product-declared order. Nucleus reports ordinary
+`acceptingJobs=false` while held. Its explicit `maintenance health RUN_ID`
+installation proof requires the sole matching owner, drained work,
+authentication and the exact supported harness; it does not authorize general
+research. `maintenance canary RUN_ID` executes the fixed real no-tools canary.
+After Nucleus verifies, the coordinator durably releases only its own Nucleus
+hold so the still-held requesters can run isolated synthetic domain canaries.
+CRM, Todo and Weaver canaries use their actual Nucleus integrations and retained
+correlation evidence. Annals, Krisis and Semantics validate their installed
+dependencies and exercise isolated domain persistence and replay. These checks
+do not send email or fabricate successful domain results. Remaining holds are
+released only after their required proofs pass.
+
+`status` and bounded `wait` read the durable run. `resume` continues only
+pre-maintenance preparation. Once a mutation may have occurred, `recover`
+requires product-owned proof of a coherent prior or candidate installation;
+an uncertain apply is never blindly repeated. Nucleus can be reopened after its
+own recovery proof to permit requester recovery checks. Unprovable state retains
+holds and stops. `recovered` is distinct from a fully successful deployment.
+Program selectors alone cannot prove database rollback or restore consumed
+authentication. Backups and failed canary evidence are retained for product
+recovery rather than silently removed.
+
+When Nucleus apply began but its successful apply response was not captured,
+automatic recovery retains the hold and stops for the supported Nucleus service
+recovery procedure. Candidate command files and a matching daemon version do not
+prove service replacement: an older process may remain resident after an
+interrupted cutover. Health and canary success cannot remove that uncertainty.
+The unchanged pre-apply case and a captured successful apply remain eligible for
+the normal product-owned recovery proofs; recovery never guesses a restart.
+
+### Migration to coordinated deployment
+
+The initial migration must install maintenance-capable binaries through the
+existing product deployment procedures. A hold created by a candidate binary
+does not fence a currently running older binary that never checks that hold.
+First stop each product's scheduled admission through its existing owner,
+preserve the original enabled/paused state, and settle existing domain work and
+Nucleus jobs. Then install the compatible foundation and requester binaries,
+verify their new maintenance interfaces, and restore exactly the prior schedule
+and pause state. Do not infer a successful migration from catalog presence.
+
+Thereafter a names-only run owns the operational sequence. Selector-only products
+are suitable first pilots; a Nucleus/requester selection exercises affected-only
+holds, real runtime canaries and restoration. The ordinary stateful adapters
+require a configured installation. New databases, authentication provisioning,
+new schedule policy, account changes and domain imports remain their documented
+explicit operations. The CRM coordinator adapter composes the supported
+`migrate --backup PATH` command under the drained hold; the standalone generated
+CRM deployer still changes only program/provider selectors.
 
 ### Standard installed paths
 
@@ -562,7 +651,9 @@ never falls back to a direct Codex invocation. Schema two adds current profile
 entries. Existing schema-one state requires explicit `crm migrate --backup
 PATH` after stopping new work and settling active workers. Migration creates a
 private SQLite-aware schema-one backup and adds the empty table transactionally;
-deployment never migrates state. Program rollback to schema one also requires
+the standalone generated deployer never migrates state. The coordinator's
+CRM-owned adapter invokes this same migration under its drained hold before
+switching program selectors. Program rollback to schema one also requires
 a separate quiescent database restore and must preserve newer state before
 removing it from the active view.
 

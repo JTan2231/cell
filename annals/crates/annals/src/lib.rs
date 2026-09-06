@@ -16,6 +16,7 @@ mod inbox_retry_store;
 mod index;
 mod ingestion;
 mod liaison;
+mod maintenance;
 mod model;
 mod model_runner;
 mod reconciliation_draft;

@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "product": "todo",
+  "application": "Todo",
+  "dependencies": [
+    "nucleus"
+  ],
+  "description": "Product-owned ordinary Todo installation update.",
+  "deployer": "todo/packaging/macos/deploy-user.sh",
+  "expected_current": true,
+  "proofs": {
+    "binary_sha256": "libexec/todo",
+    "frontend_sha256": [
+      "bin/todo",
+      "package/todo"
+    ],
+    "deployer_sha256": "package/deploy-user.sh",
+    "plist_sha256": "package/org.todo.daily-email.plist",
+    "email_runner_sha256": [
+      "bin/todo-daily-email",
+      "package/todo-daily-email"
+    ]
+  },
+  "maintenance_products": [
+    "nucleus"
+  ],
+  "cli_flags": [
+    "--json"
+  ],
+  "payload": "libexec/todo",
+  "bundle_key": "chancery_bundle_sha256",
+  "source_proofs": {
+    "deployer_sha256": "todo/packaging/macos/deploy-user.sh",
+    "frontend_sha256": "todo/packaging/macos/todo",
+    "plist_sha256": "todo/packaging/macos/org.todo.daily-email.plist",
+    "email_runner_sha256": "todo/packaging/macos/todo-daily-email"
+  },
+  "candidate_proofs": {
+    "binary_sha256": "todo"
+  },
+  "bundle_source": "todo/chancery",
+  "ready_command": true,
+  "doctor_command": false
+}

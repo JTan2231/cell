@@ -60,6 +60,9 @@ impl<'a> Worker<'a> {
     where
         F: FnMut(&StewardUpdate) -> Result<u64>,
     {
+        let _recovery = crate::maintenance::gate(self.store.path())?
+            .recover()
+            .map_err(crate::maintenance::error)?;
         let Some(mut lease) = self.acquire_drain_lease()? else {
             return Ok(0);
         };
@@ -127,6 +130,9 @@ impl<'a> Worker<'a> {
         P: FnMut(&StewardUpdate) -> Result<u64>,
         A: FnOnce() -> Result<()>,
     {
+        let _recovery = crate::maintenance::gate(self.store.path())?
+            .recover()
+            .map_err(crate::maintenance::error)?;
         let mut lease = self.store.acquire_worker_lease()?;
         let selected_result = match self.store.claim_or_resume(update_id) {
             Ok(update) if update.is_settled() => update.applied_revision.ok_or_else(|| {

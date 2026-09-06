@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "product": "usher",
+  "application": "Usher",
+  "dependencies": [],
+  "description": "Product-owned ordinary Usher installation update.",
+  "deployer": "usher/packaging/macos/deploy-user.sh",
+  "expected_current": true,
+  "proofs": {
+    "binary_sha256": "bin/usher",
+    "deployer_sha256": "package/deploy-user.sh"
+  },
+  "allow_absent": true,
+  "source_proofs": {
+    "deployer_sha256": "usher/packaging/macos/deploy-user.sh"
+  },
+  "candidate_proofs": {
+    "binary_sha256": "usher"
+  },
+  "bundle_source": "usher/chancery"
+}

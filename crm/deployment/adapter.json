@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "product": "crm",
+  "application": "CRM",
+  "dependencies": [
+    "nucleus"
+  ],
+  "description": "Product-owned ordinary CRM installation update.",
+  "deployer": "crm/packaging/macos/deploy-user.sh",
+  "expected_current": true,
+  "proofs": {
+    "binary_sha256": "bin/crm",
+    "deployer_sha256": "package/deploy-user.sh"
+  },
+  "maintenance_products": [
+    "nucleus"
+  ],
+  "cli_flags": [
+    "--json"
+  ],
+  "drain_command": true,
+  "source_proofs": {
+    "deployer_sha256": "crm/packaging/macos/deploy-user.sh"
+  },
+  "candidate_proofs": {
+    "binary_sha256": "crm"
+  },
+  "bundle_source": "crm/chancery",
+  "doctor_command": true
+}

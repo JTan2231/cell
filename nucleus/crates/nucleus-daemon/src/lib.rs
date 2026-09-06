@@ -109,6 +109,7 @@ pub enum DaemonError {
 
 #[derive(Clone)]
 pub struct AppState {
+    maintenance: Option<cell_maintenance::Gate>,
     store: Arc<Mutex<Store>>,
     codex: CodexHarness,
     cancellations: Arc<Mutex<HashMap<String, watch::Sender<bool>>>>,
@@ -137,6 +138,7 @@ impl AppState {
         let (changes, _) = broadcast::channel(1_024);
         let (mailbox_changes, _) = broadcast::channel(256);
         let state = Self {
+            maintenance: None,
             store: Arc::new(Mutex::new(store)),
             codex,
             cancellations: Arc::new(Mutex::new(HashMap::new())),
@@ -276,11 +278,18 @@ pub async fn serve(config: ServeConfig) -> Result<(), DaemonError> {
     prepare_parent(&config.socket)?;
     let store = Store::open(&config.database)?;
     secure_store_files(&config.database)?;
-    let state = AppState::new(
+    let mut state = AppState::new(
         store,
         CodexHarness::with_codex_home(&config.codex, &config.codex_home),
     )
     .await?;
+    state.maintenance = Some(cell_maintenance::Gate::new(
+        config
+            .database
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("deployment-maintenance"),
+    ));
     let listener = bind_socket(&config.socket).await?;
     info!(socket = %config.socket.display(), database = %config.database.display(), "nucleusd ready");
     let shutdown_state = state.clone();
@@ -309,6 +318,10 @@ pub async fn serve(config: ServeConfig) -> Result<(), DaemonError> {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1/health", get(health))
+        .route("/v1/maintenance", get(maintenance_status))
+        .route("/v1/maintenance/hold", post(maintenance_hold))
+        .route("/v1/maintenance/release", post(maintenance_release))
+        .route("/v1/maintenance/canary", post(maintenance_canary))
         .route("/v1/account", get(account_snapshot))
         .route("/v1/launch-contexts", post(register_launch_context))
         .route("/v1/jobs", post(submit_job).get(list_jobs))
@@ -355,7 +368,12 @@ async fn health(State(state): State<AppState>) -> Json<HealthResponseV1> {
             Some("Codex readiness inspection timed out".to_owned()),
         ),
     };
-    let accepting_jobs = harness.is_some() && auth.configured && auth.authenticated;
+    let maintenance_open = state
+        .maintenance
+        .as_ref()
+        .is_none_or(|gate| gate.status().is_ok_and(|status| status.holds.is_empty()));
+    let accepting_jobs =
+        harness.is_some() && auth.configured && auth.authenticated && maintenance_open;
     let available_slots = state.execution_slots.available_permits();
     Json(HealthResponseV1 {
         version: PROTOCOL_VERSION_V1,
@@ -461,6 +479,147 @@ fn schedule_launch_context_expiry(
     });
 }
 
+#[allow(clippy::needless_pass_by_value)] // Consumes Result::map_err input.
+fn maintenance_error(error: cell_maintenance::Error) -> ApiError {
+    ApiError::new(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "deployment_maintenance",
+        error.to_string(),
+    )
+}
+
+fn maintenance_gate(state: &AppState) -> Result<&cell_maintenance::Gate, ApiError> {
+    state.maintenance.as_ref().ok_or_else(|| {
+        ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "maintenance_unavailable",
+            "durable maintenance is not configured",
+        )
+    })
+}
+
+async fn maintenance_snapshot(
+    state: &AppState,
+) -> Result<nucleus_core::MaintenanceStatusV1, ApiError> {
+    let status = maintenance_gate(state)?
+        .status()
+        .map_err(maintenance_error)?;
+    let nonterminal_jobs = state
+        .store
+        .lock()
+        .await
+        .list_jobs()
+        .map_err(ApiError::store)?
+        .iter()
+        .filter(|job| !job.state.is_terminal())
+        .count();
+    Ok(nucleus_core::MaintenanceStatusV1 {
+        protocol_version: 1,
+        holds: status.holds,
+        drained: status.drained
+            && nonterminal_jobs == 0
+            && state.cancellations.lock().await.is_empty(),
+        nonterminal_jobs,
+    })
+}
+
+async fn maintenance_status(
+    State(state): State<AppState>,
+) -> Result<Json<nucleus_core::MaintenanceStatusV1>, ApiError> {
+    Ok(Json(maintenance_snapshot(&state).await?))
+}
+
+async fn maintenance_hold(
+    State(state): State<AppState>,
+    payload: Result<Json<nucleus_core::MaintenanceOwnerV1>, JsonRejection>,
+) -> Result<Json<nucleus_core::MaintenanceStatusV1>, ApiError> {
+    let Json(owner) = payload.map_err(ApiError::invalid_json)?;
+    maintenance_gate(&state)?
+        .hold(&owner.run_id)
+        .map_err(maintenance_error)?;
+    Ok(Json(maintenance_snapshot(&state).await?))
+}
+
+async fn maintenance_release(
+    State(state): State<AppState>,
+    payload: Result<Json<nucleus_core::MaintenanceOwnerV1>, JsonRejection>,
+) -> Result<Json<nucleus_core::MaintenanceStatusV1>, ApiError> {
+    let Json(owner) = payload.map_err(ApiError::invalid_json)?;
+    maintenance_gate(&state)?
+        .release(&owner.run_id)
+        .map_err(maintenance_error)?;
+    Ok(Json(maintenance_snapshot(&state).await?))
+}
+
+async fn maintenance_canary(
+    State(state): State<AppState>,
+    payload: Result<Json<nucleus_core::MaintenanceOwnerV1>, JsonRejection>,
+) -> Result<(StatusCode, Json<JobAcceptedV1>), ApiError> {
+    let Json(owner) = payload.map_err(ApiError::invalid_json)?;
+    let mut invocation = nucleus_core::AgentInvocationV1::new(
+        "codex",
+        "gpt-5.6-terra",
+        AbsolutePath::new(
+            state
+                .codex
+                .codex_home()
+                .unwrap_or_else(|| Path::new("/unconfigured")),
+        ),
+        nucleus_core::WorkspaceAccess::None,
+        nucleus_core::BuiltinToolsV1 {
+            local_execution: false,
+            web_search: false,
+        },
+        nucleus_core::TimeoutSeconds::new(90),
+    );
+    invocation.reasoning_effort = Some(ReasoningEffort::Low);
+    let request = JobRequestV1::new(
+        format!(
+            "deployment-canary-{}",
+            sha256_digest(owner.run_id.as_bytes())
+        ),
+        "Verify Nucleus deployment",
+        Requester {
+            program: "nucleus-deployment".into(),
+            id: owner.run_id.clone(),
+        },
+        "Answer directly using no tools. Return only the exact requested marker.",
+        "Reply with exactly NUCLEUS_DEPLOYMENT_CANARY_OK.",
+        invocation,
+    );
+    let status = maintenance_gate(&state)?
+        .status()
+        .map_err(maintenance_error)?;
+    if !status.holds.contains(&owner.run_id) {
+        return Err(maintenance_error(cell_maintenance::Error::Held));
+    }
+    // A retried canary request always follows this run's original attempt.
+    if let Some(existing) = exact_existing_job(&state, &request).await? {
+        return accepted_response(&state, existing, StatusCode::OK).await;
+    }
+    let admission = maintenance_gate(&state)?
+        .enter_for(&owner.run_id)
+        .map_err(maintenance_error)?;
+    if !state
+        .store
+        .lock()
+        .await
+        .list_jobs()
+        .map_err(ApiError::store)?
+        .iter()
+        .all(|job| job.state.is_terminal())
+        || !state.cancellations.lock().await.is_empty()
+        || state.execution_slots.available_permits() != MAX_CONCURRENT_JOB_ATTEMPTS
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "maintenance_not_drained",
+            "canary requires all existing jobs to settle",
+        ));
+    }
+    submit_admitted_job(&state, request, Some(admission)).await
+}
+
 async fn account_snapshot(
     State(state): State<AppState>,
     query: Result<Query<AccountSnapshotQueryV1>, QueryRejection>,
@@ -513,6 +672,15 @@ async fn submit_job(
     payload: Result<Json<JobRequestV1>, JsonRejection>,
 ) -> Result<(StatusCode, Json<JobAcceptedV1>), ApiError> {
     let Json(request) = payload.map_err(ApiError::invalid_json)?;
+    submit_admitted_job(&state, request, None).await
+}
+
+#[allow(clippy::too_many_lines)]
+async fn submit_admitted_job(
+    state: &AppState,
+    request: JobRequestV1,
+    privileged: Option<cell_maintenance::Admission>,
+) -> Result<(StatusCode, Json<JobAcceptedV1>), ApiError> {
     request.validate().map_err(ApiError::validation)?;
     if request.invocation.harness.as_str() != "codex" {
         return Err(ApiError::unprocessable(
@@ -521,9 +689,21 @@ async fn submit_job(
         ));
     }
 
-    if let Some(existing) = exact_existing_job(&state, &request).await? {
-        return accepted_response(&state, existing, StatusCode::OK).await;
+    if let Some(existing) = exact_existing_job(state, &request).await? {
+        return accepted_response(state, existing, StatusCode::OK).await;
     }
+
+    // Hold admission until the durable job and its attempt are published.
+    // A prior exact replay above stays available while deployment holds admission.
+    let _admission = match privileged {
+        Some(admission) => Some(admission),
+        None => state
+            .maintenance
+            .as_ref()
+            .map(cell_maintenance::Gate::enter)
+            .transpose()
+            .map_err(maintenance_error)?,
+    };
 
     if let Some(parent) = &request.parent
         && state
@@ -536,13 +716,13 @@ async fn submit_job(
     {
         return Err(ApiError::not_found("parent job", parent.as_str()));
     }
-    let launch_environment = match resolve_launch_environment(&state, &request).await? {
+    let launch_environment = match resolve_launch_environment(state, &request).await? {
         LaunchEnvironmentResolution::Environment(environment) => environment,
         LaunchEnvironmentResolution::Existing(existing) => {
-            return accepted_response(&state, *existing, StatusCode::OK).await;
+            return accepted_response(state, *existing, StatusCode::OK).await;
         }
     };
-    let definitions = load_toolset_definitions(&state, &request).await?;
+    let definitions = load_toolset_definitions(state, &request).await?;
     let dynamic_tools = dynamic_tools(&definitions)?;
     let inspection = tokio::time::timeout(ADMISSION_INSPECTION_TIMEOUT, state.codex.inspect())
         .await
@@ -576,7 +756,7 @@ async fn submit_job(
         .codex
         .validate_protocol_schema(&inspection, &generated_schema)
         .map_err(ApiError::harness_compatibility)?;
-    register_codex_schema(&state, &inspection, generated_schema).await?;
+    register_codex_schema(state, &inspection, generated_schema).await?;
 
     let created_at = now();
     let request_bytes = serde_json::to_vec(&request).map_err(ApiError::encoding)?;
@@ -596,7 +776,7 @@ async fn submit_job(
             .map_err(ApiError::store)?
     };
     if !admission.was_created() {
-        return accepted_response(&state, admission.into_inner(), StatusCode::OK).await;
+        return accepted_response(state, admission.into_inner(), StatusCode::OK).await;
     }
     let job = admission.into_inner();
     let attempt_id = format!("attempt_{}", Uuid::now_v7());
@@ -617,7 +797,7 @@ async fn submit_job(
     if let Some(context) = &request.invocation.launch_context {
         state.launch_contexts.lock().await.remove(context.as_str());
     }
-    let cancel_rx = register_cancellation_watch(&state, &job.id).await?;
+    let cancel_rx = register_cancellation_watch(state, &job.id).await?;
     let run_state = state.clone();
     let run_request = request.clone();
     let run_inspection = inspection.clone();
@@ -637,7 +817,7 @@ async fn submit_job(
         .await;
     });
     state.notify(&job.id);
-    let cursor = last_log_sequence(&state, &job.id).await?;
+    let cursor = last_log_sequence(state, &job.id).await?;
     Ok((
         StatusCode::ACCEPTED,
         Json(JobAcceptedV1 {

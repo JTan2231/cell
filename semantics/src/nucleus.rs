@@ -65,9 +65,10 @@ impl NucleusReconciler {
 
     pub fn doctor(&self) -> Result<()> {
         let runtime = runtime()?;
+        let deployment_run_id = std::env::var("CELL_DEPLOYMENT_RUN_ID").ok();
         runtime.block_on(async {
             let client = self.client()?;
-            require_health(&client).await?;
+            require_health(&client, deployment_run_id.as_deref()).await?;
             register_contract(&client).await?;
             register_account_contract(&client).await?;
             Ok(())
@@ -177,7 +178,7 @@ impl NucleusReconciler {
         let runtime = runtime()?;
         runtime.block_on(async {
             let client = self.client()?;
-            require_health(&client).await?;
+            require_health(&client, None).await?;
             let toolset = register_contract(&client).await?;
             let correlation = match store.correlation(&intake.event_id)? {
                 Some(value) => value,
@@ -297,7 +298,7 @@ impl NucleusReconciler {
         runtime
             .block_on(async {
                 let client = self.client()?;
-                require_health(&client).await?;
+                require_health(&client, None).await?;
                 let toolset = register_account_contract(&client).await?;
                 let correlation = match store.account_correlation(&intake.event_id)? {
                     Some(value) => value,
@@ -404,8 +405,17 @@ impl NucleusReconciler {
     }
 }
 
-async fn require_health(client: &NucleusClient) -> Result<()> {
-    let health = client.health().await?;
+async fn require_health(client: &NucleusClient, deployment_run_id: Option<&str>) -> Result<()> {
+    let mut health = client.health().await?;
+    let mut deployment_proved = false;
+    if (health.status != "ok" || !health.accepting_jobs)
+        && let Some(run_id) = deployment_run_id.filter(|run_id| !run_id.is_empty())
+    {
+        // Only doctors pass an owner. Ordinary reconciliation still requires
+        // public admission, even when this process inherited a deployment ID.
+        health = client.health_for_deployment(run_id).await?;
+        deployment_proved = true;
+    }
     let required = [
         HarnessCapability::ExactModel,
         HarnessCapability::ReasoningEffort,
@@ -419,8 +429,7 @@ async fn require_health(client: &NucleusClient) -> Result<()> {
         .filter(|capability| !health.capabilities.contains(capability))
         .map(|capability| format!("{capability:?}"))
         .collect::<Vec<_>>();
-    if health.status != "ok"
-        || !health.accepting_jobs
+    if (!deployment_proved && (health.status != "ok" || !health.accepting_jobs))
         || !health.authentication.authenticated
         || !health
             .supported_protocol_versions
@@ -1566,6 +1575,55 @@ mod tests {
     struct CapturedFlow {
         request_body: Vec<u8>,
         result_bodies: Vec<Vec<u8>>,
+    }
+
+    #[test]
+    fn deployment_doctor_requires_its_sole_hold_and_preserves_admission_checks() {
+        for (owner, holds, missing_capabilities, accepted) in [
+            (Some("run-a"), vec!["run-a"], false, true),
+            (Some("run-a"), vec!["run-b"], false, false),
+            (Some("run-a"), vec!["run-a", "run-b"], false, false),
+            (Some("run-a"), vec!["run-a"], true, false),
+            (None, vec!["run-a"], false, false),
+        ] {
+            let directory = TempDir::new().expect("temporary directory");
+            let socket = directory.path().join("nucleus.sock");
+            let listener = UnixListener::bind(&socket).expect("bind socket");
+            listener.set_nonblocking(true).expect("nonblocking socket");
+            let mut health = ready_health();
+            health["status"] = json!("degraded");
+            health["acceptingJobs"] = json!(false);
+            health["harnessExecutable"] = json!("/usr/bin/false");
+            health["execution"] = json!({"maxActiveJobs": 1, "activeJobs": 0, "availableSlots": 1});
+            if missing_capabilities {
+                health["capabilities"] = json!([]);
+            }
+            let server = thread::spawn(move || -> ServerResult {
+                let health_requests = if owner.is_some() { 2 } else { 1 };
+                for _ in 0..health_requests {
+                    let (mut stream, request, _) = accept_request(&listener)?;
+                    assert!(request.starts_with("GET /v1/health "));
+                    write_json(&mut stream, "200 OK", &health)?;
+                }
+                if owner.is_some() {
+                    let (mut stream, request, _) = accept_request(&listener)?;
+                    assert!(request.starts_with("GET /v1/maintenance "));
+                    write_json(
+                        &mut stream,
+                        "200 OK",
+                        &json!({"protocol_version": 1, "holds": holds,
+                            "drained": true, "nonterminal_jobs": 0}),
+                    )?;
+                }
+                Ok(())
+            });
+            let client = nucleus_client::NucleusClient::new(&socket).expect("client");
+            let result = super::runtime()
+                .expect("runtime")
+                .block_on(super::require_health(&client, owner));
+            assert_eq!(result.is_ok(), accepted, "owner={owner:?}: {result:?}");
+            join_server(server);
+        }
     }
 
     #[test]

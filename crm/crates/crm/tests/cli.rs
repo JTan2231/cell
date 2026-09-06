@@ -231,3 +231,109 @@ fn failed_update_commands_keep_the_consumed_update_advisory() {
         }
     }
 }
+
+#[test]
+fn deployment_hold_blocks_intake_and_preserves_other_owners() {
+    let (_temporary, database) = fixture();
+    let invoke = |args: &[&str]| {
+        crm()
+            .arg("--database")
+            .arg(&database)
+            .arg("--json")
+            .args(args)
+            .output()
+            .expect("CRM command")
+    };
+    let held = invoke(&["maintenance", "hold", "rollout-one"]);
+    assert!(
+        held.status.success(),
+        "{}",
+        String::from_utf8_lossy(&held.stderr)
+    );
+    let status: serde_json::Value = serde_json::from_slice(&held.stdout).unwrap();
+    assert_eq!(status["data"]["maintenance"]["drained"], true);
+    assert!(
+        invoke(&["maintenance", "hold", "operator-two"])
+            .status
+            .success()
+    );
+    let blocked = invoke(&["case", "new", "--title", "Blocked intake"]);
+    assert!(!blocked.status.success());
+    let error: serde_json::Value = serde_json::from_slice(&blocked.stderr).unwrap();
+    assert_eq!(error["error"]["code"], "deployment_maintenance");
+    let released = invoke(&["maintenance", "release", "rollout-one"]);
+    let status: serde_json::Value = serde_json::from_slice(&released.stdout).unwrap();
+    assert_eq!(
+        status["data"]["maintenance"]["holds"],
+        serde_json::json!(["operator-two"])
+    );
+    assert!(invoke(&["case", "list"]).status.success());
+    assert!(
+        !invoke(&["case", "new", "--title", "Still blocked"])
+            .status
+            .success()
+    );
+    assert!(
+        invoke(&["maintenance", "release", "operator-two"])
+            .status
+            .success()
+    );
+    assert!(
+        invoke(&["case", "new", "--title", "Admitted"])
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn maintenance_reports_durable_queued_and_applied_unsettled_work() {
+    let (_temporary, database) = fixture();
+    let store = Store::open(&database).unwrap();
+    let case = store
+        .create_case("Canary fixture", "Synthetic", Stage::Research)
+        .unwrap();
+    store
+        .enqueue_delivery(&case.case_id, "Fixture", "Synthetic input", None)
+        .unwrap();
+    let output = crm()
+        .arg("--database")
+        .arg(&database)
+        .args(["--json", "maintenance", "hold", "test-run"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["data"]["maintenance"]["drained"], false);
+    assert_eq!(value["data"]["maintenance"]["unsettled_updates"], 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn database_aliases_cannot_bypass_deployment_admission() {
+    let (_temporary, database) = fixture();
+    let aliases = tempfile::tempdir().unwrap();
+    let held = crm()
+        .arg("--database")
+        .arg(&database)
+        .args(["maintenance", "hold", "alias-test"])
+        .output()
+        .unwrap();
+    assert!(held.status.success());
+    let symbolic = aliases.path().join("symbolic.db");
+    std::os::unix::fs::symlink(&database, &symbolic).unwrap();
+    let hard = aliases.path().join("hard.db");
+    for alias in [&symbolic, &hard] {
+        if alias == &hard {
+            std::fs::hard_link(&database, &hard).unwrap();
+        }
+        let output = crm()
+            .arg("--database")
+            .arg(alias)
+            .args(["--json", "case", "new", "--title", "Blocked alias"])
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        let value: serde_json::Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(value["error"]["code"], "deployment_maintenance");
+    }
+}

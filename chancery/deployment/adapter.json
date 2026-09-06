@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "product": "chancery",
+  "application": "Chancery",
+  "dependencies": [],
+  "description": "Product-owned ordinary Chancery installation update.",
+  "deployer": "chancery/packaging/macos/deploy-user.sh",
+  "expected_current": true,
+  "proofs": {
+    "binary_sha256": "bin/chancery",
+    "deployer_sha256": "package/deploy-user.sh"
+  },
+  "bundle_key": "provider_sha256",
+  "bundle_path_lines": false,
+  "bundle_path": "share/chancery",
+  "source_proofs": {
+    "deployer_sha256": "chancery/packaging/macos/deploy-user.sh"
+  },
+  "candidate_proofs": {
+    "binary_sha256": "chancery"
+  },
+  "bundle_source": "chancery/provider"
+}

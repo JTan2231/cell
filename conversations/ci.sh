@@ -4,4 +4,7 @@
 set -eu
 PRODUCT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 CELL_ROOT=$(CDPATH='' cd "$PRODUCT_DIR/.." && pwd)
+if [ "${1:-}" = --stage-candidate ]; then
+    exec python3 "$CELL_ROOT/ci_broker/client.py" run --verbose-receipt --repo-root "$CELL_ROOT" --gate "conversations" --lane "heavy" -- "$CELL_ROOT/pipeline/ci.sh" "conversations" "$@"
+fi
 exec python3 "$CELL_ROOT/ci_broker/client.py" run --repo-root "$CELL_ROOT" --gate "conversations" --lane "heavy" -- "$CELL_ROOT/pipeline/ci.sh" "conversations" "$@"

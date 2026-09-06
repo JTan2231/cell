@@ -43,6 +43,9 @@ enum Command {
     Manual,
     /// Inspect daemon availability.
     Health,
+    /// Own deployment admission holds and run the fixed runtime canary.
+    #[command(subcommand)]
+    Maintenance(MaintenanceCommand),
     /// Read the authenticated Codex account owned by Nucleus.
     Account {
         /// Also read account token activity; failure is reported in usageError.
@@ -70,6 +73,25 @@ enum Command {
     /// Install and control the per-user macOS background service.
     #[command(subcommand)]
     Service(ServiceCommand),
+}
+
+#[derive(Debug, Subcommand)]
+enum MaintenanceCommand {
+    /// Prove healthy auth and harness under the named sole deployment hold.
+    Health {
+        run_id: String,
+    },
+    Hold {
+        run_id: String,
+    },
+    Status,
+    Release {
+        run_id: String,
+    },
+    /// Run a real no-tools model job while this run owns the sole drained hold.
+    Canary {
+        run_id: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -358,6 +380,7 @@ async fn run_api(command: Command, client: NucleusClient, compact: bool) -> Resu
                 .await?,
             compact,
         ),
+        Command::Maintenance(command) => run_maintenance(command, &client, compact).await,
         Command::Jobs(command) => run_jobs(command, &client, compact).await,
         Command::Schemas(command) => run_schemas(command, &client, compact).await,
         Command::Toolsets(command) => run_toolsets(command, &client, compact).await,
@@ -365,6 +388,62 @@ async fn run_api(command: Command, client: NucleusClient, compact: bool) -> Resu
         Command::Manual => unreachable!("manual is handled before client creation"),
         Command::Auth(_) => unreachable!("auth commands are handled before client creation"),
         Command::Service(_) => unreachable!("service commands are handled before client creation"),
+    }
+}
+
+async fn run_maintenance(
+    command: MaintenanceCommand,
+    client: &NucleusClient,
+    compact: bool,
+) -> Result<(), CliError> {
+    match command {
+        MaintenanceCommand::Health { run_id } => {
+            let health = client.health().await?;
+            require_maintenance_health(client, &health, &run_id).await?;
+            print_json(&health, compact)
+        }
+        MaintenanceCommand::Hold { run_id } => {
+            print_json(&client.maintenance_hold(&run_id).await?, compact)
+        }
+        MaintenanceCommand::Status => print_json(&client.maintenance_status().await?, compact),
+        MaintenanceCommand::Release { run_id } => {
+            print_json(&client.maintenance_release(&run_id).await?, compact)
+        }
+        MaintenanceCommand::Canary { run_id } => {
+            let accepted = client.maintenance_canary(&run_id).await?;
+            let deadline = Instant::now() + Duration::from_secs(120);
+            loop {
+                let job = client.get_job(&accepted.job_id).await?;
+                if job.summary.state.is_terminal() {
+                    let verified = job.summary.state == JobState::Completed
+                        && job
+                            .attempts
+                            .last()
+                            .and_then(|attempt| attempt.output.as_ref())
+                            .is_some_and(|output| {
+                                output.final_message.trim() == "NUCLEUS_DEPLOYMENT_CANARY_OK"
+                            });
+                    print_json(
+                        &serde_json::json!({ "protocol_version": 1, "verified": verified, "job_id": accepted.job_id }),
+                        compact,
+                    )?;
+                    return if verified {
+                        Ok(())
+                    } else {
+                        Err(CliError::ServiceUnhealthy(
+                            "deployment canary did not produce its required result".into(),
+                        ))
+                    };
+                }
+                if Instant::now() >= deadline {
+                    return Err(CliError::HealthTimeout(format!(
+                        "deployment canary {} remains unfinished",
+                        accepted.job_id
+                    )));
+                }
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+        }
     }
 }
 
@@ -563,8 +642,45 @@ async fn run_tool_calls(
     }
 }
 
+async fn require_maintenance_health(
+    client: &NucleusClient,
+    _health: &nucleus_core::HealthResponseV1,
+    owner: &str,
+) -> Result<(), CliError> {
+    client.health_for_deployment(owner).await?;
+    Ok(())
+}
+
+async fn deployment_service_guard(
+    paths: &ServicePaths,
+    command: &ServiceCommand,
+) -> Result<Option<cell_maintenance::Admission>, CliError> {
+    let admission = if matches!(
+        command,
+        ServiceCommand::Install { .. } | ServiceCommand::Restart
+    ) && let Ok(owner) = std::env::var("CELL_DEPLOYMENT_RUN_ID")
+    {
+        let client = NucleusClient::new(&paths.socket)?;
+        let status = client.maintenance_status().await?;
+        if status.holds != [owner.as_str()] || !status.drained {
+            return Err(CliError::ServiceUnhealthy(
+                "deployment requires its sole drained admission hold".into(),
+            ));
+        }
+        Some(
+            cell_maintenance::Gate::new(paths.state_dir.join("deployment-maintenance"))
+                .enter_for(&owner)
+                .map_err(|error| CliError::ServiceUnhealthy(error.to_string()))?,
+        )
+    } else {
+        None
+    };
+    Ok(admission)
+}
+
 async fn run_service(command: ServiceCommand, compact: bool) -> Result<(), CliError> {
     let paths = ServicePaths::for_current_user()?;
+    let deployment_guard = deployment_service_guard(&paths, &command).await?;
     match command {
         ServiceCommand::Install {
             daemon,
@@ -577,18 +693,19 @@ async fn run_service(command: ServiceCommand, compact: bool) -> Result<(), CliEr
                 codex.as_deref(),
                 codex_home.as_deref(),
             )?;
-            let health = match wait_for_health(&installed.paths.socket).await {
-                Ok(health) => health,
-                Err(health_error) => {
-                    if let Err(rollback) = installed.rollback() {
-                        return Err(CliError::InstallHealthRollback {
-                            health: health_error.to_string(),
-                            rollback: rollback.to_string(),
-                        });
+            let health =
+                match wait_for_health(&installed.paths.socket, deployment_guard.as_ref()).await {
+                    Ok(health) => health,
+                    Err(health_error) => {
+                        if let Err(rollback) = installed.rollback() {
+                            return Err(CliError::InstallHealthRollback {
+                                health: health_error.to_string(),
+                                rollback: rollback.to_string(),
+                            });
+                        }
+                        return Err(CliError::InstallUnhealthyRestored(health_error.to_string()));
                     }
-                    return Err(CliError::InstallUnhealthyRestored(health_error.to_string()));
-                }
-            };
+                };
             print_json(
                 &InstalledOutput {
                     service: service::SERVICE_LABEL,
@@ -629,7 +746,7 @@ async fn run_service(command: ServiceCommand, compact: bool) -> Result<(), CliEr
         }
         ServiceCommand::Restart => {
             service::restart()?;
-            let health = wait_for_health(&paths.socket).await?;
+            let health = wait_for_health(&paths.socket, deployment_guard.as_ref()).await?;
             print_json(&health, compact)
         }
         ServiceCommand::Uninstall => {
@@ -647,7 +764,10 @@ async fn run_service(command: ServiceCommand, compact: bool) -> Result<(), CliEr
     }
 }
 
-async fn wait_for_health(socket: &Path) -> Result<nucleus_core::HealthResponseV1, CliError> {
+async fn wait_for_health(
+    socket: &Path,
+    installation_guard: Option<&cell_maintenance::Admission>,
+) -> Result<nucleus_core::HealthResponseV1, CliError> {
     let deadline = Instant::now() + SERVICE_START_TIMEOUT;
     let client = NucleusClient::new(socket)?;
     loop {
@@ -657,8 +777,40 @@ async fn wait_for_health(socket: &Path) -> Result<nucleus_core::HealthResponseV1
         }
         let attempt_timeout = remaining;
         let last_error = match tokio::time::timeout(attempt_timeout, client.health()).await {
-            Ok(Ok(health)) if health.status == "ok" => return Ok(health),
+            Ok(Ok(health))
+                if health.status == "ok"
+                    && std::env::var_os("CELL_DEPLOYMENT_RUN_ID").is_none() =>
+            {
+                return Ok(health);
+            }
             Ok(Ok(health)) => {
+                if let Ok(owner) = std::env::var("CELL_DEPLOYMENT_RUN_ID") {
+                    if installation_guard.is_some() {
+                        // This process still holds enter_for's exclusive guard.
+                        // No earlier admission or recovery guard can coexist.
+                        let status = client.maintenance_status().await?;
+                        if status.holds != [owner.as_str()]
+                            || status.nonterminal_jobs != 0
+                            || health.harness.is_none()
+                            || health.harness_executable.is_none()
+                            || !health.authentication.configured
+                            || !health.authentication.authenticated
+                            || health.detail.is_some()
+                            || !health.supported_protocol_versions.contains(&1)
+                            || health
+                                .execution
+                                .is_none_or(|capacity| capacity.active_jobs != 0)
+                        {
+                            return Err(CliError::ServiceUnhealthy(
+                                "held installation health did not verify its owner and runtime"
+                                    .into(),
+                            ));
+                        }
+                    } else {
+                        require_maintenance_health(&client, &health, &owner).await?;
+                    }
+                    return Ok(health);
+                }
                 return Err(CliError::ServiceUnhealthy(format!(
                     "daemon reported status {:?}",
                     health.status

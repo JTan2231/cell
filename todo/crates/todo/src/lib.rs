@@ -1,5 +1,6 @@
 pub mod api;
 mod app;
+mod canary;
 mod cli;
 mod config;
 mod db;
@@ -7,6 +8,7 @@ mod digest;
 mod email;
 mod error;
 mod liaison;
+mod maintenance;
 mod model;
 mod model_runner;
 mod reconciliation;

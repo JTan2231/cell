@@ -10,7 +10,8 @@ use clap::Parser as _;
 use serde_json::{Value, json};
 
 use crate::cli::{
-    CaseCommand, Cli, Command, ProfileCommand, TellArgs, UpdateCommand, WorkerCommand,
+    CaseCommand, Cli, Command, MaintenanceCommand, ProfileCommand, TellArgs, UpdateCommand,
+    WorkerCommand,
 };
 use crate::model::{CaseListItem, CaseRevision, ProfileEntry, SearchResult, StewardUpdate};
 use crate::nucleus::NucleusSteward;
@@ -104,7 +105,61 @@ pub fn main_entry() -> i32 {
 
 fn run(cli: Cli) -> CommandResult<Option<Output>> {
     let database = resolve_database(cli.database.as_deref())?;
+    // New work and every ordinary mutation participate in the same admission
+    // boundary. Existing update recovery remains available so it can drain.
+    let mutation = matches!(
+        &cli.command,
+        Command::Init
+            | Command::Migrate { .. }
+            | Command::Tell(_)
+            | Command::Case {
+                command: CaseCommand::New { .. }
+            }
+            | Command::Profile {
+                command: ProfileCommand::New { .. } | ProfileCommand::Update { .. }
+            }
+            | Command::Update {
+                command: UpdateCommand::Retry { .. }
+            }
+    );
+    let _admission = mutation
+        .then(|| {
+            crate::maintenance::enter(&database, matches!(&cli.command, Command::Migrate { .. }))
+        })
+        .transpose()?;
     match cli.command {
+        Command::Maintenance {
+            command: MaintenanceCommand::Canary { directory },
+        } => {
+            let canary = crate::canary::run(&directory)?;
+            let human = serde_json::to_string(&canary).map_err(Error::from)?;
+            Ok(Some(Output {
+                data: json!({ "type": "deployment_canary", "canary": canary }),
+                human,
+            }))
+        }
+        Command::Maintenance { command } => {
+            let gate = crate::maintenance::gate(&database)?;
+            match command {
+                MaintenanceCommand::Hold { run_id } => {
+                    gate.hold(&run_id).map_err(crate::maintenance::error)?;
+                }
+                MaintenanceCommand::Release { run_id } => {
+                    gate.release(&run_id).map_err(crate::maintenance::error)?;
+                }
+                MaintenanceCommand::Drain if database.exists() => {
+                    Worker::new(&Store::open(&database)?).drain()?;
+                }
+                MaintenanceCommand::Status | MaintenanceCommand::Drain => {}
+                MaintenanceCommand::Canary { .. } => unreachable!("canary is handled separately"),
+            }
+            let status = crate::maintenance::status(&database)?;
+            let human = serde_json::to_string(&status).map_err(Error::from)?;
+            Ok(Some(Output {
+                data: json!({ "type": "maintenance", "maintenance": status }),
+                human,
+            }))
+        }
         Command::Init => {
             let result = Store::init(&database)?;
             Ok(Some(Output {
@@ -487,13 +542,7 @@ fn resolve_database(explicit: Option<&Path>) -> Result<PathBuf> {
             .join("CRM")
             .join("crm.db")
     };
-    if path.is_absolute() {
-        Ok(path)
-    } else {
-        env::current_dir()
-            .map(|cwd| cwd.join(path))
-            .map_err(|source| crate::error::io("current directory", source))
-    }
+    cell_maintenance::canonical_database_path(&path).map_err(crate::maintenance::error)
 }
 
 fn read_text(path: &Path) -> Result<String> {

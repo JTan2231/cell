@@ -838,6 +838,7 @@ fi
 grep -F 'maintenance recovery is retained' "$temporary/fail-null.err" >/dev/null
 [ "$(cat "$active_binding")" = "false|$second_digest" ]
 [ -f "$home/Library/Application Support/Decisions/.clockwork-maintenance" ]
+unset KRISIS_FAIL_VERIFY_SWITCH
 
 bad_home="$temporary/BadHome"
 mkdir "$bad_home"
@@ -850,4 +851,38 @@ if HOME="$bad_home" KRISIS_CLOCKWORK_CAPTURE="$clockwork_capture" KRISIS_CLOCKWO
     exit 1
 fi
 grep -F '32 lowercase hexadecimal' "$temporary/bad.err" >/dev/null
+
+# Ordinary updates may move the exact Annals executable/config pins while
+# preserving the canonical decisions-library identity. The old binding must be
+# proved against its own receipt, not against the requested new pins.
+pin_home="$temporary/PinHome"
+pin_clockwork="$temporary/pin-clockwork"
+mkdir -p "$pin_home" "$pin_clockwork/definitions" "$pin_clockwork/bindings"
+deploy_for "$pin_home" "$pin_clockwork" >/dev/null
+deploy_for "$pin_home" "$pin_clockwork" --final-cutover >/dev/null
+pin_receipt="$pin_home/Library/Application Support/Decisions/install/krisis-observer-binding.txt"
+pin_binding="$pin_clockwork/bindings/krisis_observer.binding"
+next_annals="$temporary/annals-next"
+next_config="$temporary/decisions-next.toml"
+cp "$annals" "$next_annals"
+cp "$config" "$next_config"
+chmod 0755 "$next_annals"
+deploy_for "$pin_home" "$pin_clockwork" --annals "$next_annals" --annals-config "$next_config" >/dev/null
+deploy_for "$pin_home" "$pin_clockwork" --annals "$next_annals" --annals-config "$next_config" --final-cutover >/dev/null
+grep -Fx "annals_binary=$next_annals" "$pin_receipt" >/dev/null
+grep -Fx "annals_config=$next_config" "$pin_receipt" >/dev/null
+grep -Fx 'annals_library_id=0123456789abcdef0123456789abcdef' "$pin_receipt" >/dev/null
+cp "$pin_receipt" "$temporary/pin-receipt.before"
+cp "$pin_binding" "$temporary/pin-binding.before"
+
+# A failed new selection restores the exact previous target and receipt.
+deploy_for "$pin_home" "$pin_clockwork" --annals "$annals" >/dev/null
+if KRISIS_FAIL_VERIFY_SWITCH=1 deploy_for "$pin_home" "$pin_clockwork" \
+    --annals "$annals" --final-cutover >"$temporary/pin-failure.out" 2>"$temporary/pin-failure.err"; then
+    printf '%s\n' 'Annals pin transition ignored Clockwork verification failure' >&2
+    exit 1
+fi
+unset KRISIS_FAIL_VERIFY_SWITCH
+cmp "$pin_receipt" "$temporary/pin-receipt.before"
+cmp "$pin_binding" "$temporary/pin-binding.before"
 printf '%s\n' 'Krisis guarded deployer test passed'

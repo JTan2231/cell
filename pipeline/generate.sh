@@ -19,6 +19,9 @@ emit_ci_wrapper() {
 set -eu
 PRODUCT_DIR=\$(CDPATH='' cd "\$(dirname "\$0")" && pwd)
 CELL_ROOT=\$(CDPATH='' cd "\$PRODUCT_DIR/.." && pwd)
+if [ "\${1:-}" = --stage-candidate ]; then
+    exec python3 "\$CELL_ROOT/ci_broker/client.py" run --verbose-receipt --repo-root "\$CELL_ROOT" --gate "$CI_GATE_ID" --lane "$CI_RESOURCE_CLASS" -- "\$CELL_ROOT/pipeline/ci.sh" "$PRODUCT_ID" "\$@"
+fi
 exec python3 "\$CELL_ROOT/ci_broker/client.py" run --repo-root "\$CELL_ROOT" --gate "$CI_GATE_ID" --lane "$CI_RESOURCE_CLASS" -- "\$CELL_ROOT/pipeline/ci.sh" "$PRODUCT_ID" "\$@"
 EOF
 }

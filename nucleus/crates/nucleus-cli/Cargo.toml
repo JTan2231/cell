@@ -10,6 +10,7 @@ name = "nucleus"
 path = "src/main.rs"
 
 [dependencies]
+cell-maintenance.workspace = true
 clap.workspace = true
 fs2.workspace = true
 nucleus-codex = { path = "../nucleus-codex" }

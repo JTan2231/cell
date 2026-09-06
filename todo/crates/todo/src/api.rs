@@ -175,8 +175,8 @@ impl Client {
 pub use crate::cli::{
     AssessArgs, Command as Request, ConcernAddArgs, ConcernArgs, ConcernAssessArgs, ConcernCommand,
     ConcernListArgs, DesignAcceptArgs, DesignArgs, DesignCommand, DesignCorrectArgs,
-    DesignProposeArgs, DesignRejectArgs, EmailCommand, EmailSendArgs, ListArgs, MigrateArgs,
-    NewArgs, NoteAddArgs, NoteCommand, ResearchArgs, RoutingAcceptArgs, RoutingArgs,
+    DesignProposeArgs, DesignRejectArgs, EmailCommand, EmailSendArgs, ListArgs, MaintenanceCommand,
+    MigrateArgs, NewArgs, NoteAddArgs, NoteCommand, ResearchArgs, RoutingAcceptArgs, RoutingArgs,
     RoutingCommand, RoutingRejectArgs, SearchArgs, SituationArgs, SituationCommand, TodoArgs,
 };
 pub use crate::db::MigrationOutcome;
@@ -273,10 +273,26 @@ pub struct DesignChoiceView {
     pub drop: Option<DesignDropView>,
 }
 
+/// Durable product admission status. Admitted synchronous operations retain
+/// their guard through runtime settlement and domain result handling.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MaintenanceStatus {
+    pub protocol_version: u32,
+    pub holds: Vec<String>,
+    pub drained: bool,
+    pub nonterminal_jobs: Option<usize>,
+}
+
 /// Existing untagged CLI payloads. Domain projections retain their current shape.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum Data {
+    DeploymentCanary {
+        canary: DeploymentCanary,
+    },
+    Maintenance {
+        maintenance: MaintenanceStatus,
+    },
     Init {
         database: String,
     },
@@ -359,6 +375,16 @@ impl Client {
         let mut args = Vec::<OsString>::new();
         let mut push = |parts: &[&str]| args.extend(parts.iter().map(|part| OsString::from(*part)));
         match request {
+            Request::Maintenance(command) => match command {
+                MaintenanceCommand::Canary { directory } => {
+                    push(&["maintenance", "canary", "--directory"]);
+                    args.push(directory.as_os_str().to_owned());
+                }
+                MaintenanceCommand::Hold { run_id } => push(&["maintenance", "hold", run_id]),
+                MaintenanceCommand::Ready { run_id } => push(&["maintenance", "ready", run_id]),
+                MaintenanceCommand::Status => push(&["maintenance", "status"]),
+                MaintenanceCommand::Release { run_id } => push(&["maintenance", "release", run_id]),
+            },
             Request::Init => push(&["init"]),
             Request::Migrate(a) => {
                 push(&["migrate", "--backup"]);
@@ -501,4 +527,14 @@ pub mod tools {
         SituationAssessment, SourceReadRequest, SourceSearchRequest, SubjectIdentity, UnifyRoute,
         UnresolvedAssessmentItem, UnresolvedKind,
     };
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeploymentCanary {
+    pub protocol_version: u32,
+    pub verified: bool,
+    pub database: PathBuf,
+    pub concern_id: ConcernId,
+    pub routing_id: RoutingProposalId,
+    pub job_id: String,
 }

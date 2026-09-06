@@ -22,6 +22,8 @@ const ORIGIN: &str = "http://nucleus.local";
 
 #[derive(Debug, Error)]
 pub enum ClientError {
+    #[error("deployment readiness was not proved for the named maintenance hold")]
+    DeploymentNotReady,
     #[error("HOME is unavailable or is not an absolute path; pass an explicit socket path")]
     MissingHome,
     #[error("Nucleus socket path must be absolute: {0}")]
@@ -103,6 +105,100 @@ impl NucleusClient {
     /// Returns a [`ClientError`] if the API call fails.
     pub async fn health(&self) -> Result<HealthResponseV1, ClientError> {
         self.get("/v1/health").await
+    }
+
+    /// Prove deployment readiness under one exact owner's sole hold.
+    /// The returned health remains unchanged: `accepting_jobs` is false while
+    /// held. Callers must use this result only for installation readiness, never
+    /// ordinary research admission. Every admission activity must be drained.
+    ///
+    /// # Errors
+    /// Returns a [`ClientError`] unless owner, runtime drain, authentication,
+    /// harness, and protocol readiness are all proved.
+    pub async fn health_for_deployment(
+        &self,
+        run_id: &str,
+    ) -> Result<HealthResponseV1, ClientError> {
+        let health = self.health().await?;
+        let status = self.maintenance_status().await?;
+        if status.protocol_version != 1
+            || status.holds != [run_id]
+            || status.nonterminal_jobs != 0
+            || !status.drained
+            || health.harness.is_none()
+            || health.harness_executable.is_none()
+            || !health.authentication.configured
+            || !health.authentication.authenticated
+            || health.detail.is_some()
+            || !health.supported_protocol_versions.contains(&1)
+            || health
+                .execution
+                .is_none_or(|capacity| capacity.active_jobs != 0)
+        {
+            return Err(ClientError::DeploymentNotReady);
+        }
+        Ok(health)
+    }
+
+    /// Inspect durable deployment holds and all unfinished jobs.
+    ///
+    /// # Errors
+    /// Returns a [`ClientError`] if the API call fails.
+    pub async fn maintenance_status(
+        &self,
+    ) -> Result<nucleus_core::MaintenanceStatusV1, ClientError> {
+        self.get("/v1/maintenance").await
+    }
+
+    /// Establish one run-owned deployment admission hold.
+    ///
+    /// # Errors
+    /// Returns a [`ClientError`] if the API call fails.
+    pub async fn maintenance_hold(
+        &self,
+        run_id: &str,
+    ) -> Result<nucleus_core::MaintenanceStatusV1, ClientError> {
+        self.send_json(
+            Method::POST,
+            "/v1/maintenance/hold",
+            &nucleus_core::MaintenanceOwnerV1 {
+                run_id: run_id.into(),
+            },
+        )
+        .await
+    }
+
+    /// Release only the named deployment's hold.
+    ///
+    /// # Errors
+    /// Returns a [`ClientError`] if the API call fails.
+    pub async fn maintenance_release(
+        &self,
+        run_id: &str,
+    ) -> Result<nucleus_core::MaintenanceStatusV1, ClientError> {
+        self.send_json(
+            Method::POST,
+            "/v1/maintenance/release",
+            &nucleus_core::MaintenanceOwnerV1 {
+                run_id: run_id.into(),
+            },
+        )
+        .await
+    }
+
+    /// Admit the fixed no-tools deployment canary under the sole drained hold.
+    ///
+    /// # Errors
+    /// Returns a [`ClientError`] if the API call fails.
+    pub async fn maintenance_canary(&self, run_id: &str) -> Result<JobAcceptedV1, ClientError> {
+        self.send_json(
+            Method::POST,
+            "/v1/maintenance/canary",
+            &nucleus_core::MaintenanceOwnerV1 {
+                run_id: run_id.into(),
+            },
+        )
+        .await
     }
 
     /// Register a short-lived, memory-only launch environment. The returned

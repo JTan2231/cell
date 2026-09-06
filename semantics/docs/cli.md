@@ -13,6 +13,39 @@ installed default is
 `SEMANTICS_ANNALS_CONFIG` only to an absolute alternate path and
 `SEMANTICS_ANNALS` only to an alternate executable.
 
+## Deployment maintenance
+
+```text
+semantics --database DATABASE --json maintenance status
+semantics --database DATABASE --json maintenance hold RUN_ID
+semantics --database DATABASE --json maintenance release RUN_ID
+```
+
+Each database has a private durable sibling gate,
+`<canonical-database>.cell-maintenance`. These commands do not open, initialize, or
+migrate SQLite. Status does not create an absent gate and returns
+`protocol_version: 1`, `contract_version: 1`, `holds`, and `drained`. Drain
+describes live command admission; deployment must also account for durable
+intake and unfinished dependency jobs before claiming domain quiescence.
+
+Any hold prevents every other public CLI command, including typed clients,
+repository reads, project operations, and doctor, before database access;
+opening Semantics state can migrate it. Existing admitted commands may settle.
+Repeated holds are idempotent and survive process exit. Release removes only
+the named owner and never changes project pause, activation, or cursor state.
+Run IDs contain 1–128 ASCII letters, digits, hyphens, underscores, or periods
+and cannot start with a period. Invalid owners or unprovable admission fail
+with `deployment_maintenance`.
+
+An installer may use `CELL_DEPLOYMENT_RUN_ID=RUN_ID` for a controlled command
+only under its sole matching hold with exclusive access after activity drains.
+Another owner's hold remains authoritative. With no hold, the command follows
+ordinary admission. Only doctor uses this ID to request proof of deliberately
+held Nucleus readiness. The typed Nucleus proof requires the same sole owner,
+runtime drain, authentication, and harness readiness; Semantics still checks
+required capabilities and protocol. Ordinary reconciliation continues to
+require normal Nucleus admission.
+
 ## Projects
 
 ```text
@@ -115,3 +148,8 @@ project has the selected Annals identity and activation/scan cursors. An empty
 database may report `activation pending; no active or paused projects` because
 there is no consumer cursor to skip; its first project registration captures
 the then-current watermark. Doctor exits nonzero if any check fails.
+
+Deployment gate identity follows the canonical database path (including a
+symlink alias), or the canonical existing ancestor for a new database.
+Hardlinked databases are rejected before admission. Maintenance status still
+does not open or initialize the database.

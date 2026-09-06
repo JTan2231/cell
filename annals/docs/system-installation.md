@@ -622,11 +622,11 @@ delivery, and corpus success; Clockwork does not ingest Annals log bodies.
 Krisis decision accounts use a second physical Annals library, never the
 primary paths above. Annals owns the supported per-user provisioner and its
 `packaging/launchd/annals-decisions.toml.in` and
-`annals-decisions-inbox.clockwork.toml.in` inputs. Nothing invokes the
-provisioner implicitly, and the ordinary primary-library deployer does not
-activate this second library. After an Annals content release has been
-installed and verified, an authorized current-user operator invokes it
-explicitly:
+`annals-decisions-inbox.clockwork.toml.in` inputs. The ordinary primary-library
+deployer does not activate this second library. The Cell deployment adapter
+explicitly composes primary deployment with this product-owned provisioner;
+an independent operator can invoke it after an Annals content release has
+been installed and verified:
 
 ```sh
 release="$HOME/Library/Application Support/Annals/install/releases/<64-hex-release-id>"
@@ -1030,6 +1030,39 @@ Back up and explicitly remove the remaining state only when the library,
 queued material, logs, and archives are no longer needed. Nucleus credentials
 and raw model output belong to Nucleus's separate retention boundary.
 
+## Coordinated deployment maintenance
+
+`annals/deployment/adapter.py` is Annals' boundary for the Cell deployment
+coordinator. It composes the existing primary deployer and the exact installed
+release's decisions provisioner. This composition owns supported initialization
+or migration of the dedicated library as part of the selected Annals update;
+it does not infer legacy Krisis/Semantics activation or invent a cutover
+watermark. Annals retains authority over its release, both physical libraries,
+spools, configuration, backups, exact Clockwork definitions, and recovery.
+
+The adapter inspects installed admission support before effects. A currently
+installed executable without `maintenance status` cannot be fenced by a new
+candidate and stops coordinated deployment. Install the compatible admission
+release once through the existing documented deployers and their quiescence
+procedure; a candidate hold is not evidence that an older executable is held.
+Ordinary supported new-state setup continues through the existing deployers.
+
+Each selected database uses its own `<database>.cell-maintenance` sibling
+gate. The coordinator establishes all affected run-owned holds and proves
+drain before applying any selected product. Controlled installer commands use
+the same sole `CELL_DEPLOYMENT_RUN_ID` with exclusive activity; without a
+hold, they use ordinary admission. This control is separate from spool
+`.maintenance` receipts and operator `.paused` state. The adapter preserves
+operator pauses and the predeployment enabled booleans of owned schedules,
+including dependent Krisis and Semantics controls affected by an Annals update.
+Read-only Annals feed access remains available for held dependency doctors.
+
+After verification, release removes only this run's hold. Recovery stops when
+a product installer's retained maintenance marker or transaction still needs
+its documented recovery procedure; the adapter does not erase that marker or
+claim its own hold as recovery authority. Unknown ownership, incomplete drain,
+and an unproved prior or candidate installation leave admission held.
+
 ## Failure recovery and maintenance
 
 `annals inbox status` summarizes incoming, ready, settling, total queued and
@@ -1157,3 +1190,10 @@ priority choices, and sequence order.
 Keep the `done`, `duplicates`, `failed`, and `skipped` envelopes according to
 the installation's retention policy; Annals does not silently delete source
 files from these archives.
+
+The deployment adapter retains its private isolated canary state under the
+run directory on success and failure; it does not remove that evidence. A
+verified response identifies the canary directory. Annals exercises local
+retention, Krisis durable baseline replay, and Semantics repository mutation
+and replay, alongside each product's dependency doctor. These checks do not
+claim a live model-backed domain integration.

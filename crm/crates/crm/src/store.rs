@@ -263,6 +263,37 @@ impl Store {
         })
     }
 
+    /// Read only the migration-compatible operational state, including queued
+    /// work and committed revisions whose runtime has not settled.
+    pub fn maintenance_work(path: &Path) -> Result<(u64, bool)> {
+        let connection = open_connection(path, true)?;
+        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if ![1, SCHEMA_VERSION].contains(&version) {
+            return Err(Error::domain(
+                "schema_unsupported",
+                "unsupported CRM maintenance schema",
+            ));
+        }
+        require_schema_version(&connection, version)?;
+        let unfinished: i64 = connection.query_row(
+            "SELECT count(*) FROM steward_updates WHERE status IN ('queued','running') OR (status = 'applied' AND runtime_state IS NULL)",
+            [], |row| row.get(0),
+        )?;
+        let pid: Option<u32> = connection.query_row(
+            "SELECT worker_pid FROM crm_meta WHERE marker = 'crm'",
+            [],
+            |row| row.get(0),
+        )?;
+        let alive = pid.map(process_is_alive).transpose()?.unwrap_or(false);
+        let unfinished = u64::try_from(unfinished).map_err(|_| {
+            Error::domain(
+                "maintenance_state_invalid",
+                "negative unfinished update count",
+            )
+        })?;
+        Ok((unfinished, alive))
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }

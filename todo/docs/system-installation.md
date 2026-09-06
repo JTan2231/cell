@@ -88,7 +88,19 @@ it records whether the email LaunchAgent is loaded and quiesces it. It creates a
 private transaction directory, asks the candidate binary to run `todo migrate
 --backup` with a nonexistent absolute path inside that directory, switches the
 release selector, and validates the installed CLI. Only then does it install
-and bootstrap the final `org.todo.daily-email` definition.
+the final `org.todo.daily-email` definition. It bootstraps an update only if
+the schedule was previously loaded; an unloaded schedule remains unloaded.
+Fresh installation bootstraps only when no existing plist or disabled override
+records an operator choice. The deployer never changes launchd enable/disable
+overrides. A service that is both loaded and disabled is refused before
+quiescence because launchd cannot reload it without changing that override.
+Coordinated deployment retains Todo's maintenance hold throughout these changes
+and its isolated canary never sends email.
+The Todo deployment adapter captures loaded/disabled state and proves that the
+live plist matches the selected release's rendered template. Verification and
+recovery retain the hold if those controls drift, including interruption between
+bootout and bootstrap. Recovery never guesses whether an unload was an operator
+pause or an incomplete installer step.
 
 The candidate migrator writes a complete pre-migration SQLite backup before
 the version-2 transaction begins. If migration, selector switching, smoke
@@ -177,3 +189,49 @@ TODO_DATABASE=/path/to/other.db todo list
 todo --config /path/to/other.toml list
 TODO_CONFIG=/path/to/other.toml todo list
 ```
+
+## Coordinated deployment maintenance
+
+```sh
+todo --json maintenance hold RUN_ID
+todo --json maintenance status
+todo --json maintenance ready RUN_ID
+todo --json maintenance release RUN_ID
+todo --json maintenance canary --directory /absolute/private/canary-directory
+```
+
+Normal database/config selection applies. The selected database parent owns
+`deployment-maintenance/`; databases sharing a parent share the same gate.
+New research and ordinary mutations, including scheduled email send, retain a
+shared admission guard through completion. Holds prevent new admissions
+before input is retained, and do not interrupt already admitted research or
+change an operator configuration. Read-only commands remain available.
+
+JSON returns `data.maintenance` with `protocol_version: 1`, `holds`, `drained`,
+and `nonterminal_jobs`. Drain requires both no live admission guard and no
+accepted/running/waiting Nucleus jobs attributed to Todo, conservatively across
+all Todo databases. This catches a killed CLI whose job still exists. An
+unavailable runtime returns a null count and `drained: false`; it is never
+reported as zero. Holds survive process exit and release removes only its
+exact owner.
+
+`migrate --backup` with `CELL_DEPLOYMENT_RUN_ID` requires its sole matching
+hold and exclusive activity; no caller-supplied value bypasses another hold.
+The macOS deployer accepts `--expected-current absent|releases/HASH` under its
+update lock, preserves configured email addresses, and accepts either ordinary
+strict Nucleus readiness or the named deployment's proved held readiness.
+
+The canary uses a product-marked private synthetic database and source file,
+runs actual concern-routing research, and proves one pending routing record
+and the correlated terminal Todo Nucleus job. It returns `data.canary` with
+`protocol_version`, `verified`, database, concern, routing, and job identities.
+It never accepts a proposal or sends email. Foreign directories are refused.
+If interrupted research has no domain result, it fails with retained evidence
+instead of creating a replacement attempt. Requester canaries run after
+Nucleus admission is restored, while production Todo holds remain.
+
+`maintenance ready RUN_ID` requires the sole drained hold and proves that this
+binary can read the actual configured database: current version, every required
+table/index/trigger definition, SQLite integrity, and foreign keys. This is the
+production storage compatibility proof after an interrupted migration; the
+isolated canary alone cannot supply it.

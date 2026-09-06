@@ -183,10 +183,26 @@ pub struct UpdateData {
     pub update: UpdateView,
 }
 
+/// Product-owned deployment hold and runtime settlement report.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MaintenanceStatus {
+    pub protocol_version: u32,
+    pub holds: Vec<String>,
+    pub drained: bool,
+    pub unsettled_updates: u64,
+    pub worker_alive: bool,
+}
+
 /// Every public CLI success payload. Hidden workers have no public response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Data {
+    DeploymentCanary {
+        canary: DeploymentCanary,
+    },
+    Maintenance {
+        maintenance: MaintenanceStatus,
+    },
     Init {
         database: PathBuf,
         schema_version: u32,
@@ -246,6 +262,17 @@ pub enum Data {
 /// Public commands; `_worker` remains private to CRM.
 #[derive(Debug)]
 pub enum Request {
+    MaintenanceCanary {
+        directory: PathBuf,
+    },
+    MaintenanceHold {
+        run_id: String,
+    },
+    MaintenanceStatus,
+    MaintenanceRelease {
+        run_id: String,
+    },
+    MaintenanceDrain,
     Init,
     Migrate {
         backup: PathBuf,
@@ -328,6 +355,14 @@ impl Client {
         let mut args: Vec<OsString> = Vec::new();
         let mut push = |parts: &[&str]| args.extend(parts.iter().map(|part| OsString::from(*part)));
         match request {
+            Request::MaintenanceCanary { directory } => {
+                push(&["maintenance", "canary", "--directory"]);
+                args.push(directory.as_os_str().to_owned());
+            }
+            Request::MaintenanceHold { run_id } => push(&["maintenance", "hold", run_id]),
+            Request::MaintenanceStatus => push(&["maintenance", "status"]),
+            Request::MaintenanceRelease { run_id } => push(&["maintenance", "release", run_id]),
+            Request::MaintenanceDrain => push(&["maintenance", "drain"]),
             Request::Init => push(&["init"]),
             Request::Migrate { backup } => {
                 push(&["migrate", "--backup"]);
@@ -404,4 +439,14 @@ impl Client {
         }
         self.call(&args, input)
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeploymentCanary {
+    pub protocol_version: u32,
+    pub verified: bool,
+    pub database: PathBuf,
+    pub case_id: String,
+    pub update_id: String,
+    pub job_id: String,
 }

@@ -31,12 +31,23 @@ Semantics marker, and Chancery introduction evidence. Root CI runs
 `pipeline/recognition.sh` as a brokered heavy body against its exact source
 candidate before the selected product gates. Full Chancery validation remains
 in the existing product and integrated catalog gates.
+The same root recognition body also formats, lints and tests the shared
+`cell-maintenance` library; it is infrastructure rather than a separate product
+identity or release unit.
 
 Product `ci.sh` files are synchronous clients of the host-scoped CI broker.
 The broker invokes `pipeline/ci.sh` as the private body. Public product entry
 points always request admission; an inherited environment flag cannot bypass
 the broker. Root and release orchestration use those public entry points so
 each product gate remains an independently scheduled unit.
+
+For deployment preparation, public product gates accept
+`--stage-candidate ABSOLUTE_DIRECTORY`. They run the same complete checks, seal
+the exact release executables before their admitted body exits, and return a
+broker receipt on success. Staging stays inside the shared Cargo lane; it is
+not another build path or a way to skip admission. The deployment coordinator
+accepts staged bytes only with the matching passed receipt and fixed committed
+source identity. See [deployment](../deployment/README.md).
 
 `pipeline/release.sh` retains product release authority. It holds one lock in
 the repository's Git common directory from preflight through CI and atomic

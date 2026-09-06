@@ -16,6 +16,7 @@ else
 fi
 
 binary_path=
+expected_current=
 chancery_path=
 install_home=${HOME:-}
 
@@ -29,6 +30,7 @@ product binding and never initializes or migrates Clockwork runtime state.
 
 Options:
   --chancery ABSOLUTE_PATH  Candidate Chancery reader used to validate the staged provider
+  --expected-current SELECTOR  Require the observed absent or releases/HASH selection
   --home ABSOLUTE_PATH  Override the operator home (primarily for tests)
 EOF
 }
@@ -48,6 +50,15 @@ while [ "$#" -gt 0 ]; do
         --chancery)
             [ "$#" -ge 2 ] || fail '--chancery requires a path'
             chancery_path=$2
+            shift 2
+            ;;
+        --expected-current)
+            [ "$#" -ge 2 ] || fail '--expected-current requires a selector'
+            expected_current=$2
+            case "$expected_current" in
+                absent|releases/*) ;;
+                *) fail 'expected current must be absent or releases/HASH' ;;
+            esac
             shift 2
             ;;
         --home)
@@ -467,6 +478,11 @@ if [ -L "$CURRENT_LINK" ]; then
     old_current=$(readlink "$CURRENT_LINK")
 elif [ -e "$CURRENT_LINK" ]; then
     fail "$CURRENT_LINK must be a symbolic link"
+fi
+if [ -n "$expected_current" ]; then
+    observed_current=${old_current:-absent}
+    [ "$observed_current" = "$expected_current" ] \
+        || fail "installed current changed: expected $expected_current, observed $observed_current"
 fi
 if [ -L "$PREVIOUS_LINK" ]; then
     old_previous=$(readlink "$PREVIOUS_LINK")

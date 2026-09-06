@@ -33,6 +33,12 @@ and optimistic `current` checks are generated from the
 [deployment profile](deployment/README.md); stateful products retain their own
 lifecycle logic.
 
+`./deploy.sh SYSTEM...` prepares and deploys selected systems from one committed
+local `main` snapshot. The detached coordinator stages tested binaries, holds
+and drains affected products, invokes their installers and canaries, and records
+durable recovery evidence. See [deployment and initial migration](deployment/README.md)
+and the [shared operator manual](nucleus/docs/operator-manual.md).
+
 [Usher](usher/README.md) checks declared Cell membership: product identity,
 Semantics participation, and Chancery presence. Every root CI invocation runs
 the check. After building, `target/release/usher report .` shows each product's

@@ -17,7 +17,10 @@ fn init_and_json_errors_follow_the_cli_contract() -> TestResult {
     assert!(initialized.status.success());
     let value = stdout_json(&initialized)?;
     assert_eq!(value["ok"], true);
-    assert_eq!(value["data"]["database"], database.display().to_string());
+    assert_eq!(
+        value["data"]["database"],
+        database.canonicalize()?.display().to_string()
+    );
 
     let duplicate = run(&database, &["--json", "init"])?;
     assert_eq!(duplicate.status.code(), Some(4));
@@ -316,5 +319,97 @@ fn seed_pending_concern(database: &Path) -> TestResult {
         "INSERT INTO concerns(id, body, source_path) VALUES(3, ?1, ?2)",
         params!["private concern body", "/tmp/private-concern.md"],
     )?;
+    Ok(())
+}
+
+#[test]
+fn maintenance_blocks_new_research_before_retaining_input_and_preserves_holds() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let database = directory.path().join("todo.db");
+    assert!(run(&database, &["init"])?.status.success());
+    let held = run(&database, &["--json", "maintenance", "hold", "rollout-one"])?;
+    assert!(held.status.success());
+    assert!(
+        run(
+            &database,
+            &["--json", "maintenance", "hold", "operator-two"]
+        )?
+        .status
+        .success()
+    );
+    let blocked = run(
+        &database,
+        &[
+            "--json",
+            "new",
+            "Blocked research",
+            "--source",
+            "/missing-source",
+        ],
+    )?;
+    assert_eq!(
+        stderr_json(&blocked)?["error"]["code"],
+        "deployment_maintenance"
+    );
+    let connection = Connection::open(&database)?;
+    let retained: i64 =
+        connection.query_row("SELECT count(*) FROM concerns", [], |row| row.get(0))?;
+    assert_eq!(retained, 0);
+    let release = run(
+        &database,
+        &["--json", "maintenance", "release", "rollout-one"],
+    )?;
+    assert_eq!(
+        stdout_json(&release)?["data"]["maintenance"]["holds"],
+        serde_json::json!(["operator-two"])
+    );
+    assert!(run(&database, &["--json", "list"])?.status.success());
+    assert!(
+        run(
+            &database,
+            &["--json", "maintenance", "release", "operator-two"]
+        )?
+        .status
+        .success()
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn database_aliases_cannot_bypass_deployment_admission() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let aliases = tempfile::tempdir()?;
+    let database = directory.path().join("todo.db");
+    assert!(run(&database, &["init"])?.status.success());
+    assert!(
+        run(&database, &["maintenance", "hold", "alias-test"])?
+            .status
+            .success()
+    );
+    let symbolic = aliases.path().join("symbolic.db");
+    std::os::unix::fs::symlink(&database, &symbolic)?;
+    let output = run(
+        &symbolic,
+        &[
+            "--json",
+            "concern",
+            "add",
+            "Blocked",
+            "--source",
+            "/missing-source",
+        ],
+    )?;
+    assert_eq!(
+        stderr_json(&output)?["error"]["code"],
+        "deployment_maintenance"
+    );
+    let hard = aliases.path().join("hard.db");
+    fs::hard_link(&database, &hard)?;
+    let output = run(&hard, &["--json", "init"])?;
+    assert_eq!(
+        stderr_json(&output)?["error"]["code"],
+        "deployment_maintenance"
+    );
     Ok(())
 }

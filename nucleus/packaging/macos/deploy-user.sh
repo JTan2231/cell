@@ -13,6 +13,7 @@ else
 fi
 
 binary_path=
+expected_current=
 daemon_path=
 codex_path=
 codex_home=
@@ -26,6 +27,7 @@ Usage: deploy-user.sh --binary ABSOLUTE_PATH --daemon ABSOLUTE_PATH \
 Install or update the current user's macOS Nucleus service.
 
 Options:
+  --expected-current VALUE  Refuse stale plans (absent or releases/HASH)
   --codex-home ABSOLUTE_PATH  Import signed-in auth into Nucleus-owned state
   --home ABSOLUTE_PATH        Override the operator home (primarily for tests)
 EOF
@@ -75,6 +77,12 @@ atomic_symlink() {
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
+        --expected-current)
+            [ "$#" -ge 2 ] || fail '--expected-current requires a value'
+            expected_current=$2
+            case "$expected_current" in absent|releases/*) ;; *) fail 'invalid expected current selector' ;; esac
+            shift 2
+            ;;
         --binary)
             [ "$#" -ge 2 ] || fail '--binary requires a path'
             binary_path=$2
@@ -277,6 +285,11 @@ if [ -L "$current_link" ]; then
     old_current=$(readlink "$current_link")
 elif [ -e "$current_link" ]; then
     fail "$current_link must be a symbolic link"
+fi
+if [ -n "$expected_current" ]; then
+    observed_current=${old_current:-absent}
+    [ "$observed_current" = "$expected_current" ] \
+        || fail "stale deployment plan: expected $expected_current, found $observed_current"
 fi
 if [ -L "$previous_link" ]; then
     old_previous=$(readlink "$previous_link")

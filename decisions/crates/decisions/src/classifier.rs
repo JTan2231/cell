@@ -237,6 +237,7 @@ impl Runner {
     }
 
     pub(crate) fn doctor(&self) -> AppResult<()> {
+        let deployment_run_id = std::env::var("CELL_DEPLOYMENT_RUN_ID").ok();
         let runtime = Builder::new_current_thread()
             .enable_all()
             .build()
@@ -252,7 +253,7 @@ impl Runner {
                 None => NucleusClient::for_current_user(),
             }
             .map_err(client_error)?;
-            require_health(&client).await?;
+            require_health(&client, deployment_run_id.as_deref()).await?;
             let _registration = register_contract(&client, true).await?;
             Ok(())
         })
@@ -327,7 +328,7 @@ impl Runner {
             None => NucleusClient::for_current_user(),
         }
         .map_err(client_error)?;
-        require_health(&client).await?;
+        require_health(&client, None).await?;
         let registration = register_contract(&client, observation.is_some()).await?;
         let request = build_request(
             requester_id,
@@ -718,8 +719,20 @@ fn abandonment_action(state: Option<&JobState>, admitted: bool) -> AppResult<Aba
     }
 }
 
-async fn require_health(client: &NucleusClient) -> AppResult<()> {
-    let health = client.health().await.map_err(client_error)?;
+async fn require_health(client: &NucleusClient, deployment_run_id: Option<&str>) -> AppResult<()> {
+    let mut health = client.health().await.map_err(client_error)?;
+    let mut deployment_proved = false;
+    if (health.status != "ok" || !health.accepting_jobs)
+        && let Some(run_id) = deployment_run_id.filter(|run_id| !run_id.is_empty())
+    {
+        // Only doctors pass an owner. Classification always requires normal
+        // admission, even when this process inherited a deployment ID.
+        health = client
+            .health_for_deployment(run_id)
+            .await
+            .map_err(client_error)?;
+        deployment_proved = true;
+    }
     let required = [
         HarnessCapability::ExactModel,
         HarnessCapability::ReasoningEffort,
@@ -733,8 +746,7 @@ async fn require_health(client: &NucleusClient) -> AppResult<()> {
         .filter(|capability| !health.capabilities.contains(capability))
         .map(|capability| format!("{capability:?}"))
         .collect::<Vec<_>>();
-    if health.status != "ok"
-        || !health.accepting_jobs
+    if (!deployment_proved && (health.status != "ok" || !health.accepting_jobs))
         || !health.authentication.authenticated
         || !health
             .supported_protocol_versions
@@ -2062,6 +2074,59 @@ mod tests {
     }
 
     const READY_HEALTH: &str = r#"{"version":1,"status":"ok","daemonVersion":"0.1.0","acceptingJobs":true,"checkedAt":"2026-09-03T00:00:00Z","supportedProtocolVersions":[1],"harness":{"harness":"codex","harnessVersion":"0.146.0","adapterVersion":"0.1.0"},"harnessExecutable":"/usr/bin/false","capabilities":["exact-model","reasoning-effort","workspace-none","dynamic-client-tools","developer-instructions","persistent-file-authentication"],"authentication":{"codexHome":"/tmp/codex-home","configured":true,"authenticated":true}}"#;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn deployment_doctor_requires_its_sole_hold_and_preserves_admission_checks()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for (owner, holds, missing_capabilities, accepted) in [
+            (Some("run-a"), vec!["run-a"], false, true),
+            (Some("run-a"), vec!["run-b"], false, false),
+            (Some("run-a"), vec!["run-a", "run-b"], false, false),
+            (Some("run-a"), vec!["run-a"], true, false),
+            (None, vec!["run-a"], false, false),
+        ] {
+            let directory = tempfile::tempdir()?;
+            let socket = directory.path().join("nucleus.sock");
+            let listener = tokio::net::UnixListener::bind(&socket)?;
+            let mut health: serde_json::Value = serde_json::from_str(READY_HEALTH)?;
+            health["status"] = serde_json::json!("degraded");
+            health["acceptingJobs"] = serde_json::json!(false);
+            health["execution"] =
+                serde_json::json!({"maxActiveJobs": 1, "activeJobs": 0, "availableSlots": 1});
+            if missing_capabilities {
+                health["capabilities"] = serde_json::json!([]);
+            }
+            let server = tokio::spawn(async move {
+                let health_requests = if owner.is_some() { 2 } else { 1 };
+                for _ in 0..health_requests {
+                    serve_http_response(
+                        &listener,
+                        "GET /v1/health HTTP/1.1",
+                        "200 OK",
+                        &health.to_string(),
+                    )
+                    .await?;
+                }
+                if owner.is_some() {
+                    let maintenance = serde_json::json!({"protocol_version": 1,
+                        "holds": holds, "drained": true, "nonterminal_jobs": 0});
+                    serve_http_response(
+                        &listener,
+                        "GET /v1/maintenance HTTP/1.1",
+                        "200 OK",
+                        &maintenance.to_string(),
+                    )
+                    .await?;
+                }
+                Ok::<_, std::io::Error>(())
+            });
+            let client = NucleusClient::new(&socket)?;
+            let result = super::require_health(&client, owner).await;
+            assert_eq!(result.is_ok(), accepted, "owner={owner:?}: {result:?}");
+            server.await??;
+        }
+        Ok(())
+    }
 
     #[allow(clippy::too_many_lines)]
     async fn terminal_owner_resolution(

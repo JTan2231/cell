@@ -42,6 +42,9 @@ pub struct Cli {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
+    /// Coordinate durable deployment admission.
+    #[command(subcommand)]
+    Maintenance(MaintenanceCommand),
     /// Create a new database without replacing an existing file.
     Init,
     /// Upgrade an older database after writing a caller-selected backup.
@@ -532,4 +535,24 @@ mod tests {
         };
         assert_eq!(args.backup, Path::new("/tmp/todo-v1.db.backup"));
     }
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum MaintenanceCommand {
+    /// Prove this binary can read the complete configured database under its hold.
+    Ready {
+        run_id: String,
+    },
+    /// Run real concern research in a retained synthetic isolated database.
+    Canary {
+        #[arg(long)]
+        directory: PathBuf,
+    },
+    Hold {
+        run_id: String,
+    },
+    Status,
+    Release {
+        run_id: String,
+    },
 }

@@ -98,6 +98,46 @@ Codex path. It suppresses detailed child errors and emits only a fixed failure
 message, so it writes body-free output to the existing Decisions log path.
 Interactive `krisis` diagnostics remain detailed.
 
+## Coordinated deployment maintenance
+
+`decisions/deployment/adapter.py` is the Krisis product boundary used by Cell's
+deployment coordinator. It composes the existing prepare and final-cutover
+deployer, retains product-owned maintenance through group verification, and
+releases it only through the deployer's matching owned-hold operation. It
+preserves captured schedule enabled booleans and the write-once observer
+baseline. An ordinary update never invents a legacy activation watermark or
+performs an implicit Semantics cutover.
+
+The adapter first proves that the installed public executable supports
+`maintenance status`. An older installed executable cannot be fenced by a
+candidate gate: coordinated inspection stops before effects. Bootstrap that
+compatibility release through the existing documented deployer and its writer
+quiescence procedure. Supported new installation still uses the product's
+existing prepare and final-cutover path.
+
+The CLI gate is the private sibling `<database>.cell-maintenance`, separate
+from `.clockwork-maintenance` and its installer receipt. Every ordinary public
+command is fenced before database access. The coordinator holds every affected
+product before applying selected candidates. Controlled installation uses the
+same sole `CELL_DEPLOYMENT_RUN_ID` and exclusive drained activity; no hold
+means ordinary admission. Doctor can prove Nucleus readiness under this exact
+run's Nucleus hold while ordinary model submissions remain stopped.
+
+An ordinary Annals dependency update may change the exact Annals executable
+or config pin while preserving the persistent decisions-library ID. Before
+changing it, Krisis proves the selected prior definition against the prior
+release and private ownership receipt's old binary, config, and library ID.
+It then validates the newly requested target with candidate doctor. Matching
+only the new paths does not prove ownership of the old definition. A changed
+library ID, foreign receipt, or unproved prior definition stops the update;
+this transition does not rebind durable account identity to another library.
+
+Group release removes only the coordinator's named hold after product
+verification. Recovery stops on a retained installer maintenance marker or
+unfinished product transaction and requires the existing product recovery
+procedure; it never removes such evidence to force progress. An unproved
+installation remains held.
+
 ## Verification
 
 After a separately authorized final cutover:
@@ -134,3 +174,10 @@ foreign or legacy bindings are left
 untouched and stop the operation. It retains the database, baseline, receipt
 ledger, legacy Decisions history, releases, logs, and Clockwork history.
 Deleting those requires a separate destructive decision.
+
+The deployment adapter retains its private isolated canary state under the
+run directory on success and failure; it does not remove that evidence. A
+verified response identifies the canary directory. Annals exercises local
+retention, Krisis durable baseline replay, and Semantics repository mutation
+and replay, alongside each product's dependency doctor. These checks do not
+claim a live model-backed domain integration.

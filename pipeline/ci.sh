@@ -228,6 +228,17 @@ EOF
 
 [ "$#" -ge 1 ] || pipeline_fail 'usage: pipeline/ci.sh PRODUCT'
 product_id=$1
+shift
+stage_candidate=
+if [ "$#" -gt 0 ]; then
+    [ "$#" -eq 2 ] && [ "$1" = --stage-candidate ] \
+        || ci_fail 'usage: PRODUCT [--stage-candidate ABSOLUTE_DIRECTORY]'
+    stage_candidate=$2
+    case "$stage_candidate" in
+        /*) ;;
+        *) ci_fail 'candidate staging directory must be absolute' ;;
+    esac
+fi
 pipeline_load_descriptor "$product_id"
 pipeline_validate_descriptor
 
@@ -260,5 +271,13 @@ ci_doc
 ci_build
 ci_run_extra "$CI_EXTRA_AFTER_BUILD"
 ci_check_binaries
+
+# This copy is part of the admitted product gate. A later gate may overwrite
+# the shared Cargo target only after these exact binaries have been sealed.
+if [ -n "$stage_candidate" ]; then
+    python3 "$PIPELINE_ROOT/deployment/candidate.py" \
+        --source-root "$PIPELINE_ROOT" --product "$PRODUCT_ID" \
+        --output "$stage_candidate" --binary-spec "$RELEASE_BINARY_CHECKS"
+fi
 
 printf '%s\n' 'ci.sh: green'

@@ -5,7 +5,7 @@
   "mode": "operate",
   "support": "supported",
   "title": "Maintain a project's semantic repository service",
-  "summary": "Install, register, seed, pause, resume, route, recover, or uninstall the project-scoped Semantics registry, repository, and Clockwork-bound serial 60-second worker.",
+  "summary": "Install, register, seed, pause, resume, route, maintenance-hold, recover, or uninstall the project-scoped Semantics registry, repository, and Clockwork-bound serial 60-second worker.",
   "use_when": [
     "Semantics should be installed, updated, diagnosed, or uninstalled for this macOS user.",
     "A folder should join, move within, pause, resume, or retire from the project registry.",
@@ -18,6 +18,7 @@
   ],
   "outcome": "A validated content-addressed installation and explicit project registry whose immutable semantic repositories are maintained from post-activation accounts in one exact Annals decisions library.",
   "effects": [
+    "The Cell product adapter composes the existing deployer under durable run-owned CLI admission and preserves project pauses, activation and scan cursors, and prior schedule enabled booleans without an implicit legacy activation.",
     "Deployment writes a content-addressed user release whose identity covers the runner and unrendered Clockwork template, renders absolute paths and hashes only after that identity exists, publishes CLI and Chancery selectors, registers an immutable `semantics/worker` definition, and may initialize or migrate retained SQLite after a private backup.",
     "Registration stores the canonical folder and current Annals decisions-feed watermark; it intentionally excludes earlier accounts. Existing schema-one projects require one explicit common-watermark feed activation after legacy intake is drained.",
     "The worker reads the public Annals decision-account feed and Conversations, may submit one restricted Nucleus job, and commits at most one valid semantic revision per invocation.",
@@ -34,6 +35,7 @@
     "Each registered root is canonical and uniquely owned, and every new account-derived revision includes an exact Annals library/event/account grounding."
   ],
   "failure_and_recovery": [
+    "Coordinated inspection stops before effects if the installed public CLI lacks maintenance support; bootstrap a compatible admission release through the existing deployer and quiescence procedure. Adapter recovery stops on a retained product-installer maintenance marker or unfinished transaction and never erases it or another owner's hold to force progress.",
     "Pause the affected project before semantic maintenance; paused state prevents a late Nucleus proposal from committing.",
     "A failed deployment restores prior selectors and the quiescent database plus sidecars. It restores the exact prior non-null Clockwork selection and enabled state, or restores the prior owned legacy LaunchAgent, never both. A previously absent or disabled-null binding becomes a disabled tombstone that may retain the candidate digest because Clockwork has no clear-selection operation; a previously disabled selected definition is restored without transient activation. Semantics retains exact release bytes for every registered immutable definition. Before releasing the worker flock, an unprovable rollback retains the release-independent maintenance gate, exact private current-release selector, authenticated hold, and recovery backup while attempting both scheduler cleanups and removing public selectors.",
     "Clockwork definition ownership is a point-in-time inspection rather than a compare-and-swap; Semantics serializes its own deploy and uninstall, while concurrent direct same-user mutation of `semantics/worker` is unsupported and may require maintenance-gated recovery.",
@@ -81,6 +83,9 @@
     "The requested action would delete retained state, manufacture a cursor, expose repository bodies in logs, or let Nucleus bypass Semantics validation."
   ],
   "interfaces": [
+    {"label": "Inspect deployment admission", "invocation": "/Users/joey/.local/bin/semantics --database ABSOLUTE_DATABASE --json maintenance status"},
+    {"label": "Hold deployment admission", "invocation": "/Users/joey/.local/bin/semantics --database ABSOLUTE_DATABASE --json maintenance hold RUN_ID"},
+    {"label": "Release own deployment hold", "invocation": "/Users/joey/.local/bin/semantics --database ABSOLUTE_DATABASE --json maintenance release RUN_ID"},
     {"label": "Deploy", "invocation": "semantics/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH --clockwork ABSOLUTE_CLOCKWORK_PATH [--final-decisions-watermark OPAQUE_CURSOR --keep-maintenance]"},
     {"label": "Doctor", "invocation": "/Users/joey/.local/bin/semantics --json doctor"},
     {"label": "Register project", "invocation": "/Users/joey/.local/bin/semantics project register ID ABSOLUTE_ROOT"},
@@ -97,13 +102,16 @@
       {"status": "declared", "statement": "The local operator may install and diagnose Semantics, maintain explicitly marked project registrations and intake, or recover its serial worker."}
     ],
     "preconditions": [
+      {"status": "declared", "statement": "Coordinated updates prove the currently installed affected executables support maintenance, establish all affected run-owned holds, and prove product and dependency drain before applying selected candidates. A candidate does not fence older public executables that lack admission support."},
       {"status": "declared", "statement": "Project registration or move selects a canonical folder with the exact root participation marker; worker operation requires compatible Annals decision-account feed, Conversations exact-cwd, and Nucleus execution contracts."},
       {"status": "declared", "statement": "Retirement requires a paused project with no unresolved assigned intake, and retained-state deletion is outside this operation."}
     ],
     "inputs": [
+      {"status": "declared", "statement": "Maintenance accepts the selected database and one run ID of 1–128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. CELL_DEPLOYMENT_RUN_ID permits a controlled command only under the same sole hold and exclusive drained activity; absent holds use ordinary admission."},
       {"status": "declared", "statement": "Inputs are an exact project ID and canonical root, explicit administrative command, selected intake event where applicable, or one version-matched deployment candidate."}
     ],
     "outputs": [
+      {"status": "declared", "statement": "Maintenance returns protocol_version 1, contract_version 1, holds, and drained without opening, initializing, or migrating SQLite; status leaves an absent gate absent. Drained covers participating live commands and is not alone proof that durable intake or Nucleus jobs are terminal."},
       {"status": "declared", "statement": "Outputs are a validated installed release, durable project or intake transition, one optional committed semantic revision, or structured readiness and recovery evidence."}
     ],
     "data_semantics": [
@@ -120,6 +128,8 @@
       {"status": "declared", "statement": "Administrative writes use the local Semantics CLI and owned user state; the worker receives read-only upstream contracts and gives Nucleus workspace none with no shell or web."}
     ],
     "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "The durable gate is the private sibling <database>.cell-maintenance. Hold atomically fences every other public CLI command and typed client before SQLite access, including reads and doctor because opening state may migrate it. Existing commands may settle and holds survive process exit. Repeated hold and release are idempotent; release removes only its owner and preserves project pause, activation, and cursor state."},
+      {"status": "declared", "statement": "The Cell adapter composes existing deployment and verification without choosing a final Decisions watermark, retains each product's commit and recovery boundary, and stops on retained installer markers or unproved recovery. Group verification precedes release of the coordinator's own holds."},
       {"status": "declared", "statement": "Registration and intake transitions are durable, one worker is cross-process serial, repository revisions are atomic and append-only, and identical mailbox redelivery is idempotent while conflicts fail."},
       {"status": "declared", "statement": "Deployment quiesces the worker and database, backs up database plus sidecars, restores at most one prior active scheduler, and keeps prior absent or disabled state disabled. When rollback cannot be proved, it retains the release-independent maintenance gate before releasing the worker lock, attempts both scheduler cleanups, and removes public selectors; the gate is the domain-admission guarantee even when scheduler cleanup cannot be proved."}
     ],
@@ -127,6 +137,7 @@
       {"status": "declared", "statement": "Each worker invocation processes at most one reconciliation and one Nucleus job, with one immutable managed tool, neutral cwd, workspace none, no shell, and no web."}
     ],
     "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Only doctor may prove deliberately held Nucleus readiness through health_for_deployment for the same sole run hold with runtime drain, authentication, and harness readiness. Required Semantics capabilities and protocol checks remain; ordinary reconciliation requires public Nucleus admission."},
       {"status": "declared", "statement": "Operation contract version 3 requires Annals decision-account exchange contract 1, Conversations history contract 3, Nucleus execution contract 1, and Clockwork schedule contract 1; preserved legacy schemas retain their identity and new tool meaning uses successor identities."}
     ],
     "reliances": [

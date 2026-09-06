@@ -46,6 +46,51 @@ pub(crate) fn open_write(path: &Path) -> Result<Connection, AppError> {
     Ok(connection)
 }
 
+/// Prove that this binary can read the complete installed storage contract.
+pub(crate) fn verify(path: &Path) -> Result<(), AppError> {
+    let connection = open_read(path)?;
+    let expected = Connection::open_in_memory()?;
+    expected.execute_batch(SCHEMA)?;
+    let mut statement = expected.prepare("SELECT type, name, sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type, name")?;
+    let objects = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    })?;
+    for object in objects {
+        let (kind, name, definition) = object?;
+        let actual: Option<String> = connection
+            .query_row(
+                "SELECT sql FROM sqlite_schema WHERE type = ?1 AND name = ?2",
+                [&kind, &name],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if actual.as_deref() != Some(definition.as_str()) {
+            return Err(AppError::database(
+                "database_schema_mismatch",
+                format!(
+                    "required Todo {kind} {name} is absent or differs from this binary's schema"
+                ),
+            ));
+        }
+    }
+    let integrity: String = connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+    let foreign_key_violation = connection
+        .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
+        .optional()?
+        .is_some();
+    if integrity != "ok" || foreign_key_violation {
+        return Err(AppError::database(
+            "database_integrity_failed",
+            "Todo integrity or foreign-key verification failed",
+        ));
+    }
+    Ok(())
+}
+
 /// Explicitly upgrade the selected database after retaining a `SQLite` backup.
 ///
 /// A current database is a true no-op: the backup argument is not inspected or
@@ -452,6 +497,19 @@ use rusqlite::OptionalExtension as _;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn deployment_verification_checks_actual_schema_and_required_triggers()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let temporary = tempfile::tempdir()?;
+        let database = temporary.path().join("todo.db");
+        drop(super::init(&database)?);
+        super::verify(&database)?;
+        let connection = rusqlite::Connection::open(&database)?;
+        connection.execute_batch("DROP TRIGGER todos_cannot_be_deleted")?;
+        assert!(super::verify(&database).is_err());
+        Ok(())
+    }
+
     use rusqlite::Connection;
 
     use super::{CURRENT_SCHEMA_VERSION, init, migrate, open_read, open_write, schema_version};

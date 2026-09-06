@@ -356,3 +356,54 @@ Use the provider-owned `todo::api::Client`, `Request`, and `Data` for typed
 CLI calls. The client preserves the documented envelope and successful stderr
 diagnostics, performs no automatic retries, and uses the same command effects
 and recovery rules. See [Rust interface](rust-api.md) for the exported boundary.
+
+## Coordinated deployment maintenance
+
+```sh
+todo --json maintenance hold RUN_ID
+todo --json maintenance status
+todo --json maintenance ready RUN_ID
+todo --json maintenance release RUN_ID
+todo --json maintenance canary --directory /absolute/private/canary-directory
+```
+
+Normal database/config selection applies. The selected database parent owns
+`deployment-maintenance/`; databases sharing a parent share the same gate.
+New research and ordinary mutations, including scheduled email send, retain a
+shared admission guard through completion. Holds prevent new admissions
+before input is retained, and do not interrupt already admitted research or
+change an operator configuration. Read-only commands remain available.
+
+JSON returns `data.maintenance` with `protocol_version: 1`, `holds`, `drained`,
+and `nonterminal_jobs`. Drain requires both no live admission guard and no
+accepted/running/waiting Nucleus jobs attributed to Todo, conservatively across
+all Todo databases. This catches a killed CLI whose job still exists. An
+unavailable runtime returns a null count and `drained: false`; it is never
+reported as zero. Holds survive process exit and release removes only its
+exact owner.
+
+`migrate --backup` with `CELL_DEPLOYMENT_RUN_ID` requires its sole matching
+hold and exclusive activity; no caller-supplied value bypasses another hold.
+The macOS deployer accepts `--expected-current absent|releases/HASH` under its
+update lock, preserves configured email addresses, and accepts either ordinary
+strict Nucleus readiness or the named deployment's proved held readiness.
+
+The canary uses a product-marked private synthetic database and source file,
+runs actual concern-routing research, and proves one pending routing record
+and the correlated terminal Todo Nucleus job. It returns `data.canary` with
+`protocol_version`, `verified`, database, concern, routing, and job identities.
+It never accepts a proposal or sends email. Foreign directories are refused.
+If interrupted research has no domain result, it fails with retained evidence
+instead of creating a replacement attempt. Requester canaries run after
+Nucleus admission is restored, while production Todo holds remain.
+
+`maintenance ready RUN_ID` requires the sole drained hold and proves that this
+binary can read the actual configured database: current version, every required
+table/index/trigger definition, SQLite integrity, and foreign keys. This is the
+production storage compatibility proof after an interrupted migration; the
+isolated canary alone cannot supply it.
+
+Deployment admission resolves the configured database to its canonical path and
+uses that database parent for `deployment-maintenance/`. Symbolic aliases share
+the same gate. Databases with multiple hard links are rejected because their
+state root cannot identify one authoritative admission gate.

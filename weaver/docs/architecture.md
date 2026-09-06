@@ -162,7 +162,9 @@ new work while maintenance exists.
 The macOS deployer uses this interface and switches the complete installed
 release and Chancery provider documentation only after the active workflow
 settles. It validates the candidate while maintenance remains in effect, commits
-the cutover, and removes maintenance through the installed CLI. As a one-time
+the cutover, and releases only its own maintenance through the installed CLI. As a one-time
 migration, it also boots out and removes the exact `org.weaver.worker` prototype
 service and plist. A pre-commit failure restores that service together with the
 old release and provider resolution. Nucleus stays running throughout.
+
+Deployment admission uses product-owned durable run holds in `deployment-maintenance/`, independent of operator pauses. The product augments activity-lock status with its durable workflow/runtime settlement evidence. See the deployment maintenance section in `cli.md`; the coordinator never edits domain state directly.

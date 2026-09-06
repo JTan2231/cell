@@ -84,6 +84,43 @@ claim that both scheduler cleanups succeeded, prevents domain admission.
 Deploy and uninstall share one update lock, so scheduler, selector, and
 database transitions cannot race each other.
 
+## Coordinated deployment maintenance
+
+`semantics/deployment/adapter.py` is Semantics' product boundary for the Cell
+deployment coordinator. It composes the existing deployer, migration,
+scrubbed doctor, selector ownership checks, and rollback procedure. The
+coordinator establishes and drains all affected product holds before applying
+selected candidates. The adapter preserves project pauses, existing cursor
+and activation state, and captured schedule enabled booleans.
+
+The adapter requires the installed public CLI to support `maintenance status`
+before effects. A candidate cannot fence an older installed command that does
+not participate in admission. Such an installation stops coordinated
+inspection and needs its one-time compatibility release through the existing
+documented deployer and quiescence procedure. Ordinary supported new-state
+installation continues through that deployer.
+
+The CLI's private durable gate is the sibling
+`<database>.cell-maintenance`, separate from the installer's maintenance
+marker and receipt. Maintenance status never opens or initializes the
+database. Every other public command is fenced before SQLite access because
+even reads may migrate state. Controlled installation uses
+`CELL_DEPLOYMENT_RUN_ID` only under the same sole hold with exclusive drained
+activity; no hold means ordinary admission. Doctor may prove Nucleus readiness
+under the exact same Nucleus hold without permitting ordinary reconciliation.
+
+Ordinary coordinated updates omit `--final-decisions-watermark` and preserve
+all existing activation and scan cursors. The explicit one-time legacy
+activation below remains a separate documented operation; the adapter never
+manufactures or chooses its watermark. It keeps product ownership and
+commit boundaries intact rather than promising an aggregate database rollback.
+
+Group release removes only this run's hold after verification. A retained
+product-installer maintenance marker, unfinished transaction, or unproved
+installation stops adapter recovery and retains admission for the existing
+product recovery procedure. Clearing the outer hold cannot authorize clearing
+another owner's marker or a project pause.
+
 ## Paths
 
 ```text
@@ -214,3 +251,10 @@ owned legacy LaunchAgent and public CLI/provider selectors, and intentionally
 retains the database, releases, definitions, activation history, and logs. Deleting
 retained state is a separate destructive operation and is not authorized by
 the uninstaller.
+
+The deployment adapter retains its private isolated canary state under the
+run directory on success and failure; it does not remove that evidence. A
+verified response identifies the canary directory. Annals exercises local
+retention, Krisis durable baseline replay, and Semantics repository mutation
+and replay, alongside each product's dependency doctor. These checks do not
+claim a live model-backed domain integration.

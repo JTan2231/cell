@@ -8,7 +8,8 @@
   "summary": "Check readiness, eight-slot execution capacity, and account access; submit or inspect agent jobs, read their output, cancel work, or operate the per-user Nucleus service.",
   "use_when": [
     "Nucleus readiness, authentication, job state, exact harness output, cancellation, or service state must be inspected or changed.",
-    "An exact version-one invocation must be submitted directly for technical diagnosis or a deliberate runtime task."
+    "An exact version-one invocation must be submitted directly for technical diagnosis or a deliberate runtime task.",
+    "A deployment must durably hold new admissions, observe actual runtime settlement, release only its own hold, or run the predefined isolated verification canary."
   ],
   "do_not_use_when": [
     "The request is ordinary immediate work that the current interactive agent can perform directly.",
@@ -20,7 +21,8 @@
     "Read commands expose daemon, execution-capacity, account, job, request, and exact harness-output state.",
     "Job submission creates one durable Nucleus job and may invoke Codex and consume account allowance; an accepted job remains queued with a pending attempt while all eight global execution slots are occupied.",
     "Cancellation records intent for one exact job attempt; authentication login changes the Nucleus-owned credential.",
-    "Graceful shutdown first requests cancellation; on startup every attempt still durably nonterminal is marked lost, while uninstall removes installed programs but retains state and logs."
+    "Graceful shutdown first requests cancellation; on startup every attempt still durably nonterminal is marked lost, while uninstall removes installed programs but retains state and logs.",
+    "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. The explicit canary uses real Nucleus execution and retains private synthetic verification evidence."
   ],
   "authority": [
     "Nucleus owns admission, the global eight-slot scheduler, one harness attempt per job, job lifecycle, cancellation, the single-authority managed authentication broker, isolated static API-key job credentials, exact non-authentication harness stdout, and the durable requester-tool mailbox.",
@@ -34,22 +36,66 @@
   "failure_and_recovery": [
     "If health cannot connect, inspect `nucleus service status` and the user-service logs; do not create a hidden direct-Codex fallback.",
     "If authentication is unavailable, quiesce requesters before attended device login and run a deliberate requester canary afterward.",
-    "If an attempt is lost or fails after a domain commit, inspect requester state before considering any new job."
+    "If an attempt is lost or fails after a domain commit, inspect requester state before considering any new job.",
+    "An incomplete drain, foreign hold, unavailable runtime, or failed canary never becomes success; retain the named holds and durable job/domain evidence and follow the owning recovery contract."
   ],
   "privacy": [
     "Nucleus state may contain complete prompts, tool arguments and results, source content, exact app-server stdout, and authentication material.",
     "The per-user socket relies on local filesystem ownership rather than application-level authentication."
   ],
   "interfaces": [
-    {"label": "Installed manual", "invocation": "/Users/joey/.local/bin/nucleus manual"},
-    {"label": "Strict readiness", "invocation": "/Users/joey/.local/bin/nucleus health"},
-    {"label": "Account probe", "invocation": "/Users/joey/.local/bin/nucleus account --wait 0"},
-    {"label": "Submit exact request", "invocation": "/Users/joey/.local/bin/nucleus jobs submit <REQUEST_JSON>"},
-    {"label": "Inspect job", "invocation": "/Users/joey/.local/bin/nucleus jobs show <JOB_ID>"},
-    {"label": "Read job output", "invocation": "/Users/joey/.local/bin/nucleus jobs logs <JOB_ID>"},
-    {"label": "Cancel job", "invocation": "/Users/joey/.local/bin/nucleus jobs cancel <JOB_ID>"},
-    {"label": "Attended login", "invocation": "/Users/joey/.local/bin/nucleus auth login --device-auth"},
-    {"label": "Service status", "invocation": "/Users/joey/.local/bin/nucleus service status"}
+    {
+      "label": "Installed manual",
+      "invocation": "/Users/joey/.local/bin/nucleus manual"
+    },
+    {
+      "label": "Strict readiness",
+      "invocation": "/Users/joey/.local/bin/nucleus health"
+    },
+    {
+      "label": "Account probe",
+      "invocation": "/Users/joey/.local/bin/nucleus account --wait 0"
+    },
+    {
+      "label": "Submit exact request",
+      "invocation": "/Users/joey/.local/bin/nucleus jobs submit <REQUEST_JSON>"
+    },
+    {
+      "label": "Inspect job",
+      "invocation": "/Users/joey/.local/bin/nucleus jobs show <JOB_ID>"
+    },
+    {
+      "label": "Read job output",
+      "invocation": "/Users/joey/.local/bin/nucleus jobs logs <JOB_ID>"
+    },
+    {
+      "label": "Cancel job",
+      "invocation": "/Users/joey/.local/bin/nucleus jobs cancel <JOB_ID>"
+    },
+    {
+      "label": "Attended login",
+      "invocation": "/Users/joey/.local/bin/nucleus auth login --device-auth"
+    },
+    {
+      "label": "Service status",
+      "invocation": "/Users/joey/.local/bin/nucleus service status"
+    },
+    {
+      "label": "Hold deployment admission",
+      "invocation": "/Users/joey/.local/bin/nucleus maintenance hold RUN_ID"
+    },
+    {
+      "label": "Observe deployment drain",
+      "invocation": "/Users/joey/.local/bin/nucleus maintenance status"
+    },
+    {
+      "label": "Release only deployment owner",
+      "invocation": "/Users/joey/.local/bin/nucleus maintenance release RUN_ID"
+    },
+    {
+      "label": "Run predefined real deployment canary",
+      "invocation": "/Users/joey/.local/bin/nucleus maintenance canary RUN_ID"
+    }
   ],
   "does_not_authorize": [
     "A new requester attempt after failure or loss.",
@@ -103,6 +149,10 @@
       {
         "status": "unsupported",
         "statement": "Nucleus returns no requester-domain success assertion, automatic replacement attempt, workflow result, or authoritative interpretation of model prose."
+      },
+      {
+        "status": "declared",
+        "statement": "Maintenance status reports protocol_version 1, holds and drained with product-specific runtime evidence; the explicit predefined canary reports verified only after real runtime execution and its product-owned required result."
       }
     ],
     "data_semantics": [
@@ -185,12 +235,16 @@
       {
         "status": "declared",
         "statement": "Account reads may overlap active jobs. Account reads and canonical refresh use private staging, validated atomic promotion, and supervised reconciliation that survives requester cancellation; attended login is excluded until active job and account sessions have ended and promotes only a validated successful staged result. No Codex child writes the authoritative credential directly."
+      },
+      {
+        "status": "declared",
+        "statement": "Deployment maintenance protocol version 1 durably owns each hold by run ID, prevents new admission atomically, permits already-admitted work to settle, reports product-owned durable work in drain status, and releases only the named owner; independent operator pauses remain intact."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Version one is per-user and permits at most eight active attempts globally; accepted jobs with pending attempts wait for capacity, and attempts waiting on requester tools remain active. It admits one attempt per job and provides no automatic retry, global drain, workflow scheduler, project registry, capability discovery, or requester-domain interpreter."
+        "statement": "Version one is per-user and permits at most eight active attempts globally; accepted jobs with pending attempts wait for capacity, and attempts waiting on requester tools remain active. It admits one attempt per job and provides no automatic retry, workflow scheduler, project registry, capability discovery, or requester-domain interpreter."
       },
       {
         "status": "declared",

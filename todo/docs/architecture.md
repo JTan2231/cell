@@ -269,3 +269,5 @@ CLI-client types. The CLI uses the same serialized values. Consumers convert
 those exported values into their local structs; they do not implement another
 Todo wire decoder. Storage and execution internals remain outside this API.
 See [Rust interface](rust-api.md).
+
+Deployment admission uses product-owned durable run holds in `deployment-maintenance/`, independent of operator pauses. The product augments activity-lock status with its durable workflow/runtime settlement evidence. See the deployment maintenance section in `cli.md`; the coordinator never edits domain state directly.

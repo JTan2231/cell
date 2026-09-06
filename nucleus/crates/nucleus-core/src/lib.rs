@@ -766,6 +766,23 @@ pub struct JobV1 {
     pub attempts: Vec<AttemptV1>,
 }
 
+/// Durable deployment admission status. Existing jobs and mailbox traffic can
+/// continue while new submissions are held.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MaintenanceStatusV1 {
+    pub protocol_version: u32,
+    pub holds: Vec<String>,
+    pub drained: bool,
+    pub nonterminal_jobs: usize,
+}
+
+/// Identity of the deployment that owns one independent hold.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MaintenanceOwnerV1 {
+    pub run_id: String,
+}
+
 // ---- Schema-bound log records ------------------------------------------------
 
 /// Exact schema document registered for one producer/protocol version.

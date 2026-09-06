@@ -11,6 +11,7 @@ use crate::project::Project;
 use crate::state::{CurrentRun, RunStatus, StateStore};
 use crate::validator::Verdict;
 
+mod canary;
 mod error;
 mod nucleus;
 mod pipeline;
@@ -84,8 +85,26 @@ enum WorkerCommand {
     Run,
 }
 
-#[derive(Clone, Copy, Debug, Subcommand)]
+#[derive(Clone, Debug, Subcommand)]
 enum MaintenanceCommand {
+    /// Prove the sole named deployment hold and completed workflow settlement.
+    Ready {
+        run_id: String,
+    },
+    /// Exercise five real model stages against an isolated synthetic repository.
+    Canary {
+        #[arg(long)]
+        directory: PathBuf,
+    },
+    Hold {
+        run_id: String,
+    },
+    Status,
+    Release {
+        run_id: String,
+    },
+    /// Recover the existing workflow without admitting a replacement.
+    Drain,
     /// Prevent new claims and wait for the active worker lock to become free.
     Begin {
         #[arg(long, default_value_t = 60)]
@@ -122,7 +141,7 @@ async fn run(cli: Cli) -> AppResult<ExitCode> {
         TopLevelCommand::Worker {
             command: WorkerCommand::Run,
         } => worker_command(state_dir).await,
-        TopLevelCommand::Maintenance { command } => maintenance_command(state_dir, command),
+        TopLevelCommand::Maintenance { command } => maintenance_command(state_dir, command).await,
     }
 }
 
@@ -218,7 +237,11 @@ async fn doctor_command(state_dir: Option<PathBuf>) -> AppResult<ExitCode> {
     let store = state_store(state_dir)?;
     store.validate_operational_shape()?;
     let runner = NucleusRunner::for_current_user()?;
-    runner.ensure_ready().await?;
+    if let Ok(owner) = std::env::var("CELL_DEPLOYMENT_RUN_ID") {
+        runner.ensure_deployment_ready(&owner).await?;
+    } else {
+        runner.ensure_ready().await?;
+    }
     println!("weaver: state and Nucleus are ready");
     Ok(ExitCode::SUCCESS)
 }
@@ -241,12 +264,52 @@ async fn worker_command(state_dir: Option<PathBuf>) -> AppResult<ExitCode> {
     }
 }
 
-fn maintenance_command(
+async fn maintenance_command(
     state_dir: Option<PathBuf>,
     command: MaintenanceCommand,
 ) -> AppResult<ExitCode> {
+    if let MaintenanceCommand::Canary { directory } = &command {
+        let result = canary::run(directory).await?;
+        println!("{result}");
+        return Ok(ExitCode::SUCCESS);
+    }
     let store = state_store(state_dir)?;
     match command {
+        MaintenanceCommand::Canary { .. } => unreachable!("canary is handled separately"),
+        MaintenanceCommand::Hold { run_id } => {
+            store
+                .deployment_gate()
+                .hold(&run_id)
+                .map_err(|error| error::WeaverError::runtime(error.to_string()))?;
+            print_deployment_status(&store)?;
+        }
+        MaintenanceCommand::Release { run_id } => {
+            store
+                .deployment_gate()
+                .release(&run_id)
+                .map_err(|error| error::WeaverError::runtime(error.to_string()))?;
+            print_deployment_status(&store)?;
+        }
+        MaintenanceCommand::Ready { run_id } => {
+            let status = store.deployment_status()?;
+            if !status.drained {
+                return Err(error::WeaverError::runtime("Weaver has not drained"));
+            }
+            let _install = store
+                .deployment_gate()
+                .enter_for(&run_id)
+                .map_err(|error| error::WeaverError::runtime(error.to_string()))?;
+            println!(
+                "{}",
+                serde_json::to_string(&status)
+                    .map_err(|error| error::WeaverError::runtime(error.to_string()))?
+            );
+        }
+        MaintenanceCommand::Status => print_deployment_status(&store)?,
+        MaintenanceCommand::Drain => {
+            pipeline::run_worker(&store).await?;
+            print_deployment_status(&store)?;
+        }
         MaintenanceCommand::Begin { wait_seconds } => {
             store.begin_maintenance(Duration::from_secs(wait_seconds))?;
             println!("weaver: maintenance enabled; no worker holds the run lock");
@@ -257,6 +320,16 @@ fn maintenance_command(
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn print_deployment_status(store: &StateStore) -> AppResult<()> {
+    let status = store.deployment_status()?;
+    println!(
+        "{}",
+        serde_json::to_string(&status)
+            .map_err(|error| error::WeaverError::runtime(error.to_string()))?
+    );
+    Ok(())
 }
 
 fn state_store(configured: Option<PathBuf>) -> AppResult<StateStore> {

@@ -19,6 +19,7 @@ else
 fi
 
 binary_path=
+expected_current=
 install_home=${HOME:-}
 launchctl_path=/bin/launchctl
 email_to=
@@ -32,6 +33,7 @@ Install or update the user-owned macOS Todo CLI. A healthy user-owned Nucleus
 service must already be installed.
 
 Options:
+  --expected-current VALUE  Refuse stale plans (absent or releases/HASH)
   --home ABSOLUTE_PATH       Override the operator home (primarily for tests)
   --launchctl ABSOLUTE_PATH  Override launchctl (primarily for tests)
   --email-to ADDRESS         Configure the digest recipient
@@ -71,6 +73,12 @@ chancery_bundle_hash() {
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
+        --expected-current)
+            [ "$#" -ge 2 ] || fail '--expected-current requires a value'
+            expected_current=$2
+            case "$expected_current" in absent|releases/*) ;; *) fail 'invalid expected current selector' ;; esac
+            shift 2
+            ;;
         --binary)
             [ "$#" -ge 2 ] || fail '--binary requires a path'
             binary_path=$2
@@ -189,6 +197,7 @@ chancery_provider_switched=0
 config_changed=0
 plist_changed=0
 was_loaded=0
+was_disabled=0
 service_stopped=0
 new_service_loaded=0
 committed=0
@@ -311,15 +320,22 @@ provider_release=$(awk -F '"' '/"release"[[:space:]]*:/ { print $4; exit }' \
     "$SOURCE_CHANCERY/provider.json")
 [ "$provider_release" = "$version" ] \
     || fail "Todo provider release $provider_release does not match candidate $version"
-nucleus_health=$(HOME="$install_home" "$nucleus_cli" --compact health) \
-    || fail 'could not read the user-owned Nucleus service health'
+if nucleus_health=$(HOME="$install_home" "$nucleus_cli" --compact health 2>/dev/null); then
+    for admission_field in '"status":"ok"' '"acceptingJobs":true'; do
+        printf '%s\n' "$nucleus_health" | grep -F "$admission_field" >/dev/null \
+            || fail "Nucleus is not accepting Todo work (missing $admission_field)"
+    done
+elif [ -n "${CELL_DEPLOYMENT_RUN_ID:-}" ]; then
+    nucleus_health=$(HOME="$install_home" "$nucleus_cli" --compact maintenance health "$CELL_DEPLOYMENT_RUN_ID") \
+        || fail 'could not prove the named Nucleus deployment hold and readiness'
+else
+    fail 'could not read the user-owned Nucleus service health'
+fi
 case "$nucleus_health" in
     *'"supportedProtocolVersions":[1]'*|*'"supportedProtocolVersions":[1,'*) ;;
     *) fail 'Nucleus is not ready for Todo (protocol v1 is not supported)' ;;
 esac
 for required_health_field in \
-    '"status":"ok"' \
-    '"acceptingJobs":true' \
     '"harness":{"harness":"codex"' \
     '"exact-model"' \
     '"reasoning-effort"' \
@@ -392,6 +408,11 @@ if [ -L "$CURRENT_LINK" ]; then
 elif [ -e "$CURRENT_LINK" ]; then
     fail "$CURRENT_LINK must be a symbolic link"
 fi
+if [ -n "$expected_current" ]; then
+    observed_current=${old_current:-absent}
+    [ "$observed_current" = "$expected_current" ] \
+        || fail "stale deployment plan: expected $expected_current, found $observed_current"
+fi
 if [ -L "$PREVIOUS_LINK" ]; then
     old_previous=$(readlink "$PREVIOUS_LINK")
 elif [ -e "$PREVIOUS_LINK" ]; then
@@ -432,6 +453,20 @@ if "$launchctl_path" print "$SERVICE_TARGET" >/dev/null 2>&1; then
     [ "$old_plist" -eq 1 ] \
         || fail "loaded service has no recoverable plist at $AGENT_PLIST"
 fi
+disabled_services=$("$launchctl_path" print-disabled "$SERVICE_DOMAIN") \
+    || fail 'unable to inspect launchd disabled services'
+was_disabled=$(printf '%s\n' "$disabled_services" | awk -v label="\"$SERVICE_LABEL\"" '
+    /disabled services = \{/ { valid = 1 }
+    $1 == label && $2 == "=>" {
+        if ($3 == "true") disabled = 1
+        else if ($3 != "false") invalid = 1
+    }
+    END { if (!valid || invalid) exit 1; print disabled + 0 }
+') || fail 'unrecognized launchd disabled-service state'
+# launchd cannot bootstrap a disabled service. Do not unload that unusual
+# combination: restoring it would require changing an operator-owned override.
+[ "$was_loaded" -eq 0 ] || [ "$was_disabled" -eq 0 ] \
+    || fail 'email service is loaded but disabled; preserve that state until the operator unloads it'
 
 binary_hash=$(shasum -a 256 "$binary_path" | awk '{print $1}')
 frontend_hash=$(shasum -a 256 "$SOURCE_FRONTEND" | awk '{print $1}')
@@ -589,9 +624,16 @@ fi
 TODO_STATE_DIR="$STATE_DIR" HOME="$install_home" \
     "$CLI_PATH" --config "$CONFIG_PATH" --json list --limit 1 >/dev/null
 
-"$launchctl_path" bootstrap "$SERVICE_DOMAIN" "$AGENT_PLIST" >/dev/null \
-    || fail "unable to start $SERVICE_LABEL"
-new_service_loaded=1
+# Updating software must not turn an unloaded schedule back on. A fresh
+# installation starts its schedule only when no existing plist or disabled
+# override records an operator choice. Never enable or disable the service.
+if [ "$was_loaded" -eq 1 ] \
+    || { [ -z "$old_current" ] && [ "$old_plist" -eq 0 ] && [ "$was_disabled" -eq 0 ]; }
+then
+    "$launchctl_path" bootstrap "$SERVICE_DOMAIN" "$AGENT_PLIST" >/dev/null \
+        || fail "unable to start $SERVICE_LABEL"
+    new_service_loaded=1
+fi
 
 committed=1
 printf 'Installed Todo release %s\n' "$release_id"

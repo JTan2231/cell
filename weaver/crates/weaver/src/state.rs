@@ -214,6 +214,10 @@ impl StateStore {
     }
 
     pub(crate) fn enqueue(&self, repo_root: PathBuf, narrative: String) -> AppResult<CurrentRun> {
+        let _admission = self
+            .deployment_gate()
+            .enter()
+            .map_err(|error| WeaverError::runtime(error.to_string()))?;
         let _control = self.acquire_control_lock()?;
         if self.maintenance_requested_unlocked()? {
             return Err(WeaverError::runtime(
@@ -357,6 +361,31 @@ impl StateStore {
         current.updated_unix_seconds = unix_seconds()?;
         self.write_current_unlocked(&current)?;
         Ok(Some(current))
+    }
+
+    pub(crate) fn deployment_gate(&self) -> cell_maintenance::Gate {
+        cell_maintenance::Gate::new(self.root.join("deployment-maintenance"))
+    }
+
+    pub(crate) fn deployment_status(&self) -> AppResult<weaver::api::MaintenanceStatus> {
+        let status = self
+            .deployment_gate()
+            .status()
+            .map_err(|error| WeaverError::runtime(error.to_string()))?;
+        let _control = self.acquire_control_lock()?;
+        let current = self.read_current_unlocked()?;
+        let nonterminal_run = current
+            .filter(|run| !run.status.is_terminal())
+            .map(|run| run.run_id);
+        let worker_active = self.try_acquire_run_lock()?.is_none();
+        Ok(weaver::api::MaintenanceStatus {
+            protocol_version: 1,
+            holds: status.holds,
+            drained: status.drained && nonterminal_run.is_none() && !worker_active,
+            nonterminal_run,
+            worker_active,
+            operator_maintenance: self.maintenance_requested_unlocked()?,
+        })
     }
 
     pub(crate) fn begin_maintenance(&self, wait: Duration) -> AppResult<()> {
@@ -738,6 +767,34 @@ mod tests {
                 .map(|request| request.invocation.cwd),
             Some(AbsolutePath::new(store.root().to_path_buf()))
         );
+    }
+
+    #[test]
+    fn deployment_holds_preserve_operator_pause_and_allow_existing_recovery() {
+        let temporary = must(TempDir::new());
+        let store = must(StateStore::open(temporary.path().join("state")));
+        let current = must(store.enqueue(PathBuf::from("/tmp/repo"), "one".into()));
+        must(store.deployment_gate().hold("rollout-one"));
+        assert!(!must(store.deployment_status()).drained);
+        assert!(
+            store
+                .enqueue(PathBuf::from("/tmp/repo"), "two".into())
+                .is_err()
+        );
+        assert!(must(store.claim_for_worker()).is_some());
+        must(store.update(&current.run_id, |run| {
+            run.status = RunStatus::Succeeded;
+            Ok(())
+        }));
+        assert!(must(store.deployment_status()).drained);
+        must(store.begin_maintenance(Duration::ZERO));
+        must(store.deployment_gate().hold("operator-two"));
+        must(store.deployment_gate().release("rollout-one"));
+        let status = must(store.deployment_status());
+        assert_eq!(status.holds, ["operator-two"]);
+        assert!(status.operator_maintenance);
+        must(store.deployment_gate().release("operator-two"));
+        assert!(must(store.deployment_status()).operator_maintenance);
     }
 
     #[test]

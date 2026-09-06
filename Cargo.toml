@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "deployment/crates/cell-maintenance",
     "nucleus/crates/nucleus-cli",
     "nucleus/crates/nucleus-client",
     "nucleus/crates/nucleus-core",
@@ -35,6 +36,7 @@ rust-version = "1.89"
 license = "MIT"
 
 [workspace.dependencies]
+cell-maintenance = { path = "deployment/crates/cell-maintenance" }
 annals-api = { path = "annals/crates/annals-api" }
 krisis-api = { path = "decisions/crates/krisis-api" }
 axum = { version = "0.8.9", features = ["json", "tokio"] }

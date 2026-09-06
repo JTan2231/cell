@@ -14,6 +14,38 @@ Annals delivery and doctor use three explicit values:
 The binary and config paths must be absolute. The expected library ID is exactly
 32 lowercase hexadecimal characters. Partial configuration is rejected.
 
+## Deployment maintenance
+
+```text
+krisis --database DATABASE --json maintenance status
+krisis --database DATABASE --json maintenance hold RUN_ID
+krisis --database DATABASE --json maintenance release RUN_ID
+```
+
+The private durable gate is the sibling directory
+`<canonical-database>.cell-maintenance`. Maintenance commands do not open, initialize,
+or migrate SQLite; status leaves an absent gate absent. Their JSON result
+contains `protocol_version: 1`, `contract_version: 1`, `holds`, and `drained`.
+Drain reports live command admission only; the deployment adapter must also
+account for durable observations and unfinished dependency jobs.
+
+Holds prevent every other public CLI command, including typed client calls,
+status, and doctor, before database access because opening Krisis state may
+migrate it. Already admitted commands may settle. Repeated holds are
+idempotent and survive process exit; release removes only the named owner's
+hold and does not reset the observer baseline or clear another hold. Run IDs
+contain 1–128 ASCII letters, digits, hyphens, underscores, or periods and
+cannot begin with a period. Invalid owners and unavailable admission fail
+with `deployment_maintenance`.
+
+For an installer-owned command, `CELL_DEPLOYMENT_RUN_ID=RUN_ID` requires that
+exact sole hold and exclusive access after live activity drains. It cannot
+bypass another owner. With no hold, commands use ordinary admission. Doctor
+can accept deliberately held Nucleus readiness only after
+`health_for_deployment` proves this same run's sole Nucleus hold, runtime
+drain, authentication, and harness. Product capabilities and protocol checks
+still apply. Observation processing always requires normal Nucleus admission.
+
 ## Supported commands
 
 `krisis doctor` opens and migrates the database, checks Conversations and
@@ -64,3 +96,8 @@ email, review, or state mutation. No active daily/review schedule exists.
 Use `--json` for machine-readable Krisis responses. Upstream dependency error
 bodies, prompts, accounts, and transcript text are not copied into routine
 error output.
+
+Deployment gate identity follows the canonical database path (including a
+symlink alias), or the canonical existing ancestor for a new database.
+Hardlinked databases are rejected before admission. Maintenance status still
+does not open or initialize the database.

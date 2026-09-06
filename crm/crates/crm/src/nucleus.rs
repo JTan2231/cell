@@ -51,7 +51,7 @@ impl NucleusSteward {
     pub fn doctor(&self) -> Result<()> {
         runtime()?.block_on(async {
             let client = self.client()?;
-            require_health(&client).await?;
+            require_health_for_doctor(&client).await?;
             register_contract(&client).await?;
             Ok(())
         })
@@ -210,7 +210,21 @@ fn verify_job_identity(
 }
 
 async fn require_health(client: &NucleusClient) -> Result<()> {
+    validate_health(&client.health().await?, true)
+}
+
+async fn require_health_for_doctor(client: &NucleusClient) -> Result<()> {
     let health = client.health().await?;
+    if health.accepting_jobs {
+        return validate_health(&health, true);
+    }
+    if let Ok(owner) = std::env::var("CELL_DEPLOYMENT_RUN_ID") {
+        return validate_health(&client.health_for_deployment(&owner).await?, false);
+    }
+    validate_health(&health, true)
+}
+
+fn validate_health(health: &nucleus_core::HealthResponseV1, require_admission: bool) -> Result<()> {
     let required = [
         HarnessCapability::ExactModel,
         HarnessCapability::ReasoningEffort,
@@ -229,8 +243,7 @@ async fn require_health(client: &NucleusClient) -> Result<()> {
         .as_ref()
         .is_some_and(|identity| identity.harness.as_str() == "codex");
     if health.version != PROTOCOL_VERSION_V1
-        || health.status != "ok"
-        || !health.accepting_jobs
+        || (require_admission && (health.status != "ok" || !health.accepting_jobs))
         || !health.authentication.configured
         || !health.authentication.authenticated
         || !health

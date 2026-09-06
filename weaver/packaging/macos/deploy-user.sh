@@ -16,6 +16,7 @@ else
 fi
 
 binary_path=
+expected_current=
 install_home=${HOME:-}
 launchctl_path=/bin/launchctl
 wait_seconds=${WEAVER_UPDATE_WAIT_SECONDS:-21600}
@@ -29,6 +30,7 @@ Nucleus service must already be installed. This deployer also removes the exact
 org.weaver.worker LaunchAgent from the superseded prototype, when present.
 
 Options:
+  --expected-current VALUE  Refuse stale plans (absent or releases/HASH)
   --home ABSOLUTE_PATH       Override the operator home (primarily for tests)
   --launchctl ABSOLUTE_PATH  Override launchctl (primarily for tests)
   --wait-seconds SECONDS     Bound the wait for an active workflow to finish
@@ -67,6 +69,12 @@ chancery_bundle_hash() {
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
+        --expected-current)
+            [ "$#" -ge 2 ] || fail '--expected-current requires a value'
+            expected_current=$2
+            case "$expected_current" in absent|releases/*) ;; *) fail 'invalid expected current selector' ;; esac
+            shift 2
+            ;;
         --binary)
             [ "$#" -ge 2 ] || fail '--binary requires a path'
             binary_path=$2
@@ -206,6 +214,7 @@ chancery_provider_switched=0
 was_loaded=0
 launchd_changed=0
 maintenance_started=0
+prior_operator_maintenance=0
 committed=0
 lock_created=0
 catalog_lock_created=0
@@ -335,7 +344,7 @@ then
     fail "invalid maintenance marker: $MAINTENANCE_MARKER"
 fi
 if [ -e "$MAINTENANCE_MARKER" ]; then
-    fail "Weaver is already under maintenance: $MAINTENANCE_MARKER"
+    prior_operator_maintenance=1
 fi
 if [ -L "$AGENT_PLIST" ] \
     || { [ -e "$AGENT_PLIST" ] && [ ! -f "$AGENT_PLIST" ]; }
@@ -349,6 +358,11 @@ if [ -L "$CURRENT_LINK" ]; then
     old_current=$(readlink "$CURRENT_LINK")
 elif [ -e "$CURRENT_LINK" ]; then
     fail "$CURRENT_LINK must be a symbolic link"
+fi
+if [ -n "$expected_current" ]; then
+    observed_current=${old_current:-absent}
+    [ "$observed_current" = "$expected_current" ] \
+        || fail "stale deployment plan: expected $expected_current, found $observed_current"
 fi
 if [ -L "$PREVIOUS_LINK" ]; then
     old_previous=$(readlink "$PREVIOUS_LINK")
@@ -464,10 +478,22 @@ maintenance_cli=$binary_path
 if [ -n "$old_current" ]; then
     maintenance_cli="$INSTALL_DIR/$old_current/bin/weaver"
 fi
-maintenance_started=1
-run_weaver "$maintenance_cli" maintenance begin --wait-seconds "$wait_seconds" \
-    >/dev/null \
-    || fail "active workflow did not settle within $wait_seconds seconds"
+if [ -n "${CELL_DEPLOYMENT_RUN_ID:-}" ]; then
+    # The coordinator owns the durable deployment hold. Never alter the
+    # independent operator marker, including changes made during installation.
+    deployment_status=$(run_weaver "$binary_path" maintenance ready "$CELL_DEPLOYMENT_RUN_ID") \
+        || fail 'cannot inspect Weaver deployment maintenance'
+    printf '%s\n' "$deployment_status" | grep -F '"drained":true' >/dev/null \
+        || fail 'Weaver has not drained for deployment'
+elif [ "$prior_operator_maintenance" -eq 1 ]; then
+    run_weaver "$maintenance_cli" maintenance begin --wait-seconds "$wait_seconds" >/dev/null \
+        || fail 'existing operator maintenance has an active worker'
+else
+    maintenance_started=1
+    run_weaver "$maintenance_cli" maintenance begin --wait-seconds "$wait_seconds" \
+        >/dev/null \
+        || fail "active workflow did not settle within $wait_seconds seconds"
+fi
 
 launchd_changed=1
 "$launchctl_path" disable "$SERVICE_TARGET" >/dev/null 2>&1 || true

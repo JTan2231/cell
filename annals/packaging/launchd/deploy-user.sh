@@ -1078,6 +1078,7 @@ run_with_installation_environment() {
         cd "$STATE_DIR"
         env -i \
             HOME="$install_home" \
+            CELL_DEPLOYMENT_RUN_ID="${CELL_DEPLOYMENT_RUN_ID:-}" \
             PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin \
             USER="$operator" \
             LOGNAME="$operator" \

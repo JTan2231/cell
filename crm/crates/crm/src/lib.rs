@@ -9,10 +9,12 @@
 pub mod api;
 #[doc(hidden)]
 pub mod app;
+mod canary;
 #[doc(hidden)]
 pub mod cli;
 #[doc(hidden)]
 pub mod error;
+mod maintenance;
 #[doc(hidden)]
 pub mod model;
 #[doc(hidden)]

@@ -75,6 +75,23 @@ impl NucleusRunner {
         validate_health(&health)
     }
 
+    pub(crate) async fn ensure_deployment_ready(&self, owner: &str) -> AppResult<()> {
+        let health = self
+            .client
+            .health()
+            .await
+            .map_err(|error| client_error("cannot read Nucleus health", &error))?;
+        if health.accepting_jobs {
+            return validate_health(&health);
+        }
+        let health = self
+            .client
+            .health_for_deployment(owner)
+            .await
+            .map_err(|error| client_error("cannot prove Nucleus deployment readiness", &error))?;
+        validate_health_requirements(&health, false)
+    }
+
     pub(crate) fn stage_request(
         &self,
         project: &Project,
@@ -231,6 +248,13 @@ pub(crate) fn stage_job_id(run_id: &str, stage: Stage) -> JobId {
 }
 
 fn validate_health(health: &HealthResponseV1) -> AppResult<()> {
+    validate_health_requirements(health, true)
+}
+
+fn validate_health_requirements(
+    health: &HealthResponseV1,
+    require_admission: bool,
+) -> AppResult<()> {
     if health.version != PROTOCOL_VERSION_V1
         || !health
             .supported_protocol_versions
@@ -258,8 +282,7 @@ fn validate_health(health: &HealthResponseV1) -> AppResult<()> {
             )));
         }
     }
-    if health.status != "ok"
-        || !health.accepting_jobs
+    if (require_admission && (health.status != "ok" || !health.accepting_jobs))
         || !health.authentication.configured
         || !health.authentication.authenticated
     {
@@ -370,7 +393,8 @@ fn client_error(context: &str, error: &ClientError) -> WeaverError {
     match error {
         ClientError::Transport { .. } => WeaverError::retryable(message),
         ClientError::Api { status, .. } if *status >= 500 => WeaverError::retryable(message),
-        ClientError::MissingHome
+        ClientError::DeploymentNotReady
+        | ClientError::MissingHome
         | ClientError::RelativeSocket(_)
         | ClientError::Validation(_)
         | ClientError::Build(_)

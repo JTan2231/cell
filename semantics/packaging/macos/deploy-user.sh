@@ -947,6 +947,7 @@ database_touched=1
 if [ "$final_decisions_watermark_set" -eq 1 ]; then
     /usr/bin/env -i \
         HOME="$install_home" \
+        CELL_DEPLOYMENT_RUN_ID="${CELL_DEPLOYMENT_RUN_ID:-}" \
         PATH=/usr/bin:/bin:/usr/sbin:/sbin \
         CONVERSATIONS_CODEX="$codex_path" \
         SEMANTICS_ANNALS="$install_home/.local/bin/annals" \
@@ -960,6 +961,7 @@ if [ "$final_decisions_watermark_set" -eq 1 ]; then
 fi
 doctor_output=$(/usr/bin/env -i \
     HOME="$install_home" \
+    CELL_DEPLOYMENT_RUN_ID="${CELL_DEPLOYMENT_RUN_ID:-}" \
     PATH=/usr/bin:/bin:/usr/sbin:/sbin \
     CONVERSATIONS_CODEX="$codex_path" \
     SEMANTICS_ANNALS="$install_home/.local/bin/annals" \

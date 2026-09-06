@@ -168,6 +168,7 @@ fn migration_client_requires_explicit_upgrade_and_returns_backup() -> TestResult
     old.execute_batch(include_str!("fixtures/schema-v1.sql"))?;
     old.pragma_update(None, "user_version", 1)?;
     drop(old);
+    let canonical_database = database.canonicalize()?;
     let client = Client::new(env!("CARGO_BIN_EXE_crm")).with_database(&database);
     assert!(matches!(
         client.execute(&Request::Init),
@@ -180,7 +181,7 @@ fn migration_client_requires_explicit_upgrade_and_returns_backup() -> TestResult
     assert_eq!(
         result.data,
         Data::Migrated {
-            database: database.clone(),
+            database: canonical_database.clone(),
             backup: Some(backup.clone()),
             from_schema_version: 1,
             schema_version: 2,
@@ -195,7 +196,7 @@ fn migration_client_requires_explicit_upgrade_and_returns_backup() -> TestResult
     assert_eq!(
         again.data,
         Data::Migrated {
-            database,
+            database: canonical_database,
             backup: None,
             from_schema_version: 2,
             schema_version: 2,
