@@ -287,6 +287,9 @@ def create_run(root: Path, requested: Sequence[str], storage: Path | None = None
 
 def runtime_environment() -> dict[str, str]:
     environment = {name: os.environ[name] for name in MINIMAL_ENVIRONMENT if name in os.environ}
+    for name in ("CELL_RELEASE_CACHE_DIR", "CELL_RELEASE_BUILD_JOBS"):
+        if name in os.environ:
+            environment[name] = os.environ[name]
     environment["HOME"] = pwd.getpwuid(os.getuid()).pw_dir
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONUNBUFFERED"] = "1"
@@ -540,9 +543,10 @@ class Run:
         if (product != "usher" or binary != "usher-install" or product not in self.data["products"]
                 or directory is None or manifest is None or not record.get("prepared")):
             raise DeploymentError(f"{product} binary adapter requires its prepared selected candidate")
-        receipt = record.get("ci_receipt", {})
+        receipt = record.get("build_receipt", {})
         if (record.get("candidate_id") != manifest["candidate_id"]
-                or receipt.get("state") != "passed" or receipt.get("gate") != product
+                or receipt.get("state") != "built" or receipt.get("product") != product
+                or receipt.get("candidate_id") != manifest["candidate_id"]
                 or receipt.get("source_key") != manifest["source_key"]
                 or manifest["source_key"] != self.data.get("source_key")):
             raise DeploymentError("binary adapter does not match its admitted candidate receipt")
@@ -597,61 +601,40 @@ class Run:
                 os.umask(previous_umask)
         if git(self.worktree, "rev-parse", "HEAD") != self.data["source_commit"]:
             raise DeploymentError("preparation worktree is on another source commit")
-        source_key, clean = ci_client.source_snapshot(self.worktree)
-        if not clean:
+        if git(self.worktree, "status", "--porcelain", "--untracked-files=all"):
             raise DeploymentError("preparation worktree was modified")
+        source_key = candidate.content_source_key(self.worktree)
         self.data["source_key"] = source_key
         self.save()
-        # These are the root's existing read-only generator and descriptor gates.
-        returncode, _ = self.command("cell", "pipeline-check", [str(self.worktree / "pipeline" / "test.sh")], cwd=self.worktree)
+        preparation = self.path / "preparation"
+        command = [self.data["python"], str(self.worktree / "deployment" / "build.py"),
+                   "--source-root", str(self.worktree), "--output", str(preparation)]
+        for product in self.data["products"]:
+            command.extend(["--product", product])
+        returncode, _ = self.command("cell", "release-build", command, cwd=self.worktree)
         if returncode:
-            raise DeploymentError("pipeline checks failed before candidate preparation")
-        self.data["active_operation"] = None
-        self.save()
-        self.quality_gate("cell.recognition", "pipeline/recognition.sh")
+            raise DeploymentError("release bundle preparation failed before installation")
+        result = read_json(preparation / "result.json")
+        if (result.get("schema") != 1 or result.get("state") != "built"
+                or result.get("source_key") != source_key):
+            raise DeploymentError("release build does not match the selected source")
+        self.data["build"] = {key: result[key] for key in ("cache_hit", "build_key", "elapsed_seconds") if key in result}
         for product in self.data["products"]:
             record = self.record(product)
-            if record.get("prepared"):
-                candidate.verify(Path(record["candidate_dir"]), product=product, commit=self.data["source_commit"])
-                continue
-            output = self.path / "candidates" / product
-            directory = self.data["catalog"][product]["directory"]
-            returncode, log = self.command(product, "ci", [str(self.worktree / directory / "ci.sh"),
-                                                               "--stage-candidate", str(output)], cwd=self.worktree)
-            if returncode:
-                raise DeploymentError(f"{product} CI did not pass; staged bytes are not admitted")
+            output = preparation / "candidates" / product
             manifest = candidate.verify(output, product=product, commit=self.data["source_commit"])
             if manifest["source_key"] != source_key:
                 raise DeploymentError("candidate evidence belongs to another source snapshot")
-            receipt = None
-            with log.open(errors="replace") as output_log:
-                for line in output_log:
-                    try:
-                        value = json.loads(line)
-                    except ValueError:
-                        continue
-                    if isinstance(value, dict) and value.get("execution_id") and value.get("state") == "passed":
-                        receipt = value
-            if receipt is None or receipt.get("source_key") != source_key or receipt.get("gate") != product:
-                raise DeploymentError("candidate is missing its exact passed broker receipt")
-            record.update(prepared=True, candidate_dir=str(output), candidate_id=manifest["candidate_id"], ci_receipt=receipt)
+            prepared = result.get("candidates", {}).get(product, {})
+            if prepared.get("candidate_id") != manifest["candidate_id"]:
+                raise DeploymentError("candidate is missing its exact release-build record")
+            receipt = {"state": "built", "product": product, "source_key": source_key,
+                       "candidate_id": manifest["candidate_id"]}
+            record.update(prepared=True, candidate_dir=str(output), candidate_id=manifest["candidate_id"], build_receipt=receipt)
             self.data["active_operation"] = None
             self.event("candidate_prepared", product=product, candidate_id=manifest["candidate_id"])
-        if set(self.data["products"]) == set(self.data["catalog"]):
-            self.quality_gate("cell.integrated", "pipeline/integrated.sh")
-        if ci_client.source_snapshot(self.worktree) != (source_key, True):
+        if candidate.content_source_key(self.worktree) != source_key:
             raise DeploymentError("source changed while preparing deployment candidates")
-
-    def quality_gate(self, name: str, body: str) -> None:
-        command = [self.data["python"], str(self.worktree / "ci_broker" / "client.py"),
-                   "run", "--repo-root", str(self.worktree), "--gate", name,
-                   "--expected-source-key", self.data["source_key"], "--lane", "heavy", "--",
-                   str(self.worktree / body)]
-        returncode, _ = self.command("cell", name.removeprefix("cell."), command, cwd=self.worktree)
-        if returncode:
-            raise DeploymentError(f"{name} gate did not pass for the deployment source")
-        self.data["active_operation"] = None
-        self.event("quality_gate_passed", gate=name)
 
     def inspect(self) -> None:
         self.data["state"] = "inspecting"
@@ -831,6 +814,7 @@ def launch(path: Path, lock_fd: int) -> dict[str, Any]:
             "products": data["products"], "source_commit": data["source_commit"],
             "detail": bounded_text(data.get("detail", ""), MAX_DETAIL), "exit_code": 1 if returncode else 0,
             "recovery": data.get("recovery", {"state": "not_needed"}), "maintenance": maintenance_result(data),
+            "build": data.get("build"),
             "cleanup": data.get("cleanup", {"releases": "not_started", "workspace": "pending"}),
             "diagnostics": data.get("diagnostics", [])}
 

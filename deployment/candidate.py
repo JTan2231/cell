@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seal tested executables before the CI broker releases its Cargo lane."""
+"""Seal exact executables and bind them to their source and preparation record."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from ci_broker.client import git, source_snapshot
 
 
 class CandidateError(RuntimeError):
-    """An artifact cannot be tied to its tested source."""
+    """An artifact cannot be tied to its declared source."""
 
 
 def json_bytes(value: Any) -> bytes:
@@ -87,6 +87,22 @@ def remove_tree(root: Path) -> None:
     shutil.rmtree(root)
 
 
+def content_source_key(source: Path) -> str:
+    """Identify source bytes across a release's version-edit/commit boundary.
+
+    Git metadata is deliberately excluded. A new deployment still records its
+    exact commit, but committing unchanged build inputs does not force a build.
+    """
+    paths = git(source, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+    files = {}
+    for raw in sorted(set(paths.split(b"\x00")) - {b""}):
+        relative = os.fsdecode(raw)
+        path = source / relative
+        regular(path)
+        files[relative] = {"sha256": digest(path), "executable": bool(path.stat().st_mode & stat.S_IXUSR)}
+    return "sha256:" + hashlib.sha256(json_bytes({"source_content_schema": 1, "files": files})).hexdigest()
+
+
 def verify(root: Path, *, product: str | None = None,
            commit: str | None = None) -> dict[str, Any]:
     regular(root / "candidate.json")
@@ -114,6 +130,20 @@ def verify(root: Path, *, product: str | None = None,
 
 
 def stage(source: Path, product: str, output: Path, binary_spec: str) -> dict[str, Any]:
+    """Legacy full-CI staging; retained for the public product CI interface."""
+    return _stage(source, product, output, binary_spec)
+
+
+def stage_build(source: Path, product: str, output: Path, binary_spec: str, *,
+                target: Path, source_key: str, expected_versions: dict[str, str]) -> dict[str, Any]:
+    """Seal a successful release build without claiming a CI pass."""
+    return _stage(source, product, output, binary_spec, target=target,
+                  build_source_key=source_key, expected_versions=expected_versions)
+
+
+def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
+           target: Path | None = None, build_source_key: str | None = None,
+           expected_versions: dict[str, str] | None = None) -> dict[str, Any]:
     if not re.fullmatch(r"[a-z][a-z0-9-]*", product):
         raise CandidateError("invalid product identity")
     source = source.resolve()
@@ -123,9 +153,14 @@ def stage(source: Path, product: str, output: Path, binary_spec: str) -> dict[st
     if output == source or source in output.parents:
         raise CandidateError("candidate staging must be outside the source worktree")
     commit = git(source, "rev-parse", "HEAD").decode().strip()
-    source_key, clean = source_snapshot(source)
-    if not clean:
-        raise CandidateError("candidate preparation requires an unchanged committed worktree")
+    if build_source_key is None:
+        source_key, clean = source_snapshot(source)
+        if not clean:
+            raise CandidateError("candidate preparation requires an unchanged committed worktree")
+    else:
+        source_key = content_source_key(source)
+        if source_key != build_source_key:
+            raise CandidateError("source changed before sealing release build")
     product_dir = "decisions" if product == "krisis" else product
     canonical = "krisis" if product == "decisions" else product
     source_inputs: dict[str, str] = {}
@@ -153,8 +188,8 @@ def stage(source: Path, product: str, output: Path, binary_spec: str) -> dict[st
                 raise CandidateError("invalid or repeated product executable")
             if not relative.startswith("target/") or ".." in Path(relative).parts:
                 raise CandidateError("product executable is outside the Cargo target")
-            target = Path(os.environ.get("CARGO_TARGET_DIR", str(source / "target")))
-            binary = target / relative.removeprefix("target/")
+            binary_target = target or Path(os.environ.get("CARGO_TARGET_DIR", str(source / "target")))
+            binary = binary_target / relative.removeprefix("target/")
             regular(binary)
             sealed = temporary / "bin" / name
             with binary.open("rb") as incoming, sealed.open("xb") as destination:
@@ -164,10 +199,14 @@ def stage(source: Path, product: str, output: Path, binary_spec: str) -> dict[st
             sealed.chmod(0o555)
             version = subprocess.run([str(sealed), "--version"], check=True,
                                      capture_output=True, text=True, timeout=30).stdout.strip()
+            if expected_versions is not None and version != expected_versions.get(name):
+                raise CandidateError(f"{name} release binary version does not match its declared version")
             binaries[name] = {"path": f"bin/{name}", "sha256": digest(sealed), "version": version}
         if not binaries:
             raise CandidateError("product declares no deployment executables")
-        if source_snapshot(source) != (source_key, True):
+        unchanged = (source_snapshot(source) == (source_key, True) if build_source_key is None
+                     else content_source_key(source) == source_key)
+        if not unchanged:
             raise CandidateError("source changed while staging candidate")
         manifest: dict[str, Any] = {
             "schema": 1, "product": canonical, "source_commit": commit,

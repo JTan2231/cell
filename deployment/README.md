@@ -36,17 +36,43 @@ script generation retain their existing Python 3.10 prerequisite.
 
 ## Preparation and cutover
 
-Each run creates a detached Git worktree at its selected commit. Pipeline drift
-checks and brokered Cell recognition precede normal public product gates. A
-complete product selection also runs the integrated Chancery source gate.
-Public product `ci.sh --stage-candidate ABSOLUTE_DIRECTORY` executes the entire
-existing gate and seals its exact executables **before releasing the broker's
-heavy lane**. Later gates may reuse and overwrite the shared Cargo target; the
-runner deploys the sealed copy, never a later view of `target/release`. Candidate
-identity records the source commit, exact source key, executable hashes and
-versions, and packaging/adapter source hashes. A staged directory is not admitted
-without its exact passed broker receipt. Failed, lost, cancelled or stale gates
-do not admit their staged bytes.
+Each run creates a detached Git worktree at its selected commit and calls the
+shared release builder once for all selected products. Development is expected
+to have completed the relevant CI checks. Deployment does not run CI or require
+a prior CI receipt: preparation builds production binaries and checks their
+versions, hashes, and exact source material. Tests, formatting, Clippy,
+documentation builds, recognition gates, and generator CI remain development
+checks.
+
+The builder uses one release-profile Cargo invocation for the selected packages
+and binaries, then seals independent product candidates in parallel. It keeps
+a persistent target and file lock per logical Git repository, separate from
+the CI broker and target. Cargo defaults to the logical CPU count capped at
+eight; `CELL_RELEASE_BUILD_JOBS` accepts a positive override. Completed build
+bundles persist in a content-addressed cache; preparation reuses a matching
+bundle only after checking its exact material and executable integrity.
+
+Build identity follows source bytes and build inputs rather than Git HEAD.
+This lets publication build after updating versions and reuse those artifacts
+when the same bytes become a commit. The existing schema-one candidate records
+executable hashes and versions, and packaging/adapter source hashes. Deployment
+binds that candidate to its exact selected commit after matching the source
+material and retains a separate build receipt. The runner deploys sealed
+executable copies, never a later view of a mutable Cargo target. A build record
+makes no claim that CI passed.
+
+The same builder can prepare candidates without publication or installation:
+
+```sh
+python3 deployment/build.py --source-root /absolute/cell \
+  --product usher --product nucleus --output /absolute/cell-build
+```
+
+The output contains `candidates/PRODUCT/bin`, each product's `candidate.json`,
+and `result.json`. With a single product, optional `--unit UNIT` selects one
+independently versioned release unit for release preparation. The existing
+product `ci.sh --stage-candidate ABSOLUTE_DIRECTORY` interface still runs the complete
+CI gate for callers that explicitly choose it.
 
 All candidates are prepared before maintenance begins. The coordinator then:
 
@@ -105,9 +131,12 @@ temporary run files. A surviving descendant blocks this cleanup. The next
 deployment removes stale inactive workspace only after obtaining that same lock;
 it does not resume or recover an interrupted deployment. Both original failure
 and recovery evidence are collected before cleanup and emitted once afterward.
-Capture terminal output externally if a deployment report is needed.
-Failed preparation gates retain their CI transcripts under the separate broker
-retention policy; the coordinator's own logs and workspace remain temporary.
+Capture terminal output externally if a deployment report is needed. The
+coordinator's logs and workspace remain temporary. Completed build bundles and
+the release Cargo target live outside that workspace and survive cleanup. The
+default cache is `cell-release-cache` under the repository's Git common
+directory, shared by linked worktrees; `CELL_RELEASE_CACHE_DIR` overrides it.
+The build cache has no automatic pruning.
 
 The final result preserves `schema`, `run_id`, `state`, `products`,
 `source_commit`, `detail` and `exit_code`. It additionally reports `recovery`
@@ -202,11 +231,10 @@ boundary.
 
 Deployment consumes committed declared versions and content identities. Git
 release publication remains the separate product `release.sh` operation with
-its publication lock, version policy, gate, commit, tag and atomic push. The
-coordinator does not reinterpret an installed version as a release tag and does
-not introduce a universal cadence. Changing cross-run CI evidence reuse or
-adding automatic version/publication policy requires a separate reviewed
-contract; neither is part of this version.
+its publication lock, version policy, release build, commit, tag and atomic
+push. The coordinator does not reinterpret an installed version as a release
+tag and does not introduce a universal cadence. Release and deployment share reusable build
+artifacts; they do not reuse or enforce completed CI evidence.
 
 ## Usher's Rust installer
 
@@ -216,11 +244,13 @@ the version-one coordinator adapter; the `usher` recognition command remains
 read-only. `cell-install` is workspace infrastructure with no separate product
 identity or release publication. Only Usher uses this installer path.
 
-After the ordinary product gate builds both executables, direct installation is:
+Prepare both executables with the shared release builder, then install them:
 
 ```sh
-/absolute/cell/target/release/usher-install install \
-  --binary /absolute/cell/target/release/usher \
+python3 /absolute/cell/deployment/build.py --source-root /absolute/cell \
+  --product usher --output /absolute/cell-build
+/absolute/cell-build/candidates/usher/bin/usher-install install \
+  --binary /absolute/cell-build/candidates/usher/bin/usher \
   --bundle /absolute/cell/usher/chancery
 ```
 

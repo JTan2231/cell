@@ -62,20 +62,38 @@ if fault.get("fail") == [name, op]:
 print(json.dumps({"schema":1,"status":status,"data":data,"detail":fault.get("detail", "isolated fixture")}))
 '''
 
-FAKE_CI = '''#!PYTHON
-import json, os, pathlib, sys
+FAKE_BUILD = '''import argparse, json, pathlib, sys
 sys.dont_write_bytecode = True
-root = pathlib.Path(__file__).resolve().parent.parent
+parser = argparse.ArgumentParser()
+parser.add_argument("--source-root", type=pathlib.Path)
+parser.add_argument("--output", type=pathlib.Path)
+parser.add_argument("--product", action="append")
+args = parser.parse_args()
+root = args.source_root
 sys.path.insert(0, str(root))
 from deployment import candidate
-from ci_broker.client import source_snapshot
-name = pathlib.Path(__file__).resolve().parent.name
-binary = root / "target" / "release" / name
-binary.parent.mkdir(parents=True, exist_ok=True)
-binary.write_text("#!/bin/sh\\nprintf '%s\\\\n' '" + name + " 1.0.0'\\n")
-binary.chmod(0o755)
-result = candidate.stage(root, name, pathlib.Path(sys.argv[2]), name + "|target/release/" + name + "|" + name)
-print(json.dumps({"execution_id":"isolated-fixture", "state":"passed", "gate":name, "source_key":source_snapshot(root)[0]}))
+source_key = candidate.content_source_key(root)
+records = {}
+for name in args.product:
+    binary = root / "target" / "release" / name
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    binary.write_text("#!/bin/sh\\nprintf '%s\\\\n' '" + name + " 1.0.0'\\n")
+    binary.chmod(0o755)
+    spec = name + "|target/release/" + name + "|" + name
+    versions = {name: name + " 1.0.0"}
+    installer = binary.with_name("usher-install")
+    if name == "usher":
+        installer.write_text((root / "usher/packaging/installer-fixture").read_text())
+        installer.chmod(0o755)
+        if not (root / "usher/packaging/skip-installer").exists():
+            spec += "\\nusher|target/release/usher-install|usher-install"
+            versions["usher-install"] = "usher-install 1.0.0"
+    records[name] = candidate.stage_build(root, name, args.output / "candidates" / name, spec,
+        target=root / "target", source_key=source_key, expected_versions=versions)
+    if name == "usher":
+        installer.write_text("later target contents must never execute")
+(args.output / "result.json").write_text(json.dumps({"schema":1, "state":"built",
+    "source_key":source_key, "candidates":records, "cache_hit":False}))
 '''
 
 
@@ -96,19 +114,20 @@ class Fixture:
         # The pinned cleanup subprocess never touches actual installations in
         # this disposable fixture, including when run_worker is called directly.
         self.write("deployment/cleanup.py", "print('{}')\n")
+        self.write("deployment/build.py", FAKE_BUILD)
         # Quality-gate admission is simulated in this isolated repository. It
         # never invokes the production broker, Cargo, or a real product body.
         client_path = self.repo / "ci_broker/client.py"
         client_path.write_text(client_path.read_text().replace(
             'if __name__ == "__main__":',
             'if __name__ == "__main__" and sys.argv[1:2] == ["run"]:\n    raise SystemExit(0)\n\nif __name__ == "__main__":'))
-        self.write("pipeline/test.sh", "#!/bin/sh\nexit 0\n", executable=True)
+        self.write("pipeline/test.sh", "#!/bin/sh\nexit 99\n", executable=True)
         for name in ("alpha", "beta"):
             self.write(f"pipeline/products/{name}.sh", f"PRODUCT_ID={name}\nPRODUCT_DIR={name}\nDEPLOY_PROFILE=selector-only-v1\n")
             self.write(f"{name}/deployment/adapter.json", json.dumps({"schema": 1, "product": name, "dependencies": []}))
             self.write(f"{name}/deployment/adapter.py", FAKE_ADAPTER)
             self.write(f"{name}/packaging/manifest.txt", "owned packaging\n")
-            self.write(f"{name}/ci.sh", FAKE_CI.replace("PYTHON", sys.executable), executable=True)
+            self.write(f"{name}/ci.sh", "#!/bin/sh\nexit 99\n", executable=True)
         self.commit()
 
     def write(self, relative: str, content: str, executable: bool = False) -> None:
@@ -137,14 +156,9 @@ class Fixture:
         installer = f"#!{sys.executable}\n" + FAKE_ADAPTER.replace(
             "op = sys.argv[1]", 'if sys.argv[1:] == ["--version"]:\n    print("usher-install 1.0.0")\n    sys.exit(0)\nassert sys.argv[1] == "adapter"\nop = sys.argv[2]')
         self.write("usher/packaging/installer-fixture", installer)
-        body = FAKE_CI.replace("PYTHON", sys.executable).replace(
-            "result = candidate.stage", 'installer = binary.with_name("usher-install")\ninstaller.write_text((root / "usher/packaging/installer-fixture").read_text())\ninstaller.chmod(0o755)\nresult = candidate.stage')
-        if stage_installer:
-            body = body.replace(' + "|" + name)', ' + "|" + name + "\\nusher|target/release/usher-install|usher-install")')
-        # The shared target is scratch space after admission ends. The actual
-        # adapter must keep using the sealed copy even if target is overwritten.
-        body += '\ninstaller.write_text("later target contents must never execute")\n'
-        self.write("usher/ci.sh", body, executable=True)
+        if not stage_installer:
+            self.write("usher/packaging/skip-installer", "yes")
+        self.write("usher/ci.sh", "#!/bin/sh\nexit 99\n", executable=True)
         self.write("deployment/cleanup.py", 'import json,sys\nprint(json.dumps({"arguments":sys.argv[1:]}))\n')
         self.commit()
 
@@ -185,7 +199,7 @@ class DeploymentTests(unittest.TestCase):
                                              ("inspect", "hold", "drain", "apply", "verify", "release")])
         state = cli.read_json(path / "run.json")
         self.assertEqual(state["release_history_cleanup"]["arguments"], [
-            "--usher-installer", str(path / "candidates/usher/bin/usher-install")])
+            "--usher-installer", str(path / "preparation/candidates/usher/bin/usher-install")])
         self.assertEqual((path / "worktree/target/release/usher-install").read_text(),
                          "later target contents must never execute")
 
@@ -211,11 +225,11 @@ class DeploymentTests(unittest.TestCase):
         with cli.deployment_lock(self.fixture.storage) as lock_fd:
             run = cli.Run(path, lock_fd)
             run.prepare()
-            run.record("usher")["ci_receipt"]["state"] = "stale"
+            run.record("usher")["build_receipt"]["state"] = "failed"
             with self.assertRaisesRegex(cli.DeploymentError, "admitted candidate receipt"):
                 run.adapter("usher", "inspect")
-            run.record("usher")["ci_receipt"]["state"] = "passed"
-            binary = path / "candidates/usher/bin/usher-install"
+            run.record("usher")["build_receipt"]["state"] = "built"
+            binary = path / "preparation/candidates/usher/bin/usher-install"
             binary.chmod(0o755)
             binary.write_text("tampered staged installer")
             with self.assertRaisesRegex(candidate.CandidateError, "tree changed"):
@@ -271,23 +285,18 @@ class DeploymentTests(unittest.TestCase):
             candidate.stage(self.fixture.repo, "alpha", self.base / "candidate", "alpha|target/release/alpha|alpha")
         self.assertFalse((self.base / "candidate").exists())
 
-    def test_staged_bytes_from_a_stale_gate_are_not_admitted(self) -> None:
-        self.fixture.write("alpha/ci.sh", FAKE_CI.replace("PYTHON", sys.executable).replace(
-            '"state":"passed"', '"state":"stale"') + "\nsys.exit(75)\n", executable=True)
+    def test_staged_bytes_from_a_failed_build_are_not_admitted(self) -> None:
+        self.fixture.write("deployment/build.py", FAKE_BUILD + "\nsys.exit(75)\n")
         self.fixture.commit()
         path = self.fixture.create()
         self.assertEqual(cli.run_worker(path), 1)
-        self.assertTrue((path / "candidates" / "alpha" / "candidate.json").exists())
-        self.assertFalse(cli.read_json(path / "run.json")["records"]["alpha"].get("prepared", False))
+        self.assertTrue((path / "preparation/candidates" / "alpha" / "candidate.json").exists())
+        self.assertFalse(cli.read_json(path / "run.json")["records"].get("alpha", {}).get("prepared", False))
         self.assertFalse((path / "observed.jsonl").exists())
 
     def test_private_runner_checks_out_normal_source_modes_without_exposing_run_state(self) -> None:
-        self.fixture.write("pipeline/test.sh", f'''#!{sys.executable}
-from pathlib import Path
-root = Path(__file__).resolve().parent.parent
-assert (root / "alpha/ci.sh").stat().st_mode & 0o777 == 0o755
-assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
-''', executable=True)
+        self.fixture.write("deployment/build.py", FAKE_BUILD.replace(
+            "records = {}", 'assert (root / "alpha/ci.sh").stat().st_mode & 0o777 == 0o755\nassert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644\nrecords = {}'))
         self.fixture.commit()
         previous_umask = os.umask(0o077)
         try:
@@ -313,7 +322,7 @@ assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
         data = cli.read_json(path / "run.json")
         self.assertEqual(data["state"], "succeeded")
         self.assertNotIn("candidate_dir", data["records"]["beta"])
-        self.assertTrue(data["records"]["alpha"]["ci_receipt"])
+        self.assertTrue(data["records"]["alpha"]["build_receipt"])
 
     def test_failed_verify_keeps_holds_when_internal_recovery_is_not_safe(self) -> None:
         path = self.fixture.create()
@@ -377,7 +386,7 @@ assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
         self.assertEqual([path.name for path in self.fixture.storage.iterdir()], ["deployment.lock"])
 
     def test_foreground_failure_removes_sealed_candidates_logs_and_worktree(self) -> None:
-        self.fixture.write("alpha/ci.sh", FAKE_CI.replace("PYTHON", sys.executable) + "\nsys.exit(75)\n", executable=True)
+        self.fixture.write("deployment/build.py", FAKE_BUILD + "\nsys.exit(75)\n")
         self.fixture.commit()
         result = cli.start(self.fixture.repo, ["alpha"], self.fixture.storage)
         self.assertEqual(result["exit_code"], 1)

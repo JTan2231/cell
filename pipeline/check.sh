@@ -69,6 +69,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$PIPELINE_ROOT/pipeline/test_release.py" -q
 PYTHONDONTWRITEBYTECODE=1 python3 "$PIPELINE_ROOT/pipeline/test_todo_catalog.py" -q
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q ci_broker.test_broker
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_coordinator
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_build
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_adapters
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_stateful_adapters
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_cleanup

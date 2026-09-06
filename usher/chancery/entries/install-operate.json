@@ -38,7 +38,7 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Build and validate both binaries and the provider bundle with ./ci.sh usher.",
+    "Complete relevant development checks with ./ci.sh usher. Prepare both production executables with deployment/build.py; release and deployment assume prior CI success without rerunning CI or requiring a receipt.",
     "Run usher-install install with the exact recognition binary, provider bundle, and optional expected current selection.",
     "Use inspect and exact-candidate verify to establish installed identity, integrity, and coherent command/provider selection. Use retained verify-release and recover only against the exact intended supported release."
   ],
@@ -88,7 +88,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "A green version-matched candidate and owned coherent prior release/selector basis."
+        "statement": "A version-matched candidate with verified source and executable integrity, and an owned coherent prior release/selector basis. Relevant development CI is expected beforehand but is not rerun or enforced by release or deployment preparation."
       }
     ],
     "inputs": [

@@ -1,12 +1,16 @@
 # Install or recover Usher
 
-Build both `usher` and `usher-install` and validate the matching product-owned
-Chancery bundle with `./ci.sh usher`. Installation uses the separate Rust
-`usher-install` executable and shared `cell-install` library:
+Complete relevant development checks with `./ci.sh usher` before release or
+deployment. Preparation assumes those checks have passed without rerunning CI
+or requiring a CI receipt. Build both production executables with the shared
+release builder. Installation uses the separate Rust `usher-install` executable
+and shared `cell-install` library:
 
 ```sh
-/absolute/cell/target/release/usher-install install \
-  --binary /absolute/cell/target/release/usher \
+python3 /absolute/cell/deployment/build.py --source-root /absolute/cell \
+  --product usher --output /absolute/cell-build
+/absolute/cell-build/candidates/usher/bin/usher-install install \
+  --binary /absolute/cell-build/candidates/usher/bin/usher \
   --bundle /absolute/cell/usher/chancery
 ```
 
@@ -39,8 +43,8 @@ Read the installation and verify it against the exact candidate:
 
 ```sh
 usher-install inspect
-/absolute/cell/target/release/usher-install verify \
-  --binary /absolute/cell/target/release/usher \
+/absolute/cell-build/candidates/usher/bin/usher-install verify \
+  --binary /absolute/cell-build/candidates/usher/bin/usher \
   --bundle /absolute/cell/usher/chancery
 usher-install verify-release /absolute/Usher/install/releases/HASH
 ```
@@ -91,9 +95,10 @@ checked-in shell installer or Python Usher deployment adapter.
 ## Coordinated deployment
 
 From a Cell checkout, `./deploy.sh usher` prepares the committed candidate
-through its ordinary product gate, which seals both executables before
-releasing the Cargo lane. The Python coordinator invokes the sealed
-`bin/usher-install adapter OP` under the existing version-one JSON protocol.
+through the shared release builder. It builds only production binaries or reuses
+a matching sealed bundle, verifies versions, hashes and source identity, and
+records build evidence without making a CI claim. The Python coordinator invokes
+the sealed `bin/usher-install adapter OP` under the existing version-one JSON protocol.
 The Rust adapter owns Usher's inspection, installation, verification and
 recovery. As a stateless product, it creates no domain maintenance state.
 

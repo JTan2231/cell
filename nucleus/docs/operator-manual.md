@@ -374,10 +374,22 @@ read-only; it never queries or registers live services. See
 
 Each product release entry point uses its checked-in descriptor but remains a
 separate release unit. It holds one Git-common-directory publication lock
-through its brokered product gate, commit, tag, and atomic push, and rechecks
+through its release build, commit, tag, and atomic push, and rechecks
 the expected `origin/main` revision and absent tag before publication. A
 release command still requires separate explicit authority; CI never invokes
 one.
+
+Release and deployment preparation use `deployment/build.py` to build only
+selected production packages and binaries in one release-profile Cargo batch,
+then seal independent product candidates in parallel. They assume relevant
+development CI has already passed, without rerunning CI or requiring its
+receipt. Tests, formatting, Clippy, documentation builds and generator checks
+remain in development CI. The builder uses a separate persistent Cargo target
+and file lock per logical Git repository, with at most eight Cargo jobs by
+default. Its content-addressed cache verifies source/build inputs and executable
+hashes and versions before reuse. Git HEAD is excluded from the build key, so
+the same version-updated source bytes can reuse artifacts after publication
+commits them. A build receipt is not CI evidence.
 
 Deployment remains product-owned. Every deployer takes its existing product or
 update lock before the shared Chancery catalog-writer lock and holds the catalog
@@ -392,7 +404,7 @@ CI success, and release preparation grant no deployment authority.
 
 Usher uses a separate Rust `usher-install` executable backed by the shared
 `cell-install` library. The recognition command and library retain their
-read-only declaration boundary. Its product gate builds and seals both
+read-only declaration boundary. Release preparation builds and seals both
 `usher` and `usher-install`; direct installation takes the exact recognition
 binary and provider bundle, while coordinated deployment invokes the sealed
 installer's version-one JSON adapter. There is no Usher Python adapter or
@@ -423,13 +435,14 @@ releases and discover affected installations to hold; they never silently
 upgrade an unselected system. Annals includes Usage, and `decisions` aliases
 `krisis`.
 
-The coordinator fixes local committed `main` and prepares a separate worktree.
-Every selected product passes its normal brokered gate.
-`ci.sh --stage-candidate ABSOLUTE_DIRECTORY` seals binary bytes while that gate
-still owns the heavy Cargo lease. A passed receipt and matching source/artifact
-identity are required before maintenance. The shared target directory is a build
-cache, not the deployment artifact store. Completed CI evidence is not reused
-between runs. Deployment does not change versions, commit, tag or push releases.
+The coordinator fixes local committed `main`, prepares a separate worktree,
+and asks the shared release builder for all selected products in one batch.
+The existing schema-one candidates carry exact source/artifact identity, with
+the commit binding and a separate build receipt checked before maintenance.
+Sealed build bundles are reusable across invocations; the mutable Cargo target
+is not the deployment artifact store. The legacy `ci.sh --stage-candidate` interface still
+runs the full gate when explicitly requested. Deployment itself does not run
+CI, require a passed CI receipt, change versions, commit, tag or push releases.
 
 The foreground host process owns preparation and ordering. Product adapters own
 configuration, dependencies, maintenance, migrations, service lifecycle,
@@ -437,6 +450,10 @@ readiness and recovery. Temporary source, candidates, logs and operation state
 live under `~/Library/Application Support/Cell/deployments/active`. One host lock
 is inherited by the worker and its children; product and catalog locks also
 protect coexistence with direct deployment commands.
+Completed build bundles and the release target persist separately under the
+Git common directory's `cell-release-cache` (or `CELL_RELEASE_CACHE_DIR`).
+Deployment workspace cleanup preserves this cache, which has no automatic
+pruning.
 
 Nucleus, Annals, Krisis, Semantics, CRM, Todo and Weaver expose durable holds
 owned by the deployment identity. Holds block new admission while existing work
@@ -479,8 +496,7 @@ invocation clears stale inactive workspace under the same lock. There is no
 retained deployment history or public `status`, `wait`, `resume` or `recover`
 command. Product-owned holds and database recovery backups remain operational
 state until resolved; ordinary domain and Nucleus execution history is unaffected.
-Failed preparation gates retain their CI broker transcripts under the separate
-CI retention policy; this does not retain the coordinator's workspace or logs.
+Release-build caching does not retain deployment operation logs or recovery history.
 
 Successful coordinated deployments also remove unreferenced installed release
 directories and previous-release selectors. Current releases and releases still

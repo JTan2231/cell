@@ -141,10 +141,7 @@ release_update_provider() {
 release_check_binaries() {
     while IFS='|' read -r unit binary_path command_name; do
         [ "$unit" = "$release_unit" ] || continue
-        case "$binary_path" in
-            target/*) absolute_binary=$(pipeline_target_file "${binary_path#target/}") ;;
-            *) absolute_binary="$PIPELINE_ROOT/$binary_path" ;;
-        esac
+        absolute_binary="$release_build_dir/preparation/candidates/$CI_GATE_ID/bin/$command_name"
         reported_version=$("$absolute_binary" --version) \
             || release_fail "unable to read the $command_name release binary version"
         [ "$reported_version" = "$command_name $new_version" ] \
@@ -159,6 +156,7 @@ release_lock_kind=
 rollback_version_files=false
 temporary_files=
 release_lock_dir=
+release_build_dir=
 
 release_cleanup() {
     cleanup_status=$?
@@ -171,6 +169,10 @@ release_cleanup() {
         [ -n "$temporary_file" ] && rm -f "$temporary_file"
     done
     IFS=$old_ifs
+    if [ -n "$release_build_dir" ]; then
+        chmod -R u+w "$release_build_dir"
+        rm -rf "$release_build_dir"
+    fi
     if [ "$rollback_version_files" = true ]; then
         release_restore_files
         printf '%s\n' 'release.sh: restored version files after failure' >&2
@@ -226,7 +228,7 @@ tag_prefix=$(pipeline_unit_field "$release_unit" 5)
 lockfile_path=Cargo.lock
 
 cd "$PIPELINE_ROOT"
-for tool in awk git grep sort; do
+for tool in awk git grep sort python3 mktemp; do
     command -v "$tool" >/dev/null 2>&1 \
         || release_fail "required tool not found: $tool"
 done
@@ -254,10 +256,6 @@ case "$git_common_dir" in
     *) git_common_dir="$PIPELINE_ROOT/$git_common_dir" ;;
 esac
 git_common_dir=$(CDPATH='' cd "$git_common_dir" && pwd)
-# Release verification must inspect the same storage-bounded target used by
-# brokered product CI, regardless of a caller's inherited Cargo target.
-CARGO_TARGET_DIR="$(dirname "$git_common_dir")/target"
-export CARGO_TARGET_DIR
 release_lock_dir="$git_common_dir/cell-release-publication.lock"
 if command -v shlock >/dev/null 2>&1; then
     release_lock_kind=shlock
@@ -362,10 +360,13 @@ release_metadata 0 0 || release_fail 'unable to refresh root Cargo.lock'
 release_metadata 1 "$RELEASE_METADATA_NO_DEPS" \
     || release_fail 'the bumped manifest and lockfile are not synchronized'
 
-# A release intentionally created a new dirty candidate; it must not inherit an
-# enclosing root plan's source binding.
-unset CELL_CI_EXPECTED_SOURCE_KEY
-"$PIPELINE_ROOT/$PRODUCT_DIR/ci.sh"
+# Build and seal the versioned candidate once. Publication checks these exact
+# bytes; the shared builder retains them for a later deployment.
+release_build_dir=$(mktemp -d "${TMPDIR:-/tmp}/cell-release-build.XXXXXX")
+release_build_dir=$(CDPATH='' cd "$release_build_dir" && pwd)
+python3 "$PIPELINE_ROOT/deployment/build.py" \
+    --source-root "$PIPELINE_ROOT" --product "$PRODUCT_ID" \
+    --unit "$release_unit" --output "$release_build_dir/preparation"
 release_check_binaries
 
 [ -z "$(git diff --cached --name-only)" ] \

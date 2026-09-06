@@ -102,11 +102,14 @@ Fix the source declaration and rerun; Usher has no reset or repair command.
 The product has an independent version. Its separate Rust `usher-install`
 executable uses the shared `cell-install` library to install the recognition
 binary and its version-matched Chancery documentation for the current macOS
-user. After a green build:
+user. Complete relevant development CI before release or deployment. Prepare
+production executables and install with:
 
 ```sh
-/absolute/cell/target/release/usher-install install \
-  --binary /absolute/cell/target/release/usher \
+python3 /absolute/cell/deployment/build.py --source-root /absolute/cell \
+  --product usher --output /absolute/cell-build
+/absolute/cell-build/candidates/usher/bin/usher-install install \
+  --binary /absolute/cell-build/candidates/usher/bin/usher \
   --bundle /absolute/cell/usher/chancery
 ```
 
@@ -129,10 +132,13 @@ Rust executable can later reselect its release. See the
 [installation contract](chancery/manuals/install-operate.md)
 for ownership, failure and recovery requirements.
 
-`./deploy.sh usher` seals both executables inside the ordinary product CI gate
+`./deploy.sh usher` prepares both executables through the shared release builder
 and invokes the sealed installer's Rust adapter through the coordinator's
 version-one JSON protocol. Usher has no Python deployment adapter or generated
 shell installer. Other products retain their existing installation paths.
+Release and deployment preparation build production binaries, reuse matching
+sealed artifacts, and check versions and hashes. They do not rerun CI or require
+a prior CI receipt; `./ci.sh usher` remains the full development gate.
 Installation changes only Usher's release and command/provider selectors; the
 recognition library and `usher` command remain read-only. No semantic project,
 database, worker, schedule, or other product runtime is changed. See

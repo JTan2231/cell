@@ -41,8 +41,10 @@ or release units.
 Product `ci.sh` files are synchronous clients of the host-scoped CI broker.
 The broker invokes `pipeline/ci.sh` as the private body. Public product entry
 points always request admission; an inherited environment flag cannot bypass
-the broker. Root and release orchestration use those public entry points so
-each product gate remains an independently scheduled unit.
+the broker. Root CI uses those public entry points so each product gate remains
+an independently scheduled unit. Development is expected to complete the
+relevant CI checks before release or deployment; neither operation reruns CI
+or requires a stored CI receipt.
 
 CI captures build and test transcripts in the broker. A direct product gate
 prints one success result; root `./ci.sh` suppresses child success results and
@@ -54,23 +56,33 @@ suppresses only a successful summary for enclosing orchestration. These are
 presentation options and do not change admission identity or gate checks.
 See [the broker](../ci_broker/README.md) for log bounds and retention.
 
-For deployment preparation, public product gates accept
-`--stage-candidate ABSOLUTE_DIRECTORY`. They run the same complete checks, seal
+Public product gates retain `--stage-candidate ABSOLUTE_DIRECTORY` for callers
+that want a candidate from a full CI run. They run the same complete checks, seal
 the exact release executables before their admitted body exits, and return a
 broker receipt on success. Staging stays inside the shared Cargo lane; it is
-not another build path or a way to skip admission. The deployment coordinator
-accepts staged bytes only with the matching passed receipt and fixed committed
-source identity. See [deployment](../deployment/README.md).
-For Usher, staging seals both `usher` and `usher-install`; the coordinator
-invokes the sealed installer's Rust adapter. The recognition executable remains
-the read-only Cell membership command.
+not a way to skip CI admission. Release and deployment preparation instead use
+the shared release builder described below. For Usher, both paths seal `usher`
+and `usher-install`; the coordinator invokes the sealed installer's Rust adapter.
 Presentation options precede `--stage-candidate`; staging always requests the
 complete machine receipt even when the enclosing caller suppresses summaries.
 
+`deployment/build.py` requires Python 3.11 or newer and prepares production
+executables for release and deployment
+without tests, formatting, Clippy, documentation builds, or generator CI. It
+builds the selected Cargo packages and binaries in one release-profile Cargo
+invocation, then seals product candidates in parallel. Release builds share a
+persistent target and a file lock per logical Git repository, separate from the
+CI target and broker. Cargo defaults to at most eight jobs. Completed candidates
+are cached by source content and build inputs, with executable hashes and
+versions checked before reuse. The cache excludes Git HEAD, so a release's
+version-update build can be reused after those exact source bytes are committed.
+It records build evidence, not CI success. See [deployment](../deployment/README.md)
+for invocation, candidate identity, and cache retention.
+
 `pipeline/release.sh` retains product release authority. It holds one lock in
-the repository's Git common directory from preflight through CI and atomic
-push, and it rechecks `origin/main` and the release tag immediately before
-commit, tag, and push. On macOS, `shlock` safely replaces a lock whose recorded
-process no longer exists. Other hosts use a fail-closed `mkdir` fallback and
+the repository's Git common directory from preflight through the release build
+and atomic push, and it rechecks `origin/main` and the release tag immediately
+before commit, tag, and push. On macOS, `shlock` safely replaces a lock whose
+recorded process no longer exists. Other hosts use a fail-closed `mkdir` fallback and
 must verify that no release is active before removing a stale
 `.git/cell-release-publication.lock.d`.
