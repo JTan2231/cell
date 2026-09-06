@@ -354,7 +354,18 @@ def prune(home, installs, verifiers=None):
             if path.exists() or path.is_symlink():
                 receipt = read_record(path)
                 selected = receipt.get("release_id", receipt.get("release", "").removeprefix("releases/"))
-                require(receipt.get("completed_at") and selected == currents[application].name,
+                completed = receipt.get("completed_at")
+                if product == "semantics" and name == "last-update.json" and not completed:
+                    # Semantics records completion through its released maintenance
+                    # state; lifecycle_barriers already excludes pending transactions.
+                    snapshot = receipt.get("rollback_snapshot")
+                    completed = (receipt.get("version") == 1
+                                 and receipt.get("maintenance_retained") is False
+                                 and isinstance(receipt.get("clockwork_definition"), str)
+                                 and HEX.fullmatch(receipt["clockwork_definition"])
+                                 and isinstance(snapshot, str)
+                                 and Path(snapshot).parent == base / application / "backups/deployments")
+                require(completed and selected == currents[application].name,
                         "installation history receipt is not completed current state")
                 if verifier is not None:
                     receipts.append(path)

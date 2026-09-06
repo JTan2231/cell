@@ -100,6 +100,45 @@ class ReleaseCleanupTests(unittest.TestCase):
         (install / "previous").symlink_to("releases/" + self.old)
         return current, old
 
+    def test_semantics_completed_receipt_uses_its_product_fields(self):
+        current = self.release("Semantics", self.current)
+        old = self.release("Semantics", self.old)
+        install = current.parent.parent
+        (install / "current").symlink_to("releases/" + self.current)
+        (install / "previous").symlink_to("releases/" + self.old)
+        verifier = self.home / "sealed-candidates/semantics/bin/semantics-install"
+        verifier.parent.mkdir(parents=True)
+        verifier.write_text("admitted candidate fixture")
+        verifier.chmod(0o555)
+        self.verifiers["semantics"] = verifier
+        receipt = {"version": 1, "release_id": self.current,
+                   "previous": {"current": None, "previous": None, "entries": {}},
+                   "clockwork_definition": "1" * 64, "maintenance_retained": False,
+                   "rollback_snapshot": str(self.base / "Semantics/backups/deployments/pre-current-fixture")}
+        history = install / "last-update.json"
+        for changed in ({"maintenance_retained": True}, {"release_id": self.old},
+                        {"version": 2}, {"clockwork_definition": "invalid"}):
+            history.write_text(json.dumps(receipt | changed))
+            with self.subTest(changed=changed), self.assertRaisesRegex(cleanup.CleanupError, "not completed"):
+                self.run_cleanup()
+            self.assertTrue(old.is_dir())
+            self.assertTrue(self.history.is_file())
+        history.write_text(json.dumps(receipt))
+        pending = install / ".transaction.fixture"
+        pending.mkdir()
+        with self.assertRaisesRegex(cleanup.CleanupError, "transaction"):
+            self.run_cleanup()
+        pending.rmdir()
+        self.history.write_text(json.dumps(receipt))
+        with self.assertRaisesRegex(cleanup.CleanupError, "not completed"):
+            self.run_cleanup()
+        self.history.write_text(json.dumps({"release_id": self.current, "completed_at": "completed"}))
+        result = self.run_cleanup()
+        self.assertEqual(result["removed_history_receipts"], 2)
+        self.assertTrue(current.is_dir())
+        self.assertFalse(old.exists())
+        self.assertFalse(history.exists())
+
     def test_usher_history_is_retained_without_a_trusted_candidate_installer(self):
         current, old = self.usher_releases()
         result = self.run_cleanup()
