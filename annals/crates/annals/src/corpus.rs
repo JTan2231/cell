@@ -261,8 +261,8 @@ pub(crate) struct ShakePlan {
     after: Snapshot,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct ShakeEdge {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShakeEdge {
     pub parent: ConceptReference,
     pub child: ConceptReference,
 }

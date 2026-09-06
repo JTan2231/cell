@@ -49,3 +49,12 @@ registered or seeded by this change.
 `release.sh` commits, tags, and pushes. The macOS packaging scripts change
 installed selectors. Neither is a build command, and neither should be run
 without separate authority.
+
+## Rust interface
+
+`clockwork::api` owns the activation manifest, definition, binding and history
+types, their existing codecs, and a typed client for an explicitly selected
+Clockwork executable. The CLI serializes these same types. Manifest decoding
+is structural; registration still performs the authoritative local-artifact
+and scheduling checks. Private plist bookkeeping is excluded from binding
+exports. Existing shell installation integrations are unchanged.

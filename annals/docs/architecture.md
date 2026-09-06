@@ -361,3 +361,13 @@ field for field with the complete relevant Annals release before Annals
 disables or replaces it; unknown same-key state is left untouched. On
 success the old generation remains under `backups/generations/` for explicit
 recovery.
+
+## Rust account interface
+
+`annals-api` owns the acceptance receipt, success envelope, watermark, fixed
+page, accepted-account event, and the typed CLI client. Annals emits these same
+types. Krisis and Semantics import them, then retain only their own delivery
+policy, target binding, local projections, and durable progress. Annals decodes
+Krisis account content with `krisis_api::account`; its database and feed
+projection remain Annals-owned. This library extraction preserves the CLI
+JSON, account bytes, cursor rules, and persistent schema.

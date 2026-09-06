@@ -12,11 +12,11 @@ const FIRST_MIGRATABLE_SCHEMA_VERSION: i64 = 1;
 pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 2;
 const SCHEMA: &str = include_str!("../schema.sql");
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-pub(crate) struct MigrationOutcome {
-    pub(crate) from_version: i64,
-    pub(crate) to_version: i64,
-    pub(crate) migrated: bool,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MigrationOutcome {
+    pub from_version: i64,
+    pub to_version: i64,
+    pub migrated: bool,
 }
 
 /// Create and initialize a fresh Todo database without replacing a path.

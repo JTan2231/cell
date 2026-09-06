@@ -18,6 +18,168 @@ const CONCURRENCY_LABEL: &str = "Concurrency control";
 const SERIALIZABLE_LABEL: &str = "Serializable execution";
 const LOCKING_LABEL: &str = "Predicate locking";
 
+#[test]
+fn public_reader_and_cli_share_corpus_and_retention_views() -> TestResult {
+    use annals::api::{LibraryReader, RetentionResult, RootsResult, WorkContent};
+    let library = Library::initialized()?;
+    let retained = library.add_work("Read boundary", "read.txt", "Unchanged source.\n")?;
+    let result: RetentionResult = serde_json::from_value(retained.clone())?;
+    assert_eq!(result.retention, "new");
+    assert_eq!(serde_json::to_value(&result)?, retained);
+    seed_diamond(&library, "Diamond")?;
+    let reader = LibraryReader::open(&library.path)?;
+    let shown = library.json_ok(["work", "show", "Read boundary"])?;
+    let content: WorkContent = serde_json::from_value(shown.clone())?;
+    assert_eq!(content.text, "Unchanged source.\n");
+    assert_eq!(serde_json::to_value(reader.work("Read boundary")?)?, shown);
+    let roots = library.json_ok(["roots", "--limit", "1"])?;
+    let typed: RootsResult = serde_json::from_value(roots.clone())?;
+    assert_eq!(typed.revision, 1);
+    assert_eq!(serde_json::to_value(reader.roots(None, 1, None)?)?, roots);
+    assert_eq!(
+        serde_json::to_value(reader.overview(Some(1))?)?,
+        library.json_ok(["overview", "--at", "1"])?
+    );
+    assert_eq!(
+        serde_json::to_value(reader.log(20)?)?,
+        library.json_ok(["log", "--limit", "20"])?
+    );
+    assert_eq!(
+        reader
+            .roots(None, 0, None)
+            .err()
+            .ok_or("zero page size must fail")?
+            .code(),
+        "invalid_limit"
+    );
+    assert!(annals::api::parse_reconciliation(&diamond_reconciliation().to_string()).is_ok());
+    assert!(annals::api::parse_reconciliation(r#"{"summary":"invalid","operations":[]}"#).is_err());
+    Ok(())
+}
+
+#[test]
+fn public_graph_reader_preserves_cli_pages_and_walk_bounds() -> TestResult {
+    use annals::api::{GraphDirection, LibraryReader};
+    let library = Library::initialized()?;
+    seed_diamond(&library, "Diamond")?;
+    let id_text = search_concept_id(&library, 1, SERIALIZABLE_LABEL)?;
+    let id = id_text.parse()?;
+    let reader = LibraryReader::open(&library.path)?;
+    let parents = reader.parents(None, id, 1, None)?;
+    assert_eq!(
+        serde_json::to_value(&parents)?,
+        library.json_ok(["concept", "parents", &id_text, "--limit", "1"])?
+    );
+    let cursor = parents
+        .parents
+        .page
+        .next_cursor
+        .as_deref()
+        .ok_or("missing parent cursor")?;
+    assert_eq!(
+        serde_json::to_value(reader.parents(None, id, 1, Some(cursor))?)?,
+        library.json_ok([
+            "concept", "parents", &id_text, "--limit", "1", "--cursor", cursor
+        ])?
+    );
+    assert_eq!(
+        serde_json::to_value(reader.children(Some(1), id, 20, None)?)?,
+        library.json_ok(["concept", "children", &id_text, "--at", "1"])?
+    );
+    assert_eq!(
+        serde_json::to_value(reader.walk(Some(1), id, GraphDirection::Both, 2, 3)?)?,
+        library.json_ok([
+            "graph",
+            &id_text,
+            "--at",
+            "1",
+            "--direction",
+            "both",
+            "--depth",
+            "2",
+            "--max-nodes",
+            "3"
+        ])?
+    );
+    assert_eq!(
+        reader
+            .walk(None, id, GraphDirection::Both, 2, 0)
+            .err()
+            .ok_or("zero graph bound must fail")?
+            .code(),
+        "invalid_graph_bounds"
+    );
+    Ok(())
+}
+
+#[test]
+fn typed_cli_retains_submits_and_applies_without_rebuilding_the_protocol() -> TestResult {
+    use annals::api::{
+        ChangeCommand, ChangeSelectArgs, ChangeSubmitArgs, CliClient, ClientError, Request,
+        Response, WorkAddArgs, WorkCommand, WorkShowArgs,
+    };
+    let library = Library::initialized()?;
+    let mut client = CliClient::new(env!("CARGO_BIN_EXE_annals").into());
+    client.library = Some(library.path.clone());
+    let name = "--exact work label with spaces";
+    let add = Request::Work(WorkCommand::Add(WorkAddArgs {
+        input: "-".into(),
+        name: Some(name.to_owned()),
+    }));
+    let Response::Retained(retained) =
+        client.call_with_input(&add, Some(diamond_source().as_bytes()))?
+    else {
+        return Err("retention returned another view".into());
+    };
+    assert_eq!(retained.work, name);
+    assert_eq!(retained.corpus_revision, 0);
+    let show = Request::Work(WorkCommand::Show(WorkShowArgs {
+        label: name.to_owned(),
+    }));
+    let Response::Work(work) = client.call(&show)? else {
+        return Err("work show returned another view".into());
+    };
+    assert_eq!(work.text, diamond_source());
+    assert!(matches!(
+        client.call_with_input(&show, Some(b"unrequested")),
+        Err(ClientError::UnexpectedInput)
+    ));
+    let request = diamond_reconciliation().to_string();
+    let submit = Request::Change(ChangeCommand::Submit(ChangeSubmitArgs {
+        input: "-".into(),
+        work: name.to_owned(),
+        base: 0,
+    }));
+    let Response::Reconciliation(submitted) =
+        client.call_with_input(&submit, Some(request.as_bytes()))?
+    else {
+        return Err("submission returned another view".into());
+    };
+    assert_eq!(submitted.status, "pending");
+    let Response::Applied(applied) =
+        client.call(&Request::Change(ChangeCommand::Apply(ChangeSelectArgs {
+            work: Some(name.to_owned()),
+        })))?
+    else {
+        return Err("application returned another view".into());
+    };
+    assert_eq!(applied.revision, 1);
+    let missing = Request::Work(WorkCommand::Show(WorkShowArgs {
+        label: "missing".to_owned(),
+    }));
+    let Err(ClientError::Failed {
+        exit_code,
+        error: Some(error),
+        ..
+    }) = client.call(&missing)
+    else {
+        return Err("missing work did not return a typed provider failure".into());
+    };
+    assert_eq!(exit_code, Some(3));
+    assert_eq!(error.code, "work_not_found");
+    Ok(())
+}
+
 struct Library {
     directory: TempDir,
     path: PathBuf,

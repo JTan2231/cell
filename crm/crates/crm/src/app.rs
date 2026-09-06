@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::api::{Data, Failure, Success, UpdateData, UpdateView};
 use clap::Parser as _;
-use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::cli::{CaseCommand, Cli, Command, TellArgs, UpdateCommand, WorkerCommand};
@@ -48,14 +48,6 @@ impl From<Error> for CommandFailure {
 
 type CommandResult<T> = std::result::Result<T, CommandFailure>;
 
-#[derive(Serialize)]
-struct UpdateView {
-    #[serde(flatten)]
-    update: StewardUpdate,
-    advisory: Option<String>,
-    attention: bool,
-}
-
 pub fn main_entry() -> i32 {
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
@@ -69,7 +61,8 @@ pub fn main_entry() -> i32 {
     match run(cli) {
         Ok(Some(output)) => {
             let rendered = if compact {
-                serde_json::to_string(&json!({"ok": true, "data": output.data}))
+                serde_json::from_value::<Data>(output.data)
+                    .and_then(|data| serde_json::to_string(&Success::new(data)))
                     .unwrap_or_else(|_| "{\"ok\":false}".to_owned())
             } else {
                 output.human
@@ -81,16 +74,15 @@ pub fn main_entry() -> i32 {
         Err(failure) => {
             let error = &failure.error;
             if compact {
-                let mut response = json!({
-                    "ok": false,
-                    "error": {"code": error.code(), "message": error.to_string()}
-                });
-                if let Some(update) = failure.context.as_ref() {
-                    response["context"] = json!({
-                        "type": "update",
-                        "update": update
+                let mut response = Failure::new(error.code(), error.to_string());
+                response.context = failure
+                    .context
+                    .as_deref()
+                    .cloned()
+                    .map(|update| UpdateData {
+                        kind: "update".into(),
+                        update,
                     });
-                }
                 eprintln!(
                     "{}",
                     serde_json::to_string(&response)

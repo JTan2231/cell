@@ -4,6 +4,8 @@ version = "0.15.5"
 edition.workspace = true
 
 [dependencies]
+annals-api.workspace = true
+krisis-api.workspace = true
 base64 = { workspace = true }
 clap = { workspace = true }
 fs2 = { workspace = true }

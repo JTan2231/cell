@@ -199,17 +199,7 @@ struct ProducerReceipt {
     work_label: String,
 }
 
-#[derive(Debug, Serialize)]
-struct AcceptanceSummary {
-    contract_version: u32,
-    library_id: String,
-    producer: String,
-    key: String,
-    source_sha256: String,
-    job_id: String,
-    accepted_at: String,
-    acceptance: &'static str,
-}
+use annals_api::AcceptanceReceipt as AcceptanceSummary;
 
 struct AcceptedSource {
     source_sha256: String,
@@ -301,7 +291,7 @@ fn storage_location_status_with(
         )
     })?;
     Ok(StorageLocationStatus {
-        role,
+        role: role.to_owned(),
         path: path.display().to_string(),
         available_bytes,
     })
@@ -433,140 +423,140 @@ fn remove_pause_marker(spool: &Spool) -> Result<bool, AppError> {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
-struct StorageLocationStatus {
-    role: &'static str,
-    path: String,
-    available_bytes: u64,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StorageLocationStatus {
+    pub role: String,
+    pub path: String,
+    pub available_bytes: u64,
 }
 
-#[derive(Clone, Debug, Serialize)]
-struct StorageStatus {
-    enabled: bool,
-    minimum_available_bytes: u64,
-    ready: bool,
-    locations: Vec<StorageLocationStatus>,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StorageStatus {
+    pub enabled: bool,
+    pub minimum_available_bytes: u64,
+    pub ready: bool,
+    pub locations: Vec<StorageLocationStatus>,
 }
 
-#[derive(Debug, Serialize)]
-struct InboxStatus {
-    root: String,
-    incoming: usize,
-    ready: usize,
-    settling: usize,
-    ignored: usize,
-    queued: usize,
-    priority_queued: usize,
-    next_job: Option<RegisteredJob>,
-    active_job: Option<ActiveJob>,
-    processing: usize,
-    done: usize,
-    duplicates: usize,
-    failed: usize,
-    skipped: usize,
-    locked: bool,
-    paused: bool,
-    maintenance: bool,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InboxStatus {
+    pub root: String,
+    pub incoming: usize,
+    pub ready: usize,
+    pub settling: usize,
+    pub ignored: usize,
+    pub queued: usize,
+    pub priority_queued: usize,
+    pub next_job: Option<RegisteredJob>,
+    pub active_job: Option<ActiveJob>,
+    pub processing: usize,
+    pub done: usize,
+    pub duplicates: usize,
+    pub failed: usize,
+    pub skipped: usize,
+    pub locked: bool,
+    pub paused: bool,
+    pub maintenance: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    storage: Option<StorageStatus>,
+    pub storage: Option<StorageStatus>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[allow(clippy::struct_excessive_bools)]
-struct RunSummary {
-    root: String,
-    settle_seconds: u64,
-    registered: usize,
-    attempted: usize,
-    applied: usize,
-    recorded: usize,
-    duplicates: usize,
-    failed: usize,
-    skipped: usize,
-    recovered: usize,
-    remaining: usize,
-    settling: usize,
-    ignored: usize,
-    elapsed_seconds: f64,
-    queue_drained: bool,
-    stopped_for_pause: bool,
-    stopped_for_maintenance: bool,
-    stopped_for_low_space: bool,
+pub struct RunSummary {
+    pub root: String,
+    pub settle_seconds: u64,
+    pub registered: usize,
+    pub attempted: usize,
+    pub applied: usize,
+    pub recorded: usize,
+    pub duplicates: usize,
+    pub failed: usize,
+    pub skipped: usize,
+    pub recovered: usize,
+    pub remaining: usize,
+    pub settling: usize,
+    pub ignored: usize,
+    pub elapsed_seconds: f64,
+    pub queue_drained: bool,
+    pub stopped_for_pause: bool,
+    pub stopped_for_maintenance: bool,
+    pub stopped_for_low_space: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    storage: Option<StorageStatus>,
+    pub storage: Option<StorageStatus>,
 }
 
-#[derive(Debug, Serialize)]
-struct RegistrationSummary {
-    root: String,
-    settle_seconds: u64,
-    registered: usize,
-    jobs: Vec<RegisteredJob>,
-    queued: usize,
-    ready: usize,
-    settling: usize,
-    ignored: usize,
-    paused: bool,
-    maintenance: bool,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RegistrationSummary {
+    pub root: String,
+    pub settle_seconds: u64,
+    pub registered: usize,
+    pub jobs: Vec<RegisteredJob>,
+    pub queued: usize,
+    pub ready: usize,
+    pub settling: usize,
+    pub ignored: usize,
+    pub paused: bool,
+    pub maintenance: bool,
 }
 
-#[derive(Debug, Serialize)]
-struct EnqueueSummary {
-    root: String,
-    registered: usize,
-    priority: JobPriority,
-    jobs: Vec<RegisteredJob>,
-    queued: usize,
-    priority_queued: usize,
-    next_job: Option<RegisteredJob>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EnqueueSummary {
+    pub root: String,
+    pub registered: usize,
+    pub priority: JobPriority,
+    pub jobs: Vec<RegisteredJob>,
+    pub queued: usize,
+    pub priority_queued: usize,
+    pub next_job: Option<RegisteredJob>,
 }
 
-#[derive(Debug, Serialize)]
-struct PrioritySummary {
-    root: String,
-    requested: usize,
-    changed: usize,
-    priority: JobPriority,
-    jobs: Vec<RegisteredJob>,
-    priority_queued: usize,
-    next_job: Option<RegisteredJob>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PrioritySummary {
+    pub root: String,
+    pub requested: usize,
+    pub changed: usize,
+    pub priority: JobPriority,
+    pub jobs: Vec<RegisteredJob>,
+    pub priority_queued: usize,
+    pub next_job: Option<RegisteredJob>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct RegisteredJob {
-    id: String,
-    sequence: u64,
-    source_name: String,
-    registered_at: String,
-    priority: JobPriority,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisteredJob {
+    pub id: String,
+    pub sequence: u64,
+    pub source_name: String,
+    pub registered_at: String,
+    pub priority: JobPriority,
 }
 
-#[derive(Debug, Serialize)]
-struct ActiveJob {
-    id: String,
-    sequence: u64,
-    source_name: String,
-    attempts: u32,
-    started_at: Option<String>,
-    interrupt_requested: Option<String>,
-    priority: JobPriority,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ActiveJob {
+    pub id: String,
+    pub sequence: u64,
+    pub source_name: String,
+    pub attempts: u32,
+    pub started_at: Option<String>,
+    pub interrupt_requested: Option<String>,
+    pub priority: JobPriority,
 }
 
-#[derive(Debug, Serialize)]
-struct InterruptSummary {
-    root: String,
-    job_id: String,
-    disposition: String,
-    requested: bool,
-    reason: Option<String>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InterruptSummary {
+    pub root: String,
+    pub job_id: String,
+    pub disposition: String,
+    pub requested: bool,
+    pub reason: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-struct BacklogImportSummary {
-    source: String,
-    destination: String,
-    imported: usize,
-    queued: usize,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BacklogImportSummary {
+    pub source: String,
+    pub destination: String,
+    pub imported: usize,
+    pub queued: usize,
 }
 
 struct BacklogSource {
@@ -595,14 +585,14 @@ impl From<&Envelope> for RegisteredJob {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[allow(clippy::struct_excessive_bools)]
-struct PauseSummary {
-    root: String,
-    paused: bool,
-    changed: bool,
-    locked: bool,
-    maintenance: bool,
+pub struct PauseSummary {
+    pub root: String,
+    pub paused: bool,
+    pub changed: bool,
+    pub locked: bool,
+    pub maintenance: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -762,7 +752,7 @@ struct VersionFourJobReceipt {
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-enum JobPriority {
+pub enum JobPriority {
     #[default]
     Normal,
     Priority,
@@ -1481,11 +1471,11 @@ fn acceptance_output(
         contract_version: decision_feed::CONTRACT_VERSION,
         library_id: library_id.to_owned(),
         producer: producer.to_owned(),
-        key: key.to_owned(),
+        producer_key: key.to_owned(),
         source_sha256: record.source_sha256,
         job_id: record.job_id,
         accepted_at: record.accepted_at,
-        acceptance: if created { "created" } else { "replayed" },
+        acceptance: if created { "created" } else { "replayed" }.to_owned(),
     };
     let human = format!(
         "{} Krisis decision account {} as job {}",
@@ -1941,7 +1931,7 @@ pub(crate) fn retry_status(
         );
     }
     Ok(CommandOutput::new(
-        serde_json::json!({ "events": events }),
+        serde_json::json!(crate::api::RetryEventsResult { events }),
         human,
     ))
 }

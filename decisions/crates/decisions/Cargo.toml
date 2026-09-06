@@ -8,6 +8,8 @@ name = "krisis"
 path = "src/main.rs"
 
 [dependencies]
+annals-api.workspace = true
+krisis-api.workspace = true
 clap.workspace = true
 conversations = { path = "../../../conversations/crates/conversations" }
 fs2.workspace = true

@@ -59,3 +59,12 @@ These reads and deterministic writes use Todo SQLite directly and do not
 invoke Nucleus. They can expose private directions, paths, notes, assessment
 findings, and design content. Model completion or prose never substitutes for
 the explicit decision commands.
+
+## Rust callers
+
+The provider crate exports `todo::api`: supported request and response
+types, provider-owned envelope decoding, and an explicit-executable CLI client.
+Use these types at imports and convert only to caller-local domain values.
+The client performs the same operations under this contract and never adds
+retry or authorization. See `todo/docs/rust-api.md`; the Rust structs and
+enums define the interface without a separate declaration layer.

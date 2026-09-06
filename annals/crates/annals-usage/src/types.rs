@@ -3,25 +3,27 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[allow(clippy::struct_field_names)]
-pub(crate) struct TokenUsageBreakdown {
-    pub(crate) input_tokens: i64,
-    pub(crate) cached_input_tokens: i64,
+pub struct TokenUsageBreakdown {
+    pub input_tokens: i64,
+    pub cached_input_tokens: i64,
     #[serde(default)]
-    pub(crate) cache_write_input_tokens: i64,
-    pub(crate) output_tokens: i64,
-    pub(crate) reasoning_output_tokens: i64,
-    pub(crate) total_tokens: i64,
+    pub cache_write_input_tokens: i64,
+    pub output_tokens: i64,
+    pub reasoning_output_tokens: i64,
+    pub total_tokens: i64,
 }
 
 impl TokenUsageBreakdown {
-    pub(crate) fn ordinary_input_tokens(self) -> Option<i64> {
+    #[must_use]
+    pub fn ordinary_input_tokens(self) -> Option<i64> {
         self.input_tokens
             .checked_sub(self.cached_input_tokens)?
             .checked_sub(self.cache_write_input_tokens)
             .filter(|tokens| *tokens >= 0)
     }
 
-    pub(crate) fn is_consistent(self) -> bool {
+    #[must_use]
+    pub fn is_consistent(self) -> bool {
         self.input_tokens >= 0
             && self.cached_input_tokens >= 0
             && self.cache_write_input_tokens >= 0
@@ -36,11 +38,11 @@ impl TokenUsageBreakdown {
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ThreadTokenUsage {
-    pub(crate) last: TokenUsageBreakdown,
-    pub(crate) total: TokenUsageBreakdown,
+pub struct ThreadTokenUsage {
+    pub last: TokenUsageBreakdown,
+    pub total: TokenUsageBreakdown,
     #[serde(default)]
-    pub(crate) model_context_window: Option<i64>,
+    pub model_context_window: Option<i64>,
 }
 
 #[cfg(test)]

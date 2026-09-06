@@ -9,9 +9,9 @@ use crate::inventory::{Product, valid_id, valid_slug};
 
 const MAX_FILE_BYTES: u64 = 1_048_576;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum Status {
+pub enum Status {
     Declared,
     Missing,
     Invalid,
@@ -30,7 +30,7 @@ impl Status {
 }
 
 pub(crate) struct Problem {
-    pub(crate) status: Status,
+    pub status: Status,
     pub(crate) message: String,
 }
 
@@ -56,19 +56,19 @@ impl Problem {
     }
 }
 
-#[derive(Serialize)]
-pub(crate) struct Issue {
-    status: Status,
-    path: String,
-    message: String,
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Issue {
+    pub status: Status,
+    pub path: String,
+    pub message: String,
 }
 
-#[derive(Serialize)]
-pub(crate) struct Finding {
-    pub(crate) status: Status,
-    pub(crate) identities: Vec<String>,
-    pub(crate) evidence: Vec<String>,
-    pub(crate) issues: Vec<Issue>,
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Finding {
+    pub status: Status,
+    pub identities: Vec<String>,
+    pub evidence: Vec<String>,
+    pub issues: Vec<Issue>,
 }
 
 impl Finding {
@@ -197,33 +197,9 @@ pub(crate) fn semantics(root: &Path, product: &Product) -> Finding {
     finding
 }
 
-// These are introduction projections, not a second Chancery schema validator.
-// Outward promises, dependencies, release compatibility and quality are not
-// interpreted. Chancery's own existing gates validate the complete bundle.
-#[derive(Deserialize)]
-struct Manifest {
-    schema_version: u32,
-    provider: ProviderIdentity,
-    entries: Vec<String>,
-}
-
-#[derive(Deserialize)]
-struct ProviderIdentity {
-    id: String,
-    name: String,
-    release: String,
-}
-
-#[derive(Deserialize)]
-struct Entry {
-    id: String,
-    contract_version: u32,
-    manual: String,
-}
-
-fn json<T: serde::de::DeserializeOwned>(root: &Path, path: &str) -> Result<T, Problem> {
-    serde_json::from_str(&read(root, path)?)
-        .map_err(|_| Problem::invalid("malformed JSON or missing/invalid introduction fields"))
+// Chancery owns this partial wire view; Usher owns membership evidence policy.
+fn introduction_error(_: serde_json::Error) -> Problem {
+    Problem::invalid("malformed JSON or missing/invalid introduction fields")
 }
 
 fn inspect_provider(
@@ -233,7 +209,8 @@ fn inspect_provider(
     finding: &mut Finding,
 ) -> Result<(), Problem> {
     let path = format!("{provider_dir}/provider.json");
-    let manifest: Manifest = json(root, &path)?;
+    let manifest = chancery::api::ProviderIntroduction::decode(&read(root, &path)?)
+        .map_err(introduction_error)?;
     if !(1..=3).contains(&manifest.schema_version) {
         return Err(Problem::new(
             Status::Unassessed,
@@ -272,7 +249,8 @@ fn inspect_provider(
             continue;
         }
         let result = (|| {
-            let entry: Entry = json(&bundle_root, &entry_path)?;
+            let entry = chancery::api::EntryIntroduction::decode(&read(&bundle_root, &entry_path)?)
+                .map_err(introduction_error)?;
             let prefix = format!("{id}.");
             if !entry
                 .id

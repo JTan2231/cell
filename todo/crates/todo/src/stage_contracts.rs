@@ -202,44 +202,44 @@ pub(crate) fn contract(stage: Stage) -> StageContract {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct LegacyCreateTodo {
     pub(crate) title: String,
     pub(crate) note: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct PageRequest {
-    pub(crate) cursor: Option<String>,
+pub struct PageRequest {
+    pub cursor: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct CandidateReadRequest {
-    pub(crate) candidate_id: String,
-    pub(crate) cursor: Option<String>,
+pub struct CandidateReadRequest {
+    pub candidate_id: String,
+    pub cursor: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct SourceReadRequest {
-    pub(crate) source_id: String,
-    pub(crate) cursor: Option<String>,
+pub struct SourceReadRequest {
+    pub source_id: String,
+    pub cursor: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct SourceSearchRequest {
-    pub(crate) source_id: String,
-    pub(crate) query: String,
-    pub(crate) cursor: Option<String>,
+pub struct SourceSearchRequest {
+    pub source_id: String,
+    pub query: String,
+    pub cursor: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum RoutingDisposition {
+pub enum RoutingDisposition {
     Attach,
     Create,
     Revise,
@@ -250,14 +250,14 @@ pub(crate) enum RoutingDisposition {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct RoutingTarget {
-    pub(crate) todo_id: String,
-    pub(crate) direction_revision: u64,
+pub struct RoutingTarget {
+    pub todo_id: String,
+    pub direction_revision: u64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum DirectionBoundaryKind {
+pub enum DirectionBoundaryKind {
     Required,
     Forbidden,
     Authority,
@@ -267,7 +267,7 @@ pub(crate) enum DirectionBoundaryKind {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum DirectionBoundaryAttribution {
+pub enum DirectionBoundaryAttribution {
     ExplicitUser,
     GoverningInstruction,
     AcceptedInference,
@@ -275,45 +275,45 @@ pub(crate) enum DirectionBoundaryAttribution {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ProposedDirectionBoundary {
-    pub(crate) r#ref: String,
-    pub(crate) kind: DirectionBoundaryKind,
-    pub(crate) text: String,
-    pub(crate) attribution: DirectionBoundaryAttribution,
-    pub(crate) basis_refs: Vec<String>,
+pub struct ProposedDirectionBoundary {
+    pub r#ref: String,
+    pub kind: DirectionBoundaryKind,
+    pub text: String,
+    pub attribution: DirectionBoundaryAttribution,
+    pub basis_refs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ProposedDirection {
-    pub(crate) title: String,
-    pub(crate) body: String,
-    pub(crate) boundaries: Vec<ProposedDirectionBoundary>,
+pub struct ProposedDirection {
+    pub title: String,
+    pub body: String,
+    pub boundaries: Vec<ProposedDirectionBoundary>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct UnifyRoute {
-    pub(crate) left: RoutingTarget,
-    pub(crate) right: RoutingTarget,
-    pub(crate) survivor_todo_id: String,
+pub struct UnifyRoute {
+    pub left: RoutingTarget,
+    pub right: RoutingTarget,
+    pub survivor_todo_id: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ConcernRoutingProposal {
-    pub(crate) disposition: RoutingDisposition,
-    pub(crate) targets: Vec<RoutingTarget>,
-    pub(crate) proposed_direction: Option<ProposedDirection>,
-    pub(crate) unify: Option<UnifyRoute>,
-    pub(crate) rationale: String,
-    pub(crate) evidence_refs: Vec<String>,
-    pub(crate) limitations: Vec<String>,
+pub struct ConcernRoutingProposal {
+    pub disposition: RoutingDisposition,
+    pub targets: Vec<RoutingTarget>,
+    pub proposed_direction: Option<ProposedDirection>,
+    pub unify: Option<UnifyRoute>,
+    pub rationale: String,
+    pub evidence_refs: Vec<String>,
+    pub limitations: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum AssessmentDisposition {
+pub enum AssessmentDisposition {
     Ready,
     NeedsUserChoice,
     Inconclusive,
@@ -321,14 +321,14 @@ pub(crate) enum AssessmentDisposition {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct SubjectIdentity {
-    pub(crate) label: String,
-    pub(crate) identity_refs: Vec<String>,
+pub struct SubjectIdentity {
+    pub label: String,
+    pub identity_refs: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum FindingKind {
+pub enum FindingKind {
     CurrentState,
     Constraint,
     Dependency,
@@ -337,24 +337,24 @@ pub(crate) enum FindingKind {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct AssessmentFinding {
-    pub(crate) r#ref: String,
-    pub(crate) kind: FindingKind,
-    pub(crate) claim: String,
-    pub(crate) evidence_refs: Vec<String>,
+pub struct AssessmentFinding {
+    pub r#ref: String,
+    pub kind: FindingKind,
+    pub claim: String,
+    pub evidence_refs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct JurisdictionAssignment {
-    pub(crate) party: String,
-    pub(crate) role: JurisdictionRole,
-    pub(crate) responsibility: String,
+pub struct JurisdictionAssignment {
+    pub party: String,
+    pub role: JurisdictionRole,
+    pub responsibility: String,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum JurisdictionRole {
+pub enum JurisdictionRole {
     Owner,
     Participant,
     Consumer,
@@ -362,16 +362,16 @@ pub(crate) enum JurisdictionRole {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct JurisdictionFinding {
-    pub(crate) key: String,
-    pub(crate) concern: String,
-    pub(crate) assignments: Vec<JurisdictionAssignment>,
-    pub(crate) evidence_refs: Vec<String>,
+pub struct JurisdictionFinding {
+    pub key: String,
+    pub concern: String,
+    pub assignments: Vec<JurisdictionAssignment>,
+    pub evidence_refs: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum BoundaryDisposition {
+pub enum BoundaryDisposition {
     Satisfied,
     Unsatisfied,
     ConstrainsDesign,
@@ -380,16 +380,16 @@ pub(crate) enum BoundaryDisposition {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct DirectionMapping {
-    pub(crate) boundary_ref: String,
-    pub(crate) disposition: BoundaryDisposition,
-    pub(crate) finding_refs: Vec<String>,
-    pub(crate) explanation: String,
+pub struct DirectionMapping {
+    pub boundary_ref: String,
+    pub disposition: BoundaryDisposition,
+    pub finding_refs: Vec<String>,
+    pub explanation: String,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum UnresolvedKind {
+pub enum UnresolvedKind {
     UserChoice,
     EvidenceGap,
     JurisdictionConflict,
@@ -397,29 +397,29 @@ pub(crate) enum UnresolvedKind {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct UnresolvedAssessmentItem {
-    pub(crate) r#ref: String,
-    pub(crate) kind: UnresolvedKind,
-    pub(crate) description: String,
-    pub(crate) materiality: String,
-    pub(crate) evidence_refs: Vec<String>,
+pub struct UnresolvedAssessmentItem {
+    pub r#ref: String,
+    pub kind: UnresolvedKind,
+    pub description: String,
+    pub materiality: String,
+    pub evidence_refs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct SituationAssessment {
-    pub(crate) disposition: AssessmentDisposition,
-    pub(crate) summary: String,
-    pub(crate) subject: SubjectIdentity,
-    pub(crate) findings: Vec<AssessmentFinding>,
-    pub(crate) jurisdictions: Vec<JurisdictionFinding>,
-    pub(crate) direction_mappings: Vec<DirectionMapping>,
-    pub(crate) unresolved: Vec<UnresolvedAssessmentItem>,
+pub struct SituationAssessment {
+    pub disposition: AssessmentDisposition,
+    pub summary: String,
+    pub subject: SubjectIdentity,
+    pub findings: Vec<AssessmentFinding>,
+    pub jurisdictions: Vec<JurisdictionFinding>,
+    pub direction_mappings: Vec<DirectionMapping>,
+    pub unresolved: Vec<UnresolvedAssessmentItem>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum DesignClauseKind {
+pub enum DesignClauseKind {
     Ownership,
     Boundary,
     State,
@@ -433,36 +433,36 @@ pub(crate) enum DesignClauseKind {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct NewDesignClause {
-    pub(crate) r#ref: String,
-    pub(crate) kind: DesignClauseKind,
-    pub(crate) subject: String,
-    pub(crate) statement: String,
-    pub(crate) basis_refs: Vec<String>,
-    pub(crate) jurisdiction_ref: Option<String>,
+pub struct NewDesignClause {
+    pub r#ref: String,
+    pub kind: DesignClauseKind,
+    pub subject: String,
+    pub statement: String,
+    pub basis_refs: Vec<String>,
+    pub jurisdiction_ref: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct DesignChoice {
-    pub(crate) r#ref: String,
-    pub(crate) question: String,
-    pub(crate) why_material: String,
-    pub(crate) basis_refs: Vec<String>,
+pub struct DesignChoice {
+    pub r#ref: String,
+    pub question: String,
+    pub why_material: String,
+    pub basis_refs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct DesignSubmission {
-    pub(crate) summary: String,
-    pub(crate) jurisdiction_changes: Vec<NewJurisdictionChange>,
-    pub(crate) clauses: Vec<NewDesignClause>,
-    pub(crate) unresolved_choices: Vec<DesignChoice>,
+pub struct DesignSubmission {
+    pub summary: String,
+    pub jurisdiction_changes: Vec<NewJurisdictionChange>,
+    pub clauses: Vec<NewDesignClause>,
+    pub unresolved_choices: Vec<DesignChoice>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum JurisdictionAction {
+pub enum JurisdictionAction {
     Keep,
     Move,
     Add,
@@ -471,77 +471,77 @@ pub(crate) enum JurisdictionAction {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct NewJurisdictionChange {
-    pub(crate) r#ref: String,
-    pub(crate) key: String,
-    pub(crate) action: JurisdictionAction,
-    pub(crate) expected_assignments: Vec<JurisdictionAssignment>,
-    pub(crate) proposed_assignments: Vec<JurisdictionAssignment>,
-    pub(crate) rationale: String,
-    pub(crate) basis_refs: Vec<String>,
+pub struct NewJurisdictionChange {
+    pub r#ref: String,
+    pub key: String,
+    pub action: JurisdictionAction,
+    pub expected_assignments: Vec<JurisdictionAssignment>,
+    pub proposed_assignments: Vec<JurisdictionAssignment>,
+    pub rationale: String,
+    pub basis_refs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct JurisdictionChangeReplacement {
-    pub(crate) operation_id: String,
-    pub(crate) key: String,
-    pub(crate) action: JurisdictionAction,
-    pub(crate) expected_assignments: Vec<JurisdictionAssignment>,
-    pub(crate) proposed_assignments: Vec<JurisdictionAssignment>,
-    pub(crate) rationale: String,
-    pub(crate) basis_refs: Vec<String>,
+pub struct JurisdictionChangeReplacement {
+    pub operation_id: String,
+    pub key: String,
+    pub action: JurisdictionAction,
+    pub expected_assignments: Vec<JurisdictionAssignment>,
+    pub proposed_assignments: Vec<JurisdictionAssignment>,
+    pub rationale: String,
+    pub basis_refs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct DesignReplacement {
-    pub(crate) operation_id: String,
-    pub(crate) kind: DesignClauseKind,
-    pub(crate) subject: String,
-    pub(crate) statement: String,
-    pub(crate) basis_refs: Vec<String>,
-    pub(crate) jurisdiction_ref: Option<String>,
+pub struct DesignReplacement {
+    pub operation_id: String,
+    pub kind: DesignClauseKind,
+    pub subject: String,
+    pub statement: String,
+    pub basis_refs: Vec<String>,
+    pub jurisdiction_ref: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct DesignDrop {
-    pub(crate) operation_id: String,
-    pub(crate) reason: String,
-    pub(crate) basis_refs: Vec<String>,
+pub struct DesignDrop {
+    pub operation_id: String,
+    pub reason: String,
+    pub basis_refs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct DesignRevision {
-    pub(crate) expected_version: u64,
-    pub(crate) summary: Option<String>,
-    pub(crate) jurisdiction_replacements: Vec<JurisdictionChangeReplacement>,
-    pub(crate) jurisdiction_additions: Vec<NewJurisdictionChange>,
-    pub(crate) jurisdiction_drops: Vec<DesignDrop>,
-    pub(crate) replacements: Vec<DesignReplacement>,
-    pub(crate) additions: Vec<NewDesignClause>,
-    pub(crate) drops: Vec<DesignDrop>,
-    pub(crate) unresolved_choices: Option<Vec<DesignChoice>>,
+pub struct DesignRevision {
+    pub expected_version: u64,
+    pub summary: Option<String>,
+    pub jurisdiction_replacements: Vec<JurisdictionChangeReplacement>,
+    pub jurisdiction_additions: Vec<NewJurisdictionChange>,
+    pub jurisdiction_drops: Vec<DesignDrop>,
+    pub replacements: Vec<DesignReplacement>,
+    pub additions: Vec<NewDesignClause>,
+    pub drops: Vec<DesignDrop>,
+    pub unresolved_choices: Option<Vec<DesignChoice>>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct DraftStatusRequest {}
+pub struct DraftStatusRequest {}
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct DiscardDesignDraft {
-    pub(crate) expected_version: u64,
-    pub(crate) reason: String,
+pub struct DiscardDesignDraft {
+    pub expected_version: u64,
+    pub reason: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct AssessmentReturn {
-    pub(crate) reason: String,
-    pub(crate) missing_or_stale_refs: Vec<String>,
+pub struct AssessmentReturn {
+    pub reason: String,
+    pub missing_or_stale_refs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

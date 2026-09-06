@@ -65,3 +65,12 @@ assessment blocks both correction and acceptance against the older basis.
 Acceptance stops at desired state. It creates no task, implementation job,
 deployment, or completion claim. Todo state is authoritative; model prose and
 Nucleus completion cannot decide the design.
+
+## Rust callers
+
+The provider crate exports `todo::api`: supported request and response
+types, provider-owned envelope decoding, and an explicit-executable CLI client.
+Use these types at imports and convert only to caller-local domain values.
+The client performs the same operations under this contract and never adds
+retry or authorization. See `todo/docs/rust-api.md`; the Rust structs and
+enums define the interface without a separate declaration layer.

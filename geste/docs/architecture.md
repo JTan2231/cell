@@ -93,3 +93,11 @@ Continuous ingestion, hooks, launchd workers, source watermarks, automatic
 episode boundaries, live anchor verification, model-authored reports,
 embeddings, automatically inferred resemblance, Annals export, and a graphical
 UI are outside version 0.1. Chancery does not advertise them.
+
+## Rust boundary
+
+`geste::api` owns the supported importable request, payload, error, and local
+CLI-client types. The CLI uses the same serialized values. Consumers convert
+those exported values into their local structs; they do not implement another
+Geste wire decoder. Storage and execution internals remain outside this API.
+See [Rust interface](rust-api.md).

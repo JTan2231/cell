@@ -11,6 +11,7 @@
 
 pub mod account_worker;
 pub mod adapters;
+pub mod api;
 pub mod domain;
 pub mod error;
 pub mod nucleus;

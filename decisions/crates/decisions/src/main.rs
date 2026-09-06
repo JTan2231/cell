@@ -16,6 +16,10 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use conversations::{AppServerClient, ClientConfig, StderrPolicy};
+use decisions::api::{
+    AccountDelivery, ActivationReceipt, DoctorReport, HookReceipt, ObservationProcess,
+    ProcessResult, StopHookInput,
+};
 use serde_json::json;
 use time::{Date, OffsetDateTime, PrimitiveDateTime, Time, UtcOffset};
 
@@ -198,10 +202,10 @@ fn run(cli: Cli) -> AppResult<()> {
                     let created = store.observer_baseline_at()?.is_none();
                     let baseline = store.activate_observer(requested)?;
                     if cli.json {
-                        print_json(&json!({
-                            "observer_baseline_at": baseline,
-                            "created": created
-                        }))
+                        print_json(&ActivationReceipt {
+                            observer_baseline_at: baseline,
+                            created,
+                        })
                     } else {
                         println!("Observer baseline: {baseline}");
                         Ok(())
@@ -376,21 +380,6 @@ fn run(cli: Cli) -> AppResult<()> {
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
-struct StopHookInput {
-    session_id: String,
-    turn_id: String,
-    hook_event_name: String,
-}
-
-#[derive(Debug, serde::Serialize)]
-struct ProcessResult {
-    observation_id: String,
-    status: String,
-    scope_level: i64,
-    outcome: Option<String>,
-}
-
 #[derive(Clone, Copy)]
 struct ProjectionFrontier {
     completion_cutoff: i64,
@@ -438,8 +427,7 @@ fn ingest_hook(store: &Store) -> AppResult<()> {
     validate_hook_id("session_id", &input.session_id)?;
     validate_hook_id("turn_id", &input.turn_id)?;
     let _observation = store.ingest_observation(&input.session_id, &input.turn_id)?;
-    println!("{{}}");
-    Ok(())
+    print_json(&HookReceipt {})
 }
 
 fn validate_hook_id(field: &str, value: &str) -> AppResult<()> {
@@ -722,9 +710,9 @@ fn fail_observation_if_terminal(
 
 fn print_process_result(result: Option<&ProcessResult>, json_output: bool) -> AppResult<()> {
     if json_output {
-        return print_json(&match result {
-            Some(result) => json!({"processed": true, "observation": result}),
-            None => json!({"processed": false}),
+        return print_json(&ObservationProcess {
+            processed: result.is_some(),
+            observation: result.cloned(),
         });
     }
     match result {
@@ -824,15 +812,15 @@ fn doctor(
     Runner::for_current_user().doctor()?;
     account::doctor(annals)?;
     if json_output {
-        print_json(&json!({
-            "ok": true,
-            "schema_version": schema_version,
-            "observer_baseline_at": observer_baseline_at,
-            "observer": observer,
-            "conversation_source": source,
-            "nucleus": "ready",
-            "annals_library_id": annals.expected_library_id
-        }))
+        print_json(&DoctorReport {
+            ok: true,
+            schema_version,
+            observer_baseline_at,
+            observer,
+            conversation_source: source,
+            nucleus: "ready".to_owned(),
+            annals_library_id: annals.expected_library_id.clone(),
+        })
     } else {
         println!(
             "ready: schema v{schema_version}, observer {} (queued {}, processing {}, failed {}), {} visible conversations, Nucleus ready, Annals library {}",
@@ -1250,14 +1238,14 @@ fn print_account_delivery(
     json_output: bool,
 ) -> AppResult<()> {
     if json_output {
-        print_json(&json!({
-            "processed": true,
-            "kind": "annals_acceptance",
-            "account_id": account_id,
-            "library_id": receipt.library_id,
-            "job_id": receipt.job_id,
-            "accepted_at": receipt.accepted_at
-        }))
+        print_json(&AccountDelivery {
+            processed: true,
+            kind: "annals_acceptance".to_owned(),
+            account_id: account_id.to_owned(),
+            library_id: receipt.library_id.clone(),
+            job_id: receipt.job_id.clone(),
+            accepted_at: receipt.accepted_at.clone(),
+        })
     } else {
         println!("Delivered {account_id} to Annals job {}", receipt.job_id);
         Ok(())

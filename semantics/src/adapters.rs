@@ -1,14 +1,8 @@
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use conversations::{AppServerClient, ClientConfig, StderrPolicy, ThreadRef};
-use serde::Deserialize;
 
-use crate::domain::{
-    DecisionAccountAnchor, DecisionAccountEvent, DecisionAnchor, DecisionEvent,
-    validate_annals_library_id,
-};
+use crate::domain::{DecisionAccountAnchor, DecisionAccountEvent, DecisionAnchor, DecisionEvent};
 use crate::{Error, Result};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -54,8 +48,7 @@ pub trait DecisionAccountSource {
 
 #[derive(Debug, Clone)]
 pub struct AnnalsDecisionFeedCli {
-    binary: PathBuf,
-    config: PathBuf,
+    client: annals_api::Client,
     expected_library_id: Option<String>,
 }
 
@@ -67,8 +60,7 @@ impl AnnalsDecisionFeedCli {
         expected_library_id: Option<impl Into<String>>,
     ) -> Self {
         Self {
-            binary: binary.into(),
-            config: config.into(),
+            client: annals_api::Client::new(binary, config),
             expected_library_id: expected_library_id.map(Into::into),
         }
     }
@@ -103,28 +95,6 @@ impl AnnalsDecisionFeedCli {
         ))
     }
 
-    fn json(&self, arguments: &[OsString]) -> Result<Vec<u8>> {
-        let output = Command::new(&self.binary)
-            .arg("--config")
-            .arg(&self.config)
-            .arg("--json")
-            .args(arguments)
-            .output()
-            .map_err(|_| {
-                Error::domain(
-                    "annals_feed_unavailable",
-                    "unable to run the configured Annals decision-feed command",
-                )
-            })?;
-        if !output.status.success() {
-            return Err(Error::domain(
-                "annals_feed_failed",
-                "Annals decision-feed command did not complete successfully",
-            ));
-        }
-        Ok(output.stdout)
-    }
-
     fn require_library(&self, library_id: &str) -> Result<()> {
         if self
             .expected_library_id
@@ -145,32 +115,7 @@ impl AnnalsDecisionFeedCli {
 
 impl DecisionAccountSource for AnnalsDecisionFeedCli {
     fn watermark(&mut self) -> Result<(String, String)> {
-        let output = self.json(&[OsString::from("decision-feed"), OsString::from("watermark")])?;
-        let response: CliSuccess<AccountWatermarkResponse> = serde_json::from_slice(&output)
-            .map_err(|_| {
-                Error::domain(
-                    "annals_feed_invalid",
-                    "Annals returned an invalid decision-feed watermark envelope",
-                )
-            })?;
-        if !response.ok {
-            return Err(Error::domain(
-                "annals_feed_failed",
-                "Annals returned a non-success JSON envelope",
-            ));
-        }
-        let response = response.data;
-        if response.contract_version != 1 {
-            return Err(Error::domain(
-                "annals_feed_incompatible",
-                format!(
-                    "unsupported Annals decision-feed contract {}",
-                    response.contract_version
-                ),
-            ));
-        }
-        validate_annals_library_id(&response.library_id)?;
-        require_account_text("watermark", &response.watermark, 1_024)?;
+        let response = self.client.watermark().map_err(annals_error)?;
         self.require_library(&response.library_id)?;
         Ok((response.library_id, response.watermark))
     }
@@ -181,68 +126,16 @@ impl DecisionAccountSource for AnnalsDecisionFeedCli {
         watermark: &str,
         limit: u16,
     ) -> Result<DecisionAccountPage> {
-        if !(1..=200).contains(&limit) {
-            return Err(Error::domain(
-                "account_event_limit_invalid",
-                "Annals decision-feed limit must be between 1 and 200",
-            ));
-        }
-        if cursor.trim().is_empty() || watermark.trim().is_empty() {
-            return Err(Error::domain(
-                "annals_cursor_invalid",
-                "Annals decision-feed cursor and watermark must not be blank",
-            ));
-        }
-        let arguments = vec![
-            OsString::from("decision-feed"),
-            OsString::from("page"),
-            OsString::from("--watermark"),
-            OsString::from(watermark),
-            OsString::from("--after"),
-            OsString::from(cursor),
-            OsString::from("--limit"),
-            OsString::from(limit.to_string()),
-        ];
-        let output = self.json(&arguments)?;
-        let response: CliSuccess<AccountPageResponse> =
-            serde_json::from_slice(&output).map_err(|_| {
-                Error::domain(
-                    "annals_feed_invalid",
-                    "Annals returned an invalid decision-feed page envelope",
-                )
-            })?;
-        if !response.ok {
-            return Err(Error::domain(
-                "annals_feed_failed",
-                "Annals returned a non-success JSON envelope",
-            ));
-        }
-        let response = response.data;
-        if response.contract_version != 1 {
-            return Err(Error::domain(
-                "annals_feed_incompatible",
-                format!(
-                    "unsupported Annals decision-feed contract {}",
-                    response.contract_version
-                ),
-            ));
-        }
-        validate_annals_library_id(&response.library_id)?;
-        require_account_text("watermark", &response.watermark, 1_024)?;
-        require_account_text("request_cursor", &response.request_cursor, 1_024)?;
-        require_account_text("next_cursor", &response.next_cursor, 1_024)?;
+        let response = self
+            .client
+            .read_page(cursor, watermark, limit)
+            .map_err(annals_error)?;
         self.require_library(&response.library_id)?;
-        if response.watermark != watermark {
-            return Err(Error::domain(
-                "annals_watermark_mismatch",
-                "Annals did not keep the page fixed to the requested watermark",
-            ));
-        }
         let events = response
             .events
             .into_iter()
-            .map(|event| event.normalize(&response.library_id))
-            .collect::<Result<Vec<_>>>()?;
+            .map(|event| normalize_account(event, &response.library_id))
+            .collect();
         Ok(DecisionAccountPage {
             library_id: response.library_id,
             request_cursor: response.request_cursor,
@@ -253,16 +146,35 @@ impl DecisionAccountSource for AnnalsDecisionFeedCli {
     }
 }
 
+fn annals_error(error: annals_api::Error) -> Error {
+    let (code, message) = match error.code {
+        "annals_command_unavailable" => (
+            "annals_feed_unavailable",
+            "unable to run the configured Annals decision-feed command",
+        ),
+        "annals_command_failed" => (
+            "annals_feed_failed",
+            "Annals decision-feed command did not complete successfully",
+        ),
+        "annals_response_invalid" => ("annals_feed_invalid", error.message),
+        _ => (error.code, error.message),
+    };
+    Error::domain(code, message)
+}
+
 #[derive(Debug, Clone)]
 pub struct DecisionsCli {
     binary: PathBuf,
+    client: krisis_api::lifecycle::Client,
 }
 
 impl DecisionsCli {
     #[must_use]
     pub fn new(binary: impl Into<PathBuf>) -> Self {
+        let binary = binary.into();
         Self {
-            binary: binary.into(),
+            client: krisis_api::lifecycle::Client::new(&binary),
+            binary,
         }
     }
 
@@ -274,23 +186,15 @@ impl DecisionsCli {
         )
     }
 
-    fn json(&self, arguments: &[OsString]) -> Result<Vec<u8>> {
-        let output = Command::new(&self.binary)
-            .args(arguments)
-            .output()
-            .map_err(|source| crate::error::io(&self.binary, source))?;
-        if !output.status.success() {
-            let detail = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::domain(
-                "decisions_events_failed",
-                format!(
-                    "Decisions event command exited with {}: {}",
-                    output.status,
-                    detail.trim()
-                ),
-            ));
+    fn error(&self, error: krisis_api::lifecycle::Error) -> Error {
+        match error {
+            krisis_api::lifecycle::Error::Io(source) => crate::error::io(&self.binary, source),
+            krisis_api::lifecycle::Error::Json(source) => Error::Json(source),
+            krisis_api::lifecycle::Error::Failed { .. } => {
+                Error::domain("decisions_events_failed", error.to_string())
+            }
+            krisis_api::lifecycle::Error::Invalid { code, message } => Error::domain(code, message),
         }
-        Ok(output.stdout)
     }
 }
 
@@ -302,38 +206,19 @@ impl Default for DecisionsCli {
 
 impl DecisionEventSource for DecisionsCli {
     fn watermark(&mut self) -> Result<String> {
-        let output = self.json(&[
-            OsString::from("events"),
-            OsString::from("watermark"),
-            OsString::from("--json"),
-        ])?;
-        let response: WatermarkResponse = serde_json::from_slice(&output)?;
-        validate_stream(&response.stream, response.envelope_version)?;
+        let response = self.client.watermark().map_err(|error| self.error(error))?;
         Ok(response.cursor)
     }
 
     fn read_after(&mut self, cursor: &str, limit: u16) -> Result<DecisionEventPage> {
-        if !(1..=1_000).contains(&limit) {
-            return Err(Error::domain(
-                "event_limit_invalid",
-                "Decisions event limit must be between 1 and 1000",
-            ));
-        }
-        let output = self.json(&[
-            OsString::from("events"),
-            OsString::from("read"),
-            OsString::from("--after"),
-            OsString::from(cursor),
-            OsString::from("--limit"),
-            OsString::from(limit.to_string()),
-            OsString::from("--json"),
-        ])?;
-        let response: EventPageResponse = serde_json::from_slice(&output)?;
-        validate_stream(&response.stream, response.envelope_version)?;
+        let response = self
+            .client
+            .read_after(cursor, limit)
+            .map_err(|error| self.error(error))?;
         let events = response
             .events
             .into_iter()
-            .map(EventItem::normalize)
+            .map(normalize_legacy_event)
             .collect::<Result<Vec<_>>>()?;
         Ok(DecisionEventPage {
             after_cursor: response.after_cursor,
@@ -454,285 +339,87 @@ pub fn require_participation_marker(root: &Path, project_id: &str) -> Result<()>
     Ok(())
 }
 
-fn validate_stream(stream: &str, version: u32) -> Result<()> {
-    if stream != "decisions.lifecycle" || version != 1 {
-        return Err(Error::domain(
-            "decisions_stream_incompatible",
-            format!("unsupported Decisions stream {stream:?} envelope version {version}"),
-        ));
-    }
-    Ok(())
-}
-
-#[derive(Debug, Deserialize)]
-struct WatermarkResponse {
-    stream: String,
-    envelope_version: u32,
-    cursor: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct EventPageResponse {
-    stream: String,
-    envelope_version: u32,
-    after_cursor: String,
-    next_cursor: String,
-    watermark_cursor: String,
-    has_more: bool,
-    events: Vec<EventItem>,
-}
-
-#[derive(Debug, Deserialize)]
-struct EventItem {
-    cursor: String,
-    event: EventEnvelope,
-}
-
-impl EventItem {
-    fn normalize(self) -> Result<DecisionEvent> {
-        if self.event.event_version != 1 {
-            return Err(Error::domain(
+fn normalize_legacy_event(item: krisis_api::lifecycle::DecisionEventItem) -> Result<DecisionEvent> {
+    let anchors = item
+        .event
+        .decision
+        .sources
+        .into_iter()
+        .map(|source| DecisionAnchor {
+            source_role: source.source_role,
+            host_id: source.host_id,
+            thread_id: source.thread_id,
+            turn_id: source.turn_id,
+            item_id: source.item_id,
+            message_role: source.message_role,
+            occurred_at: source.occurred_at,
+            timestamp_precision: source.timestamp_precision,
+        })
+        .collect();
+    let (review_id, review_action, reviewed_at, review_source) = match item.event.review {
+        Some(review) => (
+            Some(review.review_id),
+            Some(review.action),
+            Some(review.reviewed_at),
+            Some(review.review_source),
+        ),
+        None => (None, None, None, None),
+    };
+    Ok(DecisionEvent {
+        event_id: item.event.event_id,
+        event_version: u32::try_from(item.event.event_version).map_err(|_| {
+            Error::domain(
                 "decision_event_incompatible",
-                format!(
-                    "unsupported decision event version {}",
-                    self.event.event_version
-                ),
-            ));
-        }
-        let anchors = self
-            .event
-            .decision
-            .sources
-            .into_iter()
-            .map(|source| DecisionAnchor {
-                source_role: source.source_role,
-                host_id: source.host_id,
-                thread_id: source.thread_id,
-                turn_id: source.turn_id,
-                item_id: source.item_id,
-                message_role: source.message_role,
-                occurred_at: source.occurred_at,
-                timestamp_precision: source.timestamp_precision,
-            })
-            .collect();
-        let (review_id, review_action, reviewed_at, review_source) = match self.event.review {
-            Some(review) => (
-                Some(review.review_id),
-                Some(review.action),
-                Some(review.reviewed_at),
-                Some(review.review_source),
-            ),
-            None => (None, None, None, None),
-        };
-        Ok(DecisionEvent {
-            event_id: self.event.event_id,
-            event_version: self.event.event_version,
-            cursor: self.cursor,
-            event_kind: self.event.event_kind,
-            occurred_at: self.event.occurred_at,
-            decision_id: self.event.decision.decision_id,
-            decided_at: self.event.decision.decided_at,
-            timestamp_precision: self.event.decision.timestamp_precision,
-            statement: self.event.decision.statement,
-            disposition: self.event.decision.disposition,
-            confidence: self.event.decision.confidence,
-            rationale: self.event.decision.rationale,
-            supersedes_decision_id: self.event.decision.supersedes_decision_id,
-            authority_start: self.event.decision.authority_span.start,
-            authority_end: self.event.decision.authority_span.end,
-            review_state: self.event.decision.review_state,
-            review_id,
-            review_action,
-            reviewed_at,
-            review_source,
-            anchors,
-        })
+                "unsupported decision event version",
+            )
+        })?,
+        cursor: item.cursor,
+        event_kind: item.event.event_kind,
+        occurred_at: item.event.occurred_at,
+        decision_id: item.event.decision.decision_id,
+        decided_at: item.event.decision.decided_at,
+        timestamp_precision: item.event.decision.timestamp_precision,
+        statement: item.event.decision.statement,
+        disposition: item.event.decision.disposition,
+        confidence: item.event.decision.confidence,
+        rationale: item.event.decision.rationale,
+        supersedes_decision_id: item.event.decision.supersedes_decision_id,
+        authority_start: item.event.decision.authority_span.start,
+        authority_end: item.event.decision.authority_span.end,
+        review_state: item.event.decision.review_state,
+        review_id,
+        review_action,
+        reviewed_at,
+        review_source,
+        anchors,
+    })
+}
+
+fn normalize_account(
+    event: annals_api::AcceptedAccountEvent,
+    library_id: &str,
+) -> DecisionAccountEvent {
+    DecisionAccountEvent {
+        library_id: library_id.to_owned(),
+        cursor: event.cursor,
+        event_id: event.event_id,
+        account_id: event.account_id,
+        account_schema_version: event.account_schema_version,
+        statement: event.statement,
+        context: event.context,
+        action: event.action,
+        result: event.result,
+        occurred_at: event.occurred_at,
+        occurred_at_precision: event.occurred_at_precision,
+        authority: DecisionAccountAnchor {
+            host_id: event.authority.host_id,
+            thread_id: event.authority.thread_id,
+            turn_id: event.authority.turn_id,
+            item_id: event.authority.item_id,
+            span_start: event.authority.span.start,
+            span_end: event.authority.span.end,
+        },
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct EventEnvelope {
-    event_id: String,
-    event_version: u32,
-    event_kind: String,
-    occurred_at: i64,
-    decision: EventDecision,
-    review: Option<EventReview>,
-}
-
-#[derive(Debug, Deserialize)]
-struct EventDecision {
-    decision_id: String,
-    decided_at: i64,
-    timestamp_precision: String,
-    statement: String,
-    disposition: String,
-    confidence: String,
-    rationale: Option<String>,
-    supersedes_decision_id: Option<String>,
-    review_state: String,
-    authority_span: EventAuthoritySpan,
-    sources: Vec<EventSource>,
-}
-
-#[derive(Debug, Deserialize)]
-struct EventAuthoritySpan {
-    start: i64,
-    end: i64,
-}
-
-#[derive(Debug, Deserialize)]
-struct EventSource {
-    source_role: String,
-    host_id: String,
-    thread_id: String,
-    turn_id: String,
-    item_id: String,
-    message_role: String,
-    occurred_at: i64,
-    timestamp_precision: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct EventReview {
-    review_id: String,
-    action: String,
-    reviewed_at: i64,
-    review_source: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CliSuccess<T> {
-    ok: bool,
-    data: T,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AccountWatermarkResponse {
-    contract_version: u32,
-    library_id: String,
-    watermark: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AccountPageResponse {
-    contract_version: u32,
-    library_id: String,
-    watermark: String,
-    request_cursor: String,
-    next_cursor: String,
-    events: Vec<AccountEventItem>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AccountEventItem {
-    cursor: String,
-    event_id: String,
-    account_id: String,
-    account_schema_version: u32,
-    statement: String,
-    context: String,
-    action: String,
-    result: String,
-    occurred_at: i64,
-    occurred_at_precision: String,
-    authority: AccountAuthority,
-}
-
-impl AccountEventItem {
-    fn normalize(self, library_id: &str) -> Result<DecisionAccountEvent> {
-        if self.account_schema_version != 1 {
-            return Err(Error::domain(
-                "decision_account_incompatible",
-                format!(
-                    "unsupported decision account schema {}",
-                    self.account_schema_version
-                ),
-            ));
-        }
-        if self.authority.span.end <= self.authority.span.start {
-            return Err(Error::domain(
-                "decision_account_anchor_invalid",
-                "decision account authority span ends before it starts",
-            ));
-        }
-        for (field, value, maximum) in [
-            ("cursor", self.cursor.as_str(), 1_024),
-            ("event_id", self.event_id.as_str(), 1_024),
-            ("account_id", self.account_id.as_str(), 1_024),
-            ("statement", self.statement.as_str(), 16_384),
-            ("context", self.context.as_str(), 16_384),
-            ("action", self.action.as_str(), 16_384),
-            ("result", self.result.as_str(), 16_384),
-            (
-                "occurred_at_precision",
-                self.occurred_at_precision.as_str(),
-                128,
-            ),
-            ("authority.host_id", self.authority.host_id.as_str(), 1_024),
-            (
-                "authority.thread_id",
-                self.authority.thread_id.as_str(),
-                1_024,
-            ),
-            ("authority.turn_id", self.authority.turn_id.as_str(), 1_024),
-            ("authority.item_id", self.authority.item_id.as_str(), 1_024),
-        ] {
-            require_account_text(field, value, maximum)?;
-        }
-        Ok(DecisionAccountEvent {
-            library_id: library_id.to_owned(),
-            cursor: self.cursor,
-            event_id: self.event_id,
-            account_id: self.account_id,
-            account_schema_version: self.account_schema_version,
-            statement: self.statement,
-            context: self.context,
-            action: self.action,
-            result: self.result,
-            occurred_at: self.occurred_at,
-            occurred_at_precision: self.occurred_at_precision,
-            authority: DecisionAccountAnchor {
-                host_id: self.authority.host_id,
-                thread_id: self.authority.thread_id,
-                turn_id: self.authority.turn_id,
-                item_id: self.authority.item_id,
-                span_start: self.authority.span.start,
-                span_end: self.authority.span.end,
-            },
-        })
-    }
-}
-
-fn require_account_text(field: &str, value: &str, maximum: usize) -> Result<()> {
-    if value.trim().is_empty() || value.len() > maximum {
-        return Err(Error::domain(
-            "decision_account_invalid",
-            format!("{field} must contain 1..={maximum} bytes"),
-        ));
-    }
-    Ok(())
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AccountAuthority {
-    host_id: String,
-    thread_id: String,
-    turn_id: String,
-    item_id: String,
-    span: AccountSpan,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AccountSpan {
-    start: u64,
-    end: u64,
 }
 
 #[cfg(test)]

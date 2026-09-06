@@ -764,12 +764,17 @@ fn render_situation(assessment: &SituationAssessmentView) -> String {
     render_situation_components(
         &mut human,
         &assessment.bases,
-        &assessment.findings,
-        &assessment.jurisdictions,
-        &assessment.direction_mappings,
-        &assessment.unresolved,
+        &display_projection(&assessment.findings),
+        &display_projection(&assessment.jurisdictions),
+        &display_projection(&assessment.direction_mappings),
+        &display_projection(&assessment.unresolved),
     );
     human
+}
+
+// The human renderer uses a local JSON projection; machine output uses api types.
+fn display_projection<T: serde::Serialize>(values: &[T]) -> Vec<Value> {
+    values.iter().map(|value| json!(value)).collect()
 }
 
 fn render_situation_components(
@@ -922,9 +927,12 @@ fn render_design(design: &DesignView) -> String {
     }
     push_string_section(&mut human, "Stale reasons", &design.stale_reasons);
     push_text_section(&mut human, "Summary", &design.summary);
-    render_design_jurisdictions(&mut human, &design.jurisdiction_changes);
-    render_design_clauses(&mut human, &design.clauses);
-    render_design_choices(&mut human, &design.unresolved_choices);
+    render_design_jurisdictions(
+        &mut human,
+        &display_projection(&design.jurisdiction_changes),
+    );
+    render_design_clauses(&mut human, &display_projection(&design.clauses));
+    render_design_choices(&mut human, &display_projection(&design.unresolved_choices));
     push_decision_provenance(
         &mut human,
         design.decision_source_path.as_deref(),
@@ -1436,7 +1444,7 @@ mod tests {
             summary: "A complete desired state".to_owned(),
             current: false,
             stale_reasons: vec!["situation assessment is no longer current".to_owned()],
-            jurisdiction_changes: vec![json!({
+            jurisdiction_changes: vec![serde_json::from_value(json!({
                 "operation_id": "op-1",
                 "local_ref": "jc1",
                 "key": "j-runtime",
@@ -1452,31 +1460,37 @@ mod tests {
                 ],
                 "basis_refs": ["assessment:a4:jurisdiction:j-runtime"],
                 "drop": null
-            })],
-            clauses: vec![json!({
-                "operation_id": "op-2",
-                "local_ref": "dc1",
-                "kind": "boundary",
-                "subject": "Runtime records",
-                "statement": "Nucleus is authoritative",
-                "jurisdiction_ref": "j-runtime",
-                "status": "dropped",
-                "basis_refs": ["assessment:a4:jurisdiction:j-runtime", "direction:b1"],
-                "drop": {
-                    "reason": "Superseded by a narrower clause",
-                    "basis_refs": ["correction:12"],
-                    "dropped_at": "2026-08-28T12:00:00.000Z"
-                }
-            })],
-            unresolved_choices: vec![json!({
-                "operation_id": "op-3",
-                "local_ref": "choice1",
-                "question": "Which retention period?",
-                "why_material": "It changes storage obligations",
-                "status": "active",
-                "basis_refs": ["direction:body"],
-                "drop": null
-            })],
+            })).unwrap_or_else(|error| panic!("{error}"))],
+            clauses: vec![
+                serde_json::from_value(json!({
+                    "operation_id": "op-2",
+                    "local_ref": "dc1",
+                    "kind": "boundary",
+                    "subject": "Runtime records",
+                    "statement": "Nucleus is authoritative",
+                    "jurisdiction_ref": "j-runtime",
+                    "status": "dropped",
+                    "basis_refs": ["assessment:a4:jurisdiction:j-runtime", "direction:b1"],
+                    "drop": {
+                        "reason": "Superseded by a narrower clause",
+                        "basis_refs": ["correction:12"],
+                        "dropped_at": "2026-08-28T12:00:00.000Z"
+                    }
+                }))
+                .unwrap_or_else(|error| panic!("{error}")),
+            ],
+            unresolved_choices: vec![
+                serde_json::from_value(json!({
+                    "operation_id": "op-3",
+                    "local_ref": "choice1",
+                    "question": "Which retention period?",
+                    "why_material": "It changes storage obligations",
+                    "status": "active",
+                    "basis_refs": ["direction:body"],
+                    "drop": null
+                }))
+                .unwrap_or_else(|error| panic!("{error}")),
+            ],
             correction_basis_ref: Some("correction:12".to_owned()),
             correction_feedback: Some("Preserve the explicit runtime boundary\u{1b}".to_owned()),
             decision_source_path: Some("/tmp/decision.jsonl".to_owned()),

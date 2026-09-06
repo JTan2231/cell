@@ -154,3 +154,11 @@ The supported version-0.1 reads expose immutable case revisions,
 correlation. Raw delivery bodies, persisted request JSON, and mailbox receipt
 JSON are retained for exact execution and recovery but have no public
 show/export command. Direct SQLite access is not a supported consumer surface.
+
+## Rust boundary
+
+`crm::api` owns the supported importable request, payload, error, and local
+CLI-client types. The CLI uses the same serialized values. Consumers convert
+those exported values into their local structs; they do not implement another
+CRM wire decoder. Storage and execution internals remain outside this API.
+See [Rust interface](rust-api.md).

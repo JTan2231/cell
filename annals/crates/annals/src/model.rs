@@ -8,6 +8,10 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub struct ConceptId(i64);
 
 impl ConceptId {
+    /// Construct a concept identity from its positive numeric value.
+    ///
+    /// # Errors
+    /// Returns `InvalidConceptId` when the value is not positive.
     pub fn from_storage(value: i64) -> Result<Self, InvalidConceptId> {
         if value > 0 {
             Ok(Self(value))

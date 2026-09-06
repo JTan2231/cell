@@ -211,3 +211,15 @@ The tool does not infer historical usage, scrape a UI, estimate a hidden
 subscription denominator, or provide offline fallback. Retain and back up the
 underlying Nucleus and Annals authorities when historical reports must remain
 available.
+
+## Provider-owned Rust interfaces
+
+`annals-api::usage` owns the read-only library queries and partial inbox-receipt
+decoding used for usage attribution. Annals Usage imports its typed delivery,
+model-run and receipt records; it contains no production SQL or spool-schema
+decoder. The read-only reader does not initialize or modify a library.
+
+`annals_usage::api` exposes the existing consumption and budget report types
+and a client for the selected reporting executable. The CLI produces those
+same types. Nucleus/Codex account normalization, attribution calculations,
+coverage classifications and wire formats are unchanged.

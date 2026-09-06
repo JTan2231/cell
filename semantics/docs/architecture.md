@@ -101,3 +101,17 @@ unassigned intake and all legacy states stay explicit. Separate legacy and
 account mailbox receipts make repeated delivery idempotent and reject
 conflicting replay. Operator retry refuses a prior Nucleus job that is active
 or whose admitted state cannot be established.
+
+## Rust interfaces
+
+`semantics::api` is the provider-owned import surface for repository, project,
+revision, grounding, intake, and diagnostic output types plus a typed CLI
+client. CLI output uses the same types. The client implements supported public
+commands; it does not open SQLite, run hidden worker/cutover operations, or
+replace Semantics validation. A failed doctor still returns its typed check
+report. Consumers own their local projections and action policy.
+
+Upstream adapters use `annals-api` and `krisis_api::lifecycle` clients and
+exported response types, then convert them to Semantics-owned account and
+legacy intake records. They do not define upstream wire replicas. Existing
+local source traits retain worker policy and synthetic-test substitution.

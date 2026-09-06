@@ -9,9 +9,10 @@ use crate::db;
 use crate::error::AppError;
 use crate::render::CommandOutput;
 
-pub(crate) const CONTRACT_VERSION: u32 = 1;
-pub(crate) const ACCOUNT_SCHEMA_VERSION: u32 = 1;
-const MAX_PAGE_SIZE: usize = 200;
+use annals_api::{
+    AcceptedAccountEvent, MAX_PAGE_SIZE, Page as PageOutput, Watermark as WatermarkOutput,
+};
+pub(crate) use annals_api::{AuthorityAnchor, AuthoritySpan, CONTRACT_VERSION};
 const CURSOR_VERSION: u32 = 1;
 
 #[derive(Debug, Clone)]
@@ -27,71 +28,11 @@ pub(crate) struct AccountProjection {
     pub authority: AuthorityAnchor,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct AuthorityAnchor {
-    pub host_id: String,
-    pub thread_id: String,
-    pub turn_id: String,
-    pub item_id: String,
-    pub span: AuthoritySpan,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct AuthoritySpan {
-    pub start: u64,
-    pub end: u64,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SourceMetadata {
-    schema_version: u32,
-    decision_id: String,
-    occurred_at: i64,
-    occurred_at_precision: String,
-    capture_rule_version: String,
-    authority: AuthorityAnchor,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct AcceptanceRecord {
     pub source_sha256: String,
     pub job_id: String,
     pub accepted_at: String,
-}
-
-#[derive(Debug, Serialize)]
-struct WatermarkOutput {
-    contract_version: u32,
-    library_id: String,
-    watermark: String,
-}
-
-#[derive(Debug, Serialize)]
-struct PageOutput {
-    contract_version: u32,
-    library_id: String,
-    watermark: String,
-    request_cursor: String,
-    next_cursor: String,
-    events: Vec<AcceptedAccountEvent>,
-}
-
-#[derive(Debug, Serialize)]
-struct AcceptedAccountEvent {
-    cursor: String,
-    event_id: String,
-    account_id: String,
-    account_schema_version: u32,
-    statement: String,
-    context: String,
-    action: String,
-    result: String,
-    occurred_at: i64,
-    occurred_at_precision: String,
-    authority: AuthorityAnchor,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -137,124 +78,22 @@ pub(crate) fn require_expected_library(
 }
 
 pub(crate) fn parse_account(text: &str, expected_key: &str) -> Result<AccountProjection, AppError> {
-    let normalized = text.strip_suffix('\n').unwrap_or(text);
-    let after_title = normalized.strip_prefix("# Decision\n").ok_or_else(|| {
-        invalid_account("decision account must begin with the exact heading # Decision")
-    })?;
-    let (statement, rest) = split_section(after_title, "Authority")?;
-    let (authority_quote, rest) = split_section(rest, "Context")?;
-    let (context, rest) = split_section(rest, "Action")?;
-    let (action, rest) = split_section(rest, "Result")?;
-    let (result, source) = split_section(rest, "Source")?;
-    for section in [statement, authority_quote, context, action, result] {
-        if section.trim().is_empty() {
-            return Err(invalid_account(
-                "decision account sections must not be blank",
-            ));
-        }
-        if section.lines().any(|line| line.starts_with('#')) {
-            return Err(invalid_account(
-                "decision account contains an unexpected heading",
-            ));
-        }
-    }
-    if authority_quote
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .any(|line| line != ">" && !line.starts_with("> "))
-        || authority_quote
-            .lines()
-            .all(|line| line.trim_matches(['>', ' ']).is_empty())
-    {
-        return Err(invalid_account(
-            "the Authority section must contain exactly one Markdown block quotation",
-        ));
-    }
-    let source = source.trim();
-    let json = source
-        .strip_prefix("```json\n")
-        .and_then(|value| value.strip_suffix("\n```"))
-        .ok_or_else(|| {
-            invalid_account("the Source section must be exactly one fenced json object")
-        })?;
-    let metadata: SourceMetadata = serde_json::from_str(json)
-        .map_err(|error| invalid_account(format!("invalid Source metadata: {error}")))?;
-    validate_source_metadata(&metadata, expected_key)?;
+    let account = krisis_api::account::parse(text, expected_key)
+        .map_err(|error| AppError::invalid("invalid_decision_account", error.to_string()))?;
     Ok(AccountProjection {
-        schema_version: metadata.schema_version,
-        statement: statement.trim().to_owned(),
-        context: context.trim().to_owned(),
-        action: action.trim().to_owned(),
-        result: result.trim().to_owned(),
-        occurred_at: metadata.occurred_at,
-        occurred_at_precision: metadata.occurred_at_precision,
-        capture_rule_version: metadata.capture_rule_version,
-        authority: metadata.authority,
+        schema_version: account.source.schema_version,
+        statement: account.statement,
+        context: account.context,
+        action: account.action,
+        result: account.result,
+        occurred_at: account.source.occurred_at,
+        occurred_at_precision: account.source.occurred_at_precision,
+        capture_rule_version: account.source.capture_rule_version,
+        authority: account.source.authority,
     })
 }
 
-fn split_section<'a>(input: &'a str, heading: &str) -> Result<(&'a str, &'a str), AppError> {
-    input
-        .split_once(&format!("\n## {heading}\n"))
-        .ok_or_else(|| invalid_account(format!("decision account is missing ## {heading}")))
-}
-
-fn validate_source_metadata(metadata: &SourceMetadata, expected_key: &str) -> Result<(), AppError> {
-    if metadata.schema_version != ACCOUNT_SCHEMA_VERSION {
-        return Err(invalid_account(
-            "unsupported decision account schema_version",
-        ));
-    }
-    if metadata.decision_id != expected_key {
-        return Err(invalid_account(
-            "Source decision_id does not match the producer key",
-        ));
-    }
-    for (name, value) in [
-        ("decision_id", metadata.decision_id.as_str()),
-        (
-            "occurred_at_precision",
-            metadata.occurred_at_precision.as_str(),
-        ),
-        (
-            "capture_rule_version",
-            metadata.capture_rule_version.as_str(),
-        ),
-        ("authority.host_id", metadata.authority.host_id.as_str()),
-        ("authority.thread_id", metadata.authority.thread_id.as_str()),
-        ("authority.turn_id", metadata.authority.turn_id.as_str()),
-        ("authority.item_id", metadata.authority.item_id.as_str()),
-    ] {
-        if !bounded_identifier(value) {
-            return Err(invalid_account(format!(
-                "Source {name} must be a nonblank single-line value of at most 512 bytes"
-            )));
-        }
-    }
-    if metadata.authority.span.end <= metadata.authority.span.start
-        || metadata.authority.span.end > i64::MAX as u64
-    {
-        return Err(invalid_account(
-            "Source authority span must be a nonempty signed-64-bit byte range",
-        ));
-    }
-    Ok(())
-}
-
-pub(crate) fn valid_producer_key(value: &str) -> bool {
-    bounded_identifier(value)
-}
-
-fn bounded_identifier(value: &str) -> bool {
-    !value.trim().is_empty()
-        && value.len() <= 512
-        && !value.chars().any(char::is_control)
-        && value == value.trim()
-}
-
-fn invalid_account(message: impl Into<String>) -> AppError {
-    AppError::invalid("invalid_decision_account", message)
-}
+pub(crate) use krisis_api::account::valid_producer_key;
 
 pub(crate) fn find_acceptance(
     connection: &Connection,
@@ -323,10 +162,16 @@ pub(crate) fn insert_acceptance(
             account.authority.turn_id,
             account.authority.item_id,
             i64::try_from(account.authority.span.start).map_err(|_| {
-                invalid_account("Source authority span start exceeds signed 64-bit storage")
+                AppError::invalid(
+                    "invalid_decision_account",
+                    "Source authority span start exceeds signed 64-bit storage",
+                )
             })?,
             i64::try_from(account.authority.span.end).map_err(|_| {
-                invalid_account("Source authority span end exceeds signed 64-bit storage")
+                AppError::invalid(
+                    "invalid_decision_account",
+                    "Source authority span end exceeds signed 64-bit storage",
+                )
             })?,
         ],
     )?;

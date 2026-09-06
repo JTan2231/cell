@@ -32,12 +32,7 @@ pub(crate) enum ObservationLoad {
     },
 }
 
-#[derive(Debug, serde::Serialize)]
-pub(crate) struct ReconcileResult {
-    pub(crate) threads_scanned: usize,
-    pub(crate) activities_scanned: usize,
-    pub(crate) observations_enqueued: usize,
-}
+pub(crate) use decisions::api::ReconcileResult;
 
 pub(crate) fn load_observation(
     session_hint: &str,

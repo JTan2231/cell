@@ -8,6 +8,7 @@ DEPLOY_PROFILE=custom
 DEPLOY_CONFLICT_KEYS='global'
 CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES='annals
+annals-api
 annals-usage'
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
@@ -42,6 +43,7 @@ CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='annals|Annals|package|annals/crates/annals/Cargo.toml|annals-|1
 annals-usage|Annals Usage|package|annals/crates/annals-usage/Cargo.toml|annals-usage-|0'
 RELEASE_ALLOW_EXPLICIT_UNIT=1
+RELEASE_COMPANION_MANIFESTS='annals|annals/crates/annals-api/Cargo.toml'
 RELEASE_USAGE='Usage: ./release.sh --patch|--minor|--major
        ./release.sh annals|annals-usage --patch|--minor|--major'
 RELEASE_METADATA_NO_DEPS=0

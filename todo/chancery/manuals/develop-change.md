@@ -68,3 +68,12 @@ Databases, backups, decision-source paths, source catalogs, Nucleus output,
 email content, API setup, and logs may contain private directions and system
 state. Keep every fixture and diagnostic inside the strongest applicable
 retention boundary.
+
+## Rust callers
+
+The provider crate exports `todo::api`: supported request and response
+types, provider-owned envelope decoding, and an explicit-executable CLI client.
+Use these types at imports and convert only to caller-local domain values.
+The client performs the same operations under this contract and never adds
+retry or authorization. See `todo/docs/rust-api.md`; the Rust structs and
+enums define the interface without a separate declaration layer.

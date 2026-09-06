@@ -6,22 +6,7 @@ use regex::Regex;
 use crate::error::{AppResult, WeaverError};
 use crate::project::{Project, STAGES};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Verdict {
-    Pass,
-    Revise,
-    Blocked,
-}
-
-impl Verdict {
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::Pass => "PASS",
-            Self::Revise => "REVISE",
-            Self::Blocked => "BLOCKED",
-        }
-    }
-}
+pub(crate) use weaver::api::Verdict;
 
 pub(crate) fn check(project: &Project) -> AppResult<Verdict> {
     let mut outputs = Vec::with_capacity(STAGES.len());

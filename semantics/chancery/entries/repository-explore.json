@@ -46,7 +46,8 @@
     {"label": "Show HEAD", "invocation": "/Users/joey/.local/bin/semantics repository show PROJECT"},
     {"label": "Search", "invocation": "/Users/joey/.local/bin/semantics repository search PROJECT QUERY"},
     {"label": "Revision log", "invocation": "/Users/joey/.local/bin/semantics repository log PROJECT"},
-    {"label": "Diff", "invocation": "/Users/joey/.local/bin/semantics repository diff PROJECT FROM TO"}
+    {"label": "Diff", "invocation": "/Users/joey/.local/bin/semantics repository diff PROJECT FROM TO"},
+    {"label": "Rust repository reader", "invocation": "semantics::api::Client::{repository,search,log,diff}"}
   ],
   "does_not_authorize": [
     "Registering or changing a project, seeding or committing a revision, assigning or retrying intake, or invoking the worker.",

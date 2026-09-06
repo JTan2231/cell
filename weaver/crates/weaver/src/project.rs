@@ -9,33 +9,7 @@ use uuid::Uuid;
 
 use crate::error::{AppResult, WeaverError};
 
-pub(crate) const STAGES: [Stage; 5] = [
-    Stage {
-        ordinal: 1,
-        name: "stories",
-        directory: "01-stories",
-    },
-    Stage {
-        ordinal: 2,
-        name: "themes",
-        directory: "02-themes",
-    },
-    Stage {
-        ordinal: 3,
-        name: "compose",
-        directory: "03-draft",
-    },
-    Stage {
-        ordinal: 4,
-        name: "review",
-        directory: "04-review",
-    },
-    Stage {
-        ordinal: 5,
-        name: "finalize",
-        directory: "05-final",
-    },
-];
+pub(crate) use weaver::api::{STAGES, Stage};
 
 const PROMPT_FILES: [&str; 7] = [
     "common.md",
@@ -46,19 +20,6 @@ const PROMPT_FILES: [&str; 7] = [
     "review.md",
     "finalize.md",
 ];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct Stage {
-    pub(crate) ordinal: usize,
-    pub(crate) name: &'static str,
-    pub(crate) directory: &'static str,
-}
-
-impl Stage {
-    pub(crate) fn prompt_relative(self) -> String {
-        format!("workflow/narrative/{}.md", self.name)
-    }
-}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Project {

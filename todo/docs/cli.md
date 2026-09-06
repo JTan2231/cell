@@ -349,3 +349,10 @@ Nucleus job ended cleanly. If a concern, proposal, assessment, or draft commits
 and a later terminal liaison error occurs, Todo reports the durable result and
 may also report the later diagnostic on standard error. Nucleus completion by
 itself is never domain success.
+
+## Rust callers
+
+Use the provider-owned `todo::api::Client`, `Request`, and `Data` for typed
+CLI calls. The client preserves the documented envelope and successful stderr
+diagnostics, performs no automatic retries, and uses the same command effects
+and recovery rules. See [Rust interface](rust-api.md) for the exported boundary.

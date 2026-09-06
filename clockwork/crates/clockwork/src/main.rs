@@ -14,8 +14,8 @@ use std::io::Read as _;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
+use clockwork::api;
 use serde::Serialize;
-use serde_json::json;
 
 use crate::error::{Context as _, Error, Result};
 use crate::launchd::SystemLaunchd;
@@ -238,15 +238,15 @@ async fn run(cli: Cli) -> Result<()> {
                 ));
             }
             emit(
-                &json!({
-                    "database": layout.database(),
-                    "state_root": layout.state_root(),
-                    "sqlite": sqlite,
-                    "recovered_lost_activations": recovered,
-                    "pending_binding_transitions": pending_transitions,
-                    "clockwork_binary": binary,
-                    "launchctl": launchctl,
-                }),
+                &api::DoctorReport {
+                    database: layout.database(),
+                    state_root: layout.state_root().to_path_buf(),
+                    sqlite,
+                    recovered_lost_activations: recovered,
+                    pending_binding_transitions: pending_transitions,
+                    clockwork_binary: binary,
+                    launchctl,
+                },
                 cli.json,
             )
         }
@@ -262,7 +262,8 @@ async fn run(cli: Cli) -> Result<()> {
 }
 
 fn emit<T: Serialize>(data: &T, compact: bool) -> Result<()> {
-    let value = json!({"ok": true, "data": data});
+    let value = serde_json::to_value(api::Success { ok: true, data })
+        .context("output_failed", "serialize command result")?;
     let rendered = if compact {
         serde_json::to_string(&value)
     } else {
@@ -275,10 +276,13 @@ fn emit<T: Serialize>(data: &T, compact: bool) -> Result<()> {
 
 fn emit_error(error: &Error, compact: bool) {
     if compact {
-        let rendered = serde_json::to_string(&json!({
-            "ok": false,
-            "error": {"code": error.code(), "message": error.message()}
-        }))
+        let rendered = serde_json::to_string(&api::Failure {
+            ok: false,
+            error: api::ErrorBody {
+                code: error.code().to_owned(),
+                message: error.message().to_owned(),
+            },
+        })
         .unwrap_or_else(|_| "{\"ok\":false}".to_owned());
         eprintln!("{rendered}");
     } else {

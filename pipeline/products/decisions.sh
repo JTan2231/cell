@@ -9,7 +9,8 @@ DEPLOY_CONFLICT_KEYS='global'
 PRODUCT_ALIASES='krisis decisions'
 CI_GATE_ID=krisis
 CARGO_MANIFEST=Cargo.toml
-CARGO_PACKAGES=decisions
+CARGO_PACKAGES='decisions
+krisis-api'
 CARGO_OFFLINE=0
 CARGO_PATH_PREFIX=/Users/joey/.cargo/bin
 CLIPPY_KEEP_GOING=0
@@ -30,6 +31,7 @@ CI_PROVIDER_VALIDATION_PHASE=before-rust
 CI_EXTRA_BEFORE_RUST=pipeline/extras/decisions-catalog.sh
 CI_BINARY_CHECKS='krisis|target/release/krisis|krisis'
 RELEASE_UNITS='krisis|Krisis|package|decisions/crates/decisions/Cargo.toml|krisis-|1'
+RELEASE_COMPANION_MANIFESTS='krisis|decisions/crates/krisis-api/Cargo.toml'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='krisis|target/release/krisis|krisis'
 PROVIDERS='krisis|krisis|decisions/chancery|3

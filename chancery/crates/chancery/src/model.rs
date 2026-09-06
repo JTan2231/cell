@@ -2,53 +2,53 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-pub(crate) const OUTPUT_SCHEMA_VERSION: u32 = 2;
-pub(crate) const PROVIDER_SCHEMA_VERSION: u32 = 3;
-pub(crate) const PREVIOUS_PROVIDER_SCHEMA_VERSION: u32 = 2;
-pub(crate) const LEGACY_PROVIDER_SCHEMA_VERSION: u32 = 1;
+pub const OUTPUT_SCHEMA_VERSION: u32 = 2;
+pub const PROVIDER_SCHEMA_VERSION: u32 = 3;
+pub const PREVIOUS_PROVIDER_SCHEMA_VERSION: u32 = 2;
+pub const LEGACY_PROVIDER_SCHEMA_VERSION: u32 = 1;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ProviderManifest {
-    pub(crate) schema_version: u32,
-    pub(crate) provider: ProviderIdentity,
+pub struct ProviderManifest {
+    pub schema_version: u32,
+    pub provider: ProviderIdentity,
     #[serde(default)]
-    pub(crate) promise_scope: Option<ProviderPromiseScope>,
+    pub promise_scope: Option<ProviderPromiseScope>,
     #[serde(skip)]
     pub(crate) promise_scope_present: bool,
-    pub(crate) entries: Vec<String>,
+    pub entries: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ProviderPromiseScope {
-    pub(crate) authoritative_for: Vec<String>,
-    pub(crate) not_authoritative_for: Vec<String>,
-    pub(crate) inventory: InventoryScope,
-    pub(crate) shared_access_and_trust: Vec<String>,
-    pub(crate) shared_privacy_and_retention: Vec<String>,
-    pub(crate) compatibility_and_retirement: Vec<String>,
-    pub(crate) operational_limits: Vec<String>,
+pub struct ProviderPromiseScope {
+    pub authoritative_for: Vec<String>,
+    pub not_authoritative_for: Vec<String>,
+    pub inventory: InventoryScope,
+    pub shared_access_and_trust: Vec<String>,
+    pub shared_privacy_and_retention: Vec<String>,
+    pub compatibility_and_retirement: Vec<String>,
+    pub operational_limits: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct InventoryScope {
-    pub(crate) covers: Vec<String>,
-    pub(crate) completeness: InventoryCompleteness,
-    pub(crate) excludes: Vec<String>,
+pub struct InventoryScope {
+    pub covers: Vec<String>,
+    pub completeness: InventoryCompleteness,
+    pub excludes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum InventoryCompleteness {
+pub enum InventoryCompleteness {
     Complete,
     Partial,
 }
 
 impl InventoryCompleteness {
     #[must_use]
-    pub(crate) const fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Complete => "complete",
             Self::Partial => "partial",
@@ -58,22 +58,22 @@ impl InventoryCompleteness {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ProviderIdentity {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) release: String,
+pub struct ProviderIdentity {
+    pub id: String,
+    pub name: String,
+    pub release: String,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum EntryKind {
+pub enum EntryKind {
     Capability,
     Operation,
 }
 
 impl EntryKind {
     #[must_use]
-    pub(crate) const fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Capability => "capability",
             Self::Operation => "operation",
@@ -83,7 +83,7 @@ impl EntryKind {
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum Mode {
+pub enum Mode {
     Use,
     Operate,
     Develop,
@@ -91,7 +91,7 @@ pub(crate) enum Mode {
 
 impl Mode {
     #[must_use]
-    pub(crate) const fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Use => "use",
             Self::Operate => "operate",
@@ -102,14 +102,14 @@ impl Mode {
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum Support {
+pub enum Support {
     Supported,
     Deprecated,
 }
 
 impl Support {
     #[must_use]
-    pub(crate) const fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Supported => "supported",
             Self::Deprecated => "deprecated",
@@ -119,22 +119,22 @@ impl Support {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Interface {
-    pub(crate) label: String,
-    pub(crate) invocation: String,
+pub struct Interface {
+    pub label: String,
+    pub invocation: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Dependency {
-    pub(crate) id: String,
-    pub(crate) min_contract: u32,
-    pub(crate) max_contract_exclusive: u32,
+pub struct Dependency {
+    pub id: String,
+    pub min_contract: u32,
+    pub max_contract_exclusive: u32,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum ClaimStatus {
+pub enum ClaimStatus {
     Declared,
     Unsupported,
     Unspecified,
@@ -143,7 +143,7 @@ pub(crate) enum ClaimStatus {
 
 impl ClaimStatus {
     #[must_use]
-    pub(crate) const fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Declared => "declared",
             Self::Unsupported => "unsupported",
@@ -155,14 +155,14 @@ impl ClaimStatus {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct PromiseClaim {
-    pub(crate) status: ClaimStatus,
-    pub(crate) statement: String,
+pub struct PromiseClaim {
+    pub status: ClaimStatus,
+    pub statement: String,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum RelianceKind {
+pub enum RelianceKind {
     Data,
     Control,
     Authority,
@@ -172,7 +172,7 @@ pub(crate) enum RelianceKind {
 
 impl RelianceKind {
     #[must_use]
-    pub(crate) const fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Data => "data",
             Self::Control => "control",
@@ -185,37 +185,37 @@ impl RelianceKind {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct RelianceClaim {
-    pub(crate) status: ClaimStatus,
-    pub(crate) statement: String,
+pub struct RelianceClaim {
+    pub status: ClaimStatus,
+    pub statement: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) target: Option<String>,
+    pub target: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) kind: Option<RelianceKind>,
+    pub kind: Option<RelianceKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) contract: Option<String>,
+    pub contract: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct EntryPromise {
-    pub(crate) consumers: Vec<PromiseClaim>,
-    pub(crate) preconditions: Vec<PromiseClaim>,
-    pub(crate) inputs: Vec<PromiseClaim>,
-    pub(crate) outputs: Vec<PromiseClaim>,
-    pub(crate) data_semantics: Vec<PromiseClaim>,
-    pub(crate) identity_and_units: Vec<PromiseClaim>,
-    pub(crate) completeness_and_freshness: Vec<PromiseClaim>,
-    pub(crate) access: Vec<PromiseClaim>,
-    pub(crate) lifecycle_and_consistency: Vec<PromiseClaim>,
-    pub(crate) operational_limits: Vec<PromiseClaim>,
-    pub(crate) compatibility_and_evolution: Vec<PromiseClaim>,
-    pub(crate) reliances: Vec<RelianceClaim>,
+pub struct EntryPromise {
+    pub consumers: Vec<PromiseClaim>,
+    pub preconditions: Vec<PromiseClaim>,
+    pub inputs: Vec<PromiseClaim>,
+    pub outputs: Vec<PromiseClaim>,
+    pub data_semantics: Vec<PromiseClaim>,
+    pub identity_and_units: Vec<PromiseClaim>,
+    pub completeness_and_freshness: Vec<PromiseClaim>,
+    pub access: Vec<PromiseClaim>,
+    pub lifecycle_and_consistency: Vec<PromiseClaim>,
+    pub operational_limits: Vec<PromiseClaim>,
+    pub compatibility_and_evolution: Vec<PromiseClaim>,
+    pub reliances: Vec<RelianceClaim>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum PromiseFacet {
+pub enum PromiseFacet {
     Applicability,
     Outcome,
     Consumers,
@@ -241,7 +241,7 @@ pub(crate) enum PromiseFacet {
 }
 
 impl PromiseFacet {
-    pub(crate) const ALL: [Self; 22] = [
+    pub const ALL: [Self; 22] = [
         Self::Applicability,
         Self::Outcome,
         Self::Consumers,
@@ -267,7 +267,7 @@ impl PromiseFacet {
     ];
 
     #[must_use]
-    pub(crate) const fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Applicability => "applicability",
             Self::Outcome => "outcome",
@@ -297,47 +297,47 @@ impl PromiseFacet {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct EntryDocument {
-    pub(crate) id: String,
-    pub(crate) contract_version: u32,
-    pub(crate) kind: EntryKind,
-    pub(crate) mode: Mode,
-    pub(crate) support: Support,
-    pub(crate) title: String,
-    pub(crate) summary: String,
-    pub(crate) use_when: Vec<String>,
-    pub(crate) do_not_use_when: Vec<String>,
-    pub(crate) outcome: String,
-    pub(crate) effects: Vec<String>,
-    pub(crate) authority: Vec<String>,
-    pub(crate) success: Vec<String>,
-    pub(crate) failure_and_recovery: Vec<String>,
-    pub(crate) privacy: Vec<String>,
+pub struct EntryDocument {
+    pub id: String,
+    pub contract_version: u32,
+    pub kind: EntryKind,
+    pub mode: Mode,
+    pub support: Support,
+    pub title: String,
+    pub summary: String,
+    pub use_when: Vec<String>,
+    pub do_not_use_when: Vec<String>,
+    pub outcome: String,
+    pub effects: Vec<String>,
+    pub authority: Vec<String>,
+    pub success: Vec<String>,
+    pub failure_and_recovery: Vec<String>,
+    pub privacy: Vec<String>,
     #[serde(default)]
-    pub(crate) interfaces: Vec<Interface>,
+    pub interfaces: Vec<Interface>,
     #[serde(default)]
-    pub(crate) dependencies: Vec<Dependency>,
+    pub dependencies: Vec<Dependency>,
     #[serde(default)]
-    pub(crate) promise: Option<EntryPromise>,
+    pub promise: Option<EntryPromise>,
     #[serde(skip)]
     pub(crate) promise_present: bool,
     #[serde(default)]
-    pub(crate) session_surfaces: Vec<String>,
+    pub session_surfaces: Vec<String>,
     #[serde(default)]
-    pub(crate) does_not_authorize: Vec<String>,
+    pub does_not_authorize: Vec<String>,
     #[serde(default)]
-    pub(crate) runtime: Option<String>,
+    pub runtime: Option<String>,
     #[serde(default)]
-    pub(crate) automation: Option<String>,
+    pub automation: Option<String>,
     #[serde(default)]
-    pub(crate) steps: Vec<String>,
+    pub steps: Vec<String>,
     #[serde(default)]
-    pub(crate) checkpoints: Vec<String>,
+    pub checkpoints: Vec<String>,
     #[serde(default)]
-    pub(crate) adaptation: Vec<String>,
+    pub adaptation: Vec<String>,
     #[serde(default)]
-    pub(crate) stop_when: Vec<String>,
-    pub(crate) manual: String,
+    pub stop_when: Vec<String>,
+    pub manual: String,
 }
 
 #[derive(Debug, Clone)]
@@ -351,18 +351,18 @@ pub(crate) struct LoadedEntry {
     pub(crate) compatible: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct DependencyStatus {
-    pub(crate) id: String,
-    pub(crate) min_contract: u32,
-    pub(crate) max_contract_exclusive: u32,
-    pub(crate) installed_contract: Option<u32>,
-    pub(crate) state: DependencyState,
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DependencyStatus {
+    pub id: String,
+    pub min_contract: u32,
+    pub max_contract_exclusive: u32,
+    pub installed_contract: Option<u32>,
+    pub state: DependencyState,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum DependencyState {
+pub enum DependencyState {
     Compatible,
     Missing,
     Incompatible,
@@ -372,7 +372,7 @@ pub(crate) enum DependencyState {
 
 impl DependencyState {
     #[must_use]
-    pub(crate) const fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Compatible => "compatible",
             Self::Missing => "missing",
@@ -393,20 +393,21 @@ pub(crate) struct ProviderBundle {
     pub(crate) entries: Vec<LoadedEntry>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct Issue {
-    pub(crate) code: String,
-    pub(crate) message: String,
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Issue {
+    pub code: String,
+    pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) provider: Option<String>,
+    pub provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) entry: Option<String>,
+    pub entry: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) path: Option<String>,
+    pub path: Option<String>,
 }
 
 impl Issue {
-    pub(crate) fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
+    #[must_use]
+    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             code: code.into(),
             message: message.into(),
@@ -417,19 +418,19 @@ impl Issue {
     }
 
     #[must_use]
-    pub(crate) fn provider(mut self, provider: impl Into<String>) -> Self {
+    pub fn provider(mut self, provider: impl Into<String>) -> Self {
         self.provider = Some(provider.into());
         self
     }
 
     #[must_use]
-    pub(crate) fn entry(mut self, entry: impl Into<String>) -> Self {
+    pub fn entry(mut self, entry: impl Into<String>) -> Self {
         self.entry = Some(entry.into());
         self
     }
 
     #[must_use]
-    pub(crate) fn path(mut self, path: impl Into<String>) -> Self {
+    pub fn path(mut self, path: impl Into<String>) -> Self {
         self.path = Some(path.into());
         self
     }
@@ -444,7 +445,7 @@ pub(crate) struct Registry {
 }
 
 impl Registry {
-    pub(crate) fn entries(&self) -> impl Iterator<Item = (&ProviderIdentity, &LoadedEntry)> {
+    pub fn entries(&self) -> impl Iterator<Item = (&ProviderIdentity, &LoadedEntry)> {
         self.providers.iter().flat_map(|provider| {
             provider
                 .entries
@@ -454,14 +455,14 @@ impl Registry {
     }
 
     #[must_use]
-    pub(crate) fn entry_count(&self) -> usize {
+    pub fn entry_count(&self) -> usize {
         self.providers
             .iter()
             .map(|provider| provider.entries.len())
             .sum()
     }
 
-    pub(crate) fn find_entry(&self, id: &str) -> Option<(&ProviderBundle, &LoadedEntry)> {
+    pub fn find_entry(&self, id: &str) -> Option<(&ProviderBundle, &LoadedEntry)> {
         self.providers.iter().find_map(|provider| {
             provider
                 .entries

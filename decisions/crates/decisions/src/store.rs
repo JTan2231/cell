@@ -21,8 +21,7 @@ const MIGRATION_2: &str = include_str!("../migration_2.sql");
 const MIGRATION_3: &str = include_str!("../migration_3.sql");
 const MIGRATION_4: &str = include_str!("../migration_4.sql");
 const SCHEMA_VERSION: i64 = 4;
-const EVENT_STREAM: &str = "decisions.lifecycle";
-const EVENT_ENVELOPE_VERSION: i64 = 1;
+use krisis_api::lifecycle::{ENVELOPE_VERSION as EVENT_ENVELOPE_VERSION, STREAM as EVENT_STREAM};
 
 pub(crate) struct Store {
     connection: Connection,
@@ -60,29 +59,8 @@ pub(crate) struct ObservationProjection {
     pub(crate) observations_covered: usize,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-pub(crate) struct DecisionEventWatermark {
-    pub(crate) stream: &'static str,
-    pub(crate) envelope_version: i64,
-    pub(crate) cursor: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub(crate) struct DecisionEventPage {
-    pub(crate) stream: &'static str,
-    pub(crate) envelope_version: i64,
-    pub(crate) after_cursor: String,
-    pub(crate) next_cursor: String,
-    pub(crate) watermark_cursor: String,
-    pub(crate) has_more: bool,
-    pub(crate) events: Vec<DecisionEventItem>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub(crate) struct DecisionEventItem {
-    pub(crate) cursor: String,
-    pub(crate) event: serde_json::Value,
-}
+use krisis_api::lifecycle::{DecisionEventItem, DecisionEventWatermark};
+type DecisionEventPage = krisis_api::lifecycle::DecisionEventPage<serde_json::Value>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RunJobCorrelation {
@@ -312,7 +290,7 @@ impl Store {
     pub(crate) fn event_watermark(&self) -> AppResult<DecisionEventWatermark> {
         let sequence = event_watermark_sequence(&self.connection)?;
         Ok(DecisionEventWatermark {
-            stream: EVENT_STREAM,
+            stream: EVENT_STREAM.to_owned(),
             envelope_version: EVENT_ENVELOPE_VERSION,
             cursor: encode_event_cursor(sequence),
         })
@@ -391,7 +369,7 @@ impl Store {
             })
             .collect::<AppResult<Vec<_>>>()?;
         Ok(DecisionEventPage {
-            stream: EVENT_STREAM,
+            stream: EVENT_STREAM.to_owned(),
             envelope_version: EVENT_ENVELOPE_VERSION,
             after_cursor: after_cursor.to_owned(),
             next_cursor: encode_event_cursor(next),
@@ -3550,14 +3528,10 @@ impl Store {
         pending: &PendingAccount,
         receipt: &AnnalsReceipt,
     ) -> AppResult<()> {
-        if receipt.contract_version != 1
+        if receipt.validate().is_err()
             || receipt.library_id != pending.target_library_id
-            || receipt.producer != "krisis"
             || receipt.producer_key != pending.account_id
             || receipt.source_sha256 != pending.source_sha256
-            || receipt.job_id.trim().is_empty()
-            || receipt.accepted_at.trim().is_empty()
-            || !matches!(receipt.acceptance.as_str(), "created" | "replayed")
         {
             return Err(AppError::new(
                 "annals_receipt_invalid",

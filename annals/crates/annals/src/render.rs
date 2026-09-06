@@ -1,6 +1,5 @@
 use std::fmt::Write as _;
 
-use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::error::AppError;
@@ -30,23 +29,8 @@ impl CommandOutput {
     }
 }
 
-#[derive(Serialize)]
-struct SuccessEnvelope<'a> {
-    ok: bool,
-    data: &'a Value,
-}
-
-#[derive(Serialize)]
-struct ErrorBody<'a> {
-    code: &'a str,
-    message: String,
-}
-
-#[derive(Serialize)]
-struct ErrorEnvelope<'a> {
-    ok: bool,
-    error: ErrorBody<'a>,
-}
+use crate::api::{ErrorBody, ErrorOutput};
+use annals_api::SuccessEnvelope;
 
 pub fn success_json(data: &Value) -> Result<String, AppError> {
     serde_json::to_string(&SuccessEnvelope { ok: true, data })
@@ -54,10 +38,10 @@ pub fn success_json(data: &Value) -> Result<String, AppError> {
 }
 
 pub fn error_json(error: &AppError) -> String {
-    let envelope = ErrorEnvelope {
+    let envelope = ErrorOutput {
         ok: false,
         error: ErrorBody {
-            code: error.code(),
+            code: error.code().to_owned(),
             message: error.to_string(),
         },
     };

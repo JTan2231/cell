@@ -44,8 +44,14 @@ These are **introduction projections**, not a replacement Chancery validator.
 Usher does not validate the remaining contract fields, promise scope, dependency
 graph, release alignment, or completeness of the published capabilities.
 Chancery's existing gates retain full bundle validation. Usher checks no
-Pratica, Nucleus, Clockwork, or other relationship. Those affairs belong to the
+Nucleus, Clockwork, or other relationship. Those affairs belong to the
 concerned systems.
+
+The Rust library exports these report and error types plus the read-only
+`inspect` function through `usher::api`; the CLI uses the same definitions.
+Usher decodes Chancery introductions through Chancery-owned partial views.
+Those readers deliberately ignore unrelated contract fields; Usher still owns
+its membership, path, read-limit, and collision checks.
 
 A marker declares participation; it does not prove registration, an existing
 vocabulary, or current vocabulary quality. A source bundle declares Chancery

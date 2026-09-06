@@ -290,30 +290,15 @@ fn load_manifest(
         MAX_MANIFEST_BYTES,
         "manifest_unavailable",
     )?;
-    let manifest_value: serde_json::Value =
-        serde_json::from_str(&manifest_text).map_err(|error| {
-            vec![
-                Issue::new(
-                    "invalid_manifest",
-                    format!("invalid provider.json: {error}"),
-                )
-                .path(root.join("provider.json").display().to_string()),
-            ]
-        })?;
-    let promise_scope_present = manifest_value
-        .as_object()
-        .is_some_and(|object| object.contains_key("promise_scope"));
-    let mut manifest: ProviderManifest =
-        serde_json::from_value(manifest_value).map_err(|error| {
-            vec![
-                Issue::new(
-                    "invalid_manifest",
-                    format!("invalid provider.json: {error}"),
-                )
-                .path(root.join("provider.json").display().to_string()),
-            ]
-        })?;
-    manifest.promise_scope_present = promise_scope_present;
+    let manifest = ProviderManifest::decode(&manifest_text).map_err(|error| {
+        vec![
+            Issue::new(
+                "invalid_manifest",
+                format!("invalid provider.json: {error}"),
+            )
+            .path(root.join("provider.json").display().to_string()),
+        ]
+    })?;
     let manifest_sha256 = sha256(&manifest_text);
     Ok((root, manifest, manifest_sha256))
 }
@@ -404,19 +389,7 @@ fn load_entry(
 }
 
 fn parse_entry(entry_text: &str, schema_version: u32) -> Result<EntryDocument, serde_json::Error> {
-    let mut value: serde_json::Value = serde_json::from_str(entry_text)?;
-    let promise_present = value
-        .as_object()
-        .is_some_and(|object| object.contains_key("promise"));
-    if schema_version == LEGACY_PROVIDER_SCHEMA_VERSION
-        && let Some(object) = value.as_object_mut()
-    {
-        object.remove("routable");
-        object.remove("routing");
-    }
-    let mut document: EntryDocument = serde_json::from_value(value)?;
-    document.promise_present = promise_present;
-    Ok(document)
+    EntryDocument::decode(entry_text, schema_version)
 }
 
 fn load_manual(root: &Path, document: &EntryDocument, issues: &mut Vec<Issue>) -> String {

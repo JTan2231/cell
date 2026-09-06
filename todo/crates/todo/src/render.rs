@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 
-use serde::Serialize;
+use crate::api::{Data, Failure, Success};
 use serde_json::{Value, json};
 
 use crate::error::AppError;
@@ -30,38 +30,15 @@ impl CommandOutput {
     }
 }
 
-#[derive(Serialize)]
-struct SuccessEnvelope<'a> {
-    ok: bool,
-    data: &'a Value,
-}
-
-#[derive(Serialize)]
-struct ErrorBody<'a> {
-    code: &'a str,
-    message: String,
-}
-
-#[derive(Serialize)]
-struct ErrorEnvelope<'a> {
-    ok: bool,
-    error: ErrorBody<'a>,
-}
-
 pub(crate) fn success_json(data: &Value) -> Result<String, AppError> {
-    serde_json::to_string(&SuccessEnvelope { ok: true, data })
+    serde_json::from_value::<Data>(data.clone())
+        .and_then(|data| serde_json::to_string(&Success::new(data)))
         .map_err(|error| AppError::unexpected("json_serialization_failed", error.to_string()))
 }
 
 #[must_use]
 pub(crate) fn error_json(error: &AppError) -> String {
-    let envelope = ErrorEnvelope {
-        ok: false,
-        error: ErrorBody {
-            code: error.code(),
-            message: error.to_string(),
-        },
-    };
+    let envelope = Failure::new(error.code(), error.to_string());
     serde_json::to_string(&envelope).unwrap_or_else(|_| {
         json!({
             "ok": false,

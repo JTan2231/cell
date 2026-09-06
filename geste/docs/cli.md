@@ -109,3 +109,10 @@ situation/response/applicability 3, and outcome/lesson 2. Matching uses
 normalized substrings; outcome includes both status and summary. Results sort
 by score descending and numeric episode ID ascending, and expose matched terms
 and fields. A result remains a precedent candidate requiring agent judgment.
+
+## Rust callers
+
+Use the provider-owned `geste::api::Client`, `Request`, and `Data` for typed
+CLI calls. The client preserves the documented envelope and successful stderr
+diagnostics, performs no automatic retries, and uses the same command effects
+and recovery rules. See [Rust interface](rust-api.md) for the exported boundary.

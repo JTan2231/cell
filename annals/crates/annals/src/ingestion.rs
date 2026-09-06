@@ -3,7 +3,7 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use rusqlite::{Connection, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::{Date, Duration, Month, OffsetDateTime, Time, UtcOffset};
 
@@ -189,14 +189,14 @@ pub(crate) fn fail_interrupted_manual(connection: &Connection) -> Result<usize, 
     )?)
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct IngestionErrorView {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IngestionErrorView {
     pub code: String,
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct IngestionView {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IngestionView {
     pub source_name: String,
     pub channel: String,
     pub status: String,
@@ -226,8 +226,8 @@ impl IngestionView {
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(crate) struct LatelyReport {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LatelyReport {
     pub since: String,
     pub until: String,
     pub time_basis: String,

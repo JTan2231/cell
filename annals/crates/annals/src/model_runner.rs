@@ -34,7 +34,7 @@ const TOOL_RESULT_SCHEMA_DOCUMENT: &str = r#"{
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Eq, PartialEq, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum ModelQuality {
+pub enum ModelQuality {
     Low,
     Medium,
     #[default]

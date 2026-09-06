@@ -1,10 +1,15 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::json;
+
+use crate::api::{
+    CatalogEntry, ContractBasis, ContractDossier, ContractRequirement, DoctorResult, FacetCoverage,
+    FacetRequirements, FileBasis, ListResult, ProviderSummary, RegistryCounts, ResolutionGap,
+    ResolveResult, ShowResult, ValidateResult,
+};
 
 use crate::cli::{Cli, Command, ListArgs, ResolveArgs};
 use crate::error::AppError;
@@ -91,20 +96,20 @@ fn list(registry: &Registry, args: &ListArgs) -> CommandOutput {
             let availability = availability(entry);
             let compatibility = compatibility(entry);
             let readiness = readiness(entry);
-            values.push(json!({
-                "id": document.id,
-                "title": document.title,
-                "summary": document.summary,
-                "kind": document.kind,
-                "mode": document.mode,
-                "provider": provider,
-                "provider_release": provider.release,
-                "contract_version": document.contract_version,
-                "support": document.support,
-                "availability": availability,
-                "compatibility": compatibility,
-                "readiness": readiness,
-            }));
+            values.push(CatalogEntry {
+                id: document.id.clone(),
+                title: document.title.clone(),
+                summary: document.summary.clone(),
+                kind: document.kind,
+                mode: document.mode,
+                provider: provider.clone(),
+                provider_release: provider.release.clone(),
+                contract_version: document.contract_version,
+                support: document.support,
+                availability: availability.to_owned(),
+                compatibility: compatibility.to_owned(),
+                readiness: readiness.to_owned(),
+            });
             let _ = write!(
                 human,
                 "\n{} — {}\n  {}\n  {} · {} · {} {} · {} · {} · {} · {}\n",
@@ -134,9 +139,9 @@ fn list(registry: &Registry, args: &ListArgs) -> CommandOutput {
     );
     append_issues(&mut human, &registry.issues);
     CommandOutput::success(
-        json!({
-            "entries": values,
-            "issues": registry.issues,
+        json!(ListResult {
+            entries: values,
+            issues: registry.issues.clone()
         }),
         human,
     )
@@ -178,28 +183,18 @@ fn show(registry: &Registry, id: &str) -> Result<CommandOutput, AppError> {
     append_entry_details(&mut human, entry);
     append_issues(&mut human, &registry.issues);
     Ok(CommandOutput::success(
-        json!({
-            "provider": provider.identity,
-            "entry": document,
-            "availability": availability,
-            "compatibility": compatibility,
-            "readiness": readiness,
-            "dependency_statuses": entry.dependency_statuses,
-            "manual": entry.manual_text,
-            "issues": registry.issues,
+        json!(ShowResult {
+            provider: provider.identity.clone(),
+            entry: document.clone(),
+            availability: availability.to_owned(),
+            compatibility: compatibility.to_owned(),
+            readiness: readiness.to_owned(),
+            dependency_statuses: entry.dependency_statuses.clone(),
+            manual: entry.manual_text.clone(),
+            issues: registry.issues.clone(),
         }),
         human,
     ))
-}
-
-#[derive(Debug, Serialize)]
-struct ResolutionGap {
-    code: &'static str,
-    message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    entry: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    facet: Option<String>,
 }
 
 struct ResolutionSummary<'a> {
@@ -211,7 +206,7 @@ struct ResolutionSummary<'a> {
 impl ResolutionGap {
     fn new(code: &'static str, message: impl Into<String>) -> Self {
         Self {
-            code,
+            code: code.to_owned(),
             message: message.into(),
             entry: None,
             facet: None,
@@ -304,8 +299,14 @@ fn resolve(registry: &Registry, args: &ResolveArgs) -> Result<CommandOutput, App
         .iter()
         .map(|(provider, entry)| contract_dossier(provider, entry))
         .collect();
-    let required_values: Vec<_> = required.iter().map(|facet| facet.as_str()).collect();
-    let unsatisfied_values: Vec<_> = unsatisfied.iter().map(|facet| facet.as_str()).collect();
+    let required_values: Vec<_> = required
+        .iter()
+        .map(|facet| facet.as_str().to_owned())
+        .collect();
+    let unsatisfied_values: Vec<_> = unsatisfied
+        .iter()
+        .map(|facet| facet.as_str().to_owned())
+        .collect();
 
     let human = resolution_human(
         registry,
@@ -322,25 +323,25 @@ fn resolve(registry: &Registry, args: &ResolveArgs) -> Result<CommandOutput, App
 
     Ok(CommandOutput::report(
         documentation_resolved,
-        json!({
-            "requested_id": args.id,
-            "status": status,
-            "contract_requirement": {
-                "min_contract": args.min_contract,
-                "max_contract_exclusive": args.max_contract_exclusive,
-                "satisfied": contract_matches,
+        json!(ResolveResult {
+            requested_id: args.id.clone(),
+            status: status.to_owned(),
+            contract_requirement: ContractRequirement {
+                min_contract: args.min_contract,
+                max_contract_exclusive: args.max_contract_exclusive,
+                satisfied: contract_matches,
             },
-            "facet_requirements": {
-                "required": required_values,
-                "unsatisfied": unsatisfied_values,
+            facet_requirements: FacetRequirements {
+                required: required_values,
+                unsatisfied: unsatisfied_values
             },
-            "declaration_status": declaration_status,
-            "dependency_closure_status": dependency_closure_status,
-            "readiness": readiness(root_entry),
-            "root": root_value,
-            "dependency_closure": closure_values,
-            "gaps": gaps,
-            "issues": registry.issues,
+            declaration_status: declaration_status.to_owned(),
+            dependency_closure_status: dependency_closure_status.to_owned(),
+            readiness: readiness(root_entry).to_owned(),
+            root: root_value,
+            dependency_closure: closure_values,
+            gaps,
+            issues: registry.issues.clone(),
         }),
         human,
         i32::from(!documentation_resolved),
@@ -471,50 +472,52 @@ fn contract_matches(entry: &LoadedEntry, args: &ResolveArgs) -> bool {
             .is_none_or(|maximum| entry.document.contract_version < maximum)
 }
 
-fn contract_dossier(provider: &ProviderBundle, entry: &LoadedEntry) -> Value {
-    json!({
-        "provider": provider.identity,
-        "provider_schema_version": provider.schema_version,
-        "provider_promise_scope": provider.promise_scope,
-        "entry": entry.document,
-        "facet_coverage": facet_coverage(entry),
-        "availability": availability(entry),
-        "compatibility": compatibility(entry),
-        "readiness": readiness(entry),
-        "dependency_statuses": entry.dependency_statuses,
-        "manual": entry.manual_text,
-        "basis": {
-            "provider_manifest": {
-                "path": "provider.json",
-                "sha256": provider.manifest_sha256,
+fn contract_dossier(provider: &ProviderBundle, entry: &LoadedEntry) -> ContractDossier {
+    ContractDossier {
+        provider: provider.identity.clone(),
+        provider_schema_version: provider.schema_version,
+        provider_promise_scope: provider.promise_scope.clone(),
+        entry: entry.document.clone(),
+        facet_coverage: facet_coverage(entry),
+        availability: availability(entry).to_owned(),
+        compatibility: compatibility(entry).to_owned(),
+        readiness: readiness(entry).to_owned(),
+        dependency_statuses: entry.dependency_statuses.clone(),
+        manual: entry.manual_text.clone(),
+        basis: ContractBasis {
+            provider_manifest: FileBasis {
+                path: "provider.json".to_owned(),
+                sha256: provider.manifest_sha256.clone(),
             },
-            "entry_contract": {
-                "path": entry.source_path,
-                "sha256": entry.source_sha256,
+            entry_contract: FileBasis {
+                path: entry.source_path.clone(),
+                sha256: entry.source_sha256.clone(),
             },
-            "manual": {
-                "path": entry.document.manual,
-                "sha256": entry.manual_sha256,
-            }
-        }
-    })
+            manual: FileBasis {
+                path: entry.document.manual.clone(),
+                sha256: entry.manual_sha256.clone(),
+            },
+        },
+    }
 }
 
-fn facet_coverage(entry: &LoadedEntry) -> Value {
-    let mut coverage = serde_json::Map::new();
-    for facet in PromiseFacet::ALL {
-        let statuses = facet_claim_statuses(entry, facet);
-        let state = aggregate_claim_status(&statuses);
-        let claim_statuses: Vec<_> = statuses.iter().map(|status| status.as_str()).collect();
-        coverage.insert(
-            facet.as_str().to_owned(),
-            json!({
-                "state": state,
-                "claim_statuses": claim_statuses,
-            }),
-        );
-    }
-    Value::Object(coverage)
+fn facet_coverage(entry: &LoadedEntry) -> BTreeMap<String, FacetCoverage> {
+    PromiseFacet::ALL
+        .into_iter()
+        .map(|facet| {
+            let statuses = facet_claim_statuses(entry, facet);
+            (
+                facet.as_str().to_owned(),
+                FacetCoverage {
+                    state: aggregate_claim_status(&statuses).to_owned(),
+                    claim_statuses: statuses
+                        .iter()
+                        .map(|status| status.as_str().to_owned())
+                        .collect(),
+                },
+            )
+        })
+        .collect()
 }
 
 fn facet_claim_statuses(entry: &LoadedEntry, facet: PromiseFacet) -> BTreeSet<ClaimStatus> {
@@ -1012,17 +1015,15 @@ fn append_dependencies(human: &mut String, entry: &LoadedEntry) {
 
 fn doctor(registry: &Registry) -> CommandOutput {
     let valid = registry.issues.is_empty();
-    let provider_values: Vec<Value> = registry
+    let provider_values = registry
         .providers
         .iter()
-        .map(|provider| {
-            json!({
-                "id": provider.identity.id,
-                "name": provider.identity.name,
-                "release": provider.identity.release,
-                "root": provider.root,
-                "entries": provider.entries.len(),
-            })
+        .map(|provider| ProviderSummary {
+            id: provider.identity.id.clone(),
+            name: provider.identity.name.clone(),
+            release: provider.identity.release.clone(),
+            root: provider.root.clone(),
+            entries: provider.entries.len(),
         })
         .collect();
     let mut human = format!("Chancery registry\n  root: {}\n\n", registry.root.display());
@@ -1054,17 +1055,17 @@ fn doctor(registry: &Registry) -> CommandOutput {
     append_issues(&mut human, &registry.issues);
     CommandOutput::report(
         valid,
-        json!({
-            "valid": valid,
-            "registry": registry.root,
-            "providers": provider_values,
-            "counts": {
-                "scanned_providers": registry.scanned_providers,
-                "valid_providers": registry.providers.len(),
-                "excluded_providers": excluded,
-                "entries": registry.entry_count(),
+        json!(DoctorResult {
+            valid,
+            registry: registry.root.clone(),
+            providers: provider_values,
+            counts: RegistryCounts {
+                scanned_providers: registry.scanned_providers,
+                valid_providers: registry.providers.len(),
+                excluded_providers: excluded,
+                entries: registry.entry_count(),
             },
-            "issues": registry.issues,
+            issues: registry.issues.clone(),
         }),
         human,
         i32::from(!valid),
@@ -1086,13 +1087,13 @@ fn validate_bundle(bundle: &Path) -> CommandOutput {
                 provider.entries.len()
             );
             CommandOutput::success(
-                json!({
-                    "valid": true,
-                    "provider": provider.identity,
-                    "bundle": provider.root,
-                    "entries": provider.entries.len(),
-                    "external_dependencies": "not_checked",
-                    "issues": [],
+                json!(ValidateResult {
+                    valid: true,
+                    provider: Some(provider.identity),
+                    bundle: provider.root,
+                    entries: Some(provider.entries.len()),
+                    external_dependencies: "not_checked".to_owned(),
+                    issues: vec![],
                 }),
                 human,
             )
@@ -1106,11 +1107,13 @@ fn invalid_bundle(bundle: &Path, issues: &[Issue]) -> CommandOutput {
     append_issues(&mut human, issues);
     CommandOutput::report(
         false,
-        json!({
-            "valid": false,
-            "bundle": bundle,
-            "external_dependencies": "not_checked",
-            "issues": issues,
+        json!(ValidateResult {
+            valid: false,
+            provider: None,
+            bundle: bundle.to_path_buf(),
+            entries: None,
+            external_dependencies: "not_checked".to_owned(),
+            issues: issues.to_vec(),
         }),
         human,
         1,

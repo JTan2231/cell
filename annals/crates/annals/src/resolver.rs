@@ -34,14 +34,14 @@ pub(crate) struct ResolvedReconciliation {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ResolvedEvidence {
+pub struct ResolvedEvidence {
     pub quote: String,
     pub occurrence_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
-pub(crate) enum ResolvedOperation {
+pub enum ResolvedOperation {
     CreateConcept {
         concept: ConceptReference,
         parents: Vec<ConceptReference>,

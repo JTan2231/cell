@@ -164,3 +164,12 @@ recovery plan instead of forcing binary rollback.
 
 Version 0.1 has no uninstaller or automatic pruning. Deleting retained cases,
 attempts, releases, or a database is a separate destructive action.
+
+## Rust callers
+
+The provider crate exports `crm::api`: supported request and response
+types, provider-owned envelope decoding, and an explicit-executable CLI client.
+Use these types at imports and convert only to caller-local domain values.
+The client performs the same operations under this contract and never adds
+retry or authorization. See `crm/docs/rust-api.md`; the Rust structs and
+enums define the interface without a separate declaration layer.

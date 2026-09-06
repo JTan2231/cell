@@ -51,3 +51,12 @@ Continuous ingestion, source-specific runtime adapters, model inference,
 embeddings, and network activity are outside manual v0.1. Stop for a new
 contract review before assigning their identity, cutoff, privacy, failure, and
 recovery behavior.
+
+## Rust callers
+
+The provider crate exports `geste::api`: supported request and response
+types, provider-owned envelope decoding, and an explicit-executable CLI client.
+Use these types at imports and convert only to caller-local domain values.
+The client performs the same operations under this contract and never adds
+retry or authorization. See `geste/docs/rust-api.md`; the Rust structs and
+enums define the interface without a separate declaration layer.

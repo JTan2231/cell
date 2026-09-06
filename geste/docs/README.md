@@ -11,3 +11,6 @@
   Geste CLI promise inventory for this release. Use `chancery show ID` for the
   full contract and `chancery resolve ID` for its normalized outward boundary,
   exact basis, and explicit gaps.
+
+- [Rust interface](rust-api.md): provider-owned request and response types,
+  boundary decoding, and the local CLI client.

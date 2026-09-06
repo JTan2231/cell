@@ -1,20 +1,20 @@
 use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::corpus::now;
 use crate::error::AppError;
 
 const MAX_REASON_CHARACTERS: usize = 1_000;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct RetrySelection {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetrySelection {
     pub from_job_id: String,
     pub through_job_id: String,
     pub items: Vec<RetrySelectionItem>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct RetrySelectionItem {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetrySelectionItem {
     pub ordinal: i64,
     pub original_job_id: String,
     pub original_sequence: u64,
@@ -23,21 +23,21 @@ pub(crate) struct RetrySelectionItem {
     pub original_error_code: String,
     pub original_error_message: String,
     #[serde(skip_serializing)]
-    pub original_work_id: Option<i64>,
+    pub(crate) original_work_id: Option<i64>,
     pub already_selected_by: Option<i64>,
     pub already_selected_child_job_id: Option<String>,
     pub already_selected_child_delivery_id: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct RetryHalt {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetryHalt {
     pub halted_at: String,
     pub code: String,
     pub message: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct RetryEvent {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetryEvent {
     pub id: i64,
     pub from_job_id: String,
     pub through_job_id: String,
@@ -50,8 +50,8 @@ pub(crate) struct RetryEvent {
     pub member_count: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct RetryItem {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetryItem {
     pub ordinal: i64,
     pub original_job_id: String,
     pub original_sequence: u64,
@@ -60,7 +60,7 @@ pub(crate) struct RetryItem {
     pub original_error_code: String,
     pub original_error_message: String,
     #[serde(skip_serializing)]
-    pub original_work_id: Option<i64>,
+    pub(crate) original_work_id: Option<i64>,
     pub child_job_id: Option<String>,
     pub child_sequence: Option<u64>,
     pub child_delivery_id: Option<i64>,
@@ -73,8 +73,8 @@ pub(crate) struct RetryItem {
     pub outcome: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct RetrySummary {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetrySummary {
     pub selected: usize,
     pub attempted: usize,
     pub succeeded: usize,
@@ -88,8 +88,8 @@ pub(crate) struct RetrySummary {
     pub skipped: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct RetryEventReport {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetryEventReport {
     pub event: RetryEvent,
     pub summary: RetrySummary,
     pub items: Vec<RetryItem>,

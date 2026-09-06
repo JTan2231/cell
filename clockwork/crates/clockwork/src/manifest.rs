@@ -60,9 +60,9 @@ pub(crate) fn load(path: &Path, layout: &Layout) -> Result<(Manifest, String)> {
 }
 
 pub(crate) fn definition_digest(manifest: &Manifest) -> Result<String> {
-    let canonical =
-        serde_json::to_vec(manifest).context("manifest_invalid", "serialize canonical manifest")?;
-    Ok(hex::encode(Sha256::digest(canonical)))
+    manifest
+        .digest()
+        .context("manifest_invalid", "serialize canonical manifest")
 }
 
 #[allow(clippy::too_many_lines)]

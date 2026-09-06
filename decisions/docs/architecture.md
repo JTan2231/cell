@@ -102,3 +102,23 @@ identity transition cannot strand an in-flight legacy job.
 Krisis does not append new legacy lifecycle events. The read-only
 `decisions.lifecycle.consume` command surface remains for existing consumers;
 daily digest, review, email, and their schedules are retired.
+
+## Provider-owned Rust exports
+
+`krisis-api` owns the schema-one account sections, source metadata, authority
+anchor, canonical Markdown renderer, and parser. Both Krisis rendering and
+Annals admission use that codec. Its separate `lifecycle` module owns the
+frozen Decisions envelopes and read-only CLI client; retained provider event
+JSON is preserved while consumers decode the same exported envelope types.
+There is no new lifecycle producer, backfill, or acknowledgement operation.
+
+Krisis imports `annals-api` for acceptance and watermark transport and response
+types. Target binding, exact outbox digest matching, durable receipt storage,
+and retry policy remain Krisis-owned. The account export crate does not depend
+on Annals, so these provider-owned dependencies do not form a crate cycle.
+
+`decisions::api` exposes the operational Krisis CLI separately from the small
+account/lifecycle crate. It owns hook input, activation and processing results,
+observation status, retained-candidate inspection, reconciliation and doctor
+reports, and the typed CLI client. The executable emits those same structs.
+The client does not expose retired daily digest or review actions.

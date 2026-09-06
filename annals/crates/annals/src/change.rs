@@ -11,11 +11,11 @@ use crate::model::ConceptId;
 /// One complete semantic reconciliation submitted for a host-scoped work and corpus revision.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Reconciliation {
-    pub(crate) summary: String,
-    pub(crate) operations: Vec<ChangeOperation>,
+pub struct Reconciliation {
+    pub summary: String,
+    pub operations: Vec<ChangeOperation>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub(crate) annotations: Vec<String>,
+    pub annotations: Vec<String>,
 }
 
 impl Reconciliation {
@@ -44,7 +44,7 @@ impl Reconciliation {
 /// A durable public concept ID, or a request-local creation handle.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(untagged, deny_unknown_fields)]
-pub(crate) enum ConceptSelector {
+pub enum ConceptSelector {
     Existing {
         id: ConceptId,
     },
@@ -57,7 +57,7 @@ pub(crate) enum ConceptSelector {
 /// Exact source language, with optional natural-language disambiguators.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct EvidenceSelector {
+pub struct EvidenceSelector {
     pub quote: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub within_heading: Option<Vec<String>>,
@@ -70,7 +70,7 @@ pub(crate) struct EvidenceSelector {
 /// What to do with existing evidence when wording changes without changing identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum EvidenceDisposition {
+pub enum EvidenceDisposition {
     Retain,
     Remove,
 }
@@ -78,7 +78,7 @@ pub(crate) enum EvidenceDisposition {
 /// One semantic operation in an atomic reconciliation.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
-pub(crate) enum ChangeOperation {
+pub enum ChangeOperation {
     CreateConcept {
         #[serde(rename = "ref")]
         handle: String,
@@ -116,16 +116,18 @@ pub(crate) enum ChangeOperation {
 
 /// A syntax or language-level contract failure, before corpus resolution begins.
 #[derive(Debug, Error)]
-pub(crate) enum ReconciliationContractError {
+pub enum ReconciliationContractError {
     #[error("reconciliation is not valid contract JSON: {0}")]
     InvalidJson(#[source] serde_json::Error),
     #[error("invalid reconciliation: {0}")]
     InvalidReconciliation(String),
 }
 
-pub(crate) fn parse_reconciliation(
-    document: &str,
-) -> Result<Reconciliation, ReconciliationContractError> {
+/// Decode and validate a complete reconciliation request.
+///
+/// # Errors
+/// Returns a syntax or language-contract error before corpus resolution.
+pub fn parse_reconciliation(document: &str) -> Result<Reconciliation, ReconciliationContractError> {
     let reconciliation: Reconciliation =
         serde_json::from_str(document).map_err(ReconciliationContractError::InvalidJson)?;
     reconciliation.validate()?;

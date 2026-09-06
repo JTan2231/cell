@@ -86,3 +86,12 @@ The database must already have been created by the separate visible
 source-product call. Protect both request files and the private database; they
 may contain sensitive process accounts, decisions, labels, identities, and
 outcomes.
+
+## Rust callers
+
+The provider crate exports `geste::api`: supported request and response
+types, provider-owned envelope decoding, and an explicit-executable CLI client.
+Use these types at imports and convert only to caller-local domain values.
+The client performs the same operations under this contract and never adds
+retry or authorization. See `geste/docs/rust-api.md`; the Rust structs and
+enums define the interface without a separate declaration layer.

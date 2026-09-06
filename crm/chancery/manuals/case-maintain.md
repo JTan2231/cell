@@ -163,3 +163,12 @@ update, JSON adds a top-level `context` containing that update view and its
 relevant attention/advisory; human stderr prints the same nonblocking advisory
 banner before the error. The operational failure remains nonzero, but the
 advisory is never allowed to disappear merely because processing failed.
+
+## Rust callers
+
+The provider crate exports `crm::api`: supported request and response
+types, provider-owned envelope decoding, and an explicit-executable CLI client.
+Use these types at imports and convert only to caller-local domain values.
+The client performs the same operations under this contract and never adds
+retry or authorization. See `crm/docs/rust-api.md`; the Rust structs and
+enums define the interface without a separate declaration layer.

@@ -44,7 +44,8 @@
   "interfaces": [
     {"label": "Accept account", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> inbox accept --producer krisis --key <ID> <FILE>"},
     {"label": "Freeze watermark", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> decision-feed watermark"},
-    {"label": "Read fixed page", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> decision-feed page --watermark <TOKEN> --after <CURSOR> --limit <N>"}
+    {"label": "Read fixed page", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> decision-feed page --watermark <TOKEN> --after <CURSOR> --limit <N>"},
+    {"label": "Rust account exchange", "invocation": "annals_api::Client::{accept,watermark,read_page}"}
   ],
   "dependencies": [],
   "does_not_authorize": [

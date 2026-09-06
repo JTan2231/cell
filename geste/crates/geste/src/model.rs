@@ -191,7 +191,7 @@ impl EpisodeRelation {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RevisionView {
     pub episode: String,
     pub revision: u32,
@@ -201,7 +201,7 @@ pub struct RevisionView {
     pub capture: Capture,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EpisodeListItem {
     pub episode: String,
     pub revision: u32,
@@ -211,7 +211,7 @@ pub struct EpisodeListItem {
     pub basis_cutoff_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SearchResult {
     pub episode: String,
     pub revision: u32,
@@ -223,34 +223,34 @@ pub struct SearchResult {
     pub matched_fields: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Report {
     #[serde(rename = "type")]
-    pub kind: &'static str,
+    pub kind: String,
     pub episode: RevisionView,
-    pub interpretation_label: &'static str,
-    pub source_boundary: &'static str,
+    pub interpretation_label: String,
+    pub source_boundary: String,
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Graph {
     #[serde(rename = "type")]
-    pub kind: &'static str,
+    pub kind: String,
     pub episode: String,
     pub revision: u32,
-    pub interpretation_label: &'static str,
-    pub source_boundary: &'static str,
+    pub interpretation_label: String,
+    pub source_boundary: String,
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GraphNode {
     pub id: String,
-    pub kind: &'static str,
-    pub origin: &'static str,
+    pub kind: String,
+    pub origin: String,
     pub label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
@@ -258,7 +258,7 @@ pub struct GraphNode {
     pub source: Option<GraphSource>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GraphSource {
     pub system: String,
     pub kind: String,
@@ -269,11 +269,11 @@ pub struct GraphSource {
     pub role: SourceRole,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GraphEdge {
     pub from: String,
     pub to: String,
-    pub kind: &'static str,
+    pub kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
 }

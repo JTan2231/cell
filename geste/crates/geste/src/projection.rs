@@ -12,10 +12,10 @@ const INTERPRETATION_LABEL: &str = "Except for explicitly structured settlements
 pub fn report(view: RevisionView) -> Report {
     let warnings = coverage_warnings(&view);
     Report {
-        kind: "episode_report",
+        kind: "episode_report".to_owned(),
         episode: view,
-        interpretation_label: INTERPRETATION_LABEL,
-        source_boundary: SOURCE_BOUNDARY,
+        interpretation_label: INTERPRETATION_LABEL.to_owned(),
+        source_boundary: SOURCE_BOUNDARY.to_owned(),
         warnings,
     }
 }
@@ -149,8 +149,8 @@ pub fn graph(view: &RevisionView) -> Graph {
     let capture = &view.capture;
     let mut nodes = vec![GraphNode {
         id: root.clone(),
-        kind: "episode",
-        origin: "geste_episode",
+        kind: "episode".to_owned(),
+        origin: "geste_episode".to_owned(),
         label: capture.title.clone(),
         status: Some(capture.outcome.status.as_str().to_owned()),
         source: None,
@@ -187,8 +187,8 @@ pub fn graph(view: &RevisionView) -> Graph {
         let claim_id = claim_node_id(&target);
         nodes.push(GraphNode {
             id: claim_id.clone(),
-            kind: "settlement",
-            origin,
+            kind: "settlement".to_owned(),
+            origin: origin.to_owned(),
             label: settlement.statement.clone(),
             status: Some(settlement.status.as_str().to_owned()),
             source: None,
@@ -196,7 +196,7 @@ pub fn graph(view: &RevisionView) -> Graph {
         edges.push(GraphEdge {
             from: root.clone(),
             to: claim_id.clone(),
-            kind: "structural",
+            kind: "structural".to_owned(),
             label: Some("settlement".to_owned()),
         });
         if settlement.status == SettlementStatus::Unverified
@@ -205,7 +205,7 @@ pub fn graph(view: &RevisionView) -> Graph {
             edges.push(GraphEdge {
                 from: claim_id,
                 to: claim_node_id(gap),
-                kind: "structural",
+                kind: "structural".to_owned(),
                 label: Some("unverified_gap".to_owned()),
             });
         }
@@ -219,8 +219,8 @@ pub fn graph(view: &RevisionView) -> Graph {
         let source_id = format!("source:{}", source.id);
         nodes.push(GraphNode {
             id: source_id.clone(),
-            kind: "source",
-            origin: "manual_upstream_anchor",
+            kind: "source".to_owned(),
+            origin: "manual_upstream_anchor".to_owned(),
             label: format!(
                 "{}/{} {} — {}",
                 source.system, source.kind, source.reference, source.label
@@ -239,14 +239,14 @@ pub fn graph(view: &RevisionView) -> Graph {
         edges.push(GraphEdge {
             from: root.clone(),
             to: source_id.clone(),
-            kind: "structural",
+            kind: "structural".to_owned(),
             label: Some("source_basis".to_owned()),
         });
         for target in &source.supports {
             edges.push(GraphEdge {
                 from: source_id.clone(),
                 to: claim_node_id(target),
-                kind: "support",
+                kind: "support".to_owned(),
                 label: Some(source.role.as_str().to_owned()),
             });
         }
@@ -258,8 +258,8 @@ pub fn graph(view: &RevisionView) -> Graph {
         if related_nodes.insert(related_id.clone()) {
             nodes.push(GraphNode {
                 id: related_id.clone(),
-                kind: "related_episode",
-                origin: "geste_frozen_reference",
+                kind: "related_episode".to_owned(),
+                origin: "geste_frozen_reference".to_owned(),
                 label: format!("{} revision {}", link.episode, link.revision),
                 status: None,
                 source: None,
@@ -268,17 +268,17 @@ pub fn graph(view: &RevisionView) -> Graph {
         edges.push(GraphEdge {
             from: root.clone(),
             to: related_id,
-            kind: "episode_relation",
+            kind: "episode_relation".to_owned(),
             label: Some(link.relation.as_str().to_owned()),
         });
     }
 
     Graph {
-        kind: "episode_graph",
+        kind: "episode_graph".to_owned(),
         episode: view.episode.clone(),
         revision: view.revision,
-        interpretation_label: INTERPRETATION_LABEL,
-        source_boundary: SOURCE_BOUNDARY,
+        interpretation_label: INTERPRETATION_LABEL.to_owned(),
+        source_boundary: SOURCE_BOUNDARY.to_owned(),
         nodes,
         edges,
         warnings: coverage_warnings(view),
@@ -360,8 +360,8 @@ fn add_claim(
     let id = claim_node_id(target);
     nodes.push(GraphNode {
         id: id.clone(),
-        kind: "claim",
-        origin: "geste_authored_interpretation",
+        kind: "claim".to_owned(),
+        origin: "geste_authored_interpretation".to_owned(),
         label: value.to_owned(),
         status: None,
         source: None,
@@ -369,7 +369,7 @@ fn add_claim(
     edges.push(GraphEdge {
         from: root.to_owned(),
         to: id,
-        kind: "structural",
+        kind: "structural".to_owned(),
         label: Some(label.to_owned()),
     });
 }

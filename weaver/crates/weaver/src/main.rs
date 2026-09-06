@@ -136,8 +136,11 @@ fn submit_command(
     let store = state_store(state_dir)?;
     let current = store.enqueue(project.repo_root, project.slug)?;
     println!(
-        "weaver: submitted {}: narratives/{}",
-        current.run_id, current.narrative
+        "{}",
+        weaver::api::Submission {
+            run_id: current.run_id.clone(),
+            narrative: current.narrative.clone()
+        }
     );
     if let Err(error) = store.activate_worker() {
         eprintln!("weaver: workflow is durably queued, but worker activation failed: {error}");
@@ -175,7 +178,12 @@ async fn wait_command(state_dir: Option<PathBuf>, selection: &RunSelection) -> A
 fn cancel_command(state_dir: Option<PathBuf>, selection: &RunSelection) -> AppResult<ExitCode> {
     let store = state_store(state_dir)?;
     let current = store.request_cancel(selection.run_id.as_deref())?;
-    println!("weaver: cancellation requested: {}", current.run_id);
+    println!(
+        "{}",
+        weaver::api::Cancellation {
+            run_id: current.run_id.clone()
+        }
+    );
     if !current.status.is_terminal()
         && let Err(error) = store.activate_worker()
     {
@@ -260,19 +268,18 @@ fn state_store(configured: Option<PathBuf>) -> AppResult<StateStore> {
 }
 
 fn print_current(current: &CurrentRun) {
-    println!("Run: {}", current.run_id);
-    println!("Narrative: narratives/{}", current.narrative);
-    println!("State: {}", current.status.as_str());
-    println!("Completed stages: {}/5", current.next_stage);
-    if let Some(verdict) = &current.verdict {
-        println!("Verdict: {verdict}");
-    }
-    if let Some(job_id) = &current.active_job_id {
-        println!("Nucleus job: {job_id}");
-    }
-    if let Some(detail) = &current.detail {
-        println!("Detail: {detail}");
-    }
+    print!(
+        "{}",
+        weaver::api::Run {
+            run_id: current.run_id.clone(),
+            narrative: current.narrative.clone(),
+            status: current.status,
+            completed_stages: current.next_stage,
+            verdict: current.verdict.clone(),
+            active_job_id: current.active_job_id.clone(),
+            detail: current.detail.clone(),
+        }
+    );
 }
 
 fn run_exit_code(status: RunStatus) -> ExitCode {

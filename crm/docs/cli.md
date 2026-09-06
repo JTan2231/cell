@@ -167,3 +167,10 @@ before the error.
 
 Advisories are data, not errors: a non-null advisory never changes an otherwise
 valid command's exit status or authorizes CRM to refuse the operation.
+
+## Rust callers
+
+Use the provider-owned `crm::api::Client`, `Request`, and `Data` for typed
+CLI calls. The client preserves the documented envelope and successful stderr
+diagnostics, performs no automatic retries, and uses the same command effects
+and recovery rules. See [Rust interface](rust-api.md) for the exported boundary.

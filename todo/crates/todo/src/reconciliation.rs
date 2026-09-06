@@ -496,28 +496,37 @@ fn design_basis_catalog(
             .iter()
             .map(|boundary| format!("direction:{}", boundary.local_ref)),
     );
-    refs.extend(assessment.findings.iter().filter_map(|finding| {
-        finding
-            .get("ref")
-            .and_then(Value::as_str)
-            .map(|local_ref| format!("assessment:{}:finding:{local_ref}", assessment.id))
-    }));
-    refs.extend(assessment.jurisdictions.iter().filter_map(|jurisdiction| {
-        jurisdiction
-            .get("key")
-            .and_then(Value::as_str)
-            .map(|key| format!("assessment:{}:jurisdiction:{key}", assessment.id))
+    refs.extend(
+        assessment
+            .findings
+            .iter()
+            .map(|finding| format!("assessment:{}:finding:{}", assessment.id, finding.local_ref)),
+    );
+    refs.extend(assessment.jurisdictions.iter().map(|jurisdiction| {
+        format!(
+            "assessment:{}:jurisdiction:{}",
+            assessment.id, jurisdiction.key
+        )
     }));
     if let Some(predecessor) = predecessor {
-        for operation in predecessor
+        let operations = predecessor
             .jurisdiction_changes
             .iter()
-            .chain(predecessor.clauses.iter())
-            .chain(predecessor.unresolved_choices.iter())
-        {
-            if operation.get("status").and_then(Value::as_str) == Some("active")
-                && let Some(operation_id) = operation.get("operation_id").and_then(Value::as_str)
-            {
+            .map(|operation| (&operation.status, &operation.operation_id))
+            .chain(
+                predecessor
+                    .clauses
+                    .iter()
+                    .map(|operation| (&operation.status, &operation.operation_id)),
+            )
+            .chain(
+                predecessor
+                    .unresolved_choices
+                    .iter()
+                    .map(|operation| (&operation.status, &operation.operation_id)),
+            );
+        for (status, operation_id) in operations {
+            if status == "active" {
                 refs.insert(format!("design:{}:{operation_id}", predecessor.id));
             }
         }

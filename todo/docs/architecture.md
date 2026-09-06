@@ -261,3 +261,11 @@ is used to classify entries without copying that richer content into email.
 Resend using the existing retry and idempotency contract. Email sending does
 not use Nucleus or Codex authentication. The rendered digest leaves the local
 security boundary in both the email and Resend's service.
+
+## Rust boundary
+
+`todo::api` owns the supported importable request, payload, error, and local
+CLI-client types. The CLI uses the same serialized values. Consumers convert
+those exported values into their local structs; they do not implement another
+Todo wire decoder. Storage and execution internals remain outside this API.
+See [Rust interface](rust-api.md).

@@ -56,3 +56,6 @@ public use, operation, and development promises. Discover semantically with
 boundary claims, documentation dependency closure, exact basis, and explicit
 gaps. Keep documentary resolution separate from live readiness, authorization,
 and domain success.
+
+- [Rust interface](rust-api.md): provider-owned request and response types,
+  boundary decoding, and the local CLI client.

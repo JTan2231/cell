@@ -3,22 +3,22 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::evidence::{self, Finding, Problem, Status};
 use crate::inventory;
 
-#[derive(Serialize)]
-pub(crate) struct ProductReport {
-    id: String,
-    name: String,
-    root: Option<String>,
-    aliases: Vec<String>,
-    descriptor: String,
-    identity: Finding,
-    semantics: Finding,
-    chancery: Finding,
-    complete: bool,
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ProductReport {
+    pub id: String,
+    pub name: String,
+    pub root: Option<String>,
+    pub aliases: Vec<String>,
+    pub descriptor: String,
+    pub identity: Finding,
+    pub semantics: Finding,
+    pub chancery: Finding,
+    pub complete: bool,
 }
 
 impl ProductReport {
@@ -75,16 +75,20 @@ impl ProductReport {
     }
 }
 
-#[derive(Serialize)]
-pub(crate) struct Report {
-    schema_version: u32,
-    scope: &'static str,
-    products: Vec<ProductReport>,
-    complete: usize,
-    pub(crate) incomplete: usize,
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Report {
+    pub schema_version: u32,
+    pub scope: String,
+    pub products: Vec<ProductReport>,
+    pub complete: usize,
+    pub incomplete: usize,
 }
 
-pub(crate) fn inspect(root: &Path, selection: Option<&str>) -> Result<Report, String> {
+/// Inspect repository declarations with global collision checks before selection.
+///
+/// # Errors
+/// Returns a diagnostic when the inventory or requested selection cannot be read.
+pub fn inspect(root: &Path, selection: Option<&str>) -> Result<Report, String> {
     let root = root
         .canonicalize()
         .map_err(|e| format!("cannot open checkout root: {e}"))?;
@@ -132,7 +136,7 @@ pub(crate) fn inspect(root: &Path, selection: Option<&str>) -> Result<Report, St
     let complete = products.iter().filter(|product| product.complete).count();
     Ok(Report {
         schema_version: 1,
-        scope: "repository_declarations",
+        scope: "repository_declarations".to_owned(),
         incomplete: products.len() - complete,
         products,
         complete,
@@ -191,7 +195,11 @@ fn check_collisions(products: &mut [ProductReport]) {
 }
 
 impl Report {
-    pub(crate) fn render(&self, output: &mut impl Write) -> io::Result<()> {
+    /// Render the same human-readable report emitted by the CLI.
+    ///
+    /// # Errors
+    /// Returns an error if writing the report fails.
+    pub fn render(&self, output: &mut impl Write) -> io::Result<()> {
         writeln!(output, "Cell recognition — repository declarations\n")?;
         for product in &self.products {
             writeln!(

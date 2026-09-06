@@ -1,8 +1,8 @@
 use std::fmt::Write as _;
 
-use serde::Serialize;
 use serde_json::Value;
 
+use crate::api::{ErrorBody, ErrorOutput, Output};
 use crate::error::AppError;
 use crate::model::OUTPUT_SCHEMA_VERSION;
 
@@ -34,28 +34,8 @@ impl CommandOutput {
     }
 }
 
-#[derive(Serialize)]
-struct SuccessEnvelope<'a> {
-    schema_version: u32,
-    ok: bool,
-    data: &'a Value,
-}
-
-#[derive(Serialize)]
-struct ErrorBody<'a> {
-    code: &'a str,
-    message: String,
-}
-
-#[derive(Serialize)]
-struct ErrorEnvelope<'a> {
-    schema_version: u32,
-    ok: bool,
-    error: ErrorBody<'a>,
-}
-
 pub(crate) fn output_json(output: &CommandOutput) -> Result<String, AppError> {
-    serde_json::to_string(&SuccessEnvelope {
+    serde_json::to_string(&Output {
         schema_version: OUTPUT_SCHEMA_VERSION,
         ok: output.ok,
         data: &output.data,
@@ -70,11 +50,11 @@ pub(crate) fn output_json(output: &CommandOutput) -> Result<String, AppError> {
 
 #[must_use]
 pub(crate) fn error_json(error: &AppError) -> String {
-    serde_json::to_string(&ErrorEnvelope {
+    serde_json::to_string(&ErrorOutput {
         schema_version: OUTPUT_SCHEMA_VERSION,
         ok: false,
         error: ErrorBody {
-            code: error.code(),
+            code: error.code().to_owned(),
             message: error.to_string(),
         },
     })

@@ -419,73 +419,12 @@ impl PersistedObservationClassification {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct StoredCandidate {
-    pub(crate) id: String,
-    pub(crate) run_id: String,
-    pub(crate) decided_at: i64,
-    pub(crate) timestamp_precision: String,
-    pub(crate) statement: String,
-    pub(crate) disposition: String,
-    pub(crate) confidence: String,
-    pub(crate) rationale: Option<String>,
-    pub(crate) supersedes_id: Option<String>,
-    pub(crate) authority_start: i64,
-    pub(crate) authority_end: i64,
-    pub(crate) review_state: String,
-    pub(crate) sources: Vec<StoredSource>,
-}
+pub(crate) use decisions::api::StoredCandidate;
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct StoredSource {
-    pub(crate) source_role: String,
-    pub(crate) host_id: String,
-    pub(crate) thread_id: String,
-    pub(crate) turn_id: String,
-    pub(crate) item_id: String,
-    pub(crate) message_role: String,
-    pub(crate) occurred_at: i64,
-    pub(crate) timestamp_precision: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct DecisionEventEnvelope {
-    pub(crate) event_id: String,
-    pub(crate) event_version: i64,
-    pub(crate) event_kind: String,
-    pub(crate) occurred_at: i64,
-    pub(crate) decision: DecisionEventDecision,
-    pub(crate) review: Option<DecisionEventReview>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct DecisionEventDecision {
-    pub(crate) decision_id: String,
-    pub(crate) decided_at: i64,
-    pub(crate) timestamp_precision: String,
-    pub(crate) statement: String,
-    pub(crate) disposition: String,
-    pub(crate) confidence: String,
-    pub(crate) rationale: Option<String>,
-    pub(crate) supersedes_decision_id: Option<String>,
-    pub(crate) review_state: String,
-    pub(crate) authority_span: DecisionEventAuthoritySpan,
-    pub(crate) sources: Vec<StoredSource>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct DecisionEventAuthoritySpan {
-    pub(crate) start: i64,
-    pub(crate) end: i64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct DecisionEventReview {
-    pub(crate) review_id: String,
-    pub(crate) action: String,
-    pub(crate) reviewed_at: i64,
-    pub(crate) review_source: String,
-}
+pub(crate) use krisis_api::lifecycle::{
+    DecisionEventAuthoritySpan, DecisionEventDecision, DecisionEventEnvelope, DecisionEventReview,
+    DecisionEventSource as StoredSource,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Run {
@@ -495,39 +434,7 @@ pub(crate) struct Run {
     pub(crate) content_revision: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct Observation {
-    pub(crate) id: String,
-    pub(crate) session_id: String,
-    pub(crate) turn_id: String,
-    pub(crate) host_id: Option<String>,
-    pub(crate) thread_id: Option<String>,
-    pub(crate) status: String,
-    pub(crate) scope_level: i64,
-    pub(crate) attempt_epoch: i64,
-    pub(crate) outcome: Option<String>,
-    pub(crate) file_change_count: i64,
-    pub(crate) authority_occurred_at: Option<i64>,
-    pub(crate) failure_code: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct ObservationStatus {
-    pub(crate) observer_baseline_at: Option<i64>,
-    pub(crate) queued: usize,
-    pub(crate) processing: usize,
-    pub(crate) complete: usize,
-    pub(crate) failed: usize,
-    pub(crate) accounts_pending_annals: usize,
-    pub(crate) accounts_accepted_by_annals: usize,
-    pub(crate) failures: Vec<ObservationFailure>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct ObservationFailure {
-    pub(crate) id: String,
-    pub(crate) failure_code: String,
-}
+pub(crate) use decisions::api::{Observation, ObservationFailure, ObservationStatus};
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct DigestSnapshot {

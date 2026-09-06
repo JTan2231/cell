@@ -43,3 +43,11 @@ message.
 Sending discloses the supplied subject and body to Resend and Gmail. The
 runtime does not call Chancery; Chancery only reads the documentation staged
 with the installed Email release.
+
+## Rust interface
+
+`email::api::{Message, Receipt, send}` exposes the same fixed-recipient,
+plain-text submission as the CLI, which uses that implementation. Callers own
+send authorization and any supplied occurrence key. `Receipt` means Resend
+accepted the submission. The API does not add configurable addresses, HTML or
+retained delivery state.

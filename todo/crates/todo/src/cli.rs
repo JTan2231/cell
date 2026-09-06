@@ -15,33 +15,33 @@ use crate::model::{
     long_about = "Capture concerns and maintain durable, actionable todo umbrellas.\n\n`todo new` is intended for agents as well as people: give it the file where a need arose (usually a conversation transcript) and a short direction. Todo records that provenance before research and asks its liaison for a pending routing proposal. Accepting that proposal is a separate command.",
     arg_required_else_help = true
 )]
-pub(crate) struct Cli {
+pub struct Cli {
     /// Todo TOML configuration path. Defaults to `TODO_CONFIG` when set.
     #[arg(long, global = true, value_name = "PATH")]
-    pub(crate) config: Option<PathBuf>,
+    pub config: Option<PathBuf>,
 
     /// `SQLite` database path. Defaults to nonempty `TODO_DATABASE`, then config.
     #[arg(long, global = true, value_name = "PATH")]
-    pub(crate) database: Option<PathBuf>,
+    pub database: Option<PathBuf>,
 
     /// Emit one JSON document.
     #[arg(long, global = true)]
-    pub(crate) json: bool,
+    pub json: bool,
 
     /// Suppress successful human-oriented mutation output.
     #[arg(long, global = true)]
-    pub(crate) quiet: bool,
+    pub quiet: bool,
 
     /// Increase diagnostic detail on standard error.
     #[arg(short = 'v', global = true, action = ArgAction::Count)]
-    pub(crate) verbose: u8,
+    pub verbose: u8,
 
     #[command(subcommand)]
-    pub(crate) command: Command,
+    pub command: Command,
 }
 
 #[derive(Debug, Clone, Subcommand)]
-pub(crate) enum Command {
+pub enum Command {
     /// Create a new database without replacing an existing file.
     Init,
     /// Upgrade an older database after writing a caller-selected backup.
@@ -81,36 +81,36 @@ pub(crate) enum Command {
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct MigrateArgs {
+pub struct MigrateArgs {
     /// Absolute, nonexistent path at which to retain the pre-migration database.
     #[arg(long, value_name = "ABSOLUTE_PATH")]
-    pub(crate) backup: PathBuf,
+    pub backup: PathBuf,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct NewArgs {
+pub struct NewArgs {
     /// Short need or concern for the research agent to investigate.
     #[arg(value_name = "DIRECTION")]
-    pub(crate) direction: String,
+    pub direction: String,
 
     /// File where the need arose, usually a conversation transcript.
     ///
     /// The research agent begins here and may inspect related local or external
     /// material. The resolved path, but not the file contents, is retained.
     #[arg(long, value_name = "PATH")]
-    pub(crate) source: PathBuf,
+    pub source: PathBuf,
 
     /// Research-agent quality preset.
     #[arg(long, value_enum)]
-    pub(crate) quality: Option<ModelQuality>,
+    pub quality: Option<ModelQuality>,
 
     /// Exact Codex model, overriding the model selected by --quality.
     #[arg(long, value_name = "MODEL")]
-    pub(crate) model: Option<String>,
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Subcommand)]
-pub(crate) enum ConcernCommand {
+pub enum ConcernCommand {
     /// Record immutable source provenance without running research.
     Add(ConcernAddArgs),
     /// List concerns awaiting a terminal routing decision.
@@ -122,46 +122,46 @@ pub(crate) enum ConcernCommand {
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct ConcernAddArgs {
+pub struct ConcernAddArgs {
     /// Short need or concern to retain.
     #[arg(value_name = "DIRECTION")]
-    pub(crate) direction: String,
+    pub direction: String,
 
     /// File where the concern arose, usually a conversation transcript.
     #[arg(long, value_name = "PATH")]
-    pub(crate) source: PathBuf,
+    pub source: PathBuf,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct ConcernListArgs {
+pub struct ConcernListArgs {
     /// Include concerns already attached to an umbrella or dismissed.
     #[arg(long)]
-    pub(crate) all: bool,
+    pub all: bool,
 
     /// Maximum number of concerns.
     #[arg(long, value_name = "N", default_value_t = 20)]
-    pub(crate) limit: u32,
+    pub limit: u32,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct ConcernArgs {
+pub struct ConcernArgs {
     /// Durable public concern ID.
     #[arg(value_name = "CONCERN")]
-    pub(crate) id: ConcernId,
+    pub id: ConcernId,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct ConcernAssessArgs {
+pub struct ConcernAssessArgs {
     /// Durable public concern ID.
     #[arg(value_name = "CONCERN")]
-    pub(crate) id: ConcernId,
+    pub id: ConcernId,
 
     #[command(flatten)]
-    pub(crate) research: ResearchArgs,
+    pub research: ResearchArgs,
 }
 
 #[derive(Debug, Clone, Subcommand)]
-pub(crate) enum RoutingCommand {
+pub enum RoutingCommand {
     /// Show one sealed routing proposal and its exact basis.
     Show(RoutingArgs),
     /// Authorize the action in one still-current routing proposal.
@@ -171,63 +171,63 @@ pub(crate) enum RoutingCommand {
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct RoutingArgs {
+pub struct RoutingArgs {
     /// Durable public routing proposal ID.
     #[arg(value_name = "ROUTING")]
-    pub(crate) id: RoutingProposalId,
+    pub id: RoutingProposalId,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct RoutingAcceptArgs {
+pub struct RoutingAcceptArgs {
     /// Durable public routing proposal ID.
     #[arg(value_name = "ROUTING")]
-    pub(crate) id: RoutingProposalId,
+    pub id: RoutingProposalId,
 
     /// Readable UTF-8 file containing the authorization decision.
     #[arg(long, value_name = "PATH")]
-    pub(crate) source: PathBuf,
+    pub source: PathBuf,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct RoutingRejectArgs {
+pub struct RoutingRejectArgs {
     /// Durable public routing proposal ID.
     #[arg(value_name = "ROUTING")]
-    pub(crate) id: RoutingProposalId,
+    pub id: RoutingProposalId,
 
     /// Why the proposal is being rejected, or - to read UTF-8 text from stdin.
     #[arg(long, value_name = "TEXT")]
-    pub(crate) reason: String,
+    pub reason: String,
 
     /// Readable UTF-8 file containing the rejection decision.
     #[arg(long, value_name = "PATH")]
-    pub(crate) source: PathBuf,
+    pub source: PathBuf,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct AssessArgs {
+pub struct AssessArgs {
     /// Durable public todo umbrella ID.
     #[arg(value_name = "TODO")]
-    pub(crate) id: TodoId,
+    pub id: TodoId,
 
     #[command(flatten)]
-    pub(crate) research: ResearchArgs,
+    pub research: ResearchArgs,
 }
 
 #[derive(Debug, Clone, Subcommand)]
-pub(crate) enum SituationCommand {
+pub enum SituationCommand {
     /// Show one immutable, dated situation assessment and its bases.
     Show(SituationArgs),
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct SituationArgs {
+pub struct SituationArgs {
     /// Durable public situation assessment ID.
     #[arg(value_name = "SITUATION")]
-    pub(crate) id: SituationAssessmentId,
+    pub id: SituationAssessmentId,
 }
 
 #[derive(Debug, Clone, Subcommand)]
-pub(crate) enum DesignCommand {
+pub enum DesignCommand {
     /// Propose a design from the umbrella's current ready assessment.
     Propose(DesignProposeArgs),
     /// Show one sealed design version and its decision history.
@@ -241,114 +241,114 @@ pub(crate) enum DesignCommand {
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct DesignProposeArgs {
+pub struct DesignProposeArgs {
     /// Todo umbrella whose latest current ready assessment is the design basis.
     #[arg(value_name = "TODO")]
-    pub(crate) todo: TodoId,
+    pub todo: TodoId,
 
     #[command(flatten)]
-    pub(crate) research: ResearchArgs,
+    pub research: ResearchArgs,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct DesignArgs {
+pub struct DesignArgs {
     /// Durable public design ID.
     #[arg(value_name = "DESIGN")]
-    pub(crate) id: DesignId,
+    pub id: DesignId,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct DesignAcceptArgs {
+pub struct DesignAcceptArgs {
     /// Durable public design ID.
     #[arg(value_name = "DESIGN")]
-    pub(crate) id: DesignId,
+    pub id: DesignId,
 
     /// Readable UTF-8 file containing the authorization decision.
     #[arg(long, value_name = "PATH")]
-    pub(crate) source: PathBuf,
+    pub source: PathBuf,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct DesignCorrectArgs {
+pub struct DesignCorrectArgs {
     /// Durable public design ID to correct.
     #[arg(value_name = "DESIGN")]
-    pub(crate) id: DesignId,
+    pub id: DesignId,
 
     /// Correction feedback, or - to read UTF-8 text from stdin.
     #[arg(value_name = "FEEDBACK")]
-    pub(crate) feedback: String,
+    pub feedback: String,
 
     #[command(flatten)]
-    pub(crate) research: ResearchArgs,
+    pub research: ResearchArgs,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct DesignRejectArgs {
+pub struct DesignRejectArgs {
     /// Durable public design ID.
     #[arg(value_name = "DESIGN")]
-    pub(crate) id: DesignId,
+    pub id: DesignId,
 
     /// Why the proposal is being rejected, or - to read UTF-8 text from stdin.
     #[arg(long, value_name = "TEXT")]
-    pub(crate) reason: String,
+    pub reason: String,
 
     /// Readable UTF-8 file containing the rejection decision.
     #[arg(long, value_name = "PATH")]
-    pub(crate) source: PathBuf,
+    pub source: PathBuf,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct ResearchArgs {
+pub struct ResearchArgs {
     /// Research-agent quality preset.
     #[arg(long, value_enum)]
-    pub(crate) quality: Option<ModelQuality>,
+    pub quality: Option<ModelQuality>,
 
     /// Exact Codex model, overriding the model selected by --quality.
     #[arg(long, value_name = "MODEL")]
-    pub(crate) model: Option<String>,
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct ListArgs {
+pub struct ListArgs {
     /// Include completed todos.
     #[arg(long)]
-    pub(crate) all: bool,
+    pub all: bool,
 
     /// Maximum number of todos.
     #[arg(long, value_name = "N", default_value_t = 20)]
-    pub(crate) limit: u32,
+    pub limit: u32,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct SearchArgs {
+pub struct SearchArgs {
     /// Literal text to find.
     #[arg(value_name = "QUERY")]
-    pub(crate) query: String,
+    pub query: String,
 
     /// Include completed todos.
     #[arg(long)]
-    pub(crate) all: bool,
+    pub all: bool,
 
     /// Maximum number of todos.
     #[arg(long, value_name = "N", default_value_t = 20)]
-    pub(crate) limit: u32,
+    pub limit: u32,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct TodoArgs {
+pub struct TodoArgs {
     /// Durable public todo ID.
     #[arg(value_name = "TODO")]
-    pub(crate) id: TodoId,
+    pub id: TodoId,
 }
 
 #[derive(Debug, Clone, Subcommand)]
-pub(crate) enum NoteCommand {
+pub enum NoteCommand {
     /// Append one immutable working note.
     Add(NoteAddArgs),
 }
 
 #[derive(Debug, Clone, Subcommand)]
-pub(crate) enum EmailCommand {
+pub enum EmailCommand {
     /// Preview the exact daily digest without sending it.
     Preview,
     /// Send the current daily attention digest through Resend.
@@ -356,21 +356,21 @@ pub(crate) enum EmailCommand {
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct EmailSendArgs {
+pub struct EmailSendArgs {
     /// Use the deterministic daily idempotency key intended for launchd.
     #[arg(long)]
-    pub(crate) scheduled: bool,
+    pub scheduled: bool,
 }
 
 #[derive(Debug, Clone, Args)]
-pub(crate) struct NoteAddArgs {
+pub struct NoteAddArgs {
     /// Durable public todo ID.
     #[arg(value_name = "TODO")]
-    pub(crate) id: TodoId,
+    pub id: TodoId,
 
     /// Working-note text, or - to read UTF-8 text from standard input.
     #[arg(value_name = "TEXT")]
-    pub(crate) text: String,
+    pub text: String,
 }
 
 #[cfg(test)]

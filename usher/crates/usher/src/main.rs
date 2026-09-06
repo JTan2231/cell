@@ -1,6 +1,4 @@
-mod evidence;
-mod inventory;
-mod report;
+use usher::api::{ErrorReport, inspect};
 
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -43,7 +41,7 @@ fn run(cli: Cli) -> Result<u8, String> {
         Command::Report(selection) => (selection, false),
         Command::Check(selection) => (selection, true),
     };
-    let report = report::inspect(&selection.root, selection.product.as_deref())?;
+    let report = inspect(&selection.root, selection.product.as_deref())?;
     let mut output = io::stdout().lock();
     if cli.json {
         serde_json::to_writer_pretty(&mut output, &report).map_err(|e| e.to_string())?;
@@ -61,10 +59,7 @@ fn main() -> ExitCode {
         Ok(code) => ExitCode::from(code),
         Err(message) => {
             if json {
-                println!(
-                    "{}",
-                    serde_json::json!({"schema_version": 1, "error": message})
-                );
+                println!("{}", serde_json::json!(ErrorReport::new(message)));
             } else {
                 eprintln!("usher: {message}");
             }

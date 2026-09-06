@@ -39,7 +39,8 @@
   ],
   "interfaces": [
     {"label": "Legacy watermark", "invocation": "/Users/joey/.local/bin/krisis events watermark --json"},
-    {"label": "Legacy page", "invocation": "/Users/joey/.local/bin/krisis events read --after OPAQUE_CURSOR --limit 1000 --json"}
+    {"label": "Legacy page", "invocation": "/Users/joey/.local/bin/krisis events read --after OPAQUE_CURSOR --limit 1000 --json"},
+    {"label": "Rust legacy lifecycle reader", "invocation": "krisis_api::lifecycle::Client::{watermark,read_after}"}
   ],
   "does_not_authorize": [
     "Reading or mutating SQLite directly, invoking retired review/digest behavior, or treating a legacy event as a Krisis or Annals account.",

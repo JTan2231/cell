@@ -74,3 +74,12 @@ a published envelope whose database commit was interrupted. Identity, digest,
 or envelope mismatch is a stop: inspect supported status and restore the exact
 library/spool pair rather than editing SQLite or producer receipts. Low storage
 is also a stop, never cleanup authority.
+
+## Rust access
+
+Local Rust callers use `annals_api::Client::new(binary, decisions_config)` with
+`accept`, `watermark`, and `read_page`. The client and Annals share the exported
+receipt, watermark, page, and event structs. `krisis_api::account` owns account
+content encoding; Annals owns admission and feed projection. The client invokes
+the same CLI with the same effects and does not bypass its identity or storage
+boundaries. Callers retain exact target binding, outbox, and cursor policy.

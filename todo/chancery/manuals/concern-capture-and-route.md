@@ -66,3 +66,12 @@ proposals have no force path and must be researched again.
 Todo stores source paths, not source bytes. The routing liaison can read
 selected source content, and Nucleus can retain that content in raw job output.
 Keep both systems inside the appropriate private boundary.
+
+## Rust callers
+
+The provider crate exports `todo::api`: supported request and response
+types, provider-owned envelope decoding, and an explicit-executable CLI client.
+Use these types at imports and convert only to caller-local domain values.
+The client performs the same operations under this contract and never adds
+retry or authorization. See `todo/docs/rust-api.md`; the Rust structs and
+enums define the interface without a separate declaration layer.

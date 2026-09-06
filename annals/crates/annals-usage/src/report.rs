@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::Path;
 
+use annals_api::usage::{
+    DeliveryRecord, Library, ModelRunIdentity, ReceiptSummary, Receipts, read_receipts,
+};
 use nucleus_core::{
     AttemptOutputV1, AttemptState, JobState, JobV1, LogRecordV1, LogStream, ReasoningEffort,
 };
-use rusqlite::{Connection, OpenFlags, OptionalExtension as _};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -30,11 +30,9 @@ pub(crate) struct ReportScope {
 
 impl ReportScope {
     pub(crate) fn load(config: &UsageConfig, limit: usize) -> Result<Self, ReportError> {
-        let library = Connection::open_with_flags(
-            &config.library,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )?;
-        let delivery_ids = read_deliveries(&library, limit)?
+        let library = Library::open(&config.library)?;
+        let delivery_ids = library
+            .deliveries(limit)?
             .into_iter()
             .map(|delivery| delivery.id)
             .collect::<HashSet<_>>();
@@ -75,105 +73,71 @@ impl ReportScope {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ConsumptionReport {
-    generated_at: String,
-    projection_version: &'static str,
-    deliveries: Vec<DeliveryReport>,
-    unattributed_runs: Vec<RunReport>,
-    notes: Vec<&'static str>,
+pub struct ConsumptionReport {
+    pub generated_at: String,
+    pub projection_version: String,
+    pub deliveries: Vec<DeliveryReport>,
+    pub unattributed_runs: Vec<RunReport>,
+    pub notes: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DeliveryReport {
-    delivery_id: i64,
-    source_name: String,
-    delivery_status: String,
-    result: Option<String>,
-    work_id: Option<i64>,
-    reconciliation_id: Option<i64>,
-    selected_model_run_id: Option<i64>,
-    coverage: String,
-    incremental_usage: Option<TokenUsageBreakdown>,
-    attempts: Vec<RunReport>,
-    known_credit_equivalent: Option<f64>,
-    unpriced_cache_write_tokens: i64,
+pub struct DeliveryReport {
+    pub delivery_id: i64,
+    pub source_name: String,
+    pub delivery_status: String,
+    pub result: Option<String>,
+    pub work_id: Option<i64>,
+    pub reconciliation_id: Option<i64>,
+    pub selected_model_run_id: Option<i64>,
+    pub coverage: String,
+    pub incremental_usage: Option<TokenUsageBreakdown>,
+    pub attempts: Vec<RunReport>,
+    pub known_credit_equivalent: Option<f64>,
+    pub unpriced_cache_write_tokens: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RunReport {
-    job_id: String,
-    model_run_token: String,
-    annals_model_run_id: Option<i64>,
-    delivery_id: Option<i64>,
-    inbox_job_id: Option<String>,
-    inbox_attempt: Option<u32>,
-    work_id: Option<i64>,
-    work_label: Option<String>,
-    base_revision: Option<i64>,
-    model: String,
-    reasoning_effort: Option<String>,
-    codex_version: Option<String>,
-    thread_id: Option<String>,
-    turn_id: Option<String>,
-    status: String,
-    coverage: String,
-    started_at_ms: i64,
-    completed_at_ms: Option<i64>,
-    usage: Option<TokenUsageBreakdown>,
-    model_context_window: Option<i64>,
-    exact_response_stream_complete: bool,
-    error: Option<String>,
-    response_count: usize,
-    responses: Vec<ResponseUsage>,
+pub struct RunReport {
+    pub job_id: String,
+    pub model_run_token: String,
+    pub annals_model_run_id: Option<i64>,
+    pub delivery_id: Option<i64>,
+    pub inbox_job_id: Option<String>,
+    pub inbox_attempt: Option<u32>,
+    pub work_id: Option<i64>,
+    pub work_label: Option<String>,
+    pub base_revision: Option<i64>,
+    pub model: String,
+    pub reasoning_effort: Option<String>,
+    pub codex_version: Option<String>,
+    pub thread_id: Option<String>,
+    pub turn_id: Option<String>,
+    pub status: String,
+    pub coverage: String,
+    pub started_at_ms: i64,
+    pub completed_at_ms: Option<i64>,
+    pub usage: Option<TokenUsageBreakdown>,
+    pub model_context_window: Option<i64>,
+    pub exact_response_stream_complete: bool,
+    pub error: Option<String>,
+    pub response_count: usize,
+    pub responses: Vec<ResponseUsage>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ResponseUsage {
-    sequence: u64,
-    observed_at_ms: i64,
-    response_id: String,
-    thread_id: String,
-    turn_id: String,
-    usage: TokenUsageBreakdown,
-}
-
-#[derive(Debug)]
-struct DeliveryRecord {
-    id: i64,
-    source_name: String,
-    status: String,
-    result: Option<String>,
-    work_id: Option<i64>,
-}
-
-#[derive(Debug)]
-struct ModelRunIdentity {
-    id: i64,
-    work_id: i64,
-    work_label: String,
-    base_revision: i64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct ReceiptSummary {
-    id: String,
-    #[serde(default)]
-    attempts: u32,
-    ingestion_id: Option<i64>,
-    model_run_token: Option<String>,
-    reconciliation_id: Option<i64>,
-    result_status: Option<String>,
-}
-
-#[derive(Debug, Default)]
-struct Receipts {
-    by_token: HashMap<String, ReceiptSummary>,
-    by_delivery: HashMap<i64, ReceiptSummary>,
+pub struct ResponseUsage {
+    pub sequence: u64,
+    pub observed_at_ms: i64,
+    pub response_id: String,
+    pub thread_id: String,
+    pub turn_id: String,
+    pub usage: TokenUsageBreakdown,
 }
 
 pub(crate) fn build_report(
@@ -181,12 +145,9 @@ pub(crate) fn build_report(
     observations: Vec<NucleusObservation>,
     limit: usize,
 ) -> Result<ConsumptionReport, ReportError> {
-    let library = Connection::open_with_flags(
-        &config.library,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
-    let deliveries = read_deliveries(&library, limit)?;
-    let identities = read_model_run_identities(&library)?;
+    let library = Library::open(&config.library)?;
+    let deliveries = library.deliveries(limit)?;
+    let identities = library.model_run_identities()?;
     let receipts = read_receipts(&config.spool)?;
     let mut runs_by_delivery: HashMap<i64, Vec<RunReport>> = HashMap::new();
     let mut unattributed = Vec::new();
@@ -204,7 +165,7 @@ pub(crate) fn build_report(
         let attempts = runs_by_delivery.remove(&delivery.id).unwrap_or_default();
         let receipt = receipts.by_delivery.get(&delivery.id);
         let reconciliation_id = receipt.and_then(|receipt| receipt.reconciliation_id);
-        let selected_model_run_id = selected_model_run_id(&library, reconciliation_id)?;
+        let selected_model_run_id = library.selected_model_run_id(reconciliation_id)?;
         let (coverage, usage) = delivery_usage(&library, &delivery, receipt, &attempts)?;
         let (known_credit_equivalent, unpriced_cache_write_tokens) =
             if matches!(coverage.as_str(), "exact" | "cumulative") {
@@ -232,14 +193,14 @@ pub(crate) fn build_report(
         generated_at: OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .unwrap_or_else(|_| "unavailable".to_owned()),
-        projection_version: env!("CARGO_PKG_VERSION"),
+        projection_version: env!("CARGO_PKG_VERSION").to_owned(),
         deliveries: reports,
         unattributed_runs: unattributed,
         notes: vec![
             "this report is calculated live from Nucleus model-output records and Annals attribution",
             "cached and cache-write tokens are subsets of input; reasoning tokens are a subset of output",
             "known credit-equivalent excludes cache-write tokens because the rate card does not price them separately",
-        ],
+        ].into_iter().map(str::to_owned).collect(),
     })
 }
 
@@ -753,88 +714,8 @@ fn usage_is_componentwise_at_most(usage: TokenUsageBreakdown, total: TokenUsageB
         && usage.total_tokens <= total.total_tokens
 }
 
-fn read_deliveries(
-    connection: &Connection,
-    limit: usize,
-) -> Result<Vec<DeliveryRecord>, ReportError> {
-    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
-    let mut statement = connection.prepare(
-        "SELECT id, source_name, status, result, work_id \
-         FROM ingestions ORDER BY id DESC LIMIT ?1",
-    )?;
-    let records = statement.query_map([limit], |row| {
-        Ok(DeliveryRecord {
-            id: row.get(0)?,
-            source_name: row.get(1)?,
-            status: row.get(2)?,
-            result: row.get(3)?,
-            work_id: row.get(4)?,
-        })
-    })?;
-    records.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-}
-
-fn read_model_run_identities(
-    connection: &Connection,
-) -> Result<HashMap<String, ModelRunIdentity>, ReportError> {
-    let mut statement = connection.prepare(
-        "SELECT m.token, m.id, m.work_id, w.label, m.base_revision \
-         FROM model_runs AS m JOIN works AS w ON w.id = m.work_id",
-    )?;
-    let rows = statement.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            ModelRunIdentity {
-                id: row.get(1)?,
-                work_id: row.get(2)?,
-                work_label: row.get(3)?,
-                base_revision: row.get(4)?,
-            },
-        ))
-    })?;
-    rows.collect::<Result<HashMap<_, _>, _>>()
-        .map_err(Into::into)
-}
-
-fn read_receipts(spool: &Path) -> Result<Receipts, ReportError> {
-    let mut receipts = Receipts::default();
-    for state in ["processing", "done", "duplicates", "failed", "skipped"] {
-        let directory = spool.join(state);
-        let entries = match fs::read_dir(&directory) {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(source) => return Err(ReportError::ReadDirectory { directory, source }),
-        };
-        for entry in entries {
-            let path = entry?.path().join("job.json");
-            let document = match fs::read_to_string(&path) {
-                Ok(document) => document,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(source) => return Err(ReportError::ReadReceipt { path, source }),
-            };
-            let receipt: ReceiptSummary = serde_json::from_str(&document)?;
-            if let Some(delivery_id) = receipt.ingestion_id {
-                receipts.by_delivery.insert(delivery_id, receipt.clone());
-            }
-            if let Some(token) = receipt.model_run_token.clone() {
-                if let Some(existing) = receipts.by_token.get(&token)
-                    && existing.id != receipt.id
-                {
-                    return Err(ReportError::DuplicateModelRunReceipt {
-                        token,
-                        first_job: existing.id.clone(),
-                        second_job: receipt.id,
-                    });
-                }
-                receipts.by_token.insert(token, receipt);
-            }
-        }
-    }
-    Ok(receipts)
-}
-
 fn delivery_usage(
-    library: &Connection,
+    library: &Library,
     delivery: &DeliveryRecord,
     receipt: Option<&ReceiptSummary>,
     attempts: &[RunReport],
@@ -876,11 +757,7 @@ fn delivery_usage(
                 Some(TokenUsageBreakdown::default()),
             ));
         };
-        let exists = library.query_row(
-            "SELECT EXISTS(SELECT 1 FROM model_runs WHERE token = ?1)",
-            [token],
-            |row| row.get::<_, bool>(0),
-        )?;
+        let exists = library.has_model_run(token)?;
         if !exists {
             return Ok((
                 "reused-no-new-usage".to_owned(),
@@ -889,24 +766,6 @@ fn delivery_usage(
         }
     }
     Ok(("gap".to_owned(), None))
-}
-
-fn selected_model_run_id(
-    library: &Connection,
-    reconciliation_id: Option<i64>,
-) -> Result<Option<i64>, ReportError> {
-    let Some(reconciliation_id) = reconciliation_id else {
-        return Ok(None);
-    };
-    library
-        .query_row(
-            "SELECT model_run_id FROM reconciliations WHERE id = ?1",
-            [reconciliation_id],
-            |row| row.get(0),
-        )
-        .optional()
-        .map(Option::flatten)
-        .map_err(Into::into)
 }
 
 fn add_usage(
@@ -1010,29 +869,9 @@ fn optional_grouped(value: Option<i64>) -> String {
 #[derive(Debug, Error)]
 pub(crate) enum ReportError {
     #[error(transparent)]
-    Sqlite(#[from] rusqlite::Error),
+    Annals(#[from] annals_api::usage::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-    #[error("unable to read inbox directory {directory}: {source}")]
-    ReadDirectory {
-        directory: std::path::PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("unable to read job receipt {path}: {source}")]
-    ReadReceipt {
-        path: std::path::PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("model run token {token} appears in multiple inbox jobs: {first_job} and {second_job}")]
-    DuplicateModelRunReceipt {
-        token: String,
-        first_job: String,
-        second_job: String,
-    },
     #[error("Nucleus returned invalid timestamp {timestamp:?}: {source}")]
     InvalidNucleusTimestamp {
         timestamp: String,
@@ -1135,8 +974,11 @@ mod tests {
     #[test]
     fn retry_child_reusing_a_reconciliation_has_zero_new_usage()
     -> Result<(), Box<dyn std::error::Error>> {
-        let library = Connection::open_in_memory()?;
-        library.execute_batch("CREATE TABLE model_runs(token TEXT NOT NULL)")?;
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("annals.db");
+        let connection = Connection::open(&path)?;
+        connection.execute_batch("CREATE TABLE model_runs(token TEXT NOT NULL)")?;
+        let library = annals_api::usage::Library::open(&path)?;
         let delivery = DeliveryRecord {
             id: 7,
             source_name: "retry.md".to_owned(),

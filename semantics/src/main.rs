@@ -15,6 +15,9 @@ use semantics::adapters::{
     AnnalsDecisionFeedCli, AppServerConversationLocator, DecisionAccountPage,
     DecisionAccountSource, canonical_directory, require_participation_marker,
 };
+use semantics::api::{
+    DoctorCheck, DoctorReport, ErrorBody, ErrorResponse, IntakeReport, RevisionReceipt,
+};
 use semantics::domain::{IntakeStatus, ProjectStatus, validate_project_id};
 use semantics::nucleus::NucleusReconciler;
 use semantics::seed::{seed_markdown, seed_one};
@@ -177,10 +180,13 @@ fn render_error(error: &Error, json_output: bool, scheduled_worker: bool) -> Str
     } else if scheduled_worker {
         "semantics: semantics_worker_failed: Semantics worker stopped; inspect durable intake and dependency readiness".to_owned()
     } else if json_output {
-        serde_json::to_string(&json!({
-            "ok": false,
-            "error": {"code": error.code(), "message": error.to_string()}
-        }))
+        serde_json::to_string(&ErrorResponse {
+            ok: false,
+            error: ErrorBody {
+                code: error.code().to_owned(),
+                message: error.to_string(),
+            },
+        })
         .unwrap_or_else(|_| "{\"ok\":false}".to_owned())
     } else {
         format!("semantics: {error}")
@@ -312,14 +318,20 @@ fn repository_command(store: &Store, command: RepositoryCommand, compact: bool) 
         } => {
             let revision = seed_one(store, &project, &label, &meaning, grounding.as_deref())?;
             print(
-                &json!({"project_id": project, "revision": revision}),
+                &RevisionReceipt {
+                    project_id: project,
+                    revision,
+                },
                 compact,
             )
         }
         RepositoryCommand::SeedMarkdown { project, path } => {
             let revision = seed_markdown(store, &project, &path)?;
             print(
-                &json!({"project_id": project, "revision": revision}),
+                &RevisionReceipt {
+                    project_id: project,
+                    revision,
+                },
                 compact,
             )
         }
@@ -331,10 +343,10 @@ fn intake_command(store: &Store, command: IntakeCommand, compact: bool) -> Resul
         IntakeCommand::Status { status } => {
             let status = status.as_deref().map(IntakeStatus::from_str).transpose()?;
             print(
-                &json!({
-                    "annals_decision_accounts": store.list_account_intake(status.clone())?,
-                    "legacy_decisions": store.list_intake(status)?,
-                }),
+                &IntakeReport {
+                    annals_decision_accounts: store.list_account_intake(status.clone())?,
+                    legacy_decisions: store.list_intake(status)?,
+                },
                 compact,
             )
         }
@@ -370,13 +382,6 @@ fn intake_command(store: &Store, command: IntakeCommand, compact: bool) -> Resul
             print(&worker.run_once()?, compact)
         }
     }
-}
-
-#[derive(Debug, Serialize)]
-struct DoctorCheck {
-    name: &'static str,
-    ok: bool,
-    detail: String,
 }
 
 fn doctor(store: &Store, compact: bool) -> Result<()> {
@@ -437,7 +442,7 @@ fn doctor(store: &Store, compact: bool) -> Result<()> {
         Ok("health, capabilities, schemas, and immutable toolset verified".to_owned())
     }));
     let ok = checks.iter().all(|check| check.ok);
-    print(&json!({"ok": ok, "checks": checks}), compact)?;
+    print(&DoctorReport { ok, checks }, compact)?;
     if ok {
         Ok(())
     } else {
@@ -608,12 +613,12 @@ fn ready_account_feed_library(store: &Store) -> Result<Option<String>> {
 fn check(name: &'static str, operation: impl FnOnce() -> Result<String>) -> DoctorCheck {
     match operation() {
         Ok(detail) => DoctorCheck {
-            name,
+            name: name.to_owned(),
             ok: true,
             detail,
         },
         Err(error) => DoctorCheck {
-            name,
+            name: name.to_owned(),
             ok: false,
             detail: error.to_string(),
         },

@@ -701,17 +701,8 @@ pub fn validate_project_id(project_id: &str) -> Result<()> {
 }
 
 pub(crate) fn validate_annals_library_id(library_id: &str) -> Result<()> {
-    let valid = library_id.len() == 32
-        && library_id
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
-    if !valid {
-        return Err(Error::domain(
-            "annals_library_invalid",
-            "Annals library identity must be exactly 32 lowercase hexadecimal characters",
-        ));
-    }
-    Ok(())
+    annals_api::require_library_id(library_id)
+        .map_err(|error| Error::domain("annals_library_invalid", error.message))
 }
 
 pub fn marker_for(project_id: &str) -> String {

@@ -6,12 +6,20 @@
 )]
 #![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
+pub mod api;
+#[doc(hidden)]
 pub mod app;
+#[doc(hidden)]
 pub mod cli;
+#[doc(hidden)]
 pub mod error;
+#[doc(hidden)]
 pub mod model;
+#[doc(hidden)]
 pub mod nucleus;
+#[doc(hidden)]
 pub mod store;
+#[doc(hidden)]
 pub mod worker;
 
 pub use error::{Error, Result};

@@ -49,6 +49,18 @@ const LEGACY_PROCESSING_RECEIPT: &[u8] = br#"{
 }"#;
 const BLOCKING_MINIMUM_AVAILABLE_BYTES: u64 = 9_000_000_000_000_000_000;
 
+#[test]
+fn inbox_status_uses_the_exported_provider_view() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    let output = installation.json_ok(["inbox", "status"])?;
+    let status: annals::api::InboxStatus = serde_json::from_value(output.clone())?;
+    assert_eq!(status.queued, 0);
+    assert!(status.active_job.is_none());
+    assert_eq!(serde_json::to_value(&status)?, output);
+    Ok(())
+}
+
 struct Installation {
     directory: TempDir,
     config: PathBuf,

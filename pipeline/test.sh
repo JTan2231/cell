@@ -64,5 +64,6 @@ EOF
 "$PIPELINE_ROOT/pipeline/generate.sh" --check \
     --product nucleus --product crm
 python3 "$PIPELINE_ROOT/deployment/generate.py" --check
+PYTHONDONTWRITEBYTECODE=1 python3 "$PIPELINE_ROOT/pipeline/test_release.py" -q
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q ci_broker.test_broker
 printf '%s\n' 'pipeline/test.sh: green'

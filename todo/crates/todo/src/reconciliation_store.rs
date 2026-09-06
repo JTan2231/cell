@@ -3,8 +3,13 @@ use std::path::Path;
 
 use rusqlite::types::Type;
 use rusqlite::{Connection, OptionalExtension as _, Row, Transaction, TransactionBehavior, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
+use crate::api::{
+    AssessmentFindingView, DesignChoiceView, DesignClauseView, DesignDropView,
+    DirectionMappingView, JurisdictionAssignmentView, JurisdictionChangeView, JurisdictionView,
+    UnresolvedAssessmentView,
+};
 use crate::error::{AppError, AppResult};
 use crate::model::{
     ConcernId, DesignId, RoutingProposalId, SituationAssessmentId, TodoId, TodoStatus,
@@ -35,9 +40,9 @@ const REQUIRED_DESIGN_CLAUSE_KINDS: [&str; 9] = [
 type AssignmentTuple = (String, String, String);
 type JurisdictionAssignments = BTreeMap<String, Vec<AssignmentTuple>>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum ConcernStatus {
+pub enum ConcernStatus {
     Pending,
     Attached,
     Dismissed,
@@ -54,79 +59,79 @@ impl ConcernStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct Concern {
-    pub(crate) id: ConcernId,
-    pub(crate) body: String,
-    pub(crate) source_path: String,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Concern {
+    pub id: ConcernId,
+    pub body: String,
+    pub source_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) source_thread_id: Option<String>,
+    pub source_thread_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) source_turn_id: Option<String>,
+    pub source_turn_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) source_item_id: Option<String>,
-    pub(crate) status: ConcernStatus,
-    pub(crate) created_at: String,
+    pub source_item_id: Option<String>,
+    pub status: ConcernStatus,
+    pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) resolved_at: Option<String>,
+    pub resolved_at: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct DirectionBoundary {
-    pub(crate) id: i64,
-    pub(crate) local_ref: String,
-    pub(crate) kind: String,
-    pub(crate) statement: String,
-    pub(crate) attribution: String,
-    pub(crate) source_refs: Vec<String>,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectionBoundary {
+    pub id: i64,
+    pub local_ref: String,
+    pub kind: String,
+    pub statement: String,
+    pub attribution: String,
+    pub source_refs: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct DirectionRevision {
-    pub(crate) id: i64,
-    pub(crate) todo_id: TodoId,
-    pub(crate) revision: i64,
-    pub(crate) title: String,
-    pub(crate) body: String,
-    pub(crate) provenance_kind: String,
-    pub(crate) created_at: String,
-    pub(crate) boundaries: Vec<DirectionBoundary>,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectionRevision {
+    pub id: i64,
+    pub todo_id: TodoId,
+    pub revision: i64,
+    pub title: String,
+    pub body: String,
+    pub provenance_kind: String,
+    pub created_at: String,
+    pub boundaries: Vec<DirectionBoundary>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct RoutingTargetView {
-    pub(crate) todo_id: TodoId,
-    pub(crate) direction_revision: i64,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoutingTargetView {
+    pub todo_id: TodoId,
+    pub direction_revision: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct RoutingProposalView {
-    pub(crate) id: RoutingProposalId,
-    pub(crate) concern_id: ConcernId,
-    pub(crate) action: String,
-    pub(crate) targets: Vec<RoutingTargetView>,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoutingProposalView {
+    pub id: RoutingProposalId,
+    pub concern_id: ConcernId,
+    pub action: String,
+    pub targets: Vec<RoutingTargetView>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) survivor_todo_id: Option<TodoId>,
+    pub survivor_todo_id: Option<TodoId>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) proposed_title: Option<String>,
+    pub proposed_title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) proposed_direction: Option<String>,
-    pub(crate) proposed_boundaries: Vec<DirectionBoundary>,
-    pub(crate) rationale: String,
-    pub(crate) evidence_refs: Vec<String>,
-    pub(crate) limitations: Vec<String>,
-    pub(crate) decision: String,
+    pub proposed_direction: Option<String>,
+    pub proposed_boundaries: Vec<DirectionBoundary>,
+    pub rationale: String,
+    pub evidence_refs: Vec<String>,
+    pub limitations: Vec<String>,
+    pub decision: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) decision_source_path: Option<String>,
+    pub decision_source_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) decision_thread_id: Option<String>,
+    pub decision_thread_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) decision_turn_id: Option<String>,
+    pub decision_turn_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) decision_reason: Option<String>,
+    pub decision_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) decided_at: Option<String>,
-    pub(crate) created_at: String,
+    pub decided_at: Option<String>,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -153,12 +158,12 @@ pub(crate) struct DecisionSource {
     pub(crate) turn_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct RoutingDecision {
-    pub(crate) proposal: RoutingProposalView,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoutingDecision {
+    pub proposal: RoutingProposalView,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) todo_id: Option<TodoId>,
-    pub(crate) changed: bool,
+    pub todo_id: Option<TodoId>,
+    pub changed: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -166,13 +171,13 @@ pub(crate) struct AgentJob {
     pub(crate) id: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct AssessmentBase {
-    pub(crate) source_ref: String,
-    pub(crate) kind: String,
-    pub(crate) locator: String,
-    pub(crate) revision: String,
-    pub(crate) observed_at: String,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssessmentBase {
+    pub source_ref: String,
+    pub kind: String,
+    pub locator: String,
+    pub revision: String,
+    pub observed_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -194,75 +199,75 @@ pub(crate) struct AssessmentSnapshot {
     pub(crate) base_digest: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct SituationAssessmentView {
-    pub(crate) id: SituationAssessmentId,
-    pub(crate) todo_id: TodoId,
-    pub(crate) direction_revision: i64,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SituationAssessmentView {
+    pub id: SituationAssessmentId,
+    pub todo_id: TodoId,
+    pub direction_revision: i64,
     #[serde(skip)]
     direction_revision_id: i64,
-    pub(crate) concern_set_digest: String,
+    pub concern_set_digest: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) notes_through_id: Option<WorkingNoteId>,
+    pub notes_through_id: Option<WorkingNoteId>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) based_on_design_id: Option<DesignId>,
-    pub(crate) disposition: String,
-    pub(crate) summary: String,
-    pub(crate) subject_label: String,
-    pub(crate) observed_at: String,
-    pub(crate) current: bool,
-    pub(crate) stale_reasons: Vec<String>,
-    pub(crate) bases: Vec<AssessmentBase>,
-    pub(crate) identity_refs: Vec<String>,
-    pub(crate) findings: Vec<serde_json::Value>,
-    pub(crate) jurisdictions: Vec<serde_json::Value>,
-    pub(crate) direction_mappings: Vec<serde_json::Value>,
-    pub(crate) unresolved: Vec<serde_json::Value>,
+    pub based_on_design_id: Option<DesignId>,
+    pub disposition: String,
+    pub summary: String,
+    pub subject_label: String,
+    pub observed_at: String,
+    pub current: bool,
+    pub stale_reasons: Vec<String>,
+    pub bases: Vec<AssessmentBase>,
+    pub identity_refs: Vec<String>,
+    pub findings: Vec<AssessmentFindingView>,
+    pub jurisdictions: Vec<JurisdictionView>,
+    pub direction_mappings: Vec<DirectionMappingView>,
+    pub unresolved: Vec<UnresolvedAssessmentView>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct DesignView {
-    pub(crate) id: DesignId,
-    pub(crate) todo_id: TodoId,
-    pub(crate) revision: i64,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DesignView {
+    pub id: DesignId,
+    pub todo_id: TodoId,
+    pub revision: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) assessment_id: Option<SituationAssessmentId>,
+    pub assessment_id: Option<SituationAssessmentId>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) based_on_design_id: Option<DesignId>,
-    pub(crate) draft_version: i64,
-    pub(crate) state: String,
-    pub(crate) summary: String,
-    pub(crate) current: bool,
-    pub(crate) stale_reasons: Vec<String>,
-    pub(crate) jurisdiction_changes: Vec<serde_json::Value>,
-    pub(crate) clauses: Vec<serde_json::Value>,
-    pub(crate) unresolved_choices: Vec<serde_json::Value>,
+    pub based_on_design_id: Option<DesignId>,
+    pub draft_version: i64,
+    pub state: String,
+    pub summary: String,
+    pub current: bool,
+    pub stale_reasons: Vec<String>,
+    pub jurisdiction_changes: Vec<JurisdictionChangeView>,
+    pub clauses: Vec<DesignClauseView>,
+    pub unresolved_choices: Vec<DesignChoiceView>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) correction_basis_ref: Option<String>,
+    pub correction_basis_ref: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) correction_feedback: Option<String>,
+    pub correction_feedback: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) decision_source_path: Option<String>,
+    pub decision_source_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) decision_thread_id: Option<String>,
+    pub decision_thread_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) decision_turn_id: Option<String>,
+    pub decision_turn_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) decision_reason: Option<String>,
+    pub decision_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) decided_at: Option<String>,
-    pub(crate) created_at: String,
+    pub decided_at: Option<String>,
+    pub created_at: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct AssessmentReturnView {
-    pub(crate) assessment_id: SituationAssessmentId,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssessmentReturnView {
+    pub assessment_id: SituationAssessmentId,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) design_id: Option<DesignId>,
-    pub(crate) reason: String,
-    pub(crate) missing_or_stale_refs: Vec<String>,
-    pub(crate) producer_tool_call_id: String,
-    pub(crate) created_at: String,
+    pub design_id: Option<DesignId>,
+    pub reason: String,
+    pub missing_or_stale_refs: Vec<String>,
+    pub producer_tool_call_id: String,
+    pub created_at: String,
 }
 
 pub(crate) fn capture_concern(
@@ -2250,7 +2255,7 @@ fn load_assessment_bases(
 fn load_assessment_findings(
     connection: &Connection,
     id: SituationAssessmentId,
-) -> AppResult<Vec<serde_json::Value>> {
+) -> AppResult<Vec<AssessmentFindingView>> {
     let mut statement = connection.prepare(
         "SELECT id, local_ref, kind, claim
          FROM todo_assessment_findings WHERE assessment_id = ?1 ORDER BY id",
@@ -2274,12 +2279,12 @@ fn load_assessment_findings(
                 "evidence_ref",
                 row_id,
             )?;
-            Ok(serde_json::json!({
-                "ref": local_ref,
-                "kind": kind,
-                "claim": claim,
-                "evidence_refs": evidence_refs,
-            }))
+            Ok(AssessmentFindingView {
+                local_ref,
+                kind,
+                claim,
+                evidence_refs,
+            })
         })
         .collect()
 }
@@ -2287,7 +2292,7 @@ fn load_assessment_findings(
 fn load_assessment_jurisdictions(
     connection: &Connection,
     id: SituationAssessmentId,
-) -> AppResult<Vec<serde_json::Value>> {
+) -> AppResult<Vec<JurisdictionView>> {
     let mut statement = connection.prepare(
         "SELECT id, jurisdiction_key, concern
          FROM todo_assessment_jurisdictions WHERE assessment_id = ?1 ORDER BY id",
@@ -2310,11 +2315,11 @@ fn load_assessment_jurisdictions(
             )?;
             let assignments = assignments_statement
                 .query_map([row_id], |row| {
-                    Ok(serde_json::json!({
-                        "party": row.get::<_, String>(0)?,
-                        "role": row.get::<_, String>(1)?,
-                        "responsibility": row.get::<_, String>(2)?,
-                    }))
+                    Ok(JurisdictionAssignmentView {
+                        party: row.get(0)?,
+                        role: row.get(1)?,
+                        responsibility: row.get(2)?,
+                    })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
             let evidence_refs = load_child_strings(
@@ -2324,12 +2329,12 @@ fn load_assessment_jurisdictions(
                 "evidence_ref",
                 row_id,
             )?;
-            Ok(serde_json::json!({
-                "key": key,
-                "concern": concern,
-                "assignments": assignments,
-                "evidence_refs": evidence_refs,
-            }))
+            Ok(JurisdictionView {
+                key,
+                concern,
+                assignments,
+                evidence_refs,
+            })
         })
         .collect()
 }
@@ -2337,7 +2342,7 @@ fn load_assessment_jurisdictions(
 fn load_assessment_direction_mappings(
     connection: &Connection,
     id: SituationAssessmentId,
-) -> AppResult<Vec<serde_json::Value>> {
+) -> AppResult<Vec<DirectionMappingView>> {
     let mut statement = connection.prepare(
         "SELECT m.id, b.local_ref, m.disposition, m.explanation
          FROM todo_assessment_direction_mappings AS m
@@ -2365,12 +2370,12 @@ fn load_assessment_direction_mappings(
             let finding_refs = finding_statement
                 .query_map([mapping_id], |row| row.get(0))?
                 .collect::<Result<Vec<String>, _>>()?;
-            Ok(serde_json::json!({
-                "boundary_ref": boundary_ref,
-                "disposition": disposition,
-                "finding_refs": finding_refs,
-                "explanation": explanation,
-            }))
+            Ok(DirectionMappingView {
+                boundary_ref,
+                disposition,
+                finding_refs,
+                explanation,
+            })
         })
         .collect()
 }
@@ -2378,7 +2383,7 @@ fn load_assessment_direction_mappings(
 fn load_assessment_unresolved(
     connection: &Connection,
     id: SituationAssessmentId,
-) -> AppResult<Vec<serde_json::Value>> {
+) -> AppResult<Vec<UnresolvedAssessmentView>> {
     let mut statement = connection.prepare(
         "SELECT id, local_ref, kind, description, materiality
          FROM todo_assessment_unresolved WHERE assessment_id = ?1 ORDER BY id",
@@ -2403,13 +2408,13 @@ fn load_assessment_unresolved(
                 "evidence_ref",
                 row_id,
             )?;
-            Ok(serde_json::json!({
-                "ref": local_ref,
-                "kind": kind,
-                "description": description,
-                "materiality": materiality,
-                "evidence_refs": evidence_refs,
-            }))
+            Ok(UnresolvedAssessmentView {
+                local_ref,
+                kind,
+                description,
+                materiality,
+                evidence_refs,
+            })
         })
         .collect()
 }
@@ -2666,7 +2671,7 @@ fn get_design_tx(connection: &Connection, id: DesignId) -> AppResult<DesignView>
 fn load_design_jurisdictions(
     connection: &Connection,
     id: DesignId,
-) -> AppResult<Vec<serde_json::Value>> {
+) -> AppResult<Vec<JurisdictionChangeView>> {
     let mut statement = connection.prepare(
         "SELECT id, slot, local_ref, jurisdiction_key, action, rationale, status
          FROM todo_design_jurisdiction_changes
@@ -2698,18 +2703,18 @@ fn load_design_jurisdictions(
                     row_id,
                 )?;
                 let drop = load_design_drop(connection, id, &slot)?;
-                Ok(serde_json::json!({
-                    "operation_id": slot,
-                    "local_ref": local_ref,
-                    "key": key,
-                    "action": action,
-                    "rationale": rationale,
-                    "status": status,
-                    "expected_assignments": expected,
-                    "proposed_assignments": proposed,
-                    "basis_refs": basis_refs,
-                    "drop": drop,
-                }))
+                Ok(JurisdictionChangeView {
+                    operation_id: slot,
+                    local_ref,
+                    key,
+                    action,
+                    rationale,
+                    status,
+                    expected_assignments: expected,
+                    proposed_assignments: proposed,
+                    basis_refs,
+                    drop,
+                })
             },
         )
         .collect()
@@ -2719,7 +2724,7 @@ fn load_design_assignments(
     connection: &Connection,
     change_id: i64,
     side: &str,
-) -> AppResult<Vec<serde_json::Value>> {
+) -> AppResult<Vec<JurisdictionAssignmentView>> {
     let mut statement = connection.prepare(
         "SELECT party, role, responsibility
          FROM todo_design_responsibilities
@@ -2727,16 +2732,16 @@ fn load_design_assignments(
          ORDER BY party, role",
     )?;
     let rows = statement.query_map(params![change_id, side], |row| {
-        Ok(serde_json::json!({
-            "party": row.get::<_, String>(0)?,
-            "role": row.get::<_, String>(1)?,
-            "responsibility": row.get::<_, String>(2)?,
-        }))
+        Ok(JurisdictionAssignmentView {
+            party: row.get(0)?,
+            role: row.get(1)?,
+            responsibility: row.get(2)?,
+        })
     })?;
     rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
 }
 
-fn load_design_clauses(connection: &Connection, id: DesignId) -> AppResult<Vec<serde_json::Value>> {
+fn load_design_clauses(connection: &Connection, id: DesignId) -> AppResult<Vec<DesignClauseView>> {
     let mut statement = connection.prepare(
         "SELECT id, slot, local_ref, kind, subject, statement, jurisdiction_key, status
          FROM todo_design_clauses WHERE design_id = ?1 ORDER BY id",
@@ -2766,23 +2771,23 @@ fn load_design_clauses(connection: &Connection, id: DesignId) -> AppResult<Vec<s
                     row_id,
                 )?;
                 let drop = load_design_drop(connection, id, &slot)?;
-                Ok(serde_json::json!({
-                    "operation_id": slot,
-                    "local_ref": local_ref,
-                    "kind": kind,
-                    "subject": subject,
-                    "statement": statement,
-                    "jurisdiction_ref": jurisdiction,
-                    "status": status,
-                    "basis_refs": basis_refs,
-                    "drop": drop,
-                }))
+                Ok(DesignClauseView {
+                    operation_id: slot,
+                    local_ref,
+                    kind,
+                    subject,
+                    statement,
+                    jurisdiction_ref: jurisdiction,
+                    status,
+                    basis_refs,
+                    drop,
+                })
             },
         )
         .collect()
 }
 
-fn load_design_choices(connection: &Connection, id: DesignId) -> AppResult<Vec<serde_json::Value>> {
+fn load_design_choices(connection: &Connection, id: DesignId) -> AppResult<Vec<DesignChoiceView>> {
     let mut statement = connection.prepare(
         "SELECT id, slot, local_ref, question, materiality, status
          FROM todo_design_choices WHERE design_id = ?1 ORDER BY id",
@@ -2809,15 +2814,15 @@ fn load_design_choices(connection: &Connection, id: DesignId) -> AppResult<Vec<s
                 row_id,
             )?;
             let drop = load_design_drop(connection, id, &slot)?;
-            Ok(serde_json::json!({
-                "operation_id": slot,
-                "local_ref": local_ref,
-                "question": question,
-                "why_material": materiality,
-                "status": status,
-                "basis_refs": basis_refs,
-                "drop": drop,
-            }))
+            Ok(DesignChoiceView {
+                operation_id: slot,
+                local_ref,
+                question,
+                why_material: materiality,
+                status,
+                basis_refs,
+                drop,
+            })
         })
         .collect()
 }
@@ -2826,7 +2831,7 @@ fn load_design_drop(
     connection: &Connection,
     id: DesignId,
     operation_id: &str,
-) -> AppResult<Option<serde_json::Value>> {
+) -> AppResult<Option<DesignDropView>> {
     let row = connection
         .query_row(
             "SELECT reason, dropped_at FROM todo_design_operation_drops
@@ -2844,11 +2849,11 @@ fn load_design_drop(
         let basis_refs = statement
             .query_map(params![id.storage_id(), operation_id], |row| row.get(0))?
             .collect::<Result<Vec<String>, _>>()?;
-        Ok(serde_json::json!({
-            "reason": reason,
-            "basis_refs": basis_refs,
-            "dropped_at": dropped_at,
-        }))
+        Ok(DesignDropView {
+            reason,
+            basis_refs,
+            dropped_at,
+        })
     })
     .transpose()
 }
@@ -4409,9 +4414,9 @@ mod tests {
             &submission,
         )?;
         assert_eq!(draft.state, "open");
-        assert_eq!(draft.jurisdiction_changes[0]["operation_id"], "op-1");
-        assert_eq!(draft.clauses[0]["operation_id"], "op-2");
-        assert_eq!(draft.unresolved_choices[0]["operation_id"], "op-11");
+        assert_eq!(draft.jurisdiction_changes[0].operation_id, "op-1");
+        assert_eq!(draft.clauses[0].operation_id, "op-2");
+        assert_eq!(draft.unresolved_choices[0].operation_id, "op-11");
 
         let error = failure(
             revise_design(
@@ -4458,8 +4463,8 @@ mod tests {
         )?;
         assert_eq!(ready.state, "ready");
         assert_eq!(ready.draft_version, 2);
-        assert_eq!(ready.unresolved_choices[0]["status"], "dropped");
-        assert!(ready.unresolved_choices[0]["drop"].is_object());
+        assert_eq!(ready.unresolved_choices[0].status, "dropped");
+        assert!(ready.unresolved_choices[0].drop.is_some());
 
         let decision = DecisionSource {
             source_path: directory

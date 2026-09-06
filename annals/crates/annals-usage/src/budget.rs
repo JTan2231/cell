@@ -1,15 +1,15 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct BudgetReport {
-    observed_at: String,
-    scope: &'static str,
-    attribution: &'static str,
-    snapshot: Value,
+pub struct BudgetReport {
+    pub observed_at: String,
+    pub scope: String,
+    pub attribution: String,
+    pub snapshot: Value,
 }
 
 impl BudgetReport {
@@ -18,8 +18,8 @@ impl BudgetReport {
             observed_at: OffsetDateTime::now_utc()
                 .format(&Rfc3339)
                 .unwrap_or_else(|_| "unavailable".to_owned()),
-            scope: "account-global Codex subscription state",
-            attribution: "not uniquely attributable to Annals or one source delivery",
+            scope: "account-global Codex subscription state".to_owned(),
+            attribution: "not uniquely attributable to Annals or one source delivery".to_owned(),
             snapshot,
         }
     }

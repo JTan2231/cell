@@ -16,36 +16,7 @@ use crate::error::{AppResult, WeaverError};
 
 const STATE_VERSION: u32 = 1;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum RunStatus {
-    Queued,
-    Running,
-    Succeeded,
-    Blocked,
-    Failed,
-    Cancelled,
-}
-
-impl RunStatus {
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::Queued => "queued",
-            Self::Running => "running",
-            Self::Succeeded => "succeeded",
-            Self::Blocked => "blocked",
-            Self::Failed => "failed",
-            Self::Cancelled => "cancelled",
-        }
-    }
-
-    pub(crate) const fn is_terminal(self) -> bool {
-        matches!(
-            self,
-            Self::Succeeded | Self::Blocked | Self::Failed | Self::Cancelled
-        )
-    }
-}
+pub(crate) use weaver::api::RunStatus;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

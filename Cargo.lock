@@ -15,9 +15,11 @@ dependencies = [
 name = "annals"
 version = "0.15.5"
 dependencies = [
+ "annals-api",
  "base64",
  "clap",
  "fs2",
+ "krisis-api",
  "nucleus-client",
  "nucleus-core",
  "nucleus-daemon",
@@ -34,9 +36,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "annals-api"
+version = "0.15.5"
+dependencies = [
+ "krisis-api",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "annals-usage"
 version = "0.4.4"
 dependencies = [
+ "annals-api",
  "clap",
  "nucleus-client",
  "nucleus-core",
@@ -353,9 +368,11 @@ dependencies = [
 name = "decisions"
 version = "0.4.5"
 dependencies = [
+ "annals-api",
  "clap",
  "conversations",
  "fs2",
+ "krisis-api",
  "libc",
  "nucleus-client",
  "nucleus-core",
@@ -875,6 +892,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "krisis-api"
+version = "0.4.5"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1203,26 +1230,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
-name = "pratica"
-version = "0.1.4"
-dependencies = [
- "clap",
- "libc",
- "nucleus-client",
- "nucleus-core",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "toml",
- "uuid",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1424,9 +1431,11 @@ dependencies = [
 name = "semantics"
 version = "0.2.1"
 dependencies = [
+ "annals-api",
  "clap",
  "conversations",
  "fs2",
+ "krisis-api",
  "nucleus-client",
  "nucleus-core",
  "rusqlite",
@@ -1999,6 +2008,7 @@ dependencies = [
 name = "usher"
 version = "0.1.1"
 dependencies = [
+ "chancery",
  "clap",
  "serde",
  "serde_json",

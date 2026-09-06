@@ -108,6 +108,40 @@ fn declarations_pass_without_installed_services_or_quality_requirements() -> Tes
 }
 
 #[test]
+fn chancery_partial_views_ignore_unrelated_malformed_contract_fields() -> TestResult {
+    let temp = fixture()?;
+    let manifest_path = temp.path().join("alpha/chancery/alpha/provider.json");
+    let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
+    manifest["promise_scope"] = json!(false);
+    manifest["provider"]["future_metadata"] = json!([null, 42]);
+    fs::write(&manifest_path, serde_json::to_vec(&manifest)?)?;
+    let entry_path = temp.path().join("alpha/chancery/alpha/entries/read.json");
+    let mut entry: Value = serde_json::from_slice(&fs::read(&entry_path)?)?;
+    entry["kind"] = json!({"not": "a kind"});
+    entry["dependencies"] = json!(false);
+    entry["promise"] = json!(17);
+    fs::write(&entry_path, serde_json::to_vec(&entry)?)?;
+
+    let (status, json) = run(temp.path(), "check", None)?;
+    assert_eq!(status, 0);
+    let report: usher::api::Report = serde_json::from_value(json.clone())?;
+    assert_eq!(report.incomplete, 0);
+    assert_eq!(
+        report.products[0].chancery.status,
+        usher::api::Status::Declared
+    );
+    assert_eq!(serde_json::to_value(&report)?, json);
+    assert_eq!(usher::api::inspect(temp.path(), None)?, report);
+
+    entry["contract_version"] = json!("invalid");
+    fs::write(&entry_path, serde_json::to_vec(&entry)?)?;
+    let (status, json) = run(temp.path(), "check", None)?;
+    assert_eq!(status, 1);
+    assert_eq!(json["products"][0]["chancery"]["status"], "invalid");
+    Ok(())
+}
+
+#[test]
 fn product_missing_both_introductions_is_reported_and_fails_check() -> TestResult {
     let temp = fixture()?;
     descriptor(temp.path(), "beta", "beta", "")?;

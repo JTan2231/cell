@@ -8,6 +8,4 @@
 - [System installation](system-installation.md): public identities, paths,
   observer packaging, migration, and recovery.
 
-The sealed cross-product terms are in the repository-level
-`.pratica-krisis/` agreement directory. Installed Chancery contracts are the
-public operational summary.
+Installed Chancery contracts are the public operational summary.

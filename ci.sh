@@ -6,12 +6,12 @@ ROOT=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 
 usage() {
     printf '%s\n' \
-        'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver|email|conversations|krisis|decisions|semantics|geste|pratica|clockwork|crm|usher]...'
+        'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver|email|conversations|krisis|decisions|semantics|geste|clockwork|crm|usher]...'
 }
 
 if [ "$#" -eq 0 ]; then
     set -- nucleus annals todo chancery weaver email conversations krisis \
-        semantics geste pratica clockwork crm usher
+        semantics geste clockwork crm usher
 fi
 
 nucleus_selected=0
@@ -24,7 +24,6 @@ conversations_selected=0
 krisis_selected=0
 semantics_selected=0
 geste_selected=0
-pratica_selected=0
 clockwork_selected=0
 crm_selected=0
 usher_selected=0
@@ -40,7 +39,6 @@ for project in "$@"; do
         krisis|decisions) krisis_selected=1 ;;
         semantics) semantics_selected=1 ;;
         geste) geste_selected=1 ;;
-        pratica) pratica_selected=1 ;;
         clockwork) clockwork_selected=1 ;;
         crm) crm_selected=1 ;;
         usher) usher_selected=1 ;;
@@ -68,8 +66,8 @@ for project in "$@"; do
     esac
 done
 
-if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$krisis_selected$semantics_selected$geste_selected$pratica_selected$clockwork_selected$crm_selected$usher_selected" = \
-    11111111111111 ]
+if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$krisis_selected$semantics_selected$geste_selected$clockwork_selected$crm_selected$usher_selected" = \
+    1111111111111 ]
 then
     printf '%s\n' '==> integrated Chancery source catalog'
     python3 "$ROOT/ci_broker/client.py" run \

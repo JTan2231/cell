@@ -3,8 +3,8 @@
 # Shared helpers for the checked-in Cell pipeline descriptors. This file is
 # sourced by the CI, release, generator, and self-test entry points.
 
-PIPELINE_EXPECTED_PRODUCT_COUNT=14
-PIPELINE_EXPECTED_PROVIDER_ENTRIES=55
+PIPELINE_EXPECTED_PRODUCT_COUNT=13
+PIPELINE_EXPECTED_PROVIDER_ENTRIES=51
 
 pipeline_products() {
     for descriptor in "$PIPELINE_ROOT"/pipeline/products/*.sh; do
@@ -28,6 +28,7 @@ pipeline_clear_descriptor() {
     unset CI_PROVIDER_VALIDATION_PHASE CI_EXTRA_BEFORE_RUST
     unset CI_EXTRA_AFTER_BUILD CI_BINARY_CHECKS
     unset RELEASE_UNITS RELEASE_ALLOW_EXPLICIT_UNIT RELEASE_USAGE
+    unset RELEASE_COMPANION_MANIFESTS
     unset RELEASE_METADATA_NO_DEPS RELEASE_BINARY_CHECKS PROVIDERS
 }
 
@@ -69,6 +70,7 @@ pipeline_load_descriptor() {
     RELEASE_USAGE=${RELEASE_USAGE:-Usage: ./release.sh --patch|--minor|--major}
     RELEASE_METADATA_NO_DEPS=${RELEASE_METADATA_NO_DEPS:-1}
     RELEASE_BINARY_CHECKS=${RELEASE_BINARY_CHECKS:-}
+    RELEASE_COMPANION_MANIFESTS=${RELEASE_COMPANION_MANIFESTS:-}
     PROVIDERS=${PROVIDERS:-}
 }
 
@@ -204,6 +206,40 @@ pipeline_validate_descriptor() {
             *) pipeline_fail "$PRODUCT_ID release unit has invalid default flag: $unit" ;; esac
     done <<EOF
 $RELEASE_UNITS
+EOF
+
+    companion_paths=
+    while IFS='|' read -r unit manifest extra; do
+        [ -n "$unit$manifest$extra" ] || continue
+        [ -n "$unit" ] && [ -n "$manifest" ] && [ -z "$extra" ] \
+            || pipeline_fail "$PRODUCT_ID has an invalid companion manifest entry"
+        pipeline_unit_field "$unit" 1 >/dev/null \
+            || pipeline_fail "$PRODUCT_ID companion references unknown unit: $unit"
+        case "$manifest" in
+            "$PRODUCT_DIR"/*) ;;
+            *) pipeline_fail "$PRODUCT_ID companion manifest is outside its product: $manifest" ;;
+        esac
+        case "/$manifest/" in
+            */../*|*/./*) pipeline_fail "$PRODUCT_ID companion manifest is not canonical: $manifest" ;;
+        esac
+        [ -f "$PIPELINE_ROOT/$manifest" ] \
+            || pipeline_fail "$PRODUCT_ID companion manifest is missing: $manifest"
+        [ -n "$(pipeline_read_version package "$PIPELINE_ROOT/$manifest")" ] \
+            || pipeline_fail "$PRODUCT_ID companion has no package version: $manifest"
+        if printf '%s\n' "$RELEASE_UNITS" | awk -F '|' -v path="$manifest" \
+            '$4 == path { found = 1 } END { exit !found }'
+        then
+            pipeline_fail "$PRODUCT_ID companion is already a release manifest: $manifest"
+        fi
+        case "
+$companion_paths
+" in *"
+$manifest
+"*) pipeline_fail "$PRODUCT_ID repeats a companion manifest: $manifest" ;; esac
+        companion_paths="$companion_paths
+$manifest"
+    done <<EOF
+$RELEASE_COMPANION_MANIFESTS
 EOF
 
     while IFS='|' read -r unit provider_id provider_dir expected_entries; do

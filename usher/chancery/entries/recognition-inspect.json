@@ -12,7 +12,7 @@
   ],
   "do_not_use_when": [
     "Actual registration, installation, vocabulary quality, capability coverage, implementation conformance, or runtime readiness must be established.",
-    "The task concerns Pratica agreements or any other inter-system affair."
+    "The task concerns relationships beyond Cell membership."
   ],
   "outcome": "A deterministic, evidence-bearing membership report for all inventoried products or one selected product, and a check exit status based solely on required declarations.",
   "effects": [
@@ -51,7 +51,7 @@
     }
   ],
   "does_not_authorize": [
-    "Registration, deployment, automatic repairs, vocabulary changes, agreement creation, or other product operations.",
+    "Registration, deployment, automatic repairs, vocabulary changes, or other product operations.",
     "Interpreting a complete report as runtime readiness, installation, complete outward promises, or verified relationship quality."
   ],
   "manual": "manuals/recognition-inspect.md",

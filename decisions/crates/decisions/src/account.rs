@@ -2,19 +2,21 @@ use std::fs;
 use std::io::Write as _;
 use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
-use serde::Deserialize;
-use serde_json::json;
 use sha2::{Digest as _, Sha256};
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult, Context as _};
 use crate::model::DecisionAccount;
 
-pub(crate) const ACCOUNT_SCHEMA_VERSION: i64 = 1;
-pub(crate) const CAPTURE_RULE_VERSION: &str = "krisis/decision-account-classification/1";
-const MAX_ACCOUNT_BYTES: usize = 1_048_576;
+pub(crate) const ACCOUNT_SCHEMA_VERSION: i64 = krisis_api::account::ACCOUNT_SCHEMA_VERSION as i64;
+pub(crate) use annals_api::AcceptanceReceipt as AnnalsReceipt;
+#[cfg(test)]
+use annals_api::SuccessEnvelope as AnnalsEnvelope;
+pub(crate) use krisis_api::account::CAPTURE_RULE_VERSION;
+use krisis_api::account::{
+    Account, AuthorityAnchor, AuthoritySpan, MAX_ACCOUNT_BYTES, SourceMetadata,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct PendingAccount {
@@ -25,78 +27,48 @@ pub(crate) struct PendingAccount {
     pub(crate) target_config_path: String,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct AnnalsConfig {
-    pub(crate) binary: PathBuf,
-    pub(crate) config: PathBuf,
-    pub(crate) expected_library_id: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct AnnalsReceipt {
-    pub(crate) contract_version: i64,
-    pub(crate) library_id: String,
-    pub(crate) producer: String,
-    #[serde(rename = "key")]
-    pub(crate) producer_key: String,
-    pub(crate) source_sha256: String,
-    pub(crate) job_id: String,
-    pub(crate) accepted_at: String,
-    pub(crate) acceptance: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AnnalsEnvelope<T> {
-    ok: bool,
-    data: T,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AnnalsWatermark {
-    contract_version: i64,
-    library_id: String,
-    watermark: String,
-}
+pub(crate) use decisions::api::AnnalsTarget as AnnalsConfig;
 
 pub(crate) fn render(account: &DecisionAccount) -> AppResult<String> {
-    let source = json!({
-        "schema_version": ACCOUNT_SCHEMA_VERSION,
-        "decision_id": account.id,
-        "occurred_at": account.occurred_at,
-        "occurred_at_precision": account.precision.as_str(),
-        "capture_rule_version": CAPTURE_RULE_VERSION,
-        "authority": {
-            "host_id": account.authority.host_id,
-            "thread_id": account.authority.thread_id,
-            "turn_id": account.authority.turn_id,
-            "item_id": account.authority.item_id,
-            "span": {
-                "start": account.authority_start,
-                "end": account.authority_end
-            }
+    let exported = Account {
+        statement: account.statement.clone(),
+        authority_quote: format!("> {}", account.authority_quote),
+        context: account
+            .context
+            .clone()
+            .unwrap_or_else(|| "Unknown.".to_owned()),
+        action: account
+            .action
+            .clone()
+            .unwrap_or_else(|| "Unknown.".to_owned()),
+        result: account
+            .result
+            .clone()
+            .unwrap_or_else(|| "Unknown.".to_owned()),
+        source: SourceMetadata {
+            schema_version: krisis_api::account::ACCOUNT_SCHEMA_VERSION,
+            decision_id: account.id.clone(),
+            occurred_at: account.occurred_at,
+            occurred_at_precision: account.precision.as_str().to_owned(),
+            capture_rule_version: CAPTURE_RULE_VERSION.to_owned(),
+            authority: AuthorityAnchor {
+                host_id: account.authority.host_id.clone(),
+                thread_id: account.authority.thread_id.clone(),
+                turn_id: account.authority.turn_id.clone(),
+                item_id: account.authority.item_id.clone(),
+                span: AuthoritySpan {
+                    start: account.authority_start as u64,
+                    end: account.authority_end as u64,
+                },
+            },
+        },
+    };
+    krisis_api::account::render(&exported).map_err(|error| match error {
+        krisis_api::account::Error::TooLarge => {
+            AppError::new("account_too_large", error.to_string())
         }
-    });
-    let source = serde_json::to_string_pretty(&source)
-        .context("account_render_failed", "unable to render decision source")?;
-    let markdown = format!(
-        "# Decision\n\n{}\n\n## Authority\n\n> {}\n\n## Context\n\n{}\n\n## Action\n\n{}\n\n## Result\n\n{}\n\n## Source\n\n```json\n{}\n```\n",
-        account.statement,
-        account.authority_quote,
-        account.context.as_deref().unwrap_or("Unknown."),
-        account.action.as_deref().unwrap_or("Unknown."),
-        account.result.as_deref().unwrap_or("Unknown."),
-        source
-    );
-    if markdown.len() > MAX_ACCOUNT_BYTES {
-        return Err(AppError::new(
-            "account_too_large",
-            "rendered decision account exceeds one MiB",
-        ));
-    }
-    Ok(markdown)
+        _ => AppError::new("account_render_failed", "unable to render decision source"),
+    })
 }
 
 pub(crate) fn sha256(value: &str) -> String {
@@ -126,40 +98,25 @@ pub(crate) fn accept(
     }
     let temporary_path = prepare_handoff(delivery, state_directory)?;
     (|| {
-        let output = Command::new(&configuration.binary)
-            .arg("--config")
-            .arg(&configuration.config)
-            .arg("--json")
-            .arg("inbox")
-            .arg("accept")
-            .arg("--producer")
-            .arg("krisis")
-            .arg("--key")
-            .arg(&delivery.account_id)
-            .arg(&temporary_path)
-            .output()
-            .context(
-                "annals_delivery_failed",
-                "unable to invoke Annals account acceptance",
-            )?;
-        if !output.status.success() {
-            return Err(AppError::new(
-                "annals_acceptance_rejected",
-                "Annals did not accept the pending decision account",
-            ));
-        }
-        let envelope: AnnalsEnvelope<AnnalsReceipt> = serde_json::from_slice(&output.stdout)
-            .context(
-                "annals_receipt_invalid",
-                "Annals returned an incompatible acceptance receipt",
-            )?;
-        if !envelope.ok {
-            return Err(AppError::new(
-                "annals_receipt_invalid",
-                "Annals returned a non-success acceptance envelope",
-            ));
-        }
-        let receipt = envelope.data;
+        let receipt = annals_api::Client::new(&configuration.binary, &configuration.config)
+            .accept(&delivery.account_id, &temporary_path)
+            .map_err(|error| {
+                let (code, message) = match error.code {
+                    "annals_command_unavailable" => (
+                        "annals_delivery_failed",
+                        "unable to invoke Annals account acceptance",
+                    ),
+                    "annals_command_failed" => (
+                        "annals_acceptance_rejected",
+                        "Annals did not accept the pending decision account",
+                    ),
+                    _ => (
+                        "annals_receipt_invalid",
+                        "Annals returned an incompatible acceptance receipt",
+                    ),
+                };
+                AppError::new(code, message)
+            })?;
         validate_receipt(&receipt, delivery, configuration)?;
         cleanup_handoffs(delivery, state_directory)?;
         Ok(receipt)
@@ -290,33 +247,26 @@ fn handoff_prefix(delivery: &PendingAccount) -> AppResult<String> {
 
 pub(crate) fn doctor(configuration: &AnnalsConfig) -> AppResult<()> {
     validate_configuration(configuration)?;
-    let output = Command::new(&configuration.binary)
-        .arg("--config")
-        .arg(&configuration.config)
-        .arg("--json")
-        .arg("decision-feed")
-        .arg("watermark")
-        .output()
-        .context(
-            "annals_doctor_failed",
-            "unable to invoke Annals doctor for the decisions library",
-        )?;
-    if !output.status.success() {
-        return Err(AppError::new(
-            "annals_not_ready",
-            "Annals doctor did not accept the configured decisions library",
-        ));
-    }
-    let envelope: AnnalsEnvelope<AnnalsWatermark> = serde_json::from_slice(&output.stdout)
-        .context(
-            "annals_receipt_invalid",
-            "Annals returned an incompatible decisions-library watermark",
-        )?;
-    if !envelope.ok
-        || envelope.data.contract_version != 1
-        || envelope.data.library_id != configuration.expected_library_id
-        || envelope.data.watermark.trim().is_empty()
-    {
+    let watermark = annals_api::Client::new(&configuration.binary, &configuration.config)
+        .watermark()
+        .map_err(|error| {
+            let (code, message) = match error.code {
+                "annals_command_unavailable" => (
+                    "annals_doctor_failed",
+                    "unable to invoke Annals doctor for the decisions library",
+                ),
+                "annals_command_failed" => (
+                    "annals_not_ready",
+                    "Annals doctor did not accept the configured decisions library",
+                ),
+                _ => (
+                    "annals_receipt_invalid",
+                    "Annals returned an incompatible decisions-library watermark",
+                ),
+            };
+            AppError::new(code, message)
+        })?;
+    if watermark.library_id != configuration.expected_library_id {
         return Err(AppError::new(
             "annals_not_ready",
             "Annals watermark does not match the configured decisions library",
@@ -356,14 +306,10 @@ fn validate_receipt(
     delivery: &PendingAccount,
     configuration: &AnnalsConfig,
 ) -> AppResult<()> {
-    if receipt.contract_version != 1
+    if receipt.validate().is_err()
         || receipt.library_id != configuration.expected_library_id
-        || receipt.producer != "krisis"
         || receipt.producer_key != delivery.account_id
         || receipt.source_sha256 != delivery.source_sha256
-        || receipt.job_id.trim().is_empty()
-        || receipt.accepted_at.trim().is_empty()
-        || !matches!(receipt.acceptance.as_str(), "created" | "replayed")
     {
         return Err(AppError::new(
             "annals_receipt_invalid",
@@ -419,6 +365,10 @@ mod tests {
         let first = render(&account).unwrap_or_else(|error| panic!("{error}"));
         let second = render(&account).unwrap_or_else(|error| panic!("{error}"));
         assert_eq!(first, second);
+        assert_eq!(
+            first,
+            include_str!("../../krisis-api/tests/fixtures/account-v1.md")
+        );
         assert!(first.starts_with("# Decision\n"));
         assert!(first.contains("## Authority\n\n> use the scoped library"));
         assert!(first.contains("## Action\n\nUnknown."));

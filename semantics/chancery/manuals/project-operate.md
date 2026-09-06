@@ -187,3 +187,8 @@ This disables the owned Clockwork binding, removes any owned legacy LaunchAgent
 and CLI/provider selectors, and retains the database, releases, immutable
 definitions, activation history, and product logs. Removing retained state requires a
 separate explicit destructive decision.
+
+Rust callers may use `semantics::api::Client` for the public project, seeding,
+intake, and diagnostic CLI operations with provider-owned return types. The
+client does not invoke hidden cutover or worker operations. Each explicit
+method retains the corresponding command's authorization and effect boundary.

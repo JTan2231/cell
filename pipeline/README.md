@@ -18,6 +18,13 @@ deployment conflict keys. Product-specific catalog regressions remain small
 scripts under `extras/`; arbitrary release or deployment hooks are not part of
 the shared format.
 
+`RELEASE_COMPANION_MANIFESTS` optionally lists `release-unit|package-manifest`
+rows for provider-owned libraries released at their owner's version. Annals'
+`annals-api` and Krisis' `krisis-api` follow this rule; Annals Usage remains an
+independent release unit. Release preflight requires matching versions, then
+updates, checks, commits, or restores every companion with the primary manifest,
+root lockfile, and provider bundles. Companions have no separate release tag.
+
 The descriptor files themselves are the product inventory. Usher reads their
 literal assignments without executing them and checks each product's identity,
 Semantics marker, and Chancery introduction evidence. Root CI runs

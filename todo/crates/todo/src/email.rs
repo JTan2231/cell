@@ -16,16 +16,16 @@ const RESEND_ENDPOINT: &str = "https://api.resend.com/emails";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const RETRY_DELAYS: [Duration; 2] = [Duration::from_millis(100), Duration::from_millis(250)];
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct EmailPreview {
-    pub(crate) from: String,
-    pub(crate) to: String,
-    pub(crate) attention_count: usize,
-    pub(crate) pending_concern_count: usize,
-    pub(crate) todo_count: usize,
-    pub(crate) subject: String,
-    pub(crate) text: String,
-    pub(crate) html: String,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EmailPreview {
+    pub from: String,
+    pub to: String,
+    pub attention_count: usize,
+    pub pending_concern_count: usize,
+    pub todo_count: usize,
+    pub subject: String,
+    pub text: String,
+    pub html: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

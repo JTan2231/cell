@@ -135,3 +135,12 @@ runner.
 Stop rather than weakening an invariant, hiding a source/advisory boundary,
 inventing readiness, silently migrating state, or broadening CRM into a crawler,
 sender, scheduler, generic people graph, or general autonomous agent.
+
+## Rust callers
+
+The provider crate exports `crm::api`: supported request and response
+types, provider-owned envelope decoding, and an explicit-executable CLI client.
+Use these types at imports and convert only to caller-local domain values.
+The client performs the same operations under this contract and never adds
+retry or authorization. See `crm/docs/rust-api.md`; the Rust structs and
+enums define the interface without a separate declaration layer.

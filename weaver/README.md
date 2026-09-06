@@ -168,3 +168,13 @@ if a pre-commit migration fails. It does not stop or replace Nucleus.
 
 See [the macOS installation guide](docs/system-installation.md) for the exact
 layout and maintenance behavior.
+
+## Rust interface
+
+`weaver::api` owns workflow status and receipt types, stage layout, editorial
+verdicts, and the typed client for an explicitly selected Weaver executable.
+The provider renders its existing CLI output from these same types; the client
+owns decoding that output. Calls use Weaver's executable so detached workers
+retain the existing process lineage. Private `current.json` records and
+Nucleus requests are not exported. A terminal failed or blocked run remains a
+typed domain outcome returned by `Client::wait`.

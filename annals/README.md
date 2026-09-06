@@ -4,6 +4,18 @@ Annals is a local CLI for maintaining an evidence-grounded conceptual corpus.
 Source works are retained unchanged. Corpus concepts belong to the library, may
 be supported by many works, and change only through atomic revision commits.
 
+`annals::api` exports the same typed corpus, work, retention, reconciliation,
+source-activity, history, and inbox views emitted by the CLI. Its read-only
+`LibraryReader` returns provider-owned views using Annals' existing queries and
+cursor rules; database connections and worker state remain private. Reconciliation
+inputs use the exported `Reconciliation` types and `parse_reconciliation` codec.
+`CliClient` invokes an explicitly selected executable with a typed `Request` and
+returns the matching `Response`. Requests reuse the CLI's own argument types
+and cover its reads and mutations, including inbox operations. Standard-input
+bytes are accepted only for a request with an explicit `-` input path. Client
+construction has no effects; each call has the selected command's usual effects.
+The separate `annals-api` crate owns accepted-account exchange and usage views.
+
 Annals can also host a physically separate decisions library. Krisis
 idempotently hands one immutable decision account to that library; Annals owns
 the accepted bytes, ordinary inbox dispatch, interpretation, and a bounded

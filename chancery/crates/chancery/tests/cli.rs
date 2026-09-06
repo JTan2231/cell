@@ -11,6 +11,86 @@ use tempfile::TempDir;
 type TestResult = Result<(), Box<dyn Error>>;
 
 #[test]
+fn cli_outputs_are_readable_through_the_owned_api() -> TestResult {
+    use chancery::api::{
+        DoctorResult, ErrorOutput, ListResult, Output as ApiOutput, ResolveResult, ShowResult,
+        ValidateResult,
+    };
+    let fixture = Fixture::new()?;
+    let root = fixture.write_provider("nucleus", vec![execution_entry()])?;
+    let client = chancery::api::Client::new(env!("CARGO_BIN_EXE_chancery"))
+        .with_registry(fixture.registry());
+    assert_eq!(
+        client.list(None, None)?.data.entries[0].id,
+        "nucleus.execution"
+    );
+    assert_eq!(
+        client.show("nucleus.execution")?.data.entry.id,
+        "nucleus.execution"
+    );
+    let unmet = client.resolve("nucleus.execution", Some(999), None, &[])?;
+    assert!(!unmet.ok);
+    assert!(!unmet.data.contract_requirement.satisfied);
+    assert_eq!(client.doctor()?.data.counts.entries, 1);
+    assert!(client.validate(&root)?.data.valid);
+    let listed = fixture.run_json(&["list"])?;
+    let list: ApiOutput<ListResult> = serde_json::from_slice(&listed.stdout)?;
+    assert_eq!(list.data.entries[0].id, "nucleus.execution");
+    assert_eq!(serde_json::to_value(&list)?, stdout_json(&listed)?);
+    let shown = fixture.run_json(&["show", "nucleus.execution"])?;
+    let show: ApiOutput<ShowResult> = serde_json::from_slice(&shown.stdout)?;
+    assert_eq!(show.data.entry.id, list.data.entries[0].id);
+    assert_eq!(serde_json::to_value(&show)?, stdout_json(&shown)?);
+    let resolved = fixture.run_json(&["resolve", "nucleus.execution"])?;
+    let resolve: ApiOutput<ResolveResult> = serde_json::from_slice(&resolved.stdout)?;
+    assert_eq!(resolve.data.root.entry.id, list.data.entries[0].id);
+    assert_eq!(serde_json::to_value(&resolve)?, stdout_json(&resolved)?);
+    let doctor_output = fixture.run_json(&["doctor"])?;
+    let doctor: ApiOutput<DoctorResult> = serde_json::from_slice(&doctor_output.stdout)?;
+    assert_eq!(doctor.data.counts.entries, 1);
+    assert_eq!(serde_json::to_value(&doctor)?, stdout_json(&doctor_output)?);
+    let validated = run_validate(&root)?;
+    let valid: ApiOutput<ValidateResult> = serde_json::from_slice(&validated.stdout)?;
+    assert!(valid.data.valid);
+    assert_eq!(serde_json::to_value(&valid)?, stdout_json(&validated)?);
+    fs::write(root.join("provider.json"), "{")?;
+    assert!(!client.validate(&root)?.data.valid);
+    assert!(
+        matches!(client.show("missing.entry"), Err(chancery::api::ClientError::Provider { code, .. }) if code == "entry_not_found")
+    );
+    let rejected = run_validate(&root)?;
+    let invalid: ApiOutput<ValidateResult> = serde_json::from_slice(&rejected.stdout)?;
+    assert!(!invalid.data.valid);
+    assert!(invalid.data.provider.is_none());
+    assert_eq!(serde_json::to_value(&invalid)?, stdout_json(&rejected)?);
+    let missing = fixture.run_json(&["show", "missing.entry"])?;
+    let error: ErrorOutput = serde_json::from_slice(&missing.stderr)?;
+    assert_eq!(error.error.code, "entry_not_found");
+    Ok(())
+}
+
+#[test]
+fn owned_introduction_views_are_partial_and_keep_required_field_types() -> TestResult {
+    use chancery::api::{EntryIntroduction, ProviderIntroduction, ProviderManifest};
+    let provider = json!({
+        "schema_version": 3,
+        "provider": {"id": "alpha", "name": "Alpha", "release": "1", "extra": false},
+        "entries": ["entries/read.json"], "promise_scope": false,
+    });
+    let view = ProviderIntroduction::decode(&provider.to_string())?;
+    assert_eq!(view.provider.id, "alpha");
+    assert!(ProviderManifest::decode(&provider.to_string()).is_err());
+    assert!(EntryIntroduction::decode(r#"{"id":"alpha.read","contract_version":1,"manual":"manuals/read.md","dependencies":false}"#).is_ok());
+    assert!(
+        EntryIntroduction::decode(
+            r#"{"id":"alpha.read","contract_version":"1","manual":"manuals/read.md"}"#
+        )
+        .is_err()
+    );
+    Ok(())
+}
+
+#[test]
 fn list_and_show_present_the_complete_semantic_catalog_without_mutation() -> TestResult {
     let fixture = Fixture::new()?;
     fixture.write_provider("nucleus", vec![execution_entry()])?;

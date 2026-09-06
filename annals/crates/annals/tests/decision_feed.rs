@@ -8,7 +8,6 @@ use std::process::{Command, Output};
 use std::thread;
 
 use rusqlite::Connection;
-use serde::Deserialize;
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -22,26 +21,7 @@ struct Installation {
     library_id: String,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct KrisisSuccessEnvelope {
-    ok: bool,
-    data: KrisisReceipt,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct KrisisReceipt {
-    contract_version: i64,
-    library_id: String,
-    producer: String,
-    #[serde(alias = "key")]
-    producer_key: String,
-    source_sha256: String,
-    job_id: String,
-    accepted_at: String,
-    acceptance: String,
-}
+type KrisisSuccessEnvelope = annals_api::SuccessEnvelope<annals_api::AcceptanceReceipt>;
 
 impl Installation {
     fn new() -> TestResult<Self> {
@@ -858,5 +838,35 @@ fn concurrent_identical_acceptance_converges() -> TestResult {
     assert_eq!(statuses, ["created", "replayed"]);
     assert_eq!(first["job_id"], second["job_id"]);
     assert_eq!(directory_count(&installation.spool.join("queued"))?, 1);
+    Ok(())
+}
+
+#[test]
+fn owning_clients_exchange_canonical_account_bytes() -> TestResult {
+    let installation = Installation::new()?;
+    let client = annals_api::Client::new(env!("CARGO_BIN_EXE_annals"), &installation.config);
+    let activation = client.watermark()?;
+    let exported = krisis_api::account::parse(
+        include_str!("../../../../decisions/crates/krisis-api/tests/fixtures/account-v1.md"),
+        "d_0123456789abcdef0123",
+    )?;
+    let source = installation.file("typed-account.md", &krisis_api::account::render(&exported)?)?;
+    let first = client.accept(&exported.source.decision_id, &source)?;
+    let replay = client.accept(&exported.source.decision_id, &source)?;
+    assert_eq!(first.acceptance, "created");
+    assert_eq!(replay.acceptance, "replayed");
+    assert_eq!(first.job_id, replay.job_id);
+    let watermark = client.watermark()?;
+    let page = client.read_page(&activation.watermark, &watermark.watermark, 100)?;
+    assert_eq!(page.events.len(), 1);
+    assert_eq!(page.events[0].account_id, exported.source.decision_id);
+    assert_eq!(page.events[0].statement, exported.statement);
+    assert_eq!(
+        page.events[0].authority.span.end,
+        exported.source.authority.span.end
+    );
+    let empty = client.read_page(&page.next_cursor, &watermark.watermark, 100)?;
+    assert!(empty.events.is_empty());
+    assert_eq!(empty.next_cursor, page.next_cursor);
     Ok(())
 }

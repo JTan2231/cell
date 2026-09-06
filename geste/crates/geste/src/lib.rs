@@ -1,3 +1,4 @@
+pub mod api;
 mod app;
 mod capture;
 mod cli;
@@ -8,52 +9,22 @@ mod store;
 
 use std::ffi::OsStr;
 
+use crate::api::{Failure, Success};
 use clap::Parser as _;
-use serde::Serialize;
 
 use crate::cli::Cli;
 use crate::error::AppError;
 
 pub const OUTPUT_SCHEMA_VERSION: u32 = 1;
 
-#[derive(Serialize)]
-struct SuccessEnvelope<'a> {
-    schema_version: u32,
-    ok: bool,
-    data: &'a serde_json::Value,
-}
-
-#[derive(Serialize)]
-struct ErrorBody<'a> {
-    code: &'a str,
-    message: &'a str,
-}
-
-#[derive(Serialize)]
-struct ErrorEnvelope<'a> {
-    schema_version: u32,
-    ok: bool,
-    error: ErrorBody<'a>,
-}
-
 fn success_json(data: &serde_json::Value) -> Result<String, serde_json::Error> {
-    serde_json::to_string(&SuccessEnvelope {
-        schema_version: OUTPUT_SCHEMA_VERSION,
-        ok: true,
-        data,
-    })
+    let data: api::Data = serde_json::from_value(data.clone())?;
+    serde_json::to_string(&Success::new(data))
 }
 
 #[must_use]
 fn error_json(error: &AppError) -> String {
-    serde_json::to_string(&ErrorEnvelope {
-        schema_version: OUTPUT_SCHEMA_VERSION,
-        ok: false,
-        error: ErrorBody {
-            code: error.code(),
-            message: error.message(),
-        },
-    })
+    serde_json::to_string(&Failure::new(error.code(), error.message()))
     .unwrap_or_else(|_| {
         "{\"schema_version\":1,\"ok\":false,\"error\":{\"code\":\"json_serialization_failed\",\"message\":\"unable to serialize error\"}}".to_owned()
     })

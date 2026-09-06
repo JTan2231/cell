@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Eq, PartialEq, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum ModelQuality {
+pub enum ModelQuality {
     Low,
     Medium,
     #[default]
@@ -15,7 +15,7 @@ pub(crate) enum ModelQuality {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct TodoId(i64);
+pub struct TodoId(i64);
 
 impl TodoId {
     pub(crate) fn from_storage(value: i64) -> Result<Self, InvalidTodoId> {
@@ -33,7 +33,7 @@ impl TodoId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct InvalidTodoId;
+pub struct InvalidTodoId;
 
 impl fmt::Display for InvalidTodoId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -102,7 +102,7 @@ impl<'de> Deserialize<'de> for TodoId {
 macro_rules! prefixed_id {
     ($name:ident, $error:ident, $prefix:literal, $example:literal, $description:literal) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        pub(crate) struct $name(i64);
+        pub struct $name(i64);
 
         impl $name {
             pub(crate) fn from_storage(value: i64) -> Result<Self, $error> {
@@ -120,7 +120,7 @@ macro_rules! prefixed_id {
         }
 
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-        pub(crate) struct $error;
+        pub struct $error;
 
         impl fmt::Display for $error {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -226,7 +226,7 @@ prefixed_id!(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum TodoStatus {
+pub enum TodoStatus {
     Open,
     Done,
 }
@@ -253,25 +253,25 @@ impl FromStr for TodoStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct Todo {
-    pub(crate) id: TodoId,
-    pub(crate) title: String,
-    pub(crate) direction: String,
-    pub(crate) direction_revision: i64,
-    pub(crate) status: TodoStatus,
-    pub(crate) created_at: String,
+pub struct Todo {
+    pub id: TodoId,
+    pub title: String,
+    pub direction: String,
+    pub direction_revision: i64,
+    pub status: TodoStatus,
+    pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) completed_at: Option<String>,
+    pub completed_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct TodoSummary {
-    pub(crate) id: TodoId,
-    pub(crate) title: String,
-    pub(crate) status: TodoStatus,
-    pub(crate) created_at: String,
+pub struct TodoSummary {
+    pub id: TodoId,
+    pub title: String,
+    pub status: TodoStatus,
+    pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) completed_at: Option<String>,
+    pub completed_at: Option<String>,
 }
 
 impl From<&Todo> for TodoSummary {
@@ -287,59 +287,59 @@ impl From<&Todo> for TodoSummary {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct WorkingNote {
-    pub(crate) id: WorkingNoteId,
-    pub(crate) todo_id: TodoId,
-    pub(crate) text: String,
-    pub(crate) created_at: String,
+pub struct WorkingNote {
+    pub id: WorkingNoteId,
+    pub todo_id: TodoId,
+    pub text: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct TodoConcern {
-    pub(crate) id: ConcernId,
-    pub(crate) attached_todo_id: TodoId,
-    pub(crate) body: String,
-    pub(crate) source_path: PathBuf,
+pub struct TodoConcern {
+    pub id: ConcernId,
+    pub attached_todo_id: TodoId,
+    pub body: String,
+    pub source_path: PathBuf,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) source_thread_id: Option<String>,
+    pub source_thread_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) source_turn_id: Option<String>,
+    pub source_turn_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) source_item_id: Option<String>,
-    pub(crate) created_at: String,
+    pub source_item_id: Option<String>,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct SituationAssessmentSummary {
-    pub(crate) id: SituationAssessmentId,
-    pub(crate) disposition: String,
-    pub(crate) subject_label: String,
-    pub(crate) summary: String,
-    pub(crate) observed_at: String,
-    pub(crate) created_at: String,
+pub struct SituationAssessmentSummary {
+    pub id: SituationAssessmentId,
+    pub disposition: String,
+    pub subject_label: String,
+    pub summary: String,
+    pub observed_at: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct DesignSummary {
-    pub(crate) id: DesignId,
-    pub(crate) revision: i64,
-    pub(crate) state: String,
-    pub(crate) summary: String,
-    pub(crate) created_at: String,
+pub struct DesignSummary {
+    pub id: DesignId,
+    pub revision: i64,
+    pub state: String,
+    pub summary: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct TodoView {
-    pub(crate) requested_id: TodoId,
-    pub(crate) resolution_path: Vec<TodoId>,
+pub struct TodoView {
+    pub requested_id: TodoId,
+    pub resolution_path: Vec<TodoId>,
     #[serde(flatten)]
-    pub(crate) todo: Todo,
-    pub(crate) concerns: Vec<TodoConcern>,
-    pub(crate) working_notes: Vec<WorkingNote>,
+    pub todo: Todo,
+    pub concerns: Vec<TodoConcern>,
+    pub working_notes: Vec<WorkingNote>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) latest_assessment: Option<SituationAssessmentSummary>,
+    pub latest_assessment: Option<SituationAssessmentSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) latest_design: Option<DesignSummary>,
+    pub latest_design: Option<DesignSummary>,
 }
 
 #[cfg(test)]

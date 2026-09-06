@@ -1,3 +1,4 @@
+use crate::api;
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -199,11 +200,11 @@ fn initialize(path: &Path, args: &InitArgs) -> Result<CommandOutput, AppError> {
     };
     let library_id = decision_feed::library_id(&connection)?;
     Ok(CommandOutput::new(
-        json!({
-            "library": path.display().to_string(),
-            "library_id": library_id,
-            "kind": kind.as_str(),
-            "revision": 0
+        json!(api::InitializedLibrary {
+            library: path.display().to_string(),
+            library_id,
+            kind: kind.as_str().to_owned(),
+            revision: 0
         }),
         format!(
             "Initialized Annals library {} at revision 0",
@@ -230,11 +231,11 @@ fn migrate_library(path: &Path) -> Result<CommandOutput, AppError> {
         )
     };
     Ok(CommandOutput::new(
-        json!({
-            "library": path.display().to_string(),
-            "from_version": result.from_version,
-            "to_version": result.to_version,
-            "migrated": result.migrated,
+        json!(api::MigratedLibrary {
+            library: path.display().to_string(),
+            from_version: result.from_version,
+            to_version: result.to_version,
+            migrated: result.migrated,
         }),
         human,
     )
@@ -287,7 +288,9 @@ fn backup(path: &Path, output: &Path) -> Result<CommandOutput, AppError> {
     let connection = db::open_backup_source(path)?;
     db::backup(&connection, output)?;
     Ok(CommandOutput::new(
-        json!({ "output": output.display().to_string() }),
+        json!(api::BackupResult {
+            output: output.display().to_string()
+        }),
         format!("Backed up {} to {}", path.display(), output.display()),
     )
     .mutation())
@@ -300,13 +303,18 @@ fn add_work(path: &Path, args: &WorkAddArgs) -> Result<CommandOutput, AppError> 
     let connection = db::open_read(path)?;
     let corpus_revision = revision(&connection)?;
     Ok(CommandOutput::new(
-        json!({
-            "work": work.label,
-            "size_bytes": work.text.len(),
-            "sha256": work.sha256,
-            "first_retained_at": work.created_at,
-            "retention": if retained.new_work { "new" } else { "duplicate" },
-            "corpus_revision": corpus_revision
+        json!(api::RetentionResult {
+            work: work.label.clone(),
+            size_bytes: work.text.len(),
+            sha256: work.sha256.clone(),
+            first_retained_at: work.created_at.clone(),
+            retention: if retained.new_work {
+                "new"
+            } else {
+                "duplicate"
+            }
+            .to_owned(),
+            corpus_revision,
         }),
         format!(
             "{} work {:?} ({} bytes)\nCorpus remains at revision {corpus_revision}",
@@ -347,13 +355,9 @@ fn show_work(path: &Path, label: &str) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
     let work = get_work(&connection, label)?;
     let view = work_view(&work);
-    let data = json!({
-        "work": view.summary.work,
-        "size_bytes": view.summary.size_bytes,
-        "sha256": view.summary.sha256,
-        "first_retained_at": view.summary.first_retained_at,
-        "headings": view.headings,
-        "text": work.text
+    let data = json!(api::WorkContent {
+        view,
+        text: work.text.clone()
     });
     let human = format!(
         "Work: {}\nSize: {} bytes\nSHA-256: {}\nFirst retained: {}\n\n{}",
@@ -680,12 +684,12 @@ fn validate_change(path: &Path, args: &ChangeSelectArgs) -> Result<CommandOutput
         render_annotations(reconciliation.annotations()),
     );
     Ok(CommandOutput::new(
-        json!({
-            "work": record.work_label,
-            "base_revision": record.base_revision,
-            "status": "valid",
-            "summary": record.summary,
-            "operations": resolved.operations
+        json!(api::ValidatedReconciliation {
+            work: record.work_label.clone(),
+            base_revision: record.base_revision,
+            status: "valid".to_owned(),
+            summary: record.summary.clone(),
+            operations: resolved.operations,
         }),
         human,
     ))
@@ -729,16 +733,16 @@ fn reconciliation_output(
     let view = reconciliation_view(&connection, record)?;
     let reconciliation: Reconciliation = serde_json::from_value(view.request.clone())?;
     let operation_count = view.request["operations"].as_array().map_or(0, Vec::len);
-    let data = json!({
-        "work": view.work,
-        "base_revision": view.base_revision,
-        "status": view.status,
-        "summary": view.summary,
-        "operation_count": operation_count,
-        "annotations": view.annotations,
-        "reconciliation": view.request,
-        "created_at": view.created_at,
-        "applied_revision": view.applied_revision
+    let data = json!(api::ReconciliationResult {
+        work: view.work.clone(),
+        base_revision: view.base_revision,
+        status: view.status.clone(),
+        summary: view.summary.clone(),
+        operation_count,
+        annotations: view.annotations.clone(),
+        reconciliation: reconciliation.clone(),
+        created_at: view.created_at.clone(),
+        applied_revision: view.applied_revision,
     });
     let heading = match view.status.as_str() {
         "applied" => "Applied reconciliation",
@@ -1067,16 +1071,15 @@ fn applied_output(
 ) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
     let request = crate::change::load_request(&connection, record.request_id)?;
-    let reconciliation = serde_json::to_value(&request)?;
     Ok(CommandOutput::new(
-        json!({
-            "work": record.work_label,
-            "base_revision": record.base_revision,
-            "revision": applied,
-            "status": "applied",
-            "summary": record.summary,
-            "annotations": request.annotations(),
-            "reconciliation": reconciliation
+        json!(api::AppliedReconciliation {
+            work: record.work_label.clone(),
+            base_revision: record.base_revision,
+            revision: applied,
+            status: "applied".to_owned(),
+            summary: record.summary.clone(),
+            annotations: request.annotations().to_vec(),
+            reconciliation: request.clone(),
         }),
         format!(
             "Applied reconciliation at revision {applied}:\n{}\n{}",
@@ -1112,7 +1115,10 @@ fn roots(path: &Path, args: &PagedAtArgs) -> Result<CommandOutput, AppError> {
     let roots = graph.roots_page(cli_page_limit(args.limit)?, args.cursor.as_deref())?;
     let human = render_summary_page("Roots", &roots, requested);
     Ok(CommandOutput::new(
-        json!({ "revision": requested, "roots": roots }),
+        json!(api::RootsResult {
+            revision: requested,
+            roots
+        }),
         human,
     ))
 }
@@ -1161,7 +1167,10 @@ fn show_concept(path: &Path, args: &ConceptShowArgs) -> Result<CommandOutput, Ap
         evidence_preview
     );
     Ok(CommandOutput::new(
-        json!({ "revision": requested, "concept": detail }),
+        json!(api::ConceptResult {
+            revision: requested,
+            concept: detail
+        }),
         human,
     ))
 }
@@ -1205,10 +1214,18 @@ fn concept_neighbors(
     let human = render_reference_page_heading(heading, &reference, &page, requested);
     let data = match direction {
         GraphDirection::Parents => {
-            json!({ "revision": requested, "concept": reference, "parents": page })
+            json!(api::ParentsResult {
+                revision: requested,
+                concept: reference,
+                parents: page
+            })
         }
         GraphDirection::Children => {
-            json!({ "revision": requested, "concept": reference, "children": page })
+            json!(api::ChildrenResult {
+                revision: requested,
+                concept: reference,
+                children: page
+            })
         }
         GraphDirection::Both => unreachable!("both was rejected above"),
     };
@@ -1250,7 +1267,11 @@ fn concept_evidence(path: &Path, args: &ConceptPageArgs) -> Result<CommandOutput
         render_continuation(&evidence.page, requested)
     );
     Ok(CommandOutput::new(
-        json!({ "revision": requested, "concept": reference, "evidence": evidence }),
+        json!(api::EvidenceResult {
+            revision: requested,
+            concept: reference,
+            evidence
+        }),
         human,
     ))
 }
@@ -1556,14 +1577,14 @@ fn render_shake_plan(plan: &ShakePlan) -> String {
 }
 
 fn shake_data(plan: &ShakePlan, status: &str, revision: i64) -> Value {
-    json!({
-        "status": status,
-        "base_revision": plan.base_revision,
-        "revision": revision,
-        "edge_count_before": plan.edge_count_before,
-        "removed_edge_count": plan.removed_edges.len(),
-        "edge_count_after": plan.edge_count_after,
-        "removed_edges": plan.removed_edges
+    json!(api::ShakeResult {
+        status: status.to_owned(),
+        base_revision: plan.base_revision,
+        revision,
+        edge_count_before: plan.edge_count_before,
+        removed_edge_count: plan.removed_edges.len(),
+        edge_count_after: plan.edge_count_after,
+        removed_edges: plan.removed_edges.clone(),
     })
 }
 
@@ -1687,7 +1708,10 @@ fn log(path: &Path, limit: usize) -> Result<CommandOutput, AppError> {
             .join("\n")
     };
     Ok(CommandOutput::new(
-        json!({ "head_revision": head, "commits": commits }),
+        json!(api::LogResult {
+            head_revision: head,
+            commits
+        }),
         human,
     ))
 }
@@ -1760,10 +1784,10 @@ fn revert(path: &Path, target: i64) -> Result<CommandOutput, AppError> {
     let new_revision = crate::corpus::revert(&transaction, target)?;
     transaction.commit()?;
     Ok(CommandOutput::new(
-        json!({
-            "revision": new_revision,
-            "reverted_revision": target,
-            "summary": format!("Revert revision {target}")
+        json!(api::RevertResult {
+            revision: new_revision,
+            reverted_revision: target,
+            summary: format!("Revert revision {target}")
         }),
         format!("Applied revision {new_revision}:\nRevert revision {target}"),
     )

@@ -55,3 +55,8 @@ decision provenance and repository meanings inside the local project boundary.
 
 If replay fails, stop. Run Semantics doctor and use the project operation
 contract; do not edit SQLite or skip a revision.
+
+Rust callers may import `semantics::api` repository types and use its typed
+`Client` for repository show, search, log, and diff. The client invokes the
+same local CLI and preserves its read-only effects and project authority.
+Project and intake operations are separately documented operational actions.

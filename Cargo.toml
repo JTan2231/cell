@@ -7,6 +7,7 @@ members = [
     "nucleus/crates/nucleus-daemon",
     "nucleus/crates/nucleus-store",
     "annals/crates/annals",
+    "annals/crates/annals-api",
     "annals/crates/annals-usage",
     "todo/crates/todo",
     "chancery/crates/chancery",
@@ -14,9 +15,9 @@ members = [
     "email/crates/email",
     "conversations/crates/conversations",
     "decisions/crates/decisions",
+    "decisions/crates/krisis-api",
     "semantics",
     "geste/crates/geste",
-    "pratica/crates/pratica",
     "clockwork/crates/clockwork",
     "crm/crates/crm",
     "usher/crates/usher",
@@ -26,7 +27,7 @@ resolver = "3"
 [workspace.package]
 # The six Nucleus crates share this release version. Annals, Annals Usage,
 # Todo, Chancery, Weaver, Email, Conversations, Krisis, Semantics, Geste,
-# Pratica, Clockwork, CRM, and Usher declare independent product versions in their
+# Clockwork, CRM, and Usher declare independent product versions in their
 # manifests.
 version = "0.3.5"
 edition = "2024"
@@ -34,6 +35,8 @@ rust-version = "1.89"
 license = "MIT"
 
 [workspace.dependencies]
+annals-api = { path = "annals/crates/annals-api" }
+krisis-api = { path = "decisions/crates/krisis-api" }
 axum = { version = "0.8.9", features = ["json", "tokio"] }
 base64 = "0.22"
 bytes = "1.10"

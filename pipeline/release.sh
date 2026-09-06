@@ -61,30 +61,38 @@ release_provider_paths() {
     '
 }
 
+release_version_sources() {
+    printf '%s|%s\n' "$version_kind" "$version_manifest"
+    printf '%s\n' "$RELEASE_COMPANION_MANIFESTS" | awk -F '|' -v unit="$release_unit" '
+        $1 == unit { print "package|" $2 }
+    '
+}
+
 release_restore_files() {
-    set -- "$version_manifest" "$lockfile_path"
-    while IFS= read -r provider_manifest; do
-        [ -n "$provider_manifest" ] || continue
-        set -- "$@" "$provider_manifest"
+    set --
+    while IFS= read -r release_file; do
+        [ -n "$release_file" ] || continue
+        set -- "$@" "$release_file"
     done <<EOF
-$(release_provider_paths "$release_unit")
+$(release_expected_files)
 EOF
     git restore --staged --worktree -- "$@"
 }
 
 release_stage_files() {
-    set -- "$version_manifest" "$lockfile_path"
-    while IFS= read -r provider_manifest; do
-        [ -n "$provider_manifest" ] || continue
-        set -- "$@" "$provider_manifest"
+    set --
+    while IFS= read -r release_file; do
+        [ -n "$release_file" ] || continue
+        set -- "$@" "$release_file"
     done <<EOF
-$(release_provider_paths "$release_unit")
+$(release_expected_files)
 EOF
     git add -- "$@"
 }
 
 release_expected_files() {
-    printf '%s\n' "$version_manifest" "$lockfile_path"
+    release_version_sources | awk -F '|' '{ print $2 }'
+    printf '%s\n' "$lockfile_path"
     release_provider_paths "$release_unit"
 }
 
@@ -291,6 +299,14 @@ printf '%s\n' "$current_version" \
     | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' \
     || release_fail "package version must be numeric MAJOR.MINOR.PATCH; found $current_version"
 
+while IFS='|' read -r source_kind source_manifest; do
+    companion_version=$(pipeline_read_version "$source_kind" "$source_manifest")
+    [ "$companion_version" = "$current_version" ] \
+        || release_fail "release manifest $source_manifest version $companion_version does not match $current_version"
+done <<EOF
+$(release_version_sources)
+EOF
+
 while IFS= read -r provider_manifest; do
     provider_version=$(pipeline_provider_release "$provider_manifest")
     [ "$provider_version" = "$current_version" ] \
@@ -317,13 +333,18 @@ git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null \
 release_remote_tag_absent "$tag"
 release_remote_main_matches "$local_revision"
 
-manifest_tmp="$version_manifest.release.$$"
-temporary_files=$manifest_tmp
 rollback_version_files=true
-release_update_version "$current_version" "$new_version" "$version_kind" \
-    "$version_manifest" "$manifest_tmp" \
-    || release_fail "unable to update $version_manifest"
-mv "$manifest_tmp" "$version_manifest"
+while IFS='|' read -r source_kind source_manifest; do
+    manifest_tmp="$source_manifest.release.$$"
+    temporary_files="$temporary_files
+$manifest_tmp"
+    release_update_version "$current_version" "$new_version" "$source_kind" \
+        "$source_manifest" "$manifest_tmp" \
+        || release_fail "unable to update $source_manifest"
+    mv "$manifest_tmp" "$source_manifest"
+done <<EOF
+$(release_version_sources)
+EOF
 
 while IFS= read -r provider_manifest; do
     provider_tmp="$provider_manifest.release.$$"
