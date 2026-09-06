@@ -1,13 +1,13 @@
 {
   "id": "usher.install.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install or recover Usher",
-  "summary": "Deploy or recover the stateless Usher CLI and its version-matched Chancery selector without changing semantic registration or any product runtime.",
+  "summary": "Install, verify, or recover the stateless Usher commands and matching Chancery selector through the Rust installer without changing semantic registration or any product runtime.",
   "use_when": [
-    "Usher should be installed, updated, or recovered for the current macOS user."
+    "Usher should be installed, updated, inspected, verified, or recovered for the current macOS user."
   ],
   "do_not_use_when": [
     "Only membership should be reported; use usher.recognition.inspect.",
@@ -15,20 +15,21 @@
   ],
   "outcome": "A version-matched immutable release with coherent Usher CLI and provider selectors.",
   "effects": [
-    "Stages an immutable Usher release, holds product and catalog writer locks, and advances owned CLI and provider selectors through one current release.",
-    "No service state or semantic registration is touched."
+    "Stages an immutable Usher release containing the recognition command, exact Rust installer and recovery executable, and matching provider bundle; holds product and catalog writer locks and advances owned command and provider selectors through one current release.",
+    "Inspection and verification are read-only. Installation and recovery change only Usher-owned local release artifacts and selectors; no service state or semantic registration is touched."
   ],
   "authority": [
     "Usher owns its release and selectors. Cell products retain all domain and declaration authority."
   ],
   "success": [
-    "Candidate/provider versions match; installed help/version and release integrity checks pass; owned selectors follow current."
+    "Recognition binary, installer, and provider versions match; exact candidate and retained release integrity checks pass; owned command and provider selectors follow one current release."
   ],
   "failure_and_recovery": [
-    "Refuse foreign, tampered, stale, or unprovable selections. On failed publication restore prior selectors; use the exact retained previous release deployer and binary for deliberate recovery."
+    "Refuse foreign, tampered, stale, or unprovable selections. A failed publication restores the captured prior selectors when recovery can prove that basis.",
+    "Deliberate recovery uses a retained exact Rust package/install and a supported immutable release under the selected home. Restoring legacy manifest.txt releases detaches the owned public usher-install selector; inspection accepts that absence and the retained Rust executable can later reselect its release. The archived legacy deployer cannot recover from a new-format current release. Never edit retained release bytes."
   ],
   "privacy": [
-    "Release documentation contains no secrets or live records. Recognition metadata remains caller-owned output."
+    "The installer retains immutable executable and documentation releases and integrity manifests under the selected local home. It creates no domain database, retains no credentials or domain bodies, and makes no network or model call."
   ],
   "session_surfaces": [
     "local_filesystem",
@@ -37,9 +38,9 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Build a green candidate with ./ci.sh usher.",
-    "Run the product deployer with the exact binary and optional expected current selector.",
-    "Verify version, help, immutable release, and owned Chancery selector."
+    "Build and validate both binaries and the provider bundle with ./ci.sh usher.",
+    "Run usher-install install with the exact recognition binary, provider bundle, and optional expected current selection.",
+    "Use inspect and exact-candidate verify to establish installed identity, integrity, and coherent command/provider selection. Use retained verify-release and recover only against the exact intended supported release."
   ],
   "checkpoints": [
     "Version, integrity, ownership, and prior selection are established before advancing selectors.",
@@ -57,8 +58,24 @@
   "manual": "manuals/install-operate.md",
   "interfaces": [
     {
-      "label": "Deploy candidate",
-      "invocation": "usher/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH [--expected-current absent|releases/HASH]"
+      "label": "Install candidate",
+      "invocation": "usher-install install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/HASH]"
+    },
+    {
+      "label": "Inspect owned installation",
+      "invocation": "usher-install inspect [--home ABSOLUTE_HOME]"
+    },
+    {
+      "label": "Verify exact installed candidate",
+      "invocation": "usher-install verify --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH [--home ABSOLUTE_HOME]"
+    },
+    {
+      "label": "Verify retained release integrity",
+      "invocation": "usher-install verify-release ABSOLUTE_RELEASE_DIRECTORY"
+    },
+    {
+      "label": "Recover retained release",
+      "invocation": "ABSOLUTE_RETAINED_RELEASE/package/install recover --release ABSOLUTE_RELEASE_DIRECTORY [--home ABSOLUTE_HOME] [--expected-current absent|releases/HASH]"
     }
   ],
   "promise": {
@@ -77,13 +94,13 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Exact release binary, product deployer and bundle, optional expected current, and optional isolated home."
+        "statement": "Exact recognition binary, matching provider bundle and executing Rust installer, optional expected current and isolated home; verification or recovery selects an exact supported retained release directory."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "A version-matched immutable release with coherent Usher CLI and provider selectors."
+        "statement": "A version-matched immutable release with coherent Usher recognition, installer and provider selectors, or a read-only inspection or verification result."
       }
     ],
     "data_semantics": [
@@ -95,7 +112,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Product release version and content-addressed release identity are separate from capability contract and JSON schema versions."
+        "statement": "Product and provider versions, the cell-install-v1 manifest format, content-addressed release identity, adapter protocol version, capability contract version and recognition JSON schemas are separate axes."
       }
     ],
     "completeness_and_freshness": [
@@ -107,13 +124,13 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Current-user local filesystem and shell, bounded to product-owned files and selectors."
+        "statement": "Current-user local filesystem through the separate Rust installer, bounded to product-owned release files and selectors; optional home is an explicit alternate or isolated boundary."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Product lock precedes catalog writer lock. One atomic current selector selects program and documentation; failed publication restores prior selectors."
+        "statement": "Product lock precedes catalog writer lock. An observed or explicit expected current selection prevents stale cutover. One atomic current selector selects both commands and documentation; failed publication restores the captured prior selectors when that basis is provable."
       }
     ],
     "operational_limits": [
@@ -125,13 +142,13 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Generated selector-only deployment profile v1, product version, provider release, and entry contract version remain distinct."
+        "statement": "Installation contract two uses the Rust installer CLI and cell-install-v1 JSON manifest with retained exact package/install recovery executable. Rust recovery supports legacy manifest.txt releases and detaches their unsupported public installer selector; the retained Rust executable remains available to reselect its release. The version-one coordinator adapter JSON protocol and recognition semantics remain unchanged."
       }
     ],
     "reliances": [
       {
         "status": "not_applicable",
-        "statement": "Deployment uses the product-owned generated local deployer; it does not invoke represented products."
+        "statement": "Installation uses the product-owned Rust executable and linked shared cell-install library. It does not require a Chancery executable, invoke represented systems, or delegate product authority to the deployment coordinator."
       }
     ]
   }

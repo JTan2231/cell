@@ -1,6 +1,7 @@
 """Discard completed Cell installation history after coordinated success only."""
 from __future__ import annotations
 
+import argparse
 import contextlib
 import json
 import os
@@ -223,11 +224,16 @@ def installer_locks(home, installs):
                 path.rmdir()
 
 
-def clean_installed_release_history(home: Path) -> dict:
+def clean_installed_release_history(home: Path, usher_installer: Path | None = None) -> dict:
     """Prune only the thirteen known Cell installation trees under the held lock."""
     require(home.is_absolute() and home.resolve(strict=True) == home,
             "cleanup requires the canonical operator home")
     require_deployment_lock(home)
+    if usher_installer is not None:
+        require(usher_installer.is_absolute() and usher_installer.resolve(strict=True) == usher_installer,
+                "Usher history verifier must be an exact sealed candidate path")
+        info = regular(usher_installer)
+        require(info.st_mode & stat.S_IXUSR, "Usher history verifier is not executable")
     source = Path(__file__).resolve().parents[1]
     base = home / "Library/Application Support"
     installs = {}
@@ -236,12 +242,14 @@ def clean_installed_release_history(home: Path) -> dict:
         require(metadata.get("application") == application, "Cell installation metadata differs")
         installs[application] = base / application / "install"
     with installer_locks(home, installs):
-        return prune(home, installs)
+        return prune(home, installs, usher_installer)
 
 
-def prune(home, installs):
+def prune(home, installs, usher_installer=None):
     base = home / "Library/Application Support"
     currents, selectors, previous, releases, receipts = {}, {}, [], [], []
+    retained_usher = set()
+    usher_history = None
     for product, application in PRODUCTS.items():
         install = base / application / "install"
         if not install.exists() and not install.is_symlink():
@@ -261,7 +269,7 @@ def prune(home, installs):
             selectors[link] = target
             if name == "current":
                 currents[application] = install / target
-            else:
+            elif application != "Usher" or usher_installer is not None:
                 previous.append(link)
         # An uninstalled retained tree has no current ownership proof.
         require(application in currents, "retained installation has no current release")
@@ -274,6 +282,19 @@ def prune(home, installs):
             require(manifest.get("release_id") == release.name
                     and manifest.get("product", product) in {product, "krisis" if product == "decisions" else product},
                     "release manifest ownership is unproved")
+            if application == "Usher":
+                if usher_installer is None:
+                    # A retained release cannot establish trust in its own
+                    # installer. Only the coordinator's admitted candidate
+                    # may verify Usher history for deletion.
+                    retained_usher.add(release)
+                    usher_history = "retained_without_verified_installer"
+                else:
+                    reply = json.loads(inspect_command([usher_installer, "verify-release", release]))
+                    require(reply.get("ok") is True and isinstance(reply.get("data"), dict)
+                            and reply["data"].get("release_id") == release.name,
+                            "Usher release history verification did not prove its identity")
+                    usher_history = "verified"
             for path in release.rglob("*"):
                 if path.is_dir() and not path.is_symlink():
                     directory(path)
@@ -287,8 +308,9 @@ def prune(home, installs):
                 selected = receipt.get("release_id", receipt.get("release", "").removeprefix("releases/"))
                 require(receipt.get("completed_at") and selected == currents[application].name,
                         "installation history receipt is not completed current state")
-                receipts.append(path)
-    protected = live_pins(home, installs, currents)
+                if application != "Usher" or usher_installer is not None:
+                    receipts.append(path)
+    protected = live_pins(home, installs, currents) | retained_usher
     require(all(link.is_symlink() and os.readlink(link) == target for link, target in selectors.items()),
             "release selectors changed during cleanup inspection")
     require(shutil.rmtree.avoids_symlink_attacks, "safe directory removal is unavailable")
@@ -305,15 +327,22 @@ def prune(home, installs):
         shutil.rmtree(path)
     for path in receipts:
         path.unlink()
-    return {"removed_releases": len(removed), "removed_previous_links": len(previous),
-            "removed_history_receipts": len(receipts), "retained_releases": len(protected)}
+    result = {"removed_releases": len(removed), "removed_previous_links": len(previous),
+              "removed_history_receipts": len(receipts), "retained_releases": len(protected)}
+    if usher_history is not None:
+        result["usher_history"] = usher_history
+    return result
 
 
 if __name__ == "__main__":
     try:
-        require(len(sys.argv) == 1 and sys.platform == "darwin", "cleanup is a coordinated macOS operation")
+        require(sys.platform == "darwin", "cleanup is a coordinated macOS operation")
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("--usher-installer", type=Path)
+        arguments = parser.parse_args()
         os.umask(0o077)
-        print(json.dumps(clean_installed_release_history(Path(pwd.getpwuid(os.getuid()).pw_dir)),
+        print(json.dumps(clean_installed_release_history(Path(pwd.getpwuid(os.getuid()).pw_dir),
+                                                       arguments.usher_installer),
                          separators=(",", ":"), sort_keys=True))
     except (CleanupError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         print(f"cell-deploy: installed release cleanup failed: {error}", file=sys.stderr)

@@ -144,13 +144,22 @@ def catalog(root: Path, revision: str) -> dict[str, dict[str, Any]]:
         metadata_path = f"{directory}/deployment/adapter.json"
         try:
             metadata = json.loads(source_file(root, revision, metadata_path))
-            git(root, "cat-file", "-e", f"{revision}:{adapter_path}")
         except (RuntimeError, ValueError):
             metadata = None
         if metadata is not None:
             if not isinstance(metadata, dict) or metadata.get("schema") != 1 or metadata.get("product") != name:
                 raise DeploymentError(f"invalid committed adapter declaration: {name}")
             names(metadata.get("dependencies", []))
+            adapter_binary = metadata.get("adapter_binary")
+            if adapter_binary is not None:
+                if name != "usher" or adapter_binary != "usher-install":
+                    raise DeploymentError(f"unsupported committed binary adapter: {name}")
+                adapter_path = None
+            else:
+                try:
+                    git(root, "cat-file", "-e", f"{revision}:{adapter_path}")
+                except RuntimeError:
+                    metadata = None
         products[name] = {
             "product": name, "directory": directory, "adapter": adapter_path,
             "metadata": metadata, "profile": values["DEPLOY_PROFILE"],
@@ -511,11 +520,7 @@ class Run:
             if process is not None and process.poll() is None and active["pid"] is None:
                 process.terminate()
 
-    def adapter(self, product: str, operation: str) -> dict[str, Any]:
-        self.check_source()
-        item = self.data["catalog"].get(product)
-        if item is None or item["metadata"] is None:
-            raise DeploymentError(f"required product lacks a committed deployment adapter: {product}")
+    def candidate_for(self, product: str) -> tuple[Path | None, dict[str, Any] | None]:
         record = self.record(product)
         manifest = None
         directory = None
@@ -526,13 +531,42 @@ class Run:
             for relative, expected_hash in manifest["source_inputs"].items():
                 if source_manifest.get(relative, {}).get("sha256") != expected_hash:
                     raise DeploymentError("candidate packaging differs from the pinned adapter source")
+        return directory, manifest
+
+    def sealed_adapter(self, product: str, directory: Path | None,
+                       manifest: dict[str, Any] | None) -> Path:
+        binary = self.data["catalog"][product]["metadata"].get("adapter_binary")
+        record = self.record(product)
+        if (product != "usher" or binary != "usher-install" or product not in self.data["products"]
+                or directory is None or manifest is None or not record.get("prepared")):
+            raise DeploymentError(f"{product} binary adapter requires its prepared selected candidate")
+        receipt = record.get("ci_receipt", {})
+        if (record.get("candidate_id") != manifest["candidate_id"]
+                or receipt.get("state") != "passed" or receipt.get("gate") != product
+                or receipt.get("source_key") != manifest["source_key"]
+                or manifest["source_key"] != self.data.get("source_key")):
+            raise DeploymentError("binary adapter does not match its admitted candidate receipt")
+        if manifest["binaries"].get(binary, {}).get("path") != f"bin/{binary}":
+            raise DeploymentError("candidate does not contain its declared binary adapter")
+        return directory / "bin" / binary
+
+    def adapter(self, product: str, operation: str) -> dict[str, Any]:
+        self.check_source()
+        item = self.data["catalog"].get(product)
+        if item is None or item["metadata"] is None:
+            raise DeploymentError(f"required product lacks a committed deployment adapter: {product}")
+        record = self.record(product)
+        directory, manifest = self.candidate_for(product)
+        if item["metadata"].get("adapter_binary") is not None:
+            command = [str(self.sealed_adapter(product, directory, manifest)), "adapter", operation]
+        else:
+            command = [self.data["python"], str(self.source / item["adapter"]), operation]
         request = {"schema": SCHEMA, "product": product, "run_id": self.data["run_id"],
                    "run_dir": str(self.path), "source_root": str(self.source),
                    "candidate_dir": str(directory) if directory else None, "candidate": manifest,
                    "prior": record.get("prior"), "selected_products": self.data["products"],
                    "recovery": record.get("recovery_context")}
-        returncode, output = self.command(product, operation,
-                                         [self.data["python"], str(self.source / item["adapter"]), operation], request)
+        returncode, output = self.command(product, operation, command, request)
         if output.stat().st_size > MAX_REPLY:
             raise DeploymentError(f"{product} {operation} reply exceeds the protocol bound")
         try:
@@ -750,8 +784,12 @@ def run_worker(path: Path, lock_fd: int | None = None) -> int:
     # must not initiate product recovery or undo that completed deployment.
     try:
         run.check_source()
-        returncode, output = run.command("cell", "cleanup", [
-            run.data["python"], str(run.source / "deployment" / "cleanup.py")])
+        cleanup_command = [run.data["python"], str(run.source / "deployment" / "cleanup.py")]
+        if ("usher" in run.data["products"]
+                and run.data["catalog"]["usher"]["metadata"].get("adapter_binary")):
+            directory, manifest = run.candidate_for("usher")
+            cleanup_command.extend(["--usher-installer", str(run.sealed_adapter("usher", directory, manifest))])
+        returncode, output = run.command("cell", "cleanup", cleanup_command)
         if returncode:
             raise DeploymentError("installed release history cleanup failed")
         run.data["release_history_cleanup"] = read_json(output)

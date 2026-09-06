@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "deployment/crates/cell-install",
     "deployment/crates/cell-maintenance",
     "nucleus/crates/nucleus-cli",
     "nucleus/crates/nucleus-client",
@@ -37,6 +38,7 @@ rust-version = "1.89"
 license = "MIT"
 
 [workspace.dependencies]
+cell-install = { path = "deployment/crates/cell-install" }
 cell-maintenance = { path = "deployment/crates/cell-maintenance" }
 annals-api = { path = "annals/crates/annals-api" }
 krisis-api = { path = "decisions/crates/krisis-api" }

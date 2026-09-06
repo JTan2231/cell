@@ -33,8 +33,10 @@ Semantics marker, and Chancery introduction evidence. Root CI runs
 candidate before the selected product gates. Full Chancery validation remains
 in the existing product and integrated catalog gates.
 The same root recognition body also formats, lints and tests the shared
-`cell-maintenance` library; it is infrastructure rather than a separate product
-identity or release unit.
+`cell-maintenance` library. Usher's product gate checks the shared `cell-install`
+library and both `usher` and its product-owned `usher-install` executable.
+The shared libraries are infrastructure rather than separate product identities
+or release units.
 
 Product `ci.sh` files are synchronous clients of the host-scoped CI broker.
 The broker invokes `pipeline/ci.sh` as the private body. Public product entry
@@ -59,6 +61,9 @@ broker receipt on success. Staging stays inside the shared Cargo lane; it is
 not another build path or a way to skip admission. The deployment coordinator
 accepts staged bytes only with the matching passed receipt and fixed committed
 source identity. See [deployment](../deployment/README.md).
+For Usher, staging seals both `usher` and `usher-install`; the coordinator
+invokes the sealed installer's Rust adapter. The recognition executable remains
+the read-only Cell membership command.
 Presentation options precede `--stage-candidate`; staging always requests the
 complete machine receipt even when the enclosing caller suppresses summaries.
 

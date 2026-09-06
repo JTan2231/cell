@@ -130,6 +130,24 @@ class Fixture:
     def create(self, products: tuple[str, ...] = ("alpha",)) -> Path:
         return cli.create_run(self.repo, products, self.storage)
 
+    def add_binary_adapter(self, *, stage_installer: bool = True) -> None:
+        self.write("pipeline/products/usher.sh", "PRODUCT_ID=usher\nPRODUCT_DIR=usher\nDEPLOY_PROFILE=rust-install-v1\n")
+        self.write("usher/deployment/adapter.json", json.dumps({
+            "schema": 1, "product": "usher", "dependencies": [], "adapter_binary": "usher-install"}))
+        installer = f"#!{sys.executable}\n" + FAKE_ADAPTER.replace(
+            "op = sys.argv[1]", 'if sys.argv[1:] == ["--version"]:\n    print("usher-install 1.0.0")\n    sys.exit(0)\nassert sys.argv[1] == "adapter"\nop = sys.argv[2]')
+        self.write("usher/packaging/installer-fixture", installer)
+        body = FAKE_CI.replace("PYTHON", sys.executable).replace(
+            "result = candidate.stage", 'installer = binary.with_name("usher-install")\ninstaller.write_text((root / "usher/packaging/installer-fixture").read_text())\ninstaller.chmod(0o755)\nresult = candidate.stage')
+        if stage_installer:
+            body = body.replace(' + "|" + name)', ' + "|" + name + "\\nusher|target/release/usher-install|usher-install")')
+        # The shared target is scratch space after admission ends. The actual
+        # adapter must keep using the sealed copy even if target is overwritten.
+        body += '\ninstaller.write_text("later target contents must never execute")\n'
+        self.write("usher/ci.sh", body, executable=True)
+        self.write("deployment/cleanup.py", 'import json,sys\nprint(json.dumps({"arguments":sys.argv[1:]}))\n')
+        self.commit()
+
 
 @unittest.skipIf(sys.version_info < (3, 11), "deployment runtime requires Python 3.11")
 class DeploymentTests(unittest.TestCase):
@@ -155,6 +173,81 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(result["source_commit"], expected)
         self.assertEqual(result["products"], ["alpha"])
         self.assertEqual(self.fixture.git("status", "--porcelain"), "M alpha/deployment/adapter.json")
+
+    def test_binary_adapter_uses_only_the_admitted_candidate_and_supplies_cleanup_verifier(self):
+        self.fixture.add_binary_adapter()
+        planned = cli.plan(self.fixture.repo, ["usher"])
+        self.assertIsNone(planned["catalog"]["usher"]["adapter"])
+        self.assertFalse((self.fixture.repo / "usher/deployment/adapter.py").exists())
+        path = self.fixture.create(("usher",))
+        self.assertEqual(cli.run_worker(path), 0)
+        self.assertEqual(self.observed(path), [["usher", operation] for operation in
+                                             ("inspect", "hold", "drain", "apply", "verify", "release")])
+        state = cli.read_json(path / "run.json")
+        self.assertEqual(state["release_history_cleanup"]["arguments"], [
+            "--usher-installer", str(path / "candidates/usher/bin/usher-install")])
+        self.assertEqual((path / "worktree/target/release/usher-install").read_text(),
+                         "later target contents must never execute")
+
+    def test_binary_adapter_requires_its_selected_prepared_candidate(self):
+        self.fixture.add_binary_adapter()
+        path = self.fixture.create(("usher",))
+        with cli.deployment_lock(self.fixture.storage) as lock_fd:
+            run = cli.Run(path, lock_fd)
+            with self.assertRaisesRegex(cli.DeploymentError, "prepared selected candidate"):
+                run.adapter("usher", "inspect")
+        self.assertFalse((path / "observed.jsonl").exists())
+
+    def test_binary_adapter_rejects_candidate_without_declared_installer(self):
+        self.fixture.add_binary_adapter(stage_installer=False)
+        path = self.fixture.create(("usher",))
+        self.assertEqual(cli.run_worker(path), 1)
+        self.assertIn("declared binary adapter", cli.read_json(path / "run.json")["detail"])
+        self.assertFalse((path / "observed.jsonl").exists())
+
+    def test_binary_adapter_rechecks_candidate_and_passed_evidence_before_execution(self):
+        self.fixture.add_binary_adapter()
+        path = self.fixture.create(("usher",))
+        with cli.deployment_lock(self.fixture.storage) as lock_fd:
+            run = cli.Run(path, lock_fd)
+            run.prepare()
+            run.record("usher")["ci_receipt"]["state"] = "stale"
+            with self.assertRaisesRegex(cli.DeploymentError, "admitted candidate receipt"):
+                run.adapter("usher", "inspect")
+            run.record("usher")["ci_receipt"]["state"] = "passed"
+            binary = path / "candidates/usher/bin/usher-install"
+            binary.chmod(0o755)
+            binary.write_text("tampered staged installer")
+            with self.assertRaisesRegex(candidate.CandidateError, "tree changed"):
+                run.adapter("usher", "inspect")
+        self.assertFalse((path / "observed.jsonl").exists())
+
+    def test_binary_adapter_uncertain_apply_uses_recovery_without_replaying_apply(self):
+        self.fixture.add_binary_adapter()
+        path = self.fixture.create(("usher",))
+        cli.durable_json(path / "fault.json", {"invalid": ["usher", "apply"]})
+        self.assertEqual(cli.run_worker(path), 1)
+        self.assertEqual(self.observed(path).count(["usher", "apply"]), 1)
+        self.assertEqual(self.observed(path)[-2:], [["usher", "recover"], ["usher", "release"]])
+        self.assertEqual(cli.read_json(path / "run.json")["recovery"]["state"], "succeeded")
+
+    def test_binary_adapter_replies_keep_the_existing_protocol_bound(self):
+        self.fixture.add_binary_adapter()
+        path = self.fixture.create(("usher",))
+        cli.durable_json(path / "fault.json", {"detail": "x" * (cli.MAX_REPLY + 1)})
+        self.assertEqual(cli.run_worker(path), 1)
+        state = cli.read_json(path / "run.json")
+        self.assertIn("reply exceeds the protocol bound", state["detail"])
+        self.assertFalse(state["mutation_started"])
+        self.assertEqual(self.observed(path), [["usher", "inspect"]])
+
+    def test_binary_adapter_declaration_cannot_select_an_arbitrary_command(self):
+        self.fixture.add_binary_adapter()
+        self.fixture.write("usher/deployment/adapter.json", json.dumps({
+            "schema": 1, "product": "usher", "dependencies": [], "adapter_binary": "../other"}))
+        self.fixture.commit()
+        with self.assertRaisesRegex(cli.DeploymentError, "unsupported committed binary adapter"):
+            cli.plan(self.fixture.repo, ["usher"])
 
     def test_candidate_survives_later_target_overwrite_and_detects_tampering(self) -> None:
         binary = self.fixture.repo / "target" / "release" / "alpha"

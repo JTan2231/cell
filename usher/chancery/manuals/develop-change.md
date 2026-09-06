@@ -17,9 +17,19 @@ inputs, unsupported formats, aliases, multiple providers, collisions and path
 boundaries. A selected product still receives global collision checks. Do not
 make CI green by filtering out incomplete products or treating unknown input as
 absence. Update CLI/JSON contracts and manuals with behavioral changes. Update
-Cell's operator manual when shared CI or membership facts change.
+Cell's operator manual when shared CI, installation, or membership facts change.
+
+Usher's separate `usher-install` executable owns installation. It uses the
+shared Rust `cell-install` library, packages its exact recovery executable, and
+provides the coordinator's version-one JSON adapter without changing the
+recognition library or CLI's read-only boundary. Keep recognition and installer
+interfaces distinct. Installation tests must prove fresh install, identical
+redeploy, upgrade, failed publication, retained-release recovery, legacy-release
+compatibility, tamper rejection, stale selection, and foreign ownership refusal.
+The product gate builds and stages both executables and validates the matching
+provider bundle.
 
 Run `./ci.sh` and inspect the candidate's report. Usher owns its independent
-release and generated selector-only packaging. A release script commits, tags,
-and pushes; deployment changes installed selectors. Neither is a side effect
-of development. No other system operation is authorized by this contract.
+release and product installation policy. A release script commits, tags, and
+pushes; deployment changes installed selectors. Neither is a side effect of
+development. No other system operation is authorized by this contract.

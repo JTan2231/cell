@@ -3,15 +3,16 @@
   "provider": {
     "id": "usher",
     "name": "Usher",
-    "release": "0.3.0"
+    "release": "0.4.0"
   },
   "promise_scope": {
     "authoritative_for": [
-      "Usher owns the deterministic interpretation of declared Cell membership and the report/check outcome over a selected checkout."
+      "Usher owns the deterministic interpretation of declared Cell membership and the report/check outcome over a selected checkout.",
+      "The separate usher-install executable owns Usher installation policy, immutable releases, command and provider selectors, integrity verification, and supported retained-release recovery using the shared cell-install library."
     ],
     "not_authoritative_for": [
       "Products own their identity and provider declarations; Semantics owns actual project registration and vocabulary, and Chancery owns complete bundle validation and installed discovery.",
-      "Each system owns its affairs with other systems. Usher has no authority over agreement coverage, relationship quality, implementation conformance, installation, or readiness."
+      "Each system owns its affairs with other systems. Recognition has no authority over agreement coverage, relationship quality, implementation conformance, actual installation, or readiness; the installer operates only Usher-owned release artifacts and selectors."
     ],
     "inventory": {
       "covers": [
@@ -23,16 +24,20 @@
       ]
     },
     "shared_access_and_trust": [
-      "Local CLI reading explicitly selected checkout files. Repository descriptors are parsed as literal data and never executed."
+      "Recognition reads explicitly selected local checkout files. Repository descriptors are parsed as literal data and never executed.",
+      "Installation uses the separate local usher-install executable, exact candidate artifacts, and current-user product-owned paths. It refuses foreign selectors and requires a coherent supported prior release before cutover or recovery."
     ],
     "shared_privacy_and_retention": [
-      "Reports expose product IDs, aliases, semantic project IDs, provider IDs, relative paths, and bounded diagnostics, never document bodies. Usher retains no state or report and makes no network or model call."
+      "Recognition reports expose product IDs, aliases, semantic project IDs, provider IDs, relative paths, and bounded diagnostics, never document bodies. Recognition retains no state or report and makes no network or model call.",
+      "Installation retains immutable executable and documentation releases with integrity manifests. It creates no domain database or service state, retains no credentials, and sends no network or model request."
     ],
     "compatibility_and_retirement": [
-      "Provider release, capability contract version, and JSON output schema are separate. Recognition rule changes require explicit product contract review."
+      "Provider release, capability contract version, and JSON output schema are separate. Recognition rule changes require explicit product contract review.",
+      "Usher installation contract two uses the cell-install-v1 manifest and Rust installer CLI. Retained Rust recovery supports legacy shell releases, detaches their unsupported public installer selector, and can later reselect a Rust release. The archived legacy deployer cannot handle a new-format current release."
     ],
     "operational_limits": [
-      "At most 256 descriptors, 512 entries per provider, and 1 MiB per regular UTF-8 evidence file. Reads reject paths escaping owning roots and symbolic evidence; callers keep the checkout stable."
+      "Recognition reads at most 256 descriptors, 512 entries per provider, and 1 MiB per regular UTF-8 evidence file. It rejects paths escaping owning roots and symbolic evidence; callers keep the checkout stable.",
+      "The installer changes Usher-owned local releases and selectors only; it does not register semantic projects, manage databases, operate services or schedules, or install other products."
     ]
   },
   "entries": [

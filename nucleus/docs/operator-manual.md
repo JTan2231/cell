@@ -67,7 +67,7 @@ separately maintained discovery catalog.
 | Conversations | Codex tasks on this Mac should be listed, inspected, or searched. | A read-only normalized view over the normal user's Codex App Server. | Decision classification, durable projections, live-process supervision, or Nucleus's isolated job history. |
 | Krisis | Attributable decisions in completed root user turns should be identified and delivered as immutable accounts to the dedicated Annals decisions library. | The observation baseline and coverage, bounded classification, source anchors, account projection, durable outbox, Annals acceptance receipts, and recovery. | Judging truth, importance, applicability, enactment, current force, review state, supersession, retaining the canonical account library, or sending a digest. |
 | Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from accepted accounts in the dedicated Annals decisions library. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, decision-feed intake, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, transcript storage, or interpreting Annals retention as semantic truth. |
-| Usher | A Cell checkout's declared membership should be reported or required in CI. | Deterministic recognition of product identity, Semantics participation, and Chancery introduction evidence. | Actual registration or installation, relationship quality, readiness, or any other inter-system affair. |
+| Usher | A Cell checkout's declared membership should be reported or required in CI, or Usher's own installation should be verified or recovered. | Deterministic recognition of product identity, Semantics participation, and Chancery introduction evidence; a separate installer owns Usher release and selector operations. | Proving other products' actual registration or installation, relationship quality, readiness, or other inter-system affairs. |
 | Geste | A prior bounded work episode should be found by problem shape or manually recorded with its source basis. | Episode identity, immutable account revisions, authored interpretation, source anchors, coverage gaps, and read-time search, report, and graph projections. | Source-system truth, current policy, automatic episode ingestion, or deciding that a precedent applies. |
 | Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, eight-slot harness supervision, single-authority credential coordination, cancellation, exact harness-stdout observations, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, requester retry policy, or reporting materializations. |
 | Annals Usage | Annals-attributed model consumption, account allowance, login, or the Annals-to-Nucleus execution path must be inspected. | Live calculation over Annals attribution and Nucleus output atoms, plus Annals-facing budget and diagnostic commands. | Nucleus runtime authority, durable reporting projections, Codex credential storage, Annals corpus success, or general job orchestration. |
@@ -390,6 +390,29 @@ their product-specific quiescence, migration, service, and recovery logic and
 are conservatively globally conflicting for orchestration. Catalog presence,
 CI success, and release preparation grant no deployment authority.
 
+Usher uses a separate Rust `usher-install` executable backed by the shared
+`cell-install` library. The recognition command and library retain their
+read-only declaration boundary. Its product gate builds and seals both
+`usher` and `usher-install`; direct installation takes the exact recognition
+binary and provider bundle, while coordinated deployment invokes the sealed
+installer's version-one JSON adapter. There is no Usher Python adapter or
+checked-in shell installer. This migration applies only to Usher.
+
+Usher's `cell-install-v1` release retains `bin/usher`, `bin/usher-install`,
+the exact recovery executable `package/install`, and its provider bundle under
+one content identity with a file-hash/mode manifest. Both public commands and
+the provider follow one atomic `current` selector. The installer checks an
+observed or explicit expected selection, acquires the product lock before the
+catalog writer lock, and refuses foreign or tampered ownership. It exposes
+read-only `inspect`, exact-candidate `verify`, and retained `verify-release`
+operations, plus deliberate `recover --release ABSOLUTE_RELEASE_DIR`.
+The retained Rust recovery executable also restores supported legacy releases,
+detaching the public installer selector that those releases lack; the same
+retained executable can later reselect its Rust release. See the version-two
+[`usher.install.operate` manual](../../usher/chancery/manuals/install-operate.md)
+for commands and recovery boundaries. No database, semantic registration,
+worker, schedule, or other product runtime is changed.
+
 ### Selection-only Cell deployment
 
 [`deployment/README.md`](../../deployment/README.md) defines the coordinator and
@@ -511,6 +534,8 @@ CRM deployer still changes only program/provider selectors.
 ~/.local/bin/clockwork
 ~/.local/bin/crm
 ~/.local/bin/cast
+~/.local/bin/usher
+~/.local/bin/usher-install
 ~/.codex/hooks.json
 ~/Library/LaunchAgents/org.nucleus.daemon.plist
 ~/Library/LaunchAgents/org.clockwork.annals.inbox.plist

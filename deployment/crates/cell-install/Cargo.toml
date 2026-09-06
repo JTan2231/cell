@@ -1,20 +1,15 @@
 [package]
-name = "usher"
-version = "0.4.0"
-default-run = "usher"
+name = "cell-install"
+version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Owned immutable Cell program installation mechanics"
 
 [dependencies]
-cell-install.workspace = true
-chancery = { path = "../../../chancery/crates/chancery" }
-clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-
-[dev-dependencies]
 tempfile.workspace = true
 
 [lints]

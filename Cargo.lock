@@ -270,6 +270,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cell-install"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "cell-maintenance"
 version = "0.1.0"
 dependencies = [
@@ -2767,12 +2777,14 @@ dependencies = [
 
 [[package]]
 name = "usher"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
+ "cell-install",
  "chancery",
  "clap",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
 ]
 

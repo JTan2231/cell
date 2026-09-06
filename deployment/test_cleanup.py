@@ -70,10 +70,73 @@ class ReleaseCleanupTests(unittest.TestCase):
                                                        "manifest": {"release_root": str(self.disabled_pin)}}})
         raise AssertionError("unexpected inspection: " + repr(argv))
 
-    def run_cleanup(self):
+    def run_cleanup(self, usher_installer=None, inspect=None):
         with mock.patch.object(cleanup, "require_deployment_lock"), \
-                mock.patch.object(cleanup, "inspect_command", side_effect=self.inspect):
-            return cleanup.clean_installed_release_history(self.home)
+                mock.patch.object(cleanup, "inspect_command", side_effect=inspect or self.inspect):
+            return cleanup.clean_installed_release_history(self.home, usher_installer)
+
+    def usher_releases(self):
+        current = self.release("Usher", self.current)
+        old = self.release("Usher", self.old)
+        current.chmod(0o755)
+        (current / "manifest.txt").unlink()
+        (current / "manifest.json").write_text(json.dumps({
+            "format": "cell-install-v1", "product": "usher", "provider": "usher",
+            "versions": {"usher": "usher 1.0.0"}, "files": {}, "release_id": current.name}))
+        current.chmod(0o555)
+        install = current.parent.parent
+        (install / "current").symlink_to("releases/" + self.current)
+        (install / "previous").symlink_to("releases/" + self.old)
+        return current, old
+
+    def test_usher_history_is_retained_without_a_trusted_candidate_installer(self):
+        current, old = self.usher_releases()
+        result = self.run_cleanup()
+        self.assertEqual(result["usher_history"], "retained_without_verified_installer")
+        self.assertTrue(current.is_dir())
+        self.assertTrue(old.is_dir())
+        self.assertTrue((current.parent.parent / "previous").is_symlink())
+        self.assertEqual(result["removed_releases"], 3)
+
+    def test_usher_legacy_and_rust_history_use_only_the_supplied_sealed_verifier(self):
+        current, old = self.usher_releases()
+        verifier = self.home / "sealed-candidate/bin/usher-install"
+        verifier.parent.mkdir(parents=True)
+        verifier.write_text("sealed admitted fixture")
+        verifier.chmod(0o555)
+        verified = []
+
+        def inspect(argv):
+            if argv[0] == verifier:
+                self.assertEqual(argv[1], "verify-release")
+                verified.append(argv[2])
+                return json.dumps({"ok": True, "data": {"release_id": argv[2].name}})
+            return self.inspect(argv)
+
+        result = self.run_cleanup(verifier, inspect)
+        self.assertEqual(set(verified), {current, old})
+        self.assertEqual(result["usher_history"], "verified")
+        self.assertTrue(current.is_dir())
+        self.assertFalse(old.exists())
+        self.assertFalse((current.parent.parent / "previous").is_symlink())
+
+    def test_usher_verification_failure_prevents_all_history_deletion(self):
+        current, old = self.usher_releases()
+        verifier = self.home / "sealed-usher-install"
+        verifier.write_text("sealed admitted fixture")
+        verifier.chmod(0o555)
+
+        def inspect(argv):
+            if argv[0] == verifier:
+                return json.dumps({"ok": True, "data": {"release_id": "wrong-release"}})
+            return self.inspect(argv)
+
+        with self.assertRaisesRegex(cleanup.CleanupError, "did not prove its identity"):
+            self.run_cleanup(verifier, inspect)
+        self.assertTrue(old.is_dir())
+        self.assertTrue((current.parent.parent / "previous").is_symlink())
+        self.assertTrue((self.base / "Annals/install/releases" / self.old).is_dir())
+        self.assertTrue(self.history.exists())
 
     def test_prunes_only_unreferenced_history_and_releases_its_locks(self):
         self.assertEqual(self.run_cleanup(), {"removed_releases": 3, "removed_previous_links": 3,

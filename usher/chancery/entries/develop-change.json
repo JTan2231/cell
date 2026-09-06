@@ -18,10 +18,10 @@
     "Does not run agents or mutate service state as part of recognition."
   ],
   "authority": [
-    "Usher owns its recognition contract; Cell owns membership policy and products own their declarations."
+    "Usher owns its recognition contract and separate installation policy; Cell owns membership policy and products own their declarations."
   ],
   "success": [
-    "Synthetic false-positive/false-negative tests and the root ./ci.sh pass; documentation states the exact evidence and proof boundaries."
+    "Synthetic recognition tests, installer ownership/integrity/recovery tests, and the root ./ci.sh pass; documentation states the exact evidence, installation, and proof boundaries."
   ],
   "failure_and_recovery": [
     "Keep failures visible and fix their source. Do not relax membership rules or hide products to make CI pass."
@@ -42,7 +42,8 @@
   ],
   "checkpoints": [
     "Recognition remains a read-only deterministic declaration check.",
-    "Global collisions and incomplete inventory evidence remain visible; other relationships and quality remain outside Usher."
+    "Global collisions and incomplete inventory evidence remain visible; other relationships and quality remain outside Usher.",
+    "The separate Rust installer and version-one deployment adapter preserve product-owned installation and supported legacy recovery; both executable candidates are built and sealed by the product gate."
   ],
   "adaptation": [
     "Add a universal membership condition only through an explicit Cell policy change, not by discovering an implementation dependency."

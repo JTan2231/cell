@@ -28,15 +28,17 @@ during execution. CI requires Python 3.10 or newer. See
 [the broker contract](ci_broker/README.md).
 
 Repeated product CI and release mechanics are declared in checked-in
-[pipeline descriptors](pipeline/README.md). Selector-only deployment mechanics
-and optimistic `current` checks are generated from the
-[deployment profile](deployment/README.md); stateful products retain their own
-lifecycle logic.
+[pipeline descriptors](pipeline/README.md). Usher uses a separate Rust
+`usher-install` executable backed by the shared `cell-install` library.
+Conversations, Geste, and CRM use generated selector-only installers;
+stateful products retain their own lifecycle logic. See
+[deployment](deployment/README.md) for their installation boundaries.
 
 `./deploy.sh SYSTEM...` prepares and deploys selected systems from one committed
-local `main` snapshot. The detached coordinator stages tested binaries, holds
-and drains affected products, invokes their installers and readiness checks, and records
-durable recovery evidence. See [deployment and initial migration](deployment/README.md)
+local `main` snapshot. The foreground coordinator stages tested binaries, holds
+and drains affected products, invokes their installers and readiness checks, and
+performs product-owned recovery before removing temporary run state. See
+[deployment and initial migration](deployment/README.md)
 and the [shared operator manual](nucleus/docs/operator-manual.md).
 
 [Usher](usher/README.md) checks declared Cell membership: product identity,

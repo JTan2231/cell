@@ -13,7 +13,8 @@ target/release/usher check .
 target/release/usher --json report . --product krisis
 ```
 
-Build and test with `./ci.sh usher`. The root `./ci.sh` runs a candidate Usher
+Build and test with `./ci.sh usher`. The gate builds `usher` and the separate
+`usher-install` executable. The root `./ci.sh` runs a candidate Usher
 membership check for every invocation, including when selecting other product
 gates. The compiler runs inside the existing CI broker's heavy lane.
 
@@ -98,14 +99,41 @@ Fix the source declaration and rerun; Usher has no reset or repair command.
 
 ## Installation
 
-The product has an independent version and a generated selector-only macOS
-deployer. After a green build, an authorized operator can install the binary
-and its version-matched Chancery documentation:
+The product has an independent version. Its separate Rust `usher-install`
+executable uses the shared `cell-install` library to install the recognition
+binary and its version-matched Chancery documentation for the current macOS
+user. After a green build:
 
 ```sh
-usher/packaging/macos/deploy-user.sh --binary /absolute/cell/target/release/usher
+/absolute/cell/target/release/usher-install install \
+  --binary /absolute/cell/target/release/usher \
+  --bundle /absolute/cell/usher/chancery
 ```
 
-Deployment advances only Usher's immutable release and its CLI/provider
-selectors. It does not register a semantic repository or touch another
-product's runtime. See the [shared deployment profile](../deployment/README.md).
+The installer retains its own exact executable, both command binaries, and the
+bundle in a content-addressed release with a `cell-install-v1` JSON manifest.
+One `current` selector selects `.local/bin/usher`, `.local/bin/usher-install`,
+and the owned Chancery provider together. `--expected-current
+absent|releases/HASH` requires an exact prior selection; omission observes it
+before waiting for the product lock. `--home ABSOLUTE_PATH` selects an
+intentional alternate or isolated home.
+
+`usher-install inspect` reports the owned installation, and `usher-install
+verify --binary ABSOLUTE_PATH --bundle ABSOLUTE_PATH` checks it against an
+exact candidate and the executing installer. `verify-release
+ABSOLUTE_RELEASE_DIR` checks a retained release's integrity without changing
+selectors. Deliberate recovery uses the retained Rust `package/install recover
+--release ABSOLUTE_RELEASE_DIR` for either a new-format or supported legacy
+release. Legacy recovery detaches the public installer selector; the retained
+Rust executable can later reselect its release. See the
+[installation contract](chancery/manuals/install-operate.md)
+for ownership, failure and recovery requirements.
+
+`./deploy.sh usher` seals both executables inside the ordinary product CI gate
+and invokes the sealed installer's Rust adapter through the coordinator's
+version-one JSON protocol. Usher has no Python deployment adapter or generated
+shell installer. Other products retain their existing installation paths.
+Installation changes only Usher's release and command/provider selectors; the
+recognition library and `usher` command remain read-only. No semantic project,
+database, worker, schedule, or other product runtime is changed. See
+[shared deployment](../deployment/README.md).

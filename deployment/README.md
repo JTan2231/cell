@@ -143,11 +143,12 @@ cannot prove that an old resident daemon was replaced.
 
 ## Product adapter protocol, version 1
 
-The product owns `PRODUCT_DIR/deployment/adapter.json` and `adapter.py`. The
-metadata is literal JSON:
+The product owns `PRODUCT_DIR/deployment/adapter.json` and its adapter
+implementation. Most products use `adapter.py`; Usher declares the sealed
+installer executable in literal JSON:
 
 ```json
-{"schema":1,"product":"usher","dependencies":[],"description":"Install Usher"}
+{"schema":1,"product":"usher","dependencies":[],"application":"Usher","adapter_binary":"usher-install","description":"Install Usher"}
 ```
 
 `dependencies` contains ordering prerequisites among selected systems. It is not
@@ -165,7 +166,11 @@ accepted. Standard input is one JSON object containing:
 `candidate_dir` and `candidate` are null for affected-only products. Binaries
 reside at `candidate_dir/bin/COMMAND`; `candidate.binaries[COMMAND]` records
 `path`, `sha256` and `version`. The source archive contains version-matched
-deployer, provider and adapter bytes. It is checked before every operation.
+deployer, provider and adapter source bytes. It is checked before every operation.
+For Usher, candidate sealing includes `usher` and `usher-install`; its adapter
+executes `candidate_dir/bin/usher-install adapter OP` rather than compiling or
+using the shared target during cutover. The enclosing coordinator and other
+products' adapters retain their existing Python implementation.
 
 Standard output must be exactly one bounded JSON object, with diagnostics on
 standard error:
@@ -202,6 +207,52 @@ coordinator does not reinterpret an installed version as a release tag and does
 not introduce a universal cadence. Changing cross-run CI evidence reuse or
 adding automatic version/publication policy requires a separate reviewed
 contract; neither is part of this version.
+
+## Usher's Rust installer
+
+Usher's separate `usher-install` executable uses the shared `cell-install`
+library for local installation mechanics. It owns Usher's product policy and
+the version-one coordinator adapter; the `usher` recognition command remains
+read-only. `cell-install` is workspace infrastructure with no separate product
+identity or release publication. Only Usher uses this installer path.
+
+After the ordinary product gate builds both executables, direct installation is:
+
+```sh
+/absolute/cell/target/release/usher-install install \
+  --binary /absolute/cell/target/release/usher \
+  --bundle /absolute/cell/usher/chancery
+```
+
+The installer verifies version alignment, content integrity and ownership,
+takes the product lock before the Chancery writer lock, and publishes one
+atomic `current` selector. It supports an exact `--expected-current
+absent|releases/HASH` precondition and intentional `--home ABSOLUTE_PATH`.
+The immutable release contains `bin/usher`, `bin/usher-install`, the exact
+recovery executable at `package/install`, and `share/chancery/usher`. Its
+`manifest.json` uses format `cell-install-v1`, records product/provider versions
+and each retained file's SHA-256 and mode, and identifies the complete release
+by content. Both public command selectors and the provider selector follow
+that release.
+
+`inspect` reports owned installed state. `verify --binary ABSOLUTE_PATH
+--bundle ABSOLUTE_PATH` proves the installed exact candidate using the executing
+installer; `verify-release ABSOLUTE_RELEASE_DIR` checks retained release
+integrity without changing selectors. `recover --release ABSOLUTE_RELEASE_DIR`
+restores a supported retained release under the same ownership and expected
+selection checks. The retained Rust `package/install` also reads and restores
+the supported legacy `manifest.txt` shell release format. Legacy recovery
+detaches the owned public `usher-install` selector; inspection accepts its
+absence while that release is current. Keep the retained Rust recovery
+executable to reselect its release later. The legacy `package/deploy-user.sh`
+is archived release evidence and cannot handle a new-format current release.
+Recovery does not edit immutable release bytes.
+See [Usher installation](../usher/chancery/manuals/install-operate.md) for
+the exact operational boundary.
+
+Usher no longer has a checked-in shell installer or Python product adapter.
+Conversations, Geste and CRM retain the generated profile below, and stateful
+products retain their product-owned lifecycle and recovery mechanics.
 
 ## Selector-only deployment generation
 

@@ -179,7 +179,7 @@ pipeline_validate_descriptor() {
         *) pipeline_fail "$PRODUCT_ID has invalid CI resource class" ;; esac
     [ "${RELEASE_BRANCH:-}" = main ] \
         || pipeline_fail "$PRODUCT_ID has unsupported release branch: ${RELEASE_BRANCH:-}"
-    case "${DEPLOY_PROFILE:-}" in selector-only-v1|custom) ;; \
+    case "${DEPLOY_PROFILE:-}" in selector-only-v1|rust-install-v1|custom) ;; \
         *) pipeline_fail "$PRODUCT_ID has invalid deployment profile" ;; esac
     [ -n "${DEPLOY_CONFLICT_KEYS:-}" ] \
         || pipeline_fail "$PRODUCT_ID declares no deployment conflict keys"
