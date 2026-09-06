@@ -246,10 +246,12 @@ def client_parser() -> argparse.ArgumentParser:
     run.add_argument("--env", action="append", default=[])
     run.add_argument("--unset-env", action="append", default=[])
     run.add_argument("--attribution-json")
+    run.add_argument("--verbose", action="store_true", help="show the body transcript")
+    run.add_argument("--quiet-result", action="store_true", help="omit a passed result line")
     run.add_argument(
         "--verbose-receipt",
         action="store_true",
-        help="print the JSON receipt on success as well as failure",
+        help="print the complete JSON receipt instead of a text result",
     )
     run.add_argument("command", nargs=argparse.REMAINDER)
 
@@ -321,9 +323,8 @@ def run(arguments: argparse.Namespace) -> int:
         else current_source_key
     )
     if expected_source_key is not None and current_source_key != source_key:
-        print(
-            json.dumps(
-                {
+        if arguments.verbose_receipt:
+            print(json.dumps({
                     "protocol_version": broker.PROTOCOL_VERSION,
                     "execution_id": None,
                     "state": "stale",
@@ -332,10 +333,12 @@ def run(arguments: argparse.Namespace) -> int:
                     "source_key": source_key,
                     "observed_source_key": current_source_key,
                     "detail": "expected source identity does not match",
-                },
-                sort_keys=True,
+                }, sort_keys=True))
+        else:
+            print(
+                f"ci: {arguments.gate} stale; expected source identity does not match",
+                file=sys.stderr,
             )
-        )
         return 75
     jobs = cargo_jobs()
     source_check = [
@@ -411,8 +414,12 @@ def run(arguments: argparse.Namespace) -> int:
         broker_arguments.extend(("--attribution-json", arguments.attribution_json))
     if clean and current_source_key == source_key:
         broker_arguments.append("--share-clean-candidate")
-    if not arguments.verbose_receipt:
-        broker_arguments.append("--quiet-success")
+    if arguments.verbose_receipt:
+        broker_arguments.append("--verbose-receipt")
+    if arguments.verbose:
+        broker_arguments.append("--verbose")
+    if arguments.quiet_result:
+        broker_arguments.append("--quiet-result")
     broker_arguments.extend(("--", *command))
     return broker.main(broker_arguments)
 

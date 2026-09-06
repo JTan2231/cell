@@ -338,7 +338,18 @@ no crash or stale result becomes green. The journal is under
 `python3 ci_broker/client.py status EXECUTION_ID` or `recover` from a Cell
 checkout for diagnosis.
 
-The root `./ci.sh` first records one exact source key and runs a candidate Usher
+CI captures each execution's stdout and stderr in a private broker log outside
+the checkout. The default output is one conclusive result, with progress at
+most once per minute for long waits or execution. A failure includes at most
+4 KiB of diagnostics and a log path available to both the original caller and
+joined callers. Failed logs are capped at 8 MiB with explicit truncation and
+follow the journal's 14-day/256-execution terminal retention; successful logs
+are discarded. `--verbose` requests detailed output, while
+`--verbose-receipt` preserves the full machine receipt used for candidate
+staging. Presentation options do not change execution identity or exit codes.
+
+The root `./ci.sh` first runs `pipeline/test.sh` as a brokered light preflight,
+then records one exact source key and runs a candidate Usher
 recognition check in the broker's heavy lane, including for selected-product
 runs. It passes the expected source key to that check and each independently
 scheduled product gate, and rejects the plan with exit 75 if the worktree
@@ -346,6 +357,10 @@ changes. A complete run then rebuilds Chancery for that same candidate and
 validates the integrated sixteen-provider, 55-entry source graph.
 This aggregate evidence does not merge product release authority or turn one
 product gate into another's gate.
+Root CI suppresses child success summaries and reports the selected scope once.
+Use `./ci.sh --verbose [PRODUCT...]` for detailed output or a product's public
+`ci.sh --verbose` for that gate. The private `pipeline/check.sh` preflight body
+does not invoke Cargo.
 
 Usher reads every `pipeline/products/*.sh` descriptor as literal data and
 requires an unambiguous product identity/root, an exact root Semantics marker,
@@ -423,6 +438,17 @@ or restore consumed authentication. An uncertain Nucleus apply requires its
 supported service recovery procedure because matching command files and health
 do not establish that an older resident daemon was replaced.
 
+The coordinator prints one final JSON result on stdout after recovery and
+cleanup. It includes recovery, maintenance, and cleanup disposition alongside
+the existing source, product, run, and exit identities. A recovered deployment
+still returns failure, with released holds reported explicitly. Unproved hold
+or release outcomes remain uncertain rather than being inferred from a missing
+ledger flag. Installation success remains distinct from cleanup failure.
+`--verbose` enables detailed progress on stderr; ordinary long-running progress
+is limited to once per minute. Original and recovery failure evidence is
+collected before deleting temporary logs, with one shared 4 KiB diagnostic
+allowance and visible truncation. Adapter data objects are not terminal dumps.
+
 Once the worker exits, the parent reacquires the host lock, unregisters the
 worktree and deletes its temporary files, including completed failure logs.
 Surviving children prevent cleanup until they release that lock. The next
@@ -430,6 +456,8 @@ invocation clears stale inactive workspace under the same lock. There is no
 retained deployment history or public `status`, `wait`, `resume` or `recover`
 command. Product-owned holds and database recovery backups remain operational
 state until resolved; ordinary domain and Nucleus execution history is unaffected.
+Failed preparation gates retain their CI broker transcripts under the separate
+CI retention policy; this does not retain the coordinator's workspace or logs.
 
 Successful coordinated deployments also remove unreferenced installed release
 directories and previous-release selectors. Current releases and releases still

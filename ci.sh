@@ -6,13 +6,22 @@ ROOT=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 
 usage() {
     printf '%s\n' \
-        'Usage: ./ci.sh [nucleus|annals|todo|chancery|weaver|email|conversations|krisis|decisions|semantics|geste|clockwork|crm|usher|cast]...'
+        'Usage: ./ci.sh [--verbose] [nucleus|annals|todo|chancery|weaver|email|conversations|krisis|decisions|semantics|geste|clockwork|crm|usher|cast]...'
 }
+
+verbose=
+if [ "${1:-}" = --verbose ]; then
+    verbose=--verbose
+    shift
+fi
 
 if [ "$#" -eq 0 ]; then
     set -- nucleus annals todo chancery weaver email conversations krisis \
         semantics geste clockwork crm usher cast
 fi
+
+scope=$(printf '%s ' "$@")
+scope=${scope% }
 
 nucleus_selected=0
 annals_selected=0
@@ -50,29 +59,27 @@ done
 
 # These checks are read-only and do not consume the shared Cargo lane. Run them
 # before binding the exact source candidate used by every selected product.
-"$ROOT/pipeline/test.sh"
+"$ROOT/pipeline/test.sh" --quiet-result $verbose
 source_key=$(python3 "$ROOT/ci_broker/client.py" source-key --repo-root "$ROOT")
 CELL_CI_EXPECTED_SOURCE_KEY=$source_key
 export CELL_CI_EXPECTED_SOURCE_KEY
 
-printf '%s\n' '==> Cell recognition'
-python3 "$ROOT/ci_broker/client.py" run \
+python3 "$ROOT/ci_broker/client.py" run --quiet-result $verbose \
     --repo-root "$ROOT" --gate cell.recognition --lane heavy -- \
     "$ROOT/pipeline/recognition.sh"
 
 for project in "$@"; do
-    printf '==> %s CI\n' "$project"
     case "$project" in
-        krisis) "$ROOT/decisions/ci.sh" ;;
-        *) "$ROOT/$project/ci.sh" ;;
+        krisis) "$ROOT/decisions/ci.sh" --quiet-result $verbose ;;
+        *) "$ROOT/$project/ci.sh" --quiet-result $verbose ;;
     esac
 done
 
 if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$krisis_selected$semantics_selected$geste_selected$clockwork_selected$crm_selected$usher_selected$cast_selected" = \
     11111111111111 ]
 then
-    printf '%s\n' '==> integrated Chancery source catalog'
-    python3 "$ROOT/ci_broker/client.py" run \
+    scope=all
+    python3 "$ROOT/ci_broker/client.py" run --quiet-result $verbose \
         --repo-root "$ROOT" --gate cell.integrated --lane heavy -- \
         "$ROOT/pipeline/integrated.sh"
 fi
@@ -86,4 +93,4 @@ if [ "$observed_source_key" != "$source_key" ]; then
 fi
 unset CELL_CI_EXPECTED_SOURCE_KEY
 
-printf '%s\n' 'ci.sh: all selected project gates are green'
+printf 'ci: passed; scope=%s\n' "$scope"

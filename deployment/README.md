@@ -17,9 +17,14 @@ Annals installation, and `decisions` is an alias for `krisis`. Dependency
 declarations order selected products; each product's inspection proves required
 installed dependencies rather than silently installing unselected products.
 
-The invocation runs in the foreground until deployment finishes. It prints
-compact progress and a final result to standard output, with failure diagnostics
-on standard error. It uses no model, Nucleus job, or conversation continuation.
+The invocation runs in the foreground until deployment finishes. By default it
+prints one final JSON result to standard output. `--verbose` adds operation
+progress on standard error; long-running operations otherwise produce at most
+one liveness line per minute, starting after the first minute. Failure diagnostic
+excerpts share a 4 KiB output budget across the original failure and recovery.
+Each failure cause appears once in the final result, bounded to 1 KiB. Adapter
+protocol replies and successful child logs are not terminal output. It uses no
+model, Nucleus job, or conversation continuation.
 Its Python executable and complete deployment source archive are pinned when
 it starts. Python 3.11 or newer, Git, normal product build tools, and the current
 macOS user session remain host prerequisites. The coordinator must be committed
@@ -98,9 +103,26 @@ After the worker exits, the parent closes its inherited lock descriptor and
 reacquires the host lock before unregistering the worktree and removing all
 temporary run files. A surviving descendant blocks this cleanup. The next
 deployment removes stale inactive workspace only after obtaining that same lock;
-it does not resume or recover an interrupted deployment. Before completed
-failure cleanup, diagnostics include bounded tails of temporary logs. Capture
-terminal output externally if a deployment report is needed.
+it does not resume or recover an interrupted deployment. Both original failure
+and recovery evidence are collected before cleanup and emitted once afterward.
+Capture terminal output externally if a deployment report is needed.
+Failed preparation gates retain their CI transcripts under the separate broker
+retention policy; the coordinator's own logs and workspace remain temporary.
+
+The final result preserves `schema`, `run_id`, `state`, `products`,
+`source_commit`, `detail` and `exit_code`. It additionally reports `recovery`
+(`not_needed`, `succeeded`, `failed`, or an interrupted outcome), `maintenance`
+(`not_started`, `released`, or `attention_required`) and `cleanup` dispositions
+for installed releases and the temporary workspace. Outstanding maintenance
+lists its owner and each affected product as `retained` or `uncertain`. A lost
+hold or release reply is uncertain until a successful release is captured.
+Successful recovery still returns deployment failure, with explicit released
+maintenance. Cleanup failure preserves the verified installation outcome.
+
+Product command failures retain a short structured error code or a recognized
+operational failure category. The shared adapter does not relay arbitrary child
+messages, command arguments, credentials, or domain bodies; unrecognized failures
+retain their executable and exit status.
 
 After successful readiness and release, the coordinator removes unreferenced
 installed Cell release history under the same global lock. It preserves current

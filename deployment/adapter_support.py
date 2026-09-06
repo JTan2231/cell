@@ -47,6 +47,40 @@ def tree_digest(root: Path, *, path_lines: bool = True) -> str:
     return result.hexdigest()
 
 
+def failure_reason(stdout: str, stderr: str) -> str | None:
+    """Summarize an error without copying private product messages or bodies."""
+    # A structured error code is useful; arbitrary messages/data are not safe
+    # for the shared adapter to publish. Never include command arguments.
+    if len(stdout) <= 1024 * 1024:
+        try:
+            value = json.loads(stdout)
+            error = value.get("error") if isinstance(value, dict) else None
+            if isinstance(error, dict):
+                code = error.get("code", error.get("kind"))
+                if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{1,63}", code):
+                    return f"product error code: {code}"
+        except ValueError:
+            pass
+    # Only fixed, operational categories leave this boundary. Source text can
+    # contain paths, credentials, or domain data, even when it is short.
+    text = stderr[-4096:].lower()
+    categories = (
+        (r"\bpermission denied\b", "filesystem permission denied"),
+        (r"\bunauthori[sz]ed\b|\bauthentication (?:failed|required)\b", "authentication or authorization failed"),
+        (r"\bnot drained\b|\bdid not drain\b", "product work has not drained"),
+        (r"\banother operation owns admission maintenance\b|\banother maintenance owner\b", "another operation owns product maintenance"),
+        (r"\block (?:is held|unavailable|busy)\b|\bfailed to acquire.{0,40}\block\b", "deployment or catalog lock unavailable"),
+        (r"\bstale deployment\b", "installation changed since inspection"),
+        (r"\bversion check failed\b|\bunexpected version\b|\bversion mismatch\b", "product version check failed"),
+        (r"\bdoes not match (?:its|the) manifest\b", "installed artifact verification failed"),
+        (r"\bconnection refused\b", "product service unavailable"),
+    )
+    for pattern, reason in categories:
+        if re.search(pattern, text):
+            return reason
+    return None
+
+
 def command(argv, *, env=None, timeout=180, json_output=False):
     effective = os.environ.copy()
     effective["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -67,18 +101,22 @@ def command(argv, *, env=None, timeout=180, json_output=False):
         result = subprocess.run([str(arg) for arg in argv], stdin=subprocess.DEVNULL,
                                 capture_output=True, text=True, env=effective, timeout=timeout,
                                 pass_fds=inherited)
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise Stopped(f"{Path(str(argv[0])).name}: {error}") from error
+    except subprocess.TimeoutExpired as error:
+        raise Stopped(f"{Path(str(argv[0])).name}: timed out after {timeout} seconds; operation outcome is uncertain") from error
+    except OSError as error:
+        raise Stopped(f"{Path(str(argv[0])).name}: cannot execute product command ({error.strerror})") from error
     if result.returncode:
-        # Do not relay unbounded diagnostics that may contain private domain data.
-        raise Stopped(f"{Path(str(argv[0])).name} {argv[1] if len(argv)>1 else ''} failed (exit {result.returncode})")
+        reason = failure_reason(result.stdout, result.stderr)
+        detail = f"{Path(str(argv[0])).name} failed (exit {result.returncode})"
+        raise Stopped(f"{detail}: {reason}" if reason else detail)
     if json_output:
         try:
             value = json.loads(result.stdout)
         except ValueError as error:
             raise Stopped("invalid product JSON response") from error
         if not isinstance(value, dict) or value.get("ok") is False:
-            raise Stopped("product did not report a successful result")
+            reason = failure_reason(result.stdout, result.stderr)
+            raise Stopped(f"product did not report a successful result: {reason}" if reason else "product did not report a successful result")
         return value
     return result.stdout.strip()
 

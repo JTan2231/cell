@@ -8,17 +8,40 @@ import os
 from pathlib import Path
 import plistlib
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
 
-from deployment.adapter_support import MaintainedAdapter, ProductAdapter, Stopped, digest, tree_digest
+from deployment.adapter_support import MaintainedAdapter, ProductAdapter, Stopped, command, digest, failure_reason, tree_digest
 
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 class AdapterProofTests(unittest.TestCase):
+    def test_command_failure_keeps_safe_reason_without_private_messages_or_arguments(self):
+        cases = [
+            ('{"error":{"code":"maintenance_held","message":"private document body"}}',
+             'authorization token=secret', "product error code: maintenance_held"),
+            ('private document body', 'fixture user deploy: unexpected version: private document body token=secret',
+             "product version check failed"),
+            ('private document body', 'clockwork version 1: private document body token=secret', None),
+        ]
+        for stdout, stderr, reason in cases:
+            with self.subTest(reason=reason):
+                response = subprocess.CompletedProcess([], 23, stdout, stderr)
+                with mock.patch("deployment.adapter_support.subprocess.run", return_value=response):
+                    with self.assertRaises(Stopped) as failed:
+                        command(["/private/path/product", "private-argument"])
+                detail = str(failed.exception)
+                self.assertIn("exit 23", detail)
+                self.assertNotIn("private", detail)
+                self.assertNotIn("secret", detail)
+                self.assertEqual(failure_reason(stdout, stderr), reason)
+                if reason:
+                    self.assertIn(reason, detail)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.base = Path(self.temporary.name)

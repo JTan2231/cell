@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import platform
+import select
 import signal
 import socket
 import sqlite3
@@ -26,6 +27,7 @@ import subprocess
 import sys
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -40,6 +42,10 @@ DEFAULT_POLL_INTERVAL = 0.25
 SOURCE_CHECK_TIMEOUT = 30.0
 MAX_TERMINAL_EXECUTIONS = 256
 TERMINAL_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
+MAX_DIAGNOSTIC_BYTES = 8 * 1024 * 1024
+MAX_DISPLAY_BYTES = 4 * 1024
+PROGRESS_INTERVAL = 60.0
+TRUNCATED_LOG = b"[earlier output omitted: diagnostic log exceeded 8 MiB]\n"
 
 STATES = (
     "queued",
@@ -93,6 +99,85 @@ EPHEMERAL_ENVIRONMENT = frozenset(("OLDPWD", "PWD", "SHLVL", "_"))
 
 class BrokerError(RuntimeError):
     """A fail-closed broker error."""
+
+
+class DiagnosticCapture:
+    """Keep a private, bounded transcript without blocking body supervision."""
+
+    def __init__(self, path: Path, verbose: bool):
+        self.path = path
+        self.verbose = verbose
+        self.tail: deque[bytes] = deque()
+        self.tail_size = 0
+        self.total = 0
+        self.closed = False
+        self.eof = False
+        try:
+            path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.chmod(path.parent, 0o700)
+            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            self.file = os.fdopen(descriptor, "wb")
+        except OSError as error:
+            raise BrokerError(f"cannot open CI diagnostics: {error}") from error
+
+    def drain(self, pipe: Any) -> None:
+        # Limit each drain so a continuously noisy body cannot starve leases or
+        # cancellation. The pipe is nonblocking and select wakes us for more.
+        for _ in range(16):
+            try:
+                chunk = os.read(pipe.fileno(), 64 * 1024)
+            except BlockingIOError:
+                return
+            if not chunk:
+                self.eof = True
+                return
+            self.append(chunk)
+
+    def append(self, chunk: bytes) -> None:
+        limit = MAX_DIAGNOSTIC_BYTES - len(TRUNCATED_LOG)
+        self.tail.append(chunk)
+        self.tail_size += len(chunk)
+        while self.tail_size > limit:
+            excess = self.tail_size - limit
+            first = self.tail.popleft()
+            if len(first) > excess:
+                self.tail.appendleft(first[excess:])
+                self.tail_size -= excess
+            else:
+                self.tail_size -= len(first)
+        try:
+            # Keep a readable prefix on disk during execution, including after
+            # a runner crash. Finalization replaces it with the bounded tail.
+            available = max(0, MAX_DIAGNOSTIC_BYTES - self.total)
+            self.file.write(chunk[:available])
+            if self.total <= MAX_DIAGNOSTIC_BYTES < self.total + len(chunk):
+                self.file.seek(0)
+                self.file.write(TRUNCATED_LOG)
+            self.file.flush()
+            self.total += len(chunk)
+            if self.verbose:
+                sys.stderr.write(chunk.decode("utf-8", "replace"))
+                sys.stderr.flush()
+        except OSError as error:
+            raise BrokerError(f"cannot capture CI diagnostics: {error}") from error
+
+    def finish(self) -> None:
+        if self.closed:
+            return
+        try:
+            if self.total > MAX_DIAGNOSTIC_BYTES:
+                self.file.seek(0)
+                self.file.truncate()
+                self.file.write(TRUNCATED_LOG)
+                for chunk in self.tail:
+                    self.file.write(chunk)
+            self.file.flush()
+            os.fsync(self.file.fileno())
+        except OSError as error:
+            raise BrokerError(f"cannot finish CI diagnostics: {error}") from error
+        finally:
+            self.file.close()
+            self.closed = True
 
 
 @dataclass(frozen=True)
@@ -355,8 +440,66 @@ class Broker:
             raise BrokerError("poll interval must be positive and less than heartbeat timeout")
         self.scope = scope
         self.poll_interval = poll_interval
+        self.streamed = False
         self._initialize()
         self.prune()
+
+    def diagnostic_path(self, execution_id: str) -> Path:
+        return self.scope.state_dir / f"scope-{self.scope.key}-logs" / f"{execution_id}.log"
+
+    def report(
+        self,
+        receipt: Mapping[str, Any],
+        *,
+        verbose: bool = False,
+        streamed: bool = False,
+        quiet_result: bool = False,
+        verbose_receipt: bool = False,
+        quiet_success: bool = False,
+    ) -> None:
+        state = receipt["state"]
+        if verbose_receipt or (quiet_success and state != "passed"):
+            print(json.dumps(receipt, sort_keys=True), flush=True)
+        elif not (state == "passed" and (quiet_result or quiet_success)):
+            suffix = ""
+            if state != "passed":
+                if receipt.get("exit_code") is not None:
+                    suffix += f"; exit={receipt['exit_code']}"
+                if receipt.get("detail"):
+                    suffix += f"; {receipt['detail']}"
+            print(
+                f"ci: {receipt['gate']} {state}{suffix}",
+                file=sys.stdout if state == "passed" else sys.stderr,
+                flush=True,
+            )
+
+        if state == "passed":
+            return
+        path = self.diagnostic_path(str(receipt["execution_id"]))
+        try:
+            if not path.is_file() or path.stat().st_size == 0:
+                return
+            if not streamed:
+                with path.open("rb") as source:
+                    size = source.seek(0, os.SEEK_END)
+                    limit = MAX_DIAGNOSTIC_BYTES if verbose else MAX_DISPLAY_BYTES - 1
+                    marker = b"[earlier output omitted; see diagnostic log]\n"
+                    available = limit - len(marker) if size > limit else limit
+                    source.seek(max(0, size - available))
+                    raw = source.read(available)
+                if size > limit:
+                    raw = marker + raw
+                # Invalid UTF-8 must not expand a bounded byte excerpt beyond
+                # the display budget when replacement characters are encoded.
+                excerpt = raw.decode("utf-8", "replace").encode("utf-8")[:limit]
+                text = excerpt.decode("utf-8", "ignore")
+                if text:
+                    sys.stderr.write(text)
+                    if not text.endswith("\n"):
+                        sys.stderr.write("\n")
+            print(f"ci: diagnostics {path}", file=sys.stderr, flush=True)
+        except OSError as error:
+            print(f"ci: diagnostics unavailable: {error}", file=sys.stderr)
 
     def _connect(self) -> sqlite3.Connection:
         try:
@@ -674,12 +817,14 @@ class Broker:
                         f"DELETE FROM executions WHERE id IN ({placeholders})",
                         doomed,
                     )
+                    for execution_id in doomed:
+                        self.diagnostic_path(execution_id).unlink(missing_ok=True)
                     connection.execute("COMMIT")
                 except Exception:
                     connection.execute("ROLLBACK")
                     raise
                 return len(doomed)
-        except sqlite3.Error as error:
+        except (sqlite3.Error, OSError) as error:
             raise BrokerError(f"cannot prune broker journal: {error}") from error
 
     def submit(self, identity: Identity, invocation: Invocation) -> Submission:
@@ -1176,8 +1321,10 @@ class Broker:
         submission: Submission,
         identity: Identity,
         invocation: Invocation,
+        *,
+        verbose: bool = False,
     ) -> dict[str, Any]:
-        announced_running = False
+        last_progress = time.monotonic()
         try:
             while True:
                 self.recover()
@@ -1202,18 +1349,14 @@ class Broker:
                     )
 
                 if state == "queued" and self._try_claim(submission, identity.lane):
-                    if not announced_running:
-                        print(
-                            f"cell-ci: running {identity.gate} "
-                            f"({submission.execution_id})",
-                            file=sys.stderr,
-                            flush=True,
-                        )
-                        announced_running = True
-                    self._run_body(submission, identity, invocation)
+                    self._run_body(submission, identity, invocation, verbose=verbose)
+                    self.streamed = verbose
                     continue
 
                 self._heartbeat(submission)
+                if time.monotonic() - last_progress >= PROGRESS_INTERVAL:
+                    print(f"ci: {identity.gate} {state}", file=sys.stderr, flush=True)
+                    last_progress = time.monotonic()
                 time.sleep(self.poll_interval)
         except KeyboardInterrupt:
             self.cancel_request(submission)
@@ -1229,6 +1372,8 @@ class Broker:
         submission: Submission,
         identity: Identity,
         invocation: Invocation,
+        *,
+        verbose: bool = False,
     ) -> None:
         source_ok, source_detail = check_source(
             invocation.cwd,
@@ -1249,6 +1394,7 @@ class Broker:
             )
             return
 
+        capture = DiagnosticCapture(self.diagnostic_path(submission.execution_id), verbose)
         read_fd, write_fd = os.pipe()
         child: subprocess.Popen[Any] | None = None
         cancelled = False
@@ -1257,6 +1403,14 @@ class Broker:
         def request_cancel(_signum: int, _frame: Any) -> None:
             nonlocal cancelled
             cancelled = True
+
+        def finish_body(state: str, exit_code: int | None, detail: str | None) -> None:
+            if child is not None and child.stdout is not None:
+                capture.drain(child.stdout)
+            capture.finish()
+            if state == "passed":
+                capture.path.unlink(missing_ok=True)
+            self._finish(submission, state, exit_code, detail)
 
         for signum in (signal.SIGINT, signal.SIGTERM):
             previous_handlers[signum] = signal.getsignal(signum)
@@ -1279,10 +1433,12 @@ class Broker:
                     env=dict(invocation.environment),
                     pass_fds=(read_fd,),
                     start_new_session=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    bufsize=0,
                 )
             except OSError as error:
-                self._finish(
-                    submission,
+                finish_body(
                     "failed",
                     127,
                     f"body spawn failed: {error.__class__.__name__}",
@@ -1291,12 +1447,15 @@ class Broker:
             finally:
                 os.close(read_fd)
 
+            assert child.stdout is not None
+            os.set_blocking(child.stdout.fileno(), False)
+
             child_token = process_token(child.pid)
             if child_token is None:
                 with contextlib.suppress(ProcessLookupError):
                     child.terminate()
-                self._finish(
-                    submission,
+                child.wait()
+                finish_body(
                     "failed",
                     None,
                     "cannot establish body process identity",
@@ -1312,23 +1471,33 @@ class Broker:
                 os.close(write_fd)
                 write_fd = -1
 
+            next_heartbeat = time.monotonic()
+            last_progress = time.monotonic()
             while child.poll() is None:
+                capture.drain(child.stdout)
                 if cancelled:
                     terminate_process_group(child.pid, child_token)
                     child.wait()
-                    self._finish(submission, "cancelled", child.returncode, "request cancelled")
+                    finish_body("cancelled", child.returncode, "request cancelled")
                     return
-                try:
+                now = time.monotonic()
+                if now >= next_heartbeat:
                     state = self._heartbeat(submission)
-                except BrokerError:
-                    terminate_process_group(child.pid, child_token)
-                    child.wait()
-                    raise
-                if state != "running":
-                    terminate_process_group(child.pid, child_token)
-                    child.wait()
-                    return
-                time.sleep(self.poll_interval)
+                    if state != "running":
+                        terminate_process_group(child.pid, child_token)
+                        child.wait()
+                        capture.drain(child.stdout)
+                        capture.finish()
+                        return
+                    next_heartbeat = now + self.poll_interval
+                if now - last_progress >= PROGRESS_INTERVAL:
+                    print(f"ci: {identity.gate} running", file=sys.stderr, flush=True)
+                    last_progress = now
+                delay = max(0, next_heartbeat - time.monotonic())
+                if capture.eof:
+                    time.sleep(delay)
+                else:
+                    select.select([child.stdout], [], [], delay)
 
             exit_code = child.returncode
             source_ok, source_detail = check_source(
@@ -1346,13 +1515,25 @@ class Broker:
             else:
                 state = "failed"
                 detail = "body exited nonzero"
-            self._finish(submission, state, exit_code, detail)
+            finish_body(state, exit_code, detail)
+        except (BrokerError, OSError) as error:
+            if child is not None and child.poll() is None:
+                terminate_process_group(child.pid, process_token(child.pid))
+                child.wait()
+            if isinstance(error, BrokerError):
+                raise
+            raise BrokerError(f"cannot supervise CI output: {error}") from error
         finally:
-            if write_fd >= 0:
-                with contextlib.suppress(OSError):
-                    os.close(write_fd)
-            for signum, handler in previous_handlers.items():
-                signal.signal(signum, handler)
+            try:
+                if child is not None and child.stdout is not None:
+                    child.stdout.close()
+                capture.finish()
+            finally:
+                if write_fd >= 0:
+                    with contextlib.suppress(OSError):
+                        os.close(write_fd)
+                for signum, handler in previous_handlers.items():
+                    signal.signal(signum, handler)
 
 
 def check_source(
@@ -1454,6 +1635,9 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--env", action="append", default=[])
     run.add_argument("--unset-env", action="append", default=[])
     run.add_argument("--attribution-json")
+    run.add_argument("--verbose", action="store_true", help="show the body transcript")
+    run.add_argument("--quiet-result", action="store_true", help="omit a passed result line")
+    run.add_argument("--verbose-receipt", action="store_true", help="print the full JSON receipt")
     run.add_argument(
         "--quiet-success",
         action="store_true",
@@ -1545,20 +1729,22 @@ def run_command(arguments: argparse.Namespace) -> int:
         receipt = broker.record_initial_stale(
             identity, invocation, source_detail or "source identity changed"
         )
-        print(json.dumps(receipt, sort_keys=True), flush=True)
+        broker.report(
+            receipt, verbose_receipt=arguments.verbose_receipt,
+            quiet_success=arguments.quiet_success,
+        )
         return receipt_exit_code(receipt)
 
     broker.recover()
     submission = broker.submit(identity, invocation)
-    action = "joined" if submission.joined else "queued"
-    print(
-        f"cell-ci: {action} {identity.gate} ({submission.execution_id})",
-        file=sys.stderr,
-        flush=True,
+    if submission.joined:
+        print(f"ci: {identity.gate} joined existing execution", file=sys.stderr, flush=True)
+    receipt = broker.wait_and_run(submission, identity, invocation, verbose=arguments.verbose)
+    broker.report(
+        receipt, verbose=arguments.verbose, streamed=broker.streamed,
+        quiet_result=arguments.quiet_result, verbose_receipt=arguments.verbose_receipt,
+        quiet_success=arguments.quiet_success,
     )
-    receipt = broker.wait_and_run(submission, identity, invocation)
-    if not (arguments.quiet_success and receipt["state"] == "passed"):
-        print(json.dumps(receipt, sort_keys=True), flush=True)
     return receipt_exit_code(receipt)
 
 

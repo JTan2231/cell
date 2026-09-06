@@ -8,8 +8,9 @@ checks require Python 3.10 or newer for the broker and generators.
 
 `generate.sh --write` updates the checked-in product entry points; repeat
 `--product PRODUCT` to limit either mode to selected products.
-`generate.sh --check` rejects drift, and `test.sh` performs the lightweight
-descriptor, provider-inventory, shell-syntax, and generation checks.
+`generate.sh --check` rejects drift. `test.sh` submits the lightweight
+descriptor, provider-inventory, shell-syntax, generation, and Python checks to
+the broker's light lane; `check.sh` is its private body and never invokes Cargo.
 
 Each `products/*.sh` descriptor names the product's Cargo packages and manifest,
 shell and packaging checks, provider bundles, independently versioned release
@@ -41,6 +42,16 @@ points always request admission; an inherited environment flag cannot bypass
 the broker. Root and release orchestration use those public entry points so
 each product gate remains an independently scheduled unit.
 
+CI captures build and test transcripts in the broker. A direct product gate
+prints one success result; root `./ci.sh` suppresses child success results and
+prints the selected scope once. Failures identify the gate and include bounded
+diagnostics and a private log path. The pipeline records the failed stage in
+that transcript. `./ci.sh --verbose [PRODUCT...]`, `PRODUCT/ci.sh --verbose`,
+and `pipeline/test.sh --verbose` request detailed output. `--quiet-result`
+suppresses only a successful summary for enclosing orchestration. These are
+presentation options and do not change admission identity or gate checks.
+See [the broker](../ci_broker/README.md) for log bounds and retention.
+
 For deployment preparation, public product gates accept
 `--stage-candidate ABSOLUTE_DIRECTORY`. They run the same complete checks, seal
 the exact release executables before their admitted body exits, and return a
@@ -48,6 +59,8 @@ broker receipt on success. Staging stays inside the shared Cargo lane; it is
 not another build path or a way to skip admission. The deployment coordinator
 accepts staged bytes only with the matching passed receipt and fixed committed
 source identity. See [deployment](../deployment/README.md).
+Presentation options precede `--stage-candidate`; staging always requests the
+complete machine receipt even when the enclosing caller suppresses summaries.
 
 `pipeline/release.sh` retains product release authority. It holds one lock in
 the repository's Git common directory from preflight through CI and atomic

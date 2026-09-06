@@ -255,26 +255,47 @@ fi
 export CELL_PIPELINE_PRODUCT="$PRODUCT_ID"
 cd "$PIPELINE_ROOT/$PRODUCT_DIR"
 
+ci_stage=preflight
+ci_report_exit() {
+    status=$?
+    if [ "$status" -ne 0 ]; then
+        printf 'ci: failed; stage=%s; exit=%s\n' "$ci_stage" "$status" >&2
+    fi
+}
+trap ci_report_exit 0
+ci_stage='shell and packaging'
 ci_shell_and_packaging
+ci_stage='provider versions'
 ci_check_provider_versions
 if [ "$CI_PROVIDER_VALIDATION_PHASE" = before-rust ]; then
+    ci_stage='provider bundles'
     ci_validate_providers
 fi
+ci_stage='extra checks'
 ci_run_extra "$CI_EXTRA_BEFORE_RUST"
+ci_stage='rustfmt'
 ci_fmt
+ci_stage='clippy'
 ci_clippy
+ci_stage='tests'
 ci_test
 if [ "$CI_PROVIDER_VALIDATION_PHASE" = after-tests ]; then
+    ci_stage='provider bundles'
     ci_validate_providers
 fi
+ci_stage='rustdoc'
 ci_doc
+ci_stage='release build'
 ci_build
+ci_stage='extra checks'
 ci_run_extra "$CI_EXTRA_AFTER_BUILD"
+ci_stage='binary versions'
 ci_check_binaries
 
 # This copy is part of the admitted product gate. A later gate may overwrite
 # the shared Cargo target only after these exact binaries have been sealed.
 if [ -n "$stage_candidate" ]; then
+    ci_stage='candidate staging'
     python3 "$PIPELINE_ROOT/deployment/candidate.py" \
         --source-root "$PIPELINE_ROOT" --product "$PRODUCT_ID" \
         --output "$stage_candidate" --binary-spec "$RELEASE_BINARY_CHECKS"

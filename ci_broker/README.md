@@ -13,11 +13,32 @@ Run a private gate body synchronously:
 python3 ci_broker/client.py run --gate cell.root -- ./path/to/private-ci-body
 ```
 
-The body runs from the worktree root unless `--cwd` is supplied. Its output is
-left attached to the caller. A normal pass returns zero without adding a JSON
-receipt; failures print the durable receipt. Add `--verbose-receipt` to print a
-receipt on success too. `--attribution-json` can carry caller-owned correlation metadata without
-changing execution identity.
+The body runs from the worktree root unless `--cwd` is supplied. A normal pass
+prints one result line on stdout. `--quiet-result` omits that success line for
+an enclosing plan. Failures print the gate, state, exit code, a diagnostic
+excerpt of at most 4 KiB, and the private diagnostic file location on stderr.
+Queue and running progress appears at most once per minute, with an initial
+notice for callers joining an existing execution.
+
+`--verbose` streams the running body's combined stdout and stderr to stderr.
+A verbose joined caller can replay retained failure diagnostics; successful
+transcripts are discarded and are not replayed to joined callers.
+`--verbose-receipt` prints the unchanged complete JSON receipt on stdout
+instead of a text result, including on success. Combining it with `--verbose`
+keeps stdout machine-readable. These presentation flags do not change
+execution identity or admission. `--attribution-json` can carry caller-owned
+correlation metadata without changing execution identity.
+
+The broker captures output once per execution so owning and joined callers
+receive the same failure evidence. Logs live outside the worktree, in a private
+directory under the broker state directory, with mode `0600` files. Each log
+is capped at 8 MiB; oversized completed transcripts retain their tail and an
+explicit truncation marker. A crashed runner may leave a bounded prefix
+instead. Capture is drained in bounded chunks alongside heartbeat and
+cancellation handling and is flushed before the supervising caller publishes
+the terminal state. Passed transcripts are deleted; unsuccessful logs follow
+the execution journal's retention and pruning below. Logs contain the body's
+output as printed and are not automatically redacted.
 
 ## Admission and identity
 

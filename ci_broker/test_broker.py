@@ -72,6 +72,7 @@ class BrokerCliTests(unittest.TestCase):
             str(self.worktree),
             "--source-check-json",
             source_check,
+            "--verbose-receipt",
         ]
 
     def parse_receipt(self, completed: subprocess.CompletedProcess[str]) -> dict:
@@ -364,6 +365,86 @@ class BrokerCliTests(unittest.TestCase):
         self.assertEqual(failed.returncode, 78)
         self.assertFalse(marker.exists())
 
+    def test_noisy_success_is_compact_and_discards_logs(self) -> None:
+        command = self.base()
+        command.remove("--verbose-receipt")
+        body = [sys.executable, "-c", "import sys; print('noise' * 100000); print('stderr noise', file=sys.stderr)"]
+        completed = subprocess.run(command + ["--", *body], capture_output=True, text=True, timeout=10)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout, "ci: root passed\n")
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(list(self.state.glob("scope-*-logs/*.log")), [])
+        quiet = subprocess.run(command + ["--quiet-result", "--", sys.executable, "-c", "pass"], capture_output=True, text=True, timeout=5)
+        self.assertEqual((quiet.returncode, quiet.stdout, quiet.stderr), (0, "", ""))
+
+    def test_joined_failure_shares_diagnostics_and_presentation_does_not_change_identity(self) -> None:
+        body = [sys.executable, "-c", "import sys,time; print('noise' * 4000); print('decisive failure', file=sys.stderr, flush=True); time.sleep(.4); sys.exit(9)"]
+        command = self.base() + ["--share-clean-candidate"]
+        first = subprocess.Popen(command + ["--quiet-result", "--", *body], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        time.sleep(.1)
+        second = subprocess.Popen(command + ["--verbose", "--", *body], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        first_out, first_err = first.communicate(timeout=10)
+        second_out, second_err = second.communicate(timeout=10)
+        self.assertEqual((first.returncode, second.returncode), (9, 9))
+        first_receipt, second_receipt = json.loads(first_out), json.loads(second_out)
+        self.assertEqual(first_receipt["execution_id"], second_receipt["execution_id"])
+        self.assertEqual({first_receipt["joined"], second_receipt["joined"]}, {False, True})
+        self.assertEqual(len(first_receipt), 19)
+        self.assertIn("decisive failure", first_err)
+        self.assertIn("decisive failure", second_err)
+        self.assertLess(len(first_err.encode()), broker.MAX_DISPLAY_BYTES + 512)
+
+    def test_failed_log_and_excerpt_are_capped_private_and_pruned(self) -> None:
+        body = [sys.executable, "-c", "import sys; sys.stdout.write('x' * (9 * 1024 * 1024)); print('decisive tail', file=sys.stderr, flush=True); sys.exit(7)"]
+        completed = subprocess.run(self.base() + ["--", *body], capture_output=True, text=True, timeout=15)
+        self.assertEqual(completed.returncode, 7, completed.stderr)
+        self.assertIn("decisive tail", completed.stderr)
+        self.assertIn("earlier output omitted", completed.stderr)
+        self.assertLess(len(completed.stderr.encode()), broker.MAX_DISPLAY_BYTES + 512)
+        receipt = json.loads(completed.stdout)
+        scoped = broker.Broker(broker.Scope("host-test", "cell-test", self.state, 2, 2, 1.0), poll_interval=.05)
+        path = scoped.diagnostic_path(receipt["execution_id"])
+        self.assertLessEqual(path.stat().st_size, broker.MAX_DIAGNOSTIC_BYTES)
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
+        self.assertTrue(path.read_bytes().startswith(broker.TRUNCATED_LOG))
+        self.assertTrue(path.read_bytes().endswith(b"decisive tail\n"))
+        with contextlib.closing(sqlite3.connect(scoped.scope.database_path)) as connection:
+            connection.execute("UPDATE executions SET finished_at = 0 WHERE id = ?", (receipt["execution_id"],))
+            connection.commit()
+        self.assertEqual(scoped.prune(), 1)
+        self.assertFalse(path.exists())
+
+    def test_verbose_transcript_keeps_receipt_stdout_clean(self) -> None:
+        completed = subprocess.run(self.base() + ["--verbose", "--", sys.executable, "-c", "import sys; print('body stdout'); print('body stderr', file=sys.stderr)"], capture_output=True, text=True, timeout=5)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(json.loads(completed.stdout)["state"], "passed")
+        self.assertIn("body stdout", completed.stderr)
+        self.assertIn("body stderr", completed.stderr)
+        self.assertEqual(list(self.state.glob("scope-*-logs/*.log")), [])
+
+    def test_continuous_output_preserves_heartbeats_and_cancellation(self) -> None:
+        marker = self.root / "noisy-body-pid"
+        body = [sys.executable, "-c", f"import os; from pathlib import Path; Path({str(marker)!r}).write_text(str(os.getpid()))\nwhile True: os.write(1, b'x' * 65536)"]
+        running = subprocess.Popen(self.base() + ["--", *body], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            deadline = time.monotonic() + 5
+            while not marker.exists() and time.monotonic() < deadline:
+                time.sleep(.02)
+            self.assertTrue(marker.exists())
+            time.sleep(1.1)
+            scoped = broker.Broker(broker.Scope("host-test", "cell-test", self.state, 2, 2, 1.0), poll_interval=.05)
+            self.assertEqual(scoped.recover()["lost"], 0)
+            running.send_signal(signal.SIGINT)
+            out, err = running.communicate(timeout=5)
+            self.assertEqual(running.returncode, 130, err)
+            self.assertEqual(json.loads(out)["state"], "cancelled")
+            self.assertLess(len(err.encode()), broker.MAX_DISPLAY_BYTES + 512)
+        finally:
+            if running.poll() is None:
+                running.kill()
+                running.wait()
+
 
 class RepositoryClientTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -426,6 +507,7 @@ class RepositoryClientTests(unittest.TestCase):
                 "run",
                 "--gate",
                 "root",
+                "--verbose-receipt",
                 "--expected-source-key",
                 "sha256:not-the-current-source",
                 "--repo-root",

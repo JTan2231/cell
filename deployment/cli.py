@@ -19,6 +19,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import time
 from typing import Any, Iterator, Sequence
 import uuid
 
@@ -38,6 +39,9 @@ EXPECTED = {"inspect": "ready", "hold": "held", "drain": "drained",
 NAME = re.compile(r"[a-z][a-z0-9-]*")
 RUN_ID = re.compile(r"[0-9a-f]{32}")
 MAX_REPLY = 1024 * 1024
+MAX_DETAIL = 1024
+MAX_DIAGNOSTICS = 4096
+HEARTBEAT_SECONDS = 60
 
 
 class DeploymentError(RuntimeError):
@@ -46,6 +50,19 @@ class DeploymentError(RuntimeError):
 
 def now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat()
+
+
+def bounded_text(value: Any, limit: int, *, tail: bool = False) -> str:
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value))
+    text = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", text)
+    encoded = text.encode("utf-8", "replace")
+    if len(encoded) <= limit:
+        return text
+    suffix = "\n[truncated]"
+    size = max(0, limit - len(suffix))
+    if tail:
+        return "[truncated]\n" + (encoded[-size:] if size else b"").decode("utf-8", "ignore")
+    return encoded[:size].decode("utf-8", "ignore") + suffix
 
 
 def state_root() -> Path:
@@ -220,7 +237,8 @@ def archive_source(root: Path, revision: str, destination: Path) -> dict[str, An
     return manifest
 
 
-def create_run(root: Path, requested: Sequence[str], storage: Path | None = None) -> Path:
+def create_run(root: Path, requested: Sequence[str], storage: Path | None = None,
+               *, verbose: bool = False) -> Path:
     if sys.version_info < (3, 11):
         raise DeploymentError("deployment requires Python 3.11 or newer")
     chosen = plan(root, requested)
@@ -238,7 +256,8 @@ def create_run(root: Path, requested: Sequence[str], storage: Path | None = None
             "source_root": str(run / "source"), "worktree": str(run / "worktree"),
             "python": str(Path(sys.executable).resolve()), "records": {}, "events": [],
             "active_operation": None, "affected": [], "mutation_started": False,
-            "apply_started": False}
+            "apply_started": False, "verbose": verbose, "diagnostics": [],
+            "recovery": {"state": "not_needed"}, "cleanup": {"releases": "not_started", "workspace": "pending"}}
     durable_json(run / "run.json", data)
     try:
         source_manifest = archive_source(root, chosen["source_commit"], run / "source")
@@ -311,22 +330,86 @@ def cleanup_active(storage: Path) -> None:
     shutil.rmtree(path)
 
 
-def emit_diagnostics(path: Path) -> None:
-    """Print bounded failure evidence before deleting temporary private logs."""
-    paths = [path / "run.log"]
-    with contextlib.suppress(OSError, ValueError, KeyError):
-        active = read_json(path / "run.json").get("active_operation")
-        if active and active.get("output"):
-            output = Path(active["output"])
-            if output.parent == path / "steps":
-                paths.insert(0, output)
-    for output in paths:
-        if output.is_file() and not output.is_symlink():
+def capture_diagnostics(path: Path, data: dict[str, Any], phase: str) -> None:
+    """Keep failure evidence in memory/state until the final cleanup completes."""
+    active = data.get("active_operation") or {}
+    paths = [(path / "run.log", active.get("stderr_offset", 0))]
+    if active.get("output"):
+        output = Path(active["output"])
+        if output.parent == path / "steps":
+            paths.append((output, 0))
+    evidence = []
+    for output, offset in paths:
+        with contextlib.suppress(OSError, ValueError):
+            if not output.is_file() or output.is_symlink():
+                continue
+            if output.suffix == ".out" and active.get("adapter") and output.stat().st_size > MAX_REPLY:
+                continue
+            # Adapter JSON is an internal protocol, not a diagnostic excerpt.
+            if output.suffix == ".out" and output.stat().st_size <= MAX_REPLY:
+                try:
+                    json.loads(output.read_text())
+                    continue
+                except (UnicodeError, ValueError):
+                    pass
             with output.open("rb") as stream:
-                stream.seek(max(0, output.stat().st_size - 8192))
-                tail = stream.read(8192).decode("utf-8", "replace").strip()
+                stream.seek(max(offset, output.stat().st_size - MAX_DIAGNOSTICS))
+                tail = stream.read(MAX_DIAGNOSTICS).decode("utf-8", "replace").strip()
             if tail:
-                print(f"cell-deploy: {output.name} (last 8192 bytes):\n{tail}", file=sys.stderr)
+                evidence.append(tail)
+    text = bounded_text("\n".join(evidence), MAX_DIAGNOSTICS, tail=True)
+    if text:
+        data.setdefault("diagnostics", []).append({"phase": phase, "text": text})
+
+
+def diagnostic_text(entries: Sequence[dict[str, str]], causes: Sequence[str]) -> str:
+    """One shared, rendered-byte budget, divided between distinct failures."""
+    distinct = []
+    for entry in entries:
+        lines = [line for line in entry["text"].splitlines()
+                 if not any(len(line) >= 20 and (cause.endswith(line) or line.endswith(cause))
+                            for cause in causes if cause)]
+        text = "\n".join(lines).strip()
+        if text and text not in [item[1] for item in distinct]:
+            distinct.append((entry["phase"], text))
+    if not distinct:
+        return ""
+    allowance = MAX_DIAGNOSTICS // len(distinct)
+    chunks = []
+    for phase, text in distinct:
+        header = f"cell-deploy: {phase} diagnostics:\n"
+        chunks.append(header + bounded_text(text, allowance - len(header.encode()) - 1, tail=True) + "\n")
+    return bounded_text("".join(chunks), MAX_DIAGNOSTICS)
+
+
+def maintenance_result(data: dict[str, Any]) -> dict[str, Any]:
+    # An attempted hold or release can take effect without a successful reply.
+    # Only a subsequent captured outcome establishes its disposition.
+    products: dict[str, str] = {}
+    for event in data.get("events", []):
+        operation = event.get("operation")
+        if operation not in ("hold", "release"):
+            continue
+        product = event["product"]
+        if event["state"] == "starting":
+            products[product] = "uncertain"
+        elif (event["state"] == "outcome" and event.get("returncode") == 0
+              and event.get("response", {}).get("status") == EXPECTED[operation]):
+            products[product] = "retained" if operation == "hold" else "released"
+    outstanding = {product: state for product, state in sorted(products.items()) if state != "released"}
+    if outstanding:
+        return {"state": "attention_required", "owner": data["run_id"], "products": outstanding}
+    return {"state": "released" if products else "not_started"}
+
+
+def print_result(result: dict[str, Any]) -> None:
+    result = dict(result)
+    entries = result.pop("diagnostics", [])
+    causes = [result.get("detail", ""), result.get("recovery", {}).get("detail", "")]
+    diagnostics = diagnostic_text(entries, causes)
+    if diagnostics:
+        print(diagnostics, end="", file=sys.stderr)
+    print(json.dumps(result, separators=(",", ":"), sort_keys=True))
 
 
 class Run:
@@ -339,6 +422,7 @@ class Run:
         self.lock_fd = lock_fd
         self.source = Path(self.data["source_root"])
         self.worktree = Path(self.data["worktree"])
+        self.last_heartbeat = time.monotonic()
 
     def save(self) -> None:
         self.data["updated_at"] = now()
@@ -347,8 +431,16 @@ class Run:
     def event(self, state: str, **fields: Any) -> None:
         self.data["events"].append({"at": now(), "state": state, **fields})
         self.save()
-        if state in ("starting", "candidate_prepared", "quality_gate_passed", "installed", "succeeded", "recovered", "stopped", "cleanup_failed"):
-            print(json.dumps({"event": state, **fields}, separators=(",", ":")), flush=True)
+        if self.data.get("verbose") and state in ("starting", "candidate_prepared", "quality_gate_passed", "installed", "recovered"):
+            print(json.dumps({"event": state, **fields}, separators=(",", ":")), file=sys.stderr, flush=True)
+
+    def heartbeat(self) -> None:
+        current = time.monotonic()
+        if current - self.last_heartbeat >= HEARTBEAT_SECONDS:
+            active = self.data.get("active_operation") or {}
+            operation = " ".join(filter(None, [active.get("product"), active.get("operation")]))
+            print(f"cell-deploy: still running {operation or self.data['state']}", file=sys.stderr, flush=True)
+            self.last_heartbeat = current
 
     def check_source(self) -> None:
         manifest_path = self.path / "source-manifest.json"
@@ -370,7 +462,9 @@ class Run:
         if request is not None:
             durable_json(request_path, request)
         active = {"product": product, "operation": operation, "started_at": now(),
-                  "output": str(output_path), "pid": None, "birth": None}
+                  "output": str(output_path), "pid": None, "birth": None,
+                  "adapter": request is not None,
+                  "stderr_offset": (self.path / "run.log").stat().st_size if (self.path / "run.log").exists() else 0}
         self.data["active_operation"] = active
         if operation in MUTATIONS:
             self.data["mutation_started"] = True
@@ -396,7 +490,15 @@ class Run:
                 os.write(write_fd, b"1")
                 os.close(write_fd)
                 write_fd = -1
-                process.communicate(candidate.json_bytes(request) if request is not None else None)
+                incoming = candidate.json_bytes(request) if request is not None else None
+                while True:
+                    self.heartbeat()
+                    timeout = max(0.1, HEARTBEAT_SECONDS - (time.monotonic() - self.last_heartbeat))
+                    try:
+                        process.communicate(incoming, timeout=timeout)
+                        break
+                    except subprocess.TimeoutExpired:
+                        incoming = None
                 active["returncode"] = process.returncode
                 active["finished_at"] = now()
                 self.save()
@@ -441,7 +543,7 @@ class Run:
             raise DeploymentError(f"{product} {operation} returned an unsupported outcome")
         self.event("outcome", product=product, operation=operation, response=reply, returncode=returncode)
         if returncode != 0 or reply.get("status") != EXPECTED[operation]:
-            raise DeploymentError(f"{product} {operation} stopped: {reply.get('detail', 'outcome not proved')}")
+            raise DeploymentError(bounded_text(f"{product} {operation} stopped: {reply.get('detail', 'outcome not proved')}", MAX_DETAIL))
         self.data["active_operation"] = None
         self.save()
         return reply
@@ -629,14 +731,17 @@ def run_worker(path: Path, lock_fd: int | None = None) -> int:
     try:
         run.execute()
     except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as error:
-        detail = str(error)
-        print(f"cell-deploy: {detail}", file=sys.stderr)
-        emit_diagnostics(path)
+        detail = bounded_text(error, MAX_DETAIL)
+        capture_diagnostics(path, run.data, "failure")
         if run.data.get("mutation_started"):
+            run.data["recovery"] = {"state": "running"}
+            run.save()
             try:
                 run.recover()
+                run.data["recovery"] = {"state": "succeeded"}
             except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as recovery_error:
-                detail += f"; recovery stopped: {recovery_error}"
+                run.data["recovery"] = {"state": "failed", "detail": bounded_text(recovery_error, MAX_DETAIL)}
+                capture_diagnostics(path, run.data, "recovery")
         run.data["state"] = "stopped"
         run.data["detail"] = detail
         run.event("stopped", detail=detail)
@@ -650,15 +755,18 @@ def run_worker(path: Path, lock_fd: int | None = None) -> int:
         if returncode:
             raise DeploymentError("installed release history cleanup failed")
         run.data["release_history_cleanup"] = read_json(output)
+        run.data["cleanup"]["releases"] = "succeeded"
         run.data["active_operation"] = None
         run.data["state"] = "succeeded"
         run.event("succeeded", cleanup=run.data["release_history_cleanup"])
         return 0
     except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as error:
         run.data["state"] = "cleanup_failed"
-        run.data["detail"] = f"Products verified and holds released; cleanup failed: {error}"
+        run.data["cleanup"]["releases"] = "failed"
+        run.data["detail"] = bounded_text(f"Products verified and holds released; cleanup failed: {error}", MAX_DETAIL)
         run.event("cleanup_failed", detail=run.data["detail"])
-        emit_diagnostics(path)
+        capture_diagnostics(path, run.data, "cleanup")
+        run.save()
         return 1
 
 
@@ -675,28 +783,50 @@ def launch(path: Path, lock_fd: int) -> dict[str, Any]:
     returncode = subprocess.call(arguments, env=runtime_environment(), pass_fds=(lock_fd,))
     data = read_json(path / "run.json")
     if returncode and data["state"] not in ("stopped", "cleanup_failed"):
-        emit_diagnostics(path)
+        capture_diagnostics(path, data, "worker")
         data.update(state="stopped", detail="Deployment worker exited before completion; product holds may remain.")
+        if data.get("recovery", {}).get("state") == "running":
+            data["recovery"] = {"state": "uncertain"}
+        elif data.get("mutation_started") and data.get("recovery", {}).get("state") == "not_needed":
+            data["recovery"] = {"state": "not_attempted"}
     return {"schema": SCHEMA, "run_id": data["run_id"], "state": data["state"],
             "products": data["products"], "source_commit": data["source_commit"],
-            "detail": data.get("detail", ""), "exit_code": 1 if returncode else 0}
+            "detail": bounded_text(data.get("detail", ""), MAX_DETAIL), "exit_code": 1 if returncode else 0,
+            "recovery": data.get("recovery", {"state": "not_needed"}), "maintenance": maintenance_result(data),
+            "cleanup": data.get("cleanup", {"releases": "not_started", "workspace": "pending"}),
+            "diagnostics": data.get("diagnostics", [])}
 
 
-def start(root: Path, products: Sequence[str], storage: Path | None = None) -> dict[str, Any]:
+def start(root: Path, products: Sequence[str], storage: Path | None = None,
+          *, verbose: bool = False) -> dict[str, Any]:
     storage = storage or state_root()
     admitted = False
+    result = None
     try:
         with deployment_lock(storage) as lock_fd:
             admitted = True
             cleanup_active(storage)
-            path = create_run(root, products, storage)
-            return launch(path, lock_fd)
+            path = create_run(root, products, storage, verbose=verbose)
+            result = launch(path, lock_fd)
     finally:
         if admitted:
             # Close our inherited lock reference first. A surviving descendant
             # then prevents reacquisition and therefore prevents deletion.
-            with deployment_lock(storage):
-                cleanup_active(storage)
+            try:
+                with deployment_lock(storage):
+                    cleanup_active(storage)
+                if result is not None:
+                    result["cleanup"]["workspace"] = "removed"
+            except (DeploymentError, candidate.CandidateError, RuntimeError, OSError, ValueError) as error:
+                if result is None:
+                    raise
+                result["cleanup"]["workspace"] = "failed"
+                result["cleanup"]["detail"] = bounded_text(error, MAX_DETAIL)
+                result["exit_code"] = 1
+                if result["state"] == "succeeded":
+                    result["state"] = "cleanup_failed"
+    assert result is not None
+    return result
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -719,8 +849,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             return run_worker(Path(arguments[1]), int(arguments[2]))
         except (DeploymentError, OSError, ValueError) as error:
-            print(f"cell-deploy: {error}", file=sys.stderr)
+            print(f"cell-deploy: {bounded_text(error, MAX_DETAIL)}", file=sys.stderr)
             return 1
+    if arguments[:1] == ["--verbose"] and arguments[1:2] in (["start"], ["plan"]):
+        arguments[0], arguments[1] = arguments[1], arguments[0]
     if arguments and arguments[0] not in ("start", "plan", "-h", "--help"):
         arguments.insert(0, "start")
     parser = argparse.ArgumentParser(description=__doc__)
@@ -728,6 +860,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     for name in ("start", "plan"):
         command = commands.add_parser(name)
         command.add_argument("products", nargs="+")
+        command.add_argument("--verbose", action="store_true", help="show deployment operation progress on stderr")
     parsed = parser.parse_args(arguments)
     try:
         root = ci_client.repository_root(Path(__file__).resolve().parent.parent)
@@ -737,11 +870,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             if sys.platform != "darwin":
                 raise DeploymentError("live deployment is supported only for the current macOS user")
-            result = start(root, parsed.products)
-        print(json.dumps(result, separators=(",", ":"), sort_keys=True))
+            result = start(root, parsed.products, verbose=parsed.verbose)
+        print_result(result)
         return int(result.get("exit_code", 0))
     except (DeploymentError, candidate.CandidateError, RuntimeError, OSError, ValueError) as error:
-        print(f"cell-deploy: {error}", file=sys.stderr)
+        print_result({"schema": SCHEMA, "state": "stopped", "detail": bounded_text(error, MAX_DETAIL), "exit_code": 1})
         return 1
 
 

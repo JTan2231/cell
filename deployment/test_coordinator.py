@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 
@@ -30,6 +32,8 @@ with (run / "observed.jsonl").open("a") as output:
     output.write(json.dumps([name, op]) + "\\n")
 fault_path = run / "fault.json"
 fault = json.loads(fault_path.read_text()) if fault_path.exists() else {}
+if fault.get("stderr", {}).get(op):
+    print(fault["stderr"][op], file=sys.stderr)
 if fault.get("sleep") == [name, op]:
     (run / "child-started").write_text("yes")
     time.sleep(30)
@@ -55,7 +59,7 @@ if fault.get("invalid") == [name, op]:
 status = {"inspect":"ready","hold":"held","drain":"drained","apply":"applied","verify":"verified","release":"released","recover":"recovered"}[op]
 if fault.get("fail") == [name, op]:
     status = "stopped"
-print(json.dumps({"schema":1,"status":status,"data":data,"detail":"isolated fixture"}))
+print(json.dumps({"schema":1,"status":status,"data":data,"detail":fault.get("detail", "isolated fixture")}))
 '''
 
 FAKE_CI = '''#!PYTHON
@@ -158,7 +162,8 @@ class DeploymentTests(unittest.TestCase):
         binary.write_text("#!/bin/sh\nprintf 'alpha 1.0.0\\n'\n")
         binary.chmod(0o755)
         output = self.base / "candidate"
-        manifest = candidate.stage(self.fixture.repo, "alpha", output, "alpha|target/release/alpha|alpha")
+        with mock.patch.dict(os.environ, {"CARGO_TARGET_DIR": str(self.fixture.repo / "target")}):
+            manifest = candidate.stage(self.fixture.repo, "alpha", output, "alpha|target/release/alpha|alpha")
         binary.write_text("later unrelated gate replaced this executable")
         self.assertEqual(candidate.verify(output), manifest)
         staged = output / "bin" / "alpha"
@@ -225,7 +230,10 @@ assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
         data = cli.read_json(path / "run.json")
         self.assertEqual(data["state"], "stopped")
         self.assertTrue(all(data["records"][name]["held"] for name in ("alpha", "beta")))
-        self.assertIn("recovery stopped", data["detail"])
+        self.assertEqual(data["recovery"]["state"], "failed")
+        self.assertIn("recovery did not prove", data["recovery"]["detail"])
+        self.assertEqual(cli.maintenance_result(data), {"state": "attention_required", "owner": data["run_id"],
+                                                       "products": {"alpha": "retained", "beta": "retained"}})
 
     def test_internal_recovery_never_replays_an_uncertain_apply(self) -> None:
         path = self.fixture.create()
@@ -244,7 +252,10 @@ assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
         self.assertEqual(cli.run_worker(path), 1)
         self.assertFalse((path / "held-alpha").exists())
         self.assertFalse((path / "held-beta").exists())
-        self.assertEqual(cli.read_json(path / "run.json")["state"], "stopped")
+        data = cli.read_json(path / "run.json")
+        self.assertEqual(data["state"], "stopped")
+        self.assertEqual(data["recovery"]["state"], "succeeded")
+        self.assertEqual(cli.maintenance_result(data), {"state": "released"})
 
     def test_pinned_source_change_stops_before_any_adapter_action(self) -> None:
         path = self.fixture.create()
@@ -265,6 +276,9 @@ assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
         result = cli.start(self.fixture.repo, ["alpha"], self.fixture.storage)
         self.assertEqual(result["exit_code"], 0)
         self.assertEqual(result["state"], "succeeded")
+        self.assertEqual(result["maintenance"], {"state": "released"})
+        self.assertEqual(result["recovery"], {"state": "not_needed"})
+        self.assertEqual(result["cleanup"], {"releases": "succeeded", "workspace": "removed"})
         self.assertFalse((self.fixture.storage / "active").exists())
         self.assertEqual(self.fixture.git("worktree", "list", "--porcelain").count("worktree "), 1)
         self.assertEqual([path.name for path in self.fixture.storage.iterdir()], ["deployment.lock"])
@@ -275,6 +289,8 @@ assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
         result = cli.start(self.fixture.repo, ["alpha"], self.fixture.storage)
         self.assertEqual(result["exit_code"], 1)
         self.assertEqual(result["state"], "stopped")
+        self.assertEqual(result["maintenance"], {"state": "not_started"})
+        self.assertEqual(result["recovery"], {"state": "not_needed"})
         self.assertFalse((self.fixture.storage / "active").exists())
         self.assertEqual(self.fixture.git("worktree", "list", "--porcelain").count("worktree "), 1)
 
@@ -289,6 +305,92 @@ assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
         self.assertEqual(observed.count(["alpha", "apply"]), 1)
         self.assertFalse((path / "held-alpha").exists())
         self.assertFalse((path / "held-beta").exists())
+
+    def foreground(self, *, verbose=False):
+        script = ("from pathlib import Path\nfrom deployment import cli\n"
+                  f"result=cli.start(Path({str(self.fixture.repo)!r}), ['alpha'], "
+                  f"Path({str(self.fixture.storage)!r}), verbose={verbose!r})\n"
+                  "cli.print_result(result)\nraise SystemExit(result['exit_code'])\n")
+        return subprocess.run([sys.executable, "-B", "-c", script], cwd=ROOT,
+                              capture_output=True, text=True, timeout=30)
+
+    def test_foreground_default_is_one_result_and_verbose_only_adds_stderr_progress(self):
+        quiet = self.foreground()
+        self.assertEqual(quiet.returncode, 0, quiet.stderr)
+        self.assertEqual(len(quiet.stdout.splitlines()), 1)
+        self.assertEqual(quiet.stderr, "")
+        verbose = self.foreground(verbose=True)
+        self.assertEqual(verbose.returncode, 0, verbose.stderr)
+        self.assertEqual(len(verbose.stdout.splitlines()), 1)
+        self.assertIn('"event":"starting"', verbose.stderr)
+        self.assertNotIn('"response"', verbose.stderr)
+        self.assertEqual(json.loads(verbose.stdout)["maintenance"], {"state": "released"})
+
+    def test_original_and_recovery_evidence_survive_cleanup_with_one_shared_budget(self):
+        fault = {"fail": ["alpha", "apply"], "invalid": ["alpha", "recover"],
+                 "detail": "D" * 30000,
+                 "stderr": {"apply": "original-evidence\n" + "A" * 6000 + "\noriginal-tail",
+                            "recover": "recovery-evidence\n" + "R" * 6000 + "\nrecovery-tail"}}
+        self.fixture.write("alpha/deployment/adapter.py", FAKE_ADAPTER.replace(
+            'fault = json.loads(fault_path.read_text()) if fault_path.exists() else {}', f'fault = {fault!r}'))
+        self.fixture.commit()
+        result = self.foreground()
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(len(result.stdout.splitlines()), 1)
+        self.assertLessEqual(len(result.stderr.encode()), cli.MAX_DIAGNOSTICS)
+        self.assertIn("failure diagnostics", result.stderr)
+        self.assertIn("recovery diagnostics", result.stderr)
+        self.assertIn("original-tail", result.stderr)
+        self.assertIn("recovery-tail", result.stderr)
+        self.assertIn("uncertain output", result.stderr)
+        self.assertLess(len(result.stdout.encode()), 3000)
+        final = json.loads(result.stdout)
+        self.assertEqual(final["recovery"]["state"], "failed")
+        self.assertEqual(final["maintenance"]["products"], {"alpha": "retained", "beta": "retained"})
+        self.assertEqual(final["cleanup"]["workspace"], "removed")
+        self.assertNotIn("DDDD", result.stderr)
+        self.assertFalse((self.fixture.storage / "active").exists())
+
+    def test_lost_hold_and_release_outcomes_are_uncertain_until_a_proved_release(self):
+        for operation in ("hold", "release"):
+            with self.subTest(operation=operation):
+                events = [{"state": "starting", "operation": "hold", "product": "alpha"}]
+                if operation == "release":
+                    events += [{"state": "outcome", "operation": "hold", "product": "alpha", "returncode": 0,
+                                "response": {"status": "held"}},
+                               {"state": "starting", "operation": "release", "product": "alpha"}]
+                data = {"run_id": "owner", "events": events}
+                self.assertEqual(cli.maintenance_result(data)["products"], {"alpha": "uncertain"})
+                events.append({"state": "outcome", "operation": "release", "product": "alpha", "returncode": 0,
+                               "response": {"status": "released"}})
+                self.assertEqual(cli.maintenance_result(data), {"state": "released"})
+
+    def test_workspace_cleanup_failure_preserves_installation_and_hold_result(self):
+        original = cli.cleanup_active
+        def cleanup(storage):
+            if (storage / "active" / "run.json").exists():
+                raise OSError("fixture cleanup refused")
+            original(storage)
+        with mock.patch.object(cli, "cleanup_active", side_effect=cleanup):
+            result = cli.start(self.fixture.repo, ["alpha"], self.fixture.storage)
+        self.assertEqual(result["exit_code"], 1)
+        self.assertEqual(result["state"], "cleanup_failed")
+        self.assertEqual(result["maintenance"], {"state": "released"})
+        self.assertEqual(result["cleanup"]["workspace"], "failed")
+        self.assertEqual(result["cleanup"]["releases"], "succeeded")
+        with cli.deployment_lock(self.fixture.storage):
+            original(self.fixture.storage)
+
+    def test_heartbeat_is_delayed_and_limited_to_once_per_minute(self):
+        path = self.fixture.create()
+        with mock.patch.object(cli.time, "monotonic", return_value=100):
+            run = cli.Run(path, -1)
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output):
+            for current in (100, 159, 160, 160.1, 219, 220):
+                with mock.patch.object(cli.time, "monotonic", return_value=current):
+                    run.heartbeat()
+        self.assertEqual(len(output.getvalue().splitlines()), 2)
 
     def test_all_readiness_proofs_precede_release_and_nucleus_releases_last(self) -> None:
         self.add_nucleus()
