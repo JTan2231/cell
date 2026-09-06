@@ -108,7 +108,7 @@ class Adapter(StatefulAdapter):
         annals, config, library_id = self.pins()
         if self.prior.get("annals_library_id", library_id) != library_id:
             raise Stopped("ordinary deployment cannot replace the Annals decisions library")
-        return [*super().deploy_arguments(), "--clockwork", self.home / ".local/bin/clockwork",
+        return [*super().deploy_arguments(), "--clockwork", (self.home / ".local/bin/clockwork").resolve(strict=True),
                 "--codex", self.codex(), "--annals", annals, "--annals-config", config,
                 "--annals-library-id", library_id]
 
