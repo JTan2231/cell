@@ -141,6 +141,7 @@ pub struct Paths {
     pub binding: PathBuf,
     pub hooks: PathBuf,
     pub uid: u32,
+    pub deployment_run_id: Option<OsString>,
 }
 
 impl Paths {
@@ -169,6 +170,7 @@ impl Paths {
             state,
             install,
             uid,
+            deployment_run_id: std::env::var_os("CELL_DEPLOYMENT_RUN_ID"),
         })
     }
 
@@ -229,7 +231,7 @@ pub fn run(
         OsString::from(format!("HOME={}", text(&paths.home)?)),
         OsString::from("PATH=/usr/bin:/bin:/usr/sbin:/sbin"),
     ];
-    if let Some(run_id) = std::env::var_os("CELL_DEPLOYMENT_RUN_ID") {
+    if let Some(run_id) = &paths.deployment_run_id {
         let mut value = OsString::from("CELL_DEPLOYMENT_RUN_ID=");
         value.push(run_id);
         args.push(value);

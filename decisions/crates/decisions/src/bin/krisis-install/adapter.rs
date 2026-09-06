@@ -329,7 +329,8 @@ pub fn execute(operation: Operation) -> Result<Value> {
         "krisis-install",
         env!("CARGO_PKG_VERSION"),
     )?;
-    let paths = Paths::new(context.home.clone())?;
+    let mut paths = Paths::new(context.home.clone())?;
+    paths.deployment_run_id = Some(context.request.run_id.clone().into());
     let adapter = Adapter {
         clockwork: paths.home.join(".local/bin/clockwork"),
         context,
@@ -356,9 +357,8 @@ pub fn execute(operation: Operation) -> Result<Value> {
             adapter.check_prior()?;
             adapter.drain()?;
             let mut options = adapter.options()?;
-            lifecycle::install(&options)?;
             options.final_cutover = true;
-            lifecycle::install(&options)?;
+            lifecycle::install(&options, Some(&adapter.context.request.run_id))?;
             adapter.restore_controls()?;
             (
                 "applied",

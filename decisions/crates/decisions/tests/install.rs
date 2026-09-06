@@ -37,6 +37,9 @@ case " $* " in
   *' --version '*) printf '%s\n' 'krisis {}';;
   *' doctor '*)
     [ -z "${{KRISIS_TEST_SECRET:-}}" ] || exit 70
+    if [ -f "$HOME/expected-owner" ]; then
+      [ "${{CELL_DEPLOYMENT_RUN_ID:-}}" = "$(cat "$HOME/expected-owner")" ] || exit 72
+    fi
     database="$HOME/Library/Application Support/Decisions/decisions.db"
     printf '%s\n' 'candidate database' >"$database"
     chmod 600 "$database"
@@ -73,6 +76,9 @@ esac
         command
     }
     fn install(&self, flags: &[&str]) -> Output {
+        self.install_with_config(flags, &self.root.join("config.toml"))
+    }
+    fn install_with_config(&self, flags: &[&str], config: &Path) -> Output {
         self.command()
             .arg("install")
             .arg("--binary")
@@ -88,7 +94,7 @@ esac
             .arg("--annals")
             .arg(self.root.join("annals"))
             .arg("--annals-config")
-            .arg(self.root.join("config.toml"))
+            .arg(config)
             .args([
                 "--annals-library-id",
                 "0123456789abcdef0123456789abcdef",
@@ -128,7 +134,7 @@ esac
 
 const CLOCKWORK: &str = r"#!/usr/bin/python3
 import hashlib,json,os,pathlib,sys
-root=pathlib.Path(__file__).parent
+root=pathlib.Path(__file__).resolve().parent
 args=sys.argv[1:]
 def out(value): print(json.dumps({'ok':True,'data':value},separators=(',',':')))
 def fail(code):
@@ -302,6 +308,112 @@ fn uncertain_first_schedule_selection_retains_gate_and_evidence() {
 
 fn digest(bytes: impl AsRef<[u8]>) -> String {
     format!("{:x}", Sha256::digest(bytes.as_ref()))
+}
+
+fn bundle_proofs(
+    source: &Path,
+    path: &Path,
+    proofs: &mut serde_json::Map<String, serde_json::Value>,
+) {
+    for entry in fs::read_dir(path).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            bundle_proofs(source, &path, proofs);
+        } else {
+            proofs.insert(
+                path.strip_prefix(source).unwrap().to_str().unwrap().into(),
+                digest(fs::read(&path).unwrap()).into(),
+            );
+        }
+    }
+}
+
+#[test]
+fn adapter_json_owner_reaches_doctor_without_an_ambient_owner() {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let fixture = Fixture::new();
+    let annals = fixture.home.join("Library/Application Support/Annals");
+    fs::create_dir_all(annals.join("decisions")).unwrap();
+    fs::create_dir_all(annals.join("install/current/libexec")).unwrap();
+    let config = annals.join("decisions/config.toml");
+    write(
+        &config,
+        "[decision_feed]\nexpected_library_id = \"0123456789abcdef0123456789abcdef\"\n",
+        0o600,
+    );
+    symlink(
+        fixture.root.join("annals"),
+        annals.join("install/current/libexec/annals"),
+    )
+    .unwrap();
+    Fixture::success(&fixture.install_with_config(&["--final-cutover"], &config));
+    symlink(
+        fixture.root.join("clockwork"),
+        fixture.home.join(".local/bin/clockwork"),
+    )
+    .unwrap();
+
+    let owner = "fixture-json-owned-deployment";
+    write(&fixture.home.join("expected-owner"), owner, 0o600);
+    let source = fs::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")).unwrap();
+    let candidate = fixture.root.join("candidate");
+    fs::create_dir_all(candidate.join("bin")).unwrap();
+    let mut binaries = serde_json::Map::new();
+    for (name, executable) in [
+        ("krisis", fixture.root.join("krisis")),
+        (
+            "krisis-install",
+            PathBuf::from(env!("CARGO_BIN_EXE_krisis-install")),
+        ),
+    ] {
+        let bytes = fs::read(executable).unwrap();
+        let path = format!("bin/{name}");
+        write(&candidate.join(&path), &bytes, 0o755);
+        binaries.insert(
+            name.into(),
+            serde_json::json!({
+                "path":path, "sha256":digest(&bytes),
+                "version":format!("{name} {}",env!("CARGO_PKG_VERSION"))
+            }),
+        );
+    }
+    let mut proofs = serde_json::Map::new();
+    for bundle in ["decisions/chancery", "decisions/chancery-legacy"] {
+        bundle_proofs(&source, &source.join(bundle), &mut proofs);
+    }
+    let mut manifest = serde_json::json!({
+        "schema":1,"product":"krisis","source_commit":"fixture","source_key":"fixture",
+        "binaries":binaries,"source_inputs":proofs
+    });
+    let encoded = format!("{}\n", serde_json::to_string(&manifest).unwrap());
+    manifest["candidate_id"] = format!("sha256:{}", digest(encoded)).into();
+    let request = serde_json::json!({
+        "schema":1,"product":"krisis","run_id":owner,"run_dir":fixture.root,
+        "source_root":source,"candidate_dir":candidate,"candidate":manifest,
+        "prior":{"controls":{},"annals_library_id":"0123456789abcdef0123456789abcdef"},
+        "selected_products":["krisis"],"recovery":null
+    });
+    let mut child = Command::new(candidate.join("bin/krisis-install"))
+        .args(["adapter", "verify"])
+        .env("HOME", &fixture.home)
+        .env_remove("CELL_DEPLOYMENT_RUN_ID")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&serde_json::to_vec(&request).unwrap())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    Fixture::success(&output);
+    let reply: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(reply["status"], "verified");
 }
 
 // This fixture records the entire legacy format recipe for transition coverage.

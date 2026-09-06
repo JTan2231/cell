@@ -478,8 +478,11 @@ pub fn no_unfinished_transaction(paths: &Paths) -> Result<()> {
 
 // Admission, held-candidate proof, and cutover share one ordered lock scope.
 #[allow(clippy::too_many_lines)]
-pub fn install(options: &Install) -> Result<Value> {
-    let paths = Paths::new(home(options.home.clone())?)?;
+pub fn install(options: &Install, deployment_run_id: Option<&str>) -> Result<Value> {
+    let mut paths = Paths::new(home(options.home.clone())?)?;
+    if let Some(owner) = deployment_run_id {
+        paths.deployment_run_id = Some(owner.into());
+    }
     let pins = Pins {
         annals_binary: options.annals.clone(),
         annals_config: options.annals_config.clone(),
