@@ -46,6 +46,11 @@ class ReleaseCleanupTests(unittest.TestCase):
         path.mkdir(parents=True)
         (path / "manifest.txt").write_text(f"format=1\nrelease_id={identity}\n")
         (path / "program").write_text("fixture program")
+        bundle = path / "share/chancery/provider"
+        bundle.mkdir(parents=True)
+        (bundle / "entry.json").write_text("{}")
+        for directory in (path, path / "share", path / "share/chancery", bundle):
+            directory.chmod(0o555)
         return path
 
     def inspect(self, argv):
@@ -76,11 +81,13 @@ class ReleaseCleanupTests(unittest.TestCase):
         for application in ("Annals", "Decisions", "Clockwork"):
             install = self.base / application / "install"
             self.assertTrue((install / "current").exists())
+            self.assertEqual((install / "current").stat().st_mode & 0o777, 0o555)
             self.assertFalse((install / "previous").is_symlink())
             self.assertFalse((install / "releases" / self.old).exists())
             self.assertFalse((install / ".update-lock").exists())
         for path in (self.annals_pin, self.disabled_pin, self.running_pin, self.plist_pin):
             self.assertTrue(path.is_dir())
+            self.assertEqual(path.stat().st_mode & 0o777, 0o555)
         self.assertFalse((self.base / "Clockwork/.update-lock").exists())
         self.assertFalse(self.history.exists())
         self.assertEqual(self.domain.read_text(), "retained domain state")

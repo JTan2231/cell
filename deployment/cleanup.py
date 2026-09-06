@@ -272,6 +272,12 @@ def prune(home, installs):
     for link in previous:
         link.unlink()
     for path in removed:
+        # Installed bundles can be sealed read-only. Only obsolete releases
+        # already validated above may have owner write restored for removal.
+        for root, _, _ in os.walk(path, followlinks=False):
+            entry = Path(root)
+            info = directory(entry)
+            entry.chmod(stat.S_IMODE(info.st_mode) | stat.S_IWUSR, follow_symlinks=False)
         shutil.rmtree(path)
     for path in receipts:
         path.unlink()
