@@ -130,17 +130,17 @@ discarded. It then compacts the database before reporting healthy. Installation
 allows two minutes for that work and refuses to restore a version-one binary
 after the schema changes.
 
-## Submit a smoke job
+## Submit a job
 
 ```sh
-nucleus jobs submit /Users/joey/rust/cell/nucleus/examples/job.smoke.json
-nucleus jobs show nucleus-smoke-01
-nucleus jobs logs --follow nucleus-smoke-01
+nucleus jobs submit /Users/joey/rust/cell/nucleus/examples/job.example.json
+nucleus jobs show explain-unix-socket-01
+nucleus jobs logs --follow explain-unix-socket-01
 ```
 
 The checked-in Todo job, schema, and toolset files preserve the immutable
-historical `create_todo` contract. They are compatibility fixtures, not a
-current Todo canary. Current Todo uses the three closed requester stages
+historical `create_todo` contract. They are historical compatibility fixtures.
+Current Todo uses the three closed requester stages
 documented in [the integration handoff](docs/annals-todo-handoff.md).
 
 The HTTP API is also available directly over the Unix socket:
@@ -149,7 +149,7 @@ The HTTP API is also available directly over the Unix socket:
 curl --unix-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock" \
   -H 'content-type: application/json' \
   --data-binary \
-    @/Users/joey/rust/cell/nucleus/examples/job.smoke.json \
+    @/Users/joey/rust/cell/nucleus/examples/job.example.json \
   http://nucleus.local/v1/jobs
 ```
 

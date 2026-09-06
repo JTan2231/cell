@@ -82,17 +82,15 @@ refresh and account reconciliation survive requester cancellation, and keep
 credential recovery forward-only. Binary or database
 rollback must not silently replace a newer credential.
 
-## Deployment and canaries
+## Deployment
 
 When deployment is separately authorized, quiesce requesters if replacing the
 daemon could lose active work. Preserve the recovery material required by the
 selected playbook. After cutover, prove matching CLI and daemon versions,
 strict health and its `maxActiveJobs`, `activeJobs`, and `availableSlots`
-capacity, the exact harness and account, eight overlapping generic attempts
-with later work held accepted/pending, concurrent account reads, serialized
-refresh and login
-exclusion, every affected requester domain result, and ordered output
-observation before resuming dispatch.
+capacity, and the exact harness and account before resuming dispatch.
+Deployment readiness checks do not submit model jobs or create synthetic
+requester records.
 
 Stop if a destructive migration or credential move lacks a recovery decision,
 an affected requester cannot be quiesced, or the exact candidate harness has
@@ -101,7 +99,6 @@ deployment, requester retries, or unrelated domain changes.
 
 ## Sensitive material
 
-Fixtures, backups, canary jobs, logs, and retained output can contain complete
-prompts, source content, tool traffic, or authentication data. A generic canary
-creates a real Nucleus job; requester canaries may also create durable domain
-records. Choose them deliberately and account for the records afterward.
+Fixtures, backups, logs, and retained output can contain complete prompts,
+source content, tool traffic, or authentication data. Keep them within their
+documented private boundaries.

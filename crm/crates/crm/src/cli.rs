@@ -144,11 +144,6 @@ pub enum WorkerCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum MaintenanceCommand {
-    /// Exercise the real steward in a retained, synthetic, isolated database.
-    Canary {
-        #[arg(long)]
-        directory: PathBuf,
-    },
     Hold {
         run_id: String,
     },

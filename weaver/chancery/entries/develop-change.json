@@ -65,7 +65,7 @@
   ],
   "adaptation": [
     "Use the current version-matched Nucleus manual for shared requester and compatibility facts rather than assuming source or installed releases move in lockstep.",
-    "Scale tests and canaries to the actual change; repository validation, requester execution, worker activation, and installer rollback prove different authorities."
+    "Scale tests to the actual change; repository validation, requester execution, worker activation, and installer rollback prove different authorities."
   ],
   "stop_when": [
     "A proposed change requires browser, computer-use, publication, or job-application behavior outside Weaver's current contract.",

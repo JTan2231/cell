@@ -217,10 +217,7 @@ After an authorized cutover, verify:
 /Users/joey/.local/bin/clockwork --json history annals/inbox --limit 20
 ```
 
-Run a deliberate Annals integration canary when execution changed and inspect
-the Annals reconciliation, not only the Nucleus job. Run usage report/budget
-canaries when their projection or account path changed. Resume only the pause
-or maintenance boundary established for deployment.
+Resume only the pause or maintenance boundary established for deployment.
 
 Installed libraries, spools, rollback generations, logs, and Nucleus output
 may contain complete private source and model context. Preserve private
@@ -233,12 +230,6 @@ key, launchd label, command pathname, or provider pathname is not ownership;
 leave it intact unless a product-owned operation has proved the exact current
 definition, fully rendered legacy plist, and selector targets before mutation.
 
-The deployment adapter retains its private isolated canary state under the
-run directory on success and failure; it does not remove that evidence. A
-verified response identifies the canary directory. Annals runs one real
-Nucleus examination against a synthetic private library, applies its validated
-evidence-grounded reconciliation, and verifies the correlated completed job,
-structured final output, and Annals Usage token coverage. The stable directory
-and examination-start marker prevent an interrupted verification from starting
-a replacement examination. Repeating verification reads the same retained
-reconciliation and job. Existing production library pauses remain unchanged.
+The deployment adapter verifies library statistics, inbox status, the decisions
+feed watermark, and Annals Usage doctor while preserving operator pauses.
+Verification does not create works, reconciliations, or Nucleus jobs.

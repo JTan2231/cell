@@ -232,16 +232,5 @@ intake, and diagnostic CLI operations with provider-owned return types. The
 client does not invoke hidden cutover or worker operations. Each explicit
 method retains the corresponding command's authorization and effect boundary.
 
-The deployment adapter retains its private isolated canary state under the
-run directory on success and failure; it does not remove that evidence. A
-verified response identifies the canary directory. Annals exercises local
-retention, Krisis durable baseline replay, and Semantics repository mutation
-and replay, alongside each product's dependency doctor. These checks do not
-claim a live model-backed domain integration.
-The Cell deployment adapter additionally runs one real Nucleus account
-reconciliation against a retained private synthetic repository. Verification
-requires a durable revision with the exact synthetic account grounding and
-the same completed Nucleus job with structured final output. This does not
-write registered user repositories or consume real upstream account intake.
-Recovery reuses the fixed isolated directory and persisted job correlation;
-failed or ambiguous execution never receives an automatic successor attempt.
+The deployment adapter verifies the installed dependency configuration with
+doctor. Verification does not create projects, revisions, or Nucleus jobs.

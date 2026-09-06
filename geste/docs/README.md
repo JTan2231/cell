@@ -6,7 +6,7 @@
 - [Data model](data-model.md): schema, immutable revisions, validation, and
   recovery boundary.
 - [macOS user installation](system-installation.md): content-addressed
-  deployment, state paths, verification, and canary.
+  deployment, state paths, verification, and rollback.
 - [Chancery provider bundle](../chancery/provider.json): the complete supported
   Geste CLI promise inventory for this release. Use `chancery show ID` for the
   full contract and `chancery resolve ID` for its normalized outward boundary,

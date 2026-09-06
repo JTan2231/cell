@@ -6,10 +6,7 @@ Select systems from the Cell checkout:
 ./deploy.sh plan usher
 ./deploy.sh usher
 ./deploy.sh nucleus annals semantics krisis
-./deploy.sh status RUN_ID
-./deploy.sh wait RUN_ID --timeout 30
-./deploy.sh resume RUN_ID
-./deploy.sh recover RUN_ID
+./deploy.sh start nucleus annals semantics krisis
 ```
 
 `plan` reads committed declarations and makes no runtime changes. Starting a
@@ -20,15 +17,13 @@ Annals installation, and `decisions` is an alias for `krisis`. Dependency
 declarations order selected products; each product's inspection proves required
 installed dependencies rather than silently installing unselected products.
 
-The standard invocation starts a detached local process and returns its run ID.
-`start SYSTEM... --foreground` waits in the terminal. The process uses no model,
-Nucleus job or conversation continuation. Its Python executable and complete
-deployment source archive are pinned when the run starts. Updating the checkout
-or installing a newer coordinator affects later runs. Python 3.11 or newer,
-Git, the normal product build tools, and the current macOS user session remain
-host prerequisites. The coordinator must be committed on `main` before its first
-run; bootstrap uses the checked-in `deploy.sh`, with no new compiled bootstrap
-binary or background daemon.
+The invocation runs in the foreground until deployment finishes. It prints
+compact progress and a final result to standard output, with failure diagnostics
+on standard error. It uses no model, Nucleus job, or conversation continuation.
+Its Python executable and complete deployment source archive are pinned when
+it starts. Python 3.11 or newer, Git, normal product build tools, and the current
+macOS user session remain host prerequisites. The coordinator must be committed
+on `main` before use. There is no background daemon or detached deployment API.
 
 The deployment runtime uses Python's standard TOML reader for exact schedule
 definition comparisons. Ordinary CI/broker bootstrapping and selector-only
@@ -55,10 +50,10 @@ All candidates are prepared before maintenance begins. The coordinator then:
 2. Establishes every run-owned hold, then drains all affected products. An
    unselected requester may be held without changing its installed release.
 3. Applies selected product adapters in their declared order.
-4. Verifies affected Nucleus first. When its inspected contract requires normal
-   admission for requester canaries, it releases only Nucleus's hold after that
-   proof; all requester holds remain. It then verifies the affected requesters.
-5. Releases the remaining run-owned holds only after the required proofs pass.
+4. Checks installed candidate identity and service readiness while every
+   affected product remains held. No model jobs or synthetic records are created.
+5. Releases requester holds only after all readiness checks pass, then releases
+   Nucleus last.
 
 The first stateful adapters deliberately use a conservative impact closure:
 requester selection includes Nucleus, and Nucleus includes all its registered
@@ -67,57 +62,58 @@ requesters, and all of those installations must already expose compatible
 maintenance operations. It never upgrades them implicitly to satisfy that
 precondition. Stateless selector-only pilots do not require this bootstrap.
 
-The coordinator owns sequencing and durable evidence. Product adapters own
+The coordinator owns sequencing and temporary execution state. Product adapters own
 configuration discovery, admission, quiescence, migration, service control,
-domain verification and recovery. Existing deployers retain their ownership,
+runtime readiness and recovery. Existing deployers retain their ownership,
 product and Chancery writer locks. The shared generated profile below stays
 limited to products whose deployment only changes program/documentation
 selectors. The coordinator does not turn those scripts into stateful deployers.
 
-## Journal and recovery
+## Temporary state and failure handling
 
-Private run state is under
-`~/Library/Application Support/Cell/deployments/runs/RUN_ID` on macOS. It includes
-`run.json`, `run.log`, operation inputs/outcomes, the sealed deployment source,
-immutable executable candidates and the disposable preparation worktree. Run
-records may contain sensitive operational paths and baseline state; adapters
-must never return credentials, domain document bodies or authentication bytes.
-Runs and artifacts are retained; this version performs no automatic deletion.
+Private active state is under
+`~/Library/Application Support/Cell/deployments/active` on macOS. While running,
+it contains operation inputs/outcomes, logs, sealed source, executable candidates,
+and the detached preparation worktree. These files may contain private paths
+and baseline state; adapters must exclude credentials and domain document bodies.
+There is no retained deployment history or public status, wait, resume, or
+recover interface.
 
-One host-wide deployment lock serializes runs. Each subprocess waits for its
-durable PID/start identity before receiving permission to execute and inherits
-the lock, so a surviving adapter keeps competing runs out after its parent dies.
-The mechanical subprocess helper passes the same descriptor to product
-deployers, so a surviving deployer also retains exclusion if its adapter exits.
-An unresolved prior maintenance or cutover boundary also blocks new runs. Product
-locks and admission gates remain necessary for coexistence with direct commands.
+The foreground process acquires one host-wide deployment lock before creating
+that workspace and passes its descriptor to the pinned worker. Every adapter
+and deployer inherits the same lock. A surviving child therefore keeps another
+deployment out even if its supervisors exit. Existing product locks and
+admission gates remain necessary for coexistence with direct commands.
 
-`succeeded` means the required product proofs passed and all remaining run-owned
-holds were released. `stopped` preserves the exact incomplete operation and its
-holds; an exited runner never becomes success merely because its process ended.
-`status` reports an unfinished dead worker as `interrupted` without changing the
-journal. `resume` can continue preparation before any maintenance mutation. It
-may retain admitted candidates from that same immutable run; no CI pass or
-artifact is reused across different runs.
+Success means all required readiness checks passed and all run-owned holds were
+released. A completed failure uses the existing product recovery operations
+within that invocation. Recovery must identify a coherent prior or candidate
+installation and prove that releasing each hold is safe; every proof precedes
+release, and Nucleus releases last. Recovery never repeats an uncertain apply
+or clears another owner's hold. A failed deployment still returns failure even
+when recovery succeeds. Unsafe recovery retains the product's holds and reports
+the owner and error for its supported operational recovery procedure.
 
-After a mutation or an uncertain response, use `recover`. It refuses to race a
-still-running operation. Every affected product must identify a coherent prior
-or candidate installation and explicitly prove that releasing maintenance is
-safe. Nucleus is recovered first and its own hold released after its proof when
-needed for requester recovery canaries; requester holds remain throughout.
-After the requester proofs, the coordinator releases remaining holds and records
-`recovered`, which is distinct from deployment success. It never repeats an
-uncertain apply, clears another owner's hold or silently treats a partial
-deployment as an atomic rollback. An unsafe or unavailable recovery stays
-stopped for the product's documented recovery procedure.
+After the worker exits, the parent closes its inherited lock descriptor and
+reacquires the host lock before unregistering the worktree and removing all
+temporary run files. A surviving descendant blocks this cleanup. The next
+deployment removes stale inactive workspace only after obtaining that same lock;
+it does not resume or recover an interrupted deployment. Before completed
+failure cleanup, diagnostics include bounded tails of temporary logs. Capture
+terminal output externally if a deployment report is needed.
 
-If Nucleus apply started without a captured successful apply response, recovery
-retains its hold and requires the supported Nucleus service recovery procedure.
-Selected candidate files, a matching declared version, health and a canary cannot
-prove that an old resident daemon was replaced. Nucleus that never began apply
-may still prove its unchanged installation; a successful recorded apply allows
-the usual service verification. The coordinator records per-product apply-start
-evidence durably before launching an installer.
+After successful readiness and release, the coordinator removes unreferenced
+installed Cell release history under the same global lock. It preserves current
+releases and releases pinned by selected schedules (including disabled ones),
+service definitions, current product receipts/configuration, and running
+processes. Cleanup errors are reported separately: installed products stay in
+place and no recovery or rollback begins. Direct legacy product deployers still
+retain their own previous releases; automatic pruning belongs to a successful
+coordinated deployment.
+
+An uncertain Nucleus apply retains its hold and requires the supported Nucleus
+service recovery procedure. Matching files, declared versions, and health alone
+cannot prove that an old resident daemon was replaced.
 
 ## Product adapter protocol, version 1
 
@@ -138,7 +134,7 @@ accepted. Standard input is one JSON object containing:
 - `selected_products`, `candidate_dir`, and the candidate manifest;
 - `prior`, the opaque data captured by that product's inspection;
 - `recovery`, the captured operation and hold/application/verification progress
-  when recovering an interrupted run.
+  during recovery within the active invocation.
 
 `candidate_dir` and `candidate` are null for affected-only products. Binaries
 reside at `candidate_dir/bin/COMMAND`; `candidate.binaries[COMMAND]` records
@@ -155,9 +151,8 @@ standard error:
 The expected statuses, respectively, are `ready`, `held`, `drained`, `applied`,
 `verified`, `released` and `recovered`. Nonzero exits, `stopped`, invalid replies,
 unknown statuses and outputs above 1 MiB stop the run. `inspect` data may declare
-`maintenance_products` and `after` as lists of canonical system names. Nucleus
-alone may declare `release_after_verify: true` for the explicit service-admission
-phase above. Inspection must be read-only with respect to the installation.
+`maintenance_products` and `after` as lists of canonical system names.
+Inspection must be read-only with respect to the installation.
 
 Every hold is owned by `run_id`. Hold and release must be idempotent, preserve
 pre-existing operator pauses and other runs' holds, and support an interrupted
@@ -165,7 +160,7 @@ response. Recovery releases every affected run-owned token idempotently after
 proof, including when a hold's effect happened but its reply was lost. Each
 mutation must retain enough product-owned evidence for recovery. The coordinator
 records `any_apply_started` before permitting any product apply; an unchanged
-prior installation may recover pre-cutover holds without inventing new canaries.
+prior installation may recover pre-cutover holds using its inspected baseline.
 Successful recovery additionally returns
 `{"safe_to_release":true,"installed":"candidate"}` or `"installed":"prior"`
 inside `data`. Missing proof retains maintenance. Recovering a product is never
@@ -198,7 +193,7 @@ python3 deployment/generate.py --check
 ```
 
 The profile has no arbitrary shell hooks. A product that needs service control,
-database work, maintenance, scheduling, authentication, or a domain canary keeps
+database work, maintenance, scheduling, or authentication keeps
 a product-owned deployer. Every product that publishes a Chancery provider uses
 the same catalog-writer lock; custom/stateful profiles also keep their existing
 product and lifecycle locks and are conservatively declared as globally

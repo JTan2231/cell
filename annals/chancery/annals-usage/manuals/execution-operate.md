@@ -52,8 +52,8 @@ When authentication recovery is actually required:
    /Users/joey/.local/bin/annals-usage doctor
    ```
 
-4. Run a deliberate Annals integration canary and inspect Annals domain state.
-5. Resume only the pause established for this recovery.
+4. Resume only the pause established for this recovery after doctor confirms
+   readiness.
 
 Login delegates to `nucleus auth login --device-auth`. Annals and Annals Usage
 never read, copy, configure, or retain credential files. Credential state is

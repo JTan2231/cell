@@ -287,9 +287,6 @@ pub struct MaintenanceStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum Data {
-    DeploymentCanary {
-        canary: DeploymentCanary,
-    },
     Maintenance {
         maintenance: MaintenanceStatus,
     },
@@ -376,10 +373,6 @@ impl Client {
         let mut push = |parts: &[&str]| args.extend(parts.iter().map(|part| OsString::from(*part)));
         match request {
             Request::Maintenance(command) => match command {
-                MaintenanceCommand::Canary { directory } => {
-                    push(&["maintenance", "canary", "--directory"]);
-                    args.push(directory.as_os_str().to_owned());
-                }
                 MaintenanceCommand::Hold { run_id } => push(&["maintenance", "hold", run_id]),
                 MaintenanceCommand::Ready { run_id } => push(&["maintenance", "ready", run_id]),
                 MaintenanceCommand::Status => push(&["maintenance", "status"]),
@@ -527,14 +520,4 @@ pub mod tools {
         SituationAssessment, SourceReadRequest, SourceSearchRequest, SubjectIdentity, UnifyRoute,
         UnresolvedAssessmentItem, UnresolvedKind,
     };
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DeploymentCanary {
-    pub protocol_version: u32,
-    pub verified: bool,
-    pub database: PathBuf,
-    pub concern_id: ConcernId,
-    pub routing_id: RoutingProposalId,
-    pub job_id: String,
 }

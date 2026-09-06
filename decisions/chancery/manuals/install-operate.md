@@ -29,8 +29,7 @@ maintenance gate and transaction evidence retained.
 
 After a separately authorized final cutover, verify the baseline, doctor, exact
 hook trust, private observer ownership receipt, `krisis/observer` history,
-retired binding state, and body-free logs
-before any separately authorized synthetic canary. Uninstall disables only the
+retired binding state, and body-free logs. Uninstall disables only the
 exact owned active binding and retains the database, receipt ledger, releases,
 logs, scheduler history, and legacy history.
 
@@ -78,16 +77,5 @@ maintenance or an unfinished product transaction and leaves the outer hold
 for the existing recovery procedure. It never deletes those markers or
 another owner's hold to force progress.
 
-The deployment adapter retains its private isolated canary state under the
-run directory on success and failure; it does not remove that evidence. A
-verified response identifies the canary directory. Annals exercises local
-retention, Krisis durable baseline replay, and Semantics repository mutation
-and replay, alongside each product's dependency doctor. These checks do not
-claim a live model-backed domain integration.
-The Cell deployment adapter additionally verifies one real Nucleus
-classification using a retained private synthetic completed turn. Success
-requires its durable classification receipt, one isolated account outbox item,
-and a completed Nucleus job with structured final output. The installed Annals
-binary/config/library pin remains a separate doctor check; the canary never
-delivers a synthetic account to that library. Recovery reuses the fixed
-canary directory and job identity and creates no successor attempt.
+The deployment adapter verifies the installed dependency configuration with
+doctor. Verification does not create observations or submit Nucleus jobs.

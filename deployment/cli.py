@@ -19,7 +19,6 @@ import stat
 import subprocess
 import sys
 import tarfile
-import time
 from typing import Any, Iterator, Sequence
 import uuid
 
@@ -32,7 +31,6 @@ from ci_broker.broker import MINIMAL_ENVIRONMENT
 from deployment import candidate
 
 SCHEMA = 1
-TERMINAL = frozenset(("succeeded", "recovered", "stopped"))
 MUTATIONS = frozenset(("hold", "drain", "apply", "release", "recover"))
 EXPECTED = {"inspect": "ready", "hold": "held", "drain": "drained",
             "apply": "applied", "verify": "verified", "release": "released",
@@ -228,10 +226,10 @@ def create_run(root: Path, requested: Sequence[str], storage: Path | None = None
     chosen = plan(root, requested)
     storage = storage or state_root()
     private_directory(storage)
-    runs = storage / "runs"
-    private_directory(runs)
     run_id = uuid.uuid4().hex
-    run = runs / run_id
+    run = storage / "active"
+    if run.exists() or run.is_symlink():
+        raise DeploymentError("an active deployment workspace already exists")
     private_directory(run)
     for directory in ("candidates", "steps"):
         private_directory(run / directory)
@@ -291,20 +289,51 @@ def process_birth(pid: int) -> str | None:
     return output.stdout.strip() or None
 
 
-def reject_unrecovered_run(storage: Path, current_id: str) -> None:
-    for path in sorted((storage / "runs").glob("*/run.json")):
-        if path.parent.name == current_id:
-            continue
-        previous = read_json(path)
-        if previous.get("mutation_started") and previous.get("state") not in ("succeeded", "recovered"):
-            raise DeploymentError(f"run {previous.get('run_id')} has an unresolved maintenance or cutover boundary; recover it first")
+def cleanup_active(storage: Path) -> None:
+    """Remove the inactive workspace; caller must hold the host deployment lock."""
+    path = storage / "active"
+    if path.is_symlink():
+        raise DeploymentError("refusing symbolic active deployment workspace")
+    if not path.exists():
+        return
+    private_directory(path)
+    if (path / "run.json").exists():
+        data = read_json(path / "run.json")
+        repository = Path(data["repository"])
+        worktree = path / "worktree"
+        registered = git(repository, "worktree", "list", "--porcelain").splitlines()
+        if f"worktree {worktree}" in registered:
+            git(repository, "worktree", "remove", "--force", "--force", str(worktree))
+    # Sealed source/candidate directories must be writable before removal.
+    for directory, _, _ in os.walk(path, followlinks=False):
+        Path(directory).chmod(0o700)
+    shutil.rmtree(path)
+
+
+def emit_diagnostics(path: Path) -> None:
+    """Print bounded failure evidence before deleting temporary private logs."""
+    paths = [path / "run.log"]
+    with contextlib.suppress(OSError, ValueError, KeyError):
+        active = read_json(path / "run.json").get("active_operation")
+        if active and active.get("output"):
+            output = Path(active["output"])
+            if output.parent == path / "steps":
+                paths.insert(0, output)
+    for output in paths:
+        if output.is_file() and not output.is_symlink():
+            with output.open("rb") as stream:
+                stream.seek(max(0, output.stat().st_size - 8192))
+                tail = stream.read(8192).decode("utf-8", "replace").strip()
+            if tail:
+                print(f"cell-deploy: {output.name} (last 8192 bytes):\n{tail}", file=sys.stderr)
 
 
 class Run:
     def __init__(self, path: Path, lock_fd: int):
         self.path = path
         self.data = read_json(path / "run.json")
-        if self.data.get("schema") != SCHEMA or self.data.get("run_id") != path.name:
+        if (self.data.get("schema") != SCHEMA or not RUN_ID.fullmatch(self.data.get("run_id", ""))
+                or self.data.get("run_dir") != str(path)):
             raise DeploymentError("invalid deployment run identity")
         self.lock_fd = lock_fd
         self.source = Path(self.data["source_root"])
@@ -317,6 +346,8 @@ class Run:
     def event(self, state: str, **fields: Any) -> None:
         self.data["events"].append({"at": now(), "state": state, **fields})
         self.save()
+        if state in ("starting", "candidate_prepared", "quality_gate_passed", "installed", "succeeded", "recovered", "stopped", "cleanup_failed"):
+            print(json.dumps({"event": state, **fields}, separators=(",", ":")), flush=True)
 
     def check_source(self) -> None:
         manifest_path = self.path / "source-manifest.json"
@@ -531,18 +562,14 @@ class Run:
         self.phase("hold", affected)
         self.phase("drain", affected)
         self.phase("apply", self.data["products"])
-        # Requester canaries use ordinary Nucleus admission. Only this named
-        # foundational service may reopen after its own proof and before the
-        # requester proofs; requester-owned holds remain closed throughout.
+        self.phase("verify", affected)
+        release_order = [product for product in affected if product != "nucleus"]
         if "nucleus" in affected:
-            self.phase("verify", ["nucleus"])
-            if self.record("nucleus")["prior"].get("release_after_verify") is True:
-                self.phase("release", ["nucleus"])
-        self.phase("verify", [product for product in affected if product != "nucleus"])
-        self.phase("release", [product for product in affected if self.record(product).get("held")])
-        self.data["state"] = "succeeded"
+            release_order.append("nucleus")
+        self.phase("release", release_order)
+        self.data["state"] = "installed"
         self.data["detail"] = "Selected products verified; every run-owned maintenance hold released."
-        self.event("succeeded")
+        self.event("installed")
 
     def recover(self) -> None:
         previous_state = self.data["state"]
@@ -554,7 +581,7 @@ class Run:
         if not self.data.get("mutation_started"):
             self.data["active_operation"] = None
             self.data["state"] = "recovered"
-            self.data["detail"] = "No deployment mutation started; retained candidates may be prepared again."
+            self.data["detail"] = "No deployment mutation started."
             self.event("recovered")
             return
         affected = self.data["affected"]
@@ -579,74 +606,62 @@ class Run:
                 raise DeploymentError(f"{product} recovery did not identify a coherent installed generation")
             record["recover"] = response
             self.save()
-        # Recovery proofs for requesters may execute real isolated canaries.
-        # Reestablish the verified provider's ordinary admission first, just as
-        # during normal deployment. Its own recovery remains product-owned.
-        if "nucleus" in affected:
-            recover_product("nucleus")
-            nucleus = self.record("nucleus")
-            if nucleus["prior"].get("release_after_verify") is True:
-                self.phase("release", ["nucleus"])
         for product in affected:
-            if product != "nucleus":
-                recover_product(product)
-        self.phase("release", [product for product in affected
-                               if product != "nucleus" or self.record(product)["prior"].get("release_after_verify") is not True])
+            recover_product(product)
+        release_order = [product for product in affected if product != "nucleus"]
+        if "nucleus" in affected:
+            release_order.append("nucleus")
+        self.phase("release", release_order)
         self.data["state"] = "recovered"
         self.data["detail"] = "Products proved coherent recovery; run-owned holds released. Deployment is not reported as succeeded."
         self.event("recovered")
 
 
-def run_worker(path: Path, mode: str = "execute") -> int:
-    with deployment_lock(path.parent.parent) as lock_fd:
-        run = Run(path, lock_fd)
-        if run.data["state"] == "succeeded":
-            return 0
-        run.data["worker_pid"] = os.getpid()
-        run.data["worker_birth"] = process_birth(os.getpid())
-        run.save()
-        try:
-            reject_unrecovered_run(path.parent.parent, run.data["run_id"])
-            if mode == "recover":
+def run_worker(path: Path, lock_fd: int | None = None) -> int:
+    if lock_fd is None:
+        with deployment_lock(path.parent) as owned_fd:
+            return run_worker(path, owned_fd)
+    run = Run(path, lock_fd)
+    run.data["worker_pid"] = os.getpid()
+    run.data["worker_birth"] = process_birth(os.getpid())
+    run.save()
+    try:
+        run.execute()
+    except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as error:
+        detail = str(error)
+        print(f"cell-deploy: {detail}", file=sys.stderr)
+        emit_diagnostics(path)
+        if run.data.get("mutation_started"):
+            try:
                 run.recover()
-            elif run.data.get("mutation_started"):
-                raise DeploymentError("this run crossed a mutation boundary; use recover before starting another run")
-            else:
-                run.execute()
-            return 0
-        except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as error:
-            run.data["state"] = "stopped"
-            run.data["detail"] = str(error)
-            run.event("stopped", detail=str(error))
-            print(f"cell-deploy: {error}", file=sys.stderr)
-            return 1
+            except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as recovery_error:
+                detail += f"; recovery stopped: {recovery_error}"
+        run.data["state"] = "stopped"
+        run.data["detail"] = detail
+        run.event("stopped", detail=detail)
+        return 1
+    # Installed products are already verified and released. Cleanup failure
+    # must not initiate product recovery or undo that completed deployment.
+    try:
+        run.check_source()
+        returncode, output = run.command("cell", "cleanup", [
+            run.data["python"], str(run.source / "deployment" / "cleanup.py")])
+        if returncode:
+            raise DeploymentError("installed release history cleanup failed")
+        run.data["release_history_cleanup"] = read_json(output)
+        run.data["active_operation"] = None
+        run.data["state"] = "succeeded"
+        run.event("succeeded", cleanup=run.data["release_history_cleanup"])
+        return 0
+    except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as error:
+        run.data["state"] = "cleanup_failed"
+        run.data["detail"] = f"Products verified and holds released; cleanup failed: {error}"
+        run.event("cleanup_failed", detail=run.data["detail"])
+        emit_diagnostics(path)
+        return 1
 
 
-def locate_run(identity: str) -> Path:
-    if not RUN_ID.fullmatch(identity):
-        raise DeploymentError("run ID must be the 32-character ID returned by start")
-    path = state_root() / "runs" / identity
-    if path.is_symlink() or not path.is_dir():
-        raise DeploymentError("deployment run does not exist")
-    return path
-
-
-def status(path: Path) -> dict[str, Any]:
-    data = read_json(path / "run.json")
-    pid = data.get("worker_pid")
-    alive = bool(pid and process_birth(pid) == data.get("worker_birth"))
-    observed = data["state"]
-    if not alive and observed not in TERMINAL and observed != "prepared_source":
-        observed = "interrupted"
-    return {"schema": SCHEMA, "run_id": data["run_id"], "state": observed,
-            "recorded_state": data["state"], "worker_active": alive,
-            "products": data["products"], "affected": data["affected"],
-            "source_commit": data["source_commit"], "detail": data.get("detail", ""),
-            "active_operation": data["active_operation"], "journal": str(path / "run.json"),
-            "log": str(path / "run.log")}
-
-
-def launch(path: Path, mode: str, foreground: bool = False) -> dict[str, Any]:
+def launch(path: Path, lock_fd: int) -> dict[str, Any]:
     data = read_json(path / "run.json")
     executable = Path(data["python"])
     if candidate.digest(executable) != data["python_sha256"]:
@@ -655,19 +670,32 @@ def launch(path: Path, mode: str, foreground: bool = False) -> dict[str, Any]:
     expected = read_json(path / "source-manifest.json").get("deployment/cli.py", {}).get("sha256")
     if candidate.digest(script) != expected:
         raise DeploymentError("the pinned deployment runner changed")
-    arguments = [str(executable), str(script), "_worker", str(path), mode]
-    if foreground:
-        returncode = subprocess.call(arguments, env=runtime_environment())
-        result = status(path)
-        result["exit_code"] = returncode
-        return result
-    with (path / "run.log").open("ab") as output:
-        process = subprocess.Popen(arguments, stdin=subprocess.DEVNULL, stdout=output,
-                                   stderr=output, start_new_session=True,
-                                   cwd=path, env=runtime_environment())
-    return {"schema": SCHEMA, "run_id": data["run_id"], "state": "started",
-            "worker_pid": process.pid, "source_commit": data["source_commit"],
-            "products": data["products"], "journal": str(path / "run.json")}
+    arguments = [str(executable), str(script), "_worker", str(path), str(lock_fd)]
+    returncode = subprocess.call(arguments, env=runtime_environment(), pass_fds=(lock_fd,))
+    data = read_json(path / "run.json")
+    if returncode and data["state"] not in ("stopped", "cleanup_failed"):
+        emit_diagnostics(path)
+        data.update(state="stopped", detail="Deployment worker exited before completion; product holds may remain.")
+    return {"schema": SCHEMA, "run_id": data["run_id"], "state": data["state"],
+            "products": data["products"], "source_commit": data["source_commit"],
+            "detail": data.get("detail", ""), "exit_code": 1 if returncode else 0}
+
+
+def start(root: Path, products: Sequence[str], storage: Path | None = None) -> dict[str, Any]:
+    storage = storage or state_root()
+    admitted = False
+    try:
+        with deployment_lock(storage) as lock_fd:
+            admitted = True
+            cleanup_active(storage)
+            path = create_run(root, products, storage)
+            return launch(path, lock_fd)
+    finally:
+        if admitted:
+            # Close our inherited lock reference first. A surviving descendant
+            # then prevents reacquisition and therefore prevents deletion.
+            with deployment_lock(storage):
+                cleanup_active(storage)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -688,62 +716,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 127
     if arguments[:1] == ["_worker"]:
         try:
-            return run_worker(Path(arguments[1]), arguments[2])
+            return run_worker(Path(arguments[1]), int(arguments[2]))
         except (DeploymentError, OSError, ValueError) as error:
-            # Admission can fail before Run acquires the global lock. Give a
-            # newly detached run a terminal outcome without disturbing an
-            # already-active worker for this same run.
-            with contextlib.suppress(OSError, ValueError, RuntimeError):
-                path = Path(arguments[1])
-                data = read_json(path / "run.json")
-                pid = data.get("worker_pid")
-                alive = bool(pid and process_birth(pid) == data.get("worker_birth"))
-                if not alive and data.get("state") not in ("succeeded", "recovered"):
-                    data.update(state="stopped", detail=str(error), updated_at=now())
-                    durable_json(path / "run.json", data)
             print(f"cell-deploy: {error}", file=sys.stderr)
             return 1
-    if arguments and arguments[0] not in ("start", "plan", "status", "wait", "resume", "recover", "-h", "--help"):
+    if arguments and arguments[0] not in ("start", "plan", "-h", "--help"):
         arguments.insert(0, "start")
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("start", "plan"):
         command = commands.add_parser(name)
         command.add_argument("products", nargs="+")
-        if name == "start":
-            command.add_argument("--foreground", action="store_true", help="wait in this terminal instead of detaching")
-    for name in ("status", "wait", "resume", "recover"):
-        command = commands.add_parser(name)
-        command.add_argument("run_id")
-        if name in ("resume", "recover"):
-            command.add_argument("--foreground", action="store_true")
-        if name == "wait":
-            command.add_argument("--timeout", type=float, default=30)
     parsed = parser.parse_args(arguments)
     try:
-        if parsed.command in ("start", "plan"):
-            root = ci_client.repository_root(Path(__file__).resolve().parent.parent)
-            if parsed.command == "plan":
-                result = plan(root, parsed.products)
-                result.pop("catalog")
-            else:
-                if sys.platform != "darwin":
-                    raise DeploymentError("live deployment is supported only for the current macOS user")
-                result = launch(create_run(root, parsed.products), "execute", parsed.foreground)
+        root = ci_client.repository_root(Path(__file__).resolve().parent.parent)
+        if parsed.command == "plan":
+            result = plan(root, parsed.products)
+            result.pop("catalog")
         else:
-            path = locate_run(parsed.run_id)
-            if parsed.command in ("resume", "recover"):
-                result = launch(path, "recover" if parsed.command == "recover" else "execute", parsed.foreground)
-            else:
-                result = status(path)
-                if parsed.command == "wait":
-                    if not 0 <= parsed.timeout <= 60:
-                        raise DeploymentError("wait timeout must be between 0 and 60 seconds")
-                    deadline = time.monotonic() + parsed.timeout
-                    while result["state"] not in TERMINAL and result["state"] != "interrupted" and time.monotonic() < deadline:
-                        time.sleep(min(0.25, max(0, deadline - time.monotonic())))
-                        result = status(path)
-        print(json.dumps(result, indent=2, sort_keys=True))
+            if sys.platform != "darwin":
+                raise DeploymentError("live deployment is supported only for the current macOS user")
+            result = start(root, parsed.products)
+        print(json.dumps(result, separators=(",", ":"), sort_keys=True))
         return int(result.get("exit_code", 0))
     except (DeploymentError, candidate.CandidateError, RuntimeError, OSError, ValueError) as error:
         print(f"cell-deploy: {error}", file=sys.stderr)

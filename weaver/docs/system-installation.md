@@ -12,11 +12,9 @@ prototype demonstrated that `org.weaver.worker` under launchd received
 process had the required repository file-access authorization. Installing
 another scheduler would reintroduce that privacy-authority mismatch.
 
-The Nucleus service is deliberately outside that repository boundary too. In a
-second live canary, a Nucleus-launched Codex app-server whose invocation cwd was
-the repository under `~/Documents` remained stuck in `getcwd` before completing
-its app-server handshake. Weaver now snapshots stage inputs in the detached
-interactive-lineage process and sends their contents in the request. The
+The Nucleus service is deliberately outside that repository boundary too.
+Weaver snapshots stage inputs in the detached interactive-lineage process and
+sends their contents in the request. The
 Nucleus invocation uses Weaver's private state root as a read-only cwd, with
 local execution, web, launch context, and dynamic tools all disabled.
 
@@ -177,7 +175,6 @@ weaver maintenance status
 weaver maintenance drain
 weaver maintenance ready RUN_ID
 weaver maintenance release RUN_ID
-weaver maintenance canary --directory /absolute/private/canary-directory
 ```
 
 The selected private state root owns `deployment-maintenance/`. These durable
@@ -202,12 +199,7 @@ can prove held Nucleus readiness for the named deployment while normal workflow
 admission remains strict. The older begin/end commands retain their legacy
 meaning and do not release deployment holds.
 
-The canary creates or resumes a product-marked, private, synthetic repository
-and separate workflow state. It executes the actual five model stages, runs
-the ordinary output validator, and compares all five persisted files with
-their correlated terminal Nucleus results. It returns `protocol_version`,
-`verified`, `directory`, `run_id`, `job_ids`, and `outputs_verified: 5`. No real
-narrative is overwritten or published. A terminal failed canary is retained
-without another attempt. Run it after Nucleus admission is restored while
-production Weaver holds remain. Its model jobs and synthetic output consume
-ordinary account allowance and remain retained private verification evidence.
+Deployment verification checks the installed release, Nucleus readiness,
+and settled maintenance status. It submits no workflow or model job and
+changes no narrative output. Ordinary workflow execution retains its stage
+output validation and terminal failure rules.

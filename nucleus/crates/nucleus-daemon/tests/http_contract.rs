@@ -522,71 +522,6 @@ async fn maintenance_fences_new_jobs_but_preserves_replay_cancellation_and_owned
 }
 
 #[tokio::test]
-async fn deployment_canary_retries_follow_the_same_durable_job() {
-    let fixture = DaemonFixture::start().await;
-    fixture
-        .client
-        .maintenance_hold("canary-one")
-        .await
-        .or_panic("hold first run");
-    let first = fixture
-        .client
-        .maintenance_canary("canary-one")
-        .await
-        .or_panic("admit canary");
-    let replay = fixture
-        .client
-        .maintenance_canary("canary-one")
-        .await
-        .or_panic("replay uncertain admission");
-    assert_eq!(first.job_id, replay.job_id);
-    wait_for_state(&fixture, &first.job_id, JobState::Completed).await;
-    let terminal = fixture
-        .client
-        .maintenance_canary("canary-one")
-        .await
-        .or_panic("replay terminal attempt");
-    assert_eq!(first.job_id, terminal.job_id);
-    assert_eq!(terminal.state, JobState::Completed);
-    let deadline = Instant::now() + Duration::from_secs(8);
-    while !fixture
-        .client
-        .maintenance_status()
-        .await
-        .or_panic("canary cleanup status")
-        .drained
-    {
-        assert!(Instant::now() < deadline, "canary cleanup did not drain");
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    fixture
-        .client
-        .maintenance_release("canary-one")
-        .await
-        .or_panic("release first owner");
-    assert!(
-        fixture
-            .client
-            .maintenance_canary("canary-one")
-            .await
-            .is_err()
-    );
-    fixture
-        .client
-        .maintenance_hold("canary-two")
-        .await
-        .or_panic("hold second run");
-    let second = fixture
-        .client
-        .maintenance_canary("canary-two")
-        .await
-        .or_panic("admit second canary");
-    assert_ne!(first.job_id, second.job_id);
-    wait_for_state(&fixture, &second.job_id, JobState::Completed).await;
-    fixture.shutdown().await;
-}
-
-#[tokio::test]
 #[allow(clippy::too_many_lines)]
 async fn daemon_http_contract_is_strict_durable_and_attributed() {
     let fixture = DaemonFixture::start().await;
@@ -1431,7 +1366,7 @@ if [ "${1:-}" = "--version" ]; then
 fi
 
 if [ "${1:-}" = "debug" ] && [ "${2:-}" = "models" ]; then
-  printf '%s\n' '{"models":[{"slug":"fake-model","supported_reasoning_levels":[{"effort":"low"},{"effort":"medium"}],"default_reasoning_level":"low","shell_type":"shell_command","supports_search_tool":false},{"slug":"gpt-5.6-terra","supported_reasoning_levels":[{"effort":"low"},{"effort":"medium"}],"default_reasoning_level":"low","shell_type":"shell_command","supports_search_tool":false}]}'
+  printf '%s\n' '{"models":[{"slug":"fake-model","supported_reasoning_levels":[{"effort":"low"},{"effort":"medium"}],"default_reasoning_level":"low","shell_type":"shell_command","supports_search_tool":false}]}'
   exit 0
 fi
 

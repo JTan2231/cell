@@ -100,9 +100,8 @@ proof that requester-owned work-packet, write-conflict, and retry semantics stay
 outside Nucleus.
 
 Add requester observability, private-state handling, backup coverage, release
-ordering, rollback boundaries, operator documentation, and a real requester
-canary. The canary must verify the application's authority, not just a terminal
-Nucleus job.
+ordering, rollback boundaries, operator documentation, and service readiness
+checks that do not submit model jobs or create synthetic domain records.
 
 ## Authority and authorization
 

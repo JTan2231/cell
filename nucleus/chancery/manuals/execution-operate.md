@@ -145,7 +145,6 @@ The deployment coordinator owns one durable hold through:
 nucleus maintenance hold RUN_ID
 nucleus maintenance status
 nucleus maintenance health RUN_ID
-nucleus maintenance canary RUN_ID
 nucleus maintenance release RUN_ID
 ```
 
@@ -173,25 +172,20 @@ installation readiness, never ordinary requester admission. Only the service
 installer holding its own exclusive activity guard may account for that guard
 locally; the public health proof requires all guards drained.
 
-A new canary accepts only the sole drained owner. Nucleus creates one
-`nucleus-deployment` job with model `gpt-5.6-terra`, low reasoning, a 90-second
-invocation timeout, workspace access `none`, and no tools or launch context.
-It verifies the exact final marker `NUCLEUS_DEPLOYMENT_CANARY_OK` and terminal
-completion. Its CLI waits at most 120 seconds and returns protocol version,
-`verified`, and `job_id`; a missing result fails. The request and output remain
-private Nucleus history. A timeout does not grant cancellation or a replacement
-requester attempt. Its deterministic job ID belongs to the deployment run.
-Repeating the canary follows that exact original job while its owner still
-holds admission, including a failed or completed attempt; it never creates a
-replacement attempt.
-
 The HTTP surfaces are GET `/v1/maintenance` and POST
-`/v1/maintenance/{hold,release,canary}`. Each POST body is exactly
-`{"run_id":"OWNER"}`. Hold/release return status; canary returns the normal
-job-accepted document. The typed client owns these request/response types.
+`/v1/maintenance/{hold,release}`. Each POST accepts exactly
+`{"run_id":"OWNER"}` and returns maintenance status. The typed client owns
+these request/response types.
 
 The macOS deployer accepts `--expected-current absent|releases/HASH` and checks
 it under the product update lock before selector mutation. With
 `CELL_DEPLOYMENT_RUN_ID`, service install/restart requires the sole drained
 hold and retains an exclusive activity guard through replacement and health
 verification. The existing guarded database/credential rollback rules remain.
+
+Daemon startup retires terminal records from the removed built-in deployment
+probe. Retirement is limited to requester `nucleus-deployment`, label
+`Verify Nucleus deployment`, and the former deterministic job ID derived from
+that requester ID. It removes only those jobs, their attempts, and raw output;
+children, tool calls, or unfinished work block retirement. Ordinary job history
+and shared schemas remain unchanged. This is not a general pruning API.

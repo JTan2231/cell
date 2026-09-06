@@ -298,7 +298,7 @@ remains outside the Annals rollback boundary.
 If Nucleus authentication expires, queued jobs remain unattempted behind the
 authenticated dispatch preflight. Pause Annals, run `annals-usage login
 --device-auth` (which delegates to `nucleus auth login --device-auth`), verify
-with `annals-usage doctor`, canary, and resume.
+with `annals-usage doctor`, and resume only the pause established for recovery.
 
 The current schema is version 5. Normal deployment additively migrates a
 version-3 or version-4 library to add bounded retry-event provenance when

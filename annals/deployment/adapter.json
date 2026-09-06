@@ -1,1 +1,1 @@
-{"schema":1,"product":"annals","dependencies":["nucleus","clockwork"],"description":"Deploy Annals and its dedicated decisions-library provisioner under independent owned admission holds while preserving operator pause."}
+{"schema":1,"product":"annals","application":"Annals","dependencies":["nucleus","clockwork"],"description":"Deploy Annals and its dedicated decisions-library provisioner under independent owned admission holds while preserving operator pause."}

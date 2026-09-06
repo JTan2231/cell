@@ -61,8 +61,7 @@ needed atomic fact is absent, expose a gap rather than synthesizing authority.
    ```
 
    Treat that command as the complete Annals product gate.
-5. Run separately authorized live report, budget, doctor, login, and Annals
-   requester canaries only when the changed boundary requires them.
+5. Treat login and deployment as separately authorized operations.
 
 Annals Usage is separately versioned but deployed with Annals. Its source
 change does not authorize `annals/release.sh`, which commits, tags, and pushes,

@@ -14,7 +14,7 @@
     "The change belongs entirely to Todo, Annals, Weaver, or another requester domain.",
     "The user has not authorized release publication or deployment."
   ],
-  "outcome": "A minimal Nucleus change with the correct compatibility, execution-capacity, managed-authentication, migration, requester, documentation, CI, canary, and recovery obligations satisfied.",
+  "outcome": "A minimal Nucleus change with the correct compatibility, execution-capacity, managed-authentication, migration, requester, documentation, CI, and recovery obligations satisfied.",
   "effects": [
     "Modifies Nucleus source, tests, contracts, or operator documentation.",
     "Depending on the selected playbook, may require coordinated requester changes, database migration, exact Codex inspection, or service cutover.",
@@ -27,7 +27,7 @@
   "success": [
     "`./nucleus/ci.sh` completes green.",
     "Every changed public or operational fact is reflected in the canonical operator manual and exact contract documentation.",
-    "The relevant generic and requester canaries prove the changed boundary after any deployment."
+    "Deployment readiness confirms installed candidate identity and service health without synthetic model jobs or requester records."
   ],
   "failure_and_recovery": [
     "Do not attempt binary-only rollback after an incompatible store migration.",
@@ -36,7 +36,7 @@
   ],
   "privacy": [
     "Development fixtures, logs, and backups may contain complete prompts, model output, tool traffic, or credentials and must remain private.",
-    "Canaries create real runtime and sometimes requester-domain records; choose and account for them deliberately."
+    "Deployment readiness does not create synthetic runtime or requester-domain records."
   ],
   "dependencies": [
     {"id": "nucleus.execution.operate", "min_contract": 2, "max_contract_exclusive": 3},
@@ -52,7 +52,7 @@
     "Run `nucleus manual` and classify the change as a routine patch, protocol/client change, execution-capacity change, store migration, exact Codex upgrade, requester contract change, or authentication/service change.",
     "Apply the smallest change in the owning Nucleus component and update all exact contracts and operator facts affected by it.",
     "Run the Nucleus product CI and any affected requester CI suites.",
-    "If deployment is authorized, quiesce the required requesters, preserve the required recovery material, deploy in compatible order, and run layered canaries."
+    "If deployment is authorized, quiesce the required requesters, preserve the required recovery material, deploy in compatible order, and confirm installed candidate identity and service health."
   ],
   "checkpoints": [
     "The primary authority and every cross-system obligation are identified.",
@@ -88,7 +88,7 @@
       },
       {
         "status": "declared",
-        "statement": "Separate authority exists before release publication, installed deployment, a requester retry, a canary that creates durable records, or any destructive migration or credential move."
+        "statement": "Separate authority exists before release publication, installed deployment, a requester retry, or any destructive migration or credential move."
       }
     ],
     "inputs": [
@@ -108,7 +108,7 @@
       },
       {
         "status": "unsupported",
-        "statement": "Development completion alone does not publish a release, deploy the service, migrate live state, authenticate an account, retry requester work, or prove a production canary."
+        "statement": "Development completion alone does not publish a release, deploy the service, migrate live state, authenticate an account, retry requester work, or establish installed runtime readiness."
       }
     ],
     "data_semantics": [
@@ -118,7 +118,7 @@
       },
       {
         "status": "declared",
-        "statement": "A green development candidate proves the checked-in contract and tests, while release, deployment, migration, and live canary outcomes remain separate externally consequential states."
+        "statement": "A green development candidate proves the checked-in contract and tests, while release, deployment, migration, and runtime readiness outcomes remain separate externally consequential states."
       }
     ],
     "identity_and_units": [
@@ -134,7 +134,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Completeness requires every affected source, test, requester, public and operator contract, execution-capacity invariant, managed-authentication boundary, migration, packaging boundary, recovery path, and focused canary obligation to agree before the product gate passes."
+        "statement": "Completeness requires every affected source, test, requester, public and operator contract, execution-capacity invariant, managed-authentication boundary, migration, packaging boundary, recovery path, and deployment readiness obligation to agree before the product gate passes."
       },
       {
         "status": "declared",
@@ -148,7 +148,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "The operation uses the authorized local Nucleus source tree and shell surfaces; sensitive fixtures, backups, logs, credentials, canary records, and retained output stay within their documented private boundaries."
+        "statement": "The operation uses the authorized local Nucleus source tree and shell surfaces; sensitive fixtures, backups, logs, credentials, and retained output stay within their documented private boundaries."
       },
       {
         "status": "unsupported",

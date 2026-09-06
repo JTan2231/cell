@@ -543,11 +543,6 @@ pub enum MaintenanceCommand {
     Ready {
         run_id: String,
     },
-    /// Run real concern research in a retained synthetic isolated database.
-    Canary {
-        #[arg(long)]
-        directory: PathBuf,
-    },
     Hold {
         run_id: String,
     },

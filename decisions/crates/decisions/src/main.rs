@@ -2,7 +2,6 @@
 
 mod account;
 mod classifier;
-mod deployment_canary;
 mod digest;
 mod email;
 mod error;
@@ -60,16 +59,6 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Exercise one synthetic classification and isolated Annals delivery.
-    #[command(hide = true)]
-    DeploymentCanary {
-        #[arg(long)]
-        directory: PathBuf,
-        #[arg(long)]
-        run_id: String,
-        #[arg(long)]
-        nucleus_socket: PathBuf,
-    },
     /// Hold or restore deployment admission without changing observer history.
     Maintenance {
         #[command(subcommand)]
@@ -250,32 +239,6 @@ fn main() {
 
 #[allow(clippy::too_many_lines)]
 fn run(cli: Cli) -> AppResult<()> {
-    if let Command::DeploymentCanary {
-        directory,
-        run_id,
-        nucleus_socket,
-    } = &cli.command
-    {
-        if cli.database.is_some() || cli.annals_config.is_some() || cli.annals_library_id.is_some()
-        {
-            return Err(AppError::new(
-                "deployment_canary_scope",
-                "a canary cannot select existing domain state",
-            ));
-        }
-        let annals = cli.annals_binary.as_deref().ok_or_else(|| {
-            AppError::new(
-                "deployment_canary_scope",
-                "the canary requires the exact Annals executable",
-            )
-        })?;
-        return print_json(&deployment_canary::run(
-            directory,
-            run_id,
-            nucleus_socket,
-            annals,
-        )?);
-    }
     let database = cli.database.map_or_else(default_database_path, Ok)?;
     if let Command::Maintenance { command } = cli.command {
         return maintenance_command(&database, command);
@@ -285,7 +248,6 @@ fn run(cli: Cli) -> AppResult<()> {
     let _admission = deployment_admission(&database)?;
     let annals = annals_configuration(cli.annals_binary, cli.annals_config, cli.annals_library_id)?;
     match cli.command {
-        Command::DeploymentCanary { .. } => unreachable!("canary returned before opening state"),
         Command::Maintenance { .. } => unreachable!("maintenance returned before opening state"),
         Command::Doctor => doctor(&database, annals.as_ref(), cli.json),
         Command::Daily { command: _ } => Err(AppError::new(

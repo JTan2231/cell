@@ -1,1 +1,1 @@
-{"schema":1,"product":"semantics","dependencies":["annals","nucleus","clockwork","conversations"],"description":"Deploy Semantics with owned admission, retained project pauses, exact worker control and an isolated repository canary."}
+{"schema":1,"product":"semantics","application":"Semantics","dependencies":["annals","nucleus","clockwork","conversations"],"description":"Deploy Semantics with owned admission, retained project pauses, exact worker control and dependency readiness."}

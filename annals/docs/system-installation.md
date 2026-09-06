@@ -762,19 +762,14 @@ annals-usage login --device-auth
 annals-usage doctor
 ```
 
-Run one attended manual integration of a deliberately selected retained work
-as the full liaison canary; omit `--apply`, and use `--reexamine` so an earlier
-examination is not reused:
+After doctor confirms readiness, resume only the pause established for this
+recovery:
 
 ```sh
-annals integrate --work KNOWN_WORK_LABEL --reexamine
 annals inbox resume
-annals inbox run # optional: dispatch immediately instead of waiting for Clockwork
 ```
 
-The canary creates a new examination and reconciliation record, so choose its
-work intentionally and inspect the resulting pending or recorded
-reconciliation. On Linux, run the same sequence as the service account and set
+On Linux, run the same sequence as the service account and set
 `ANNALS_USAGE_CONFIG=/etc/annals/usage.toml` for `annals-usage`, as in the
 installation commands above. A failed inbox account preflight does not consume
 a job attempt: it exits before dispatch, leaving the envelope queued with no
@@ -783,8 +778,8 @@ the attended device login remains the recovery step when Codex requires user
 authorization.
 
 If the credential outage was discovered only after a release had already
-terminalized a stretch of jobs, keep the inbox paused after the canary and use
-the bounded retry preview, start, and status sequence. Resume ordinary dispatch
+terminalized a stretch of jobs, keep the inbox paused after authentication
+recovery and use the bounded retry preview, start, and status sequence. Resume ordinary dispatch
 only after that event completes. Never move those historical failed envelopes
 back into the queue.
 
@@ -1191,12 +1186,6 @@ Keep the `done`, `duplicates`, `failed`, and `skipped` envelopes according to
 the installation's retention policy; Annals does not silently delete source
 files from these archives.
 
-The deployment adapter retains its private isolated canary state under the
-run directory on success and failure; it does not remove that evidence. A
-verified response identifies the canary directory. Annals runs one real
-Nucleus examination against a synthetic private library, applies its validated
-evidence-grounded reconciliation, and verifies the correlated completed job,
-structured final output, and Annals Usage token coverage. The stable directory
-and examination-start marker prevent an interrupted verification from starting
-a replacement examination. Repeating verification reads the same retained
-reconciliation and job. Existing production library pauses remain unchanged.
+The deployment adapter verifies library statistics, inbox status, the decisions
+feed watermark, and Annals Usage doctor while preserving operator pauses.
+Verification does not create works, reconciliations, or Nucleus jobs.

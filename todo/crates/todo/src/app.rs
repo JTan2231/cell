@@ -152,13 +152,6 @@ fn run_maintenance(
     database: &Path,
     command: &MaintenanceCommand,
 ) -> AppResult<CommandOutput> {
-    if let MaintenanceCommand::Canary { directory } = command {
-        let canary = crate::canary::run(directory)?;
-        return Ok(CommandOutput::new(
-            json!({ "canary": canary }),
-            serde_json::to_string(&canary)?,
-        ));
-    }
     let status = match command {
         MaintenanceCommand::Hold { run_id } => gate.hold(run_id),
         MaintenanceCommand::Ready { run_id } => {
@@ -179,7 +172,6 @@ fn run_maintenance(
         }
         MaintenanceCommand::Status => gate.status(),
         MaintenanceCommand::Release { run_id } => gate.release(run_id),
-        MaintenanceCommand::Canary { .. } => unreachable!("canary is handled separately"),
     }
     .map_err(|error| AppError::conflict("deployment_maintenance", error.to_string()))?;
     let nonterminal_jobs = crate::maintenance::unfinished_runtime_jobs();

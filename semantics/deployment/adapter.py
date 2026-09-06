@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Semantics owns its installation, account-feed boundary and worker admission."""
-import json
 from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from deployment.adapter_support import command, main, Stopped
+from deployment.adapter_support import command, main
 from deployment.stateful_adapter import StatefulAdapter
 
 SPEC = {
@@ -50,16 +49,7 @@ class Adapter(StatefulAdapter):
         return {}
 
     def runtime_verify(self):
-        self.runtime_readiness()
-        root = self.run_dir / "semantics-canary"
-        proof = command(["/usr/bin/env", "-u", "SEMANTICS_DATABASE", self.payload(), "deployment-canary",
-                         "--directory", root, "--run-id", self.run_id, "--nucleus-socket",
-                         self.home / "Library/Application Support/Nucleus/nucleus.sock"],
-                        env=self.environment(), json_output=True, timeout=1500)
-        if proof.get("verified") is not True:
-            raise Stopped("isolated reconciliation did not prove its grounded revision and Nucleus result")
-        return {"canary": "isolated real account reconciliation, revision replay and Nucleus result",
-                "canary_directory": str(root), "proof": proof}
+        return self.runtime_readiness()
 
 
 if __name__ == "__main__":

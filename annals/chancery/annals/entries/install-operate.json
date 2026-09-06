@@ -36,7 +36,7 @@
   ],
   "success": [
     "Installed Annals and Annals Usage versions and help surfaces match the selected release.",
-    "Library migration and statistics checks, spool status, the exact Clockwork binding, Nucleus readiness, and deliberate Annals and usage canaries pass as applicable.",
+    "Library migration and statistics checks, spool status, the exact Clockwork binding, Nucleus readiness, and Annals Usage diagnostics pass as applicable.",
     "Maintenance is cleared only after the complete cutover commits and backlog processing is intentionally resumed; an explicitly requested decisions handoff instead reports maintenance still engaged."
   ],
   "failure_and_recovery": [
@@ -100,7 +100,7 @@
       {"status": "declared", "statement": "Maintenance returns the standard ok/data envelope with protocol_version 1, contract_version 1, holds, and drained without opening or initializing SQLite. Drained describes participating live command admission and is not by itself proof that durable work or Nucleus jobs are terminal."},
       {"status": "declared", "statement": "Success selects a complete format-four content-addressed release containing both binaries, the release-local inbox runner, primary and decisions Clockwork templates, decisions config and provisioner, legacy ownership-check template, configuration, provider bundles, and a verified compatible library and spool generation, then binds the exact definition digest."},
       {"status": "declared", "statement": "Decisions provisioning success returns one body-free ok/data envelope containing the absolute config path, persistent library ID, exact Clockwork key and definition digest, selected/enabled booleans, maintenance state, and content release ID."},
-      {"status": "declared", "statement": "Verification exposes installed versions, Nucleus health, Annals statistics and inbox status, and Annals Usage diagnostics; deliberate execution and usage canaries remain boundary-dependent checks."}
+      {"status": "declared", "statement": "Verification exposes installed versions, Nucleus health, Annals statistics and inbox status, and Annals Usage diagnostics without submitting model work."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "An ordinary update migrates and preserves the active library and spool; fresh state replaces them together and imports uncompleted backlog in preserved lane order."},

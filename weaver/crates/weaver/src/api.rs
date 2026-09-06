@@ -372,12 +372,6 @@ impl Client {
     pub fn maintenance_ready(&self, run_id: &str) -> Result<MaintenanceStatus, Error> {
         self.maintenance_result(&["maintenance", "ready", run_id])
     }
-    pub fn maintenance_canary(&self, directory: &str) -> Result<DeploymentCanary, Error> {
-        let output = self.invoke(&["maintenance", "canary", "--directory", directory])?;
-        Self::success(&output)?;
-        serde_json::from_slice(&output.stdout)
-            .map_err(|error| Error(format!("invalid Weaver deployment canary: {error}")))
-    }
     pub fn begin_maintenance(&self, wait_seconds: u64) -> Result<(), Error> {
         Self::success(&self.invoke(&[
             "maintenance",
@@ -400,14 +394,4 @@ pub struct MaintenanceStatus {
     pub nonterminal_run: Option<String>,
     pub worker_active: bool,
     pub operator_maintenance: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DeploymentCanary {
-    pub protocol_version: u32,
-    pub verified: bool,
-    pub directory: PathBuf,
-    pub run_id: String,
-    pub job_ids: Vec<String>,
-    pub outputs_verified: usize,
 }

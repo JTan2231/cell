@@ -129,18 +129,7 @@ class Adapter(StatefulAdapter):
         return {}
 
     def runtime_verify(self):
-        self.runtime_readiness()
-        root = self.run_dir / "krisis-canary"
-        pins = self.installed_pins()
-        proof = command(["/usr/bin/env", "-u", "KRISIS_DATABASE", "-u", "KRISIS_ANNALS_CONFIG", "-u", "KRISIS_ANNALS_LIBRARY_ID",
-                         self.payload(), "--annals-binary", pins["annals_binary"], "deployment-canary",
-                         "--directory", root, "--run-id", self.run_id, "--nucleus-socket",
-                         self.home / "Library/Application Support/Nucleus/nucleus.sock"],
-                        env=self.environment(), json_output=True, timeout=1500)
-        if proof.get("verified") is not True:
-            raise Stopped("isolated classifier did not prove its durable domain and Nucleus result")
-        return {"canary": "isolated real classification, durable account outbox and Nucleus result",
-                "canary_directory": str(root), "proof": proof}
+        return self.runtime_readiness()
 
 
 if __name__ == "__main__":

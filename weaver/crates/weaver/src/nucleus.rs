@@ -545,6 +545,10 @@ mod tests {
         let output = must(completed_output(&job, false));
         assert_eq!(output.final_message, "generated markdown");
         assert_eq!(output.job_id, request.id);
+        job.attempts[0].output = None;
+        let error =
+            completed_output(&job, false).expect_err("missing current output fails the stage");
+        assert!(error.to_string().contains("no structured attempt output"));
     }
 
     #[tokio::test]

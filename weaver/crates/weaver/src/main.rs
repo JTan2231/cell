@@ -11,7 +11,6 @@ use crate::project::Project;
 use crate::state::{CurrentRun, RunStatus, StateStore};
 use crate::validator::Verdict;
 
-mod canary;
 mod error;
 mod nucleus;
 mod pipeline;
@@ -90,11 +89,6 @@ enum MaintenanceCommand {
     /// Prove the sole named deployment hold and completed workflow settlement.
     Ready {
         run_id: String,
-    },
-    /// Exercise five real model stages against an isolated synthetic repository.
-    Canary {
-        #[arg(long)]
-        directory: PathBuf,
     },
     Hold {
         run_id: String,
@@ -268,14 +262,8 @@ async fn maintenance_command(
     state_dir: Option<PathBuf>,
     command: MaintenanceCommand,
 ) -> AppResult<ExitCode> {
-    if let MaintenanceCommand::Canary { directory } = &command {
-        let result = canary::run(directory).await?;
-        println!("{result}");
-        return Ok(ExitCode::SUCCESS);
-    }
     let store = state_store(state_dir)?;
     match command {
-        MaintenanceCommand::Canary { .. } => unreachable!("canary is handled separately"),
         MaintenanceCommand::Hold { run_id } => {
             store
                 .deployment_gate()

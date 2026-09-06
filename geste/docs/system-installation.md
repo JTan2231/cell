@@ -63,14 +63,10 @@ revision lacking its final seal.
 /Users/joey/.local/bin/chancery doctor
 ```
 
-A domain canary creates a real episode and then proves search, historical show,
-report, and graph from the installed database. Use genuine source anchors and
-do not fabricate a Decisions event to make a settlement appear verified. If a
-new effectful turn has not yet been admitted by Decisions, retain a Todo for a
-later self-episode rather than creating a misleading partial canary.
-
-If an installed domain canary fails after deployment committed, preserve its
-evidence and redeploy the exact previous binary with its packaged deployer:
+Verification checks the installed program and existing database without
+creating an episode. If an installed program regression requires rollback
+after deployment committed, preserve the failure evidence and redeploy the
+exact previous binary with its packaged deployer:
 
 ```sh
 geste_previous="/Users/joey/Library/Application Support/Geste/install/previous"

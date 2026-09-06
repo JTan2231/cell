@@ -2,7 +2,7 @@
 
 This document describes the packaged current-user macOS layout. Building a
 candidate does not authorize release, deployment, hook trust, live migration,
-or a canary.
+or a live model job.
 
 ## Installed identities
 
@@ -147,9 +147,6 @@ After a separately authorized final cutover:
 3. Inspect `krisis/observer` definition, binding, runtime history, and body-free
    logs; confirm both retired Decisions keys are absent or disabled.
 4. Inspect and explicitly trust the exact `~/.codex/hooks.json` definition.
-5. Only with separate canary authority, complete one synthetic post-baseline
-   root user turn and verify binary coverage, then verify account acceptance in
-   the configured Annals decisions library.
 
 An installed file or binding does not prove Codex hook delivery or Annals domain
 success on its own.
@@ -175,9 +172,5 @@ untouched and stop the operation. It retains the database, baseline, receipt
 ledger, legacy Decisions history, releases, logs, and Clockwork history.
 Deleting those requires a separate destructive decision.
 
-The deployment adapter retains its private isolated canary state under the
-run directory on success and failure; it does not remove that evidence. A
-verified response identifies the canary directory. Annals exercises local
-retention, Krisis durable baseline replay, and Semantics repository mutation
-and replay, alongside each product's dependency doctor. These checks do not
-claim a live model-backed domain integration.
+The deployment adapter verifies the installed dependency configuration with
+doctor. Verification does not create observations or submit Nucleus jobs.

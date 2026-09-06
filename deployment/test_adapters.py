@@ -122,19 +122,20 @@ class AdapterProofTests(unittest.TestCase):
         with self.assertRaisesRegex(Stopped, "incomplete candidate"):
             self.adapter().verify()
 
-    def test_independent_operator_pause_is_preserved_during_ready_and_canary(self):
+    def test_independent_operator_pause_is_preserved_during_readiness(self):
         self.spec["ready_command"] = True
         self.request["prior"] = {"runtime": {"operator_maintenance": False}}
         adapter = self.adapter(MaintainedAdapter)
         calls = []
         status = {"holds": ["run-a"], "drained": True, "operator_maintenance": True}
         adapter.maintenance = lambda *args: calls.append(args) or status.copy()
-        with mock.patch("deployment.adapter_support.command", return_value={"data": {"canary": {"verified": True}}}):
-            self.assertEqual(adapter.runtime_verify()["canary"]["verified"], True)
+        with mock.patch("deployment.adapter_support.command") as executed:
+            self.assertEqual(adapter.runtime_verify(), {"readiness": {}})
+            executed.assert_not_called()
         self.assertEqual(calls, [("ready", "run-a")])
         self.assertTrue(status["operator_maintenance"])
 
-    def test_actual_maintained_adapter_recovers_a_lost_hold_reply_without_canary(self):
+    def test_actual_maintained_adapter_recovers_a_lost_hold_reply_without_execution(self):
         self.request["prior"] = self.adapter().installed()
         self.request["recovery"] = {"any_apply_started": False, "verified": False}
         adapter = self.adapter(MaintainedAdapter)

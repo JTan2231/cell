@@ -62,8 +62,6 @@ never publishes it.
    ```
 
    Treat that command as Weaver's complete quality gate.
-5. Run any separately authorized live requester or deployment canary required
-   by the changed boundary and inspect Weaver's domain result, not only Nucleus.
 
 Persistent-state or packaging changes need atomic replacement, tamper
 detection, rollback proof, and explicit recovery after a post-commit failure.

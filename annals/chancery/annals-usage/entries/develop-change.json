@@ -52,7 +52,7 @@
     "Read `semantics.repository.explore`, query `semantics repository show annals`, read the telemetry contract, and identify whether Annals Usage actually owns the requested meaning.",
     "Run `nucleus manual` before changing shared output, account, authentication, compatibility, or deployment behavior.",
     "Implement the smallest projection change and update telemetry documentation and exact coverage tests.",
-    "Run `./annals/ci.sh`; perform separately authorized live report, budget, doctor, and requester canaries when affected."
+    "Run `./annals/ci.sh`; login and deployment remain separately authorized operations."
   ],
   "checkpoints": [
     "Atomic source authorities remain Annals and Nucleus records rather than a new reporting store.",
@@ -89,7 +89,7 @@
     ],
     "outputs": [
       {"status": "declared", "statement": "The result is the smallest coherent separately versioned projection, test, configuration, and telemetry-documentation change with explicit accounting limits and a green ./annals/ci.sh gate."},
-      {"status": "unsupported", "statement": "Development completion does not itself publish, deploy, mutate live account state, or prove a live report and login canary."}
+      {"status": "unsupported", "statement": "Development completion does not itself publish, deploy, mutate live account state, or prove account readiness."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Annals Usage owns disposable live interpretation only; Annals retains source-delivery and model-run attribution, and Nucleus retains jobs, attempts, output, account, and credential authority."},
@@ -102,8 +102,8 @@
     ],
     "completeness_and_freshness": [
       {"status": "declared", "statement": "Every affected coverage case, attribution gap, rate-card limit, account scope, and upstream decoding boundary is updated explicitly in tests and telemetry documentation."},
-      {"status": "declared", "statement": "Completion requires the full Annals product gate and separately authorized live report, budget, doctor, login, or requester canaries when the changed boundary affects them."},
-      {"status": "unspecified", "statement": "No development duration, external rate-card freshness, live-canary availability, or guarantee about unrelated projections is promised."}
+      {"status": "declared", "statement": "Completion requires the full Annals product gate with coverage for affected reporting, diagnostics, login delegation, and requester output interpretation."},
+      {"status": "unspecified", "statement": "No development duration, external rate-card freshness, or guarantee about unrelated projections is promised."}
     ],
     "access": [
       {"status": "declared", "statement": "The operation uses the current local workspace, filesystem, and shell through an interactive agent session under Annals repository instructions."},

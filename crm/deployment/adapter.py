@@ -12,7 +12,7 @@ class CrmAdapter(MaintainedAdapter):
     def apply(self):
         self.check_prior()
         command([self.candidate(), "--json", "migrate", "--backup",
-                 self.run_dir / "crm-pre-migration.sqlite"], env=self.environment(), json_output=True)
+                 self.install.parent / f"crm-pre-migration-{self.run_id}.sqlite"], env=self.environment(), json_output=True)
         return super().apply()
 
 if __name__ == "__main__":

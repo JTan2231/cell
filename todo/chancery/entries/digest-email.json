@@ -48,12 +48,12 @@
   "does_not_authorize": [
     "External sending when only preview was requested.",
     "Changing configured sender, recipient, or Resend account.",
-    "Treating email preview or delivery as a Nucleus requester canary."
+    "Treating email preview or delivery as evidence of Nucleus requester readiness."
   ],
   "promise": {
     "consumers": [
       {"status": "declared", "statement": "The configured current user may preview the exact Todo attention digest locally or explicitly submit it through the configured email path."},
-      {"status": "unsupported", "statement": "A generic Todo listing, Nucleus canary, remote scheduler, delivery ledger, or implicit external-disclosure consumer is outside this capability."}
+      {"status": "unsupported", "statement": "A generic Todo listing, Nucleus execution, remote scheduler, delivery ledger, or implicit external-disclosure consumer is outside this capability."}
     ],
     "preconditions": [
       {"status": "declared", "statement": "Preview requires a selected Todo database and complete installed sender and recipient configuration."},

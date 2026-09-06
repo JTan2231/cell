@@ -50,7 +50,7 @@
     "Read CRM instructions and exact architecture, CLI, data-model, installation, requester, and Chancery contracts affected by the change.",
     "Use the CRM Semantics repository when registered, and use nucleus.requester.integrate plus the current Nucleus manual for every requester-boundary change.",
     "Implement the smallest synchronized change with isolated synthetic fixtures and explicit migration/toolset succession when required.",
-    "Run crm/ci.sh; run release, deployment, Semantics registration, or requester canaries only under separate authority."
+    "Run crm/ci.sh; run release, deployment, Semantics registration, or real requester work only under separate authority."
   ],
   "checkpoints": [
     "CRM remains one local SQLite library with all retained content as database TEXT and no content file tree.",

@@ -35,7 +35,7 @@
   ],
   "failure_and_recovery": [
     "A failed deployment restores the previous current and previous release selectors plus both public selectors; if coherent restoration cannot be proved, it detaches Geste's public selectors and stops fail-closed.",
-    "If a domain canary fails after commit, preserve its evidence and redeploy the exact binary with the packaged deployer selected by `install/previous`; stop if that release is absent or invalid.",
+    "If an installed program regression requires rollback after commit, preserve the failure evidence and redeploy the exact binary with the packaged deployer selected by `install/previous`; stop if that release is absent or invalid.",
     "Do not bypass selector or manifest refusal. Restore the last known Geste-owned bytes or move the foreign path aside under separate authority.",
     "An absent database after deployment is expected; run the explicit init command only when new persistent state is intended."
   ],

@@ -366,76 +366,64 @@ CI success, and release preparation grant no deployment authority.
 
 [`deployment/README.md`](../../deployment/README.md) defines the coordinator and
 version-one product adapter boundary. From a Cell checkout, `./deploy.sh plan
-SYSTEM...` previews committed declarations; `./deploy.sh SYSTEM...` starts a
-detached deployment and returns its durable run identity. The requested names
-select new releases. Product-owned dependency declarations order those releases
-and discover affected installations to hold; they never silently upgrade an
-unselected system. Annals includes Usage, and `decisions` aliases `krisis`.
+SYSTEM...` previews committed declarations; `./deploy.sh SYSTEM...` runs the
+selected deployment in the foreground. Product-owned dependencies order selected
+releases and discover affected installations to hold; they never silently
+upgrade an unselected system. Annals includes Usage, and `decisions` aliases
+`krisis`.
 
-The coordinator fixes local committed `main`, archives its deployment source,
-and uses a separate worktree for preparation. Every selected product passes its
-normal brokered gate. `ci.sh --stage-candidate ABSOLUTE_DIRECTORY` seals binary
-bytes while that gate still owns the heavy Cargo lease. A passed receipt and
-matching source/artifact identity are required before any maintenance. The
-shared target directory is never the deployment artifact store. This version
-does not reuse completed CI evidence between runs, change version policy, or
-commit, tag or push Git releases.
+The coordinator fixes local committed `main` and prepares a separate worktree.
+Every selected product passes its normal brokered gate.
+`ci.sh --stage-candidate ABSOLUTE_DIRECTORY` seals binary bytes while that gate
+still owns the heavy Cargo lease. A passed receipt and matching source/artifact
+identity are required before maintenance. The shared target directory is a build
+cache, not the deployment artifact store. Completed CI evidence is not reused
+between runs. Deployment does not change versions, commit, tag or push releases.
 
-The host process owns preparation, ordering, operation checkpoints and reports;
-it does not depend on a Nucleus job or a live agent conversation. Product adapters
-own the installation proof, configuration, dependencies, maintenance, migrations,
-service lifecycle, domain canaries and recovery. Private run journals and sealed
-candidates live under `~/Library/Application Support/Cell/deployments`. One
-deployment lock prevents conflicting coordinator runs; product and catalog locks
-still protect coexistence with direct deployment commands. Updated custom
-installers accept an observed-current precondition under their product lock.
+The foreground host process owns preparation and ordering. Product adapters own
+configuration, dependencies, maintenance, migrations, service lifecycle,
+readiness and recovery. Temporary source, candidates, logs and operation state
+live under `~/Library/Application Support/Cell/deployments/active`. One host lock
+is inherited by the worker and its children; product and catalog locks also
+protect coexistence with direct deployment commands.
 
 Nucleus, Annals, Krisis, Semantics, CRM, Todo and Weaver expose durable holds
-owned by the deployment run identity. A hold blocks new admission while already
-admitted work settles. Product status combines live admission locks with its
-durable domain work; an empty process list alone is not a drain proof. Holds
-survive process exit and do not expire. Releasing one owner leaves every other
-owner and pre-existing operator pause intact. The shared `cell-maintenance`
-crate implements only hold/admission mechanics; products select the gate path
-and decide what constitutes admitted and settled work.
+owned by the deployment identity. Holds block new admission while existing work
+settles, survive process exit and do not expire. Releasing one owner preserves
+other owners and pre-existing operator pauses. Product status includes durable
+domain work; an empty process list alone does not establish a drain.
 
-After all affected products are held and drained, the coordinator applies
-selected candidates in product-declared order. Nucleus reports ordinary
-`acceptingJobs=false` while held. Its explicit `maintenance health RUN_ID`
-installation proof requires the sole matching owner, drained work,
-authentication and the exact supported harness; it does not authorize general
-research. `maintenance canary RUN_ID` executes the fixed real no-tools canary.
-After Nucleus verifies, the coordinator durably releases only its own Nucleus
-hold so the still-held requesters can run isolated synthetic domain canaries.
-CRM, Todo and Weaver canaries use their actual Nucleus integrations and retained
-correlation evidence. Deployment verification separately requires a clean
-completed runtime result and usable structured output; this does not change
-the production rule that a committed domain result survives later runtime
-failure. Annals verifies a real isolated reconciliation and correlated Usage
-report; Krisis verifies a real classification and retained outbox; Semantics
-verifies a real account reconciliation and grounded revision. These checks do
-not send email or mutate production domain records. Stable canary directories
-retain each exact job and domain correlation so recovery does not silently
-start replacement attempts. Remaining holds are released only after their
-required proofs pass.
+After all affected products are held and drained, the coordinator applies the
+selected candidates in dependency order and checks their installed identity and
+ordinary service readiness. Nucleus reports `acceptingJobs=false` while held;
+`maintenance health RUN_ID` checks its sole matching owner, drained work,
+authentication and exact supported harness. Deployment creates no model jobs or
+synthetic domain records. After every readiness check passes, requester holds
+are released, then Nucleus is released last.
 
-`status` and bounded `wait` read the durable run. `resume` continues only
-pre-maintenance preparation. Once a mutation may have occurred, `recover`
-requires product-owned proof of a coherent prior or candidate installation;
-an uncertain apply is never blindly repeated. Nucleus can be reopened after its
-own recovery proof to permit requester recovery checks. Unprovable state retains
-holds and stops. `recovered` is distinct from a fully successful deployment.
-Program selectors alone cannot prove database rollback or restore consumed
-authentication. Backups and failed canary evidence are retained for product
-recovery rather than silently removed.
+Completed failures attempt product-owned recovery within the same invocation.
+Every affected product must establish a coherent prior or candidate installation
+before any hold is released. An uncertain apply is never repeated blindly;
+unsafe recovery retains the product's hold and reports its owner for supported
+operational recovery. Program selectors alone cannot establish database rollback
+or restore consumed authentication. An uncertain Nucleus apply requires its
+supported service recovery procedure because matching command files and health
+do not establish that an older resident daemon was replaced.
 
-When Nucleus apply began but its successful apply response was not captured,
-automatic recovery retains the hold and stops for the supported Nucleus service
-recovery procedure. Candidate command files and a matching daemon version do not
-prove service replacement: an older process may remain resident after an
-interrupted cutover. Health and canary success cannot remove that uncertainty.
-The unchanged pre-apply case and a captured successful apply remain eligible for
-the normal product-owned recovery proofs; recovery never guesses a restart.
+Once the worker exits, the parent reacquires the host lock, unregisters the
+worktree and deletes its temporary files, including completed failure logs.
+Surviving children prevent cleanup until they release that lock. The next
+invocation clears stale inactive workspace under the same lock. There is no
+retained deployment history or public `status`, `wait`, `resume` or `recover`
+command. Product-owned holds and database recovery backups remain operational
+state until resolved; ordinary domain and Nucleus execution history is unaffected.
+
+Successful coordinated deployments also remove unreferenced installed release
+directories and previous-release selectors. Current releases and releases still
+pinned by configuration, schedules or running processes remain available.
+Cleanup failure is reported without undoing the completed deployment. Direct
+product deployers retain their existing rollback behavior; this pruning is part
+of the coordinated Cell command.
 
 ### Migration to coordinated deployment
 
@@ -456,11 +444,13 @@ schedule baseline must not replace the original operator intent.
 
 Thereafter a names-only run owns the operational sequence. Selector-only products
 are suitable first pilots; a Nucleus/requester selection exercises affected-only
-holds, real runtime canaries and restoration. The ordinary stateful adapters
+holds, readiness and restoration. The ordinary stateful adapters
 require a configured installation. New databases, authentication provisioning,
 new schedule policy, account changes and domain imports remain their documented
 explicit operations. The CRM coordinator adapter composes the supported
-`migrate --backup PATH` command under the drained hold; the standalone generated
+`migrate --backup PATH` command under the drained hold. Actual migration backups
+remain in the CRM application-support directory for database recovery; current-schema
+deployments create none. The standalone generated
 CRM deployer still changes only program/provider selectors.
 
 ### Standard installed paths
@@ -608,7 +598,7 @@ whether Clockwork bindings or older LaunchAgents, which are disabled rather
 than renamed during the separately authorized cutover. The
 deployer refuses any pre-existing foreign `~/.codex/hooks.json`; it never merges,
 overwrites, removes, or trusts one. Codex owns exact-definition review through
-`/hooks`, and the actual client surface must be canaried after trust. The Krisis
+`/hooks`. The Krisis
 observer is a Nucleus requester, so quiesce it for Nucleus maintenance. A
 Krisis schema cutover additionally suspends its public hook command and drains
 the three-second hook timeout before the SQLite backup.
@@ -650,10 +640,9 @@ There is no daemon, LaunchAgent, automatic migration, source adapter, model
 request, or runtime Chancery dependency. Each episode revision is sealed last
 in its capture transaction; doctor requires the complete schema object set and
 refuses committed unsealed history. The database is retained separately from
-releases and has no automatic pruning or version-0.1 uninstaller. After a
-post-commit domain-canary failure, redeploy the exact binary with the packaged
-deployer selected by `install/previous`; do not rewrite selectors or episode
-state by hand.
+releases and has no version-0.1 uninstaller. Recover installation failures through
+the supported deployer with the intended binary, rebuilding it if necessary;
+do not rewrite selectors or episode state by hand.
 
 CRM owns its content-addressed CLI installation, provider selector, and local
 SQLite library. All CRM-owned content is stored as database `TEXT`. Deployment
@@ -794,7 +783,7 @@ Nucleus has no global drain mode. Quiescence is established at its requesters:
    ```
 
 7. Perform the service, storage, or harness operation.
-8. Verify Nucleus and requester canaries before resuming the Annals inboxes,
+8. Check Nucleus and requester readiness before resuming the Annals inboxes,
    Krisis observer, Semantics worker, or new Weaver or CRM work. For Clockwork,
    switch only a key that step 4 recorded as enabled back to its exact captured
    digest; leave every originally disabled or absent key unchanged. For a
@@ -849,8 +838,7 @@ For attended recovery:
    annals-usage doctor
    ```
 
-3. Run a deliberate requester canary.
-4. Resume paused dispatch only after the canary is understood.
+3. Resume paused dispatch after account and service readiness are established.
 
 Credential state is forward-only. Installation rollback deliberately restores
 binaries and service configuration without restoring an older `auth.json`.
@@ -895,7 +883,7 @@ For a backup intended to support service recovery:
 Restoration is an attended operation. Quiesce and stop the service, preserve
 the current state separately, restore a database only to a binary known to
 support its schema, then validate health and retained job/output reads before
-requester canaries. Do not restore old credentials as part of an ordinary
+resuming dispatch. Do not restore old credentials as part of an ordinary
 database rollback. If authentication itself must be recovered, make that an
 explicit choice and expect attended login to be safer than replacing a newer
 credential with an older copy.
@@ -1168,7 +1156,7 @@ At minimum, test:
 - absence of a direct-runner fallback.
 
 Treat both the requester's state and Nucleus output atoms as sensitive according to
-the content they can retain. Add a requester canary, backup coverage, release
+the content they can retain. Add backup coverage, release
 ordering, rollback boundary, and operator documentation before production use.
 
 ### 9. Add its capability relationship
@@ -1213,11 +1201,11 @@ provider registry or documentation storage.
 | Project registration, semantic concepts, grounding, revision history, Annals decision-account intake, reconciliation policy, or Semantics deployment | Semantics | Preserve Annals library/event/account identities, exact Conversations cwd routing, both legacy and new cursor histories, and Nucleus correlation; no upstream gains Semantics state or success authority. |
 | Geste episode identity, revisions, settlement grounding, search, report, graph, database, or deployment | Geste | Preserve source-system authority and immutable locators; no source gains episode state, and Geste gains no automatic source read or policy authority. |
 | New portable invocation meaning or HTTP behavior | Nucleus core/client/daemon | Version the public contract, update examples/tests/docs, then update affected requesters in compatible order. |
-| Codex executable or app-server semantics | Nucleus Codex adapter | Prove the exact version, deploy Nucleus, then run generic and requester canaries. |
+| Codex executable or app-server semantics | Nucleus Codex adapter | Prove the exact version, deploy Nucleus, and check installed readiness. |
 | Nucleus database schema or retention | Nucleus store | Quiesce, back up, migrate and validate, and define database-aware rollback before deployment. |
 | Requester tool arguments, result, or definition | Requester plus immutable Nucleus registration | Publish a new schema/toolset version and keep historical decoding. |
 | Requester prompt, model, timeout, or permission profile | Requester | Use new job IDs for new attempts, verify health capabilities, and rerun domain acceptance tests. |
-| Managed-authentication, canonical-refresh, or attended-login behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and canary every requester. |
+| Managed-authentication, canonical-refresh, or attended-login behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and check account and service readiness. |
 | Nucleus service layout or installer | Nucleus CLI/packaging | Preserve state/log ownership, rollback, launchd behavior, and requester configuration. |
 | Chancery bundle schema, catalog, contract reader, exact-ID resolver, or directory installation | Chancery | Preserve read-only behavior, failure isolation, exact basis, explicit gaps, complete installed inventory, and provider-owned selectors; do not introduce semantic matching or a product runtime dependency. |
 | A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the fifteen-provider source graph, and update only that product's Chancery selectors. |
@@ -1262,8 +1250,7 @@ provider registry or documentation storage.
    packaging wrapper also switches the immutable Nucleus release and its
    product-owned Chancery provider selector; a failed service install restores
    those selectors, and Chancery itself is never part of runtime readiness.
-7. Verify strict health, a fresh generic job, and each affected requester
-   canary before resuming dispatch.
+7. Verify strict health and affected requester readiness before resuming dispatch.
 
 ### Exact Codex upgrade
 
@@ -1278,10 +1265,7 @@ rejects any version it has not proved.
 4. Quiesce requesters and deploy Nucleus with the candidate's absolute path.
 5. Confirm health reports that exact executable, harness version, and required
    capabilities.
-6. Run a fresh Nucleus job and the affected requester canaries, including a
-   deliberate Todo creation, Annals reconciliation, or isolated CRM steward
-   revision as applicable.
-7. Rebuild affected requesters only if the stable Nucleus types or semantics
+6. Rebuild affected requesters only if the stable Nucleus types or semantics
    they consume changed.
 
 ### Public protocol or client change
@@ -1334,7 +1318,7 @@ For version 3 or any later change:
    rollback requires both the old binaries and the pre-migration database;
    installer binary rollback alone is unsafe.
 6. Validate operational state, output ordering, mailbox foreign keys, derived
-   reads, file compaction, and requester canaries.
+   reads and file compaction.
 7. Keep credential restoration separate. A database rollback must not replace a
    newer Nucleus-owned credential.
 
@@ -1347,7 +1331,7 @@ For version 3 or any later change:
   context changes as invocation behavior changes owned by the requester.
 - Use a new job ID for a new attempt. An existing job ID can only rediscover the
   byte-equivalent request.
-- Re-run domain acceptance tests and canaries. Nucleus health proves capability,
+- Re-run relevant domain acceptance tests. Nucleus health proves capability,
   not that the requester's domain rule is correct.
 
 ### Authentication or service-ownership change
@@ -1361,7 +1345,7 @@ For version 3 or any later change:
 5. When moving authority from another system, securely transfer the current
    credential after the old writer is stopped or perform attended login in the
    new authority.
-6. Verify account, strict health, refresh behavior, and requester canaries before
+6. Verify account, strict health and refresh behavior before
    resuming work.
 
 ## Diagnosis and recovery
@@ -1370,7 +1354,7 @@ For version 3 or any later change:
 | --- | --- | --- |
 | `nucleus health` cannot connect | The socket or daemon is unavailable, or the configured path is wrong. | Run `nucleus service status`, inspect the LaunchAgent and Nucleus stderr log, and avoid requester fallback. |
 | Health is degraded with an unsupported harness | The configured Codex executable no longer matches the proved adapter. | Restore the proved executable or complete the exact Codex upgrade playbook. |
-| `model_auth_unavailable` | The Nucleus-owned credential or account read failed. | Quiesce, perform attended login, verify account and health, then canary. |
+| `model_auth_unavailable` | The Nucleus-owned credential or account read failed. | Quiesce, perform attended login, verify account and health. |
 | `authentication_busy` | Another canonical account, refresh, or login operation owns the short exclusive credential boundary. | Wait or use the requester's documented bounded wait; do not replace credentials. |
 | Job is `waiting_on_requester` | A durable dynamic tool call has not received its requester-owned result. | Inspect pending calls and the requester process/domain state. Restart the requester if it supports mailbox recovery; do not invent a result manually. |
 | Attempt is `lost` | Nucleus restarted while the harness attempt was unfinished. | Inspect domain state first. Let the requester decide whether and how to create a new attempt. |
@@ -1388,65 +1372,22 @@ requester. For CRM, inspect the queued run and revision first; a committed case
 revision remains success even when the steward job later fails, while a
 terminal job without that revision is not CRM success.
 
-## Canaries and resumption
+## Readiness and resumption
 
-Use layered proof after a shared change:
+After a shared change, check matching CLI/daemon versions, service status,
+expected harness, authenticated account and affected product readiness. Deployment
+has no requirement to create model jobs or synthetic domain records.
 
-1. **Service proof:** matching CLI/daemon versions, `nucleus service status`,
-   strict health, expected harness, and authenticated account.
-2. **Generic runtime proof:** submit a fresh smoke job with a new job ID. The
-   checked-in example is a template; reusing its existing ID only exercises
-   idempotent lookup rather than a new attempt.
-3. **Requester proof:** exercise the requester's actual domain result and verify
-   its database, not only the Nucleus terminal state.
-4. **Observation proof:** locate the job through requester identity and read its
-   ordered harness-output atoms.
-5. **Resumption:** clear only the requester-owned pause or gate that was set for
-   the operation. Do not remove Annals maintenance files manually.
-
-An Annals integration canary creates a real examination and reconciliation
-record even without `--apply`; choose the work deliberately and inspect the
-result. A `todo new` canary creates a real concern and pending routing proposal,
-not an accepted `tN`; choose a real source and direction or use an isolated Todo
-database. Do not leave unexplained canary domain records.
-Sending or previewing Todo's email digest does not exercise Nucleus and is not
-a requester canary. A Weaver canary replaces the selected narrative's current
-outputs; use a deliberate fixture or repository and validate the five persisted
-files rather than relying on Nucleus completion.
-For Krisis, canary only after its write-once baseline and exact Annals decisions
-library identity exist. Create one deliberate root turn whose user message
-explicitly settles a choice, then verify binary authority coverage, the exact
-source span, deterministic account and outbox bytes, correlated
-`krisis/decision-account-classification/1` job, Annals acceptance receipt, and
-one matching decision-feed event. A turn need not change a file to qualify. Use
-isolated Krisis and Annals decisions-library state when durable canary records
-would be misleading.
-Conversations inspection alone is read-only and is not a Nucleus canary.
-For Semantics, register only an intended folder at the current Annals decisions
-feed watermark. A seed proves repository replay without creating a Nucleus job.
-A requester canary requires a newly accepted decision account after activation:
-verify the Annals event identity, intake receipt, exact grounding, and committed
-semantic revision, not merely a terminal Nucleus job. Do not fabricate a durable
-decision account or semantic revision solely to make a canary green; use
-isolated databases when no real project decision is available.
-For Geste, initialize state explicitly after deployment, then create a real
-episode and prove search, historical show, report, and graph from the installed
-database. Do not fabricate a legacy Decisions event merely to label a
-settlement verified. If the intended source admission is not yet available, retain a
-provenance-bearing Todo for the later self-episode.
-For CRM, use an isolated database and deliberate `crm tell` content. Verify the
-durable queued run, one committed case revision, the correlated `crm` Nucleus
-job and `crm/case-steward/1` toolset, and prominent advisory rendering on every
-consumption surface. Also prove that the advisory does not change command
-success and that Nucleus completion without a committed revision is not CRM
-success.
+Resume only the requester-owned pause or gate set for the operation, preserving
+all pre-existing pauses and disabled schedules. Use each product's supported
+maintenance interface; do not remove Annals maintenance files manually.
 
 ## Where facts and changes belong
 
 Use these placement rules to keep the manual current and small:
 
 - **Operator manual:** current shared topology, authority boundaries,
-  compatibility axes, safe ordering, backup, recovery, and canary obligations.
+  compatibility axes, safe ordering, backup, recovery and deployment procedures.
 - **Todo:** an unimplemented actionable outcome or researched follow-up.
   “Implement pruning” may be a todo; “Nucleus currently does not prune” is
   current operator truth.
@@ -1477,10 +1418,8 @@ Use these placement rules to keep the manual current and small:
 
 Update this manual in the same change whenever public compatibility, persistent
 state, authentication or service ownership, deployment order, requester
-boundaries, operator action, recovery, or canary obligations change. Prefer
-proof commands and versioned authorities over “last verified” dates. Keep
-networked cross-product canaries in the release procedure rather than folding
-them into deterministic product CI.
+boundaries, operator action, recovery or deployment procedures change. Prefer
+proof commands and versioned authorities over “last verified” dates.
 
 ## Reference map
 

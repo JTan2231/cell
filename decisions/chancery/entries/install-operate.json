@@ -29,7 +29,7 @@
   "success": [
     "Preparation reports the candidate release and definition digest, retains maintenance, and leaves release, hook, command, provider, and binding selectors unchanged.",
     "Final cutover reports krisis 0.4.0-compatible identity, provider releases match, doctor and the observer use the same explicit Codex executable, doctor proves schema 4 and exact Conversations, Nucleus, and Annals readiness, and selectors resolve inside one validated release.",
-    "The write-once baseline exists before hook and krisis/observer publication, old daily and observer schedules are disabled, and a deliberate post-baseline completed user turn appears in observer coverage.",
+    "The write-once baseline exists before hook and krisis/observer publication, and old daily and observer schedules are disabled.",
     "Routine observer logs remain body-free and account delivery reaches only the configured dedicated Annals library."
   ],
   "failure_and_recovery": [
@@ -57,7 +57,7 @@
     "Run the release-owned deployer without --final-cutover to prepare and verify the exact candidate while retaining maintenance.",
     "After external Annals and semantic activation proof, rerun the same exact inputs with --final-cutover.",
     "Verify doctor, observer status, baseline, provider and release selectors, krisis/observer history, disabled Decisions bindings, body-free logs, and maintenance-gate removal.",
-    "Review and trust the exact Stop hook, then perform a separately authorized synthetic post-baseline canary on the actual Codex surface.",
+    "Review and trust the exact Stop hook under its separate authority.",
     "For uninstall, disable only exact owned Krisis state and retain database, releases, logs, and legacy history."
   ],
   "checkpoints": [
@@ -66,7 +66,7 @@
     "The Codex, Annals, and Annals-config paths are absolute and explicit, the expected library ID is exact lowercase 32-hex, and doctor uses that Codex path while validating Conversations plus the decision-feed watermark contract and library identity.",
     "A private release-independent maintenance marker gates the runner during quiescence, migration, selector switching, hook replacement, and schedule handoff.",
     "The prior database plus sidecars is backed up only after exact owned writers are stopped and quiescence is proven; migration is sequential through schema 4.",
-    "No release, deploy, canary, live account acceptance, trust change, or retained-state deletion occurs without separate authority."
+    "No release, deploy, live account acceptance, trust change, or retained-state deletion occurs without separate authority."
   ],
   "adaptation": [
     "Use alternate home and launchctl values only for explicit current-user test boundaries.",
@@ -89,7 +89,7 @@
     {"label": "Uninstall retaining state", "invocation": "decisions/packaging/macos/uninstall-user.sh --clockwork ABSOLUTE_PATH"}
   ],
   "does_not_authorize": [
-    "Releasing, deploying, trusting a hook, executing a canary, invoking live account acceptance, or deleting retained state without separate authorization.",
+    "Releasing, deploying, trusting a hook, invoking live account acceptance, or deleting retained state without separate authorization.",
     "Replacing a foreign hook, changing Annals library identity, resetting the observer baseline, or restoring retired digest/review schedules."
   ],
   "promise": {
@@ -101,7 +101,7 @@
       {"status": "declared", "statement": "Coordinated updates first prove the currently installed affected executables support maintenance, establish all affected run-owned holds, and prove product and dependency drain before applying selected candidates. Candidate support alone cannot fence an older public executable."},
       {"status": "declared", "statement": "Deployment requires a green exact krisis binary and matching provider, one explicit compatible Codex executable, compatible dependencies, explicit valid Annals configuration, and owned or absent selectors and service artifacts."},
       {"status": "declared", "statement": "Before migration, exact product writers are maintenance-gated and quiesced and a private database-plus-sidecars backup exists."},
-      {"status": "declared", "statement": "Hook trust, real canary, live deployment, and retained-state deletion each require separate authority."}
+      {"status": "declared", "statement": "Hook trust, live deployment, and retained-state deletion each require separate authority."}
     ],
     "inputs": [
       {"status": "declared", "statement": "Maintenance accepts the selected database and one run ID of 1–128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. Controlled commands use CELL_DEPLOYMENT_RUN_ID only under the same sole hold and exclusive drained activity; without a hold, they use ordinary admission."},

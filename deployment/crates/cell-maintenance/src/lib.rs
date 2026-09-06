@@ -142,7 +142,7 @@ impl Gate {
         })
     }
 
-    /// Admit an installation or isolated canary under its sole matching hold.
+    /// Admit an installation under its sole matching hold.
     /// This never bypasses another owner, and requires previous activity drained.
     ///
     /// # Errors

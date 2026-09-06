@@ -70,9 +70,9 @@ file, prepares private directories, runs SQLite `quick_check`, resolves the curr
 proving their recorded broker and any child absent. It executes no product,
 changes no binding, and proves no future timer or product-domain result.
 
-If a later authorized product canary fails, preserve its evidence and separate
-program failure from product-definition or domain failure. Roll program bytes
-back only by redeploying the exact packaged previous candidate:
+When diagnosing a failure, preserve its evidence and separate program failure
+from product-definition or domain failure. Roll program bytes back only by
+redeploying the exact packaged previous candidate:
 
 ```sh
 clockwork_previous="/Users/joey/Library/Application Support/Clockwork/install/previous"

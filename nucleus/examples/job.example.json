@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "id": "nucleus-smoke-01",
-  "label": "Verify Nucleus agent execution",
+  "id": "explain-unix-socket-01",
+  "label": "Explain a Unix socket",
   "requester": {
-    "program": "nucleus-smoke",
+    "program": "example-client",
     "id": "run-01"
   },
   "instructions": "Answer the user directly, use no tools, and keep the response to one short line.",
-  "prompt": "Reply with exactly NUCLEUS_SMOKE_OK.",
+  "prompt": "Explain in one sentence what a Unix socket is.",
   "invocation": {
     "version": 1,
     "harness": "codex",

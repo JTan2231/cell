@@ -52,6 +52,9 @@ pub enum StoreError {
     #[error("job `{0}` already exists with a different request")]
     JobConflict(String),
 
+    #[error("retired deployment job `{0}` has unfinished work or dependent records")]
+    DeploymentHistoryBlocked(String),
+
     #[error("log schema `{0}` already exists with different contents")]
     LogSchemaConflict(String),
 
@@ -556,6 +559,69 @@ impl Store {
         self.connection
             .pragma_update(None, "user_version", SCHEMA_VERSION)
             .map_err(StoreError::PostMigrationCompletion)
+    }
+
+    /// Retires history owned by the removed built-in deployment probe.
+    ///
+    /// The reserved requester, fixed label, and deterministic identifier must
+    /// all match. Ordinary job history and shared registrations are untouched.
+    ///
+    /// # Errors
+    /// Returns an error without deleting anything if matching history still has
+    /// unfinished work, children, or tool calls, or if the transaction fails.
+    pub fn retire_builtin_deployment_history(&mut self) -> Result<usize> {
+        let transaction = self.immediate_transaction()?;
+        let candidates = {
+            let mut statement = transaction.prepare(
+                "SELECT id, requester_id FROM jobs
+                 WHERE requester_program = 'nucleus-deployment'
+                   AND label = 'Verify Nucleus deployment'",
+            )?;
+            statement
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?
+        };
+        let mut retired = 0;
+        for (job_id, requester_id) in candidates {
+            let expected = format!(
+                "deployment-canary-sha256:{:x}",
+                Sha256::digest(requester_id.as_bytes())
+            );
+            if job_id != expected {
+                continue;
+            }
+            let blocked: bool = transaction.query_row(
+                "SELECT EXISTS (
+                    SELECT 1 FROM jobs WHERE id = ?1
+                      AND (state NOT IN ('completed', 'failed', 'cancelled')
+                           OR parent_job_id IS NOT NULL)
+                 ) OR EXISTS (
+                    SELECT 1 FROM jobs WHERE parent_job_id = ?1
+                 ) OR EXISTS (
+                    SELECT 1 FROM attempts WHERE job_id = ?1
+                      AND state NOT IN ('completed', 'failed', 'cancelled', 'timed_out', 'lost')
+                 ) OR EXISTS (
+                    SELECT 1 FROM pending_tool_calls WHERE job_id = ?1
+                 )",
+                [&job_id],
+                |row| row.get(0),
+            )?;
+            if blocked {
+                return Err(StoreError::DeploymentHistoryBlocked(job_id));
+            }
+            transaction.execute(
+                "DELETE FROM harness_output_records WHERE attempt_id IN (
+                    SELECT id FROM attempts WHERE job_id = ?1
+                 )",
+                [&job_id],
+            )?;
+            transaction.execute("DELETE FROM attempts WHERE job_id = ?1", [&job_id])?;
+            retired += transaction.execute("DELETE FROM jobs WHERE id = ?1", [&job_id])?;
+        }
+        transaction.commit()?;
+        Ok(retired)
     }
 
     pub fn admit_job(&mut self, new: NewJob) -> Result<Admission<JobRecord>> {
@@ -1858,6 +1924,77 @@ mod tests {
             store.admit_job(conflict),
             Err(StoreError::JobConflict(id)) if id == "job-1"
         ));
+    }
+
+    fn retired_deployment_job(owner: &str) -> NewJob {
+        let id = format!(
+            "deployment-canary-sha256:{:x}",
+            Sha256::digest(owner.as_bytes())
+        );
+        let mut request = job(&id, owner);
+        request.requester_program = "nucleus-deployment".to_owned();
+        request.label = "Verify Nucleus deployment".to_owned();
+        request
+    }
+
+    #[test]
+    fn deployment_history_retirement_preserves_ordinary_records_and_is_idempotent() -> Result<()> {
+        let mut store = prepared_store();
+        let request = retired_deployment_job("deployment-one");
+        store.admit_job(request.clone())?;
+        let retired_attempt = store.create_attempt(attempt(&request.id))?;
+        store.append_harness_output(NewHarnessOutputRecord {
+            attempt_id: retired_attempt.id.clone(),
+            observed_at: NOW.to_owned(),
+            payload: b"retired output".to_vec(),
+        })?;
+        store.transition_attempt(&retired_attempt.id, AttemptState::Cancelled, NOW, None)?;
+        let mut ordinary = retired_deployment_job("ordinary-owner");
+        ordinary.requester_program = "ordinary-requester".to_owned();
+        store.admit_job(ordinary.clone())?;
+        let mut wrong_id = retired_deployment_job("deployment-two");
+        wrong_id.id = "ordinary-job".to_owned();
+        store.admit_job(wrong_id.clone())?;
+        let schemas = store.get_log_schema("request.v1")?;
+        let ordinary_before = store.get_job(&ordinary.id)?;
+        let wrong_id_before = store.get_job(&wrong_id.id)?;
+
+        assert_eq!(store.retire_builtin_deployment_history()?, 1);
+        assert!(store.get_job(&request.id)?.is_none());
+        assert!(store.get_attempt(&retired_attempt.id)?.is_none());
+        assert!(store.list_harness_outputs(&request.id, 0, 100)?.is_empty());
+        assert_eq!(store.get_job(&ordinary.id)?, ordinary_before);
+        assert_eq!(store.get_job(&wrong_id.id)?, wrong_id_before);
+        assert_eq!(store.get_log_schema("request.v1")?, schemas);
+        assert_eq!(store.retire_builtin_deployment_history()?, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn deployment_history_retirement_blocks_unfinished_work_and_children() -> Result<()> {
+        let mut store = prepared_store();
+        let request = retired_deployment_job("deployment-one");
+        store.admit_job(request.clone())?;
+        let retained_attempt = store.create_attempt(attempt(&request.id))?;
+        assert!(matches!(
+            store.retire_builtin_deployment_history(),
+            Err(StoreError::DeploymentHistoryBlocked(_))
+        ));
+        assert!(store.get_job(&request.id)?.is_some());
+        assert!(store.get_attempt(&retained_attempt.id)?.is_some());
+
+        store.transition_attempt(&retained_attempt.id, AttemptState::Cancelled, NOW, None)?;
+        let mut child = job("ordinary-child", "requester-owner");
+        child.parent_job_id = Some(request.id.clone());
+        store.admit_job(child)?;
+        assert!(matches!(
+            store.retire_builtin_deployment_history(),
+            Err(StoreError::DeploymentHistoryBlocked(_))
+        ));
+        assert!(store.get_job(&request.id)?.is_some());
+        assert!(store.get_attempt(&retained_attempt.id)?.is_some());
+        assert!(store.get_job("ordinary-child")?.is_some());
+        Ok(())
     }
 
     #[test]

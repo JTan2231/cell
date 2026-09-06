@@ -135,11 +135,9 @@ process group. The process is a one-shot worker, not a resident daemon.
 
 This direct parent-child activation is deliberate on macOS. The prototype
 LaunchAgent could not remove generated outputs under `~/Documents` because
-launchd did not carry the required repository file-access authorization. A
-second live canary showed that a Nucleus-launched Codex app-server whose
-invocation cwd was the protected repository remained stuck in `getcwd` before
-the app-server handshake. The repository therefore cannot be either Weaver's
-service-owned workspace or Codex's invocation cwd.
+launchd did not carry the required repository file-access authorization.
+The repository therefore cannot be either Weaver's service-owned workspace or
+Codex's invocation cwd.
 
 A detached child of the submitting or waiting CLI preserves the responsible
 interactive process for all repository I/O. It passes content-only requests to

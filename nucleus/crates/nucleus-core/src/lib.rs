@@ -1482,7 +1482,7 @@ mod tests {
     #[test]
     fn checked_in_job_examples_match_the_v1_contract() {
         for encoded in [
-            include_str!("../../../examples/job.smoke.json"),
+            include_str!("../../../examples/job.example.json"),
             include_str!("../../../examples/job.todo.json"),
             include_str!("../../../examples/job.annals.json"),
         ] {

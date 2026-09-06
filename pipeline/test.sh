@@ -69,4 +69,5 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q ci_broker.test_broker
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_coordinator
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_adapters
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_stateful_adapters
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_cleanup
 printf '%s\n' 'pipeline/test.sh: green'

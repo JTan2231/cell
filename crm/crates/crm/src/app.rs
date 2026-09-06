@@ -128,16 +128,6 @@ fn run(cli: Cli) -> CommandResult<Option<Output>> {
         })
         .transpose()?;
     match cli.command {
-        Command::Maintenance {
-            command: MaintenanceCommand::Canary { directory },
-        } => {
-            let canary = crate::canary::run(&directory)?;
-            let human = serde_json::to_string(&canary).map_err(Error::from)?;
-            Ok(Some(Output {
-                data: json!({ "type": "deployment_canary", "canary": canary }),
-                human,
-            }))
-        }
         Command::Maintenance { command } => {
             let gate = crate::maintenance::gate(&database)?;
             match command {
@@ -151,7 +141,6 @@ fn run(cli: Cli) -> CommandResult<Option<Output>> {
                     Worker::new(&Store::open(&database)?).drain()?;
                 }
                 MaintenanceCommand::Status | MaintenanceCommand::Drain => {}
-                MaintenanceCommand::Canary { .. } => unreachable!("canary is handled separately"),
             }
             let status = crate::maintenance::status(&database)?;
             let human = serde_json::to_string(&status).map_err(Error::from)?;

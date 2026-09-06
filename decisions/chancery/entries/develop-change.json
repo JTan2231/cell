@@ -27,7 +27,7 @@
     "Read the nested instructions, query the decisions Semantics repository, and resolve every affected installed contract.",
     "Identify authority, source, classifier, persistence, account, delivery, legacy, packaging, and privacy boundaries affected by the change.",
     "Implement the smallest synchronized change with synthetic boundary and migration fixtures.",
-    "Run decisions/ci.sh; release, deployment, live migration, and canary remain separate operations."
+    "Run decisions/ci.sh; release, deployment, and live migration remain separate operations."
   ],
   "checkpoints": [
     "Decision identity remains host plus canonical authority item plus exact UTF-8 authority span and is derived outside the model.",
@@ -62,7 +62,7 @@
     ],
     "preconditions": [
       {"status": "declared", "statement": "The maintainer has read product instructions and resolved current Semantics, Nucleus, Conversations, Annals, and Clockwork contracts affected by the work."},
-      {"status": "declared", "statement": "Separate authority exists before any release, deployment, live migration, canary, external acceptance, retry of existing work, or retained-state deletion."}
+      {"status": "declared", "statement": "Separate authority exists before any release, deployment, live migration, external acceptance, retry of existing work, or retained-state deletion."}
     ],
     "inputs": [
       {"status": "declared", "statement": "Inputs are one authorized change plus current source, tests, product contracts, registered meanings, packaging rules, and recovery evidence."},

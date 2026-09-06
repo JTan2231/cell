@@ -16,7 +16,7 @@ class NucleusAdapter(MaintainedAdapter):
         if not isinstance(executable, str) or not Path(executable).is_absolute():
             raise Stopped("Nucleus did not report its configured absolute harness")
         digest(Path(executable))
-        data.update(harness_executable=executable, release_after_verify=True)
+        data.update(harness_executable=executable)
         return data
 
     def deploy_arguments(self):
@@ -30,11 +30,7 @@ class NucleusAdapter(MaintainedAdapter):
         health = command([self.cli, "--compact", "maintenance", "health", self.run_id], json_output=True)
         if health.get("harnessExecutable") != self.prior["harness_executable"]:
             raise Stopped("configured Nucleus harness changed")
-        canary = command([self.cli, "--compact", "maintenance", "canary", self.run_id],
-                         timeout=180, json_output=True)
-        if canary.get("verified") is not True:
-            raise Stopped("Nucleus did not verify its real execution canary")
-        return {"canary": canary}
+        return {"service_ready": True}
 
     def runtime_recover(self):
         status = self.maintenance("status")
@@ -51,8 +47,8 @@ class NucleusAdapter(MaintainedAdapter):
         recovery = self.request.get("recovery") or {}
         if recovery.get("apply_started") is True and recovery.get("applied") is not True:
             # Candidate files can be selected while the old daemon is resident,
-            # even when both declare the same version. Health and a canary do
-            # not establish which bytes that process loaded. Never release this
+            # even when both declare the same version. Health does not
+            # establish which bytes that process loaded. Never release this
             # hold on an uncertain service cutover, including unchanged files.
             raise Stopped("Nucleus service cutover is uncertain; hold retained. Use the supported Nucleus service recovery procedure before resolving this deployment.")
         observed = self.installed()
@@ -64,7 +60,7 @@ class NucleusAdapter(MaintainedAdapter):
             status = self.maintenance("status")
             if not status["holds"] and recovery.get("verified") is not True:
                 raise Stopped("candidate Nucleus has no hold or captured successful verification")
-        # A verified Nucleus is deliberately reopened before requester canaries.
+        # A verified Nucleus is deliberately reopened before requester dispatch resumes.
         # Its subsequent recovery must validate ordinary service health rather
         # than demand that already-released hold or rerun an uncertain cutover.
         self.runtime_recover()

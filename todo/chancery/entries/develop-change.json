@@ -27,7 +27,7 @@
   "success": [
     "All changed public and operational contracts are documented and immutable historical records remain meaningful.",
     "`./todo/ci.sh` completes green.",
-    "Affected Nucleus requester, database migration, email, and deployment canaries are run when their boundaries change."
+    "Tests cover affected Nucleus requester, database migration, email, and deployment boundaries."
   ],
   "failure_and_recovery": [
     "Preserve a committed Todo domain result when a later Nucleus error occurs.",
@@ -48,7 +48,7 @@
     "Identify the Todo-owned layer being changed and preserve the distinctions among `cN`, `rN`, `tN`, `aN`, `dN`, notes, lifecycle, and external implementation.",
     "Run `nucleus manual` before changing requester tools, shared execution, authentication, compatibility, job records, persistent cross-system state, or deployment.",
     "Implement the smallest change and update CLI, liaison, architecture, data, or installation documentation in the same change.",
-    "Run `./todo/ci.sh` and perform separately authorized live canaries when required."
+    "Run `./todo/ci.sh` and inspect its result."
   ],
   "checkpoints": [
     "Model text remains non-authoritative and explicit accept/reject commands remain outside liaison tools.",
@@ -58,7 +58,7 @@
   ],
   "adaptation": [
     "Select the exact domain documentation for the changed layer and use the current installed Nucleus manual for shared runtime facts.",
-    "Scale live canaries to the effects: routing, assessment, design, email, migration, and installation exercise different authorities."
+    "Scale tests to the effects: routing, assessment, design, email, migration, and installation exercise different authorities."
   ],
   "stop_when": [
     "A proposed shortcut would let a model accept a decision or treat execution as Todo state.",
@@ -100,7 +100,7 @@
     ],
     "completeness_and_freshness": [
       {"status": "declared", "statement": "Completion requires every affected code, test, CLI, liaison, architecture, data, installation, and authored-contract surface to agree and the Todo product CI gate to pass."},
-      {"status": "declared", "statement": "Current installed manuals and source documentation are reread for the selected boundary; separately authorized live canaries are required only when their actual runtime boundary changed."},
+      {"status": "declared", "statement": "Current installed manuals and source documentation are reread for the selected boundary; tests cover the actual boundary changed."},
       {"status": "unsupported", "statement": "Passing source tests alone does not establish a released, deployed, migrated, emailed, or externally successful outcome."}
     ],
     "access": [

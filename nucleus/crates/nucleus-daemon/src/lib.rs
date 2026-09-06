@@ -276,8 +276,12 @@ pub fn resolve_codex(explicit: Option<PathBuf>) -> Result<PathBuf, DaemonError> 
 pub async fn serve(config: ServeConfig) -> Result<(), DaemonError> {
     prepare_parent(&config.database)?;
     prepare_parent(&config.socket)?;
-    let store = Store::open(&config.database)?;
+    let mut store = Store::open(&config.database)?;
     secure_store_files(&config.database)?;
+    let retired = store.retire_builtin_deployment_history()?;
+    if retired > 0 {
+        info!(retired, "retired built-in deployment probe history");
+    }
     let mut state = AppState::new(
         store,
         CodexHarness::with_codex_home(&config.codex, &config.codex_home),
@@ -321,7 +325,6 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/maintenance", get(maintenance_status))
         .route("/v1/maintenance/hold", post(maintenance_hold))
         .route("/v1/maintenance/release", post(maintenance_release))
-        .route("/v1/maintenance/canary", post(maintenance_canary))
         .route("/v1/account", get(account_snapshot))
         .route("/v1/launch-contexts", post(register_launch_context))
         .route("/v1/jobs", post(submit_job).get(list_jobs))
@@ -551,75 +554,6 @@ async fn maintenance_release(
     Ok(Json(maintenance_snapshot(&state).await?))
 }
 
-async fn maintenance_canary(
-    State(state): State<AppState>,
-    payload: Result<Json<nucleus_core::MaintenanceOwnerV1>, JsonRejection>,
-) -> Result<(StatusCode, Json<JobAcceptedV1>), ApiError> {
-    let Json(owner) = payload.map_err(ApiError::invalid_json)?;
-    let mut invocation = nucleus_core::AgentInvocationV1::new(
-        "codex",
-        "gpt-5.6-terra",
-        AbsolutePath::new(
-            state
-                .codex
-                .codex_home()
-                .unwrap_or_else(|| Path::new("/unconfigured")),
-        ),
-        nucleus_core::WorkspaceAccess::None,
-        nucleus_core::BuiltinToolsV1 {
-            local_execution: false,
-            web_search: false,
-        },
-        nucleus_core::TimeoutSeconds::new(90),
-    );
-    invocation.reasoning_effort = Some(ReasoningEffort::Low);
-    let request = JobRequestV1::new(
-        format!(
-            "deployment-canary-{}",
-            sha256_digest(owner.run_id.as_bytes())
-        ),
-        "Verify Nucleus deployment",
-        Requester {
-            program: "nucleus-deployment".into(),
-            id: owner.run_id.clone(),
-        },
-        "Answer directly using no tools. Return only the exact requested marker.",
-        "Reply with exactly NUCLEUS_DEPLOYMENT_CANARY_OK.",
-        invocation,
-    );
-    let status = maintenance_gate(&state)?
-        .status()
-        .map_err(maintenance_error)?;
-    if !status.holds.contains(&owner.run_id) {
-        return Err(maintenance_error(cell_maintenance::Error::Held));
-    }
-    // A retried canary request always follows this run's original attempt.
-    if let Some(existing) = exact_existing_job(&state, &request).await? {
-        return accepted_response(&state, existing, StatusCode::OK).await;
-    }
-    let admission = maintenance_gate(&state)?
-        .enter_for(&owner.run_id)
-        .map_err(maintenance_error)?;
-    if !state
-        .store
-        .lock()
-        .await
-        .list_jobs()
-        .map_err(ApiError::store)?
-        .iter()
-        .all(|job| job.state.is_terminal())
-        || !state.cancellations.lock().await.is_empty()
-        || state.execution_slots.available_permits() != MAX_CONCURRENT_JOB_ATTEMPTS
-    {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "maintenance_not_drained",
-            "canary requires all existing jobs to settle",
-        ));
-    }
-    submit_admitted_job(&state, request, Some(admission)).await
-}
-
 async fn account_snapshot(
     State(state): State<AppState>,
     query: Result<Query<AccountSnapshotQueryV1>, QueryRejection>,
@@ -672,14 +606,13 @@ async fn submit_job(
     payload: Result<Json<JobRequestV1>, JsonRejection>,
 ) -> Result<(StatusCode, Json<JobAcceptedV1>), ApiError> {
     let Json(request) = payload.map_err(ApiError::invalid_json)?;
-    submit_admitted_job(&state, request, None).await
+    admit_job_request(&state, request).await
 }
 
 #[allow(clippy::too_many_lines)]
-async fn submit_admitted_job(
+async fn admit_job_request(
     state: &AppState,
     request: JobRequestV1,
-    privileged: Option<cell_maintenance::Admission>,
 ) -> Result<(StatusCode, Json<JobAcceptedV1>), ApiError> {
     request.validate().map_err(ApiError::validation)?;
     if request.invocation.harness.as_str() != "codex" {
@@ -695,15 +628,12 @@ async fn submit_admitted_job(
 
     // Hold admission until the durable job and its attempt are published.
     // A prior exact replay above stays available while deployment holds admission.
-    let _admission = match privileged {
-        Some(admission) => Some(admission),
-        None => state
-            .maintenance
-            .as_ref()
-            .map(cell_maintenance::Gate::enter)
-            .transpose()
-            .map_err(maintenance_error)?,
-    };
+    let _admission = state
+        .maintenance
+        .as_ref()
+        .map(cell_maintenance::Gate::enter)
+        .transpose()
+        .map_err(maintenance_error)?;
 
     if let Some(parent) = &request.parent
         && state

@@ -94,8 +94,7 @@ Fresh installation bootstraps only when no existing plist or disabled override
 records an operator choice. The deployer never changes launchd enable/disable
 overrides. A service that is both loaded and disabled is refused before
 quiescence because launchd cannot reload it without changing that override.
-Coordinated deployment retains Todo's maintenance hold throughout these changes
-and its isolated canary never sends email.
+Coordinated deployment retains Todo's maintenance hold throughout these changes.
 The Todo deployment adapter captures loaded/disabled state and proves that the
 live plist matches the selected release's rendered template. Verification and
 recovery retain the hold if those controls drift, including interruption between
@@ -197,7 +196,6 @@ todo --json maintenance hold RUN_ID
 todo --json maintenance status
 todo --json maintenance ready RUN_ID
 todo --json maintenance release RUN_ID
-todo --json maintenance canary --directory /absolute/private/canary-directory
 ```
 
 Normal database/config selection applies. The selected database parent owns
@@ -221,22 +219,13 @@ The macOS deployer accepts `--expected-current absent|releases/HASH` under its
 update lock, preserves configured email addresses, and accepts either ordinary
 strict Nucleus readiness or the named deployment's proved held readiness.
 
-The canary uses a product-marked private synthetic database and source file,
-runs actual concern-routing research, and proves one pending routing record
-and the exact correlated `todo/concern-routing/1` Nucleus job. Deployment
-verification separately requires a completed job and matching completed current
-attempt with nonblank thread, turn, and final message output. A committed routing
-proposal still remains ordinary Todo success after a later runtime failure;
-that outcome alone does not verify a healthy deployment. Rechecking a repaired
-Nucleus output read reuses the existing canary job and routing record. It returns `data.canary` with
-`protocol_version`, `verified`, database, concern, routing, and job identities.
-It never accepts a proposal or sends email. Foreign directories are refused.
-If interrupted research has no domain result, it fails with retained evidence
-instead of creating a replacement attempt. Requester canaries run after
-Nucleus admission is restored, while production Todo holds remain.
+Deployment verification checks the installed release, configured database,
+Nucleus readiness, maintenance settlement, and captured email-service state.
+It creates no concern, routing proposal, or model job and sends no email.
+Ordinary Todo success remains its committed domain result after a later
+runtime failure.
 
 `maintenance ready RUN_ID` requires the sole drained hold and proves that this
 binary can read the actual configured database: current version, every required
 table/index/trigger definition, SQLite integrity, and foreign keys. This is the
-production storage compatibility proof after an interrupted migration; the
-isolated canary alone cannot supply it.
+production storage compatibility proof after an interrupted migration.

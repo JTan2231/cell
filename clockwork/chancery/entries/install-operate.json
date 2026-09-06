@@ -38,7 +38,7 @@
   "failure_and_recovery": [
     "A symbolic, foreign, traversal, fabricated, version-mismatched, or tampered candidate, release, or selector, or a staged provider rejected by the supplied candidate Chancery reader, is refused rather than adopted or overwritten.",
     "If deployment fails before commit, inspect the evidence and preserved prior selectors; do not bypass ownership or content checks.",
-    "If a later canary fails, preserve its evidence and redeploy the exact validated previous release through its packaged deployer; program rollback does not roll back a product binding.",
+    "If an installed program regression requires rollback, preserve its evidence and redeploy the exact validated previous release through its packaged deployer; program rollback does not roll back a product binding.",
     "Before detach, disable every binding and prove quiescence; the uninstaller's plist refusal does not prove that no manual child is already running."
   ],
   "privacy": [
@@ -84,7 +84,7 @@
   "does_not_authorize": [
     "Publishing a release, overwriting a foreign path, deleting retained Clockwork or product state, or pruning a release referenced by a generated plist or running activation.",
     "Creating, migrating, switching, disabling, executing, or deleting a product binding as a side effect of Clockwork program deployment.",
-    "Treating doctor, launchctl state, or installed version evidence as a product-domain canary."
+    "Treating doctor, launchctl state, or installed version evidence as proof of product-domain success."
   ],
   "promise": {
     "consumers": [

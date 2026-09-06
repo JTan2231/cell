@@ -52,7 +52,8 @@ detaches Geste's public selectors and stops fail-closed. Inspect ownership and
 the last known valid release before retrying; do not bypass refusal or overwrite
 a foreign path.
 
-If a domain canary fails after deployment committed, retain its evidence and
+If an installed program regression requires rollback after deployment committed,
+retain the failure evidence and
 redeploy the exact `install/previous/bin/geste` candidate with
 `install/previous/package/deploy-user.sh`. This runs the normal validation and
 makes that content address current again. Stop if `previous` is absent or

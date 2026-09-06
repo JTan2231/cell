@@ -194,7 +194,7 @@ class StatefulAdapter(ProductAdapter):
         command([self.payload(), "--help"])
         installed["controls"] = self.restore_controls()
         installed.update(self.runtime_verify())
-        return response("verified", "installed contract, controls and product canary verified", installed)
+        return response("verified", "installed contract, controls and readiness verified", installed)
 
     def release(self):
         self.assert_no_installer_hold()

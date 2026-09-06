@@ -9,7 +9,6 @@ import tomllib
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from deployment.adapter_support import command, digest, main, Stopped
 from deployment.stateful_adapter import StatefulAdapter
-from annals.deployment.canary import verify as verify_canary
 
 SPEC = {
     "product": "annals", "application": "Annals", "format": "4", "allow_absent": True,
@@ -135,8 +134,7 @@ class Adapter(StatefulAdapter):
         return {"operator_pauses": pauses}
 
     def runtime_verify(self):
-        readiness = self.runtime_readiness()
-        return {**readiness, **verify_canary(self)}
+        return self.runtime_readiness()
 
 
 if __name__ == "__main__":

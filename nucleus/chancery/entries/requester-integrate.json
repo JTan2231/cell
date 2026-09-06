@@ -28,7 +28,7 @@
   "success": [
     "The requester proves strict health and capacity reporting, admission and queued waiting, domain completion, duplicate handling, mailbox recovery, queued and active cancellation, timeout, daemon loss, and domain-success/runtime-failure distinctions.",
     "No direct-runner fallback exists and retained historical jobs remain decodable.",
-    "The requester canary verifies the requester-owned authority rather than only Nucleus completion."
+    "Requester tests verify requester-owned authority independently of Nucleus completion; deployment readiness creates no synthetic records."
   ],
   "failure_and_recovery": [
     "Ambiguous admission retries only the byte-equivalent request under the same job ID.",
@@ -53,7 +53,7 @@
     "Run the installed Nucleus manual and define the requester-owned durable success condition before specifying a runtime request.",
     "Choose the typed client or HTTP boundary, stable requester identity, job idempotency key, correlations, complete invocation policy, and capacity-aware waiting behavior.",
     "Version immutable schemas and tools, implement durable mailbox servicing, and separate domain success from terminal model prose.",
-    "Define failure and new-attempt policy, then add observability, security, backup, deployment, and canary coverage.",
+    "Define failure and new-attempt policy, then add observability, security, backup, deployment, and service readiness coverage.",
     "Update the requester and shared operator documentation whenever the integration boundary changes."
   ],
   "checkpoints": [
@@ -116,7 +116,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The operation produces synchronized requester code and contracts with durable bidirectional correlation, capacity-aware accepted/pending handling, replay-safe mailbox handling, explicit invocation and retry policy, historical decoders, tests, observability, backup and recovery procedures, deployment ordering, and a domain-authority canary."
+        "statement": "The operation produces synchronized requester code and contracts with durable bidirectional correlation, capacity-aware accepted/pending handling, replay-safe mailbox handling, explicit invocation and retry policy, historical decoders, tests, observability, backup and recovery procedures, deployment ordering, and service readiness checks without synthetic records."
       },
       {
         "status": "unsupported",

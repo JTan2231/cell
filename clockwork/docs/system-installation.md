@@ -56,10 +56,8 @@ After deployment, diagnose explicitly:
 Doctor initializes only an empty unversioned schema-one Clockwork store, refuses
 foreign or unsupported schemas, and may mark retained
 `running` activations `lost` after proving their recorded processes absent. It
-is still diagnosis, not a product-job canary. A real canary requires an
-authorized product-owned candidate definition and binding and must use
-synthetic or otherwise approved domain work. Runtime exit evidence still does
-not establish product-domain success.
+does not execute a product job. Runtime exit evidence does not establish
+product-domain success.
 
 ## Rollback
 

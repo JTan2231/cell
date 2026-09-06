@@ -48,8 +48,7 @@ cross-system integration, read:
 
    Treat it as the complete Annals product gate. Packaging coverage uses fake
    Clockwork and launchctl surfaces in an isolated home, never live bindings.
-5. Run separately authorized deployment, migration, and live requester
-   canaries only when the changed boundary requires them.
+5. Treat deployment and migration as separately authorized operations.
 
 Keep current Semantics terminology out of the preserved experiment archive, whose older
 tree, path, placement, proposal, and uncertainty terms are deliberately
@@ -73,5 +72,5 @@ hoc migration.
 a test command. Development completion does not authorize it or installation.
 
 Source fixtures, experiment archives, libraries, spools, Nucleus output,
-backups, and live canaries can contain private source and model context. Treat
+backups can contain private source and model context. Treat
 each according to the strongest content it may retain.

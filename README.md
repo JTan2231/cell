@@ -35,7 +35,7 @@ lifecycle logic.
 
 `./deploy.sh SYSTEM...` prepares and deploys selected systems from one committed
 local `main` snapshot. The detached coordinator stages tested binaries, holds
-and drains affected products, invokes their installers and canaries, and records
+and drains affected products, invokes their installers and readiness checks, and records
 durable recovery evidence. See [deployment and initial migration](deployment/README.md)
 and the [shared operator manual](nucleus/docs/operator-manual.md).
 

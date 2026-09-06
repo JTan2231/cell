@@ -290,7 +290,7 @@ fn maintenance_reports_durable_queued_and_applied_unsettled_work() {
     let (_temporary, database) = fixture();
     let store = Store::open(&database).unwrap();
     let case = store
-        .create_case("Canary fixture", "Synthetic", Stage::Research)
+        .create_case("Maintenance fixture", "Synthetic", Stage::Research)
         .unwrap();
     store
         .enqueue_delivery(&case.case_id, "Fixture", "Synthetic input", None)

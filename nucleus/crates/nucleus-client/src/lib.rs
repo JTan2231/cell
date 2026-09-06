@@ -186,21 +186,6 @@ impl NucleusClient {
         .await
     }
 
-    /// Admit the fixed no-tools deployment canary under the sole drained hold.
-    ///
-    /// # Errors
-    /// Returns a [`ClientError`] if the API call fails.
-    pub async fn maintenance_canary(&self, run_id: &str) -> Result<JobAcceptedV1, ClientError> {
-        self.send_json(
-            Method::POST,
-            "/v1/maintenance/canary",
-            &nucleus_core::MaintenanceOwnerV1 {
-                run_id: run_id.into(),
-            },
-        )
-        .await
-    }
-
     /// Register a short-lived, memory-only launch environment. The returned
     /// identifier may be referenced by one subsequently admitted job.
     ///

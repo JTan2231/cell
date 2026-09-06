@@ -77,8 +77,7 @@ Preview does not authorize send. The API key must remain outside Todo
 configuration and the LaunchAgent plist; the installed runner reads it from
 the user's environment setup and launches Todo with a scrubbed environment.
 
-Sending or previewing the digest does not invoke Nucleus and is not a Todo
-requester canary. On scheduled failure, inspect
+Sending or previewing the digest does not invoke Nucleus. On scheduled failure, inspect
 `~/Library/Logs/Todo/email.stderr.log` and Resend's records. A user LaunchAgent
 cannot guarantee a 09:00 submission while the Mac is powered off or the user
 is logged out.

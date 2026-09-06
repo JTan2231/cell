@@ -234,7 +234,6 @@ crm --json maintenance hold RUN_ID
 crm --json maintenance status
 crm --json maintenance drain
 crm --json maintenance release RUN_ID
-crm --json maintenance canary --directory /absolute/private/canary-directory
 ```
 
 The selected database parent owns `deployment-maintenance/`; the standard
@@ -257,26 +256,22 @@ its explicit migration. An unavailable or ambiguous worker is not assumed
 settled. Release removes only its exact owner's hold.
 
 The coordinator composes the existing program installer and separate
-`migrate --backup` command. Migration with `CELL_DEPLOYMENT_RUN_ID` acquires
+`migrate --backup` command. Its backup destination is
+`~/Library/Application Support/CRM/crm-pre-migration-RUN_ID.sqlite`, outside
+the temporary deployment workspace. The migration creates this private
+backup only when schema migration is needed; current-schema deployment
+creates no backup. A created backup survives deployment cleanup, including
+an interrupted or failed migration, for explicit database recovery.
+Migration with `CELL_DEPLOYMENT_RUN_ID` acquires
 exclusive activity only under its sole matching hold; an arbitrary environment
 value never bypasses another owner or active work. The program installer still
 never opens or migrates CRM data. `doctor` can validate held Nucleus readiness
 for that exact deployment owner; normal steward admission remains strict.
 
-The canary creates or resumes one product-marked private synthetic database,
-uses the actual steward, and verifies one committed second revision, a visible
-advisory, acknowledged tool result, and the exact correlated
-`crm/case-steward/1` job. Deployment verification separately requires a completed
-job and matching completed current attempt with nonblank thread, turn, and final
-message output. A committed revision still remains ordinary CRM success after a
-later runtime failure; that outcome alone does not verify a healthy deployment.
-Rechecking a repaired Nucleus output read reuses the existing canary job and
-preserves any CRM diagnostic recorded before the repair.
-It returns `data.canary` with `protocol_version`, `verified`, database, case,
-update, and job identities. Existing foreign directories are refused; failed
-or uncertain work is retained and never automatically retried. It affects no
-production case and sends no contact. Restore Nucleus admission after its own
-verification before running requester canaries; production CRM holds remain.
+Deployment verification checks the installed release, database integrity,
+Nucleus readiness, and settled maintenance status. It creates no case, update,
+or model job. Ordinary CRM success remains the guarded revision commit; a
+later runtime failure does not reverse that commit.
 
 Deployment admission resolves the configured database to its canonical path and
 uses that database parent for `deployment-maintenance/`. Symbolic aliases share

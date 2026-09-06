@@ -9,7 +9,7 @@
   "use_when": [
     "Todo storage must be initialized or upgraded through its supported backup-bearing migrator.",
     "The installed CLI, content-addressed release, configuration, database, or daily email LaunchAgent must be deployed or diagnosed.",
-    "A deployment must durably hold new admissions, observe actual runtime settlement, release only its own hold, or run the predefined isolated verification canary."
+    "A deployment must durably hold new admissions, observe actual runtime settlement, check installation readiness, or release only its own hold."
   ],
   "do_not_use_when": [
     "The task is normal Todo domain use.",
@@ -22,7 +22,7 @@
     "Migration creates a retained complete backup before the version-two transaction; current databases are true no-ops.",
     "Deployment stages and switches content-addressed releases, may migrate the database, rewrites installed configuration when requested, and installs or updates the daily email LaunchAgent.",
     "Deployment rollback can restore captured database, release, configuration, plist, and loaded-service state before commit.",
-    "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. The explicit canary uses real Nucleus execution and retains private synthetic verification evidence."
+    "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. Deployment verification checks installation and dependency readiness without starting model jobs or synthetic domain work."
   ],
   "authority": [
     "Todo owns its SQLite schema, migration, installation, configuration, and email LaunchAgent.",
@@ -37,7 +37,7 @@
     "Ordinary commands never migrate implicitly; stop callers and use the supported migrator.",
     "On interrupted deployment, inspect the deployer's rollback result, selected release, database, configuration, plist, and loaded service before retrying.",
     "Do not infer 09:00 delivery while the Mac is off or the user is logged out; a user LaunchAgent cannot guarantee it.",
-    "An incomplete drain, foreign hold, unavailable runtime, or failed canary never becomes success; retain the named holds and durable job/domain evidence and follow the owning recovery contract."
+    "An incomplete drain, foreign hold, or unavailable runtime never becomes success; retain the named holds and durable job/domain evidence and follow the owning recovery contract."
   ],
   "privacy": [
     "The Todo database, migration backups, configuration, and logs can expose directions, notes, paths, design state, and email metadata.",
@@ -75,10 +75,6 @@
     {
       "label": "Release only deployment owner",
       "invocation": "/Users/joey/.local/bin/todo maintenance release RUN_ID"
-    },
-    {
-      "label": "Run predefined real deployment canary",
-      "invocation": "/Users/joey/.local/bin/todo maintenance canary --directory ABSOLUTE_PRIVATE_DIRECTORY"
     }
   ],
   "dependencies": [
@@ -135,7 +131,7 @@
       },
       {
         "status": "declared",
-        "statement": "Maintenance status reports protocol_version 1, holds and drained with product-specific runtime evidence; the explicit predefined canary reports verified only after its product-owned required result and a correlated completed Nucleus job whose completed current attempt has usable structured output. Ordinary domain success after a later runtime failure does not by itself verify deployment health."
+        "statement": "Maintenance status reports protocol_version 1, holds and drained with product-specific runtime evidence. Deployment verification checks the installed release and configured runtime readiness; it creates no model job or domain record."
       }
     ],
     "data_semantics": [

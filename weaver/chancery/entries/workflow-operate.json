@@ -10,7 +10,7 @@
     "The sole current Weaver workflow or its exact run ID must be observed, resumed through a new worker process, or cancelled.",
     "Persisted narrative outputs need deterministic validation without a model call.",
     "Weaver private state, Nucleus readiness, installation, or deployment maintenance must be checked or changed.",
-    "A deployment must durably hold new admissions, observe actual runtime settlement, release only its own hold, or run the predefined isolated verification canary."
+    "A deployment must durably hold new admissions, observe actual runtime settlement, check installation readiness, or release only its own hold."
   ],
   "do_not_use_when": [
     "The desired outcome is a new five-stage narrative build; use `weaver.narrative.build`.",
@@ -23,7 +23,7 @@
     "`wait` may start a detached replacement worker for a nonterminal run, and `cancel` durably records intent before asking Nucleus to cancel the current stage.",
     "`doctor` may initialize Weaver's private state directory and locks while changing no narrative or current workflow record.",
     "Deployment stages a content-addressed release, coordinates maintenance, changes Weaver's current command and release selectors, and removes only the superseded prototype LaunchAgent when present.",
-    "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. The explicit canary uses real Nucleus execution and retains private synthetic verification evidence."
+    "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. Deployment verification checks installation and dependency readiness without starting model jobs or synthetic domain work."
   ],
   "authority": [
     "`current.json` is Weaver's sole current operational workflow record; generated files in the narrative repository are the current output authority.",
@@ -39,7 +39,7 @@
     "A Nucleus daemon restart makes an unfinished attempt lost; do not restart Nucleus to recover a Weaver worker.",
     "If deployment fails before commit, the prior Weaver release, command, provider selector, prototype plist, and loaded-service state are restored.",
     "If deployment commits but cannot end maintenance, keep the new release authoritative and end that exact gate through the installed Weaver CLI.",
-    "An incomplete drain, foreign hold, unavailable runtime, or failed canary never becomes success; retain the named holds and durable job/domain evidence and follow the owning recovery contract."
+    "An incomplete drain, foreign hold, or unavailable runtime never becomes success; retain the named holds and durable job/domain evidence and follow the owning recovery contract."
   ],
   "privacy": [
     "Weaver private state can contain a complete active stage request and every embedded private input byte; Nucleus retains complete requests and raw protocol output.",
@@ -81,10 +81,6 @@
     {
       "label": "Release only deployment owner",
       "invocation": "/Users/joey/.local/bin/weaver maintenance release RUN_ID"
-    },
-    {
-      "label": "Run predefined real deployment canary",
-      "invocation": "/Users/joey/.local/bin/weaver maintenance canary --directory ABSOLUTE_PRIVATE_DIRECTORY"
     }
   ],
   "dependencies": [
@@ -141,7 +137,7 @@
       },
       {
         "status": "declared",
-        "statement": "Maintenance status reports protocol_version 1, holds and drained with product-specific runtime evidence; the explicit predefined canary reports verified only after real runtime execution and its product-owned required result."
+        "statement": "Maintenance status reports protocol_version 1, holds and drained with product-specific runtime evidence. Deployment verification checks the installed release and configured runtime readiness; it creates no model job or narrative output."
       }
     ],
     "data_semantics": [

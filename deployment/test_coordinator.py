@@ -89,6 +89,9 @@ class Fixture:
         for relative in ("deployment/__init__.py", "deployment/cli.py", "deployment/candidate.py", "deployment/adapter_support.py",
                          "ci_broker/__init__.py", "ci_broker/client.py", "ci_broker/broker.py"):
             self.write(relative, (ROOT / relative).read_text())
+        # The pinned cleanup subprocess never touches actual installations in
+        # this disposable fixture, including when run_worker is called directly.
+        self.write("deployment/cleanup.py", "print('{}')\n")
         # Quality-gate admission is simulated in this isolated repository. It
         # never invokes the production broker, Cargo, or a real product body.
         client_path = self.repo / "ci_broker/client.py"
@@ -214,47 +217,34 @@ assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
         self.assertNotIn("candidate_dir", data["records"]["beta"])
         self.assertTrue(data["records"]["alpha"]["ci_receipt"])
 
-    def test_failed_verify_keeps_every_hold_and_recovery_requires_all_products(self) -> None:
+    def test_failed_verify_keeps_holds_when_internal_recovery_is_not_safe(self) -> None:
         path = self.fixture.create()
-        cli.durable_json(path / "fault.json", {"fail": ["beta", "verify"]})
+        cli.durable_json(path / "fault.json", {"fail": ["beta", "verify"], "recovery_safe": False})
         self.assertEqual(cli.run_worker(path), 1)
         self.assertNotIn(["alpha", "release"], self.observed(path))
         data = cli.read_json(path / "run.json")
         self.assertEqual(data["state"], "stopped")
         self.assertTrue(all(data["records"][name]["held"] for name in ("alpha", "beta")))
-        cli.durable_json(path / "fault.json", {"recovery_safe": False})
-        self.assertEqual(cli.run_worker(path, "recover"), 1)
-        self.assertNotIn(["alpha", "release"], self.observed(path))
-        cli.durable_json(path / "fault.json", {})
-        self.assertEqual(cli.run_worker(path, "recover"), 0)
-        self.assertEqual(cli.read_json(path / "run.json")["state"], "recovered")
+        self.assertIn("recovery stopped", data["detail"])
 
-    def test_uncertain_apply_is_never_replayed_by_resume(self) -> None:
+    def test_internal_recovery_never_replays_an_uncertain_apply(self) -> None:
         path = self.fixture.create()
         cli.durable_json(path / "fault.json", {"invalid": ["alpha", "apply"]})
         self.assertEqual(cli.run_worker(path), 1)
-        self.assertEqual(cli.run_worker(path), 1)
-        self.assertEqual(self.observed(path).count(["alpha", "apply"]), 1)
-        cli.durable_json(path / "fault.json", {})
-        self.assertEqual(cli.run_worker(path, "recover"), 0)
         self.assertEqual(self.observed(path).count(["alpha", "apply"]), 1)
         records = cli.read_json(path / "run.json")["records"]
         self.assertTrue(records["alpha"]["recovery_context"]["apply_started"])
         self.assertFalse(records["alpha"]["recovery_context"]["applied"])
         self.assertFalse(records["beta"]["recovery_context"]["apply_started"])
+        self.assertFalse((path / "held-alpha").exists())
 
     def test_lost_hold_reply_is_released_even_without_a_held_ledger_bit(self) -> None:
         path = self.fixture.create()
         cli.durable_json(path / "fault.json", {"invalid": ["alpha", "hold"]})
         self.assertEqual(cli.run_worker(path), 1)
-        data = cli.read_json(path / "run.json")
-        self.assertTrue((path / "held-alpha").exists())
-        self.assertFalse(data["records"]["alpha"].get("held", False))
-        cli.durable_json(path / "fault.json", {})
-        self.assertEqual(cli.run_worker(path, "recover"), 0)
         self.assertFalse((path / "held-alpha").exists())
         self.assertFalse((path / "held-beta").exists())
-        self.assertEqual(cli.read_json(path / "run.json")["state"], "recovered")
+        self.assertEqual(cli.read_json(path / "run.json")["state"], "stopped")
 
     def test_pinned_source_change_stops_before_any_adapter_action(self) -> None:
         path = self.fixture.create()
@@ -268,62 +258,85 @@ assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
         with self.assertRaisesRegex(cli.DeploymentError, "cycle"):
             cli.ordered(["alpha", "beta"], {"alpha": ["beta"], "beta": ["alpha"]})
 
-    def test_new_run_cannot_bypass_an_earlier_unresolved_hold(self) -> None:
-        first = self.fixture.create()
-        cli.durable_json(first / "fault.json", {"fail": ["alpha", "drain"]})
-        self.assertEqual(cli.run_worker(first), 1)
-        second = self.fixture.create()
-        self.assertEqual(cli.run_worker(second), 1)
-        self.assertFalse((second / "observed.jsonl").exists())
-        cli.durable_json(first / "fault.json", {})
-        self.assertEqual(cli.run_worker(first, "recover"), 0)
-        self.assertEqual(cli.run_worker(second), 0)
+    def test_foreground_success_removes_stale_workspace_and_current_artifacts(self) -> None:
+        stale = self.fixture.create()
+        self.assertEqual(cli.run_worker(stale), 0)
+        self.assertTrue((stale / "worktree").exists())
+        result = cli.start(self.fixture.repo, ["alpha"], self.fixture.storage)
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(result["state"], "succeeded")
+        self.assertFalse((self.fixture.storage / "active").exists())
+        self.assertEqual(self.fixture.git("worktree", "list", "--porcelain").count("worktree "), 1)
+        self.assertEqual([path.name for path in self.fixture.storage.iterdir()], ["deployment.lock"])
 
-    def test_nucleus_reopens_only_after_its_proof_before_requester_canaries(self) -> None:
+    def test_foreground_failure_removes_sealed_candidates_logs_and_worktree(self) -> None:
+        self.fixture.write("alpha/ci.sh", FAKE_CI.replace("PYTHON", sys.executable) + "\nsys.exit(75)\n", executable=True)
+        self.fixture.commit()
+        result = cli.start(self.fixture.repo, ["alpha"], self.fixture.storage)
+        self.assertEqual(result["exit_code"], 1)
+        self.assertEqual(result["state"], "stopped")
+        self.assertFalse((self.fixture.storage / "active").exists())
+        self.assertEqual(self.fixture.git("worktree", "list", "--porcelain").count("worktree "), 1)
+
+    def test_cleanup_failure_does_not_recover_or_reapply_installed_products(self) -> None:
+        self.fixture.write("deployment/cleanup.py", "import sys\nprint('cleanup blocked', file=sys.stderr)\nsys.exit(1)\n")
+        self.fixture.commit()
+        path = self.fixture.create()
+        self.assertEqual(cli.run_worker(path), 1)
+        self.assertEqual(cli.read_json(path / "run.json")["state"], "cleanup_failed")
+        observed = self.observed(path)
+        self.assertFalse(any(operation == "recover" for _, operation in observed))
+        self.assertEqual(observed.count(["alpha", "apply"]), 1)
+        self.assertFalse((path / "held-alpha").exists())
+        self.assertFalse((path / "held-beta").exists())
+
+    def test_all_readiness_proofs_precede_release_and_nucleus_releases_last(self) -> None:
         self.add_nucleus()
         path = self.fixture.create()
         self.assertEqual(cli.run_worker(path), 0)
         observed = self.observed(path)
-        self.assertLess(observed.index(["nucleus", "verify"]), observed.index(["nucleus", "release"]))
-        self.assertLess(observed.index(["nucleus", "release"]), observed.index(["alpha", "verify"]))
-        self.assertLess(observed.index(["alpha", "verify"]), observed.index(["alpha", "release"]))
+        first_release = min(index for index, event in enumerate(observed) if event[1] == "release")
+        self.assertTrue(all(index < first_release for index, event in enumerate(observed) if event[1] == "verify"))
+        self.assertEqual(observed[-1], ["nucleus", "release"])
         self.assertEqual(observed.count(["nucleus", "release"]), 1)
 
     def add_nucleus(self) -> None:
         fixture = self.fixture
         fixture.write("pipeline/products/nucleus.sh", "PRODUCT_ID=nucleus\nPRODUCT_DIR=nucleus\nDEPLOY_PROFILE=custom\n")
         fixture.write("nucleus/deployment/adapter.json", json.dumps({"schema": 1, "product": "nucleus", "dependencies": []}))
-        fixture.write("nucleus/deployment/adapter.py", FAKE_ADAPTER.replace(
-            '"after": []}', '"after": [], "release_after_verify": True}'))
+        fixture.write("nucleus/deployment/adapter.py", FAKE_ADAPTER)
         fixture.write("alpha/deployment/adapter.py", FAKE_ADAPTER.replace('["beta"] if name == "alpha"', '["beta", "nucleus"] if name == "alpha"'))
         fixture.commit()
 
-    def test_recovery_reopens_proven_nucleus_before_requester_recovery(self) -> None:
+    def test_internal_recovery_proves_all_products_and_releases_nucleus_last(self) -> None:
         self.add_nucleus()
         path = self.fixture.create()
         cli.durable_json(path / "fault.json", {"fail": ["nucleus", "verify"]})
         self.assertEqual(cli.run_worker(path), 1)
-        cli.durable_json(path / "fault.json", {})
-        self.assertEqual(cli.run_worker(path, "recover"), 0)
         observed = self.observed(path)
-        self.assertLess(observed.index(["nucleus", "recover"]), observed.index(["nucleus", "release"]))
-        self.assertLess(observed.index(["nucleus", "release"]), observed.index(["alpha", "recover"]))
+        first_release = min(index for index, event in enumerate(observed) if event[1] == "release")
+        self.assertTrue(all(index < first_release for index, event in enumerate(observed) if event[1] == "recover"))
+        self.assertEqual(observed[-1], ["nucleus", "release"])
 
-    def test_detached_admission_failure_records_stopped_instead_of_idle(self) -> None:
+    def test_competing_start_cannot_create_or_delete_an_active_workspace(self) -> None:
         path = self.fixture.create()
         with cli.deployment_lock(self.fixture.storage):
-            result = subprocess.run([sys.executable, str(path / "source" / "deployment" / "cli.py"),
-                                     "_worker", str(path), "execute"], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 1)
-        self.assertEqual(cli.read_json(path / "run.json")["state"], "stopped")
+            with self.assertRaisesRegex(cli.DeploymentError, "holds the deployment lock"):
+                cli.start(self.fixture.repo, ["alpha"], self.fixture.storage)
+        self.assertTrue((path / "run.json").exists())
         self.assertFalse((path / "observed.jsonl").exists())
+
+    def worker_process(self, path: Path, log):
+        with cli.deployment_lock(self.fixture.storage) as lock_fd:
+            return subprocess.Popen([sys.executable, str(path / "source" / "deployment" / "cli.py"),
+                                     "_worker", str(path), str(lock_fd)], stdout=log, stderr=log,
+                                    pass_fds=(lock_fd,))
 
     def test_active_adapter_retains_global_lock_if_runner_dies(self) -> None:
         path = self.fixture.create()
         cli.durable_json(path / "fault.json", {"sleep": ["alpha", "apply"]})
         log = (path / "worker-test.log").open("wb")
-        process = subprocess.Popen([sys.executable, str(path / "source" / "deployment" / "cli.py"),
-                                    "_worker", str(path), "execute"], stdout=log, stderr=log)
+        process = self.worker_process(path, log)
         child_pid = None
         try:
             deadline = time.monotonic() + 15
@@ -352,8 +365,7 @@ assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
         path = self.fixture.create()
         cli.durable_json(path / "fault.json", {"spawn_sleep": ["alpha", "apply"]})
         with (path / "worker-test.log").open("wb") as log:
-            process = subprocess.Popen([sys.executable, str(path / "source" / "deployment" / "cli.py"),
-                                        "_worker", str(path), "execute"], stdout=log, stderr=log)
+            process = self.worker_process(path, log)
             child_pid = descendant_pid = None
             try:
                 deadline = time.monotonic() + 15
@@ -372,6 +384,10 @@ assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
                     with cli.deployment_lock(self.fixture.storage):
                         pass
                 self.assertNotIn(["alpha", "release"], self.observed(path))
+                with self.assertRaisesRegex(cli.DeploymentError, "holds the deployment lock"):
+                    cli.start(self.fixture.repo, ["alpha"], self.fixture.storage)
+                self.assertTrue((path / "source").exists())
+                self.assertTrue((path / "worktree").exists())
             finally:
                 if process.poll() is None:
                     process.kill()

@@ -43,7 +43,7 @@ enum Command {
     Manual,
     /// Inspect daemon availability.
     Health,
-    /// Own deployment admission holds and run the fixed runtime canary.
+    /// Own deployment admission holds and inspect runtime readiness.
     #[command(subcommand)]
     Maintenance(MaintenanceCommand),
     /// Read the authenticated Codex account owned by Nucleus.
@@ -86,10 +86,6 @@ enum MaintenanceCommand {
     },
     Status,
     Release {
-        run_id: String,
-    },
-    /// Run a real no-tools model job while this run owns the sole drained hold.
-    Canary {
         run_id: String,
     },
 }
@@ -408,41 +404,6 @@ async fn run_maintenance(
         MaintenanceCommand::Status => print_json(&client.maintenance_status().await?, compact),
         MaintenanceCommand::Release { run_id } => {
             print_json(&client.maintenance_release(&run_id).await?, compact)
-        }
-        MaintenanceCommand::Canary { run_id } => {
-            let accepted = client.maintenance_canary(&run_id).await?;
-            let deadline = Instant::now() + Duration::from_secs(120);
-            loop {
-                let job = client.get_job(&accepted.job_id).await?;
-                if job.summary.state.is_terminal() {
-                    let verified = job.summary.state == JobState::Completed
-                        && job
-                            .attempts
-                            .last()
-                            .and_then(|attempt| attempt.output.as_ref())
-                            .is_some_and(|output| {
-                                output.final_message.trim() == "NUCLEUS_DEPLOYMENT_CANARY_OK"
-                            });
-                    print_json(
-                        &serde_json::json!({ "protocol_version": 1, "verified": verified, "job_id": accepted.job_id }),
-                        compact,
-                    )?;
-                    return if verified {
-                        Ok(())
-                    } else {
-                        Err(CliError::ServiceUnhealthy(
-                            "deployment canary did not produce its required result".into(),
-                        ))
-                    };
-                }
-                if Instant::now() >= deadline {
-                    return Err(CliError::HealthTimeout(format!(
-                        "deployment canary {} remains unfinished",
-                        accepted.job_id
-                    )));
-                }
-                tokio::time::sleep(Duration::from_millis(250)).await;
-            }
         }
     }
 }

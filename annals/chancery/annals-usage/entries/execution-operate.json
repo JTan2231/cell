@@ -28,11 +28,11 @@
   "success": [
     "Budget identifies observation time, account-global scope, plan, available windows, percent used, resets, and credit fields without inventing token denominators.",
     "Doctor confirms configuration and required authority access or reports the exact failed boundary.",
-    "After login, account access and a deliberate Annals requester canary are verified before resuming paused dispatch."
+    "After login, account access and strict Nucleus health are verified before resuming paused dispatch."
   ],
   "failure_and_recovery": [
     "Authentication busy is reported nonblockingly; wait for the current canonical account, refresh, or login operation rather than replacing credentials.",
-    "If login is needed, quiesce requesters, perform attended device authentication, verify account and strict Nucleus health, then canary Annals.",
+    "If login is needed, quiesce requesters, perform attended device authentication, and verify account and strict Nucleus health before resuming dispatch.",
     "A missing allowance denominator or per-delivery share is an upstream limit, not a value to estimate."
   ],
   "privacy": [
@@ -50,7 +50,7 @@
   ],
   "does_not_authorize": [
     "Replacing or copying Nucleus credentials.",
-    "Resuming requesters before account and requester canaries are understood.",
+    "Resuming requesters before account access and strict Nucleus health are verified.",
     "Treating global account activity as exact Annals delivery consumption."
   ],
   "promise": {
@@ -69,7 +69,7 @@
     "outputs": [
       {"status": "declared", "statement": "Budget returns observation time, account-global scope, plan, available allowance windows, used percentages, reset times, credit fields, and contextual activity."},
       {"status": "declared", "statement": "Doctor reports configuration, Annals library and spool access, Nucleus and Codex versions, strict readiness, and authenticated account telemetry boundaries."},
-      {"status": "declared", "statement": "Login reports the attended Nucleus-owned authentication result; later account, health, and requester canaries establish recovery separately."}
+      {"status": "declared", "statement": "Login reports the attended Nucleus-owned authentication result; later account and health checks establish readiness separately."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Allowance is a live account-global rate-limit snapshot shared with other Codex activity; percent used and reset fields do not identify Annals delivery consumption."},
@@ -93,7 +93,7 @@
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "Budget and doctor are one-shot live reads with no retained companion state; login changes only the forward-moving Nucleus-owned credential."},
       {"status": "declared", "statement": "Account access uses a nonblocking canonical-credential boundary, so busy recovery waits for the current account, refresh, or login operation rather than replacing or racing credentials."},
-      {"status": "declared", "statement": "After attended login, recovery verifies account and strict Nucleus health, then a deliberate Annals domain canary, before clearing only the pause established for recovery."}
+      {"status": "declared", "statement": "After attended login, recovery verifies account and strict Nucleus health before clearing only the pause established for recovery."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "Allowance scope is account-global and cannot be divided into exact Annals delivery shares; login is attended and requester quiescence is required when active continuity matters."},

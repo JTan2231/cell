@@ -41,13 +41,11 @@ not a lockstep product version.
 
 ## Privacy and execution boundary
 
-Two live macOS canaries establish the process boundary. The prototype
-LaunchAgent could not remove a generated output under `~/Documents`. Separately,
-a Nucleus job whose invocation working directory was the protected repository
-left the Codex app-server stuck in `getcwd` before its protocol handshake. The
-second result occurred before the model could read a file or use a tool.
+Weaver's repository access belongs to the interactive process lineage. A
+launchd-owned process may lack access to protected repositories, and Nucleus
+must not use the protected repository as its invocation working directory.
 
-Weaver therefore performs all repository reads and writes in the detached child
+Weaver performs all repository reads and writes in the detached child
 of the interactive CLI. For each stage it snapshots only the inputs selected by
 that stage's authored contract and includes their labeled contents directly in
 the durable job prompt. The Nucleus request names Weaver's private state root as

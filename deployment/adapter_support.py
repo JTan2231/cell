@@ -328,7 +328,7 @@ class ProductAdapter:
 
 
 class MaintainedAdapter(ProductAdapter):
-    """A product's documented durable admission and isolated canary commands."""
+    """A product's documented durable admission and readiness commands."""
 
     def maintenance(self, operation, *args):
         status = maintenance_data(command([self.cli, *self.spec.get("cli_flags", []),
@@ -375,14 +375,7 @@ class MaintainedAdapter(ProductAdapter):
             raise Stopped("verification requires this run's drained product hold")
         # Independently added operator pauses remain in force. This adapter only
         # owns its run's hold and never restores a stale captured pause value.
-        self.runtime_readiness()
-        value = command([self.cli, *self.spec.get("cli_flags", []), "maintenance", "canary",
-                         "--directory", self.run_dir / (self.product + "-canary")],
-                        env=self.environment(), timeout=1800, json_output=True)
-        canary = value.get("data", value).get("canary", value.get("data", value))
-        if canary.get("verified") is not True:
-            raise Stopped("product canary did not verify its domain result")
-        return {"canary": canary}
+        return {"readiness": self.runtime_readiness()}
 
     def runtime_readiness(self):
         if self.spec.get("doctor_command"):
@@ -402,7 +395,7 @@ class MaintainedAdapter(ProductAdapter):
         if prior and context.get("any_apply_started") is False:
             # Maintenance never reached any software/schema cutover. Existing
             # work can resume with exactly the same programs; a product whose
-            # hold never began needs no artificial hold or new domain canary.
+            # hold never began needs no artificial hold or new domain work.
             return response("recovered", "unchanged program before any cutover",
                             {"safe_to_release": True, "installed": "prior"})
         if self.run_id not in status["holds"] and context.get("verified") is True:

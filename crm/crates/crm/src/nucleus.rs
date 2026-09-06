@@ -869,9 +869,8 @@ mod tests {
 
     use nucleus_client::NucleusClient;
     use nucleus_core::{
-        AttemptId, AttemptOutputV1, AttemptState, AttemptTerminalReason, AttemptV1,
-        HarnessIdentity, JobRequestV1, JobState, JobSummaryV1, JobV1, PROTOCOL_VERSION_V1,
-        WorkspaceAccess,
+        AttemptId, AttemptState, AttemptTerminalReason, AttemptV1, HarnessIdentity, JobRequestV1,
+        JobState, JobSummaryV1, JobV1, PROTOCOL_VERSION_V1, WorkspaceAccess,
     };
     use serde::Serialize;
     use serde_json::{Value, json};
@@ -1052,7 +1051,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_output_preserves_domain_commit_but_fails_deployment_verification() {
+    fn missing_output_preserves_domain_commit_and_runtime_diagnostic() {
         let fixture = requester_fixture();
         let proposal: RevisionProposal =
             serde_json::from_value(fixture.proposal).expect("revision proposal");
@@ -1088,29 +1087,6 @@ mod tests {
             retained.runtime_detail.as_deref(),
             Some("Nucleus completed without structured attempt output")
         );
-        let verify = |job: &JobV1| {
-            crate::canary::verify_runtime(job, &fixture.update.job_id, &fixture.update.requester_id)
-        };
-        assert_eq!(
-            verify(&job)
-                .expect_err("missing output cannot verify deployment")
-                .code(),
-            "canary_not_verified"
-        );
-
-        job.attempts[0].output = Some(AttemptOutputV1 {
-            thread_id: "thread-1".into(),
-            turn_id: "turn-1".into(),
-            final_message: "Revision recorded.".into(),
-        });
-        verify(&job).expect("repaired output verifies the existing job");
-        assert_eq!(
-            fixture
-                .store
-                .update(&fixture.update.id)
-                .expect("retained diagnostic"),
-            retained
-        );
         assert_eq!(
             fixture
                 .store
@@ -1119,24 +1095,6 @@ mod tests {
                 .len(),
             2
         );
-
-        for invalid in ["failed", "wrong-attempt", "blank-output"] {
-            let mut candidate = job.clone();
-            match invalid {
-                "failed" => candidate.summary.state = JobState::Failed,
-                "wrong-attempt" => {
-                    candidate.summary.current_attempt_id = Some(AttemptId::new("other"));
-                }
-                _ => {
-                    candidate.attempts[0]
-                        .output
-                        .as_mut()
-                        .expect("output")
-                        .final_message = " \n".into();
-                }
-            }
-            assert!(verify(&candidate).is_err(), "{invalid}");
-        }
     }
 
     #[test]

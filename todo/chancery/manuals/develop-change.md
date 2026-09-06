@@ -47,8 +47,6 @@ changes; historical registrations and decoders remain intact.
    ```
 
    Treat it as the complete product gate.
-5. Run separately authorized routing, assessment, design, migration, email, or
-   deployment canaries only when their exact boundary changed.
 
 Persistent-state work needs representative old-state fixtures, transactional
 migration, a complete backup, and deployment rollback proof. Requester changes
@@ -62,7 +60,7 @@ managed tools. Do not broaden that permission boundary accidentally.
 `todo/release.sh` bumps the package, runs CI, commits, tags, and pushes. It is a
 publication command and is not authorized by a development request. Deployment
 and installed database migration are separate actions too. Email can disclose
-every open todo title and must never be used as an incidental canary.
+every open todo title and requires explicit send authority.
 
 Databases, backups, decision-source paths, source catalogs, Nucleus output,
 email content, API setup, and logs may contain private directions and system
