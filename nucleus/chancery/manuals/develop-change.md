@@ -64,6 +64,14 @@ available; its timeout starts after slot acquisition, and
 `waiting_on_requester` continues to hold the slot through terminal cleanup.
 Capacity scheduling must not add workflow interpretation or automatic retry.
 
+An output-decoder change must exercise both supported authentication sequences
+through the daemon job-read API and retained replay after restart. Preserve
+exact output atoms, authentication exclusions, active thread/turn correlation,
+terminal freeze, and the absence of successful output on failed attempts. A
+completed historical job may expose repaired derived output without changing
+the operational record or executing another attempt; do not add outgoing
+requests or stored result projections to repair missing correlation.
+
 For authentication or service ownership, prevent new credential consumers and
 let active users settle before attended login. Preserve private modes and one
 authoritative managed credential, allow account reads to overlap jobs,

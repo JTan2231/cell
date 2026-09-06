@@ -3,7 +3,7 @@ use crate::store::Store;
 use crate::worker::Worker;
 use crate::{Error, Result};
 use nucleus_client::NucleusClient;
-use nucleus_core::JobId;
+use nucleus_core::{AttemptState, AttemptTerminalReason, JobId, JobState, JobV1};
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -48,6 +48,7 @@ pub(crate) fn run(directory: &Path) -> Result<Value> {
     let revision = store.case_revision(&case.case_id, None)?;
     let history = store.case_history(&case.case_id)?;
     if !update.is_settled()
+        || !update.result_posted
         || revision.source_update_id.as_deref() != Some(update.id.as_str())
         || history.len() != 2
         || revision.revision != 2
@@ -68,22 +69,44 @@ pub(crate) fn run(directory: &Path) -> Result<Value> {
             .get_job(&JobId::new(&update.job_id))
             .await
     })?;
+    verify_runtime(&job, &update.job_id, &update.requester_id)?;
+    Ok(
+        json!({ "protocol_version": 1, "verified": true, "database": database, "case_id": case.case_id, "update_id": update.id, "job_id": update.job_id }),
+    )
+}
+
+pub(crate) fn verify_runtime(job: &JobV1, job_id: &str, requester_id: &str) -> Result<()> {
     let toolset = job.request.invocation.toolset.as_ref();
-    if !job.summary.state.is_terminal()
+    let attempt = job
+        .summary
+        .current_attempt_id
+        .as_ref()
+        .and_then(|id| job.attempts.iter().find(|attempt| attempt.id == *id));
+    let completed = attempt.is_some_and(|attempt| {
+        attempt.job_id == job.summary.id
+            && attempt.state == AttemptState::Completed
+            && attempt.terminal_reason == Some(AttemptTerminalReason::Completed)
+            && attempt.output.as_ref().is_some_and(|output| {
+                !output.thread_id.trim().is_empty()
+                    && !output.turn_id.trim().is_empty()
+                    && !output.final_message.trim().is_empty()
+            })
+    });
+    if job.summary.id.as_str() != job_id
+        || job.summary.state != JobState::Completed
+        || !completed
         || job.summary.requester.program != "crm"
-        || job.summary.requester.id != update.requester_id
+        || job.summary.requester.id != requester_id
         || toolset.is_none_or(|toolset| {
             toolset.provider != "crm" || toolset.name != "case-steward" || toolset.version != 1
         })
     {
         return Err(Error::domain(
             "canary_not_verified",
-            "CRM Nucleus correlation was not proved",
+            "CRM canary requires a correlated completed Nucleus job with usable structured output",
         ));
     }
-    Ok(
-        json!({ "protocol_version": 1, "verified": true, "database": database, "case_id": case.case_id, "update_id": update.id, "job_id": update.job_id }),
-    )
+    Ok(())
 }
 
 fn fixture_file(root: &std::path::Path, relative: &str, text: &str) -> std::io::Result<()> {

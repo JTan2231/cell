@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import shutil
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -164,6 +165,101 @@ class StatefulProofTests(unittest.TestCase):
             self.assertTrue(adapter.recover()["data"]["safe_to_release"])
             readiness.assert_called_once()
             canary.assert_not_called()
+
+
+class AnnalsCanaryTests(unittest.TestCase):
+    def setUp(self):
+        from annals.deployment import canary
+        self.canary = canary
+        self.temporary = tempfile.TemporaryDirectory()
+        self.base = Path(self.temporary.name).resolve()
+        self.adapter = SimpleNamespace(run_dir=self.base, run_id="run-a", home=self.base,
+                                       socket=lambda: self.base / "nucleus.sock",
+                                       payload=lambda: self.base / "annals",
+                                       environment=lambda: {"CELL_DEPLOYMENT_RUN_ID": "run-a"})
+        self.applied = False
+        self.integrations = 0
+        self.fail_integration = False
+        self.output = {"threadId": "thread", "turnId": "turn", "finalMessage": "Recorded."}
+        self.coverage = "cumulative"
+        self.patch = mock.patch.object(canary, "command", side_effect=self.command)
+        self.patch.start()
+
+    def tearDown(self):
+        self.patch.stop()
+        self.temporary.cleanup()
+
+    def command(self, argv, **_):
+        args = [str(value) for value in argv]
+        if args[-1] == "init":
+            (self.base / "annals-canary/annals.db").touch()
+            return {"data": {}}
+        if args[-1] == "stats":
+            count = int(self.applied)
+            return {"data": {"revision": count, "work_count": count, "model_run_count": count,
+                             "commit_count": count, "pending_reconciliation_count": 0,
+                             "concept_count": count, "evidence_count": count}}
+        if "integrate" in args:
+            self.integrations += 1
+            if self.fail_integration:
+                raise Stopped("interrupted model invocation")
+            self.applied = True
+            return {"data": {"applied_revision": 1}}
+        if "change" in args:
+            return {"data": {"work": self.canary.LABEL, "status": "applied",
+                             "base_revision": 0, "applied_revision": 1}}
+        if "report" in args:
+            return {"deliveries": [], "unattributedRuns": [
+                {"annalsModelRunId": None, "jobId": "unrelated-library-job"},
+                {"annalsModelRunId": 1, "jobId": "job", "modelRunToken": "token",
+                 "workLabel": self.canary.LABEL, "baseRevision": 0, "status": "completed",
+                 "coverage": self.coverage, "threadId": "thread", "turnId": "turn",
+                 "usage": {"inputTokens": 20, "outputTokens": 10, "totalTokens": 30}}]}
+        if "jobs" in args:
+            return {"summary": {"state": "completed", "requester": {"program": "annals", "id": "token"}},
+                    "attempts": [{"state": "completed", "output": self.output}]}
+        raise AssertionError(f"unexpected command {args}")
+
+    def test_completed_replay_reads_same_domain_job_and_usage_without_new_examination(self):
+        first = self.canary.verify(self.adapter)
+        self.assertEqual(first, self.canary.verify(self.adapter))
+        self.assertEqual(self.integrations, 1)
+        self.assertTrue(first["canary"]["verified"])
+        self.assertEqual(first["canary"]["usage_coverage"], "cumulative")
+
+    def test_domain_commit_does_not_mask_missing_or_foreign_runtime_output(self):
+        for output in ({}, {"threadId": "foreign", "turnId": "turn", "finalMessage": "Recorded."}):
+            self.output = output
+            with self.assertRaisesRegex(Stopped, "structured final output"):
+                self.canary.verify(self.adapter)
+        self.assertEqual(self.integrations, 1)
+        self.assertTrue(self.applied)
+
+    def test_usage_gap_does_not_become_deployment_success(self):
+        self.coverage = "gap"
+        with self.assertRaisesRegex(Stopped, "token coverage"):
+            self.canary.verify(self.adapter)
+        self.assertTrue(self.applied)
+
+    def test_interrupted_start_cannot_create_a_replacement_attempt(self):
+        self.fail_integration = True
+        with self.assertRaisesRegex(Stopped, "interrupted"):
+            self.canary.verify(self.adapter)
+        with self.assertRaisesRegex(Stopped, "applied evidence-grounded"):
+            self.canary.verify(self.adapter)
+        self.assertEqual(self.integrations, 1)
+        # If the same admitted examination later committed before the caller
+        # disappeared, recovery can prove that result without another attempt.
+        self.applied = True
+        self.assertTrue(self.canary.verify(self.adapter)["canary"]["verified"])
+        self.assertEqual(self.integrations, 1)
+
+    def test_replay_refuses_changed_synthetic_source(self):
+        self.canary.verify(self.adapter)
+        (self.base / "annals-canary/work.txt").write_text("different source")
+        with self.assertRaisesRegex(Stopped, "input or configuration changed"):
+            self.canary.verify(self.adapter)
+        self.assertEqual(self.integrations, 1)
 
 
 if __name__ == "__main__":

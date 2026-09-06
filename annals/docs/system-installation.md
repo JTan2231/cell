@@ -1193,7 +1193,10 @@ files from these archives.
 
 The deployment adapter retains its private isolated canary state under the
 run directory on success and failure; it does not remove that evidence. A
-verified response identifies the canary directory. Annals exercises local
-retention, Krisis durable baseline replay, and Semantics repository mutation
-and replay, alongside each product's dependency doctor. These checks do not
-claim a live model-backed domain integration.
+verified response identifies the canary directory. Annals runs one real
+Nucleus examination against a synthetic private library, applies its validated
+evidence-grounded reconciliation, and verifies the correlated completed job,
+structured final output, and Annals Usage token coverage. The stable directory
+and examination-start marker prevent an interrupted verification from starting
+a replacement examination. Repeating verification reads the same retained
+reconciliation and job. Existing production library pauses remain unchanged.

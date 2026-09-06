@@ -55,7 +55,6 @@ impl NucleusReconciler {
         Self { socket: None }
     }
 
-    #[cfg(test)]
     #[must_use]
     pub fn with_socket(socket: impl Into<PathBuf>) -> Self {
         Self {

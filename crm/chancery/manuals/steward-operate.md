@@ -254,7 +254,13 @@ for that exact deployment owner; normal steward admission remains strict.
 
 The canary creates or resumes one product-marked private synthetic database,
 uses the actual steward, and verifies one committed second revision, a visible
-advisory, the exact correlated `crm/case-steward/1` job, and runtime settlement.
+advisory, acknowledged tool result, and the exact correlated
+`crm/case-steward/1` job. Deployment verification separately requires a completed
+job and matching completed current attempt with nonblank thread, turn, and final
+message output. A committed revision still remains ordinary CRM success after a
+later runtime failure; that outcome alone does not verify a healthy deployment.
+Rechecking a repaired Nucleus output read reuses the existing canary job and
+preserves any CRM diagnostic recorded before the repair.
 It returns `data.canary` with `protocol_version`, `verified`, database, case,
 update, and job identities. Existing foreign directories are refused; failed
 or uncertain work is retained and never automatically retried. It affects no

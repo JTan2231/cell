@@ -101,3 +101,19 @@ Deployment gate identity follows the canonical database path (including a
 symlink alias), or the canonical existing ancestor for a new database.
 Hardlinked databases are rejected before admission. Maintenance status still
 does not open or initialize the database.
+# Deployment requester verification
+
+The Cell deployment adapter runs the hidden `deployment-canary --directory
+ABSOLUTE_DIRECTORY --run-id RUN --nucleus-socket ABSOLUTE_SOCKET` command with
+the exact installed `--annals-binary`. It retains one synthetic completed-turn
+authority, one real Nucleus classification, its durable tool receipt and one
+account in an isolated outbox. It also requires the same Nucleus job to finish
+with structured thread, turn and final output. The installed Annals
+binary/config/library identity is checked separately by doctor; this canary
+does not deliver to Annals or read a real conversation.
+
+The directory and run identity are fixed, private and exclusively held.
+Reinvocation resumes or inspects the same classification; it does not select a
+successor after a failed or ambiguous attempt. Synthetic database state,
+outbox and proof remain available in the deployment run. Existing domain
+database/config selectors are rejected by this command.

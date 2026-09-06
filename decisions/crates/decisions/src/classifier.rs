@@ -139,6 +139,11 @@ pub(crate) struct Runner {
 }
 
 impl Runner {
+    pub(crate) fn with_socket(socket: impl Into<PathBuf>) -> Self {
+        Self {
+            socket: Some(socket.into()),
+        }
+    }
     pub(crate) const fn for_current_user() -> Self {
         Self { socket: None }
     }

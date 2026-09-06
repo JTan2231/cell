@@ -230,9 +230,23 @@ domain tools itself.
 A completed attempt also exposes a small structured `output` object containing
 `threadId`, `turnId`, and `finalMessage`. Nucleus derives that object at read
 time from the attempt's stdout atoms; it is not another stored result. The
-projection binds the active thread and turn start responses, accepts only their
-fixed JSON-RPC response identities, accepts only their correlated messages, and
-freezes at that turn's terminal notification.
+projection identifies the supported invocation's startup sequence from its
+retained successful empty MCP-inventory response: response IDs `1/2/3` for
+inventory/thread/turn with API-key authentication, or `2/3/4` with managed
+authentication. It then binds only the corresponding thread and turn start
+responses, accepts only their correlated messages, and freezes at that turn's
+terminal notification. Missing or conflicting startup evidence does not produce
+structured output. Server requests and error responses cannot establish these
+identities. Failed, cancelled, timed-out, and lost attempts expose no successful
+structured output.
+
+This decoding uses the retained attempt's evidence rather than the current
+authentication configuration. A decoder repair can therefore recover structured
+output when an existing completed job is read again, without rewriting its raw
+atoms, changing its terminal state, or running another attempt. It cannot recover
+records that were not retained or decide whether requester-owned work should be
+retried. Outgoing requests and authentication responses remain excluded from the
+ledger.
 
 ## Harness-output observation ledger
 

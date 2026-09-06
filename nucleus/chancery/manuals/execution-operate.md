@@ -62,6 +62,14 @@ The job ID is the idempotency key. Retry an ambiguous submission only with the
 byte-equivalent typed request and the same ID. A genuinely new attempt needs a
 new ID and the requester must decide that it is safe.
 
+Completed structured output is reconstructed from the retained attempt's
+supported API-key or managed-authentication startup sequence and its correlated
+terminal messages. Reading an old completed job after a decoder repair can
+recover its thread ID, turn ID, and final message without a new attempt or a
+change to its raw observations or terminal state. Today's authentication mode
+does not select a historical decoder. Missing or conflicting startup evidence
+remains missing output; a requester still owns any decision to retry its work.
+
 ## Effects and authority
 
 Submitting can invoke Codex and consume account allowance. A job receives one

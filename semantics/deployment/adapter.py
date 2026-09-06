@@ -3,7 +3,6 @@
 import json
 from pathlib import Path
 import sys
-import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from deployment.adapter_support import command, main, Stopped
@@ -52,20 +51,15 @@ class Adapter(StatefulAdapter):
 
     def runtime_verify(self):
         self.runtime_readiness()
-        # Exercise real provider-owned transactions in isolated state; never
-        # create concepts in a user's registered repository as a deployment test.
-        root = Path(tempfile.mkdtemp(prefix="semantics-canary-", dir=self.run_dir))
-        project = root / "project"
-        project.mkdir()
-        (project / "AGENTS.md").write_text("Semantics-Project: deployment-canary\n")
-        args = [self.payload(), "--database", root / "semantics.db", "--json"]
-        command([*args, "project", "register", "deployment-canary", project], env=self.environment(), json_output=True)
-        command([*args, "repository", "seed", "deployment-canary", "--label", "Deployment admission",
-                 "--meaning", "A deployment canary uses an isolated repository."], env=self.environment(), json_output=True)
-        value = command([*args, "repository", "show", "deployment-canary"], env=self.environment(), json_output=True)
-        if value.get("revision") != 1:
-            raise Stopped("isolated repository transaction did not produce revision one")
-        return {"canary": "isolated repository register, seed and replay", "canary_directory": str(root)}
+        root = self.run_dir / "semantics-canary"
+        proof = command(["/usr/bin/env", "-u", "SEMANTICS_DATABASE", self.payload(), "deployment-canary",
+                         "--directory", root, "--run-id", self.run_id, "--nucleus-socket",
+                         self.home / "Library/Application Support/Nucleus/nucleus.sock"],
+                        env=self.environment(), json_output=True, timeout=1500)
+        if proof.get("verified") is not True:
+            raise Stopped("isolated reconciliation did not prove its grounded revision and Nucleus result")
+        return {"canary": "isolated real account reconciliation, revision replay and Nucleus result",
+                "canary_directory": str(root), "proof": proof}
 
 
 if __name__ == "__main__":

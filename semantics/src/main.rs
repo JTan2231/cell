@@ -37,6 +37,16 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Exercise one retained synthetic account reconciliation during deployment.
+    #[command(hide = true)]
+    DeploymentCanary {
+        #[arg(long)]
+        directory: PathBuf,
+        #[arg(long)]
+        run_id: String,
+        #[arg(long)]
+        nucleus_socket: PathBuf,
+    },
     Maintenance {
         #[command(subcommand)]
         command: MaintenanceCommand,
@@ -247,6 +257,23 @@ fn render_error(error: &Error, json_output: bool, scheduled_worker: bool) -> Str
 }
 
 fn run(cli: Cli) -> Result<()> {
+    if let Command::DeploymentCanary {
+        directory,
+        run_id,
+        nucleus_socket,
+    } = &cli.command
+    {
+        if cli.database.is_some() {
+            return Err(Error::domain(
+                "deployment_canary_scope",
+                "a canary cannot select an existing database",
+            ));
+        }
+        return print(
+            &semantics::deployment_canary::run(directory, run_id, nucleus_socket)?,
+            true,
+        );
+    }
     let database = cli.database.map_or_else(default_database, Ok)?;
     if let Command::Maintenance { command } = cli.command {
         return maintenance_command(&database, command);
@@ -256,6 +283,7 @@ fn run(cli: Cli) -> Result<()> {
     let _admission = deployment_admission(&database)?;
     let store = Store::open(database)?;
     match cli.command {
+        Command::DeploymentCanary { .. } => unreachable!("canary returned before opening state"),
         Command::Maintenance { .. } => unreachable!("maintenance returned before opening state"),
         Command::Project(arguments) => project_command(&store, arguments.command, cli.json),
         Command::Repository(arguments) => repository_command(&store, arguments.command, cli.json),

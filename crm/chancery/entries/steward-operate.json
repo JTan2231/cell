@@ -163,7 +163,7 @@
       },
       {
         "status": "declared",
-        "statement": "Maintenance status reports protocol_version 1, holds and drained with product-specific runtime evidence; the explicit predefined canary reports verified only after real runtime execution and its product-owned required result."
+        "statement": "Maintenance status reports protocol_version 1, holds and drained with product-specific runtime evidence; the explicit predefined canary reports verified only after its product-owned required result and a correlated completed Nucleus job whose completed current attempt has usable structured output. Ordinary domain success after a later runtime failure does not by itself verify deployment health."
       }
     ],
     "data_semantics": [

@@ -12,6 +12,8 @@
 pub mod account_worker;
 pub mod adapters;
 pub mod api;
+#[doc(hidden)]
+pub mod deployment_canary;
 pub mod domain;
 pub mod error;
 pub mod nucleus;

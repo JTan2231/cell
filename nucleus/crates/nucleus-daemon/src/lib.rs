@@ -2236,6 +2236,7 @@ fn attempt_to_core(attempt: AttemptRecord, output: Option<AttemptOutputV1>) -> A
 
 #[derive(Default)]
 struct AttemptOutputProjection {
+    thread_start_response_id: Option<i64>,
     active_thread_id: Option<String>,
     active_turn_id: Option<String>,
     final_message: String,
@@ -2248,7 +2249,38 @@ impl AttemptOutputProjection {
         if self.terminal {
             return;
         }
-        if self.active_thread_id.is_none() && message.get("id").and_then(Value::as_i64) == Some(2) {
+        // The ledger excludes outgoing requests and sensitive login responses.
+        // The supported adapter's empty MCP inventory response identifies its
+        // two startup sequences: API key (inventory/thread/turn = 1/2/3) and
+        // managed authentication (2/3/4). Bind that evidence from this attempt,
+        // never today's authentication or an arbitrary result-shaped message.
+        let response_id = message
+            .get("id")
+            .filter(|_| message.get("method").is_none() && message.get("error").is_none())
+            .and_then(Value::as_i64);
+        if let Some(id @ (1 | 2)) = response_id
+            && message
+                .pointer("/result/data")
+                .and_then(Value::as_array)
+                .is_some_and(Vec::is_empty)
+            && message.pointer("/result/thread").is_none()
+            && message.pointer("/result/turn").is_none()
+        {
+            if self
+                .thread_start_response_id
+                .is_some_and(|expected| expected != id + 1)
+            {
+                // Conflicting startup evidence cannot select an active turn.
+                self.terminal = true;
+            } else {
+                self.thread_start_response_id = Some(id + 1);
+            }
+            return;
+        }
+        let Some(thread_response_id) = self.thread_start_response_id else {
+            return;
+        };
+        if self.active_thread_id.is_none() && response_id == Some(thread_response_id) {
             self.active_thread_id = message
                 .pointer("/result/thread/id")
                 .and_then(Value::as_str)
@@ -2256,7 +2288,7 @@ impl AttemptOutputProjection {
         }
         if self.active_thread_id.is_some()
             && self.active_turn_id.is_none()
-            && message.get("id").and_then(Value::as_i64) == Some(3)
+            && response_id == Some(thread_response_id + 1)
         {
             self.active_turn_id = message
                 .pointer("/result/turn/id")
@@ -3527,71 +3559,163 @@ mod tests {
 
     #[test]
     fn derived_output_tracks_only_the_active_turn_and_freezes_at_completion() {
-        let mut projection = AttemptOutputProjection::default();
-        for message in [
-            json!({"id": 99, "result": {"thread": {"id": "thread-spoof"}}}),
-            json!({"id": 2, "result": {"thread": {"id": "thread-active"}}}),
-            json!({"id": 98, "result": {"turn": {"id": "turn-spoof"}}}),
-            json!({"id": 3, "result": {"turn": {"id": "turn-active"}}}),
-            json!({
-                "method": "item/completed",
-                "params": {
-                    "threadId": "thread-other",
-                    "turnId": "turn-other",
-                    "item": {"type": "agentMessage", "text": "wrong-before"}
-                }
-            }),
-            json!({
-                "method": "item/completed",
-                "params": {
-                    "threadId": "thread-active",
-                    "turnId": "turn-active",
-                    "item": {"type": "agentMessage", "text": "correct"}
-                }
-            }),
-            json!({
-                "method": "turn/completed",
-                "params": {
-                    "threadId": "thread-other",
-                    "turn": {"id": "turn-other", "status": "failed"}
-                }
-            }),
-            json!({
-                "method": "turn/completed",
-                "params": {
-                    "threadId": "thread-active",
-                    "turn": {"id": "turn-active", "status": "completed"}
-                }
-            }),
-            json!({
-                "method": "item/completed",
-                "params": {
-                    "threadId": "thread-active",
-                    "turnId": "turn-active",
-                    "item": {"type": "agentMessage", "text": "wrong-after"}
-                }
-            }),
-            json!({
-                "method": "turn/completed",
-                "params": {
-                    "threadId": "thread-other",
-                    "turn": {
-                        "id": "turn-other",
-                        "status": "completed",
-                        "items": [{"type": "agentMessage", "text": "wrong-terminal"}]
+        for inventory_id in [1, 2] {
+            let mut projection = AttemptOutputProjection::default();
+            for message in [
+                json!({"id": 98, "result": {"data": []}}),
+                json!({"id": inventory_id, "method": "server/request", "result": {"data": []}}),
+                json!({"id": inventory_id, "error": {}, "result": {"data": []}}),
+                json!({"id": inventory_id, "result": {"data": []}}),
+                json!({"id": 99, "result": {"thread": {"id": "thread-spoof"}}}),
+                json!({"id": inventory_id + 1, "method": "server/request", "result": {"thread": {"id": "thread-spoof"}}}),
+                json!({"id": inventory_id + 1, "error": {}, "result": {"thread": {"id": "thread-spoof"}}}),
+                json!({"id": inventory_id + 1, "result": {"thread": {"id": "thread-active"}}}),
+                json!({"id": 98, "result": {"turn": {"id": "turn-spoof"}}}),
+                json!({"id": inventory_id + 2, "method": "server/request", "result": {"turn": {"id": "turn-spoof"}}}),
+                json!({"id": inventory_id + 2, "error": {}, "result": {"turn": {"id": "turn-spoof"}}}),
+                json!({"id": inventory_id + 2, "result": {"turn": {"id": "turn-active"}}}),
+                json!({
+                    "method": "item/completed",
+                    "params": {
+                        "threadId": "thread-other",
+                        "turnId": "turn-other",
+                        "item": {"type": "agentMessage", "text": "wrong-before"}
                     }
-                }
-            }),
+                }),
+                json!({
+                    "method": "item/completed",
+                    "params": {
+                        "threadId": "thread-active",
+                        "turnId": "turn-active",
+                        "item": {"type": "agentMessage", "text": "correct"}
+                    }
+                }),
+                json!({
+                    "method": "turn/completed",
+                    "params": {
+                        "threadId": "thread-other",
+                        "turn": {"id": "turn-other", "status": "failed"}
+                    }
+                }),
+                json!({
+                    "method": "turn/completed",
+                    "params": {
+                        "threadId": "thread-active",
+                        "turn": {"id": "turn-active", "status": "completed"}
+                    }
+                }),
+                json!({
+                    "method": "item/completed",
+                    "params": {
+                        "threadId": "thread-active",
+                        "turnId": "turn-active",
+                        "item": {"type": "agentMessage", "text": "wrong-after"}
+                    }
+                }),
+                json!({
+                    "method": "turn/completed",
+                    "params": {
+                        "threadId": "thread-other",
+                        "turn": {
+                            "id": "turn-other",
+                            "status": "completed",
+                            "items": [{"type": "agentMessage", "text": "wrong-terminal"}]
+                        }
+                    }
+                }),
+            ] {
+                projection.observe(&message);
+            }
+
+            let output = projection
+                .into_output()
+                .unwrap_or_else(|| panic!("active completed turn must produce output"));
+            assert_eq!(output.thread_id, "thread-active");
+            assert_eq!(output.turn_id, "turn-active");
+            assert_eq!(output.final_message, "correct");
+        }
+    }
+
+    #[test]
+    fn derived_output_requires_one_valid_startup_sequence_and_successful_terminal() {
+        for startup in [
+            vec![],
+            vec![json!({"id": 99, "result": {"data": []}})],
+            vec![json!({"id": 1, "result": {"data": [{}]}})],
+            vec![json!({"id": 1, "result": {"data": [], "thread": {"id": "spoof"}}})],
+            vec![json!({"id": 1, "error": {}, "result": {"data": []}})],
+            vec![json!({"id": 1, "method": "server/request", "result": {"data": []}})],
+            vec![
+                json!({"id": 1, "result": {"data": []}}),
+                json!({"id": 2, "result": {"data": []}}),
+            ],
         ] {
-            projection.observe(&message);
+            let mut projection = AttemptOutputProjection::default();
+            for message in startup.into_iter().chain([
+                json!({"id": 2, "result": {"thread": {"id": "thread-active"}}}),
+                json!({"id": 3, "result": {"turn": {"id": "turn-active"}}}),
+                json!({"method": "turn/completed", "params": {
+                    "threadId": "thread-active", "turn": {"id": "turn-active", "status": "completed"}
+                }}),
+            ]) {
+                projection.observe(&message);
+            }
+            assert!(projection.into_output().is_none());
         }
 
-        let output = projection
-            .into_output()
-            .unwrap_or_else(|| panic!("active completed turn must produce output"));
-        assert_eq!(output.thread_id, "thread-active");
-        assert_eq!(output.turn_id, "turn-active");
-        assert_eq!(output.final_message, "correct");
+        for inventory_id in [1, 2] {
+            for terminal_status in [Value::Null, json!("failed"), json!("completed")] {
+                let mut projection = AttemptOutputProjection::default();
+                for message in [
+                    json!({"id": inventory_id, "result": {"data": []}}),
+                    json!({"id": inventory_id + 1, "result": {"thread": {"id": "thread-active"}}}),
+                    json!({"id": inventory_id + 2, "result": {"turn": {"id": "turn-active"}}}),
+                    json!({"method": "turn/completed", "params": {
+                        "threadId": "thread-active", "turn": {"id": "turn-active", "status": terminal_status}
+                    }}),
+                    json!({"method": "turn/completed", "params": {
+                        "threadId": "thread-active", "turn": {"id": "turn-active", "status": "completed",
+                            "items": [{"type": "agentMessage", "text": "too late"}]}
+                    }}),
+                ] {
+                    projection.observe(&message);
+                }
+                let output = projection.into_output();
+                if terminal_status == "completed" {
+                    assert_eq!(
+                        output.map(|output| output.final_message),
+                        Some(String::new())
+                    );
+                } else {
+                    assert!(output.is_none());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn derived_output_uses_the_last_terminal_agent_message() {
+        for inventory_id in [1, 2] {
+            let mut projection = AttemptOutputProjection::default();
+            for message in [
+                json!({"id": inventory_id, "result": {"data": []}}),
+                json!({"id": inventory_id + 1, "result": {"thread": {"id": "thread-active"}}}),
+                json!({"id": inventory_id + 2, "result": {"turn": {"id": "turn-active"}}}),
+                json!({"method": "turn/completed", "params": {
+                    "threadId": "thread-active", "turn": {"id": "turn-active", "status": "completed", "items": [
+                        {"type": "agentMessage", "text": "earlier"},
+                        {"type": "agentMessage", "text": "final"},
+                        {"type": "tool", "text": "not an answer"}
+                    ]}
+                }}),
+            ] {
+                projection.observe(&message);
+            }
+            assert_eq!(
+                projection.into_output().map(|output| output.final_message),
+                Some("final".to_owned())
+            );
+        }
     }
 
     #[test]

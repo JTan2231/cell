@@ -1545,8 +1545,8 @@ mod tests {
 
     use super::{
         BoundedSources, DesignBackend, READ_PAGE_CHARS, RoutingBackend, abandon_unfinished_design,
-        finish_design_stage, nearest_git_workspace, validate_assessment_evidence_refs,
-        validate_routing_evidence_refs,
+        finish_design_stage, finish_stage, nearest_git_workspace,
+        validate_assessment_evidence_refs, validate_routing_evidence_refs,
     };
     use crate::db;
     use crate::model::{ConcernId, SituationAssessmentId, TodoId, TodoStatus};
@@ -1560,6 +1560,39 @@ mod tests {
     use crate::tool_server::{Backend, Call, ToolFailure};
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    #[test]
+    fn missing_runtime_output_cannot_replace_a_committed_domain_result() -> TestResult {
+        let failure = || {
+            crate::error::AppError::unexpected(
+                "model_runner_protocol",
+                "Nucleus completed the liaison without structured attempt output",
+            )
+        };
+        for kind in ["routing proposal", "situation assessment"] {
+            let output = finish_stage(Some("committed artifact"), None, Err(failure()), kind)?;
+            assert_eq!(output.artifact, "committed artifact");
+            assert!(
+                output
+                    .diagnostic
+                    .as_deref()
+                    .is_some_and(|message| message.contains("without structured attempt output"))
+            );
+            let Err(error) = finish_stage::<&str>(None, None, Err(failure()), kind) else {
+                return Err(io::Error::other("missing domain result was accepted").into());
+            };
+            assert_eq!(error.code(), "model_runner_protocol");
+        }
+        let directory = tempfile::tempdir()?;
+        let mut backend = design_backend_fixture(&directory.path().join("todo.db"), Some("ready"))?;
+        let draft = backend.draft.take().ok_or("missing committed draft")?;
+        let expected = draft.id;
+        let output = finish_design_stage(Some(draft), None, None, Err(failure()))?;
+        assert_eq!(output.artifact.id, expected);
+        assert_eq!(output.artifact.state, "ready");
+        assert!(output.diagnostic.is_some());
+        Ok(())
+    }
 
     #[test]
     fn explicit_source_scope_never_exposes_a_workspace_catalog() -> TestResult {
@@ -2023,8 +2056,9 @@ mod tests {
             connection.execute(
                 "INSERT INTO todo_designs(
                      todo_id, revision, assessment_id, agent_job_id, state, summary,
-                     producer_tool_call_id
-                 ) VALUES(?1,1,?2,?3,?4,'Open fixture','design-call')",
+                     producer_tool_call_id, canonical_digest
+                 ) VALUES(?1,1,?2,?3,?4,'Fixture design','design-call',
+                          CASE WHEN ?4 = 'ready' THEN 'sha256:fixture' END)",
                 params![
                     todo_id.storage_id(),
                     assessment_id.storage_id(),

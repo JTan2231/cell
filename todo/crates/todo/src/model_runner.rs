@@ -783,10 +783,16 @@ mod tests {
     #[test]
     fn nucleus_job_uses_durable_state_and_attempt_output() -> Result<(), Box<dyn std::error::Error>>
     {
-        exercise_fake_nucleus()
+        exercise_fake_nucleus(true)
     }
 
-    fn exercise_fake_nucleus() -> Result<(), Box<dyn std::error::Error>> {
+    #[test]
+    fn missing_output_reports_protocol_failure_after_one_tool_commit()
+    -> Result<(), Box<dyn std::error::Error>> {
+        exercise_fake_nucleus(false)
+    }
+
+    fn exercise_fake_nucleus(include_output: bool) -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
         let socket = directory.path().join("nucleus.sock");
         let listener = UnixListener::bind(&socket)?;
@@ -794,14 +800,26 @@ mod tests {
         std::fs::create_dir(&working)?;
         let working = std::fs::canonicalize(working)?;
         let expected_working = working.display().to_string();
-        let server = thread::spawn(move || serve_fake_nucleus(&listener, &expected_working));
+        let server =
+            thread::spawn(move || serve_fake_nucleus(&listener, &expected_working, include_output));
 
         let settings = ModelSettings::new(ModelQuality::Low, Some("custom-model"));
         let runner = Runner::new(&socket, Duration::from_secs(5));
         let mut backend = StubBackend::default();
-        let diagnostic =
-            runner.run_liaison(&settings, "Research this need", &working, &mut backend)?;
-        assert_eq!(diagnostic, "created");
+        let result = runner.run_liaison(&settings, "Research this need", &working, &mut backend);
+        if include_output {
+            assert_eq!(result?, "created");
+        } else {
+            let Err(error) = result else {
+                panic!("missing output was accepted");
+            };
+            assert_eq!(error.code(), "model_runner_protocol");
+            assert!(
+                error
+                    .to_string()
+                    .contains("without structured attempt output")
+            );
+        }
         assert_eq!(backend.calls.len(), 1);
         let (tool_call_id, Call::CreateTodo(arguments)) = &backend.calls[0] else {
             panic!("runner dispatched an unexpected tool");
@@ -821,13 +839,14 @@ mod tests {
     fn serve_fake_nucleus(
         listener: &UnixListener,
         expected_working: &str,
+        include_output: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut submitted = None;
         let mut job_id = None;
         for step in 0..11 {
             let (mut stream, _) = listener.accept()?;
             let (request_line, body) = read_request(&stream)?;
-            let response = fake_response(
+            let mut response = fake_response(
                 step,
                 &request_line,
                 body.as_deref(),
@@ -835,6 +854,12 @@ mod tests {
                 &mut submitted,
                 &mut job_id,
             );
+            if step == 10 && !include_output {
+                response["attempts"][0]
+                    .as_object_mut()
+                    .ok_or("attempt is not an object")?
+                    .remove("output");
+            }
             write_response(&mut stream, &response)?;
         }
         Ok(())

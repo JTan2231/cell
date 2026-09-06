@@ -390,7 +390,12 @@ strict Nucleus readiness or the named deployment's proved held readiness.
 
 The canary uses a product-marked private synthetic database and source file,
 runs actual concern-routing research, and proves one pending routing record
-and the correlated terminal Todo Nucleus job. It returns `data.canary` with
+and the exact correlated `todo/concern-routing/1` Nucleus job. Deployment
+verification separately requires a completed job and matching completed current
+attempt with nonblank thread, turn, and final message output. A committed routing
+proposal still remains ordinary Todo success after a later runtime failure;
+that outcome alone does not verify a healthy deployment. Rechecking a repaired
+Nucleus output read reuses the existing canary job and routing record. It returns `data.canary` with
 `protocol_version`, `verified`, database, concern, routing, and job identities.
 It never accepts a proposal or sends email. Foreign directories are refused.
 If interrupted research has no domain result, it fails with retained evidence

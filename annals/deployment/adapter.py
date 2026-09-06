@@ -4,12 +4,12 @@ import os
 from pathlib import Path
 import pwd
 import sys
-import tempfile
 import tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from deployment.adapter_support import command, digest, main, Stopped
 from deployment.stateful_adapter import StatefulAdapter
+from annals.deployment.canary import verify as verify_canary
 
 SPEC = {
     "product": "annals", "application": "Annals", "format": "4", "allow_absent": True,
@@ -136,16 +136,7 @@ class Adapter(StatefulAdapter):
 
     def runtime_verify(self):
         readiness = self.runtime_readiness()
-        root = Path(tempfile.mkdtemp(prefix="annals-canary-", dir=self.run_dir))
-        source = root / "work.txt"
-        source.write_text("Deployment canaries are retained only in isolated state.\n")
-        args = [self.payload(), "--library", root / "annals.db", "--json"]
-        command([*args, "init"], env=self.environment(), json_output=True)
-        command([*args, "work", "add", source, "--name", "Deployment canary"], env=self.environment(), json_output=True)
-        value = command([*args, "stats"], env=self.environment(), json_output=True)["data"]
-        if value.get("work_count") != 1:
-            raise Stopped("isolated retained-work canary did not preserve the work")
-        return {**readiness, "canary": "isolated library retention and readback", "canary_directory": str(root)}
+        return {**readiness, **verify_canary(self)}
 
 
 if __name__ == "__main__":

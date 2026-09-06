@@ -3,7 +3,6 @@
 from pathlib import Path
 import re
 import sys
-import tempfile
 import tomllib
 import os
 import stat
@@ -131,14 +130,17 @@ class Adapter(StatefulAdapter):
 
     def runtime_verify(self):
         self.runtime_readiness()
-        root = Path(tempfile.mkdtemp(prefix="krisis-canary-", dir=self.run_dir))
-        args = [self.payload(), "--database", root / "krisis.db", "--json"]
-        first = command([*args, "observe", "activate"], env=self.environment(), json_output=True)
-        second = command([*args, "observe", "activate"], env=self.environment(), json_output=True)
-        status = command([*args, "observe", "status"], env=self.environment(), json_output=True)
-        if first.get("created") is not True or second.get("created") is not False or status.get("queued") != 0:
-            raise Stopped("isolated observer activation was not durable and idempotent")
-        return {"canary": "isolated durable observer baseline and replay", "canary_directory": str(root)}
+        root = self.run_dir / "krisis-canary"
+        pins = self.installed_pins()
+        proof = command(["/usr/bin/env", "-u", "KRISIS_DATABASE", "-u", "KRISIS_ANNALS_CONFIG", "-u", "KRISIS_ANNALS_LIBRARY_ID",
+                         self.payload(), "--annals-binary", pins["annals_binary"], "deployment-canary",
+                         "--directory", root, "--run-id", self.run_id, "--nucleus-socket",
+                         self.home / "Library/Application Support/Nucleus/nucleus.sock"],
+                        env=self.environment(), json_output=True, timeout=1500)
+        if proof.get("verified") is not True:
+            raise Stopped("isolated classifier did not prove its durable domain and Nucleus result")
+        return {"canary": "isolated real classification, durable account outbox and Nucleus result",
+                "canary_directory": str(root), "proof": proof}
 
 
 if __name__ == "__main__":

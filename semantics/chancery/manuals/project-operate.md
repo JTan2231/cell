@@ -238,3 +238,10 @@ verified response identifies the canary directory. Annals exercises local
 retention, Krisis durable baseline replay, and Semantics repository mutation
 and replay, alongside each product's dependency doctor. These checks do not
 claim a live model-backed domain integration.
+The Cell deployment adapter additionally runs one real Nucleus account
+reconciliation against a retained private synthetic repository. Verification
+requires a durable revision with the exact synthetic account grounding and
+the same completed Nucleus job with structured final output. This does not
+write registered user repositories or consume real upstream account intake.
+Recovery reuses the fixed isolated directory and persisted job correlation;
+failed or ambiguous execution never receives an automatic successor attempt.

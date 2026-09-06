@@ -254,7 +254,23 @@ the uninstaller.
 
 The deployment adapter retains its private isolated canary state under the
 run directory on success and failure; it does not remove that evidence. A
-verified response identifies the canary directory. Annals exercises local
-retention, Krisis durable baseline replay, and Semantics repository mutation
-and replay, alongside each product's dependency doctor. These checks do not
-claim a live model-backed domain integration.
+verified response identifies the canary directory. Semantics exercises real
+Nucleus account reconciliation, an exact grounded revision and its replay,
+alongside dependency doctor. Its synthetic input is created only inside that
+private directory and is not a real accepted account from the user's feed.
+# Deployment requester verification
+
+The Cell adapter runs the hidden `deployment-canary --directory
+ABSOLUTE_DIRECTORY --run-id RUN --nucleus-socket ABSOLUTE_SOCKET` command.
+It creates a private synthetic project and accepted-account fixture, invokes
+the real account reconciliation requester and managed tool, and verifies one
+durable revision with the exact account grounding. It then reads the same
+Nucleus job and requires completion plus structured thread, turn and final
+output. Real project repositories, Annals accounts and feed cursors are not
+changed; dependency readiness is checked separately by doctor.
+
+The run keeps its isolated database, immutable source fixture, Nucleus
+correlation and verification proof. A repeated invocation uses the same
+correlation and never creates a successor attempt after failure or ambiguous
+transport. The fixed private directory is exclusively held, and selecting an
+existing domain database is rejected.

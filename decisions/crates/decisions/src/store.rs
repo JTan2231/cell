@@ -1790,6 +1790,19 @@ impl Store {
         }
     }
 
+    pub(crate) fn observation_job_request_digest(&self, job_id: &str) -> AppResult<String> {
+        self.connection
+            .query_row(
+                "SELECT request_digest FROM observation_jobs WHERE nucleus_job_id=?1",
+                [job_id],
+                |row| row.get(0),
+            )
+            .context(
+                "database_read_failed",
+                "unable to verify the exact canary request digest",
+            )
+    }
+
     pub(crate) fn mark_job(
         &self,
         nucleus_job_id: &str,

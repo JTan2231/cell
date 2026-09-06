@@ -408,10 +408,16 @@ research. `maintenance canary RUN_ID` executes the fixed real no-tools canary.
 After Nucleus verifies, the coordinator durably releases only its own Nucleus
 hold so the still-held requesters can run isolated synthetic domain canaries.
 CRM, Todo and Weaver canaries use their actual Nucleus integrations and retained
-correlation evidence. Annals, Krisis and Semantics validate their installed
-dependencies and exercise isolated domain persistence and replay. These checks
-do not send email or fabricate successful domain results. Remaining holds are
-released only after their required proofs pass.
+correlation evidence. Deployment verification separately requires a clean
+completed runtime result and usable structured output; this does not change
+the production rule that a committed domain result survives later runtime
+failure. Annals verifies a real isolated reconciliation and correlated Usage
+report; Krisis verifies a real classification and retained outbox; Semantics
+verifies a real account reconciliation and grounded revision. These checks do
+not send email or mutate production domain records. Stable canary directories
+retain each exact job and domain correlation so recovery does not silently
+start replacement attempts. Remaining holds are released only after their
+required proofs pass.
 
 `status` and bounded `wait` read the durable run. `resume` continues only
 pre-maintenance preparation. Once a mutation may have occurred, `recover`
@@ -441,6 +447,12 @@ preserve the original enabled/paused state, and settle existing domain work and
 Nucleus jobs. Then install the compatible foundation and requester binaries,
 verify their new maintenance interfaces, and restore exactly the prior schedule
 and pause state. Do not infer a successful migration from catalog presence.
+
+An attended handoff may keep the original scheduler and operator gates closed
+while releasing its temporary holds to the first normal coordinated run. That
+run performs the final installation and requester verification. Restore the
+captured external gates only after it succeeds; its temporarily disabled
+schedule baseline must not replace the original operator intent.
 
 Thereafter a names-only run owns the operational sequence. Selector-only products
 are suitable first pilots; a Nucleus/requester selection exercises affected-only
@@ -676,6 +688,16 @@ change is backward compatible, deploy support to Nucleus before a requester
 emits the new form. When the old and new forms cannot coexist, prevent new
 requester work, let active jobs settle, take the required backups, and perform
 a coordinated cutover.
+
+Completed structured output is reconstructed from retained stdout when a job
+is read. Its decoder supports the exact API-key and managed-authentication
+startup sequences without retaining outgoing requests or sensitive login
+responses. A decoder correction can make an old completed answer readable
+without changing job state or running the model again. Missing atoms remain a
+gap. Requester terminal records and retry policy do not change merely because
+Nucleus can now decode an old answer; inspect the owning product before any
+new attempt. Test both authentication paths through the daemon job API as well
+as the execution adapter, including replay after restart.
 
 ## Routine operation
 

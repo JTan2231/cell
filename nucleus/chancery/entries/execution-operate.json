@@ -144,7 +144,7 @@
       },
       {
         "status": "declared",
-        "statement": "A completed attempt may expose a derived structured thread ID, turn ID, and final message, while its retained output atoms remain the exact operational evidence."
+        "statement": "A completed attempt may expose a derived structured thread ID, turn ID, and final message using its retained supported API-key or managed-authentication startup sequence and correlated terminal messages; reading it after a decoder repair can recover that output without a replacement attempt, while retained atoms and operational state remain unchanged."
       },
       {
         "status": "unsupported",

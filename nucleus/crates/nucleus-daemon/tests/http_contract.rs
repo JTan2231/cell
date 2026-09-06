@@ -21,6 +21,10 @@ use tokio::process::{Child, Command};
 const ORIGIN: &str = "http://nucleus.local";
 const FAKE_MODEL: &str = "fake-model";
 const SUPPORTED_CODEX_VERSION: &str = "0.146.0";
+const API_KEY_AUTH: &str = r#"{"OPENAI_API_KEY":"fixture"}"#;
+const MANAGED_ACCESS_TOKEN: &str = "header.e30.signature-fixture-managed-secret";
+const MANAGED_REFRESH_TOKEN: &str = "fixture-managed-refresh-secret";
+const MANAGED_AUTH: &str = r#"{"auth_mode":"chatgpt","tokens":{"access_token":"header.e30.signature-fixture-managed-secret","refresh_token":"fixture-managed-refresh-secret","account_id":"fixture-account"}}"#;
 const COMPATIBLE_PROTOCOL_SCHEMA: &str = r##"{
   "definitions": {
     "ClientRequest": {"oneOf": [
@@ -121,10 +125,13 @@ impl DaemonFixture {
     }
 
     async fn start_with(codex_version: &str, protocol_schema: &str) -> Self {
+        Self::start_with_auth(codex_version, protocol_schema, API_KEY_AUTH).await
+    }
+
+    async fn start_with_auth(codex_version: &str, protocol_schema: &str, auth: &str) -> Self {
         let temporary = tempfile::tempdir().or_panic("create test directory");
         let root = temporary.path();
         let socket = root.join("nucleus.sock");
-        let database = root.join("nucleus.db");
         let fake_codex = root.join("fake-codex");
         let home = root.join("home");
         let codex_home = home.join(".codex");
@@ -141,11 +148,7 @@ impl DaemonFixture {
             fs::Permissions::from_mode(0o600),
         )
         .or_panic("secure fake config");
-        fs::write(
-            codex_home.join("auth.json"),
-            br#"{"OPENAI_API_KEY":"fixture"}"#,
-        )
-        .or_panic("write fake auth");
+        fs::write(codex_home.join("auth.json"), auth).or_panic("write fake auth");
         fs::set_permissions(
             codex_home.join("auth.json"),
             fs::Permissions::from_mode(0o600),
@@ -154,27 +157,7 @@ impl DaemonFixture {
         write_fake_codex(&fake_codex, codex_version, protocol_schema);
 
         let stderr_path = root.join("nucleusd.stderr.log");
-        let stdout_path = root.join("nucleusd.stdout.log");
-        let stderr = File::create(&stderr_path).or_panic("create daemon stderr log");
-        let stdout = File::create(stdout_path).or_panic("create daemon stdout log");
-        let mut child = Command::new(env!("CARGO_BIN_EXE_nucleusd"))
-            .args(["serve", "--socket"])
-            .arg(&socket)
-            .arg("--database")
-            .arg(&database)
-            .arg("--codex")
-            .arg(&fake_codex)
-            .arg("--codex-home")
-            .arg(&codex_home)
-            .env("HOME", &home)
-            .env("CODEX_HOME", &codex_home)
-            .env("RUST_LOG", "nucleus=debug")
-            .stdin(Stdio::null())
-            .stdout(Stdio::from(stdout))
-            .stderr(Stdio::from(stderr))
-            .kill_on_drop(true)
-            .spawn()
-            .or_panic("start nucleusd");
+        let mut child = spawn_test_daemon(root);
 
         let client = NucleusClient::new(&socket).or_panic("build typed client");
         let raw_client = reqwest::Client::builder()
@@ -182,23 +165,7 @@ impl DaemonFixture {
             .unix_socket(socket.clone())
             .build()
             .or_panic("build raw client");
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            if let Ok(Ok(_)) =
-                tokio::time::timeout(Duration::from_millis(500), client.health()).await
-            {
-                break;
-            }
-            if let Some(status) = child.try_wait().or_panic("inspect daemon process") {
-                let diagnostics = fs::read_to_string(&stderr_path).unwrap_or_default();
-                panic!("nucleusd exited during startup ({status}): {diagnostics}");
-            }
-            assert!(
-                Instant::now() < deadline,
-                "nucleusd did not become reachable"
-            );
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
+        wait_for_daemon(&mut child, &client, &stderr_path).await;
 
         Self {
             temporary,
@@ -207,6 +174,18 @@ impl DaemonFixture {
             raw_client,
             stderr_path,
         }
+    }
+
+    async fn restart(&mut self) {
+        self.child
+            .start_kill()
+            .or_panic("stop test daemon before replay");
+        self.child
+            .wait()
+            .await
+            .or_panic("wait for stopped test daemon");
+        self.child = spawn_test_daemon(self.temporary.path());
+        wait_for_daemon(&mut self.child, &self.client, &self.stderr_path).await;
     }
 
     async fn shutdown(mut self) {
@@ -249,9 +228,191 @@ impl DaemonFixture {
     }
 }
 
+fn spawn_test_daemon(root: &Path) -> Child {
+    let stderr = File::options()
+        .create(true)
+        .append(true)
+        .open(root.join("nucleusd.stderr.log"))
+        .or_panic("open daemon stderr log");
+    let stdout = File::options()
+        .create(true)
+        .append(true)
+        .open(root.join("nucleusd.stdout.log"))
+        .or_panic("open daemon stdout log");
+    Command::new(env!("CARGO_BIN_EXE_nucleusd"))
+        .args(["serve", "--socket"])
+        .arg(root.join("nucleus.sock"))
+        .arg("--database")
+        .arg(root.join("nucleus.db"))
+        .arg("--codex")
+        .arg(root.join("fake-codex"))
+        .arg("--codex-home")
+        .arg(root.join("home/.codex"))
+        .env("HOME", root.join("home"))
+        .env("CODEX_HOME", root.join("home/.codex"))
+        .env("RUST_LOG", "nucleus=debug")
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
+        .kill_on_drop(true)
+        .spawn()
+        .or_panic("start nucleusd")
+}
+
+async fn wait_for_daemon(child: &mut Child, client: &NucleusClient, stderr_path: &Path) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(500), client.health()).await {
+            break;
+        }
+        if let Some(status) = child.try_wait().or_panic("inspect daemon process") {
+            let diagnostics = fs::read_to_string(stderr_path).unwrap_or_default();
+            panic!("nucleusd exited during startup ({status}): {diagnostics}");
+        }
+        assert!(
+            Instant::now() < deadline,
+            "nucleusd did not become reachable"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
 impl Drop for DaemonFixture {
     fn drop(&mut self) {
         let _ = self.child.start_kill();
+    }
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn both_authentication_sequences_expose_private_durable_output_without_rerunning() {
+    for auth in [API_KEY_AUTH, MANAGED_AUTH] {
+        let mut fixture = DaemonFixture::start_with_auth(
+            SUPPORTED_CODEX_VERSION,
+            COMPATIBLE_PROTOCOL_SCHEMA,
+            auth,
+        )
+        .await;
+        let request = fixture.request(
+            "output-replay",
+            Requester {
+                program: "fixture".into(),
+                id: "output-replay".into(),
+            },
+            "COMPLETE",
+        );
+        fixture
+            .client
+            .submit_job(&request)
+            .await
+            .or_panic("submit output fixture");
+        let completed = wait_for_state(&fixture, &request.id, JobState::Completed).await;
+        let output = completed.attempts[0]
+            .output
+            .as_ref()
+            .or_panic("structured completed output");
+        assert_eq!(output.thread_id, "thread-fake");
+        assert_eq!(output.turn_id, "turn-fake");
+        assert_eq!(output.final_message, "fake completed");
+        let query = LogsQueryV1 {
+            limit: Some(1_000),
+            ..LogsQueryV1::default()
+        };
+        let logs = fixture
+            .client
+            .logs(&request.id, &query)
+            .await
+            .or_panic("read original atoms");
+        let log_json = serde_json::to_string(&logs).or_panic("encode original atoms");
+        for record in &logs.records {
+            assert_eq!(
+                record.payload_digest,
+                sha256_digest(record.payload.get().as_bytes())
+            );
+        }
+        if auth == MANAGED_AUTH {
+            for secret in [
+                MANAGED_ACCESS_TOKEN,
+                MANAGED_REFRESH_TOKEN,
+                "managed-private-stderr",
+            ] {
+                assert!(
+                    !log_json.contains(secret),
+                    "private authentication escaped into output"
+                );
+                assert!(!fixture.diagnostics().contains(secret));
+            }
+            assert!(
+                !logs.records.iter().any(|record| {
+                    serde_json::from_str::<Value>(record.payload.get())
+                        .or_panic("decode retained atom")
+                        .get("id")
+                        == Some(&json!(1))
+                }),
+                "managed login response must not be retained"
+            );
+        }
+
+        let failed_request = fixture.request(
+            "failed-output",
+            Requester {
+                program: "fixture".into(),
+                id: "failed-output".into(),
+            },
+            "FAIL_WITH_OUTPUT",
+        );
+        fixture
+            .client
+            .submit_job(&failed_request)
+            .await
+            .or_panic("submit failing output fixture");
+        let failed = wait_for_state(&fixture, &failed_request.id, JobState::Failed).await;
+        assert!(failed.attempts[0].output.is_none());
+        let attempts_path = fixture.temporary.path().join("fake-codex.attempts");
+        let attempts = fs::read(&attempts_path).or_panic("read actual executions");
+        assert_eq!(attempts, b"attempt\nattempt\n");
+
+        // Read-time decoding must use the retained attempt's handshake, even
+        // after restart with the opposite authentication configuration.
+        let other_auth = if auth == MANAGED_AUTH {
+            API_KEY_AUTH
+        } else {
+            MANAGED_AUTH
+        };
+        fs::write(
+            fixture.temporary.path().join("home/.codex/auth.json"),
+            other_auth,
+        )
+        .or_panic("change isolated fixture authentication");
+        fixture.restart().await;
+        let replay = fixture
+            .client
+            .get_job(&request.id)
+            .await
+            .or_panic("read historical output");
+        assert_eq!(replay, completed);
+        assert_eq!(
+            fixture
+                .client
+                .get_job(&failed_request.id)
+                .await
+                .or_panic("read historical failure"),
+            failed
+        );
+        let replay_logs = fixture
+            .client
+            .logs(&request.id, &query)
+            .await
+            .or_panic("reread original atoms");
+        assert_eq!(
+            serde_json::to_string(&replay_logs).or_panic("encode replay atoms"),
+            log_json
+        );
+        assert_eq!(
+            fs::read(&attempts_path).or_panic("read execution count after replay"),
+            attempts
+        );
+        fixture.shutdown().await;
     }
 }
 
@@ -1298,11 +1459,29 @@ IFS= read -r initialize
 printf '%s\n' '{"jsonrpc":"2.0","id":0,"result":{}}'
 IFS= read -r initialized
 IFS= read -r mcp_list
-printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"data":[]}}'
+inventory_id=1
+thread_id=2
+turn_id=3
+case "$mcp_list" in
+  *'"method":"account/login/start"'*)
+    case "$mcp_list" in
+      *'"accessToken":"header.e30.signature-fixture-managed-secret"'*) ;;
+      *) exit 66 ;;
+    esac
+    printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"type":"chatgptAuthTokens"}}'
+    printf '%s\n' 'managed-private-stderr header.e30.signature-fixture-managed-secret' >&2
+    inventory_id=2
+    thread_id=3
+    turn_id=4
+    IFS= read -r mcp_list
+    ;;
+esac
+printf '%s\n' '{"jsonrpc":"2.0","id":'"$inventory_id"',"result":{"data":[]}}'
 IFS= read -r thread_start
-printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"thread":{"id":"thread-fake"}}}'
+printf '%s\n' '{"jsonrpc":"2.0","id":'"$thread_id"',"result":{"thread":{"id":"thread-fake"}}}'
 IFS= read -r turn_start
-printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"turn":{"id":"turn-fake"}}}'
+printf '%s\n' '{"jsonrpc":"2.0","id":'"$turn_id"',"result":{"turn":{"id":"turn-fake"}}}'
+printf '%s\n' 'attempt' >> "${0}.attempts"
 
 case "$turn_start" in
   *CHECK_LAUNCH_CONTEXT*)
@@ -1331,6 +1510,12 @@ case "$turn_start" in
 esac
 
 printf '%s\n' '{"jsonrpc":"2.0","method":"item/completed","params":{"threadId":"thread-fake","turnId":"turn-fake","item":{"id":"message-fake","type":"agentMessage","text":"fake completed"}}}'
+case "$turn_start" in
+  *FAIL_WITH_OUTPUT*)
+    printf '%s\n' '{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thread-fake","turn":{"id":"turn-fake","status":"failed"}}}'
+    exit 0
+    ;;
+esac
 printf '%s\n' '{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thread-fake","turn":{"id":"turn-fake","status":"completed"}}}'
 "#;
     let script = SCRIPT
