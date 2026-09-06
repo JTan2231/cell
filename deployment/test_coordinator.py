@@ -180,6 +180,26 @@ class DeploymentTests(unittest.TestCase):
         self.assertFalse(cli.read_json(path / "run.json")["records"]["alpha"].get("prepared", False))
         self.assertFalse((path / "observed.jsonl").exists())
 
+    def test_private_runner_checks_out_normal_source_modes_without_exposing_run_state(self) -> None:
+        self.fixture.write("pipeline/test.sh", f'''#!{sys.executable}
+from pathlib import Path
+root = Path(__file__).resolve().parent.parent
+assert (root / "alpha/ci.sh").stat().st_mode & 0o777 == 0o755
+assert (root / "alpha/packaging/manifest.txt").stat().st_mode & 0o777 == 0o644
+''', executable=True)
+        self.fixture.commit()
+        previous_umask = os.umask(0o077)
+        try:
+            path = self.fixture.create()
+            self.assertEqual(cli.run_worker(path), 0)
+            self.assertEqual(os.umask(0o077), 0o077)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o700)
+            self.assertEqual((path / "steps").stat().st_mode & 0o777, 0o700)
+            self.assertEqual((path / "run.json").stat().st_mode & 0o777, 0o600)
+            self.assertTrue(all(file.stat().st_mode & 0o777 == 0o600 for file in (path / "steps").iterdir()))
+        finally:
+            os.umask(previous_umask)
+
     def test_all_maintenance_holds_precede_draining_or_cutover(self) -> None:
         path = self.fixture.create()
         self.assertEqual(cli.run_worker(path), 0)

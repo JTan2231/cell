@@ -420,7 +420,13 @@ class Run:
         self.check_source()
         repository = Path(self.data["repository"])
         if not self.worktree.exists():
-            git(repository, "worktree", "add", "--detach", str(self.worktree), self.data["source_commit"])
+            # Source generators check normal checkout modes (0755/0644). The
+            # enclosing run remains private; restore 0077 before writing state.
+            previous_umask = os.umask(0o022)
+            try:
+                git(repository, "worktree", "add", "--detach", str(self.worktree), self.data["source_commit"])
+            finally:
+                os.umask(previous_umask)
         if git(self.worktree, "rev-parse", "HEAD") != self.data["source_commit"]:
             raise DeploymentError("preparation worktree is on another source commit")
         source_key, clean = ci_client.source_snapshot(self.worktree)
