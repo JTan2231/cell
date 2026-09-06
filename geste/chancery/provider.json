@@ -3,7 +3,7 @@
   "provider": {
     "id": "geste",
     "name": "Geste",
-    "release": "0.1.2"
+    "release": "0.2.0"
   },
   "promise_scope": {
     "authoritative_for": [
