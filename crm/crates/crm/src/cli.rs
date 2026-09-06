@@ -22,7 +22,15 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     Init,
+    Migrate {
+        #[arg(long)]
+        backup: PathBuf,
+    },
     Doctor,
+    Profile {
+        #[command(subcommand)]
+        command: ProfileCommand,
+    },
     Case {
         #[command(subcommand)]
         command: CaseCommand,
@@ -37,6 +45,28 @@ pub enum Command {
     Worker {
         #[command(subcommand)]
         command: WorkerCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProfileCommand {
+    New {
+        #[arg(long)]
+        title: String,
+        input: PathBuf,
+    },
+    List {
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    Show {
+        entry: String,
+    },
+    Update {
+        entry: String,
+        #[arg(long)]
+        title: String,
+        input: PathBuf,
     },
 }
 

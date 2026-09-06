@@ -56,6 +56,14 @@ impl FromStr for Stage {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProfileEntry {
+    pub id: String,
+    pub title: String,
+    pub body_md: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CaseRevision {
     pub case_id: String,
     pub title: String,

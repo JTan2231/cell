@@ -5,7 +5,7 @@
   "mode": "develop",
   "support": "supported",
   "title": "Change CRM software and contracts",
-  "summary": "Modify CRM's local case library, immutable revision and update model, CLI, Nucleus steward integration, packaging, tests, documentation, or published contracts while preserving evidence, advisory, and authority boundaries.",
+  "summary": "Modify CRM's local case and profile library, immutable revision and update model, CLI, Nucleus steward integration, packaging, tests, documentation, or published contracts while preserving evidence, advisory, and authority boundaries.",
   "use_when": [
     "CRM code, schema, tests, public JSON/CLI behavior, Nucleus requester/toolset, Chancery bundle, packaging, release workflow, or documentation is being changed."
   ],
@@ -21,7 +21,7 @@
     "Release, deployment, database migration, Semantics registration, and real requester execution remain separate effects."
   ],
   "authority": [
-    "CRM owns its case/update/revision behavior, domain success, duplicate and retry rules, public CLI, and product packaging.",
+    "CRM owns its profile and case/update/revision behavior, domain success, duplicate and retry rules, public CLI, and product packaging.",
     "Nucleus owns shared execution, immutable registrations, job/output state, authentication, and mailbox transport; a CRM change may not make it understand case rows or retry policy.",
     "Callers and cited sources retain external truth and action authority; generated advisories or stages never become contact authorization."
   ],
@@ -33,7 +33,7 @@
   ],
   "failure_and_recovery": [
     "Do not weaken base guards, rewrite an old revision, hide an advisory, infer source truth, or let Nucleus completion replace the CRM domain commit.",
-    "Keep crawling, outbound contact, scheduling, automatic retry, and direct model execution out of version 0.1 unless a later reviewed contract assigns precise authority and recovery.",
+    "Keep crawling, outbound contact, scheduling, automatic retry, and direct model execution out of version 0.3 unless a later reviewed contract assigns precise authority and recovery.",
     "Packaging changes preserve content identity, exact provider/version matching, foreign-state refusal, stable selectors, no database access, and coherent rollback."
   ],
   "privacy": [
@@ -56,7 +56,8 @@
     "CRM remains one local SQLite library with all retained content as database TEXT and no content file tree.",
     "Tell commits delivery/update before returning; the hidden worker has no scheduler or direct fallback and uses exactly crm/case-steward/1 with one managed tool.",
     "Every revision has exactly Markdown, fixed stage, nullable advisory, and summary, and its advisory is conspicuous but never blocks.",
-    "Nucleus and CRM restart semantics, domain success, duplicate handling, and retry authority remain separate and tested."
+    "Nucleus and CRM restart semantics, domain success, duplicate handling, and retry authority remain separate and tested.",
+    "Profile rows remain current mutable Markdown with explicit writes, no automatic steward context, and no input path or parallel file tree."
   ],
   "adaptation": [
     "Publish a new immutable toolset/schema identity and preserve historical decoding when arguments, results, or tool meaning changes incompatibly.",
@@ -68,8 +69,16 @@
     "The requested behavior cannot fit CRM's reviewed local-library and one-steward boundary."
   ],
   "dependencies": [
-    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 3}
+    {
+      "id": "semantics.repository.explore",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.requester.integrate",
+      "min_contract": 1,
+      "max_contract_exclusive": 3
+    }
   ],
   "does_not_authorize": [
     "Running release.sh, committing, tagging, pushing, or deploying an installed CRM release.",
@@ -78,41 +87,86 @@
   ],
   "promise": {
     "consumers": [
-      {"status": "declared", "statement": "An interactive contributor may change CRM within its reviewed local-library and bounded steward boundary while keeping product contracts and tests synchronized."}
+      {
+        "status": "declared",
+        "statement": "An interactive contributor may change CRM within its reviewed local-library and bounded steward boundary while keeping product contracts and tests synchronized."
+      }
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The contributor has read CRM instructions and affected contracts, queried its registered terminology or the Cell fallback, used the current Nucleus integration contract when affected, and obtained separate authority for later effects."}
+      {
+        "status": "declared",
+        "statement": "The contributor has read CRM instructions and affected contracts, queried its registered terminology or the Cell fallback, used the current Nucleus integration contract when affected, and obtained separate authority for later effects."
+      }
     ],
     "inputs": [
-      {"status": "declared", "statement": "Inputs are the scoped change, current CRM source/contracts, synthetic fixtures, and exact selected installed documentation contracts for any affected reliance."}
+      {
+        "status": "declared",
+        "statement": "Inputs are the scoped change, current CRM source/contracts, synthetic fixtures, and exact selected installed documentation contracts for any affected reliance."
+      }
     ],
     "outputs": [
-      {"status": "declared", "statement": "The output is the smallest synchronized source, schema, requester, test, documentation, packaging, or provider change with a green CRM CI result."}
+      {
+        "status": "declared",
+        "statement": "The output is the smallest synchronized source, schema, requester, test, documentation, packaging, or provider change with a green CRM CI result."
+      }
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Development preserves exact retained TEXT, immutable complete revisions, stage/advisory meanings, source-owner truth, CRM domain success, and the distinction between execution evidence and accepted case state."}
+      {
+        "status": "declared",
+        "statement": "Development preserves exact retained TEXT, immutable complete revisions, stage/advisory meanings, source-owner truth, CRM domain success, and the distinction between execution evidence and accepted case state."
+      }
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Existing case, revision, update/attempt, job, receipt, database-schema, JSON-contract, toolset, provider, and release identities retain documented meanings unless an explicit successor is introduced."}
+      {
+        "status": "declared",
+        "statement": "Existing case, revision, update/attempt, job, receipt, database-schema, JSON-contract, toolset, provider, and release identities retain documented meanings unless an explicit successor is introduced."
+      }
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "Completion covers every affected CRM code, test, architecture, CLI, data-model, installation, requester, packaging, and Chancery contract plus the current CI run."}
+      {
+        "status": "declared",
+        "statement": "Completion covers every affected CRM code, test, architecture, CLI, data-model, installation, requester, packaging, and Chancery contract plus the current CI run."
+      }
     ],
     "access": [
-      {"status": "declared", "statement": "Development uses the local repository filesystem and shell; another product or installed service requires its separately selected contract, and production data is excluded from fixtures."}
+      {
+        "status": "declared",
+        "statement": "Development uses the local repository filesystem and shell; another product or installed service requires its separately selected contract, and production data is excluded from fixtures."
+      }
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Persistent changes require explicit migration and rollback; requester changes preserve exact pre-admission correlation, idempotent mailbox handling, domain-commit authority, terminal retry evidence, and historical decoding."}
+      {
+        "status": "declared",
+        "statement": "Persistent changes require explicit migration and rollback; requester changes preserve exact pre-admission correlation, idempotent mailbox handling, domain-commit authority, terminal retry evidence, and historical decoding."
+      }
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "The operation is bounded to CRM's local CLI/database, hidden per-update worker, one Nucleus toolset, and no crawler, sender, scheduler, daemon, automatic retry, direct runner, or content files."}
+      {
+        "status": "declared",
+        "statement": "The operation is bounded to CRM's local CLI/database, hidden per-update worker, one Nucleus toolset, and no crawler, sender, scheduler, daemon, automatic retry, direct runner, or content files."
+      }
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Incompatible database, output, stage, prompt/tool, Nucleus protocol, or packaging meaning receives explicit migration or a new version while retained cases and historical jobs remain inspectable."}
+      {
+        "status": "declared",
+        "statement": "Incompatible database, output, stage, prompt/tool, Nucleus protocol, or packaging meaning receives explicit migration or a new version while retained cases and historical jobs remain inspectable."
+      }
     ],
     "reliances": [
-      {"status": "declared", "statement": "CRM development relies on its registered Semantics repository for maintained terminology while source/tests/docs remain behavioral authority.", "target": "semantics", "kind": "authority", "contract": "semantics.repository.explore"},
-      {"status": "declared", "statement": "CRM requester development relies on Nucleus's supported integration procedure for invocation, immutable toolset, correlation, idempotency, recovery, privacy, and compatibility semantics.", "target": "nucleus", "kind": "control", "contract": "nucleus.requester.integrate"}
+      {
+        "status": "declared",
+        "statement": "CRM development relies on its registered Semantics repository for maintained terminology while source/tests/docs remain behavioral authority.",
+        "target": "semantics",
+        "kind": "authority",
+        "contract": "semantics.repository.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "CRM requester development relies on Nucleus's supported integration procedure for invocation, immutable toolset, correlation, idempotency, recovery, privacy, and compatibility semantics.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.requester.integrate"
+      }
     ]
   },
   "manual": "manuals/develop-change.md"

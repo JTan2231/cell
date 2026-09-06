@@ -26,7 +26,7 @@
     "The caller and cited sources retain authority for external facts; the reader owns whether the stored material is relevant and whether a real-world action is appropriate."
   ],
   "success": [
-    "The selected database is an initialized supported schema-one CRM database and the bounded read completes without integrity or identity error.",
+    "The selected database is an initialized supported schema-two CRM database and the bounded read completes without integrity or identity error.",
     "An omitted case revision selects the current head, while an explicit positive revision selects exactly that immutable snapshot.",
     "Search performs one case-insensitive literal-substring match over title, current Markdown, and current advisory, orders by most-recently updated case then identity, and never claims semantic confidence or source freshness.",
     "Every returned revision includes its stage, summary and nullable advisory; every non-null advisory is conspicuous on human and machine consumption surfaces."
@@ -57,7 +57,7 @@
       {"status": "declared", "statement": "A local reader may list or lexically search current case heads and inspect one exact current or historical case revision and its lineage."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The selected path is an initialized supported schema-one CRM database and the caller supplies a valid bounded read, query, and optional positive limit or revision."}
+      {"status": "declared", "statement": "The selected path is an initialized supported schema-two CRM database and the caller supplies a valid bounded read, query, and optional positive limit or revision."}
     ],
     "inputs": [
       {"status": "declared", "statement": "Inputs are an optional positive result limit, a lexical query, or one case identity with an optional exact positive revision."}
@@ -83,11 +83,11 @@
       {"status": "declared", "statement": "Reads make no case-domain mutation, historical revisions are immutable, omitted revision selects the committed current head, and unchanged database state yields deterministic projections; opening may tighten database/sidecar permissions and select WAL mode."}
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "Search is bounded lexical retrieval over retained current heads and does not invoke a model, source adapter, network, browser, Nucleus, or hidden worker; version 0.1 has no raw-delivery, request, or receipt export command."},
+      {"status": "declared", "statement": "Search is bounded lexical retrieval over retained current heads and does not invoke a model, source adapter, network, browser, Nucleus, or hidden worker; version 0.3 has no raw-delivery, request, or receipt export command."},
       {"status": "unspecified", "statement": "No maximum database size, wall-clock latency, semantic recall, or source coverage service level is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 reads database schema one and emits the documented ok/data or ok/error JSON envelope while preserving public case and revision identities."},
+      {"status": "declared", "statement": "Capability contract version 1 reads database schema two and emits the documented ok/data or ok/error JSON envelope while preserving public case and revision identities."},
       {"status": "unspecified", "statement": "No future schema migration window or cross-release search-ranking stability is promised."}
     ],
     "reliances": [

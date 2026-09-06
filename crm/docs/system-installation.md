@@ -37,6 +37,20 @@ Initialize separately after a fresh deployment:
 /Users/joey/.local/bin/crm doctor
 ```
 
+An existing schema-one database is a separate migration effect. Stop new CRM
+work, let active workers and runtime settlement finish, and run:
+
+```sh
+/Users/joey/.local/bin/crm migrate --backup /absolute/private/path/crm-schema1.db
+```
+
+The backup path must be new. Migration preserves existing case and queue rows
+and adds an empty profile table; it does not import source files. It refuses
+live workers and unsettled active updates. See the [data model](data-model.md#initialization-integrity-and-migration)
+for transaction, backup, and database rollback semantics. A program downgrade
+to a schema-one release requires restoring the compatible backup separately;
+selector rollback does not downgrade the database.
+
 ## Paths
 
 ```text
@@ -47,7 +61,7 @@ Initialize separately after a fresh deployment:
 ```
 
 The database and SQLite sidecars are retained independently from installed
-releases. Version 0.1 has no uninstaller or automatic pruning. Removing cases,
+releases. Version 0.3 has no uninstaller or automatic pruning. Removing cases,
 intake, steward updates, tool receipts, or retained releases is a separate
 destructive action requiring explicit authority.
 
@@ -58,6 +72,7 @@ destructive action requiring explicit authority.
 /Users/joey/.local/bin/crm doctor
 /Users/joey/.local/bin/chancery show crm.case.maintain
 /Users/joey/.local/bin/chancery show crm.library.explore
+/Users/joey/.local/bin/chancery show crm.profile.maintain
 /Users/joey/.local/bin/chancery show crm.steward.operate
 /Users/joey/.local/bin/chancery doctor
 /Users/joey/.local/bin/nucleus health

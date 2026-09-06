@@ -21,4 +21,4 @@ CI_EXTRA_BEFORE_RUST=pipeline/extras/deployment-generated.sh
 RELEASE_UNITS='crm|CRM|package|crm/crates/crm/Cargo.toml|crm-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='crm|target/release/crm|crm'
-PROVIDERS='crm|crm|crm/chancery|4'
+PROVIDERS='crm|crm|crm/chancery|5'

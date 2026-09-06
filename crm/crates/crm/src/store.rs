@@ -13,13 +13,14 @@ use uuid::Uuid;
 
 use crate::error::io;
 use crate::model::{
-    CaseListItem, CaseRevision, Correlation, Delivery, MailboxReceipt, RevisionProposal,
-    SearchResult, Stage, StewardUpdate, UpdateStatus,
+    CaseListItem, CaseRevision, Correlation, Delivery, MailboxReceipt, ProfileEntry,
+    RevisionProposal, SearchResult, Stage, StewardUpdate, UpdateStatus,
 };
 use crate::{Error, Result};
 
 const SCHEMA: &str = include_str!("../schema.sql");
-pub const SCHEMA_VERSION: i64 = 1;
+const MIGRATE_V1_TO_V2: &str = include_str!("../migrations/001-to-002.sql");
+pub const SCHEMA_VERSION: i64 = 2;
 const WORKER_LEASE_MAX_AGE_SECONDS: i64 = 30 * 60;
 const REQUIRED_TABLES: &[&str] = &[
     "crm_meta",
@@ -55,6 +56,13 @@ const REQUIRED_COLUMNS: &[(&str, &str)] = &[
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct InitResult {
     pub created: bool,
+    pub schema_version: i64,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct MigrationResult {
+    pub changed: bool,
+    pub from_schema_version: i64,
     pub schema_version: i64,
 }
 
@@ -201,30 +209,57 @@ impl Store {
         Ok(Self { path })
     }
 
+    pub fn migrate(path: &Path, backup_path: &Path) -> Result<MigrationResult> {
+        ensure_parent(path, false)?;
+        secure_path(path)?;
+        secure_sidecars(path)?;
+        let mut connection = open_connection(path, false)?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let version: i64 =
+            transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version == SCHEMA_VERSION {
+            require_schema(&transaction)?;
+            return Ok(MigrationResult {
+                changed: false,
+                from_schema_version: version,
+                schema_version: SCHEMA_VERSION,
+            });
+        }
+        if version != 1 {
+            return Err(Error::domain(
+                "schema_migration_unsupported",
+                format!("CRM cannot migrate schema {version}; only schema 1 can migrate to 2"),
+            ));
+        }
+        require_schema_version(&transaction, version)?;
+        require_migration_quiescence(&transaction)?;
+        check_integrity(&transaction)?;
+
+        // The immediate transaction prevents writes between this committed snapshot
+        // and migration. A separate reader lets VACUUM INTO include committed WAL
+        // content without copying live SQLite database or sidecar bytes.
+        create_migration_backup(path, backup_path, version)?;
+        transaction.execute_batch(MIGRATE_V1_TO_V2)?;
+        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+        require_schema(&transaction)?;
+        check_integrity(&transaction)?;
+        transaction.commit()?;
+        secure_sidecars(path)?;
+        Ok(MigrationResult {
+            changed: true,
+            from_schema_version: version,
+            schema_version: SCHEMA_VERSION,
+        })
+    }
+
     pub fn doctor(path: &Path) -> Result<DoctorResult> {
         let store = Self::open(path.to_path_buf())?;
         let connection = store.connection(true)?;
-        let violation: Option<String> = connection
-            .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
-            .optional()?;
-        if violation.is_some() {
-            return Err(Error::domain(
-                "foreign_key_check_failed",
-                "SQLite foreign_key_check reported a violation",
-            ));
-        }
-        let integrity: String =
-            connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
-        if integrity != "ok" {
-            return Err(Error::domain(
-                "integrity_check_failed",
-                format!("SQLite integrity_check reported {integrity:?}"),
-            ));
-        }
+        check_integrity(&connection)?;
         Ok(DoctorResult {
             schema_version: SCHEMA_VERSION,
             foreign_keys: "ok",
-            integrity,
+            integrity: "ok".to_owned(),
         })
     }
 
@@ -287,6 +322,73 @@ impl Store {
             [token],
         )?;
         Ok(())
+    }
+
+    pub fn create_profile_entry(&self, title: &str, body_md: &str) -> Result<ProfileEntry> {
+        let title = title.trim();
+        validate_text(title, "profile_title", 1_000, false)?;
+        validate_text(body_md, "profile_body", 1024 * 1024, true)?;
+        let entry = ProfileEntry {
+            id: format!("profile-{}", Uuid::now_v7()),
+            title: title.to_owned(),
+            body_md: body_md.to_owned(),
+            updated_at: now()?,
+        };
+        self.connection(false)?.execute(
+            "INSERT INTO profile_entries (id, title, body_md, updated_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![entry.id, entry.title, entry.body_md, entry.updated_at],
+        )?;
+        Ok(entry)
+    }
+
+    pub fn profile_entry(&self, id: &str) -> Result<ProfileEntry> {
+        self.connection(true)?
+            .query_row(
+                "SELECT id, title, body_md, updated_at FROM profile_entries WHERE id = ?1",
+                [id],
+                profile_entry_from_row,
+            )
+            .optional()?
+            .ok_or_else(|| profile_entry_not_found(id))
+    }
+
+    pub fn list_profile_entries(&self, limit: usize) -> Result<Vec<ProfileEntry>> {
+        validate_limit(limit)?;
+        let connection = self.connection(true)?;
+        let mut statement = connection.prepare(
+            "SELECT id, title, body_md, updated_at FROM profile_entries
+             ORDER BY updated_at DESC, id LIMIT ?1",
+        )?;
+        statement
+            .query_map([sql_usize(limit, "limit")?], profile_entry_from_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub fn update_profile_entry(
+        &self,
+        id: &str,
+        title: &str,
+        body_md: &str,
+    ) -> Result<ProfileEntry> {
+        let title = title.trim();
+        validate_text(title, "profile_title", 1_000, false)?;
+        validate_text(body_md, "profile_body", 1024 * 1024, true)?;
+        let entry = ProfileEntry {
+            id: id.to_owned(),
+            title: title.to_owned(),
+            body_md: body_md.to_owned(),
+            updated_at: now()?,
+        };
+        let changed = self.connection(false)?.execute(
+            "UPDATE profile_entries SET title = ?2, body_md = ?3, updated_at = ?4 WHERE id = ?1",
+            params![entry.id, entry.title, entry.body_md, entry.updated_at],
+        )?;
+        if changed != 1 {
+            return Err(profile_entry_not_found(id));
+        }
+        Ok(entry)
     }
 
     pub fn create_case(&self, title: &str, markdown: &str, stage: Stage) -> Result<CaseRevision> {
@@ -1331,11 +1433,18 @@ fn open_connection(path: &Path, read_only: bool) -> Result<Connection> {
 }
 
 fn require_schema(connection: &Connection) -> Result<()> {
+    require_schema_version(connection, SCHEMA_VERSION)
+}
+
+fn require_schema_version(connection: &Connection, expected: i64) -> Result<()> {
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version != SCHEMA_VERSION {
+    if version != expected {
         return Err(Error::domain(
             "schema_version_unsupported",
-            format!("CRM schema {version} is not supported; expected {SCHEMA_VERSION}"),
+            format!(
+                "CRM schema {version} is not supported; expected {expected}; \
+                 schema 1 requires explicit `crm migrate --backup PATH`"
+            ),
         ));
     }
     for table in REQUIRED_TABLES {
@@ -1350,6 +1459,12 @@ fn require_schema(connection: &Connection) -> Result<()> {
     for (table, column) in REQUIRED_COLUMNS {
         require_schema_column(connection, table, column)?;
     }
+    if expected == 2 {
+        require_schema_object(connection, "table", "profile_entries")?;
+        for column in ["id", "title", "body_md", "updated_at"] {
+            require_schema_column(connection, "profile_entries", column)?;
+        }
+    }
     let meta: Option<i64> = connection
         .query_row(
             "SELECT schema_version FROM crm_meta WHERE marker = 'crm'",
@@ -1357,13 +1472,143 @@ fn require_schema(connection: &Connection) -> Result<()> {
             |row| row.get(0),
         )
         .optional()?;
-    if meta != Some(SCHEMA_VERSION) {
+    if meta != Some(expected) {
         return Err(Error::domain(
             "schema_identity_invalid",
             "CRM schema identity row is absent or incompatible",
         ));
     }
     Ok(())
+}
+
+fn check_integrity(connection: &Connection) -> Result<()> {
+    let violation: Option<String> = connection
+        .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
+        .optional()?;
+    if violation.is_some() {
+        return Err(Error::domain(
+            "foreign_key_check_failed",
+            "SQLite foreign_key_check reported a violation",
+        ));
+    }
+    let integrity: String = connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+    if integrity != "ok" {
+        return Err(Error::domain(
+            "integrity_check_failed",
+            "SQLite integrity_check reported a violation",
+        ));
+    }
+    Ok(())
+}
+
+fn require_migration_quiescence(connection: &Connection) -> Result<()> {
+    let pid: Option<i64> = connection.query_row(
+        "SELECT worker_pid FROM crm_meta WHERE marker = 'crm'",
+        [],
+        |row| row.get(0),
+    )?;
+    if let Some(pid) = pid {
+        let pid = u32::try_from(pid)
+            .ok()
+            .filter(|pid| *pid > 0)
+            .ok_or_else(|| {
+                Error::domain("worker_lease_invalid", "worker lease has no valid PID")
+            })?;
+        // Lease age cannot prove quiescence: even an expired owner can still run.
+        if process_is_alive(pid)? {
+            return Err(Error::domain(
+                "migration_worker_active",
+                "finish CRM workers before migrating the database",
+            ));
+        }
+    }
+    let active: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM steward_updates
+         WHERE status = 'running' OR (status = 'applied' AND runtime_state IS NULL))",
+        [],
+        |row| row.get(0),
+    )?;
+    if active {
+        return Err(Error::domain(
+            "migration_update_unsettled",
+            "settle running and applied-but-runtime-unsettled updates before migrating",
+        ));
+    }
+    Ok(())
+}
+
+fn create_migration_backup(path: &Path, backup_path: &Path, version: i64) -> Result<()> {
+    ensure_parent(backup_path, false)?;
+    let absolute_path = fs::canonicalize(path).map_err(|source| io(path, source))?;
+    let backup_parent = backup_path
+        .parent()
+        .ok_or_else(|| Error::domain("database_parent_missing", "backup path has no parent"))?;
+    let backup_name = backup_path
+        .file_name()
+        .ok_or_else(|| Error::domain("migration_backup_invalid", "backup path has no filename"))?;
+    let absolute_backup = fs::canonicalize(backup_parent)
+        .map_err(|source| io(backup_parent, source))?
+        .join(backup_name);
+    for suffix in ["", "-wal", "-shm", "-journal"] {
+        let mut reserved = absolute_path.as_os_str().to_os_string();
+        reserved.push(suffix);
+        if absolute_backup == reserved {
+            return Err(Error::domain(
+                "migration_backup_invalid",
+                "backup must be separate from the source database and its sidecars",
+            ));
+        }
+    }
+    for suffix in ["-wal", "-shm", "-journal"] {
+        let mut sidecar = backup_path.as_os_str().to_os_string();
+        sidecar.push(suffix);
+        match fs::symlink_metadata(&sidecar) {
+            Ok(_) => {
+                return Err(Error::domain(
+                    "migration_backup_invalid",
+                    "backup destination must have no existing SQLite sidecars",
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(io(PathBuf::from(sidecar), error)),
+        }
+    }
+    let backup_text = backup_path.to_str().ok_or_else(|| {
+        Error::domain(
+            "migration_backup_invalid",
+            "backup path must be valid UTF-8",
+        )
+    })?;
+    create_private_file(backup_path)?;
+    let reader = open_connection(path, true)?;
+    reader.execute("VACUUM INTO ?1", [backup_text])?;
+    let backup = open_connection(backup_path, true)?;
+    require_schema_version(&backup, version)?;
+    check_integrity(&backup)?;
+    drop(backup);
+    fs::File::open(backup_path)
+        .and_then(|file| file.sync_all())
+        .map_err(|source| io(backup_path, source))?;
+    fs::File::open(backup_parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|source| io(backup_parent, source))?;
+    Ok(())
+}
+
+fn profile_entry_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProfileEntry> {
+    Ok(ProfileEntry {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        body_md: row.get(2)?,
+        updated_at: row.get(3)?,
+    })
+}
+
+fn profile_entry_not_found(id: &str) -> Error {
+    Error::domain(
+        "profile_entry_not_found",
+        format!("profile entry {id} does not exist"),
+    )
 }
 
 fn require_schema_object(connection: &Connection, kind: &str, name: &str) -> Result<()> {
@@ -1629,6 +1874,334 @@ mod tests {
         Store::init(&path).expect("initialize database");
         let store = Store::open(path).expect("open database");
         (temporary, store)
+    }
+
+    fn old_fixture() -> (TempDir, std::path::PathBuf, rusqlite::Connection) {
+        let temporary = TempDir::new().expect("temporary directory");
+        super::make_private_directory(temporary.path()).expect("private directory");
+        let path = temporary.path().join("crm.db");
+        super::create_private_file(&path).expect("private database");
+        let connection = super::open_connection(&path, false).expect("old database");
+        connection
+            .execute_batch(include_str!("../tests/fixtures/schema-v1.sql"))
+            .expect("schema one");
+        connection
+            .pragma_update(None, "user_version", 1)
+            .expect("schema version one");
+        connection
+            .pragma_update(None, "journal_mode", "WAL")
+            .expect("WAL mode");
+        connection
+            .pragma_update(None, "wal_autocheckpoint", 0)
+            .expect("retain WAL writes for backup test");
+        let sha = super::digest(b"Synthetic retained text");
+        connection
+            .execute(
+                "INSERT INTO cases VALUES ('case-synthetic', 'Synthetic case', 1, 't0', 't0')",
+                [],
+            )
+            .expect("old case");
+        connection
+            .execute(
+                "INSERT INTO deliveries VALUES
+                 ('delivery-synthetic', 'case-synthetic', 'Note', 'Exact synthetic delivery',
+                  ?1, 'synthetic:source', 't1')",
+                [&sha],
+            )
+            .expect("old delivery");
+        connection
+            .execute(
+                "INSERT INTO steward_updates
+                 (id, case_id, delivery_id, status, requester_id, job_id,
+                  request_json, request_sha256, last_error, created_at, finished_at)
+                 VALUES ('update-synthetic', 'case-synthetic', 'delivery-synthetic',
+                         'failed', 'requester-synthetic', 'job-synthetic',
+                         '{\"synthetic\":true}', ?1, 'Synthetic failure', 't1', 't2')",
+                [&sha],
+            )
+            .expect("old update");
+        connection
+            .execute(
+                "INSERT INTO case_revisions VALUES
+                 ('case-synthetic', 1, '# Synthetic\r\n\r\nText  \r\n', ?1, 'research',
+                  'Synthetic non-blocking advisory', 'Synthetic summary', NULL, 't0')",
+                [&sha],
+            )
+            .expect("old revision");
+        connection
+            .execute(
+                "INSERT INTO mailbox_receipts VALUES
+                 ('job-synthetic', 'call-synthetic', ?1, '{\"synthetic\":true}',
+                  ?1, 1, NULL, 't2')",
+                [&sha],
+            )
+            .expect("old receipt");
+        (temporary, path, connection)
+    }
+
+    fn retained_rows(connection: &rusqlite::Connection) -> Vec<Vec<Vec<rusqlite::types::Value>>> {
+        [
+            "cases",
+            "deliveries",
+            "steward_updates",
+            "case_revisions",
+            "mailbox_receipts",
+        ]
+        .into_iter()
+        .map(|table| {
+            let mut statement = connection
+                .prepare(&format!("SELECT * FROM {table} ORDER BY rowid"))
+                .expect("snapshot table");
+            let columns = statement.column_count();
+            statement
+                .query_map([], |row| (0..columns).map(|index| row.get(index)).collect())
+                .expect("snapshot rows")
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .expect("retained rows")
+        })
+        .collect()
+    }
+
+    #[test]
+    fn profile_entries_preserve_exact_markdown_and_have_independent_mutable_identity() {
+        let (_temporary, store) = fixture();
+        let body = "# Synthetic vignette\r\n\r\nUnicode: café  \r\n\0End\n";
+        let first = store
+            .create_profile_entry("  Synthetic vignette  ", body)
+            .expect("create entry");
+        assert_eq!(first.title, "Synthetic vignette");
+        assert_eq!(first.body_md, body);
+        assert!(first.id.starts_with("profile-"));
+        assert_eq!(store.profile_entry(&first.id).expect("read entry"), first);
+        let second = store
+            .create_profile_entry("Synthetic vignette", "Second entry")
+            .expect("titles need not be unique");
+        assert_ne!(first.id, second.id);
+        let updated = store
+            .update_profile_entry(&first.id, " Updated title ", "# Replacement\n\nExact  \n")
+            .expect("replace entry");
+        assert_eq!(updated.id, first.id);
+        assert_eq!(updated.title, "Updated title");
+        assert_eq!(updated.body_md, "# Replacement\n\nExact  \n");
+        assert!(updated.updated_at >= first.updated_at);
+        assert_eq!(
+            store.profile_entry(&first.id).expect("updated entry"),
+            updated
+        );
+        assert_eq!(
+            store.profile_entry(&second.id).expect("second entry"),
+            second
+        );
+        assert!(store.list_cases(100).expect("independent cases").is_empty());
+        assert!(store.unsettled_updates().expect("no worker").is_empty());
+
+        let connection = super::open_connection(store.path(), false).expect("raw connection");
+        connection
+            .execute("UPDATE profile_entries SET updated_at = 'same-time'", [])
+            .expect("equal timestamps");
+        let listed = store.list_profile_entries(100).expect("list entries");
+        assert_eq!(listed.len(), 2);
+        assert!(listed[0].id < listed[1].id);
+        assert_eq!(
+            store
+                .list_profile_entries(1)
+                .expect("limited entries")
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn profile_validation_and_missing_updates_do_not_mutate_entries() {
+        let (_temporary, store) = fixture();
+        let original = store
+            .create_profile_entry("Synthetic", "")
+            .expect("empty body");
+        for (title, body) in [
+            (" ".to_owned(), String::new()),
+            ("x".repeat(1_001), String::new()),
+            ("Valid".to_owned(), "x".repeat(1_048_577)),
+        ] {
+            assert!(store.create_profile_entry(&title, &body).is_err());
+            assert!(
+                store
+                    .update_profile_entry(&original.id, &title, &body)
+                    .is_err()
+            );
+        }
+        assert_eq!(
+            store.profile_entry(&original.id).expect("original remains"),
+            original
+        );
+        assert_eq!(store.list_profile_entries(100).expect("one entry").len(), 1);
+        assert!(store.list_profile_entries(0).is_err());
+        assert_eq!(
+            store
+                .profile_entry("missing")
+                .expect_err("missing read")
+                .code(),
+            "profile_entry_not_found"
+        );
+        assert_eq!(
+            store
+                .update_profile_entry("missing", "Valid", "body")
+                .expect_err("missing update")
+                .code(),
+            "profile_entry_not_found"
+        );
+    }
+
+    #[test]
+    fn explicit_migration_preserves_old_rows_and_restorable_wal_snapshot() {
+        let (temporary, path, old_connection) = old_fixture();
+        let before = retained_rows(&old_connection);
+        assert_eq!(
+            Store::open(&path)
+                .expect_err("ordinary open refuses old schema")
+                .code(),
+            "schema_version_unsupported"
+        );
+        assert_eq!(
+            Store::init(&path).expect_err("init never migrates").code(),
+            "schema_version_unsupported"
+        );
+        let backup_path = temporary.path().join("schema-one-backup.db");
+        let result = Store::migrate(&path, &backup_path).expect("explicit migration");
+        assert_eq!(
+            result,
+            super::MigrationResult {
+                changed: true,
+                from_schema_version: 1,
+                schema_version: 2
+            }
+        );
+        assert_eq!(retained_rows(&old_connection), before);
+        let store = Store::open(&path).expect("migrated database");
+        assert!(
+            store
+                .list_profile_entries(100)
+                .expect("empty profile")
+                .is_empty()
+        );
+        Store::doctor(&path).expect("migrated integrity");
+        let backup = super::open_connection(&backup_path, true).expect("snapshot database");
+        super::require_schema_version(&backup, 1).expect("old snapshot version");
+        super::check_integrity(&backup).expect("snapshot integrity");
+        assert_eq!(retained_rows(&backup), before);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            assert_eq!(
+                std::fs::metadata(&backup_path)
+                    .expect("backup permissions")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+        let restore_path = temporary.path().join("restored.db");
+        super::create_private_file(&restore_path).expect("private restore target");
+        backup
+            .execute(
+                "VACUUM INTO ?1",
+                [restore_path.to_str().expect("restore path")],
+            )
+            .expect("SQLite-aware restore");
+        let restored = super::open_connection(&restore_path, true).expect("restored snapshot");
+        super::require_schema_version(&restored, 1).expect("restored old schema");
+        super::check_integrity(&restored).expect("restored integrity");
+        assert_eq!(retained_rows(&restored), before);
+        assert!(
+            !Store::migrate(&path, &backup_path)
+                .expect("idempotent migration")
+                .changed
+        );
+        for table in ["deliveries", "case_revisions", "mailbox_receipts"] {
+            assert!(
+                old_connection
+                    .execute(&format!("DELETE FROM {table}"), [])
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn migration_refuses_live_worker_even_when_lease_expired_and_unsettled_updates() {
+        let (temporary, path, connection) = old_fixture();
+        let backup_path = temporary.path().join("backup.db");
+        connection
+            .execute(
+                "UPDATE crm_meta SET worker_token = 'synthetic-worker', worker_pid = ?1,
+             worker_acquired_at = '2000-01-01T00:00:00Z'",
+                [i64::from(std::process::id())],
+            )
+            .expect("live expired worker");
+        assert_eq!(
+            Store::migrate(&path, &backup_path)
+                .expect_err("live worker")
+                .code(),
+            "migration_worker_active"
+        );
+        assert!(!backup_path.exists());
+        connection.execute("UPDATE crm_meta SET worker_token = NULL, worker_pid = NULL, worker_acquired_at = NULL", []).expect("clear worker");
+        connection
+            .execute("UPDATE steward_updates SET status = 'running'", [])
+            .expect("running attempt");
+        assert_eq!(
+            Store::migrate(&path, &backup_path)
+                .expect_err("unsettled update")
+                .code(),
+            "migration_update_unsettled"
+        );
+        assert!(!backup_path.exists());
+        connection
+            .execute(
+                "UPDATE steward_updates SET status = 'applied', applied_revision = 1",
+                [],
+            )
+            .expect("unsettled runtime");
+        assert_eq!(
+            Store::migrate(&path, &backup_path)
+                .expect_err("unsettled runtime")
+                .code(),
+            "migration_update_unsettled"
+        );
+        assert!(!backup_path.exists());
+        connection
+            .execute(
+                "UPDATE steward_updates SET status = 'queued', applied_revision = NULL",
+                [],
+            )
+            .expect("queued attempt");
+        let before = retained_rows(&connection);
+        Store::migrate(&path, &backup_path).expect("queued records can migrate");
+        assert_eq!(retained_rows(&connection), before);
+    }
+
+    #[test]
+    fn migration_failure_rolls_back_schema_and_rows_without_overwriting_backup() {
+        let (temporary, path, connection) = old_fixture();
+        let before = retained_rows(&connection);
+        let backup_path = temporary.path().join("backup.db");
+        std::fs::write(&backup_path, "existing backup").expect("existing backup");
+        assert!(Store::migrate(&path, &backup_path).is_err());
+        assert_eq!(
+            std::fs::read_to_string(&backup_path).expect("backup untouched"),
+            "existing backup"
+        );
+        assert_eq!(retained_rows(&connection), before);
+        super::require_schema_version(&connection, 1).expect("schema remains old");
+        let fresh_backup = temporary.path().join("fresh-backup.db");
+        connection
+            .execute("CREATE TABLE profile_entries (conflict TEXT)", [])
+            .expect("synthetic DDL conflict");
+        assert!(Store::migrate(&path, &fresh_backup).is_err());
+        super::require_schema_version(&connection, 1).expect("DDL rolled back old schema");
+        assert_eq!(retained_rows(&connection), before);
+        let backup = super::open_connection(&fresh_backup, true).expect("retained valid backup");
+        super::require_schema_version(&backup, 1).expect("backup schema one");
+        assert_eq!(retained_rows(&backup), before);
     }
 
     #[cfg(unix)]

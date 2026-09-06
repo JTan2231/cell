@@ -2,7 +2,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE crm_meta (
     marker TEXT PRIMARY KEY CHECK (marker = 'crm'),
-    schema_version INTEGER NOT NULL CHECK (schema_version = 2),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 1),
     worker_token TEXT,
     worker_pid INTEGER,
     worker_acquired_at TEXT,
@@ -12,14 +12,7 @@ CREATE TABLE crm_meta (
     CHECK (worker_pid IS NULL OR worker_pid > 0)
 ) STRICT;
 INSERT INTO crm_meta(marker, schema_version, worker_token, worker_pid, worker_acquired_at)
-VALUES ('crm', 2, NULL, NULL, NULL);
-
-CREATE TABLE profile_entries (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL CHECK (length(trim(title)) > 0),
-    body_md TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-) STRICT;
+VALUES ('crm', 1, NULL, NULL, NULL);
 
 CREATE TABLE cases (
     id TEXT PRIMARY KEY,

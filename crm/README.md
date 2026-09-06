@@ -1,9 +1,10 @@
 # CRM
 
 CRM is a private local case library for employment-oriented relationship work.
-It keeps the raw information a caller supplies, an immutable revision history,
+It also stores reusable career vignettes, statements, and other profile material
+as directly editable Markdown entries in the same database. It keeps the raw information a caller supplies, an immutable revision history,
 and exact execution correlations behind each AI-assisted update. Supported
-reads expose the case lineage and CRM/Nucleus identities; version 0.1 does not
+reads expose the case lineage and CRM/Nucleus identities; version 0.3 does not
 provide a raw-delivery or mailbox-receipt export command.
 
 CRM does not fetch sources, send messages, or certify that an external event
@@ -43,6 +44,11 @@ When no initial Markdown is supplied, CRM starts a small suggested outline:
 `Current picture`, `People`, `Chronicle`, and `Open threads`. These headings
 are editorial hints only. Caller-supplied Markdown and steward revisions remain
 free-form; CRM never parses or requires the outline.
+
+`crm profile new --title TITLE INPUT` retains one profile entry; `profile list`,
+`show`, and `update` read or replace its current content. Profile operations run
+locally without AI. Existing schema-one databases require an explicit
+`crm migrate --backup PATH` before this release can use them.
 
 Start with [the documentation index](docs/README.md). The
 [CRM provider bundle](chancery/provider.json) is the release-matched index of

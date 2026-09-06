@@ -59,7 +59,7 @@ separately maintained discovery catalog.
 | System | Use it when | It owns | Do not use it for |
 | --- | --- | --- | --- |
 | Todo | An actionable concern or follow-up should be researched and retained for later. | Concern provenance, routing and its explicit decisions, stable todo identities, dated situation assessments, proposed or accepted designs, open/done state, and working notes. | Work requested for immediate completion, general knowledge, implementation execution, or shared runtime policy. |
-| CRM | Employment-relevant people, opportunities, and contemplated contact should be retained as evidence-grounded cases. | Its local SQLite library, queued steward runs, immutable case revisions, evidence, and advisory review notes. | Sending or authorizing outreach, scheduled intake, treating an advisory as a gate, or storing CRM domain state in Nucleus. |
+| CRM | Employment-relevant people, opportunities, and contemplated contact should be retained as evidence-grounded cases, or reusable career profile material should be stored. | Its local SQLite library, mutable Markdown profile entries, queued steward runs, immutable case revisions, evidence, and advisory review notes. | Sending or authorizing outreach, scheduled intake, treating an advisory as a gate, or storing CRM domain state in Nucleus. |
 | Annals | Immutable source material should be retained or reconciled with an evidence-grounded conceptual corpus, or that corpus should be searched or explored. | Each selected physical library's retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, cross-library federation, or account telemetry. |
 | Weaver | Authored repository inputs should become the current five-stage public-facing narrative outputs. | Current-run admission, stage order and input snapshots, repository output writes, validation, cancellation intent, and recovery. | Publishing, editing a public profile, treating generated text as factual authority, or general job orchestration. |
 | Email | A plain-text email should be sent to the single fixed recipient. | The synchronous Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, or agent execution. |
@@ -174,8 +174,10 @@ cannot be invoked by a model, and the optional daily email path calls Resend
 without creating a Nucleus job, using Nucleus authentication, or depending on
 Nucleus health.
 
-CRM is a short-lived local CLI, SQLite case library, and bounded Nucleus
-requester.
+CRM is a short-lived local CLI, SQLite case and profile library, and bounded
+Nucleus requester. `crm profile` stores and reads mutable Markdown entries
+locally; it launches no Nucleus job, changes no case, and supplies no automatic
+steward context.
 `crm tell` stores its supplied content as SQLite `TEXT` and queues an
 asynchronous steward run; CRM-owned content has no sidecar-file authority. Each
 steward job uses requester program `crm`, immutable toolset
@@ -556,7 +558,13 @@ CRM owns its content-addressed CLI installation, provider selector, and local
 SQLite library. All CRM-owned content is stored as database `TEXT`. Deployment
 switches immutable program and provider selectors without adding a daemon or
 schedule. `crm tell` queues an asynchronous steward run, which uses Nucleus and
-never falls back to a direct Codex invocation.
+never falls back to a direct Codex invocation. Schema two adds current profile
+entries. Existing schema-one state requires explicit `crm migrate --backup
+PATH` after stopping new work and settling active workers. Migration creates a
+private SQLite-aware schema-one backup and adds the empty table transactionally;
+deployment never migrates state. Program rollback to schema one also requires
+a separate quiescent database restore and must preserve newer state before
+removing it from the active view.
 
 ## Compatibility model
 
@@ -1082,7 +1090,7 @@ provider registry or documentation storage.
 | Change | Primary authority | Cross-system obligations |
 | --- | --- | --- |
 | Todo concerns, routing and explicit decisions, identities, assessments, designs, lifecycle, provenance, database, email delivery, or deployment | Todo | Preserve its Nucleus adapter contract when affected; the direct Resend path does not become a Nucleus job, and Nucleus does not gain Todo fields. |
-| CRM intake, cases, evidence, revisions, advisories, queued steward runs, database, or deployment | CRM | Preserve its bounded Nucleus adapter and prominent nonblocking advisories; Nucleus gains no CRM fields, domain success, scheduling, or retry authority. |
+| CRM profile entries, intake, cases, evidence, revisions, advisories, queued steward runs, database, or deployment | CRM | Preserve its bounded Nucleus adapter and prominent nonblocking advisories; Nucleus gains no CRM fields, domain success, scheduling, or retry authority. |
 | Annals works, physical-library identity, concepts, evidence, reconciliation, inbox, producer acceptance, decision feed, retry, or corpus migration | Annals | Keep primary and decisions libraries isolated; preserve job correlation and adapter behavior when affected; Nucleus does not gain Annals workflow state. |
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
 | Weaver workflow state, stage prompts, repository inputs or outputs, validation, cancellation, recovery, or deployment | Weaver | Preserve its Nucleus invocation and correlation contract; Nucleus does not gain narrative repository authority or retry policy. |
@@ -1329,8 +1337,8 @@ Use these placement rules to keep the manual current and small:
 - **Todo:** an unimplemented actionable outcome or researched follow-up.
   “Implement pruning” may be a todo; “Nucleus currently does not prune” is
   current operator truth.
-- **CRM:** employment-relationship cases, supplied content, case revisions,
-  evidence, steward-run state, and conspicuous nonblocking advisories. It is
+- **CRM:** reusable Markdown profile entries, employment-relationship cases,
+  supplied content, case revisions, evidence, steward-run state, and conspicuous nonblocking advisories. It is
   not outreach authority or a scheduler.
 - **Annals:** retained source material and evidence-grounded conceptual
   knowledge. It may retain released documentation, but it is not the sole

@@ -2,7 +2,7 @@
 
 CRM is a private local library of employment-related cases. A case can begin
 with a company, location, person, posting, introduction, or any other useful
-lead because version 0.1 does not force those inputs into a universal entity
+lead because version 0.3 does not force those inputs into a universal entity
 model. It retains raw UTF-8 Markdown and lets a bounded steward turn new
 information into a complete next case revision.
 
@@ -17,11 +17,32 @@ service.
 | Authority | Owns | Does not own |
 | --- | --- | --- |
 | Caller | The text it supplies, source labels, choice to create or tell a case, and any real-world contact action | The steward's generated revision or Nucleus execution state |
-| CRM | Case, delivery, immutable revision, and steward-update/attempt identities; stage; advisory retention and display; validation; atomic commits; retry admission; and deterministic reads | Truth of cited sources, permission to contact someone, or proof that contact occurred outside CRM |
+| CRM | Mutable profile entries; case, delivery, immutable revision, and steward-update/attempt identities; stage; advisory retention and display; validation; atomic commits; retry admission; and deterministic reads | Truth of cited sources, permission to contact someone, or proof that contact occurred outside CRM |
 | Cited source | The external fact or record referenced by the caller | CRM's retained interpretation or update history |
 | Nucleus | Agent admission, authentication, supervised execution, job/output records, and durable managed-tool transport | CRM case state, domain success, update retry policy, or the meaning of a stage |
 | Steward agent | One bounded proposed full replacement revision | Authority to bypass CRM validation, contact anyone, or make final prose a domain result |
 | Chancery | Installed contract discovery and exact promise resolution | CRM runtime execution or case data |
+
+## Profile entries
+
+Reusable career vignettes, statements, preferences, and other profile material
+share one `profile_entries` table with `id`, `title`, `body_md`, and
+`updated_at`. The body is exact UTF-8 Markdown stored as SQLite `TEXT`.
+Headings, facts, uncertainties, and disclosure guidance remain in the body;
+CRM does not parse them into a career ontology or assign entry kinds.
+
+`profile new` creates a row. `profile update` atomically replaces its complete
+title and body, retaining its identity and updating its timestamp. There is no
+profile revision history, automatic duplicate detection, or merge. `profile
+list` returns bounded current entries (metadata in human output) and `profile
+show` returns one complete current entry. Profile operations invoke no steward, Nucleus job, source fetch, or
+network. They do not link entries to cases or change case content. A caller
+must explicitly supply profile text to a case when that is desired.
+
+Input files are transient transport. CRM does not retain their paths, move or
+delete them, synchronize them, or create a parallel content tree. Source and
+disclosure rules remain ordinary Markdown and are not automatically applied to
+other entries or outputs. The caller owns corrections and interpretation.
 
 ## Case and intake flow
 
@@ -149,8 +170,8 @@ message was sent, another person replied, or employment help occurred. Those
 facts must arrive through a caller-supplied delivery with an appropriate source
 reference and remain attributable to that source.
 
-The supported version-0.1 reads expose immutable case revisions,
-`source_update_id`, update/delivery identity, and Nucleus requester/job
+The supported version-0.3 reads expose current profile entries, immutable case
+revisions, `source_update_id`, update/delivery identity, and Nucleus requester/job
 correlation. Raw delivery bodies, persisted request JSON, and mailbox receipt
 JSON are retained for exact execution and recovery but have no public
 show/export command. Direct SQLite access is not a supported consumer surface.

@@ -3,7 +3,8 @@
 Use this operation for changes to CRM code, schema, CLI/JSON behavior,
 requester/toolset, tests, documentation, provider contracts, packaging, or
 release tooling. Ordinary case use belongs to `crm.case.maintain` or
-`crm.library.explore`; installed operation belongs to
+`crm.library.explore`; profile storage and reads belong to
+`crm.profile.maintain`; installed operation belongs to
 `crm.steward.operate`.
 
 This operation does not authorize `release.sh`, deployment, Semantics
@@ -29,17 +30,23 @@ idempotency, or recovery change, read:
 Preserve reported readiness, unspecified, unsupported, and dependency outcomes
 rather than filling gaps from schemas or implementation code.
 
-## Fixed version-0.1 boundary
+## Fixed version-0.3 boundary
 
 CRM is one private local SQLite library. All retained Markdown, intake,
 request JSON, and tool-result content is database `TEXT`; input files and
 standard input are transient transport. There is no filesystem content tree.
 
-The public CLI consists of initialization/doctor, case creation and reads,
-lexical search, tell, and update list/show/wait/resume/retry. `tell` commits one
+The public CLI consists of initialization, explicit backed-up migration, doctor,
+profile creation/list/show/replacement, case creation and reads, lexical
+search, tell, and update list/show/wait/resume/retry. `tell` commits one
 delivery plus queued update before returning and then launches a hidden worker.
 There is no daemon, schedule, crawler, contact sender, automatic retry, or
 direct-Codex fallback.
+
+Profile entries are current mutable rows with exactly `id`, `title`,
+`body_md`, and `updated_at`. Explicit profile writes invoke no AI or worker and
+do not alter cases or automatically supply steward context. Input files are
+transient transport; profile commands do not move, delete, or synchronize them.
 
 Every immutable case revision has exactly:
 
@@ -94,7 +101,14 @@ rewrite an installed registration.
 A database schema change requires worker quiescence, a SQLite-aware backup
 including applicable sidecars, explicit migration, an old-state fixture,
 post-migration integrity proof, and database-aware rollback. The installer may
-never perform that migration implicitly.
+never perform that migration implicitly. Schema two adds only the profile
+table and schema markers. The supported `migrate --backup PATH` path refuses
+live workers and active unsettled updates, preserves queued work, snapshots
+committed SQLite state, and validates integrity before committing. Repeat
+migration on schema two creates no backup. Retain synthetic schema-one
+fixtures and prove both profile writes and legacy case history survive the
+upgrade. A downgrade requires a quiescent database restore, preserving newer
+state and excluding stale schema-two WAL/SHM from the restored database.
 
 Ambiguous admission reuses only a byte-identical typed request with the same
 job ID. Resume preserves recoverable work. A genuinely new retry requires
@@ -117,7 +131,7 @@ It must refuse foreign/tampered selectors and restore command/provider views
 together on a pre-commit failure. It must never open, initialize, migrate,
 inspect, back up, or delete `crm.db`.
 
-Provider scope is schema 3 and complete for the four supported entries. Every
+Provider scope is schema 3 and complete for the five supported entries. Every
 entry must retain a complete normalized promise, explicit gaps, compatible
 dependencies, and a matching detailed manual. CRM runtime never depends on
 Chancery.

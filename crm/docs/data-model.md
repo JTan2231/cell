@@ -1,14 +1,16 @@
 # Data model
 
-CRM schema version 1 stores the entire private library in SQLite. Every intake,
-delivery, complete case body, summary, advisory, exact requester request, and
+CRM schema version 2 stores the entire private library in SQLite. Every intake,
+delivery, profile body, complete case body, summary, advisory, exact requester request, and
 tool result that CRM retains is database `TEXT` with a digest where identity
 or replay requires it. CRM creates no product-owned Markdown or intake files.
 
 ## Durable records
 
-- `crm_meta` identifies CRM schema one in addition to SQLite
+- `crm_meta` identifies CRM schema two in addition to SQLite
   `PRAGMA user_version`.
+- `profile_entries` retain mutable current profile content: stable opaque `id`,
+  `title`, exact `body_md`, and `updated_at`. There is no case foreign key.
 - `cases` retain stable identity, title, current revision, lifecycle metadata,
   and no mutable content body.
 - `deliveries` retain exact raw UTF-8 tell text, its SHA-256 digest, and optional
@@ -31,10 +33,36 @@ Database triggers refuse delivery, case-revision, and receipt update or
 deletion. Current case and update views are projections over these durable
 rows.
 
-These retained rows do not imply a public export surface. Version 0.1 exposes
-case revisions, source-update identity, update/delivery identity, and Nucleus
-correlation, but not raw delivery bodies, persisted request JSON, or mailbox
+These retained rows do not imply a public export surface. Version 0.3 exposes
+current profile entries, case revisions, source-update identity, update/delivery
+identity, and Nucleus correlation, but not raw delivery bodies, persisted request JSON, or mailbox
 receipt JSON. Direct SQLite reads are outside the supported interface.
+
+## Profile entries
+
+One row is one piece of career material the caller can retrieve or replace
+independently. The only fields are:
+
+| Field | Stored meaning |
+| --- | --- |
+| `id` | Opaque stable identity generated on creation |
+| `title` | Trimmed nonempty title, at most 1,000 UTF-8 bytes; not unique |
+| `body_md` | Exact UTF-8 Markdown, at most 1,048,576 bytes; may be empty |
+| `updated_at` | CRM write time, as an RFC 3339 UTC string |
+
+Creation commits one row. Update atomically replaces the title and complete
+body and sets the write timestamp; it has no revision precondition and the
+last committed replacement wins. Identity survives title changes. No history,
+source-path column, structured entry kind, tag, fact field, case relation, or
+model-generated content is implied. Lists order by `updated_at` descending,
+then `id`; JSON list entries and show return entire current rows. Human list
+output shows ID, title, and timestamp.
+
+Profile Markdown is retained verbatim, including caveats and disclosure notes.
+CRM does not validate those claims or automatically apply rules found in one
+entry to another. `updated_at` describes storage freshness, not the date an
+experience occurred or the truth of its claims. Profile operations do not
+queue steward work or alter existing cases.
 
 ## Case revisions
 
@@ -137,7 +165,7 @@ changes retry eligibility.
 
 ## Initialization, integrity, and migration
 
-`init` is the only command that creates schema one. Repeating it against an
+`init` is the only command that creates a new CRM database, using schema two. Repeating it against an
 existing supported CRM schema is idempotent. New Unix database bytes are mode
 0600 before SQLite opens them; an existing symbolic link or non-regular target
 is rejected before open, and opening a regular database also tightens database
@@ -145,13 +173,33 @@ and existing sidecar permissions. The packaged deployer creates its default
 state directory mode 0700. Ordinary commands refuse absent, foreign,
 incomplete, newer, or older schemas and never migrate implicitly.
 
-Doctor checks `PRAGMA user_version`, the six required schema-one tables,
+Doctor checks `PRAGMA user_version`, the seven required schema-two tables,
 foreign keys, SQLite integrity, secure database/sidecar permissions, strict
 Nucleus health/capabilities, and idempotent registration of the immutable
 toolset and its input/result schemas. It does not make Nucleus authoritative
 for database health.
 
-Any future schema change requires quiescing hidden workers, retaining a
-SQLite-aware database backup including relevant WAL/SHM state, an explicit
-migration, an old-state fixture, and database-aware rollback. Program rollback
-alone must never reinterpret a newer database.
+`migrate --backup PATH` explicitly upgrades an existing schema-one database to
+schema two by adding the empty profile table and updating both schema markers.
+It preserves all existing case, revision, delivery, receipt, queue, and lease
+rows. No profile material is imported by schema migration itself.
+
+The operator must stop new CRM work and let active workers settle first. Under
+an immediate write transaction, migration refuses a live worker PID, a running
+update, or an applied update lacking terminal runtime evidence. Queued updates
+may remain queued. A SQLite-aware snapshot at the required new backup path
+includes committed WAL data and is independently readable; the backup is
+private and an existing destination is refused. Its parent must already be a
+private regular directory; a relative backup path resolves against the current
+working directory. It must be separate from the source database and sidecars
+and have no pre-existing SQLite sidecars. The source schema is changed
+and its integrity checked within the transaction. Failure before commit leaves
+schema one intact. Repeating migration on supported schema two is unchanged
+and creates no backup.
+
+For database rollback, quiesce all CRM use, preserve the current schema-two
+database and its applicable sidecars, and restore the independently readable
+schema-one backup as a complete database with no stale WAL/SHM from schema two.
+Only then use a schema-one binary. This discards post-backup writes from the
+active view, so it requires explicit recovery authority and retention of that
+newer state. Program rollback alone must never reinterpret a newer database.

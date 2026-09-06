@@ -1,6 +1,6 @@
 # CLI contract
 
-CRM commands operate on one explicitly selected schema-one database. The
+CRM commands operate on one explicitly selected schema-two database. The
 default is `~/Library/Application Support/CRM/crm.db`; global `--database`
 takes precedence over `CRM_DATABASE`. A relative selected path resolves against
 the current working directory. Ordinary commands never initialize or migrate a
@@ -13,10 +13,11 @@ JSON uses the stable envelope described below.
 
 ```sh
 crm [--database PATH] init
+crm [--database PATH] migrate --backup PATH
 crm [--database PATH] doctor
 ```
 
-`init` creates schema one when the selected file is absent. Repeating it against
+`init` creates schema two when the selected file is absent. Repeating it against
 an existing supported CRM database is idempotent; a foreign or unsupported
 schema is refused. A symbolic link or other non-regular database target is
 refused before SQLite opens or changes it. New database bytes are mode 0600 on
@@ -24,9 +25,60 @@ Unix. `doctor` checks schema identity and required tables, foreign keys, SQLite
 integrity, secure database/sidecar permissions, and strict Nucleus/toolset
 readiness without changing case domain state.
 
+`migrate --backup PATH` upgrades schema one to schema two explicitly; it never
+imports profile content or launches a worker. Stop new CRM work and let active
+workers settle. Migration refuses a live worker PID, running work, or applied
+work without terminal runtime evidence, but preserves queued work. It creates a
+private, independently readable SQLite backup at a new path before changing
+schema. The parent must be an existing non-symbolic private directory, with no
+group/other permissions on Unix. A relative backup path resolves against the
+current working directory. Existing backup destinations, source/sidecar paths,
+and destinations with existing SQLite sidecars are refused. Schema changes and
+integrity validation are transactional. Repeating against schema two returns unchanged
+without creating a backup. JSON returns `type: "migrated"`, the database path,
+`backup` (absolute path or null for unchanged schema two), `changed`,
+`from_schema_version`, and `schema_version`. After an ambiguous failure,
+inspect schema before retrying; a failed backup may leave its destination, so
+use a fresh path after inspecting it. See [migration and rollback](data-model.md#initialization-integrity-and-migration).
+
 Nucleus unavailability does not make stored cases unreadable, but it prevents
 new steward progress until readiness is restored. There is no direct agent
 fallback.
+
+## Profile entries
+
+```sh
+crm profile new --title TITLE INPUT
+crm profile list [--limit N]
+crm profile show PROFILE_ID
+crm profile update PROFILE_ID --title TITLE INPUT
+```
+
+`INPUT` is required for new and update: a regular non-symbolic UTF-8 Markdown
+file or `-` for standard input, at most 1,048,576 bytes. Empty bodies are
+allowed. CRM preserves the body exactly. Titles are trimmed and must contain
+1 through 1,000 UTF-8 bytes after trimming. Titles need not be unique. File
+paths are transient; CRM does not retain, move, delete, or synchronize them.
+
+`new` creates an opaque stable ID and commits one row with `title`, `body_md`,
+and `updated_at` (an RFC 3339 UTC string). `update` replaces the entire title
+and body atomically, retains the ID, and updates the timestamp. It has no
+revision guard or history; the last committed update wins. There is no partial
+edit, deletion, or automatic duplicate detection.
+
+`list` orders entries by `updated_at` descending and then ID. Human output
+shows ID, title, and timestamp; JSON returns all four fields, including the
+body. Limits default to 20 and must be 1 through 1,000. `show` returns all
+four fields of one current entry. Each read observes current committed state;
+separate commands are not a shared snapshot. `search` still searches cases
+only.
+
+Profile commands invoke no model, Nucleus job, network, or worker. They neither
+change cases nor automatically supply context to the steward. Rules and caveats
+in Markdown are retained text for the caller to interpret. New and update
+validate the full input before committing; an unknown ID or invalid input
+causes no partial profile write. Retrying `new` can create a duplicate; inspect
+`list`/`show` after an ambiguous result before deciding to create another row.
 
 ## Cases
 
@@ -123,7 +175,7 @@ Tell and retry acknowledgments plus update list/show/wait/resume/retry include
 its applied revision; other updates use their frozen base when assigned and
 otherwise the current head.
 
-Version 0.1 has no public raw-delivery, persisted-request, or mailbox-receipt
+Version 0.3 has no public raw-delivery, persisted-request, or mailbox-receipt
 show/export command. Case history plus update and Nucleus job identities are the
 supported inspection path; direct SQLite access is unsupported.
 

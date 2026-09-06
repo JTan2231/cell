@@ -165,7 +165,8 @@ impl Client {
 }
 
 pub use crate::model::{
-    CaseListItem, CaseRevision, RevisionProposal, SearchResult, Stage, StewardUpdate, UpdateStatus,
+    CaseListItem, CaseRevision, ProfileEntry, RevisionProposal, SearchResult, Stage, StewardUpdate,
+    UpdateStatus,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -190,6 +191,19 @@ pub enum Data {
         database: PathBuf,
         schema_version: u32,
         created: bool,
+    },
+    Migrated {
+        database: PathBuf,
+        backup: Option<PathBuf>,
+        from_schema_version: u32,
+        schema_version: u32,
+        changed: bool,
+    },
+    ProfileEntry {
+        entry: ProfileEntry,
+    },
+    ProfileList {
+        entries: Vec<ProfileEntry>,
     },
     Doctor {
         database: PathBuf,
@@ -233,7 +247,25 @@ pub enum Data {
 #[derive(Debug)]
 pub enum Request {
     Init,
+    Migrate {
+        backup: PathBuf,
+    },
     Doctor,
+    CreateProfileEntry {
+        title: String,
+        input: PathBuf,
+    },
+    ListProfileEntries {
+        limit: usize,
+    },
+    ShowProfileEntry {
+        entry: String,
+    },
+    UpdateProfileEntry {
+        entry: String,
+        title: String,
+        input: PathBuf,
+    },
     CreateCase {
         title: String,
         input: Option<PathBuf>,
@@ -297,7 +329,27 @@ impl Client {
         let mut push = |parts: &[&str]| args.extend(parts.iter().map(|part| OsString::from(*part)));
         match request {
             Request::Init => push(&["init"]),
+            Request::Migrate { backup } => {
+                push(&["migrate", "--backup"]);
+                args.push(backup.as_os_str().to_owned());
+            }
             Request::Doctor => push(&["doctor"]),
+            Request::CreateProfileEntry { title, input } => {
+                push(&["profile", "new", "--title", title]);
+                args.push(input.as_os_str().to_owned());
+            }
+            Request::ListProfileEntries { limit } => {
+                push(&["profile", "list", "--limit", &limit.to_string()]);
+            }
+            Request::ShowProfileEntry { entry } => push(&["profile", "show", entry]),
+            Request::UpdateProfileEntry {
+                entry,
+                title,
+                input,
+            } => {
+                push(&["profile", "update", entry, "--title", title]);
+                args.push(input.as_os_str().to_owned());
+            }
             Request::CreateCase {
                 title,
                 input,

@@ -1,7 +1,7 @@
 # Install or operate CRM and its steward
 
 This operation covers user-owned installation, explicit database
-initialization and diagnosis, and evidence-based recovery of hidden steward
+initialization, migration, and diagnosis, and evidence-based recovery of hidden steward
 work. It does not authorize release publication, production data mutation,
 Nucleus changes, or an otherwise ineligible retry.
 
@@ -51,7 +51,7 @@ Nucleus, or installs a daemon, LaunchAgent, or schedule.
 /Users/joey/.local/bin/crm doctor
 ```
 
-Initialization is a separate intentional effect. It creates schema one when
+Initialization is a separate intentional effect. It creates schema two when
 the selected file is absent and is idempotent against an existing supported CRM
 database; it refuses symbolic links and other non-regular targets before
 SQLite opens them, refuses foreign or unsupported schemas, and does not
@@ -59,12 +59,53 @@ migrate. New Unix database bytes are mode 0600. The packaged default state
 directory is mode 0700, while a caller-selected relative database resolves
 against the current working directory.
 
-Doctor checks schema identity and the six required tables, SQLite integrity,
+Doctor checks schema identity and the seven required tables, SQLite integrity,
 foreign keys, secure database/sidecar permissions, strict Nucleus readiness,
 and idempotent registration of immutable
 `crm/case-steward/1` registration. Storage integrity belongs to CRM; execution
 readiness belongs to Nucleus. A Nucleus failure does not make existing cases
 unreadable, but hidden steward work cannot progress through a second path.
+
+## Explicit schema-one migration
+
+Schema two adds an empty `profile_entries` table; it does not import source
+files, rewrite cases, or change requester/toolset meaning. Migration is a
+separate user-intended effect from deployment or initialization:
+
+```sh
+/Users/joey/.local/bin/crm migrate --backup /absolute/private/path/crm-schema1.db
+```
+
+Select another database with global `--database` or `CRM_DATABASE` when
+appropriate. Stop new CRM use and let active workers finish, including terminal
+runtime settlement after an applied revision. Under an immediate write
+transaction, migration refuses a live worker PID, a running update, or an
+applied update with no terminal runtime evidence. Queued updates may remain
+queued. Existing case, revision, delivery, receipt, queue, and lease rows are
+preserved.
+
+The backup path must be new, separate from the source database and its
+sidecars, and have no existing SQLite sidecars. Its parent must already be a
+private non-symbolic directory with no group/other permissions on Unix. A
+relative backup path resolves against the current working directory. An
+existing destination is refused. CRM creates a
+private, independently readable SQLite snapshot that includes committed WAL
+content, then adds the profile table and advances both schema markers with
+integrity validation before commit. Failure before commit leaves the source
+at schema one. The result reports `changed`, `from_schema_version`, and
+`schema_version`, plus database and backup paths. `backup` is absolute when
+changed and null otherwise. Repeating on schema two is unchanged and creates
+no backup. After an ambiguous result, inspect schema before retrying. A failed
+backup may leave its destination; inspect it and choose a fresh destination
+for another attempt.
+Migration calls no Nucleus service and starts no worker.
+
+Retain the backup as private data. To roll back storage, stop all CRM use,
+preserve the newer database and applicable sidecars, then restore the complete
+schema-one backup without pairing it with schema-two WAL/SHM. Only then select
+a compatible older binary. Post-backup writes will leave the active view, so
+this recovery requires explicit authority and retention of the newer state;
+program-selector rollback alone is insufficient.
 
 ## Inspect and recover hidden work
 
@@ -131,6 +172,7 @@ direct-Codex fallback.
 /Users/joey/.local/bin/crm doctor
 /Users/joey/.local/bin/chancery show crm.case.maintain
 /Users/joey/.local/bin/chancery show crm.library.explore
+/Users/joey/.local/bin/chancery show crm.profile.maintain
 /Users/joey/.local/bin/chancery show crm.steward.operate
 /Users/joey/.local/bin/chancery doctor
 /Users/joey/.local/bin/nucleus health
@@ -162,7 +204,7 @@ Nucleus state. Stop when `previous` is absent/invalid or the older binary
 cannot read the retained database schema; use that release's database-aware
 recovery plan instead of forcing binary rollback.
 
-Version 0.1 has no uninstaller or automatic pruning. Deleting retained cases,
+Version 0.3 has no uninstaller or automatic pruning. Deleting retained cases,
 attempts, releases, or a database is a separate destructive action.
 
 ## Rust callers

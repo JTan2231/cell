@@ -9,8 +9,10 @@ use crate::api::{Data, Failure, Success, UpdateData, UpdateView};
 use clap::Parser as _;
 use serde_json::{Value, json};
 
-use crate::cli::{CaseCommand, Cli, Command, TellArgs, UpdateCommand, WorkerCommand};
-use crate::model::{CaseListItem, CaseRevision, SearchResult, StewardUpdate};
+use crate::cli::{
+    CaseCommand, Cli, Command, ProfileCommand, TellArgs, UpdateCommand, WorkerCommand,
+};
+use crate::model::{CaseListItem, CaseRevision, ProfileEntry, SearchResult, StewardUpdate};
 use crate::nucleus::NucleusSteward;
 use crate::store::Store;
 use crate::worker::{Worker, activate, activate_resume};
@@ -119,6 +121,41 @@ fn run(cli: Cli) -> CommandResult<Option<Output>> {
                 },
             }))
         }
+        Command::Migrate { backup } => {
+            let backup = if backup.is_absolute() {
+                backup
+            } else {
+                env::current_dir()
+                    .map_err(|source| crate::error::io("current directory", source))?
+                    .join(backup)
+            };
+            let result = Store::migrate(&database, &backup)?;
+            Ok(Some(Output {
+                data: json!({
+                    "type": "migrated",
+                    "database": database,
+                    "backup": if result.changed { Some(&backup) } else { None },
+                    "from_schema_version": result.from_schema_version,
+                    "schema_version": result.schema_version,
+                    "changed": result.changed
+                }),
+                human: if result.changed {
+                    format!(
+                        "Migrated CRM from schema {} to {} at {}. Backup: {}",
+                        result.from_schema_version,
+                        result.schema_version,
+                        database.display(),
+                        backup.display()
+                    )
+                } else {
+                    format!("CRM is already at schema {}", result.schema_version)
+                },
+            }))
+        }
+        Command::Profile { command } => {
+            let store = Store::open(database)?;
+            Ok(Some(profile_command(&store, command)?))
+        }
         Command::Doctor => {
             let database_health = Store::doctor(&database)?;
             NucleusSteward::for_current_user().doctor()?;
@@ -172,6 +209,69 @@ fn run(cli: Cli) -> CommandResult<Option<Output>> {
             Ok(None)
         }
     }
+}
+
+fn profile_command(store: &Store, command: ProfileCommand) -> Result<Output> {
+    match command {
+        ProfileCommand::New { title, input } => {
+            let entry = store.create_profile_entry(&title, &read_text(&input)?)?;
+            Ok(Output {
+                human: format!("Created {} — {}", entry.id, one_line(&entry.title)),
+                data: json!({"type": "profile_entry", "entry": entry}),
+            })
+        }
+        ProfileCommand::List { limit } => {
+            let entries = store.list_profile_entries(limit)?;
+            let human = if entries.is_empty() {
+                "No profile entries.".to_owned()
+            } else {
+                entries
+                    .iter()
+                    .map(|entry| {
+                        format!(
+                            "{} — {} ({})",
+                            entry.id,
+                            one_line(&entry.title),
+                            entry.updated_at
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            Ok(Output {
+                human,
+                data: json!({"type": "profile_list", "entries": entries}),
+            })
+        }
+        ProfileCommand::Show { entry } => {
+            let entry = store.profile_entry(&entry)?;
+            Ok(Output {
+                human: render_profile_entry(&entry),
+                data: json!({"type": "profile_entry", "entry": entry}),
+            })
+        }
+        ProfileCommand::Update {
+            entry,
+            title,
+            input,
+        } => {
+            let entry = store.update_profile_entry(&entry, &title, &read_text(&input)?)?;
+            Ok(Output {
+                human: format!("Updated {} — {}", entry.id, one_line(&entry.title)),
+                data: json!({"type": "profile_entry", "entry": entry}),
+            })
+        }
+    }
+}
+
+fn render_profile_entry(entry: &ProfileEntry) -> String {
+    format!(
+        "{} — {}\nUpdated: {}\n\n{}",
+        entry.id,
+        one_line(&entry.title),
+        entry.updated_at,
+        entry.body_md
+    )
 }
 
 fn case_command(store: &Store, command: CaseCommand) -> Result<Output> {

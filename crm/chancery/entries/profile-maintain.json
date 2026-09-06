@@ -1,0 +1,161 @@
+{
+  "id": "crm.profile.maintain",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Store and read career profile entries",
+  "summary": "Create, list, read, or replace reusable career vignettes, statements, preferences, and other profile material as exact Markdown in CRM’s private SQLite library, without running the steward.",
+  "use_when": [
+    "Reusable information about the caller’s career or application preferences should be stored as one independently editable Markdown entry.",
+    "Current profile entries should be listed or read by stable identity.",
+    "A known profile entry’s complete title and Markdown should be explicitly replaced."
+  ],
+  "do_not_use_when": [
+    "An employment case should be created, searched, or updated through its steward.",
+    "The caller needs immutable profile history, partial edits, deletion, structured career facts, source synchronization, automatic deduplication, or automatic case context.",
+    "CRM should fetch a source, rewrite the supplied Markdown with AI, contact someone, or certify a career claim."
+  ],
+  "outcome": "One durable new or atomically replaced profile entry, a deterministic bounded list, or one complete current entry with stable ID, title, exact Markdown body, and write timestamp.",
+  "effects": [
+    "New and update write one mutable row in the selected CRM database; neither creates case revisions, queues work, calls Nucleus, fetches sources, nor invokes a model.",
+    "List and show make no domain mutation; opening storage may enforce private database/sidecar permissions and WAL mode.",
+    "Input files remain unchanged; their paths are not retained. Output may expose private profile material to the terminal or redirected destination."
+  ],
+  "authority": [
+    "CRM owns profile identities, validated bounds, stored content and write timestamps; callers and cited sources own supplied facts and corrections.",
+    "Markdown rules and caveats remain caller-interpreted content; CRM does not enforce them across entries or output and does not transfer real-world action authority."
+  ],
+  "success": [
+    "The selected database is an initialized schema-two CRM library and the complete requested operation succeeds.",
+    "New returns one generated stable ID; update retains its ID and atomically replaces the full title and body with the supplied values.",
+    "Show returns all four fields; list orders current entries by updated_at descending, then ID, returning full entries in JSON and ID/title/timestamp in human output."
+  ],
+  "failure_and_recovery": [
+    "Absent, foreign, unsupported storage, invalid UTF-8, invalid bounds, or an unknown ID fail without a partial profile write. Ordinary profile commands never initialize or migrate storage.",
+    "After an ambiguous create result, inspect list/show before issuing another create: creation has no idempotency key or duplicate check.",
+    "Updates have no revision guard or history; the last committed replacement wins. Keep any desired prior content before replacing it."
+  ],
+  "privacy": [
+    "The private database and command output may contain employment, identity, contact, eligibility, preferences, caveats, or disclosure guidance. Treat redirected output and backups as private.",
+    "Profile commands retain exact supplied Markdown but no input path, request prompt, Nucleus job, or second content file. Source files are not moved, deleted, or synchronized."
+  ],
+  "interfaces": [
+    {
+      "label": "Create an entry",
+      "invocation": "/Users/joey/.local/bin/crm profile new --title TITLE INPUT"
+    },
+    {
+      "label": "List current entries",
+      "invocation": "/Users/joey/.local/bin/crm profile list [--limit N]"
+    },
+    {
+      "label": "Read a current entry",
+      "invocation": "/Users/joey/.local/bin/crm profile show PROFILE_ID"
+    },
+    {
+      "label": "Replace an entry",
+      "invocation": "/Users/joey/.local/bin/crm profile update PROFILE_ID --title TITLE INPUT"
+    },
+    {
+      "label": "Select another database",
+      "invocation": "/Users/joey/.local/bin/crm --database PATH profile list"
+    }
+  ],
+  "does_not_authorize": [
+    "Initializing or migrating a database, deployment, deleting source files, or changing another workflow’s source of truth.",
+    "Sending profile material to a model or external recipient, changing cases, or treating stored claims as verified facts."
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local callers may store, inspect, and explicitly replace reusable career Markdown through the CRM CLI or its provider-owned Rust CLI client."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The selected path is an initialized schema-two CRM library; writes have explicit caller intent and provide a valid complete title and UTF-8 body."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "New and update take a trimmed nonempty title of at most 1,000 UTF-8 bytes and exact body of at most 1,048,576 bytes, including an empty body, from a regular nonsymbolic file or stdin via -; show/update select one opaque ID; list accepts a bounded limit."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "A complete entry has id, title, body_md, and updated_at. JSON list items include body_md; human lists show ID, title, and timestamp. Human output or the common JSON success/error envelope reports the operation; Rust callers use crm::api exported payloads."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Profiles are mutable current Markdown records, separate from cases and immutable case revisions. Entry kinds, headings, sources, facts, uncertainties, and disclosure rules are unparsed body text; neither title nor content is a uniqueness key."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "The generated opaque entry ID survives edits. updated_at is CRM write time as an RFC 3339 UTC string, not an experience date or external verification timestamp; input bounds use UTF-8 bytes."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Show returns the complete current entry at that read. List returns current entries up to its limit, ordered by updated_at descending then ID. Separate calls do not share a snapshot."
+      },
+      {
+        "status": "unsupported",
+        "statement": "CRM neither refreshes source truth nor guarantees external factual completeness or freshness."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported boundary is the local CLI, defaulting to ~/Library/Application Support/CRM/crm.db; --database overrides CRM_DATABASE and relative paths resolve from cwd. Direct SQLite is not a consumer interface."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "New commits one row. Update atomically replaces title and full body, retaining identity and updating write time. There is no compare-and-swap guard or history; the last committed replacement wins. Reads do not initialize or migrate storage."
+      },
+      {
+        "status": "unsupported",
+        "statement": "There is no deletion, profile revision lineage, partial edit, automatic merge, create idempotency key, automatic deduplication, or source synchronization."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "List defaults to 20 entries and accepts 1 through 1,000. Commands invoke no model, network, source, hidden worker, or Nucleus job, and neither modify cases nor automatically supply steward context."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No database-size or wall-clock service-level guarantee is specified."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Contract 1 requires database schema two. CRM 0.3 provides explicit schema-one migration separately; provider release, database schema, and JSON contract are distinct versions."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future retention, deprecation, or schema migration window is specified."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "Profile operations use only CRM’s selected local database; no Nucleus, Chancery runtime, source repository, model, or network dependency is required."
+      }
+    ]
+  },
+  "manual": "manuals/profile-maintain.md"
+}

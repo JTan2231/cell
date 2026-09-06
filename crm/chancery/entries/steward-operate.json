@@ -5,26 +5,28 @@
   "mode": "operate",
   "support": "supported",
   "title": "Install or operate CRM and its steward",
-  "summary": "Deploy, verify, or recover the user-owned content-addressed CRM CLI and Chancery selector, separately initialize or diagnose its private database, and inspect or explicitly recover queued hidden steward work.",
+  "summary": "Deploy, verify, or recover the user-owned content-addressed CRM CLI and Chancery selector, separately initialize, migrate, or diagnose its private database, and inspect or explicitly recover queued hidden steward work.",
   "use_when": [
     "CRM should be installed or updated for this macOS user.",
     "The installed binary, provider selector, database integrity, Nucleus/toolset readiness, or hidden update state should be diagnosed.",
-    "An empty CRM database should be explicitly initialized or queued steward work explicitly resumed or retried under its state guards."
+    "An empty CRM database should be explicitly initialized or queued steward work explicitly resumed or retried under its state guards.",
+    "An existing schema-one database should be explicitly upgraded to schema two with a private SQLite-aware backup."
   ],
   "do_not_use_when": [
-    "The task is ordinary case creation, telling, searching, or reading.",
+    "The task is ordinary profile maintenance or case creation, telling, searching, or reading.",
     "Deployment should silently initialize or migrate CRM state, restart Nucleus, install a scheduler, or drain queued updates.",
     "A foreign or tampered selector/release should be adopted or a failed update retried without positive CRM evidence."
   ],
-  "outcome": "A version-matched content-addressed release whose command and sole providers/crm selector follow one current release, an explicitly initialized schema-one database, an evidence-backed readiness diagnosis, or one guarded hidden-worker recovery transition.",
+  "outcome": "A version-matched content-addressed release whose command and sole providers/crm selector follow one current release, an explicitly initialized schema-two database, a backed-up explicit schema-one migration, an evidence-backed readiness diagnosis, or one guarded hidden-worker recovery transition.",
   "effects": [
     "Deployment stages immutable binary, deployer, manifest, and CRM-owned Chancery bundle bytes under private application support, then changes the current release selected by both public surfaces under product and shared Chancery catalog-writer locks.",
     "Deployment writes ~/.local/bin/crm and exactly one Chancery provider selector but starts no daemon, worker, schedule, or database operation.",
-    "A separate crm init creates schema one or idempotently accepts an existing supported schema; doctor checks storage/readiness and idempotently registers the immutable Nucleus schemas/toolset; resume processes one queued, running, or applied-but-runtime-unsettled update synchronously and retry queues a successor before launching a hidden child."
+    "A separate crm init creates schema two or idempotently accepts an existing supported schema; doctor checks storage/readiness and idempotently registers the immutable Nucleus schemas/toolset; resume processes one queued, running, or applied-but-runtime-unsettled update synchronously and retry queues a successor before launching a hidden child.",
+    "A separate crm migrate --backup PATH adds the profile table and advances schema markers from one to two transactionally after a private SQLite-aware backup; deployment never performs this effect."
   ],
   "authority": [
     "CRM's deployer owns its content-addressed releases, current and previous selectors, command selector, and only providers/crm.",
-    "CRM owns schema-one initialization, database integrity/privacy checks, update recovery admission, domain success, and retry policy.",
+    "CRM owns schema-two initialization and explicit schema migration, database integrity/privacy checks, update recovery admission, domain success, and retry policy.",
     "Nucleus owns strict execution readiness, agent supervision, job/output evidence, and mailbox transport, not CRM state or retry decisions."
   ],
   "success": [
@@ -32,13 +34,16 @@
     "Identical deployment is idempotent; an update rejects a stale expected-current precondition and retains a valid previous selector; failed post-switch smoke restores binary and provider views together.",
     "The deployer refuses symbolic, foreign, traversal, fabricated, or tampered owned paths and never opens or changes crm.db.",
     "After explicit init, doctor checks schema identity and required tables, foreign keys, SQLite integrity, secure database/sidecar permissions, and required Nucleus/toolset readiness.",
-    "Resume creates no successor for uncertain work; retry creates a successor update only when the selected update is failed or lost."
+    "Resume creates no successor for uncertain work; retry creates a successor update only when the selected update is failed or lost.",
+    "Explicit migration refuses a live worker PID and running or runtime-unsettled applied work, preserves queued and retained case rows, creates a new independent backup, and validates integrity before committing schema two."
   ],
   "failure_and_recovery": [
     "A failed deployment restores the prior current/previous release selectors and both public selectors; if coherent restoration cannot be proved, it detaches CRM's public selectors and stops fail-closed.",
     "After committed deployment, redeploy the exact previous binary with its packaged deployer only when its schema remains compatible; never rewrite selectors or CRM rows manually.",
     "An absent database after deployment is expected; init is a separate intentional and idempotent-on-supported-schema effect.",
-    "If Nucleus or a hidden worker is unavailable, retain queued work, diagnose exact readiness and attempt state, resume recoverable work, and retry only after positive terminal evidence."
+    "If Nucleus or a hidden worker is unavailable, retain queued work, diagnose exact readiness and attempt state, resume recoverable work, and retry only after positive terminal evidence.",
+    "Stop new CRM work before migration. An existing backup target is refused; a schema change failure before commit leaves schema one intact. On schema two migration is unchanged and creates no backup. Before restoring schema one, quiesce use and preserve newer database/sidecar state; never pair the old database with newer WAL/SHM.",
+    "After an ambiguous migration result, inspect schema before retrying. Backup failure may leave its destination; inspect it and choose a fresh path instead of overwriting it."
   ],
   "privacy": [
     "Release/provider bytes contain no case data; the private CRM database and correlated Nucleus state may contain sensitive employment, contact, source, prompt, advisory, and tool-result text.",
@@ -54,6 +59,7 @@
     "Build and validate a green CRM candidate without changing installed state.",
     "Run the product-owned deployer with the absolute candidate binary and, for a planned concurrent update, the expected current selector; inspect version, current release, command selector, provider selector, and manifest.",
     "Initialize a selected database only as a separate explicit action, then run crm doctor and inspect storage plus strict Nucleus/toolset readiness.",
+    "If upgrading schema-one state, separately quiesce workers and new CRM use, run crm migrate --backup at a new private path, and retain the backup for database-aware rollback.",
     "For stuck work, inspect update and attempt evidence before selecting wait, resume, or an explicitly eligible retry."
   ],
   "checkpoints": [
@@ -75,11 +81,30 @@
     "Update evidence is ambiguous and does not prove either same-attempt recovery or explicit new-attempt eligibility."
   ],
   "interfaces": [
-    {"label": "Deploy candidate", "invocation": "crm/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH [--expected-current absent|releases/HASH]"},
-    {"label": "Redeploy previous release", "invocation": "\"/Users/joey/Library/Application Support/CRM/install/previous/package/deploy-user.sh\" --binary \"/Users/joey/Library/Application Support/CRM/install/previous/bin/crm\""},
-    {"label": "Initialize selected database", "invocation": "/Users/joey/.local/bin/crm init"},
-    {"label": "Diagnose selected database and requester", "invocation": "/Users/joey/.local/bin/crm doctor"},
-    {"label": "Inspect or recover an update", "invocation": "/Users/joey/.local/bin/crm update show UPDATE_ID | wait UPDATE_ID | resume UPDATE_ID | retry UPDATE_ID"}
+    {
+      "label": "Deploy candidate",
+      "invocation": "crm/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH [--expected-current absent|releases/HASH]"
+    },
+    {
+      "label": "Redeploy previous release",
+      "invocation": "\"/Users/joey/Library/Application Support/CRM/install/previous/package/deploy-user.sh\" --binary \"/Users/joey/Library/Application Support/CRM/install/previous/bin/crm\""
+    },
+    {
+      "label": "Initialize selected database",
+      "invocation": "/Users/joey/.local/bin/crm init"
+    },
+    {
+      "label": "Migrate schema one explicitly",
+      "invocation": "/Users/joey/.local/bin/crm migrate --backup PATH"
+    },
+    {
+      "label": "Diagnose selected database and requester",
+      "invocation": "/Users/joey/.local/bin/crm doctor"
+    },
+    {
+      "label": "Inspect or recover an update",
+      "invocation": "/Users/joey/.local/bin/crm update show UPDATE_ID | wait UPDATE_ID | resume UPDATE_ID | retry UPDATE_ID"
+    }
   ],
   "does_not_authorize": [
     "Publishing a release, replacing foreign state, deleting releases or CRM data, or performing an incompatible database rollback.",
@@ -87,46 +112,99 @@
     "Fetching source data, sending a contact, or treating a CRM stage/advisory as real-world authority."
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 1,
+      "max_contract_exclusive": 3
+    }
   ],
   "promise": {
     "consumers": [
-      {"status": "declared", "statement": "The local operator may deploy or diagnose CRM, separately initialize one selected empty library, and explicitly recover eligible hidden steward work."}
+      {
+        "status": "declared",
+        "statement": "The local operator may deploy or diagnose CRM, separately initialize one selected empty library or migrate schema one with a backup, and explicitly recover eligible hidden steward work."
+      }
     ],
     "preconditions": [
-      {"status": "declared", "statement": "Deployment has separate authority, a regular absolute candidate binary matching the provider release, absent or CRM-owned selector paths, and an unchanged observed or explicitly supplied expected-current selection; initialization and update recovery are separately intended."}
+      {
+        "status": "declared",
+        "statement": "Deployment has separate authority, a regular absolute candidate binary matching the provider release, absent or CRM-owned selector paths, and an unchanged observed or explicitly supplied expected-current selection; initialization and update recovery are separately intended. Migration additionally requires explicit intent, stopped new CRM work, settled active workers and updates, and a new private backup destination."
+      }
     ],
     "inputs": [
-      {"status": "declared", "statement": "Deployment consumes one absolute candidate binary, an optional expected-current selector, and version-matched packaged deployer/provider; init consumes the selected database path, absolute or resolved against cwd; recovery consumes one exact update identity and its durable state."}
+      {
+        "status": "declared",
+        "statement": "Deployment consumes one absolute candidate binary, an optional expected-current selector, and version-matched packaged deployer/provider; init consumes the selected database path, absolute or resolved against cwd; recovery consumes one exact update identity and its durable state. Migration consumes the selected schema-one database and a new backup path. A relative backup path resolves from cwd; its parent must be an existing private regular directory, and the destination must be separate from source/sidecar paths with no existing SQLite sidecars."
+      }
     ],
     "outputs": [
-      {"status": "declared", "statement": "Deployment selects one content-addressed release for both public selectors; init creates or idempotently accepts schema one; doctor reports storage/requester readiness; recovery preserves or creates the exact allowed update."}
+      {
+        "status": "declared",
+        "statement": "Deployment selects one content-addressed release for both public selectors; init creates or idempotently accepts schema two; doctor reports storage/requester readiness; recovery preserves or creates the exact allowed update. Migration reports changed, from_schema_version, and schema_version, preserves old rows, and creates an independently readable schema-one backup; a schema-two no-op creates no backup. The JSON backup is an absolute path when changed or null when unchanged."
+      }
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Current and previous name validated immutable release generations; an absent database after deployment is expected; CRM steward-update state, not Nucleus terminality alone, determines recovery and domain success."}
+      {
+        "status": "declared",
+        "statement": "Current and previous name validated immutable release generations; an absent database after deployment is expected; CRM steward-update state, not Nucleus terminality alone, determines recovery and domain success."
+      }
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Release identity is a digest over exact staged bytes, provider release equals binary version, database path selects domain identity, update ID selects one attempt/domain run, and each retry creates a new update/requester/job identity."}
+      {
+        "status": "declared",
+        "statement": "Release identity is a digest over exact staged bytes, provider release equals binary version, database path selects domain identity, update ID selects one attempt/domain run, and each retry creates a new update/requester/job identity."
+      }
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "Successful deployment stages and validates the complete owned release, rechecks current under product and catalog locks, and atomically publishes both selectors; doctor and update inspection read current local state at invocation."},
-      {"status": "unspecified", "statement": "The operation promises no Nucleus availability or hidden steward completion time."}
+      {
+        "status": "declared",
+        "statement": "Successful deployment stages and validates the complete owned release, rechecks current under product and catalog locks, and atomically publishes both selectors; doctor and update inspection read current local state at invocation."
+      },
+      {
+        "status": "unspecified",
+        "statement": "The operation promises no Nucleus availability or hidden steward completion time."
+      }
     ],
     "access": [
-      {"status": "declared", "statement": "Deployment uses local filesystem/shell authority over CRM-owned user paths; hidden worker recovery uses the installed typed Nucleus boundary with no workspace, shell, web, or launch-context access."}
+      {
+        "status": "declared",
+        "statement": "Deployment uses local filesystem/shell authority over CRM-owned user paths; hidden worker recovery uses the installed typed Nucleus boundary with no workspace, shell, web, or launch-context access."
+      }
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Deployment is content-addressed and idempotent, rejects stale plans, and restores program/provider views together or detaches them fail-closed; domain initialization is separate; resume preserves attempt identity and recovers pending result/terminal observation while retry requires terminal evidence and a new identity."}
+      {
+        "status": "declared",
+        "statement": "Deployment is content-addressed and idempotent, rejects stale plans, and restores program/provider views together or detaches them fail-closed; domain initialization is separate; resume preserves attempt identity and recovers pending result/terminal observation while retry requires terminal evidence and a new identity."
+      },
+      {
+        "status": "declared",
+        "statement": "Migration reserves writes, refuses live workers and active unsettled updates, snapshots committed SQLite state including WAL content, adds the empty profile table and advances schema markers transactionally with integrity validation. Program rollback never downgrades storage."
+      }
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "Deployment starts no daemon, worker, or schedule and never opens the library; hidden steward operation has one Nucleus attempt per CRM attempt, one managed tool, no automatic retry, and no direct runner."}
+      {
+        "status": "declared",
+        "statement": "Deployment starts no daemon, worker, or schedule and never opens the library; hidden steward operation has one Nucleus attempt per CRM attempt, one managed tool, no automatic retry, and no direct runner."
+      }
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Operation contract 2 adds expected-current and coordinated catalog publication; binary/provider versions still match exactly, release, database schema, JSON contract, Nucleus protocol, and immutable toolset versions remain separate, and rollback requires a compatible retained schema."}
+      {
+        "status": "declared",
+        "statement": "Operation contract 2 adds expected-current and coordinated catalog publication; binary/provider versions still match exactly, release, database schema, JSON contract, Nucleus protocol, and immutable toolset versions remain separate, and rollback requires a compatible retained schema. CRM 0.3 uses schema two; schema-one state requires the explicit migration and an old binary requires database-aware restore."
+      }
     ],
     "reliances": [
-      {"status": "declared", "statement": "Doctor and hidden steward recovery rely on Nucleus for compatible strict readiness, supervised execution, job/output evidence, and durable managed-tool delivery.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"},
-      {"status": "unsupported", "statement": "Nucleus does not install CRM, initialize its database, decide retry eligibility, or determine CRM domain success."}
+      {
+        "status": "declared",
+        "statement": "Doctor and hidden steward recovery rely on Nucleus for compatible strict readiness, supervised execution, job/output evidence, and durable managed-tool delivery.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "unsupported",
+        "statement": "Nucleus does not install CRM, initialize its database, decide retry eligibility, or determine CRM domain success."
+      }
     ]
   },
   "manual": "manuals/steward-operate.md"

@@ -68,7 +68,7 @@ Each revision is a full snapshot containing:
 - summary.
 
 The revision's `source_update_id` can be passed to `crm update show` to inspect
-its update/delivery and Nucleus identities. Version 0.1 has no supported
+its update/delivery and Nucleus identities. Version 0.3 has no supported
 raw-delivery, persisted-request, or mailbox-receipt show/export command; direct
 SQLite reads are unsupported. Historical output does not imply current external
 truth.

@@ -65,7 +65,7 @@
       {"status": "declared", "statement": "A local caller may create or tell one private employment-oriented case and may inspect or explicitly recover the resulting update."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The selected schema-one database exists, the caller supplies a valid case identity where required, and input is at most 1,048,576 UTF-8 bytes from a regular non-symbolic file or standard input."},
+      {"status": "declared", "statement": "The selected schema-two database exists, the caller supplies a valid case identity where required, and input is at most 1,048,576 UTF-8 bytes from a regular non-symbolic file or standard input."},
       {"status": "declared", "statement": "Resume requires queued, exactly recoverable running, or applied-but-runtime-unsettled work; retry requires the selected update to be failed or lost."}
     ],
     "inputs": [
@@ -96,7 +96,7 @@
       {"status": "unspecified", "statement": "No steward completion latency, Nucleus availability, or employment outcome is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 uses database schema one, the documented JSON envelope, Nucleus toolset crm/case-steward/1, and the fixed six-stage vocabulary; incompatible meanings require explicit successor versions and retained decoding."}
+      {"status": "declared", "statement": "Capability contract version 1 uses database schema two, the documented JSON envelope, Nucleus toolset crm/case-steward/1, and the fixed six-stage vocabulary; incompatible meanings require explicit successor versions and retained decoding."}
     ],
     "reliances": [
       {"status": "declared", "statement": "Hidden steward attempts rely on Nucleus for compatible admission, authentication, supervised execution, job/output evidence, and durable delivery of the one managed tool call.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"},

@@ -16,7 +16,9 @@ durable domain result followed by a runtime problem. The client does not retry.
 from process I/O, malformed JSON, or invalid envelopes.
 
 `Request` covers case creation, intake, case/search reads, update reads, wait,
-resume, retry, initialization, and doctor. `Data` distinguishes every supported
+resume, retry, initialization, explicit migration, doctor, and profile
+creation/list/show/replacement. Profile bodies are exact Markdown; profile
+updates have the same mutable replacement semantics as the CLI. `Data` distinguishes every supported
 success payload. `CaseRevision`, `CaseListItem`, `SearchResult`, `UpdateView`,
 and `Failure::context` retain advisory text and attention; a local conversion
 must preserve their non-blocking visibility. `RevisionProposal` is the exact
