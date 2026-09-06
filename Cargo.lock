@@ -366,7 +366,7 @@ dependencies = [
 
 [[package]]
 name = "decisions"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "annals-api",
  "clap",
@@ -893,7 +893,7 @@ dependencies = [
 
 [[package]]
 name = "krisis-api"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
