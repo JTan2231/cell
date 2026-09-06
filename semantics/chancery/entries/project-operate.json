@@ -78,7 +78,7 @@
     "For an alternate test home, pass explicit --home and --launchctl only within an isolated synthetic boundary."
   ],
   "stop_when": [
-    "Annals decision-account exchange contract 1, Conversations contract 3 exact cwd, or Nucleus execution contract 1 is unavailable or doctor is not fully green.",
+    "Annals decision-account exchange contract 1, Conversations contract 4 exact cwd, or Nucleus execution contract 3 is unavailable or doctor is not fully green.",
     "A selector, release, plist, database, sidecar, marker, or registered root is foreign, symbolic where a regular path is required, ambiguous, or cannot be safely rolled back.",
     "The requested action would delete retained state, manufacture a cursor, expose repository bodies in logs, or let Nucleus bypass Semantics validation."
   ],
@@ -140,7 +140,7 @@
     ],
     "compatibility_and_evolution": [
       {"status": "declared", "statement": "Only doctor may prove deliberately held Nucleus readiness through health_for_deployment for the same sole run hold with runtime drain, authentication, and harness readiness. Required Semantics capabilities and protocol checks remain; ordinary reconciliation requires public Nucleus admission."},
-      {"status": "declared", "statement": "Operation contract version 4 requires Annals decision-account exchange contract 1, Conversations history contract 3, Nucleus execution contract 1, and Clockwork schedule contract 1; preserved legacy schemas retain their identity and new tool meaning uses successor identities."}
+      {"status": "declared", "statement": "Operation contract version 4 requires Annals decision-account exchange contract 1, Conversations history contract 4, Nucleus execution contract 3, and Clockwork schedule contract 2; preserved legacy schemas retain their identity and new tool meaning uses successor identities."}
     ],
     "reliances": [
       {"status": "declared", "statement": "Semantics consumes the ordered accepted-account feed and opaque cursors from one exact Annals decisions library.", "target": "annals", "kind": "data", "contract": "annals.decision-account.exchange"},

@@ -92,6 +92,45 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertFalse(self.history.exists())
         self.assertEqual(self.domain.read_text(), "retained domain state")
 
+    def test_paged_inventory_expands_before_pruning_disabled_binding_pins(self):
+        calls = []
+
+        def inspect(argv):
+            args = [str(value) for value in argv]
+            if args[2:4] == ["binding", "list"]:
+                limit = int(args[-1]) if "--limit" in args else 20
+                calls.append(limit)
+                items = [{"key": f"fixture/{index}", "definition_digest": None}
+                         for index in range(20)]
+                items.append({"key": "decisions/observer", "enabled": False,
+                              "definition_digest": "1" * 64})
+                return json.dumps({"ok": True, "data": {"output_version": 2,
+                    "items": items[:limit], "has_more": len(items) > limit}})
+            return self.inspect(argv)
+
+        with mock.patch.object(cleanup, "require_deployment_lock"), \
+                mock.patch.object(cleanup, "inspect_command", side_effect=inspect):
+            self.assertEqual(cleanup.clean_installed_release_history(self.home)["removed_releases"], 3)
+        self.assertEqual(calls, [20, 40])
+        self.assertTrue(self.disabled_pin.is_dir())
+
+    def test_unknown_or_incomplete_inventory_refuses_cleanup_before_deletion(self):
+        for data in ({"output_version": 99, "items": [], "has_more": False},
+                     {"output_version": 2, "items": [], "has_more": True},
+                     {"output_version": 2, "items": [], "has_more": "false"}):
+            with self.subTest(data=data):
+                def inspect(argv):
+                    if [str(value) for value in argv][2:4] == ["binding", "list"]:
+                        return json.dumps({"ok": True, "data": data})
+                    return self.inspect(argv)
+                with mock.patch.object(cleanup, "require_deployment_lock"), \
+                        mock.patch.object(cleanup, "inspect_command", side_effect=inspect):
+                    with self.assertRaises(cleanup.CleanupError):
+                        cleanup.clean_installed_release_history(self.home)
+                self.assertTrue(self.disabled_pin.is_dir())
+                self.assertTrue(self.history.exists())
+                self.assertTrue((self.base / "Annals/install/previous").is_symlink())
+
     def test_live_previous_alias_refuses_cleanup_before_deletion(self):
         config = self.base / "Annals/config.toml"
         config.write_text('executable = ' + json.dumps(str(self.base / "Annals/install/previous/program")) + "\n")

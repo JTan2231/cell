@@ -152,7 +152,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment and unattended inbox processing rely on Clockwork schedule contract 1 for immutable definition registration, one selected binding, non-overlap, activation history, and its launchd projection.",
+        "statement": "Deployment and unattended inbox processing rely on Clockwork schedule contract 2 for immutable definition registration, one selected binding, non-overlap, activation history, and its launchd projection.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

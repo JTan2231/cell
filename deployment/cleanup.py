@@ -93,6 +93,32 @@ def strings(value):
             yield from strings(item)
 
 
+def clockwork_bindings(clockwork):
+    """Read a complete inventory from legacy arrays or bounded version-two pages."""
+    limit = 20
+    while True:
+        argv = [clockwork, "--json", "binding", "list"]
+        if limit != 20:
+            argv.extend(["--limit", str(limit)])
+        reply = json.loads(inspect_command(argv))
+        require(isinstance(reply, dict) and reply.get("ok") is True,
+                "Clockwork binding inventory is unavailable")
+        data = reply.get("data")
+        if isinstance(data, list):
+            require(limit == 20, "Clockwork binding inventory changed format")
+            return data
+        require(isinstance(data, dict) and data.get("output_version") == 2
+                and isinstance(data.get("items"), list)
+                and type(data.get("has_more")) is bool,
+                "Clockwork binding inventory has an unsupported page format")
+        items = data["items"]
+        require(len(items) <= limit, "Clockwork binding page exceeds its requested limit")
+        if not data["has_more"]:
+            return items
+        require(len(items) == limit, "Clockwork binding inventory is incomplete")
+        limit *= 2
+
+
 def live_pins(home, installs, currents):
     protected = set(currents.values())
     expression = re.compile(re.escape(str(home / "Library/Application Support"))
@@ -112,10 +138,8 @@ def live_pins(home, installs, currents):
 
     clockwork = home / ".local/bin/clockwork"
     if "Clockwork" in currents:
-        reply = json.loads(inspect_command([clockwork, "--json", "binding", "list"]))
-        require(reply.get("ok") is True and isinstance(reply.get("data"), list),
-                "Clockwork binding inventory is unavailable")
-        for binding in reply["data"]:
+        for binding in clockwork_bindings(clockwork):
+            require(isinstance(binding, dict), "Clockwork binding inventory is invalid")
             selected = binding.get("definition_digest")
             if selected is None:
                 continue

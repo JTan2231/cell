@@ -466,6 +466,10 @@ Cleanup failure is reported without undoing the completed deployment. Direct
 product deployers retain their existing rollback behavior; this pruning is part
 of the coordinated Cell command.
 
+The cleanup reader accepts legacy complete Clockwork binding arrays and expands
+version-two selection pages until the inventory is complete. Unknown or incomplete
+inventories stop cleanup before deletion.
+
 ### Migration to coordinated deployment
 
 The initial migration must install maintenance-capable binaries through the

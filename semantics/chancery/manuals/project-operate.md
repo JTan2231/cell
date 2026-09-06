@@ -3,8 +3,8 @@
 ## Readiness
 
 Before installation or maintenance, verify Annals decision-account exchange contract 1,
-Conversations history contract 3 with exact cwd metadata, and Nucleus execution
-contract 1, plus Clockwork schedule contract 1. Chancery documents these boundaries but is not called by the
+Conversations history contract 4 with exact cwd metadata, and Nucleus execution
+contract 3, plus Clockwork schedule contract 2. Chancery documents these boundaries but is not called by the
 Semantics worker.
 
 Build and deploy only a green candidate:

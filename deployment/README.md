@@ -133,6 +133,10 @@ place and no recovery or rollback begins. Direct legacy product deployers still
 retain their own previous releases; automatic pruning belongs to a successful
 coordinated deployment.
 
+The cleanup reader accepts legacy complete Clockwork binding arrays and expands
+version-two selection pages until the inventory is complete. Unknown or incomplete
+inventories stop cleanup before deletion.
+
 An uncertain Nucleus apply retains its hold and requires the supported Nucleus
 service recovery procedure. Matching files, declared versions, and health alone
 cannot prove that an old resident daemon was replaced.
