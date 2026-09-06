@@ -96,7 +96,7 @@ fn home(value: Option<PathBuf>) -> Result<PathBuf> {
 
 fn dispatch(command: Command) -> Result<Value> {
     match command {
-        Command::Install(options) => lifecycle::install(&options),
+        Command::Install(options) => lifecycle::install(&options, None),
         Command::Uninstall(options) => lifecycle::uninstall(&options),
         Command::Inspect(options) => {
             let paths = support::Paths::new(home(options.home)?)?;
