@@ -300,9 +300,10 @@ def cleanup_active(storage: Path) -> None:
     if (path / "run.json").exists():
         data = read_json(path / "run.json")
         repository = Path(data["repository"])
-        worktree = path / "worktree"
+        worktree = (path / "worktree").resolve()
         registered = git(repository, "worktree", "list", "--porcelain").splitlines()
-        if f"worktree {worktree}" in registered:
+        if any(line.startswith("worktree ") and Path(line.removeprefix("worktree ")).resolve() == worktree
+               for line in registered):
             git(repository, "worktree", "remove", "--force", "--force", str(worktree))
     # Sealed source/candidate directories must be writable before removal.
     for directory, _, _ in os.walk(path, followlinks=False):
