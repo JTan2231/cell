@@ -59,6 +59,11 @@ fn create_and_revise_accept_exact_bounded_stdin_snapshots() -> TestResult {
     assert_eq!(created["type"], "episode_created");
     assert_eq!(created["episode"]["episode"], "e1");
     assert_eq!(
+        created["episode"].as_object().map(serde_json::Map::len),
+        Some(2)
+    );
+    let created = success_data(&geste(&state.database, &["episode", "show", "e1"], None)?)?;
+    assert_eq!(
         created["episode"]["submitted_sha256"],
         format!("{:x}", Sha256::digest(&first_bytes))
     );
@@ -79,6 +84,11 @@ fn create_and_revise_accept_exact_bounded_stdin_snapshots() -> TestResult {
     );
     let revised = success_data(&revised)?;
     assert_eq!(revised["episode"]["revision"], 2);
+    assert_eq!(
+        revised["episode"].as_object().map(serde_json::Map::len),
+        Some(2)
+    );
+    let revised = success_data(&geste(&state.database, &["episode", "show", "e1"], None)?)?;
     assert_eq!(
         revised["episode"]["submitted_sha256"],
         format!("{:x}", Sha256::digest(&second_bytes))
@@ -804,14 +814,14 @@ fn geste(
 
 fn success_data(output: &Output) -> Result<Value, Box<dyn std::error::Error>> {
     let value: Value = serde_json::from_slice(&output.stdout)?;
-    assert_eq!(value["schema_version"], 1);
+    assert_eq!(value["schema_version"], 2);
     assert_eq!(value["ok"], true);
     Ok(value["data"].clone())
 }
 
 fn error_code(output: &Output) -> Result<String, Box<dyn std::error::Error>> {
     let value: Value = serde_json::from_slice(&output.stderr)?;
-    assert_eq!(value["schema_version"], 1);
+    assert_eq!(value["schema_version"], 2);
     assert_eq!(value["ok"], false);
     Ok(value["error"]["code"]
         .as_str()

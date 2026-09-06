@@ -69,3 +69,7 @@ The complete work and frozen corpus context can enter the immutable Nucleus
 request and raw protocol state. Protect both the Annals library and Nucleus
 state as sensitive. Use Annals Usage, not this capability, to inspect the
 resulting model consumption.
+
+## Output selection
+
+Applied and recorded/no-change mutation results return work, base/result revision, status, summary and operation count, plus recorded time where applicable. Pending proposals retain full review content. change show retains complete selected reconciliation or accepted change; change list returns a schema-two items/has_more page defaulting to 20 with positive --limit for more. Domain results survive later runtime failure.

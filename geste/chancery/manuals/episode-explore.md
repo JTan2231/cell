@@ -73,3 +73,7 @@ Use these types at imports and convert only to caller-local domain values.
 The client performs the same operations under this contract and never adds
 retry or authorization. See `geste/docs/rust-api.md`; the Rust structs and
 enums define the interface without a separate declaration layer.
+
+## Output selection
+
+Episode list/search default to 20 compact results with has_more and positive --limit for more. Exact episode show, report and graph preserve full selected revision content and provenance. JSON output envelope schema 2 selects the same content as text; --json never requests a fuller view.

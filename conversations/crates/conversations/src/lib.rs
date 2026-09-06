@@ -444,6 +444,11 @@ impl AppServerClient {
     ///
     /// Returns an error if title enumeration or any selected history fails.
     pub fn search(&mut self, query: &str, options: &ListOptions) -> Result<Vec<SearchHit>> {
+        if query.trim().is_empty() {
+            return Err(Error::Protocol {
+                message: "search query must not be empty".into(),
+            });
+        }
         let mut title_options = options.clone();
         title_options.title_query = Some(query.to_owned());
         let title_matches = self.list(&title_options)?;
@@ -464,14 +469,22 @@ impl AppServerClient {
                     .title()
                     .to_lowercase()
                     .contains(&query_folded);
+            if title_match {
+                hits.push(SearchHit::Thread {
+                    reference: conversation.thread.reference.clone(),
+                    title: conversation.thread.title().to_owned(),
+                });
+            }
             for turn in conversation.turns {
                 for message in turn.messages {
-                    if (title_match || message.text.to_lowercase().contains(&query_folded))
+                    if message.text.to_lowercase().contains(&query_folded)
                         && seen_items.insert(message.reference.item_id.clone())
                     {
-                        hits.push(SearchHit {
-                            thread: conversation.thread.clone(),
-                            message,
+                        hits.push(SearchHit::Message {
+                            reference: message.reference,
+                            title: conversation.thread.title().to_owned(),
+                            role: message.role,
+                            excerpt: model::match_excerpt(&message.text, query),
                         });
                     }
                 }

@@ -124,7 +124,8 @@ pub(crate) fn send(
         .context("email_response_invalid", "email output was not UTF-8")?;
     let email_id = stdout
         .trim()
-        .strip_prefix("Sent ")
+        .strip_prefix("Accepted ")
+        .or_else(|| stdout.trim().strip_prefix("Sent "))
         .filter(|value| {
             !value.is_empty()
                 && value.len() <= 128

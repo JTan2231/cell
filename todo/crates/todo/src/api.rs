@@ -283,6 +283,14 @@ pub struct MaintenanceStatus {
     pub nonterminal_jobs: Option<usize>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ConcernSummary {
+    pub id: crate::model::ConcernId,
+    pub status: crate::reconciliation_store::ConcernStatus,
+    pub excerpt: String,
+    pub created_at: String,
+}
+
 /// Existing untagged CLI payloads. Domain projections retain their current shape.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged, deny_unknown_fields)]
@@ -297,16 +305,19 @@ pub enum Data {
     Todo(TodoView),
     List {
         todos: Vec<TodoSummary>,
+        has_more: bool,
     },
     Search {
         query: String,
         todos: Vec<TodoSummary>,
+        has_more: bool,
     },
     Captured {
         concern: Concern,
     },
     Concerns {
-        concerns: Vec<Concern>,
+        concerns: Vec<ConcernSummary>,
+        has_more: bool,
     },
     ConcernHistory {
         concern: Concern,

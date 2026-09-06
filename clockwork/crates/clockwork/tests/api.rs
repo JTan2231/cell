@@ -6,9 +6,9 @@ fn client_reads_isolated_cli_state_and_preserves_provider_errors()
     let temporary = tempfile::tempdir()?;
     let state = temporary.path().join("Clockwork State");
     let client = Client::new(env!("CARGO_BIN_EXE_clockwork")).with_state_root(&state);
-    assert!(client.definitions()?.is_empty());
-    assert!(client.bindings()?.is_empty());
-    assert!(client.history(None, 1)?.is_empty());
+    assert!(client.definitions()?.items.is_empty());
+    assert!(client.bindings()?.items.is_empty());
+    assert!(client.history(None, 1)?.items.is_empty());
     assert!(state.join("clockwork.db").is_file());
     assert!(
         client

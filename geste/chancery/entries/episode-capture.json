@@ -1,6 +1,6 @@
 {
   "id": "geste.episode.capture",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -65,7 +65,7 @@
       {"status": "declared", "statement": "Input is one complete schema-version-one episode snapshot from a regular file or standard input, bounded to 256 KiB, plus an episode ID and exact base revision for revise."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Success returns one new public episode identity at revision one or one next contiguous revision with the exact input digest and normalized members committed together."}
+      {"status": "declared", "statement": "Output envelope schema 2 returns episode_created/episode_revised with episode ID and committed revision only. Exact input digest and complete normalized capture remain committed together and are retrieved through episode show. Capture and database schemas remain 1."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Every revision is a complete authored snapshot; source links are caller-supplied anchors and support relations, not copied source bodies or current-source verification."}
@@ -89,7 +89,7 @@
       {"status": "unsupported", "statement": "Automatic ingestion, model inference, source crawling, deletion, and implicit initialization or migration are unsupported."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 accepts capture schema version 1 and writes database schema 1; changing those meanings requires an explicit new contract or migration."},
+      {"status": "declared", "statement": "Capability contract version 2 accepts capture schema version 1 and writes database schema 1; changing those meanings requires an explicit new contract or migration."},
       {"status": "unspecified", "statement": "No future capture-schema compatibility or deprecation period is promised."}
     ],
     "reliances": [

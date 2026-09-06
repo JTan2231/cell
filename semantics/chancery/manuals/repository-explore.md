@@ -24,11 +24,14 @@ HEAD revision.
 ```
 
 The result includes stable concept IDs, canonical labels and meanings,
-active/retired state, distinctions, decision or seed groundings, and explicit
-withdrawal history. Prefer stable concept identity over label matching when
+active/retired state, replacements and distinctions. The schema-two view
+includes project identity and the selected repository revision; search returns
+the same view with only matching concepts. No concept meaning is excerpted. Prefer stable concept identity over label matching when
 following a term across revisions.
 
-For provenance or change analysis:
+For complete replay provenance (grounds, withdrawals, creation/change revisions),
+use `semantics repository show PROJECT --provenance [--revision N]`.
+For change analysis:
 
 ```sh
 /Users/joey/.local/bin/semantics repository log PROJECT --from 1
@@ -60,3 +63,11 @@ Rust callers may import `semantics::api` repository types and use its typed
 `Client` for repository show, search, log, and diff. The client invokes the
 same local CLI and preserves its read-only effects and project authority.
 Project and intake operations are separately documented operational actions.
+
+Project lists select stable ID, canonical current path, status and HEAD.
+Ordinary repository show/search select schema version 2, project identity,
+revision and concepts with ID, label, complete meaning, active state,
+replacement and complete distinctions. `show --provenance` retains the full
+original full replay representation. Rust callers use `RepositoryView` for the
+ordinary read and `Client::repository_provenance` for the full replay.
+These are output projections, with no persistent schema or replay change.

@@ -1,6 +1,6 @@
 {
   "id": "nucleus.execution.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -136,19 +136,11 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Supported reads return health and adapter readiness including maxActiveJobs, activeJobs, and availableSlots execution capacity; account payloads; durable job and attempt state; pending tool calls; and ordered exact harness-output observations attributed to the owning attempt."
-      },
-      {
-        "status": "declared",
-        "statement": "A completed attempt may expose a derived structured thread ID, turn ID, and final message using its retained supported API-key or managed-authentication startup sequence and correlated terminal messages; reading it after a decoder repair can recover that output without a replacement attempt, while retained atoms and operational state remain unchanged."
+        "statement": "Existing health, account, submission, job show, log, mailbox, cancellation and service results retain protocol-one meaning. jobs status returns runtime/requester identity, current attempt state/ID, pending call IDs/names, final-output availability and terminal reason/message. jobs wait --timeout 60 returns one terminal or timeout observation and never cancels on timeout. Status uses successive mailbox/job reads rather than an atomic snapshot; initial read errors remain errors. jobs list defaults to 20 with its existing continuation."
       },
       {
         "status": "unsupported",
         "statement": "Nucleus returns no requester-domain success assertion, automatic replacement attempt, workflow result, or authoritative interpretation of model prose."
-      },
-      {
-        "status": "declared",
-        "statement": "Maintenance status reports protocol_version 1, holds and drained with product-specific runtime evidence. Deployment health proves the named sole drained hold, authentication, and exact supported harness without submitting a job."
       }
     ],
     "data_semantics": [

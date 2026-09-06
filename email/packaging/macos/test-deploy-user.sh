@@ -73,7 +73,7 @@ for argument in "$@"; do
     printf '%s\n' "$argument" >>"$HOME/email-arguments.log"
 done
 cat >"$HOME/email-stdin.log"
-printf '%s\n' 'Sent email_test'
+printf '%s\n' 'Accepted email_test'
 EOF
 
 make_candidate() {
@@ -143,7 +143,7 @@ printf '%s' 'first line
 second line' | HOME="$home" "$cli" \
     --idempotency-key 'product/event/2026-09-01' 'A subject' - \
     >"$temporary/send.out"
-grep -Fx 'Sent email_test' "$temporary/send.out" >/dev/null
+grep -Fx 'Accepted email_test' "$temporary/send.out" >/dev/null
 grep -Fx 'RESEND_API_KEY=resend-test-secret' "$home/email-environment.log" >/dev/null
 grep -Fx "HOME=$home" "$home/email-environment.log" >/dev/null
 grep -Fx 'PATH=/usr/bin:/bin:/usr/sbin:/sbin' "$home/email-environment.log" >/dev/null

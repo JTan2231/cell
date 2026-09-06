@@ -402,3 +402,10 @@ Deployment admission resolves the configured database to its canonical path and
 uses that database parent for `deployment-maintenance/`. Symbolic aliases share
 the same gate. Databases with multiple hard links are rejected because their
 state root cannot identify one authoritative admission gate.
+
+Selection lists and search default to 20, expose `has_more`, and accept a
+larger positive `--limit` for more. Concern triage rows contain ID, status,
+recorded time and an explicit excerpt of at most 240 characters; `concern show`
+retains complete provenance and routing history. Todo list/search rows remain
+compact identities, titles and lifecycle metadata. Exact show commands retain
+the full selected concern, routing, assessment, design or umbrella context.

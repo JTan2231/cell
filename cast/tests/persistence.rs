@@ -293,3 +293,36 @@ fn completed_pagination_remembers_jobs_seen_before_restart() -> Result<()> {
     assert!(snapshot.source_health[0].last_success_at.is_some());
     Ok(())
 }
+
+#[test]
+fn compact_source_pages_preserve_full_export_and_reveal_more_results() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let state = directory.path().join("state");
+    let store = Store::init(&state)?;
+    for index in 0..21 {
+        store.add_manual_source(&format!("https://employer-{index}.example/careers"), None)?;
+    }
+    let page = output_json(
+        &command(&state)
+            .args(["sources", "list", "--json"])
+            .output()?,
+    )?;
+    assert_eq!(page["schema_version"], 2);
+    assert_eq!(page["items"].as_array().map(Vec::len), Some(20));
+    assert_eq!(page["has_more"], true);
+    assert!(page["items"][0]["url"].is_string());
+    let expanded = output_json(
+        &command(&state)
+            .args(["sources", "list", "--json", "--limit", "21"])
+            .output()?,
+    )?;
+    assert_eq!(expanded["items"].as_array().map(Vec::len), Some(21));
+    assert_eq!(expanded["has_more"], false);
+    let full = output_json(&command(&state).args(["export", "--json"]).output()?)?;
+    assert_eq!(full["schema_version"], 1);
+    assert_eq!(full["source_health"].as_array().map(Vec::len), Some(21));
+    let status = output_json(&command(&state).args(["status", "--json"]).output()?)?;
+    assert_eq!(status["schema_version"], 2);
+    assert!(status["budgets"].is_object());
+    Ok(())
+}

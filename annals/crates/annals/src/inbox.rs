@@ -1919,10 +1919,18 @@ pub(crate) fn retry_status(
     let connection = db::open_read(library)?;
     if let Some(event_id) = args.event_id {
         let report = inbox_retry_store::event_report(&connection, event_id)?;
-        return retry_report_output(report, false);
+        return retry_report_output_detail(report, false, args.details);
     }
-    let events = inbox_retry_store::list_events(&connection)?;
+    if args.limit == 0 {
+        return Err(AppError::invalid("invalid_limit", "limit must be positive"));
+    }
+    let mut events = inbox_retry_store::list_events(&connection)?;
+    let has_more = events.len() > args.limit;
+    events.truncate(args.limit);
     let mut human = format!("Retry events: {}", events.len());
+    if has_more {
+        human.push_str("\nMore events available; increase --limit.");
+    }
     for event in &events {
         let _ = write!(
             human,
@@ -1931,7 +1939,7 @@ pub(crate) fn retry_status(
         );
     }
     Ok(CommandOutput::new(
-        serde_json::json!(crate::api::RetryEventsResult { events }),
+        serde_json::json!(crate::api::RetryEventsResult { events, has_more }),
         human,
     ))
 }
@@ -2564,6 +2572,13 @@ fn retry_report_output(
     report: inbox_retry_store::RetryEventReport,
     mutation: bool,
 ) -> Result<CommandOutput, AppError> {
+    retry_report_output_detail(report, mutation, false)
+}
+fn retry_report_output_detail(
+    report: inbox_retry_store::RetryEventReport,
+    mutation: bool,
+    details: bool,
+) -> Result<CommandOutput, AppError> {
     let mut human = format!(
         "Retry event {} — {}\nWindow: {} through {}\nReason: {}\nCreated: {}; ready: {}; completed: {}\nSelected: {}; attempted: {}; succeeded: {} ({} applied, {} recorded); unsuccessful: {} ({} failed, {} skipped); remaining: {}",
         report.event.id,
@@ -2600,7 +2615,7 @@ fn retry_report_output(
             render_terminal_text(&halt.message, false),
         );
     }
-    for item in &report.items {
+    for item in report.items.iter().filter(|_| details) {
         let child = item.child_job_id.as_deref().unwrap_or("not published");
         let _ = write!(
             human,
@@ -2608,7 +2623,14 @@ fn retry_report_output(
             item.original_job_id, item.original_error_code, child, item.outcome
         );
     }
-    let output = CommandOutput::new(serde_json::to_value(report)?, human);
+    let output = CommandOutput::new(
+        serde_json::to_value(crate::api::RetryStatus {
+            event: report.event,
+            summary: report.summary,
+            items: details.then_some(report.items),
+        })?,
+        human,
+    );
     Ok(if mutation { output.mutation() } else { output })
 }
 

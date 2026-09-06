@@ -1,6 +1,6 @@
 {
   "id": "email.message.send",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -98,11 +98,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "On Resend acceptance the command exits zero and prints 'Sent' followed by the returned Resend message identifier."
-      },
-      {
-        "status": "declared",
-        "statement": "On input, credential, transport, rate-limit, server, or provider rejection the command exits nonzero with a bounded secret-safe error."
+        "statement": "On Resend acceptance Email exits zero and prints Accepted followed by the message ID. This acknowledges transport acceptance, not final delivery. Errors remain bounded secret-safe diagnostics with nonzero exit; no output body or credential is echoed."
       },
       {
         "status": "unsupported",
@@ -196,7 +192,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Capability contract version 2 includes caller-supplied idempotency keys and remains distinct from the Email product and provider release and from Resend's external API behavior."
+        "statement": "Capability contract version 3 includes caller-supplied idempotency keys and remains distinct from the Email product and provider release and from Resend's external API behavior."
       },
       {
         "status": "unspecified",

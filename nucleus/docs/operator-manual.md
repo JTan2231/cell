@@ -772,6 +772,8 @@ nucleus jobs list --state failed
 Inspect one job and its ordered harness-output records with:
 
 ```sh
+nucleus jobs status JOB_ID
+nucleus jobs wait JOB_ID --timeout 60
 nucleus jobs show JOB_ID
 nucleus jobs logs JOB_ID
 nucleus jobs logs --follow JOB_ID
@@ -795,6 +797,49 @@ that a slot is currently free.
 currently owns that short exclusive boundary; running jobs alone do not make
 the account probe busy, and contention does not by itself mean the credential
 is invalid.
+
+### Model-facing output
+
+Select output according to the next decision. Catalogs and required terminology
+reads remain complete. Selection lists default to 20 and state whether more
+results exist; increase `--limit` or use the command's existing cursor. A result
+cap is distinct from source completeness. Excerpts are marked and bounded;
+a failed read never becomes an apparently complete empty result. `--json`
+selects encoding, while explicit commands/flags select additional content.
+
+| System | Default decision view | Complete/detail read |
+| --- | --- | --- |
+| Chancery | All cards with shared defaults; one operating manual; resolution gaps first | `show ID --full`, full `resolve ID`; `resolve --summary` selects gaps only |
+| Semantics | Project identity/path/status/HEAD; complete meanings, status and distinctions | `repository show PROJECT --provenance` |
+| CRM | Profile/case selection, newest-first revision summaries, matching excerpts, write receipts | `profile show`, `case show --revision`; full advisories in every consuming view |
+| Cast | Company/job/source selection and matching excerpts; status counts, budgets and failures | `company show`, `job show`, `export` with full evidence and coverage |
+| Conversations | Bounded metadata and title/message hits with matching excerpts | `show`, `export`; complete selected source reads still required for search |
+| Nucleus | `jobs status`; `jobs wait JOB --timeout 60` | `jobs show`, `jobs logs`, `tool-calls pending` |
+| Geste | Capture receipts and bounded selection | `episode show`, `report`, `graph` |
+| Annals | Committed reconciliation receipts and retry counts/halt | `change show`, `inbox retry status EVENT --details` |
+| Annals Usage | Live totals and coverage | `report --details` |
+| Todo | Bounded umbrella and concern triage | Exact concern/routing/situation/design/umbrella show commands |
+| Clockwork | Bounded lists and activation history | Definition/binding show; `history --details` |
+| Krisis | Counts and bounded failure IDs/codes | Increase status `--limit`; legacy lifecycle reads retain their existing protocol |
+| Usher | `check` counts and all incomplete findings | `report` |
+| Email | `Accepted ID` after Resend accepts the submission | Errors remain bounded; acceptance is not final delivery |
+| Weaver | Existing focused run state and artifact locators | Existing run/workflow detail and artifact reads |
+| CI/deployment | Existing conclusive receipt and bounded failure diagnostics | Existing `--verbose` and diagnostic paths |
+
+Nucleus status identifies the requester, job and current attempt, runtime state,
+pending call IDs/names, final-output availability and terminal reason/message.
+The client reads mailbox and job state successively, not atomically. Wait emits
+one observation with `outcome: terminal|timeout`; timeout does not cancel, retry,
+or make a job terminal. Its initial read must finish even for timeout zero;
+subsequent polling is bounded by the requested deadline. Read failures remain
+errors. Runtime success remains separate from requester-domain success.
+
+These changes version CLI output and the affected Chancery contracts, while
+retaining persistent schemas, immutable toolsets, Codex protocol and accepted
+account/event exchanges. Rebuild affected Rust clients with their provider.
+For any separately authorized rollout, stage the updated reader and coordinated
+provider/client set; source validation does not update the installed catalog
+or authorize deployment.
 
 ### Quiesce before work that cannot tolerate a lost attempt
 

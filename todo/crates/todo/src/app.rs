@@ -24,7 +24,7 @@ use crate::reconciliation_store::{
 use crate::render::{CommandOutput, terminal_text};
 use crate::{db, digest, email, reconciliation, reconciliation_store, todo_store};
 
-const MAX_PAGE_LIMIT: u32 = 1_000;
+const MAX_PAGE_LIMIT: u32 = u32::MAX - 1;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedNewArgs {
@@ -261,7 +261,18 @@ fn add_concern(database: &Path, args: &ConcernAddArgs) -> AppResult<CommandOutpu
 fn list_concerns(database: &Path, args: &ConcernListArgs) -> AppResult<CommandOutput> {
     validate_limit(args.limit)?;
     let connection = db::open_read(database)?;
-    let concerns = reconciliation_store::list_concerns(&connection, args.all, args.limit)?;
+    let mut concerns = reconciliation_store::list_concerns(&connection, args.all, args.limit + 1)?;
+    let has_more = concerns.len() > args.limit as usize;
+    concerns.truncate(args.limit as usize);
+    let concerns: Vec<_> = concerns
+        .into_iter()
+        .map(|concern| crate::api::ConcernSummary {
+            id: concern.id,
+            status: concern.status,
+            excerpt: concern_excerpt(&concern.body),
+            created_at: concern.created_at,
+        })
+        .collect();
     let human = if concerns.is_empty() {
         if args.all {
             "No concerns".to_owned()
@@ -273,16 +284,19 @@ fn list_concerns(database: &Path, args: &ConcernListArgs) -> AppResult<CommandOu
             .iter()
             .map(|concern| {
                 format!(
-                    "{}\t{:?}\t{}",
+                    "{}\t{:?}\texcerpt: {}",
                     concern.id,
                     concern.status,
-                    terminal_text(&concern.body, false)
+                    terminal_text(&concern.excerpt, false)
                 )
             })
             .collect::<Vec<_>>()
             .join("\n")
     };
-    Ok(CommandOutput::new(json!({ "concerns": concerns }), human))
+    Ok(CommandOutput::new(
+        json!({ "concerns": concerns, "has_more": has_more }),
+        page_human(human, has_more),
+    ))
 }
 
 fn show_concern(database: &Path, id: crate::model::ConcernId) -> AppResult<CommandOutput> {
@@ -564,7 +578,9 @@ fn initialize(database: &Path) -> AppResult<CommandOutput> {
 fn list_todos(database: &Path, args: &ListArgs) -> AppResult<CommandOutput> {
     validate_limit(args.limit)?;
     let connection = db::open_read(database)?;
-    let todos = todo_store::list(&connection, args.all, args.limit)?;
+    let mut todos = todo_store::list(&connection, args.all, args.limit + 1)?;
+    let has_more = todos.len() > args.limit as usize;
+    todos.truncate(args.limit as usize);
     let human = render_summaries(
         &todos,
         if args.all {
@@ -573,7 +589,10 @@ fn list_todos(database: &Path, args: &ListArgs) -> AppResult<CommandOutput> {
             "No open todos"
         },
     );
-    Ok(CommandOutput::new(json!({ "todos": todos }), human))
+    Ok(CommandOutput::new(
+        json!({ "todos": todos, "has_more": has_more }),
+        page_human(human, has_more),
+    ))
 }
 
 fn search_todos(database: &Path, args: &SearchArgs) -> AppResult<CommandOutput> {
@@ -585,11 +604,13 @@ fn search_todos(database: &Path, args: &SearchArgs) -> AppResult<CommandOutput> 
         ));
     }
     let connection = db::open_read(database)?;
-    let todos = todo_store::search(&connection, &args.query, args.all, args.limit)?;
+    let mut todos = todo_store::search(&connection, &args.query, args.all, args.limit + 1)?;
+    let has_more = todos.len() > args.limit as usize;
+    todos.truncate(args.limit as usize);
     let human = render_summaries(&todos, "No matching todos");
     Ok(CommandOutput::new(
-        json!({ "query": args.query, "todos": todos }),
-        human,
+        json!({ "query": args.query, "todos": todos, "has_more": has_more }),
+        page_human(human, has_more),
     ))
 }
 
@@ -1338,6 +1359,20 @@ fn render_todo(view: &TodoView) -> String {
 
 fn to_value<T: Serialize>(value: &T) -> AppResult<Value> {
     serde_json::to_value(value).map_err(Into::into)
+}
+
+fn concern_excerpt(text: &str) -> String {
+    let mut excerpt: String = text.chars().take(239).collect();
+    if text.chars().count() > 239 {
+        excerpt.push('…');
+    }
+    excerpt
+}
+fn page_human(mut human: String, has_more: bool) -> String {
+    if has_more {
+        human.push_str("\nMore results available; increase --limit.");
+    }
+    human
 }
 
 #[cfg(test)]

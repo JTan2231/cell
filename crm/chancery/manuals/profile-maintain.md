@@ -49,8 +49,8 @@ or lost output does not prove that a write failed to commit.
 ```
 
 List orders entries by `updated_at` descending and then ID. Human output
-shows ID, title, and timestamp; JSON returns all four fields, including
-`body_md`. Limits default to 20 and must be 1 through 1,000. Show returns the
+shows ID, title, and timestamp; JSON returns the same selection fields and
+`has_more`. Limits default to 20 and must be positive. Show returns the
 complete current entry, including `body_md`. Separate calls do not share a
 snapshot. No profile search or delete command exists; `crm search` continues
 to search cases only.
@@ -81,3 +81,7 @@ This capability grants no deployment, initialization, migration, source-file
 deletion, case change, external disclosure, or contact authority. It promises
 no external factual completeness, source freshness, database-size service
 level, execution latency, or future retention/deprecation window.
+
+## Output selection
+
+Profile new/update return profile_receipt with ID, title and updated_at. List returns the same compact entries with has_more; show returns exact Markdown. Positive --limit defaults to 20 and may be increased. The ok/data envelope and stored schema-two profile content retain their meanings.

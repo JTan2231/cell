@@ -75,3 +75,7 @@ Use these types at imports and convert only to caller-local domain values.
 The client performs the same operations under this contract and never adds
 retry or authorization. See `todo/docs/rust-api.md`; the Rust structs and
 enums define the interface without a separate declaration layer.
+
+## Output selection
+
+Capture and routing retain immutable concern/proposal and explicit-decision semantics. Concern list defaults to 20 rows of ID, status, recorded time and a marked excerpt capped at 240 characters, with has_more and positive --limit for more. concern show retains full provenance and routing history.

@@ -1,6 +1,6 @@
 {
   "id": "todo.umbrella.manage",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -68,8 +68,10 @@
       {"status": "unsupported", "statement": "A model result, Nucleus completion, stale proposal, or untyped row number cannot serve as decision authorization."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Read commands return exact concern, proposal, umbrella, direction, attachment, note, lifecycle, assessment, design, decision, staleness, or supersession projections selected by the command."},
-      {"status": "declared", "statement": "Writes return one durable provenance-bearing routing decision, immutable nN note, or idempotent open/done lifecycle result."}
+      {
+        "status": "declared",
+        "statement": "Todo list/search retain compact ID/title/lifecycle rows, default to 20, and include has_more with positive --limit for more. Exact show retains the complete selected umbrella with concerns, notes and current assessment/design summaries. Lifecycle and note mutations retain durable receipts and no implementation-success inference."
+      }
     ],
     "data_semantics": [
       {"status": "declared", "statement": "cN, rN, tN, aN, dN, and nN denote different durable concepts; staleness is derived comparison data and never rewrites historical decisions."},
@@ -97,7 +99,7 @@
       {"status": "unspecified", "statement": "No query-latency, database-size, retention-horizon, or external-state freshness service-level objective is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 preserves typed public identities, append-only history, explicit provenance-bearing decisions, and the open/done umbrella lifecycle."},
+      {"status": "declared", "statement": "Capability contract version 2 preserves typed public identities, append-only history, explicit provenance-bearing decisions, and the open/done umbrella lifecycle."},
       {"status": "unspecified", "statement": "No public deprecation period or perpetual compatibility window is promised."}
     ],
     "reliances": [

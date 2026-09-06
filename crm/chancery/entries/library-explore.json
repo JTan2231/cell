@@ -1,6 +1,6 @@
 {
   "id": "crm.library.explore",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -16,7 +16,7 @@
     "The caller needs a semantic people search, live source refresh, contact recommendation guarantee, or proof of an external interaction.",
     "A case advisory should be used to block an otherwise valid operation."
   ],
-  "outcome": "A deterministic bounded list or lexical search over current case heads, or one exact case revision or complete revision history whose CRM claims, advisory, source-update correlation, and evidence limits remain explicit.",
+  "outcome": "A deterministic bounded list or lexical search over current case heads, or one exact case revision or a bounded newest-first revision history whose CRM claims, advisory, and evidence limits remain explicit.",
   "effects": [
     "Case list, show, history, and search make no CRM domain mutation and invoke no model, Nucleus job, source, browser, network, or hidden worker; database opening may enforce private file/sidecar permissions and WAL mode.",
     "Human or JSON output may disclose private case Markdown, summaries, stages, advisories, and stable source-update references to the caller or redirected output."
@@ -63,7 +63,7 @@
       {"status": "declared", "statement": "Inputs are an optional positive result limit, a lexical query, or one case identity with an optional exact positive revision."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Outputs are deterministic current-head summaries or exact immutable revisions carrying stage, summary, nullable advisory, and stored source-update correlation in human text or the documented ok/data JSON envelope."}
+      {"status": "declared", "statement": "Case list/search and newest-first history default to 20 with has_more and positive --limit for more. History returns case ID, revision, stage, summary, complete advisory/attention and created_at. Search returns current identity/revision/stage/summary/advisory plus matched_field and an explicitly marked excerpt of at most 240 Unicode characters around the match. Case show retains exact full revisions."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Search is case-insensitive literal-substring matching over stored title, current Markdown, and current advisory; revisions are complete CRM snapshots, source-update IDs are stored correlations, and advisories are visible warnings rather than gates."}
@@ -73,7 +73,7 @@
       {"status": "not_applicable", "statement": "The read capability defines no pricing, probability, contact score, or physical unit."}
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "An exact revision read is complete for that committed snapshot; history covers the retained lineage; list and search cover only current heads in the selected database up to their explicit limits."},
+      {"status": "declared", "statement": "An exact revision read is complete for that committed snapshot; history selects retained revision summaries up to its explicit limit and reports has_more; list and search cover only current heads in the selected database up to their explicit limits."},
       {"status": "unsupported", "statement": "CRM does not refresh sources or prove that a stored person, title, role, posting, interaction, or outcome remains current externally."}
     ],
     "access": [
@@ -87,7 +87,7 @@
       {"status": "unspecified", "statement": "No maximum database size, wall-clock latency, semantic recall, or source coverage service level is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 reads database schema two and emits the documented ok/data or ok/error JSON envelope while preserving public case and revision identities."},
+      {"status": "declared", "statement": "Capability contract version 2 reads database schema two and emits the documented ok/data or ok/error JSON envelope while preserving public case and revision identities."},
       {"status": "unspecified", "statement": "No future schema migration window or cross-release search-ranking stability is promised."}
     ],
     "reliances": [

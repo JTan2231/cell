@@ -234,3 +234,7 @@ method retains the corresponding command's authorization and effect boundary.
 
 The deployment adapter verifies the installed dependency configuration with
 doctor. Verification does not create projects, revisions, or Nucleus jobs.
+
+## Output selection
+
+Project list returns ID, canonical current path, status and HEAD; project show and operational receipts retain their complete selected records. Ordinary repository show/search use compact terminology views; show --provenance returns the complete replay. Project, intake and maintenance effects retain their documented authority and recovery semantics.

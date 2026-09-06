@@ -72,3 +72,7 @@ Use the CLI or Cast's provider-owned Rust API. Direct SQLite reads and writes
 are not supported integration surfaces. Keep snapshots private: they can
 contain search interests, source locators and extracted posting text. Reads
 make no network request and cannot establish current external truth.
+
+## Output selection
+
+List/search return schema-two pages with snapshot_revision, compact items and has_more; positive --limit defaults to 20. Job rows expose stable ID/revision, company, title, location/remote eligibility, availability and last_seen_at successful observation. Search adds matched_field and a marked excerpt of at most 240 Unicode characters. Status schema 2 returns counts, budgets/usage, last run and failing/incomplete source and query summaries. Show/export preserve full records, evidence and snapshot coverage; exported snapshot schema remains 1.

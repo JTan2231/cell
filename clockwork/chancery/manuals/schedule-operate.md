@@ -257,3 +257,7 @@ Stop rather than broadening the definition when the product needs arbitrary
 commands, a secret, inherited environment, a mutable selector, workflow
 dependencies, retry/backoff, output capture, or a system service. Those require
 a different reviewed contract.
+
+## Output selection
+
+Registration and binding mutations retain definition/binding receipts; run retains one direct-child runtime outcome. Definition/binding lists and history return output-version-two items/has_more pages defaulting to 20 with positive --limit for more. History selects activation ID/key, trigger, timestamps, state, exit/signal and failure detail; --details includes definition digest and process IDs. Definition/binding show remain full selected metadata reads.

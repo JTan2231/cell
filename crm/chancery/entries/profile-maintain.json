@@ -1,6 +1,6 @@
 {
   "id": "crm.profile.maintain",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -29,7 +29,7 @@
   "success": [
     "The selected database is an initialized schema-two CRM library and the complete requested operation succeeds.",
     "New returns one generated stable ID; update retains its ID and atomically replaces the full title and body with the supplied values.",
-    "Show returns all four fields; list orders current entries by updated_at descending, then ID, returning full entries in JSON and ID/title/timestamp in human output."
+    "Show returns all four fields; list orders current entries by updated_at descending, then ID, returning ID/title/timestamp in either encoding with has_more."
   ],
   "failure_and_recovery": [
     "Absent, foreign, unsupported storage, invalid UTF-8, invalid bounds, or an unknown ID fail without a partial profile write. Ordinary profile commands never initialize or migrate storage.",
@@ -89,7 +89,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "A complete entry has id, title, body_md, and updated_at. JSON list items include body_md; human lists show ID, title, and timestamp. Human output or the common JSON success/error envelope reports the operation; Rust callers use crm::api exported payloads."
+        "statement": "Profile new/update return profile_receipt with ID, title and updated_at. List returns the same compact entries with has_more; show returns exact Markdown. Positive --limit defaults to 20 and may be increased. The ok/data envelope and stored schema-two profile content retain their meanings."
       }
     ],
     "data_semantics": [
@@ -133,7 +133,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "List defaults to 20 entries and accepts 1 through 1,000. Commands invoke no model, network, source, hidden worker, or Nucleus job, and neither modify cases nor automatically supply steward context."
+        "statement": "List defaults to 20 entries, accepts positive limits, and reports has_more. Commands invoke no model, network, source, hidden worker, or Nucleus job, and neither modify cases nor automatically supply steward context."
       },
       {
         "status": "unspecified",

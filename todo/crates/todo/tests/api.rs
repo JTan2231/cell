@@ -46,7 +46,13 @@ fn typed_client_captures_provenance_and_preserves_history_shape() -> TestResult 
             })))?
             .data,
         Data::Concerns {
-            concerns: vec![concern]
+            concerns: vec![todo::api::ConcernSummary {
+                id: concern.id,
+                status: concern.status,
+                excerpt: concern.body,
+                created_at: concern.created_at
+            }],
+            has_more: false
         }
     );
     let duplicate = client.execute(&Request::Init);
@@ -60,13 +66,14 @@ fn typed_client_captures_provenance_and_preserves_history_shape() -> TestResult 
 fn public_ids_and_overlapping_response_shapes_remain_distinct() -> TestResult {
     assert!("c1".parse::<TodoId>().is_err());
     assert!("t1".parse::<ConcernId>().is_err());
-    let response = br#"{"ok":true,"data":{"query":"synthetic","todos":[]}}"#;
+    let response = br#"{"ok":true,"data":{"query":"synthetic","todos":[],"has_more":false}}"#;
     let data: Data = decode_response(response)?;
     assert_eq!(
         data,
         Data::Search {
             query: "synthetic".into(),
-            todos: vec![]
+            todos: vec![],
+            has_more: false
         }
     );
     assert!(

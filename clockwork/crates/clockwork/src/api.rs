@@ -335,8 +335,19 @@ impl Client {
     pub fn register(&self, file: &std::path::Path) -> Result<DefinitionRecord, Error> {
         self.invoke(&["definition".as_ref(), "register".as_ref(), file.as_os_str()])
     }
-    pub fn definitions(&self) -> Result<Vec<DefinitionSummary>, Error> {
-        self.invoke(&["definition".as_ref(), "list".as_ref()])
+    pub fn definitions(&self) -> Result<SelectionPage<DefinitionSummary>, Error> {
+        self.definitions_limit(20)
+    }
+    pub fn definitions_limit(
+        &self,
+        limit: usize,
+    ) -> Result<SelectionPage<DefinitionSummary>, Error> {
+        self.invoke(&[
+            "definition".as_ref(),
+            "list".as_ref(),
+            "--limit".as_ref(),
+            limit.to_string().as_ref(),
+        ])
     }
     pub fn definition(&self, digest: &str) -> Result<DefinitionRecord, Error> {
         self.invoke(&["definition".as_ref(), "show".as_ref(), digest.as_ref()])
@@ -358,8 +369,16 @@ impl Client {
         }
         self.invoke(&args)
     }
-    pub fn bindings(&self) -> Result<Vec<BindingRecord>, Error> {
-        self.invoke(&["binding".as_ref(), "list".as_ref()])
+    pub fn bindings(&self) -> Result<SelectionPage<BindingRecord>, Error> {
+        self.bindings_limit(20)
+    }
+    pub fn bindings_limit(&self, limit: usize) -> Result<SelectionPage<BindingRecord>, Error> {
+        self.invoke(&[
+            "binding".as_ref(),
+            "list".as_ref(),
+            "--limit".as_ref(),
+            limit.to_string().as_ref(),
+        ])
     }
     pub fn binding(&self, key: &str) -> Result<BindingRecord, Error> {
         self.invoke(&["binding".as_ref(), "show".as_ref(), key.as_ref()])
@@ -367,7 +386,11 @@ impl Client {
     pub fn run(&self, key: &str) -> Result<ActivationRecord, Error> {
         self.invoke(&["run".as_ref(), key.as_ref()])
     }
-    pub fn history(&self, key: Option<&str>, limit: usize) -> Result<Vec<ActivationRecord>, Error> {
+    pub fn history(
+        &self,
+        key: Option<&str>,
+        limit: usize,
+    ) -> Result<SelectionPage<ActivationSummary>, Error> {
         let limit = limit.to_string();
         let mut args = vec!["history".as_ref(), "--limit".as_ref(), limit.as_ref()];
         if let Some(key) = key {
@@ -375,7 +398,60 @@ impl Client {
         }
         self.invoke(&args)
     }
+    pub fn history_details(
+        &self,
+        key: Option<&str>,
+        limit: usize,
+    ) -> Result<SelectionPage<ActivationRecord>, Error> {
+        let limit = limit.to_string();
+        let mut args = vec![
+            "history".as_ref(),
+            "--details".as_ref(),
+            "--limit".as_ref(),
+            limit.as_ref(),
+        ];
+        if let Some(key) = key {
+            args.push(key.as_ref());
+        }
+        self.invoke(&args)
+    }
     pub fn doctor(&self) -> Result<DoctorReport, Error> {
         self.invoke(&["doctor".as_ref()])
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelectionPage<T> {
+    pub output_version: u32,
+    pub items: Vec<T>,
+    pub has_more: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivationSummary {
+    pub id: String,
+    pub key: String,
+    pub trigger: Trigger,
+    pub state: ActivationState,
+    pub admitted_at: i64,
+    pub started_at: Option<i64>,
+    pub finished_at: Option<i64>,
+    pub exit_code: Option<i32>,
+    pub signal: Option<i32>,
+    pub detail: Option<String>,
+}
+impl From<ActivationRecord> for ActivationSummary {
+    fn from(record: ActivationRecord) -> Self {
+        Self {
+            id: record.id,
+            key: record.key,
+            trigger: record.trigger,
+            state: record.state,
+            admitted_at: record.admitted_at,
+            started_at: record.started_at,
+            finished_at: record.finished_at,
+            exit_code: record.exit_code,
+            signal: record.signal,
+            detail: record.detail,
+        }
     }
 }

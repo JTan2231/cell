@@ -6,9 +6,10 @@ use std::path::{Path, PathBuf};
 use serde_json::json;
 
 use crate::api::{
-    CatalogEntry, ContractBasis, ContractDossier, ContractRequirement, DoctorResult, FacetCoverage,
-    FacetRequirements, FileBasis, ListResult, ProviderSummary, RegistryCounts, ResolutionGap,
-    ResolveResult, ShowResult, ValidateResult,
+    CatalogDefaults, CatalogEntry, ContractBasis, ContractDossier, ContractRequirement,
+    DoctorResult, FacetCoverage, FacetRequirements, FileBasis, FullShowResult, ListResult,
+    ProviderSummary, RegistryCounts, ResolutionGap, ResolveResult, ResolveSummary, ShowResult,
+    ValidateResult,
 };
 
 use crate::cli::{Cli, Command, ListArgs, ResolveArgs};
@@ -28,7 +29,7 @@ pub(crate) fn run(cli: &Cli) -> Result<CommandOutput, AppError> {
         }
         Command::Show(args) => {
             let registry = load_registry(&registry_path(cli.registry.as_deref())?)?;
-            show(&registry, &args.id)
+            show(&registry, &args.id, args.full)
         }
         Command::Resolve(args) => {
             let registry = load_registry(&registry_path(cli.registry.as_deref())?)?;
@@ -71,7 +72,9 @@ fn registry_path(selected: Option<&Path>) -> Result<PathBuf, AppError> {
 
 fn list(registry: &Registry, args: &ListArgs) -> CommandOutput {
     let mut values = Vec::new();
-    let mut human = String::from("Installed Chancery catalog\n");
+    let mut human = String::from(
+        "Installed Chancery catalog\nDefaults: supported · installed · compatible · readiness not_checked (not probed). Exceptions appear below.\n",
+    );
     let mut count = 0;
     for mode in [Mode::Use, Mode::Operate, Mode::Develop] {
         if args.mode.is_some_and(|selected| selected != mode) {
@@ -91,9 +94,8 @@ fn list(registry: &Registry, args: &ListArgs) -> CommandOutput {
             continue;
         }
         let _ = write!(human, "\n{}\n", mode_heading(mode));
-        for (provider, entry) in mode_entries {
+        for (_, entry) in mode_entries {
             let document = &entry.document;
-            let availability = availability(entry);
             let compatibility = compatibility(entry);
             let readiness = readiness(entry);
             values.push(CatalogEntry {
@@ -102,29 +104,27 @@ fn list(registry: &Registry, args: &ListArgs) -> CommandOutput {
                 summary: document.summary.clone(),
                 kind: document.kind,
                 mode: document.mode,
-                provider: provider.clone(),
-                provider_release: provider.release.clone(),
-                contract_version: document.contract_version,
-                support: document.support,
-                availability: availability.to_owned(),
-                compatibility: compatibility.to_owned(),
-                readiness: readiness.to_owned(),
+                support: (document.support != crate::model::Support::Supported)
+                    .then_some(document.support),
+                compatibility: (compatibility != "compatible").then(|| compatibility.to_owned()),
+                readiness: (readiness != "not_checked").then(|| readiness.to_owned()),
             });
             let _ = write!(
                 human,
-                "\n{} — {}\n  {}\n  {} · {} · {} {} · {} · {} · {} · {}\n",
+                "\n{} — {}\n  {}\n",
                 terminal_text(&document.id, false),
                 terminal_text(&document.title, false),
-                terminal_text(&document.summary, false),
-                document.kind.as_str(),
-                document.mode.as_str(),
-                terminal_text(&provider.name, false),
-                terminal_text(&provider.release, false),
-                document.support.as_str(),
-                availability,
-                compatibility,
-                readiness
+                terminal_text(&document.summary, false)
             );
+            if document.support != crate::model::Support::Supported {
+                let _ = writeln!(human, "  Support: {}", document.support.as_str());
+            }
+            if compatibility != "compatible" {
+                let _ = writeln!(human, "  Compatibility: {compatibility}");
+            }
+            if readiness != "not_checked" {
+                let _ = writeln!(human, "  Readiness: {readiness}");
+            }
             count += 1;
         }
     }
@@ -140,6 +140,12 @@ fn list(registry: &Registry, args: &ListArgs) -> CommandOutput {
     append_issues(&mut human, &registry.issues);
     CommandOutput::success(
         json!(ListResult {
+            defaults: CatalogDefaults {
+                support: crate::model::Support::Supported,
+                availability: "installed".into(),
+                compatibility: "compatible".into(),
+                readiness: "not_checked".into()
+            },
             entries: values,
             issues: registry.issues.clone()
         }),
@@ -155,7 +161,7 @@ fn mode_heading(mode: Mode) -> &'static str {
     }
 }
 
-fn show(registry: &Registry, id: &str) -> Result<CommandOutput, AppError> {
+fn show(registry: &Registry, id: &str, full: bool) -> Result<CommandOutput, AppError> {
     let Some((provider, entry)) = registry.find_entry(id) else {
         return Err(AppError::invalid(
             "entry_not_found",
@@ -180,19 +186,38 @@ fn show(registry: &Registry, id: &str) -> Result<CommandOutput, AppError> {
         readiness,
         document.contract_version
     );
-    append_entry_details(&mut human, entry);
+    if full {
+        append_entry_details(&mut human, entry);
+    } else {
+        append_dependencies(&mut human, entry);
+        human.push('\n');
+        human.push_str(&terminal_text(&entry.manual_text, true));
+    }
     append_issues(&mut human, &registry.issues);
     Ok(CommandOutput::success(
-        json!(ShowResult {
-            provider: provider.identity.clone(),
-            entry: document.clone(),
-            availability: availability.to_owned(),
-            compatibility: compatibility.to_owned(),
-            readiness: readiness.to_owned(),
-            dependency_statuses: entry.dependency_statuses.clone(),
-            manual: entry.manual_text.clone(),
-            issues: registry.issues.clone(),
-        }),
+        if full {
+            json!(FullShowResult {
+                provider: provider.identity.clone(),
+                entry: document.clone(),
+                availability: availability.to_owned(),
+                compatibility: compatibility.to_owned(),
+                readiness: readiness.to_owned(),
+                dependency_statuses: entry.dependency_statuses.clone(),
+                manual: entry.manual_text.clone(),
+                issues: registry.issues.clone(),
+            })
+        } else {
+            json!(ShowResult {
+                provider: provider.identity.clone(),
+                entry: document.into(),
+                availability: availability.to_owned(),
+                compatibility: compatibility.to_owned(),
+                readiness: readiness.to_owned(),
+                dependency_statuses: entry.dependency_statuses.clone(),
+                manual: entry.manual_text.clone(),
+                issues: registry.issues.clone(),
+            })
+        },
         human,
     ))
 }
@@ -283,7 +308,6 @@ fn resolve(registry: &Registry, args: &ResolveArgs) -> Result<CommandOutput, App
     } else {
         "resolved_not_ready"
     };
-    let documentation_resolved = status == "resolved_not_ready";
     let dependency_closure_status = if root_entry.compatible {
         "complete"
     } else {
@@ -321,31 +345,61 @@ fn resolve(registry: &Registry, args: &ResolveArgs) -> Result<CommandOutput, App
         },
     );
 
-    Ok(CommandOutput::report(
+    let result = ResolveResult {
+        requested_id: args.id.clone(),
+        status: status.to_owned(),
+        contract_requirement: ContractRequirement {
+            min_contract: args.min_contract,
+            max_contract_exclusive: args.max_contract_exclusive,
+            satisfied: contract_matches,
+        },
+        facet_requirements: FacetRequirements {
+            required: required_values,
+            unsatisfied: unsatisfied_values,
+        },
+        declaration_status: declaration_status.to_owned(),
+        dependency_closure_status: dependency_closure_status.to_owned(),
+        readiness: readiness(root_entry).to_owned(),
+        root: root_value,
+        dependency_closure: closure_values,
+        gaps,
+        issues: registry.issues.clone(),
+    };
+    Ok(resolution_output(&result, args.summary, human))
+}
+
+fn resolution_output(
+    result: &ResolveResult,
+    summary_only: bool,
+    mut human: String,
+) -> CommandOutput {
+    let documentation_resolved = result.status == "resolved_not_ready";
+    let summary = ResolveSummary::from(result);
+    if summary_only {
+        human = format!(
+            "{}: {}\nDocumentation: {} · Dependency closure: {} · Readiness: {}\nContract requirement: {}\nRequired facets: {}\nUnsatisfied facets: {}\n",
+            summary.requested_id,
+            summary.status,
+            summary.declaration_status,
+            summary.dependency_closure_status,
+            summary.readiness,
+            summary.contract_requirement.satisfied,
+            summary.facet_requirements.required.join(", "),
+            summary.facet_requirements.unsatisfied.join(", ")
+        );
+        append_resolution_gaps(&mut human, &summary.gaps);
+        append_issues(&mut human, &summary.issues);
+    }
+    CommandOutput::report(
         documentation_resolved,
-        json!(ResolveResult {
-            requested_id: args.id.clone(),
-            status: status.to_owned(),
-            contract_requirement: ContractRequirement {
-                min_contract: args.min_contract,
-                max_contract_exclusive: args.max_contract_exclusive,
-                satisfied: contract_matches,
-            },
-            facet_requirements: FacetRequirements {
-                required: required_values,
-                unsatisfied: unsatisfied_values
-            },
-            declaration_status: declaration_status.to_owned(),
-            dependency_closure_status: dependency_closure_status.to_owned(),
-            readiness: readiness(root_entry).to_owned(),
-            root: root_value,
-            dependency_closure: closure_values,
-            gaps,
-            issues: registry.issues.clone(),
-        }),
+        if summary_only {
+            json!(summary)
+        } else {
+            json!(result)
+        },
         human,
         i32::from(!documentation_resolved),
-    ))
+    )
 }
 
 fn dependency_closure<'a>(
@@ -424,6 +478,7 @@ fn resolution_human(
         summary.dependency_closure_status,
         readiness(root_entry),
     );
+    append_resolution_gaps(&mut human, gaps);
     append_resolved_contract_human(&mut human, root_provider, root_entry, "ROOT CONTRACT");
     if closure.is_empty() {
         human.push_str("\nDEPENDENCY CONTRACTS\n\n  None.\n");
@@ -432,7 +487,6 @@ fn resolution_human(
             append_resolved_contract_human(&mut human, provider, entry, "DEPENDENCY CONTRACT");
         }
     }
-    append_resolution_gaps(&mut human, gaps);
     append_issues(&mut human, &registry.issues);
     human
 }

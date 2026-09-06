@@ -57,8 +57,11 @@ enum Command {
     /// Read activation history, newest first.
     History {
         key: Option<String>,
-        #[arg(long, default_value_t = 100)]
+        #[arg(long, default_value_t = 20)]
         limit: usize,
+        /// Include definition digests and process identities.
+        #[arg(long)]
+        details: bool,
     },
     /// Check private state and local runtime prerequisites.
     Doctor,
@@ -79,7 +82,10 @@ enum DefinitionCommand {
     /// Validate and register one TOML definition.
     Register { file: PathBuf },
     /// List immutable registered definitions.
-    List,
+    List {
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
     /// Show one immutable definition by digest.
     Show { digest: String },
 }
@@ -96,7 +102,10 @@ enum BindingCommand {
         select: Option<String>,
     },
     /// List stable bindings.
-    List,
+    List {
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
     /// Show one stable binding.
     Show { key: String },
 }
@@ -165,7 +174,7 @@ async fn run(cli: Cli) -> Result<()> {
                 let record = store.register_definition(&digest, &definition)?;
                 emit(&record, cli.json)
             }
-            DefinitionCommand::List => emit(&store.definitions()?, cli.json),
+            DefinitionCommand::List { limit } => emit_page(store.definitions()?, limit, cli.json),
             DefinitionCommand::Show { digest } => {
                 manifest::validate_definition_digest(&digest)?;
                 emit(&store.definition(&digest)?, cli.json)
@@ -193,7 +202,7 @@ async fn run(cli: Cli) -> Result<()> {
                 )?;
                 emit(&binding, cli.json)
             }
-            BindingCommand::List => emit(&store.bindings()?, cli.json),
+            BindingCommand::List { limit } => emit_page(store.bindings()?, limit, cli.json),
             BindingCommand::Show { key } => {
                 manifest::validate_key(&key)?;
                 emit(&store.binding(&key)?, cli.json)
@@ -203,17 +212,33 @@ async fn run(cli: Cli) -> Result<()> {
             let activation = executor::run(&mut store, &layout, &key, Trigger::Manual).await?;
             emit(&activation, cli.json)
         }
-        Command::History { key, limit } => {
-            if !(1..=1000).contains(&limit) {
+        Command::History {
+            key,
+            limit,
+            details,
+        } => {
+            if limit == 0 || limit == usize::MAX {
                 return Err(Error::new(
                     "history_limit_invalid",
-                    "history --limit must be from 1 through 1000",
+                    "history --limit must be positive and below the platform maximum",
                 ));
             }
             if let Some(key) = key.as_deref() {
                 manifest::validate_key(key)?;
             }
-            emit(&store.history(key.as_deref(), limit)?, cli.json)
+            let records = store.history(key.as_deref(), limit + 1)?;
+            if details {
+                emit_page(records, limit, cli.json)
+            } else {
+                emit_page(
+                    records
+                        .into_iter()
+                        .map(api::ActivationSummary::from)
+                        .collect(),
+                    limit,
+                    cli.json,
+                )
+            }
         }
         Command::Doctor => {
             let recovered = store.recover_stale(None)?;
@@ -288,4 +313,20 @@ fn emit_error(error: &Error, compact: bool) {
     } else {
         eprintln!("clockwork: {error}");
     }
+}
+
+fn emit_page<T: Serialize>(mut items: Vec<T>, limit: usize, compact: bool) -> Result<()> {
+    if limit == 0 {
+        return Err(Error::new("limit_invalid", "limit must be positive"));
+    }
+    let has_more = items.len() > limit;
+    items.truncate(limit);
+    emit(
+        &api::SelectionPage {
+            output_version: 2,
+            items,
+            has_more,
+        },
+        compact,
+    )
 }

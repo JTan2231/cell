@@ -94,6 +94,8 @@ pub enum CaseCommand {
     },
     History {
         case: String,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
     },
 }
 

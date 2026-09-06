@@ -1,6 +1,6 @@
 {
   "id": "semantics.repository.explore",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -65,7 +65,7 @@
       {"status": "declared", "statement": "Inputs are a stable project ID plus an optional search query, historical revision, or from/to revision range."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Outputs are a replayed repository snapshot, semantic search matches, contiguous immutable revision log, or typed revision-range diff in JSON."}
+      {"status": "declared", "statement": "Project lists return ID, canonical path, status and HEAD. Repository show/search return schema version 2, project ID, selected revision and all selected concepts with ID, complete label/meaning, active state, replacement and distinctions. show --provenance returns the full replayed repository with grounds, withdrawals and revision bookkeeping. Log and diff retain complete immutable revision records."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Concept identity is stable across wording and path changes; active or retired state, distinctions, groundings, and withdrawals are replayed from immutable typed effects rather than a mutable projection."},
@@ -90,7 +90,7 @@
       {"status": "unspecified", "statement": "No repository-size, result-count, or wall-clock read service-level objective is promised here beyond command-specific bounds."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 preserves stable project and concept IDs and replays schema-two immutable revisions, including legacy Decision groundings; provider release and revision number remain separate."},
+      {"status": "declared", "statement": "Capability contract version 2 preserves stable project and concept IDs and replays schema-two immutable revisions, including legacy Decision groundings; provider release and revision number remain separate."},
       {"status": "unspecified", "statement": "No future contract deprecation or repository migration window is promised by this read capability."}
     ],
     "reliances": [

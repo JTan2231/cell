@@ -1,6 +1,6 @@
 {
   "id": "annals.work.retain",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -64,7 +64,7 @@
       {"status": "unsupported", "statement": "Binary, blank, multi-work, reconciliation, replacement, deletion, and model instructions are not accepted by this capability."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Retention reports the canonical retained or recognized work label; list and show expose retained-work metadata and the complete unchanged text."}
+      {"status": "declared", "statement": "Retention returns its durable work/delivery receipt. Work list defaults to 20 and returns a schema-two items/has_more page with positive --limit for more; work show retains complete selected work content and structure."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Retention stores previously unseen exact bytes or recognizes an existing byte-identical work; recognition does not create the requested alternate label."},
@@ -92,7 +92,7 @@
       {"status": "unspecified", "statement": "No maximum accepted source size, retention capacity, throughput, or wall-clock latency is promised by this contract."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 identifies these retention semantics independently of the Annals provider release and library schema."},
+      {"status": "declared", "statement": "Capability contract version 2 identifies these retention semantics independently of the Annals provider release and library schema."},
       {"status": "unspecified", "statement": "No cross-release client compatibility window or deprecation period is promised."}
     ],
     "reliances": [

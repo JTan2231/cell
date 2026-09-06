@@ -98,12 +98,14 @@ fn declarations_pass_without_installed_services_or_quality_requirements() -> Tes
     assert_eq!(first["scope"], "repository_declarations");
     assert_eq!(first["complete"], 1);
     assert_eq!(first["incomplete"], 0);
+    assert_eq!(first["schema_version"], 2);
+    assert_eq!(first["products"], json!([]));
+    let (_, second) = run(temp.path(), "report", None)?;
     assert_eq!(
-        first["products"][0]["semantics"]["identities"],
+        second["products"][0]["semantics"]["identities"],
         json!(["alpha"])
     );
-    let (_, second) = run(temp.path(), "report", None)?;
-    assert_eq!(first, second);
+    assert_eq!(second["complete"], first["complete"]);
     Ok(())
 }
 
@@ -124,6 +126,9 @@ fn chancery_partial_views_ignore_unrelated_malformed_contract_fields() -> TestRe
 
     let (status, json) = run(temp.path(), "check", None)?;
     assert_eq!(status, 0);
+    let check: usher::api::CheckReport = serde_json::from_value(json)?;
+    assert!(check.products.is_empty());
+    let (_, json) = run(temp.path(), "report", None)?;
     let report: usher::api::Report = serde_json::from_value(json.clone())?;
     assert_eq!(report.incomplete, 0);
     assert_eq!(
@@ -154,7 +159,18 @@ fn product_missing_both_introductions_is_reported_and_fails_check() -> TestResul
     assert_eq!(report["products"][1]["chancery"]["status"], "missing");
     let (status, checked) = run(temp.path(), "check", None)?;
     assert_eq!(status, 1);
-    assert_eq!(checked, report);
+    assert_eq!(checked["complete"], report["complete"]);
+    assert_eq!(checked["incomplete"], report["incomplete"]);
+    assert_eq!(checked["products"].as_array().map(Vec::len), Some(1));
+    assert_eq!(checked["products"][0]["id"], "beta");
+    assert_eq!(
+        checked["products"][0]["chancery"],
+        report["products"][1]["chancery"]
+    );
+    assert_eq!(
+        checked["products"][0]["semantics"],
+        report["products"][1]["semantics"]
+    );
     Ok(())
 }
 
@@ -197,8 +213,11 @@ fn multiple_providers_and_renamed_product_aliases_are_preserved() -> TestResult 
     let path = temp.path().join("pipeline/products/alpha.sh");
     let source = fs::read_to_string(&path)? + "PRODUCT_ALIASES='new-name alpha'\n";
     fs::write(&path, source)?;
-    let (status, report) = run(temp.path(), "check", Some("new-name"))?;
+    let (status, check) = run(temp.path(), "check", Some("new-name"))?;
     assert_eq!(status, 0);
+    assert_eq!(check["complete"], 1);
+    assert_eq!(check["products"], json!([]));
+    let (_, report) = run(temp.path(), "report", Some("new-name"))?;
     assert_eq!(
         report["products"][0]["chancery"]["identities"],
         json!(["alpha", "alpha-usage"])
@@ -280,7 +299,12 @@ fn future_provider_format_is_unassessed_and_other_products_survive() -> TestResu
     let (status, report) = run(temp.path(), "check", None)?;
     assert_eq!(status, 1);
     assert_eq!(report["products"][0]["chancery"]["status"], "unassessed");
-    assert_eq!(report["products"][1]["complete"], true);
+    assert_eq!(report["complete"], 1);
+    assert_eq!(report["products"].as_array().map(Vec::len), Some(1));
+    assert_eq!(
+        run(temp.path(), "report", None)?.1["products"][1]["complete"],
+        true
+    );
     Ok(())
 }
 

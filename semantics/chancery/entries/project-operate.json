@@ -1,6 +1,6 @@
 {
   "id": "semantics.project.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -51,9 +51,9 @@
   ],
   "dependencies": [
     {"id": "annals.decision-account.exchange", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3},
-    {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "conversations.history.explore", "min_contract": 4, "max_contract_exclusive": 5},
+    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4},
+    {"id": "clockwork.schedule.operate", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],
   "runtime": "interactive_agent",
@@ -111,8 +111,10 @@
       {"status": "declared", "statement": "Inputs are an exact project ID and canonical root, explicit administrative command, selected intake event where applicable, or one version-matched deployment candidate."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Maintenance returns protocol_version 1, contract_version 1, holds, and drained without opening, initializing, or migrating SQLite; status leaves an absent gate absent. Drained covers participating live commands and is not alone proof that durable intake or Nucleus jobs are terminal."},
-      {"status": "declared", "statement": "Outputs are a validated installed release, durable project or intake transition, one optional committed semantic revision, or structured readiness and recovery evidence."}
+      {
+        "status": "declared",
+        "statement": "Project list returns ID, canonical current path, status and HEAD; project show and operational receipts retain their complete selected records. Ordinary repository show/search use compact terminology views; show --provenance returns the complete replay. Project, intake and maintenance effects retain their documented authority and recovery semantics."
+      }
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Registration activates at the current opaque Annals decisions-feed watermark; moves preserve project identity plus new and legacy cursor histories, pause fences commits, and semantic success is the validated SQLite revision transaction rather than model completion."}
@@ -138,7 +140,7 @@
     ],
     "compatibility_and_evolution": [
       {"status": "declared", "statement": "Only doctor may prove deliberately held Nucleus readiness through health_for_deployment for the same sole run hold with runtime drain, authentication, and harness readiness. Required Semantics capabilities and protocol checks remain; ordinary reconciliation requires public Nucleus admission."},
-      {"status": "declared", "statement": "Operation contract version 3 requires Annals decision-account exchange contract 1, Conversations history contract 3, Nucleus execution contract 1, and Clockwork schedule contract 1; preserved legacy schemas retain their identity and new tool meaning uses successor identities."}
+      {"status": "declared", "statement": "Operation contract version 4 requires Annals decision-account exchange contract 1, Conversations history contract 3, Nucleus execution contract 1, and Clockwork schedule contract 1; preserved legacy schemas retain their identity and new tool meaning uses successor identities."}
     ],
     "reliances": [
       {"status": "declared", "statement": "Semantics consumes the ordered accepted-account feed and opaque cursors from one exact Annals decisions library.", "target": "annals", "kind": "data", "contract": "annals.decision-account.exchange"},

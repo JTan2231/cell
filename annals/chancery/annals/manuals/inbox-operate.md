@@ -141,3 +141,7 @@ Spool archives retain unchanged source material. Nucleus state may retain the
 complete model request and output. Treat both as private. A Nucleus restart
 makes an unfinished attempt lost; Annals, not Nucleus, decides subsequent
 domain recovery.
+
+## Output selection
+
+Inbox operational reports retain queue, gate, storage, domain and failure facts. Retry start/continue and event status return identity, window, state, counts, remaining work and last halt. retry status EVENT --details includes the full original-to-child mapping. Event listing defaults to 20 with has_more and positive --limit for more; retry preview retains the complete proposed selection.

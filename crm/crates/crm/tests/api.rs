@@ -28,25 +28,31 @@ fn client_owns_mutation_read_and_error_decoding() -> TestResult {
     let Data::CaseCreated { case } = created.data else {
         return Err(std::io::Error::other("expected created case").into());
     };
-    assert_eq!(case.markdown.as_bytes(), markdown);
+    assert!(serde_json::to_value(&case)?.get("markdown").is_none());
     assert_eq!(case.stage, Stage::Research);
     assert!(!case.attention);
     let shown = client.execute(&Request::ShowCase {
         case: case.case_id.clone(),
         revision: Some(1),
     })?;
-    assert_eq!(shown.data, Data::CaseRevision { case: case.clone() });
+    let Data::CaseRevision { case: full_case } = shown.data else {
+        return Err("expected complete case".into());
+    };
+    assert_eq!(full_case.markdown.as_bytes(), markdown);
     assert_eq!(
         client
             .execute(&Request::CaseHistory {
-                case: case.case_id.clone()
+                case: case.case_id.clone(),
+                limit: 20
             })?
             .data,
         Data::CaseHistory {
-            revisions: vec![case.clone()]
+            revisions: vec![case.clone()],
+            has_more: false
         }
     );
-    let Data::CaseList { cases } = client.execute(&Request::ListCases { limit: 20 })?.data else {
+    let Data::CaseList { cases, .. } = client.execute(&Request::ListCases { limit: 20 })?.data
+    else {
         return Err(std::io::Error::other("expected case list").into());
     };
     assert_eq!(cases.len(), 1);
@@ -95,7 +101,7 @@ fn profile_client_preserves_markdown_and_updates_only_selected_entry() -> TestRe
         Client::new(env!("CARGO_BIN_EXE_crm")).with_database(temporary.path().join("crm.db"));
     client.execute(&Request::Init)?;
     let original = b"# Synthetic vignette\r\n\r\n- Contribution: implemented.\r\n- Outcome: **Needs check**.\r\n";
-    let Data::ProfileEntry { entry } = client
+    let Data::ProfileReceipt { entry } = client
         .execute_with_input(
             &Request::CreateProfileEntry {
                 title: "Synthetic vignette".into(),
@@ -107,18 +113,17 @@ fn profile_client_preserves_markdown_and_updates_only_selected_entry() -> TestRe
     else {
         return Err(std::io::Error::other("expected profile entry").into());
     };
-    assert_eq!(entry.body_md.as_bytes(), original);
+    assert!(serde_json::to_value(&entry)?.get("body_md").is_none());
     let shown = client.execute(&Request::ShowProfileEntry {
         entry: entry.id.clone(),
     })?;
-    assert_eq!(
-        shown.data,
-        Data::ProfileEntry {
-            entry: entry.clone()
-        }
-    );
+    let Data::ProfileEntry { entry: complete } = shown.data else {
+        return Err("expected full profile".into());
+    };
+    assert_eq!(complete.body_md.as_bytes(), original);
+    assert_eq!(complete.id, entry.id);
     let updated = "# Corrected vignette\n\nOutcome remains **Needs check**. 雪\n";
-    let Data::ProfileEntry { entry: edited } = client
+    let Data::ProfileReceipt { entry: edited } = client
         .execute_with_input(
             &Request::UpdateProfileEntry {
                 entry: entry.id.clone(),
@@ -133,18 +138,30 @@ fn profile_client_preserves_markdown_and_updates_only_selected_entry() -> TestRe
     };
     assert_eq!(edited.id, entry.id);
     assert_eq!(edited.title, "Corrected vignette");
-    assert_eq!(edited.body_md, updated);
+    let Data::ProfileEntry { entry: complete } = client
+        .execute(&Request::ShowProfileEntry {
+            entry: edited.id.clone(),
+        })?
+        .data
+    else {
+        return Err("expected full profile".into());
+    };
+    assert_eq!(complete.body_md, updated);
     assert_eq!(
         client
             .execute(&Request::ListProfileEntries { limit: 20 })?
             .data,
         Data::ProfileList {
-            entries: vec![edited]
+            entries: vec![edited],
+            has_more: false
         }
     );
     assert_eq!(
         client.execute(&Request::ListCases { limit: 20 })?.data,
-        Data::CaseList { cases: vec![] }
+        Data::CaseList {
+            cases: vec![],
+            has_more: false
+        }
     );
     assert!(matches!(
         client.execute(&Request::ShowProfileEntry {

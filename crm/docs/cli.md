@@ -67,8 +67,8 @@ revision guard or history; the last committed update wins. There is no partial
 edit, deletion, or automatic duplicate detection.
 
 `list` orders entries by `updated_at` descending and then ID. Human output
-shows ID, title, and timestamp; JSON returns all four fields, including the
-body. Limits default to 20 and must be 1 through 1,000. `show` returns all
+and JSON show only ID, title and timestamp. Limits default to 20 and must be
+positive. Results include `has_more`; increase `--limit` for more. `show` returns all
 four fields of one current entry. Each read observes current committed state;
 separate commands are not a shared snapshot. `search` still searches cases
 only.
@@ -86,7 +86,7 @@ causes no partial profile write. Retrying `new` can create a duplicate; inspect
 crm case new --title TITLE [INPUT] [--stage STAGE]
 crm case list [--limit N]
 crm case show CASE_ID [--revision N]
-crm case history CASE_ID
+crm case history CASE_ID [--limit N]
 ```
 
 `INPUT` is a regular non-symbolic UTF-8 Markdown file or `-` for standard
@@ -112,9 +112,11 @@ defaults to `research`; the supported values are `research`, `warranted`,
 
 `new` commits the case and immutable revision one together. `list` returns
 current case heads with deterministic ordering; list limits default to 20 and
-must be from 1 through 1,000.
+must be positive; `has_more` indicates whether increasing `--limit` returns more.
 `show` returns the current revision unless `--revision` names a positive exact
-revision. `history` returns the complete immutable revision lineage.
+revision. `history` returns newest-first revision summaries: case ID, revision,
+stage, summary, advisory/attention and recorded time. It defaults to 20 with
+`has_more`; increase `--limit` to read more history.
 
 Every case read includes stage, summary, attention, and the advisory field.
 Tell acknowledgments and every update surface also carry the relevant
@@ -133,7 +135,8 @@ titles, current Markdown, and current advisory, ordered by most recently
 updated case and then case identity. It is not semantic matching, source
 verification, or a claim that a result warrants contact. Results identify the
 exact current revision and include stage, summary, attention, advisory, and a
-Markdown snippet. Limits default to 20 and must be from 1 through 1,000.
+marked excerpt of at most 240 Unicode characters around the match, with
+`matched_field` (`title`, `advisory` or `markdown`) and `excerpt: true`. Limits default to 20 and must be positive; `has_more` indicates whether increasing `--limit` returns more.
 
 ## Tell
 
@@ -168,7 +171,7 @@ crm update retry UPDATE_ID
 and applied revisions, exact Nucleus correlation, predecessor update, and
 failure state without printing the persisted request or tool bodies. Update
 states are `queued`, `running`, `applied`, `failed`, and `lost`; list limits
-default to 20 and must be from 1 through 1,000.
+default to 20 and must be positive; `has_more` indicates whether increasing `--limit` returns more.
 
 Tell and retry acknowledgments plus update list/show/wait/resume/retry include
 `attention` and advisory for the relevant case revision. An applied update uses
@@ -279,3 +282,12 @@ the same gate. Databases with multiple hard links are rejected because their
 state root cannot identify one authoritative admission gate. Database paths
 in command receipts use this canonical identity; backup receipts retain the
 caller-selected backup path.
+
+Profile new/update return `type: profile_receipt` with ID, title and updated
+time; profile show remains `type: profile_entry` with exact Markdown.
+Case new returns `case_created` with case ID, revision, stage, summary,
+advisory/attention and recorded time. It does not echo Markdown or its hash.
+Every profile/case/update list and search includes `has_more`. Read the selected
+case revision or profile with `show` for full content. Advisories remain complete
+and non-blocking on every revision-consuming view. The Rust client exposes
+`ProfileSummary` and `RevisionSummary` for the compact results.

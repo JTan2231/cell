@@ -50,8 +50,13 @@ without a dedicated installed contract remains an intentional resolver gap.
 Give every entry a short, discriminative title and a summary that states the
 user-visible result clearly enough for an agent to form a semantic shortlist.
 Put the detailed positive and negative semantic boundary in `use_when` and
-`do_not_use_when`. The manual must make correct use possible without opening
-the source tree or checking code.
+`do_not_use_when`. The manual is the complete ordinary `show` view: write applicability, exact
+interfaces, effects, authority, success, failure/recovery, privacy, exclusions
+and operation checkpoints together in one operating explanation. It must make
+correct use possible without the source tree or structured authoring fields.
+Keep normalized claims synchronized for the full `resolve` dossier; ordinary
+`show` does not repeat them. `show --full` exposes all authoring fields. Review
+both views before publication; structural validation cannot prove prose completeness.
 
 For a cross-capability or UI-dependent procedure, publish an `operation`.
 Describe goals, participant capabilities, semantic UI actions, checkpoints,

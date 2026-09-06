@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::api::{Data, Failure, Success, UpdateData, UpdateView};
+use crate::api::{Data, Failure, ProfileSummary, RevisionSummary, Success, UpdateData, UpdateView};
 use clap::Parser as _;
 use serde_json::{Value, json};
 
@@ -226,10 +226,11 @@ fn run(cli: Cli) -> CommandResult<Option<Output>> {
         }
         Command::Search(arguments) => {
             let store = Store::open(database)?;
-            let results = store.search(&arguments.query, arguments.limit)?;
+            let mut results = store.search(&arguments.query, selection_limit(arguments.limit)?)?;
+            let has_more = trim_page(&mut results, arguments.limit);
             Ok(Some(Output {
-                data: json!({"type": "search_results", "results": results}),
-                human: render_search(&results),
+                data: json!({"type": "search_results", "results": results, "has_more": has_more}),
+                human: page_human(render_search(&results), has_more),
             }))
         }
         Command::Tell(arguments) => {
@@ -261,11 +262,13 @@ fn profile_command(store: &Store, command: ProfileCommand) -> Result<Output> {
             let entry = store.create_profile_entry(&title, &read_text(&input)?)?;
             Ok(Output {
                 human: format!("Created {} — {}", entry.id, one_line(&entry.title)),
-                data: json!({"type": "profile_entry", "entry": entry}),
+                data: json!({"type": "profile_receipt", "entry": ProfileSummary::from(&entry)}),
             })
         }
         ProfileCommand::List { limit } => {
-            let entries = store.list_profile_entries(limit)?;
+            let mut entries = store.list_profile_entries(selection_limit(limit)?)?;
+            let has_more = trim_page(&mut entries, limit);
+            let entries: Vec<_> = entries.iter().map(ProfileSummary::from).collect();
             let human = if entries.is_empty() {
                 "No profile entries.".to_owned()
             } else {
@@ -283,8 +286,8 @@ fn profile_command(store: &Store, command: ProfileCommand) -> Result<Output> {
                     .join("\n")
             };
             Ok(Output {
-                human,
-                data: json!({"type": "profile_list", "entries": entries}),
+                human: page_human(human, has_more),
+                data: json!({"type": "profile_list", "entries": entries, "has_more": has_more}),
             })
         }
         ProfileCommand::Show { entry } => {
@@ -302,7 +305,7 @@ fn profile_command(store: &Store, command: ProfileCommand) -> Result<Output> {
             let entry = store.update_profile_entry(&entry, &title, &read_text(&input)?)?;
             Ok(Output {
                 human: format!("Updated {} — {}", entry.id, one_line(&entry.title)),
-                data: json!({"type": "profile_entry", "entry": entry}),
+                data: json!({"type": "profile_receipt", "entry": ProfileSummary::from(&entry)}),
             })
         }
     }
@@ -334,7 +337,7 @@ fn case_command(store: &Store, command: CaseCommand) -> Result<Output> {
             };
             let revision = store.create_case(&title, &markdown, stage)?;
             Ok(Output {
-                data: json!({"type": "case_created", "case": revision}),
+                data: json!({"type": "case_created", "case": RevisionSummary::from(&revision)}),
                 human: format!(
                     "Created {} revision {} [{}]",
                     revision.case_id, revision.revision, revision.stage
@@ -342,10 +345,11 @@ fn case_command(store: &Store, command: CaseCommand) -> Result<Output> {
             })
         }
         CaseCommand::List { limit } => {
-            let cases = store.list_cases(limit)?;
+            let mut cases = store.list_cases(selection_limit(limit)?)?;
+            let has_more = trim_page(&mut cases, limit);
             Ok(Output {
-                data: json!({"type": "case_list", "cases": cases}),
-                human: render_case_list(&cases),
+                data: json!({"type": "case_list", "cases": cases, "has_more": has_more}),
+                human: page_human(render_case_list(&cases), has_more),
             })
         }
         CaseCommand::Show { case, revision } => {
@@ -355,11 +359,15 @@ fn case_command(store: &Store, command: CaseCommand) -> Result<Output> {
                 human: render_case(&revision),
             })
         }
-        CaseCommand::History { case } => {
-            let revisions = store.case_history(&case)?;
+        CaseCommand::History { case, limit } => {
+            selection_limit(limit)?;
+            let mut revisions = store.case_history(&case)?;
+            revisions.reverse();
+            let has_more = trim_page(&mut revisions, limit);
+            let revisions: Vec<_> = revisions.iter().map(RevisionSummary::from).collect();
             Ok(Output {
-                data: json!({"type": "case_history", "revisions": revisions}),
-                human: render_history(&revisions),
+                data: json!({"type": "case_history", "revisions": revisions, "has_more": has_more}),
+                human: page_human(render_history(&revisions), has_more),
             })
         }
     }
@@ -398,14 +406,15 @@ fn tell(store: &Store, arguments: &TellArgs) -> Result<Output> {
 fn update_command(store: &Store, command: UpdateCommand) -> CommandResult<Output> {
     match command {
         UpdateCommand::List { limit } => {
-            let updates = store.list_updates(limit)?;
+            let mut updates = store.list_updates(selection_limit(limit)?)?;
+            let has_more = trim_page(&mut updates, limit);
             let views = updates
                 .into_iter()
                 .map(|update| update_view(store, update))
                 .collect::<Result<Vec<_>>>()?;
             Ok(Output {
-                data: json!({"type": "update_list", "updates": views}),
-                human: render_updates(&views),
+                data: json!({"type": "update_list", "updates": views, "has_more": has_more}),
+                human: page_human(render_updates(&views), has_more),
             })
         }
         UpdateCommand::Show { update } => Ok(update_output(store, store.update(&update)?)?),
@@ -607,7 +616,7 @@ fn render_case_list(cases: &[CaseListItem]) -> String {
         .join("\n")
 }
 
-fn render_history(revisions: &[CaseRevision]) -> String {
+fn render_history(revisions: &[RevisionSummary]) -> String {
     revisions
         .iter()
         .map(|revision| {
@@ -633,13 +642,14 @@ fn render_search(results: &[SearchResult]) -> String {
         .iter()
         .map(|result| {
             format!(
-                "{}{}@{} [{}] {}\n  {}",
+                "{}{}@{} [{}] {}\n  {} excerpt: {}",
                 advisory_prefix(result.advisory.as_deref()),
                 result.case_id,
                 result.revision,
                 result.stage,
                 one_line(&result.title),
-                one_line(&result.snippet)
+                result.matched_field,
+                result.snippet
             )
         })
         .collect::<Vec<_>>()
@@ -697,11 +707,34 @@ fn render_update(view: &UpdateView) -> String {
 }
 
 fn one_line(value: &str) -> String {
-    value
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(240)
-        .collect()
+    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.chars().count() <= 240 {
+        normalized
+    } else {
+        normalized
+            .chars()
+            .take(239)
+            .chain(std::iter::once('…'))
+            .collect()
+    }
+}
+
+fn selection_limit(limit: usize) -> Result<usize> {
+    if limit == 0 {
+        return Err(Error::domain("limit_invalid", "limit must be positive"));
+    }
+    limit
+        .checked_add(1)
+        .ok_or_else(|| Error::domain("limit_invalid", "limit is too large"))
+}
+fn trim_page<T>(items: &mut Vec<T>, limit: usize) -> bool {
+    let has_more = items.len() > limit;
+    items.truncate(limit);
+    has_more
+}
+fn page_human(mut text: String, has_more: bool) -> String {
+    if has_more {
+        text.push_str("\nMore results available; increase --limit.");
+    }
+    text
 }

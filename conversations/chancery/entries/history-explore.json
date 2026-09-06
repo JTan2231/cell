@@ -1,6 +1,6 @@
 {
   "id": "conversations.history.explore",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -77,9 +77,10 @@
       {"status": "unsupported", "statement": "Raw Codex file paths, SQLite queries, task mutations, arbitrary JSON-RPC methods, credential material, and private internal item kinds are not supported inputs."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "List and exact-summary reads return typed ThreadSummary metadata; show, search, and export return typed user-and-assistant-only normalized records with stable references."},
-      {"status": "declared", "statement": "Activity returns one completed turn's timing, status, user and assistant message counts, and stable references plus change counts for structurally valid completed nonempty file-change items, without bodies, paths, or diffs."},
-      {"status": "declared", "statement": "Refresh returns active and archived metadata counts after permitting App Server's own scan-and-repair path and never loads message content."}
+      {
+        "status": "declared",
+        "statement": "CLI list/search return schema-two selections with has_more and a positive --limit default of 20. List rows contain reference, title, archive/update/source/runtime-status metadata. Search emits one thread hit per title match and separate message hits with stable reference, title, role and at most 240 Unicode characters of marked matching excerpt; it declares the optional thread_limit scope. Show and export retain complete normalized user/assistant transcripts; --json changes encoding only. Activity remains content-free and refresh returns metadata counts. Rust metadata methods retain complete ThreadSummary values."
+      }
     ],
     "data_semantics": [
       {"status": "declared", "statement": "The default corpus is active and archived interactive root tasks; subagents and exec tasks are included only by explicit independent filters, and copied fork items are deduplicated by item ID for snapshot, search, and export."},
@@ -110,7 +111,7 @@
       {"status": "unspecified", "statement": "No App Server availability, wall-clock latency, corpus-size, throughput, or perpetual history-retention service-level objective is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 3 preserves the typed normalized schema, complete-read failure, explicit refresh, exact summary, activity separation, stable host references, and the narrow -32601 legacy fallback."},
+      {"status": "declared", "statement": "Capability contract version 4 preserves the typed normalized schema, complete-read failure, explicit refresh, exact summary, activity separation, stable host references, and the narrow -32601 legacy fallback."},
       {"status": "declared", "statement": "The selected Codex CLI and recorded task CLI versions may differ; doctor reports compatibility observations without converting them into machine-wide liveness."},
       {"status": "unspecified", "statement": "No App Server protocol support window, future source-kind guarantee, or deprecation period for this capability version is promised."}
     ],

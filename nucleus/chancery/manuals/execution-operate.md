@@ -189,3 +189,7 @@ probe. Retirement is limited to requester `nucleus-deployment`, label
 that requester ID. It removes only those jobs, their attempts, and raw output;
 children, tool calls, or unfinished work block retirement. Ordinary job history
 and shared schemas remain unchanged. This is not a general pruning API.
+
+## Output selection
+
+Existing health, account, submission, job show, log, mailbox, cancellation and service results retain protocol-one meaning. jobs status returns runtime/requester identity, current attempt state/ID, pending call IDs/names, final-output availability and terminal reason/message. jobs wait --timeout 60 returns one terminal or timeout observation and never cancels on timeout. Status uses successive mailbox/job reads rather than an atomic snapshot; initial read errors remain errors. jobs list defaults to 20 with its existing continuation.

@@ -262,3 +262,7 @@ the same gate. Databases with multiple hard links are rejected because their
 state root cannot identify one authoritative admission gate. Database paths
 in command receipts use this canonical identity; backup receipts retain the
 caller-selected backup path.
+
+## Output selection
+
+Update views preserve domain state, Nucleus correlation and runtime settlement, result-post status, failures and complete advisory/attention. Update list defaults to 20 with has_more and positive --limit for more; show/wait/resume/retry retain the complete selected operational view.

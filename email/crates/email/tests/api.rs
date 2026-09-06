@@ -9,6 +9,6 @@ fn message_and_receipt_use_the_owned_interface() -> Result<(), Box<dyn std::erro
     let receipt = Receipt {
         id: "message-1".into(),
     };
-    assert_eq!(receipt.to_string(), "Sent message-1");
+    assert_eq!(receipt.to_string(), "Accepted message-1");
     Ok(())
 }

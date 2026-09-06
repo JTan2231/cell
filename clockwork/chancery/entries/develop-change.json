@@ -69,8 +69,8 @@
     "The requested behavior cannot be represented within Clockwork's reviewed short-lived v0.1 boundary."
   ],
   "dependencies": [
-    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "chancery.provider.publish", "min_contract": 3, "max_contract_exclusive": 4}
+    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3},
+    {"id": "chancery.provider.publish", "min_contract": 4, "max_contract_exclusive": 5}
   ],
   "does_not_authorize": [
     "Running `release.sh`, deploying an installed Clockwork release, switching a product binding, or invoking a product job.",

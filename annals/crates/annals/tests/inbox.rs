@@ -667,6 +667,14 @@ fn failed_decision_stays_terminal_and_retry_creates_a_linked_child() -> TestResu
         "--reason",
         "retry a bounded model failure",
     ])?;
+    assert!(retried.get("items").is_none());
+    let retried = installation.json_ok([
+        "inbox",
+        "retry",
+        "status",
+        &retried["event"]["id"].to_string(),
+        "--details",
+    ])?;
     assert_eq!(retried["summary"]["selected"], 1);
     assert_eq!(retried["summary"]["attempted"], 1);
     assert_eq!(retried["summary"]["applied"], 1);
@@ -2905,6 +2913,14 @@ fn bounded_retry_event_reexamines_retained_failures_and_preserves_originals() ->
         "--reason",
         "recover the bounded authentication outage",
     ])?;
+    assert!(completed.get("items").is_none());
+    let completed = installation.json_ok([
+        "inbox",
+        "retry",
+        "status",
+        &completed["event"]["id"].to_string(),
+        "--details",
+    ])?;
     assert_eq!(completed["event"]["id"], 1);
     assert_eq!(completed["event"]["state"], "completed");
     assert_eq!(
@@ -3017,7 +3033,7 @@ fn halted_retry_continues_only_unattempted_children() -> TestResult {
         .output()?;
     failed_json(&output, "inbox_retry_event_halted")?;
 
-    let halted = installation.json_ok(["inbox", "retry", "status", "1"])?;
+    let halted = installation.json_ok(["inbox", "retry", "status", "1", "--details"])?;
     assert_eq!(halted["event"]["state"], "halted");
     assert_eq!(halted["event"]["last_halt"]["code"], "model_runner_failed");
     assert!(
@@ -3038,6 +3054,14 @@ fn halted_retry_continues_only_unattempted_children() -> TestResult {
     failed_json(&resume_while_open, "inbox_retry_event_active")?;
 
     let completed = installation.json_ok(["inbox", "retry", "continue", "1"])?;
+    assert!(completed.get("items").is_none());
+    let completed = installation.json_ok([
+        "inbox",
+        "retry",
+        "status",
+        &completed["event"]["id"].to_string(),
+        "--details",
+    ])?;
     assert_eq!(completed["event"]["state"], "completed");
     assert_eq!(completed["summary"]["attempted"], 3);
     assert_eq!(completed["summary"]["applied"], 2);
@@ -3133,6 +3157,14 @@ fn retry_reexamines_a_pending_reconciliation_that_becomes_stale_in_the_event() -
         "--through",
         "j00000000000000000002",
     ])?;
+    assert!(completed.get("items").is_none());
+    let completed = installation.json_ok([
+        "inbox",
+        "retry",
+        "status",
+        &completed["event"]["id"].to_string(),
+        "--details",
+    ])?;
     assert_eq!(completed["event"]["state"], "completed");
     assert_eq!(completed["summary"]["applied"], 2);
     assert_eq!(completed["summary"]["failed"], 0);
@@ -3180,6 +3212,14 @@ fn retry_does_not_adopt_an_unlinked_reconciliation_for_the_same_work() -> TestRe
     let job = "j00000000000000000001";
     let completed =
         installation.json_ok(["inbox", "retry", "start", "--from", job, "--through", job])?;
+    assert!(completed.get("items").is_none());
+    let completed = installation.json_ok([
+        "inbox",
+        "retry",
+        "status",
+        &completed["event"]["id"].to_string(),
+        "--details",
+    ])?;
     assert_eq!(completed["summary"]["applied"], 1);
     assert_eq!(fs::read_to_string(&installation.counter)?, "3\n");
     let child = archived_receipt(&installation.inbox, "done", "j00000000000000000002")?;
@@ -3244,7 +3284,7 @@ fn retry_auth_preflight_halts_before_any_child_attempt() -> TestResult {
         .output()?;
     failed_json(&output, "model_auth_unavailable")?;
 
-    let halted = installation.json_ok(["inbox", "retry", "status", "1"])?;
+    let halted = installation.json_ok(["inbox", "retry", "status", "1", "--details"])?;
     assert_eq!(halted["event"]["state"], "halted");
     assert_eq!(halted["summary"]["attempted"], 0);
     assert_eq!(halted["summary"]["remaining"], 1);
@@ -3260,6 +3300,14 @@ fn retry_auth_preflight_halts_before_any_child_attempt() -> TestResult {
     assert_eq!(fs::read_to_string(&installation.counter)?, "1\n");
 
     let completed = installation.json_ok(["inbox", "retry", "continue", "1"])?;
+    assert!(completed.get("items").is_none());
+    let completed = installation.json_ok([
+        "inbox",
+        "retry",
+        "status",
+        &completed["event"]["id"].to_string(),
+        "--details",
+    ])?;
     assert_eq!(completed["event"]["state"], "completed");
     assert_eq!(completed["summary"]["applied"], 1);
     assert_eq!(completed["summary"]["remaining"], 0);
@@ -3287,7 +3335,7 @@ fn retry_low_storage_halts_before_any_child_attempt() -> TestResult {
         .output()?;
     failed_json(&output, "insufficient_storage")?;
 
-    let halted = installation.json_ok(["inbox", "retry", "status", "1"])?;
+    let halted = installation.json_ok(["inbox", "retry", "status", "1", "--details"])?;
     assert_eq!(halted["event"]["state"], "halted");
     assert_eq!(halted["event"]["last_halt"]["code"], "insufficient_storage");
     assert_eq!(halted["summary"]["attempted"], 0);
@@ -3304,6 +3352,14 @@ fn retry_low_storage_halts_before_any_child_attempt() -> TestResult {
 
     installation.set_minimum_available_bytes(0)?;
     let completed = installation.json_ok(["inbox", "retry", "continue", "1"])?;
+    assert!(completed.get("items").is_none());
+    let completed = installation.json_ok([
+        "inbox",
+        "retry",
+        "status",
+        &completed["event"]["id"].to_string(),
+        "--details",
+    ])?;
     assert_eq!(completed["event"]["state"], "completed");
     assert_eq!(completed["summary"]["applied"], 1);
     assert_eq!(completed["summary"]["remaining"], 0);

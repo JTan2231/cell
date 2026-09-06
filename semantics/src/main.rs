@@ -148,6 +148,9 @@ struct RepositoryArgs {
 enum RepositoryCommand {
     Show {
         project: String,
+        /// Include complete grounding and withdrawal history.
+        #[arg(long)]
+        provenance: bool,
         #[arg(long)]
         revision: Option<u64>,
     },
@@ -298,7 +301,14 @@ fn project_command(store: &Store, command: ProjectCommand, compact: bool) -> Res
             store.register_project_with_account_feed(&id, &root, &library_id, &cursor)?;
             print(&store.project_detail(&id)?, compact)
         }
-        ProjectCommand::List => print(&store.list_projects()?, compact),
+        ProjectCommand::List => print(
+            &store
+                .list_projects()?
+                .iter()
+                .map(semantics::api::ProjectSummary::from)
+                .collect::<Vec<_>>(),
+            compact,
+        ),
         ProjectCommand::Show { id } => print(&store.project_detail(&id)?, compact),
         ProjectCommand::Move { id, root } => {
             let root = canonical_directory(&root)?;
@@ -344,8 +354,17 @@ fn project_command(store: &Store, command: ProjectCommand, compact: bool) -> Res
 
 fn repository_command(store: &Store, command: RepositoryCommand, compact: bool) -> Result<()> {
     match command {
-        RepositoryCommand::Show { project, revision } => {
-            print(&store.repository(&project, revision)?, compact)
+        RepositoryCommand::Show {
+            project,
+            revision,
+            provenance,
+        } => {
+            let repository = store.repository(&project, revision)?;
+            if provenance {
+                print(&repository, compact)
+            } else {
+                print(&semantics::api::RepositoryView::from(&repository), compact)
+            }
         }
         RepositoryCommand::Search {
             project,
@@ -354,15 +373,12 @@ fn repository_command(store: &Store, command: RepositoryCommand, compact: bool) 
         } => {
             let repository = store.repository(&project, revision)?;
             let needle = query.to_lowercase();
-            let hits = repository
-                .concepts
-                .values()
-                .filter(|concept| {
-                    concept.label.to_lowercase().contains(&needle)
-                        || concept.meaning.to_lowercase().contains(&needle)
-                })
-                .collect::<Vec<_>>();
-            print(&hits, compact)
+            let mut view = semantics::api::RepositoryView::from(&repository);
+            view.concepts.retain(|_, concept| {
+                concept.label.to_lowercase().contains(&needle)
+                    || concept.meaning.to_lowercase().contains(&needle)
+            });
+            print(&view, compact)
         }
         RepositoryCommand::Log { project, from, to } => {
             print(&store.revisions(&project, from, to)?, compact)

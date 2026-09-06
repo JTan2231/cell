@@ -22,3 +22,7 @@ Rust operational callers use `decisions::api::Client` with exported hook input,
 activation, processing, status, reconciliation, and diagnostic types. Methods
 invoke the same explicit CLI operations and retain their effects and authority
 requirements. Retired digest/review commands are not available in this client.
+
+## Output selection
+
+Activation, hook, process and Annals acceptance receipts retain their documented identity and domain meaning. Observer status retains complete counts and at most 20 failure IDs/codes by default, with failures_has_more and positive --limit for more. Full source-account and legacy lifecycle reads preserve their existing schemas and authority.

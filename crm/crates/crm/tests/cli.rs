@@ -82,6 +82,19 @@ fn omitted_case_input_uses_the_suggested_unenforced_structure() {
     assert!(created.status.success());
     let value: serde_json::Value =
         serde_json::from_slice(&created.stdout).expect("JSON case creation");
+    assert!(value["data"]["case"].get("markdown").is_none());
+    let shown = crm()
+        .arg("--database")
+        .arg(&database)
+        .args([
+            "--json",
+            "case",
+            "show",
+            value["data"]["case"]["case_id"].as_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&shown.stdout).unwrap();
     assert_eq!(
         value["data"]["case"]["markdown"],
         "# Taylor\n\n## Current picture\n\n## People\n\n## Chronicle\n\n## Open threads\n"
@@ -336,4 +349,60 @@ fn database_aliases_cannot_bypass_deployment_admission() {
         let value: serde_json::Value = serde_json::from_slice(&output.stderr).unwrap();
         assert_eq!(value["error"]["code"], "deployment_maintenance");
     }
+}
+
+#[test]
+fn selection_pages_bound_bodies_and_search_excerpts_point_to_matches() {
+    let (_temporary, database) = fixture();
+    let store = Store::open(&database).expect("open fixture");
+    let body = "雪".repeat(4096);
+    for index in 0..21 {
+        store
+            .create_profile_entry(&format!("Profile {index}"), &body)
+            .expect("create profile");
+    }
+    let output = crm()
+        .arg("--database")
+        .arg(&database)
+        .args(["--json", "profile", "list"])
+        .output()
+        .expect("list profiles");
+    assert!(output.status.success());
+    let page: serde_json::Value = serde_json::from_slice(&output.stdout).expect("decode page");
+    assert_eq!(page["data"]["entries"].as_array().map(Vec::len), Some(20));
+    assert_eq!(page["data"]["has_more"], true);
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("body_md"));
+    let output = crm()
+        .arg("--database")
+        .arg(&database)
+        .args(["--json", "profile", "list", "--limit", "21"])
+        .output()
+        .expect("expand profiles");
+    let page: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("decode expanded page");
+    assert_eq!(page["data"]["entries"].as_array().map(Vec::len), Some(21));
+    assert_eq!(page["data"]["has_more"], false);
+    let markdown = format!("{body} distinctive match {}", "尾".repeat(4096));
+    let case = store
+        .create_case("Case", &markdown, Stage::Research)
+        .expect("create case");
+    let hits = store
+        .search("distinctive match", 20)
+        .expect("search near end");
+    assert_eq!(hits.len(), 1);
+    let hit = serde_json::to_value(&hits[0]).expect("encode hit");
+    assert_eq!(hit["matched_field"], "markdown");
+    assert_eq!(hit["excerpt"], true);
+    let snippet = hit["snippet"].as_str().expect("excerpt");
+    assert!(snippet.contains("distinctive match"));
+    assert!(snippet.chars().count() <= 240);
+    let output = crm()
+        .arg("--database")
+        .arg(&database)
+        .args(["--json", "case", "show", &case.case_id])
+        .output()
+        .expect("read full case");
+    let shown: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("decode full case");
+    assert_eq!(shown["data"]["case"]["markdown"], markdown);
 }

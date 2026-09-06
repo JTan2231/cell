@@ -102,8 +102,8 @@ pub struct ReconciliationResult {
     pub status: String,
     pub summary: String,
     pub operation_count: usize,
-    pub annotations: Vec<String>,
-    pub reconciliation: Reconciliation,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reconciliation: Option<Reconciliation>,
     pub created_at: String,
     pub applied_revision: Option<i64>,
 }
@@ -124,8 +124,7 @@ pub struct AppliedReconciliation {
     pub revision: i64,
     pub status: String,
     pub summary: String,
-    pub annotations: Vec<String>,
-    pub reconciliation: Reconciliation,
+    pub operation_count: usize,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -188,6 +187,7 @@ pub struct RevertResult {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RetryEventsResult {
     pub events: Vec<RetryEvent>,
+    pub has_more: bool,
 }
 
 /// A read-only library handle. It exposes owned views, never a database connection.
@@ -408,4 +408,19 @@ impl LibraryReader {
     ) -> Result<crate::graph::GraphView<'_>, AppError> {
         crate::graph::GraphReader::new(&self.connection).paged_at(revision, cursor)
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SelectionPage<T> {
+    pub schema_version: u32,
+    pub items: Vec<T>,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RetryStatus {
+    pub event: RetryEvent,
+    pub summary: crate::inbox_retry_store::RetrySummary,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub items: Option<Vec<crate::inbox_retry_store::RetryItem>>,
 }

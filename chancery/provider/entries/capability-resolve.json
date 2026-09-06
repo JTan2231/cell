@@ -1,6 +1,6 @@
 {
   "id": "chancery.capability.resolve",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -84,11 +84,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The result contains resolution status, root dossier, stable transitive dependency dossier list, contract and facet requirement results, declaration and dependency-closure states, readiness classification, gaps, and registry issues."
-      },
-      {
-        "status": "declared",
-        "statement": "Each dossier contains provider identity and schema, provider promise scope, complete entry JSON and manual, facet coverage, dependency statuses, and paths plus SHA-256 digests for the exact provider manifest, entry, and manual bytes."
+        "statement": "Resolve retains the complete root and transitive dependency dossiers, exact bases, requirements, declaration/closure status, readiness, gaps and issues. Human output puts outcome and gaps first. --summary selects only outcome, requirements, status, readiness, gaps and issues with identical exit semantics; JSON output schema is 3."
       }
     ],
     "data_semantics": [
@@ -174,7 +170,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Resolver contract version 1 reads provider schemas 1, 2, and 3; schemas 1 and 2 resolve with explicit missing scope and normalized-facet gaps."
+        "statement": "Resolver contract version 2 reads provider schemas 1, 2, and 3; schemas 1 and 2 resolve with explicit missing scope and normalized-facet gaps."
       },
       {
         "status": "declared",

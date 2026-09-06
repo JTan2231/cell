@@ -58,6 +58,9 @@ pub(crate) struct ListArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct ShowArgs {
+    /// Include structured authoring claims as well as the operating manual.
+    #[arg(long)]
+    pub(crate) full: bool,
     /// Stable capability or operation ID.
     #[arg(value_name = "ID")]
     pub(crate) id: String,
@@ -65,6 +68,9 @@ pub(crate) struct ShowArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct ResolveArgs {
+    /// Return outcome, requirements and gaps without the complete contract dossiers.
+    #[arg(long)]
+    pub(crate) summary: bool,
     /// Exact stable capability or operation ID. Chancery does not match natural-language requests.
     #[arg(value_name = "ID")]
     pub(crate) id: String,

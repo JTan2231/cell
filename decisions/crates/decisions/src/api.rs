@@ -27,6 +27,7 @@ pub struct Observation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObservationStatus {
+    pub failures_has_more: bool,
     pub observer_baseline_at: Option<i64>,
     pub queued: usize,
     pub processing: usize,
@@ -238,6 +239,16 @@ impl Client {
 
     pub fn status(&self, date: Option<&str>) -> Result<ObservationStatus, ClientError> {
         self.json(&dated("status", date), None)
+    }
+
+    pub fn status_limit(
+        &self,
+        date: Option<&str>,
+        limit: usize,
+    ) -> Result<ObservationStatus, ClientError> {
+        let mut args = dated("status", date);
+        args.extend(["--limit".into(), limit.to_string().into()]);
+        self.json(&args, None)
     }
 
     pub fn reconcile(&self, date: Option<&str>) -> Result<ReconcileResult, ClientError> {

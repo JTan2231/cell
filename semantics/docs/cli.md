@@ -86,7 +86,7 @@ overrides exist only for isolated tests.
 ## Repository
 
 ```text
-semantics repository show PROJECT [--revision N]
+semantics repository show PROJECT [--revision N] [--provenance]
 semantics repository search PROJECT QUERY [--revision N]
 semantics repository log PROJECT [--from N] [--to N]
 semantics repository diff PROJECT FROM TO
@@ -153,3 +153,11 @@ Deployment gate identity follows the canonical database path (including a
 symlink alias), or the canonical existing ancestor for a new database.
 Hardlinked databases are rejected before admission. Maintenance status still
 does not open or initialize the database.
+
+Project lists select stable ID, canonical current path, status and HEAD.
+Ordinary repository show/search select schema version 2, project identity,
+revision and concepts with ID, label, complete meaning, active state,
+replacement and complete distinctions. `show --provenance` retains the full
+original full replay representation. Rust callers use `RepositoryView` for the
+ordinary read and `Client::repository_provenance` for the full replay.
+These are output projections, with no persistent schema or replay change.

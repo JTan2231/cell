@@ -1,6 +1,6 @@
 {
   "id": "clockwork.schedule.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -77,7 +77,7 @@
       {"status": "unsupported", "statement": "PATH lookup, relative or symbolic launch paths, mutable release selectors, shell strings, `-c`, globbing, interpolation, inherited environment, implicit shebang selection, secret-looking environment names, and caller-supplied runtime argv are rejected."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Registration returns an immutable definition digest computed as SHA-256 over canonical JSON of the fully concrete normalized manifest; binding operations return coherent selected or disabled state; inspection returns definition, binding, and activation metadata; run returns the one direct child's recorded runtime outcome."},
+      {"status": "declared", "statement": "Registration and binding mutations retain definition/binding receipts; run retains one direct-child runtime outcome. Definition/binding lists and history return output-version-two items/has_more pages defaulting to 20 with positive --limit for more. History selects activation ID/key, trigger, timestamps, state, exit/signal and failure detail; --details includes definition digest and process IDs. Definition/binding show remain full selected metadata reads."},
       {"status": "unsupported", "statement": "Clockwork returns no captured output body, product-domain result, retry plan, timer-delivery receipt, or transitive executable attestation."}
     ],
     "data_semantics": [
@@ -108,7 +108,7 @@
       {"status": "unsupported", "statement": "There is no daemon, HTTP API, queue, workflow edge, dependency trigger, fan-out, retry/backoff engine, distributed lock, secret store, output capture, log rotation, cron expression, system service, or compare-and-swap binding precondition for a product's earlier ownership inspection; stable keys are not authentication between same-user processes."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1, schema-one TOML definition format, SQLite schema one, provider release, product release identity, and each immutable definition remain separate compatibility axes."},
+      {"status": "declared", "statement": "Capability contract version 2, schema-one TOML definition format, SQLite schema one, provider release, product release identity, and each immutable definition remain separate compatibility axes."},
       {"status": "declared", "statement": "Changed registered meaning creates a new definition identity and explicit binding switch; incompatible storage or manifest meaning requires a successor schema and migration while historical activation decoding remains available."},
       {"status": "unspecified", "statement": "No universal retention horizon, deprecation interval, cross-release migration window, or release cadence is promised."}
     ],

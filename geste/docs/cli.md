@@ -116,3 +116,12 @@ Use the provider-owned `geste::api::Client`, `Request`, and `Data` for typed
 CLI calls. The client preserves the documented envelope and successful stderr
 diagnostics, performs no automatic retries, and uses the same command effects
 and recovery rules. See [Rust interface](rust-api.md) for the exported boundary.
+
+## Output selection
+
+The CLI envelope uses `schema_version: 2`. Create and revise return only episode
+identity and committed revision. `episode show` returns the complete selected
+snapshot; report and graph retain their detailed read contracts. List and search
+default to 20 selection rows, report `has_more`, and accept a larger positive
+`--limit`. `--json` changes encoding only. Capture documents and persisted records
+retain schema version 1.

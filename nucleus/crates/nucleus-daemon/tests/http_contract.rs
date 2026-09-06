@@ -785,6 +785,19 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
         .await
         .or_panic("long-poll for tool call");
     assert_eq!(pending.calls.len(), 1);
+    let waited = fixture
+        .client
+        .wait_job(&tool_request.id, Duration::ZERO)
+        .await
+        .or_panic("zero-timeout status observation");
+    assert_eq!(waited.outcome, "timeout");
+    assert_eq!(waited.status.pending_tool_calls.len(), 1);
+    assert_eq!(waited.status.pending_tool_calls[0].tool_name, "read_todo");
+    let compact = serde_json::to_value(&waited).or_panic("encode wait status");
+    assert!(!compact.to_string().contains("USE_TOOL"));
+    assert!(!compact.to_string().contains("arguments"));
+    assert!(!waited.status.final_output_available);
+
     let waiting_execution = fixture
         .client
         .health()
@@ -846,6 +859,16 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
         .or_panic("post schema-bound tool result");
     assert_eq!(answered.state, ToolCallState::Answered);
     wait_for_state(&fixture, &tool_request.id, JobState::Completed).await;
+    let waited = fixture
+        .client
+        .wait_job(&tool_request.id, Duration::from_secs(5))
+        .await
+        .or_panic("wait for completed tool job");
+    assert_eq!(waited.outcome, "terminal");
+    assert_eq!(waited.status.state, JobState::Completed);
+    assert!(waited.status.pending_tool_calls.is_empty());
+    assert!(waited.status.final_output_available);
+
     let tool_logs = fixture
         .client
         .logs(&tool_request.id, &LogsQueryV1::default())

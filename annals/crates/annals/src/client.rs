@@ -15,9 +15,9 @@ use crate::api::{
     InboxRetryWindowArgs, InboxStatus, InitializedLibrary, InterruptSummary, LatelyReport,
     LibraryStats, LogResult, MigratedLibrary, PagedAtArgs, ParentsResult, PauseSummary,
     PrioritySummary, ReconciliationResult, ReconciliationView, RecordedChangeView,
-    RegistrationSummary, Request, RetentionResult, RetryEventReport, RetryEventsResult,
-    RetrySelection, RevertResult, RootsResult, RunSummary, SearchOutput, ShakeResult,
-    SuccessEnvelope, ValidatedReconciliation, WorkCommand, WorkContent, WorkSummary,
+    RegistrationSummary, Request, RetentionResult, RetryEventsResult, RetrySelection, RevertResult,
+    RootsResult, RunSummary, SearchOutput, ShakeResult, SuccessEnvelope, ValidatedReconciliation,
+    WorkCommand, WorkContent, WorkSummary,
 };
 use crate::cli::Command;
 
@@ -39,12 +39,12 @@ pub enum Response {
     Shake(ShakeResult),
     Backup(BackupResult),
     Retained(RetentionResult),
-    Works(Vec<WorkSummary>),
+    Works(crate::api::SelectionPage<WorkSummary>),
     Work(WorkContent),
     Reconciliation(ReconciliationResult),
     Applied(AppliedReconciliation),
     Validated(ValidatedReconciliation),
-    Reconciliations(Vec<ReconciliationView>),
+    Reconciliations(crate::api::SelectionPage<ReconciliationView>),
     RecordedChange(RecordedChangeView),
     Search(SearchOutput),
     Lately(LatelyReport),
@@ -60,7 +60,7 @@ pub enum Response {
     Paused(PauseSummary),
     Interrupted(InterruptSummary),
     RetrySelection(RetrySelection),
-    RetryEvent(RetryEventReport),
+    RetryEvent(crate::api::RetryStatus),
     RetryEvents(RetryEventsResult),
     InboxStatus(InboxStatus),
     Watermark(annals_api::Watermark),
@@ -308,7 +308,10 @@ fn arguments(request: &Request) -> Result<Vec<OsString>, ClientError> {
         Command::Work(v) => {
             a.push("work".into());
             match v {
-                WorkCommand::List => a.push("list".into()),
+                WorkCommand::List { limit } => {
+                    a.push("list".into());
+                    number(&mut a, "--limit", limit);
+                }
                 WorkCommand::Show(v) => {
                     a.push("show".into());
                     positional(&mut a, [v.label.clone().into()]);
@@ -354,7 +357,10 @@ fn arguments(request: &Request) -> Result<Vec<OsString>, ClientError> {
         Command::Change(v) => {
             a.push("change".into());
             match v {
-                ChangeCommand::List => a.push("list".into()),
+                ChangeCommand::List { limit } => {
+                    a.push("list".into());
+                    number(&mut a, "--limit", limit);
+                }
                 ChangeCommand::Submit(v) => {
                     a.push("submit".into());
                     option(&mut a, "--work", &v.work);
@@ -488,6 +494,10 @@ fn inbox_arguments(a: &mut Vec<OsString>, request: &InboxCommand) -> Result<(), 
                 }
                 InboxRetryCommand::Status(v) => {
                     a.push("status".into());
+                    if v.details {
+                        a.push("--details".into());
+                    }
+                    number(a, "--limit", v.limit);
                     if let Some(id) = v.event_id {
                         positional(a, [id.to_string().into()]);
                     }
@@ -528,7 +538,7 @@ fn response(request: &Request, data: Value) -> Result<Response, ClientError> {
         },
         Command::Work(v) => match v {
             WorkCommand::Add(_) => decode!(Retained),
-            WorkCommand::List => decode!(Works),
+            WorkCommand::List { .. } => decode!(Works),
             WorkCommand::Show(_) => decode!(Work),
         },
         Command::Integrate(_) => {
@@ -543,7 +553,7 @@ fn response(request: &Request, data: Value) -> Result<Response, ClientError> {
             ChangeCommand::Submit(_) | ChangeCommand::Show(_) => decode!(Reconciliation),
             ChangeCommand::Validate(_) => decode!(Validated),
             ChangeCommand::Apply(_) => decode!(Applied),
-            ChangeCommand::List => decode!(Reconciliations),
+            ChangeCommand::List { .. } => decode!(Reconciliations),
         },
         Command::Search(_) => decode!(Search),
         Command::Lately(_) => decode!(Lately),

@@ -1,6 +1,6 @@
 {
   "id": "chancery.provider.publish",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -51,7 +51,7 @@
     }
   ],
   "dependencies": [
-    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "session_surfaces": [
     "product source tree",
@@ -111,7 +111,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The product source contains one schema-valid provider scope, indexed entry set, normalized declarations where onboarded, manuals, dependency bounds, and packaging tests suitable for a matching product release."
+        "statement": "The authored bundle contains scoped provider promises, indexed entries, normalized claims and synchronized self-contained operating manuals. Ordinary show renders each manual once; it must contain all applicability, interfaces, effects, authority, success, recovery, privacy, exclusions and checkpoints needed for correct use. show --full and resolve retain the authoring and complete outward declarations. Structural validation does not prove prose completeness."
       }
     ],
     "data_semantics": [

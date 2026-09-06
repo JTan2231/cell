@@ -1,6 +1,6 @@
 {
   "id": "chancery.directory.discover",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -75,7 +75,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "List emits catalog cards and registry issues; show emits the selected provider identity, complete entry document, dependency statuses, manual, availability, compatibility, readiness classification, and registry issues."
+        "statement": "List returns all IDs, titles and summaries grouped by mode, with shared status defaults and per-entry exceptions. Show returns identity, provider release, dependency/readiness facts, issues and the complete operating manual once; --full also returns structured authoring fields and normalized claims. JSON output schema 3 honors the same content selection."
       }
     ],
     "data_semantics": [

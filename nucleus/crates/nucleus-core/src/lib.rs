@@ -766,6 +766,35 @@ pub struct JobV1 {
     pub attempts: Vec<AttemptV1>,
 }
 
+/// Compact read-time observation; runtime state never establishes requester-domain success.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobStatusV1 {
+    pub version: u32,
+    pub id: JobId,
+    pub requester: Requester,
+    pub state: JobState,
+    pub attempt_id: Option<AttemptId>,
+    pub attempt_state: Option<AttemptState>,
+    pub pending_tool_calls: Vec<ToolCallSummaryV1>,
+    pub final_output_available: bool,
+    pub terminal_reason: Option<AttemptTerminalReason>,
+    pub terminal_message: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallSummaryV1 {
+    pub id: ToolCallId,
+    pub tool_name: String,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobWaitV1 {
+    pub status: JobStatusV1,
+    /// `terminal` or `timeout`; a timeout does not cancel the job.
+    pub outcome: String,
+}
+
 /// Durable deployment admission status. Existing jobs and mailbox traffic can
 /// continue while new submissions are held.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

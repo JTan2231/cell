@@ -34,7 +34,7 @@ short bounded delays. Other Resend rejections fail immediately.
 On acceptance, stdout is:
 
 ```text
-Sent <resend-message-id>
+Accepted <resend-message-id>
 ```
 
 and the process exits zero. Errors use the `email: ` prefix on stderr, omit the

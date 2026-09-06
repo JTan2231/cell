@@ -2,7 +2,9 @@
 #![allow(clippy::missing_errors_doc)]
 
 pub use crate::budget::BudgetReport;
-pub use crate::report::{ConsumptionReport, DeliveryReport, ResponseUsage, RunReport};
+pub use crate::report::{
+    ConsumptionReport, ConsumptionSummary, DeliveryReport, ResponseUsage, RunReport, RunSummary,
+};
 pub use crate::types::{ThreadTokenUsage, TokenUsageBreakdown};
 use std::path::PathBuf;
 
@@ -63,8 +65,11 @@ impl Client {
             .map_err(|e| Error(format!("invalid Annals Usage response: {e}")))
     }
     /// Calculate a fresh report from the existing authorities.
-    pub fn report(&self, limit: usize) -> Result<ConsumptionReport, Error> {
+    pub fn report(&self, limit: usize) -> Result<ConsumptionSummary, Error> {
         self.read("report", &["--limit", &limit.to_string()])
+    }
+    pub fn report_details(&self, limit: usize) -> Result<ConsumptionReport, Error> {
+        self.read("report", &["--details", "--limit", &limit.to_string()])
     }
     pub fn budget(&self) -> Result<BudgetReport, Error> {
         self.read("budget", &[])

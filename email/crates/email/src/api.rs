@@ -19,7 +19,7 @@ pub struct Receipt {
 
 impl std::fmt::Display for Receipt {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "Sent {}", self.id)
+        write!(formatter, "Accepted {}", self.id)
     }
 }
 

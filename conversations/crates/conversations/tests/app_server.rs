@@ -50,6 +50,9 @@ while IFS= read -r line; do
                 *'"cursor":"active-next"'*)
                     printf '{"id":%s,"result":{"data":[],"nextCursor":null}}\n' "$id"
                     ;;
+                *'"searchTerm":"legacy"'*)
+                    printf '{"id":%s,"result":{"data":[],"nextCursor":null}}\n' "$id"
+                    ;;
                 *)
                     printf '{"id":%s,"result":{"data":[{"id":"sub-new","sessionId":"root-active","name":"Subagent work","preview":"child","cwd":"/work","source":{"subAgent":{"thread_spawn":{"parent_thread_id":"root-active","depth":1}}},"parentThreadId":"root-active","forkedFromId":null,"cliVersion":"0.9.0-fake","ephemeral":false,"createdAt":30,"updatedAt":300,"status":{"type":"notLoaded"}},{"id":"old-sub-no-parent","sessionId":"root-active","name":"Old subagent","preview":"old child","cwd":"/work","source":{"subAgent":"review"},"parentThreadId":null,"forkedFromId":null,"cliVersion":"0.9.0-fake","ephemeral":false,"createdAt":29,"updatedAt":290,"status":{"type":"notLoaded"}},{"id":"exec-task","sessionId":"exec-task","name":"Batch work","preview":"exec","cwd":"/work","source":"exec","parentThreadId":null,"forkedFromId":null,"cliVersion":"0.9.0-fake","ephemeral":false,"createdAt":28,"updatedAt":280,"status":{"type":"notLoaded"}},{"id":"root-active","sessionId":"root-active","name":"Current choice","preview":"Choose","cwd":"/work","source":"appServer","parentThreadId":null,"forkedFromId":null,"cliVersion":"0.9.0-fake","ephemeral":false,"createdAt":20,"updatedAt":200,"status":{"type":"active","activeFlags":[]}}],"nextCursor":"active-next"}}\n' "$id"
                     ;;
@@ -506,10 +509,18 @@ fn full_text_search_refresh_and_doctor_keep_boundaries_explicit() {
     let mut client = client(script);
 
     let hits = must(client.search("legacy", &ListOptions::default()));
-    assert!(hits.iter().any(|hit| hit.message.text == "legacy decision"));
+    assert_eq!(hits.len(), 2);
+    assert_eq!(
+        hits.iter()
+            .filter(|hit| matches!(hit, conversations::SearchHit::Thread { .. }))
+            .count(),
+        1
+    );
+    assert!(hits.iter().all(|hit| !matches!(hit, conversations::SearchHit::Message { excerpt, .. } if excerpt == "accepted")));
+    assert!(hits.iter().any(|hit| matches!(hit, conversations::SearchHit::Message { excerpt, .. } if excerpt == "legacy decision")));
     assert!(
         hits.iter()
-            .all(|hit| hit.message.reference.item_id != "secret-tool")
+            .all(|hit| !matches!(hit, conversations::SearchHit::Message { reference, .. } if reference.item_id == "secret-tool"))
     );
 
     let refresh = must(client.refresh());
@@ -555,7 +566,7 @@ fn cli_stderr_policy_is_explicit_and_suppressible() {
                 "inherit",
                 "list",
                 "--limit",
-                "0",
+                "1",
             ])
             .output(),
     );
@@ -571,7 +582,7 @@ fn cli_stderr_policy_is_explicit_and_suppressible() {
                 "suppress",
                 "list",
                 "--limit",
-                "0",
+                "1",
             ])
             .output(),
     );

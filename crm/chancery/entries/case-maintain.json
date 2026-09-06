@@ -1,6 +1,6 @@
 {
   "id": "crm.case.maintain",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -58,7 +58,7 @@
     "Automatic retry, direct Codex execution, changing Nucleus, or replacing a terminal attempt by hand."
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
+    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4}
   ],
   "promise": {
     "consumers": [
@@ -72,7 +72,7 @@
       {"status": "declared", "statement": "Case creation accepts a title, optional raw Markdown input, and optional fixed stage; tell accepts one case, required raw text delivery, optional label, and opaque source reference."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Outputs identify the committed case or delivery/update, current progress and correlations including result-post and terminal runtime evidence, or an explicitly created successor update; machine output uses the documented ok/data or ok/error envelope."}
+      {"status": "declared", "statement": "Case creation returns a receipt with case ID, revision, stage, summary, complete advisory/attention and recorded time, without repeating Markdown. Tell durably returns its queued update and any activation warning. Exact case show retains full Markdown; runtime and domain settlement remain distinct."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "A revision is a complete immutable Markdown, stage, nullable advisory, and summary snapshot; a source reference is an unverified caller-supplied locator, and a stage is CRM state rather than real-world permission or proof."}
@@ -96,7 +96,7 @@
       {"status": "unspecified", "statement": "No steward completion latency, Nucleus availability, or employment outcome is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 uses database schema two, the documented JSON envelope, Nucleus toolset crm/case-steward/1, and the fixed six-stage vocabulary; incompatible meanings require explicit successor versions and retained decoding."}
+      {"status": "declared", "statement": "Capability contract version 2 uses database schema two, the documented JSON envelope, Nucleus toolset crm/case-steward/1, and the fixed six-stage vocabulary; incompatible meanings require explicit successor versions and retained decoding."}
     ],
     "reliances": [
       {"status": "declared", "statement": "Hidden steward attempts rely on Nucleus for compatible admission, authentication, supervised execution, job/output evidence, and durable delivery of the one managed tool call.", "target": "nucleus", "kind": "control", "contract": "nucleus.execution.operate"},

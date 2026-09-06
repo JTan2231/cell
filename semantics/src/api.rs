@@ -13,6 +13,72 @@ pub use crate::domain::{
     SemanticEffect,
 };
 
+/// Current terminology without grounding history. The source repository remains append-only.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConceptSummary {
+    pub id: String,
+    pub label: String,
+    pub meaning: String,
+    pub active: bool,
+    pub replacement_concept_id: Option<String>,
+    pub distinctions: Vec<Distinction>,
+}
+
+impl From<&Concept> for ConceptSummary {
+    fn from(concept: &Concept) -> Self {
+        Self {
+            id: concept.id.clone(),
+            label: concept.label.clone(),
+            meaning: concept.meaning.clone(),
+            active: concept.active,
+            replacement_concept_id: concept.replacement_concept_id.clone(),
+            distinctions: concept.distinctions.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepositoryView {
+    pub schema_version: u32,
+    pub project_id: String,
+    pub revision: u64,
+    pub concepts: std::collections::BTreeMap<String, ConceptSummary>,
+}
+
+impl From<&Repository> for RepositoryView {
+    fn from(repository: &Repository) -> Self {
+        Self {
+            schema_version: 2,
+            project_id: repository.project_id.clone(),
+            revision: repository.revision,
+            concepts: repository
+                .concepts
+                .iter()
+                .map(|(id, concept)| (id.clone(), concept.into()))
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectSummary {
+    pub id: String,
+    pub current_path: String,
+    pub status: ProjectStatus,
+    pub current_revision: u64,
+}
+
+impl From<&Project> for ProjectSummary {
+    fn from(project: &Project) -> Self {
+        Self {
+            id: project.id.clone(),
+            current_path: project.current_path.clone(),
+            status: project.status,
+            current_revision: project.current_revision,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RevisionReceipt {
     pub project_id: String,
@@ -113,7 +179,7 @@ impl Client {
         Ok(serde_json::from_slice(&output.stdout)?)
     }
 
-    pub fn projects(&self) -> Result<Vec<Project>, CliError> {
+    pub fn projects(&self) -> Result<Vec<ProjectSummary>, CliError> {
         self.json(&["project".into(), "list".into()], false)
     }
 
@@ -157,8 +223,28 @@ impl Client {
         self.json(&["project".into(), "retire".into(), id.into()], false)
     }
 
-    pub fn repository(&self, project: &str, revision: Option<u64>) -> Result<Repository, CliError> {
+    pub fn repository(
+        &self,
+        project: &str,
+        revision: Option<u64>,
+    ) -> Result<RepositoryView, CliError> {
         let mut arguments = vec!["repository".into(), "show".into(), project.into()];
+        append_revision(&mut arguments, revision);
+        self.json(&arguments, false)
+    }
+
+    /// Read the complete replayed repository, including all grounds and withdrawals.
+    pub fn repository_provenance(
+        &self,
+        project: &str,
+        revision: Option<u64>,
+    ) -> Result<Repository, CliError> {
+        let mut arguments = vec![
+            "repository".into(),
+            "show".into(),
+            project.into(),
+            "--provenance".into(),
+        ];
         append_revision(&mut arguments, revision);
         self.json(&arguments, false)
     }
@@ -168,7 +254,7 @@ impl Client {
         project: &str,
         query: &str,
         revision: Option<u64>,
-    ) -> Result<Vec<Concept>, CliError> {
+    ) -> Result<RepositoryView, CliError> {
         let mut arguments = vec![
             "repository".into(),
             "search".into(),

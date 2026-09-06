@@ -40,8 +40,8 @@
     "Do not add contributor instructions or Semantics repository output to the constrained liaison runtime prompt."
   ],
   "dependencies": [
-    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3},
+    {"id": "clockwork.schedule.operate", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "session_surfaces": [
     "local_filesystem",

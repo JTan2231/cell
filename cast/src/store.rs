@@ -560,12 +560,15 @@ impl Store {
 
     pub fn status(&self) -> Result<Value> {
         let snapshot = self.snapshot()?;
+        let budgets = self.config()?.budgets;
         self.read(|c| { let today=timestamp().div_euclid(86400)*86400;
             let mut usage=serde_json::Map::new();
             for provider in ["theirstack","brave","http","hn"] {let total:u64=c.query_row("SELECT COALESCE(SUM(COALESCE(charged_units,reserved_units)),0) FROM requests WHERE provider=?1",[provider],row_u64)?;let daily:u64=c.query_row("SELECT COALESCE(SUM(COALESCE(charged_units,reserved_units)),0) FROM requests WHERE provider=?1 AND epoch>=?2",params![provider,today],row_u64)?;usage.insert(provider.into(),json!({"total_units":total,"daily_units":daily}));}
             let requests:u64=c.query_row("SELECT COUNT(*) FROM requests WHERE epoch>=?1",[today],row_u64)?;
             let last:Option<Value>=c.query_row("SELECT id,started_at,finished_at,status,note FROM runs ORDER BY started_epoch DESC,rowid DESC LIMIT 1",[],|r|Ok(json!({"id":r.get::<_,String>(0)?,"started_at":r.get::<_,String>(1)?,"finished_at":r.get::<_,Option<String>>(2)?,"status":r.get::<_,String>(3)?,"note":r.get::<_,Option<String>>(4)?}))).optional()?;
-            Ok(json!({"schema_version":1,"snapshot_revision":snapshot.snapshot_revision,"companies":snapshot.companies.len(),"jobs":snapshot.jobs.len(),"sources":snapshot.source_health.len(),"http_requests_today":requests,"usage":usage,"last_run":last,"source_health":snapshot.source_health,"coverage":snapshot.coverage}))
+            Ok(json!({"schema_version":2,"snapshot_revision":snapshot.snapshot_revision,"companies":snapshot.companies.len(),"jobs":snapshot.jobs.len(),"sources":snapshot.source_health.len(),"http_requests_today":requests,"usage":usage,"last_run":last,"budgets":budgets,
+                "source_health":snapshot.source_health.into_iter().filter(|source| !matches!(source.status.as_str(), "complete" | "resolved" | "observed")).map(|source| json!({"id":source.id,"status":source.status,"enabled":source.enabled,"last_attempt_at":source.last_attempt_at,"last_success_at":source.last_success_at,"note":source.note})).collect::<Vec<_>>(),
+                "coverage":snapshot.coverage.into_iter().filter(|coverage| coverage.status != "complete").map(|coverage| json!({"query_id":coverage.query_id,"provider":coverage.provider,"status":coverage.status,"last_attempt_at":coverage.last_attempt_at,"last_complete_at":coverage.last_complete_at,"note":coverage.note})).collect::<Vec<_>>()}))
         })
     }
 

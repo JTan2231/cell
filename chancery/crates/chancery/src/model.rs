@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-pub const OUTPUT_SCHEMA_VERSION: u32 = 2;
+pub const OUTPUT_SCHEMA_VERSION: u32 = 3;
 pub const PROVIDER_SCHEMA_VERSION: u32 = 3;
 pub const PREVIOUS_PROVIDER_SCHEMA_VERSION: u32 = 2;
 pub const LEGACY_PROVIDER_SCHEMA_VERSION: u32 = 1;

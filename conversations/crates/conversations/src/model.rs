@@ -191,12 +191,49 @@ pub struct Conversation {
     pub turns: Vec<Turn>,
 }
 
-/// One client-side full-text match.
+/// A title match is one thread hit; message hits contain explicitly partial text.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchHit {
-    pub thread: ThreadSummary,
-    pub message: Message,
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SearchHit {
+    Thread {
+        reference: ThreadRef,
+        title: String,
+    },
+    Message {
+        reference: ItemRef,
+        title: String,
+        role: Role,
+        excerpt: String,
+    },
+}
+
+pub(crate) fn match_excerpt(text: &str, query: &str) -> String {
+    let position = text.to_lowercase().find(&query.to_lowercase()).unwrap_or(0);
+    let mut folded_bytes = 0;
+    let matched = text
+        .chars()
+        .take_while(|ch| {
+            let before = folded_bytes;
+            folded_bytes += ch.to_lowercase().map(char::len_utf8).sum::<usize>();
+            before < position
+        })
+        .count();
+    let chars: Vec<_> = text.chars().collect();
+    let start = matched.saturating_sub(60);
+    let end = (start + 238).min(chars.len());
+    let mut result = String::new();
+    if start > 0 {
+        result.push('…');
+    }
+    result.extend(
+        chars[start..end]
+            .iter()
+            .map(|ch| if ch.is_whitespace() { ' ' } else { *ch }),
+    );
+    if end < chars.len() {
+        result.push('…');
+    }
+    result
 }
 
 pub(crate) fn parse_thread(host_id: &str, value: &Value, archived: bool) -> Result<ThreadSummary> {
@@ -507,6 +544,16 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn excerpts_locate_unicode_matches_without_returning_entire_messages() {
+        let text = format!("{}İstanbul {}", "雪".repeat(1000), "尾".repeat(1000));
+        let excerpt = super::match_excerpt(&text, "i\u{307}stanbul");
+        assert!(excerpt.contains("İstanbul"));
+        assert!(excerpt.starts_with('…'));
+        assert!(excerpt.ends_with('…'));
+        assert!(excerpt.chars().count() <= 240);
+    }
 
     #[test]
     fn normalizes_only_user_and_assistant_content() {

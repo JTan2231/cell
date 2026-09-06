@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 pub use crate::evidence::{Finding, Issue, Status};
-pub use crate::report::{ProductReport, Report, inspect};
+pub use crate::report::{CheckReport, IncompleteProduct, ProductReport, Report, inspect};
 
 /// Fatal command or inventory failure, rather than a membership finding.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]

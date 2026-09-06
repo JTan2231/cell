@@ -546,7 +546,7 @@ impl Store {
         let connection = self.connection(true)?;
         let mut statement = connection.prepare(
             "SELECT c.id, c.title, r.revision, r.stage, r.advisory, r.summary,
-                    substr(replace(replace(r.markdown, char(10), ' '), char(13), ' '), 1, 240)
+                    r.markdown
              FROM cases c
              JOIN case_revisions r
                ON r.case_id = c.id AND r.revision = c.head_revision
@@ -558,6 +558,22 @@ impl Store {
         )?;
         let rows = statement.query_map(params![pattern, sql_usize(limit, "limit")?], |row| {
             let advisory: Option<String> = row.get(4)?;
+            let title: String = row.get(1)?;
+            let markdown: String = row.get(6)?;
+            let (matched_field, text) = if title
+                .to_ascii_lowercase()
+                .contains(&query.to_ascii_lowercase())
+            {
+                ("title", title.as_str())
+            } else if advisory.as_ref().is_some_and(|text| {
+                text.to_ascii_lowercase()
+                    .contains(&query.to_ascii_lowercase())
+            }) {
+                ("advisory", advisory.as_deref().unwrap_or_default())
+            } else {
+                ("markdown", markdown.as_str())
+            };
+            let snippet = match_excerpt(text, query);
             Ok(SearchResult {
                 case_id: row.get(0)?,
                 title: row.get(1)?,
@@ -566,7 +582,9 @@ impl Store {
                 attention: advisory.is_some(),
                 advisory,
                 summary: row.get(5)?,
-                snippet: row.get(6)?,
+                snippet,
+                matched_field: matched_field.into(),
+                excerpt: true,
             })
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>()
@@ -1359,11 +1377,8 @@ fn validate_text(value: &str, field: &'static str, max: usize, allow_empty: bool
 }
 
 fn validate_limit(limit: usize) -> Result<()> {
-    if !(1..=1_000).contains(&limit) {
-        return Err(Error::domain(
-            "limit_invalid",
-            "limit must be from 1 through 1000",
-        ));
+    if limit == 0 {
+        return Err(Error::domain("limit_invalid", "limit must be positive"));
     }
     Ok(())
 }
@@ -1881,6 +1896,27 @@ fn escape_like(value: &str) -> String {
         .replace('\\', "\\\\")
         .replace('%', "\\%")
         .replace('_', "\\_")
+}
+
+fn match_excerpt(text: &str, query: &str) -> String {
+    let folded = text.to_ascii_lowercase();
+    let position = folded.find(&query.to_ascii_lowercase()).unwrap_or(0);
+    let start = text[..position].chars().count().saturating_sub(60);
+    let chars: Vec<_> = text.chars().collect();
+    let end = (start + 238).min(chars.len());
+    let mut result = String::new();
+    if start > 0 {
+        result.push('…');
+    }
+    result.extend(
+        chars[start..end]
+            .iter()
+            .map(|ch| if ch.is_whitespace() { ' ' } else { *ch }),
+    );
+    if end < chars.len() {
+        result.push('…');
+    }
+    result
 }
 
 #[cfg(test)]

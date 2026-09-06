@@ -112,6 +112,14 @@ enum JobsCommand {
     },
     /// Show one job, including its frozen request and attempts.
     Show { id: String },
+    /// Observe state, pending call IDs, final output availability, and terminal reason.
+    Status { id: String },
+    /// Emit one terminal observation or timeout; never cancels the job.
+    Wait {
+        id: String,
+        #[arg(long, default_value_t = 60)]
+        timeout: u64,
+    },
     /// List jobs, optionally scoped to one requester.
     List {
         #[arg(long)]
@@ -124,7 +132,7 @@ enum JobsCommand {
         state: Option<JobStateArgument>,
         #[arg(long)]
         after: Option<String>,
-        #[arg(long, default_value_t = 100)]
+        #[arg(long, default_value_t = 20)]
         limit: u32,
     },
     /// Read harness-output records in durable arrival order.
@@ -446,6 +454,15 @@ async fn run_jobs(
             print_json(&client.submit_job(&request).await?, compact)
         }
         JobsCommand::Show { id } => print_json(&client.get_job(&JobId::new(id)).await?, compact),
+        JobsCommand::Status { id } => {
+            print_json(&client.job_status(&JobId::new(id)).await?, compact)
+        }
+        JobsCommand::Wait { id, timeout } => print_json(
+            &client
+                .wait_job(&JobId::new(id), std::time::Duration::from_secs(timeout))
+                .await?,
+            compact,
+        ),
         JobsCommand::List {
             requester,
             requester_id,

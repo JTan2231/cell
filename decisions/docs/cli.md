@@ -101,3 +101,9 @@ Deployment gate identity follows the canonical database path (including a
 symlink alias), or the canonical existing ancestor for a new database.
 Hardlinked databases are rejected before admission. Maintenance status still
 does not open or initialize the database.
+
+`krisis observe status [--date YYYY-MM-DD] [--limit N]` retains global/window
+counts and displays at most 20 failure IDs and codes by default. JSON includes
+`failures_has_more`; increase a positive `--limit` for more. Failure counts are
+never truncated. The Rust client exposes `status_limit` for explicit selection.
+This does not change observer admission, retries or the legacy event stream.

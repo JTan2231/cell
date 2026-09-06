@@ -171,7 +171,7 @@ enum ObserveCommand {
     /// Process at most one queued or resumable observation.
     Process,
     /// Show observer readiness and durable queue counts.
-    Status(ObserveDateArgs),
+    Status(ObserveStatusArgs),
     /// Independently discover missed completed turns for one local date.
     Reconcile(ObserveDateArgs),
     /// Mark one proven-unavailable, unbound queued source as not eligible.
@@ -190,6 +190,14 @@ struct DateArgs {
     /// Local calendar date in YYYY-MM-DD; defaults to yesterday.
     #[arg(long)]
     date: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct ObserveStatusArgs {
+    #[arg(long)]
+    date: Option<String>,
+    #[arg(long, default_value_t = 20)]
+    limit: usize,
 }
 
 #[derive(Debug, Args)]
@@ -290,7 +298,10 @@ fn run(cli: Cli) -> AppResult<()> {
                     }
                 }
                 ObserveCommand::Status(args) => {
-                    let status = match args.date.as_deref() {
+                    if args.limit == 0 {
+                        return Err(AppError::new("limit_invalid", "limit must be positive"));
+                    }
+                    let mut status = match args.date.as_deref() {
                         Some(value) => {
                             let date = parse_date(value)?;
                             let (start, end) = local_window(date)?;
@@ -298,6 +309,8 @@ fn run(cli: Cli) -> AppResult<()> {
                         }
                         None => store.observation_status()?,
                     };
+                    status.failures_has_more = status.failures.len() > args.limit;
+                    status.failures.truncate(args.limit);
                     if cli.json {
                         print_json(&status)
                     } else {
@@ -313,6 +326,9 @@ fn run(cli: Cli) -> AppResult<()> {
                             status.accounts_pending_annals,
                             status.accounts_accepted_by_annals
                         );
+                        if status.failures_has_more {
+                            println!("More failures available; increase --limit.");
+                        }
                         for failure in &status.failures {
                             println!("Failure: {} [{}]", failure.id, failure.failure_code);
                         }

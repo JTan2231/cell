@@ -44,10 +44,10 @@
     "Retired Decisions history is preserved locally and is not sent to Annals."
   ],
   "dependencies": [
-    {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3},
+    {"id": "conversations.history.explore", "min_contract": 4, "max_contract_exclusive": 5},
+    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4},
     {"id": "annals.decision-account.exchange", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "clockwork.schedule.operate", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],
   "runtime": "interactive_agent",

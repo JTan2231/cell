@@ -41,7 +41,7 @@
     "Document the working directory, workspace access, local execution, web search, launch context, and tool permissions explicitly."
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 2, "max_contract_exclusive": 3}
+    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4}
   ],
   "session_surfaces": [
     "local_filesystem",

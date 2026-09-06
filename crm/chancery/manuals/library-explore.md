@@ -56,8 +56,9 @@ location, or relationship exists.
 ```
 
 Omitting `--revision` selects the current committed head. Supplying a positive
-revision selects that exact immutable snapshot. History returns the complete
-retained lineage in case-local order.
+revision selects that exact immutable snapshot. History returns newest-first
+revision summaries, defaulting to 20 with `has_more`; increase `--limit` for more.
+Use `case show --revision N` for the complete snapshot behind a history row.
 
 Each revision is a full snapshot containing:
 
@@ -112,3 +113,7 @@ Use these types at imports and convert only to caller-local domain values.
 The client performs the same operations under this contract and never adds
 retry or authorization. See `crm/docs/rust-api.md`; the Rust structs and
 enums define the interface without a separate declaration layer.
+
+## Output selection
+
+Case list/search and newest-first history default to 20 with has_more and positive --limit for more. History returns case ID, revision, stage, summary, complete advisory/attention and created_at. Search returns current identity/revision/stage/summary/advisory plus matched_field and an explicitly marked excerpt of at most 240 Unicode characters around the match. Case show retains exact full revisions.

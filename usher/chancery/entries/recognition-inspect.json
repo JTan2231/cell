@@ -1,6 +1,6 @@
 {
   "id": "usher.recognition.inspect",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -77,7 +77,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "JSON schema one or deterministic text lists each product, three findings, declaration IDs, evidence, issues, complete flag, and complete/incomplete totals. Fatal JSON errors have schema_version and error."
+        "statement": "check returns schema-two counts and every incomplete identity/Semantics/Chancery finding, omitting successful evidence. report retains the complete schema-one product report. Exit 1 still means an incomplete check; fatal command/inventory errors exit 2. Both views describe repository declarations, never runtime readiness or actual registration."
       }
     ],
     "data_semantics": [

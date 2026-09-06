@@ -28,8 +28,9 @@ current session, read the complete installed catalog:
 
 The catalog groups entries into `use`, `operate`, and `develop` work and shows
 every valid installed entry, including deprecated or dependency-unavailable
-ones. Each card includes a discriminative title and summary plus its owner,
-release, support, availability, compatibility, and readiness classification.
+ones. Each card includes its ID, title and summary. Shared support, availability,
+compatibility and readiness appear once; cards retain exceptions. `show`
+provides owner, release and contract version.
 Registry issues remain visible.
 
 Compare the user's intended outcome with those meanings and form a semantic
@@ -37,13 +38,13 @@ shortlist. Chancery does not receive the request, call a model, search the
 manuals, or select an entry. If no entry is plausibly relevant, proceed
 normally.
 
-Read every plausible full contract before invoking anything:
+Read every plausible operating contract before invoking anything:
 
 ```sh
 /Users/joey/.local/bin/chancery show ENTRY_ID
 ```
 
-Use the structured sections to decide whether the user's actual outcome fits.
+Use the complete authored operating manual to decide whether the user's actual outcome fits.
 In particular, observe `use_when`, `do_not_use_when`, dependencies, side
 effects, privacy, and what the capability does not authorize. If several
 contracts remain materially different but plausible, apply ordinary semantic
@@ -76,3 +77,10 @@ Use `chancery doctor` to diagnose provider manifests, indexed files, duplicate
 IDs, and cross-provider compatibility. One broken provider must not prevent a
 valid provider from appearing in the catalog. Repair or redeploy the owning
 product; do not edit an installed content-addressed bundle in place.
+
+`show ID --full` also includes structured authoring fields and normalized
+claims. Ordinary `show` renders the operating manual once; authors must keep
+it self-contained. `resolve ID --summary` returns the same resolution outcome,
+requirements, readiness and gaps without dossier bodies. Use full `resolve`
+when the complete outward promise or a design reliance must be read.
+Both text and JSON honor these content choices; JSON output schema is 3.

@@ -48,3 +48,7 @@ preference, a generic file save, or a summary.
 
 The full source is retained in the selected local library. This capability
 does not invoke Nucleus, Codex, or the network.
+
+## Output selection
+
+Retention returns its durable work/delivery receipt. Work list defaults to 20 and returns a schema-two items/has_more page with positive --limit for more; work show retains complete selected work content and structure.

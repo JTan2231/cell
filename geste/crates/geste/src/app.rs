@@ -72,14 +72,17 @@ pub(crate) fn run(cli: &Cli) -> AppResult<CommandOutput> {
             validate_limit(args.limit)?;
             let terms = query_terms(&args.query)?;
             let store = Store::open_read(&database)?;
-            let results = store.search(&terms, args.limit)?;
+            let mut results = store.search(&terms, args.limit + 1)?;
+            let has_more = results.len() > args.limit;
+            results.truncate(args.limit);
             Ok(CommandOutput {
                 data: json!({
                     "type": "search_results",
                     "query_terms": terms,
                     "results": results,
+                    "has_more": has_more,
                 }),
-                human: render_search(&results),
+                human: page_human(render_search(&results), has_more),
             })
         }
         Command::Episode { command } => match command {
@@ -88,7 +91,7 @@ pub(crate) fn run(cli: &Cli) -> AppResult<CommandOutput> {
                 let mut store = Store::open_write(&database)?;
                 let revision = store.create_episode(&capture, &digest)?;
                 Ok(CommandOutput {
-                    data: json!({"type": "episode_created", "episode": revision}),
+                    data: json!({"type": "episode_created", "episode": {"episode": revision.episode, "revision": revision.revision}}),
                     human: format!(
                         "Created {} revision {}",
                         revision.episode, revision.revision
@@ -104,7 +107,7 @@ pub(crate) fn run(cli: &Cli) -> AppResult<CommandOutput> {
                 let mut store = Store::open_write(&database)?;
                 let revision = store.revise_episode(episode, *base, &capture, &digest)?;
                 Ok(CommandOutput {
-                    data: json!({"type": "episode_revised", "episode": revision}),
+                    data: json!({"type": "episode_revised", "episode": {"episode": revision.episode, "revision": revision.revision}}),
                     human: format!(
                         "Appended {} revision {}",
                         revision.episode, revision.revision
@@ -114,10 +117,12 @@ pub(crate) fn run(cli: &Cli) -> AppResult<CommandOutput> {
             EpisodeCommand::List { limit } => {
                 validate_limit(*limit)?;
                 let store = Store::open_read(&database)?;
-                let episodes = store.list(*limit)?;
+                let mut episodes = store.list(*limit + 1)?;
+                let has_more = episodes.len() > *limit;
+                episodes.truncate(*limit);
                 Ok(CommandOutput {
-                    data: json!({"type": "episode_list", "episodes": episodes}),
-                    human: render_list(&episodes),
+                    data: json!({"type": "episode_list", "episodes": episodes, "has_more": has_more}),
+                    human: page_human(render_list(&episodes), has_more),
                 })
             }
             EpisodeCommand::Show(args) => {
@@ -231,10 +236,10 @@ fn parse_capture_bytes(bytes: &[u8]) -> AppResult<(crate::model::Capture, String
 }
 
 fn validate_limit(limit: usize) -> AppResult<()> {
-    if !(1..=1_000).contains(&limit) {
+    if limit == 0 || limit == usize::MAX {
         return Err(AppError::usage(
             "invalid_limit",
-            "limit must be from 1 through 1000",
+            "limit must be positive and below the platform maximum",
         ));
     }
     Ok(())
@@ -311,6 +316,13 @@ fn safe(value: &str) -> String {
         }
     }
     rendered
+}
+
+fn page_human(mut text: String, has_more: bool) -> String {
+    if has_more {
+        text.push_str("\nMore results available; increase --limit.");
+    }
+    text
 }
 
 #[cfg(test)]

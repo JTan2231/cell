@@ -160,3 +160,9 @@ When changing the schema or adding providers, use:
 Removing or incompatibly changing a contract reverses that logic: update the
 agent bootstrap and dependents first, then remove the old provider contract
 only when no installed operation requires it.
+
+Output schema 3 separates selection, operation, and declaration detail: `list`
+uses shared defaults and exceptions, `show` reads the self-contained authored
+manual once, `show --full` preserves authoring fields, and `resolve --summary`
+selects outcome and gaps from the same complete resolution. These projections
+never alter stored bundle bytes or infer missing promises.

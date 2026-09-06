@@ -39,8 +39,8 @@
     "Deployment readiness does not create synthetic runtime or requester-domain records."
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 2, "max_contract_exclusive": 3},
-    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4},
+    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "session_surfaces": [
     "local_filesystem",

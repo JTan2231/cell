@@ -45,6 +45,26 @@ fn cli_outputs_are_readable_through_the_owned_api() -> TestResult {
     let resolve: ApiOutput<ResolveResult> = serde_json::from_slice(&resolved.stdout)?;
     assert_eq!(resolve.data.root.entry.id, list.data.entries[0].id);
     assert_eq!(serde_json::to_value(&resolve)?, stdout_json(&resolved)?);
+    let full_show = client.show_full("nucleus.execution")?;
+    assert_eq!(full_show.data.entry.id, show.data.entry.id);
+    assert_eq!(full_show.data.manual, show.data.manual);
+    let summary =
+        stdout_json(&fixture.run_json(&["resolve", "nucleus.execution", "--summary"])?)?;
+    let full = stdout_json(&resolved)?;
+    for key in [
+        "status",
+        "contract_requirement",
+        "facet_requirements",
+        "declaration_status",
+        "dependency_closure_status",
+        "readiness",
+        "gaps",
+        "issues",
+    ] {
+        assert_eq!(summary["data"][key], full["data"][key], "{key}");
+    }
+    assert!(summary["data"].get("root").is_none());
+    assert!(summary["data"].get("dependency_closure").is_none());
     let doctor_output = fixture.run_json(&["doctor"])?;
     let doctor: ApiOutput<DoctorResult> = serde_json::from_slice(&doctor_output.stdout)?;
     assert_eq!(doctor.data.counts.entries, 1);
@@ -100,7 +120,7 @@ fn list_and_show_present_the_complete_semantic_catalog_without_mutation() -> Tes
     let listed = fixture.run_json(&["list"])?;
     assert!(listed.status.success());
     let listed_json = stdout_json(&listed)?;
-    assert_eq!(listed_json["schema_version"], 2);
+    assert_eq!(listed_json["schema_version"], 3);
     assert_eq!(listed_json["data"]["entries"][0]["id"], "nucleus.execution");
     assert_eq!(
         listed_json["data"]["entries"][1]["id"],
@@ -111,12 +131,15 @@ fn list_and_show_present_the_complete_semantic_catalog_without_mutation() -> Tes
     assert_eq!(todo["summary"], "Perform todo.concern.capture-and-route");
     assert_eq!(todo["kind"], "capability");
     assert_eq!(todo["mode"], "use");
-    assert_eq!(todo["provider"]["release"], "1.0.0");
-    assert_eq!(todo["provider_release"], "1.0.0");
-    assert_eq!(todo["support"], "supported");
-    assert_eq!(todo["availability"], "installed");
-    assert_eq!(todo["compatibility"], "compatible");
-    assert_eq!(todo["readiness"], "not_checked");
+    assert!(todo.get("provider_release").is_none());
+    assert!(todo.get("support").is_none());
+    assert_eq!(listed_json["data"]["defaults"]["support"], "supported");
+    assert_eq!(listed_json["data"]["defaults"]["availability"], "installed");
+    assert_eq!(
+        listed_json["data"]["defaults"]["compatibility"],
+        "compatible"
+    );
+    assert_eq!(listed_json["data"]["defaults"]["readiness"], "not_checked");
     assert!(todo.get("routing").is_none());
     assert!(todo.get("routable").is_none());
 
@@ -126,7 +149,7 @@ fn list_and_show_present_the_complete_semantic_catalog_without_mutation() -> Tes
     assert!(human.contains("USE — ordinary outcome work"));
     assert!(human.contains("Use todo.concern.capture-and-route"));
     assert!(human.contains("Perform todo.concern.capture-and-route"));
-    assert!(human.contains("supported · installed · compatible · not_checked"));
+    assert!(human.contains("supported · installed · compatible · readiness not_checked"));
 
     let shown = fixture.run_json(&["show", "todo.concern.capture-and-route"])?;
     assert!(shown.status.success());
@@ -740,7 +763,7 @@ fn resolve_requires_one_exact_id_and_valid_contract_bounds() -> TestResult {
     let semantic_text = fixture.run_json(&["resolve", "alpha.run", "extra words"])?;
     assert_eq!(semantic_text.status.code(), Some(2));
     let error = stderr_json(&semantic_text)?;
-    assert_eq!(error["schema_version"], 2);
+    assert_eq!(error["schema_version"], 3);
     assert_eq!(error["error"]["code"], "invalid_command");
 
     let removed_all = fixture.run_json(&["list", "--all"])?;

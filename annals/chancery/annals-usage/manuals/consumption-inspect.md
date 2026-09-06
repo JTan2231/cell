@@ -68,3 +68,7 @@ they are not dedicated contracts for the private upstream records this report
 reads. Those Annals and Nucleus data reliances, and the external rate card with
 no pinned contract version or digest, remain explicit resolver gaps rather
 than inferred public data surfaces.
+
+## Output selection
+
+Report output version 2 defaults to delivery totals, attempt counts, coverage and calculable credit-equivalent, plus unattributed run identity/status/totals/coverage/errors. --details includes full attempt and response projections in text or JSON. Positive --limit defaults to 20; hasMore and unattributedHasMore declare further records. All projections remain live and fail when an authority is unavailable. Budget remains an account-global live allowance view.

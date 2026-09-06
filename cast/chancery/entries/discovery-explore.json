@@ -1,6 +1,6 @@
 {
   "id": "cast.discovery.explore",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -101,7 +101,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Export schema 1 returns snapshot_revision, captured_at, companies, jobs, source_health and coverage. Individual records preserve stable IDs and attributed evidence."
+        "statement": "List/search return schema-two pages with snapshot_revision, compact items and has_more; positive --limit defaults to 20. Job rows expose stable ID/revision, company, title, location/remote eligibility, availability and last_seen_at successful observation. Search adds matched_field and a marked excerpt of at most 240 Unicode characters. Status returns counts, budgets/usage, last run and failing/incomplete source and query summaries. Show/export preserve full records, evidence and snapshot coverage; exported snapshot schema remains 1."
       }
     ],
     "data_semantics": [

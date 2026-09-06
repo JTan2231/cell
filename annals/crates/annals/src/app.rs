@@ -126,7 +126,7 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
                 db::require_path_kind(path, db::LibraryKind::General)?;
                 add_work(path, args)
             }
-            WorkCommand::List => work_list(path),
+            WorkCommand::List { limit } => work_list(path, *limit),
             WorkCommand::Show(args) => show_work(path, &args.label),
         },
         Command::Integrate(args) => {
@@ -174,7 +174,7 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
             ChangeCommand::Show(args) => show_change(path, args),
             ChangeCommand::Validate(args) => validate_change(path, args),
             ChangeCommand::Apply(args) => apply_change(path, args),
-            ChangeCommand::List => change_list(path),
+            ChangeCommand::List { limit } => change_list(path, *limit),
         },
         Command::Search(args) => search(path, args),
         Command::Lately(args) => lately(path, args),
@@ -336,9 +336,14 @@ fn add_work(path: &Path, args: &WorkAddArgs) -> Result<CommandOutput, AppError> 
     .mutation())
 }
 
-fn work_list(path: &Path) -> Result<CommandOutput, AppError> {
+fn work_list(path: &Path, limit: usize) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let works = list_works(&connection)?;
+    if limit == 0 {
+        return Err(AppError::invalid("invalid_limit", "limit must be positive"));
+    }
+    let mut works = list_works(&connection)?;
+    let has_more = works.len() > limit;
+    works.truncate(limit);
     let human = if works.is_empty() {
         "No retained works".to_owned()
     } else {
@@ -354,7 +359,14 @@ fn work_list(path: &Path) -> Result<CommandOutput, AppError> {
             .collect::<Vec<_>>()
             .join("\n")
     };
-    Ok(CommandOutput::new(to_value(&works)?, human))
+    Ok(CommandOutput::new(
+        json!(api::SelectionPage {
+            schema_version: 2,
+            items: works,
+            has_more
+        }),
+        selection_human(human, has_more),
+    ))
 }
 
 fn show_work(path: &Path, label: &str) -> Result<CommandOutput, AppError> {
@@ -472,7 +484,7 @@ fn integrate(
             }
         }
     }
-    reconciliation_output(path, &record)
+    reconciliation_output(path, &record, false)
 }
 
 fn ingest_manual_work(
@@ -569,7 +581,7 @@ fn submit_change(
     let mut connection = db::open_write(path)?;
     let work = get_work(&connection, work_label)?;
     let record = resolver::submit_document(&mut connection, &work, base, &document, "human", None)?;
-    reconciliation_output(path, &record)
+    reconciliation_output(path, &record, false)
 }
 
 fn show_change(path: &Path, args: &ChangeShowArgs) -> Result<CommandOutput, AppError> {
@@ -580,7 +592,7 @@ fn show_change(path: &Path, args: &ChangeShowArgs) -> Result<CommandOutput, AppE
         return Ok(CommandOutput::new(to_value(&change)?, human));
     }
     let record = select_reconciliation(&connection, args.work.as_deref(), false)?;
-    let mut output = reconciliation_output(path, &record)?;
+    let mut output = reconciliation_output(path, &record, true)?;
     output.quietable = false;
     Ok(output)
 }
@@ -708,9 +720,14 @@ fn apply_change(path: &Path, args: &ChangeSelectArgs) -> Result<CommandOutput, A
     applied_output(path, &record, applied)
 }
 
-fn change_list(path: &Path) -> Result<CommandOutput, AppError> {
+fn change_list(path: &Path, limit: usize) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
-    let reconciliations = list_reconciliations(&connection)?;
+    if limit == 0 {
+        return Err(AppError::invalid("invalid_limit", "limit must be positive"));
+    }
+    let mut reconciliations = list_reconciliations(&connection)?;
+    let has_more = reconciliations.len() > limit;
+    reconciliations.truncate(limit);
     let human = if reconciliations.is_empty() {
         "No recorded reconciliations".to_owned()
     } else {
@@ -728,12 +745,20 @@ fn change_list(path: &Path) -> Result<CommandOutput, AppError> {
             .collect::<Vec<_>>()
             .join("\n")
     };
-    Ok(CommandOutput::new(to_value(&reconciliations)?, human))
+    Ok(CommandOutput::new(
+        json!(api::SelectionPage {
+            schema_version: 2,
+            items: reconciliations,
+            has_more
+        }),
+        selection_human(human, has_more),
+    ))
 }
 
 fn reconciliation_output(
     path: &Path,
     record: &ReconciliationRecord,
+    details: bool,
 ) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
     let view = reconciliation_view(&connection, record)?;
@@ -745,8 +770,8 @@ fn reconciliation_output(
         status: view.status.clone(),
         summary: view.summary.clone(),
         operation_count,
-        annotations: view.annotations.clone(),
-        reconciliation: reconciliation.clone(),
+        reconciliation: (details || !matches!(view.status.as_str(), "applied" | "recorded"))
+            .then(|| reconciliation.clone()),
         created_at: view.created_at.clone(),
         applied_revision: view.applied_revision,
     });
@@ -770,15 +795,24 @@ fn reconciliation_output(
     } else {
         String::new()
     };
-    let human = format!(
-        "{heading} for {}\nBase revision: {}\nSummary: {}\nOperations ({}):\n{}\n{}\nStatus: {status}{corpus_state}",
-        render_quoted(&view.work),
-        view.base_revision,
-        render_terminal_text(&view.summary, false),
-        reconciliation.operations().len(),
-        render_requested_operations(reconciliation.operations()),
-        render_annotations(reconciliation.annotations()),
-    );
+    let human = if !details && matches!(view.status.as_str(), "applied" | "recorded") {
+        format!(
+            "{heading} for {}: {status}{corpus_state}\nBase revision: {}; operations: {operation_count}\n{}",
+            render_quoted(&view.work),
+            view.base_revision,
+            render_terminal_text(&view.summary, false)
+        )
+    } else {
+        format!(
+            "{heading} for {}\nBase revision: {}\nSummary: {}\nOperations ({}):\n{}\n{}\nStatus: {status}{corpus_state}",
+            render_quoted(&view.work),
+            view.base_revision,
+            render_terminal_text(&view.summary, false),
+            reconciliation.operations().len(),
+            render_requested_operations(reconciliation.operations()),
+            render_annotations(reconciliation.annotations()),
+        )
+    };
     Ok(CommandOutput::new(data, human).mutation())
 }
 
@@ -1084,13 +1118,14 @@ fn applied_output(
             revision: applied,
             status: "applied".to_owned(),
             summary: record.summary.clone(),
-            annotations: request.annotations().to_vec(),
-            reconciliation: request.clone(),
+            operation_count: request.operations().len(),
         }),
         format!(
-            "Applied reconciliation at revision {applied}:\n{}\n{}",
-            render_terminal_text(&record.summary, false),
-            render_annotations(request.annotations())
+            "Applied reconciliation for {} at revision {applied} (base {}, {} operations):\n{}",
+            render_quoted(&record.work_label),
+            record.base_revision,
+            request.operations().len(),
+            render_terminal_text(&record.summary, false)
         ),
     )
     .mutation())
@@ -1868,6 +1903,13 @@ fn stats_overflow() -> AppError {
 
 fn to_value<T: Serialize>(value: &T) -> Result<Value, AppError> {
     serde_json::to_value(value).map_err(AppError::from)
+}
+
+fn selection_human(mut human: String, has_more: bool) -> String {
+    if has_more {
+        human.push_str("\nMore results available; increase --limit.");
+    }
+    human
 }
 
 #[cfg(test)]

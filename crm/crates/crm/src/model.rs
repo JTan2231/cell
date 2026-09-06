@@ -100,6 +100,8 @@ pub struct SearchResult {
     pub attention: bool,
     pub summary: String,
     pub snippet: String,
+    pub matched_field: String,
+    pub excerpt: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]

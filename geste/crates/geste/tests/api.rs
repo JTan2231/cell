@@ -64,6 +64,23 @@ fn typed_capture_preserves_exact_input_and_historical_reads() -> TestResult {
     let Data::EpisodeCreated { episode } = created.data else {
         return Err(std::io::Error::other("expected created episode").into());
     };
+    assert_eq!(
+        serde_json::to_value(&episode)?
+            .as_object()
+            .map(serde_json::Map::len),
+        Some(2)
+    );
+    let Data::EpisodeRevision { episode } = client
+        .execute(&Request::Episode {
+            command: EpisodeCommand::Show(ReadArgs {
+                episode: episode.episode.clone(),
+                at: Some(1),
+            }),
+        })?
+        .data
+    else {
+        return Err("expected complete episode".into());
+    };
     assert_eq!(episode.capture, original);
     assert_eq!(
         episode.submitted_sha256,

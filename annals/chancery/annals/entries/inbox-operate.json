@@ -1,6 +1,6 @@
 {
   "id": "annals.inbox.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -58,7 +58,7 @@
     {"label": "Continue halted event", "invocation": "/Users/joey/.local/bin/annals inbox retry continue <EVENT_ID>"}
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
+    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4}
   ],
   "does_not_authorize": [
     "Editing spool receipts or moving archived envelopes manually.",
@@ -81,8 +81,10 @@
       {"status": "unsupported", "statement": "Open-ended retry, retry-all, terminal-envelope requeue, receipt editing, future-failure selection, and a second attempt for one job are not accepted."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Status and event reports expose queue, active job, pause, maintenance, archive, attempts, storage gate, retry membership, and durable outcome state."},
-      {"status": "declared", "statement": "Registration or enqueue creates complete queued envelopes; dispatch and retry reports correlate jobs with source deliveries and any Nucleus execution while preserving original records."}
+      {
+        "status": "declared",
+        "statement": "Inbox operational reports retain queue, gate, storage, domain and failure facts. Retry start/continue and event status return identity, window, state, counts, remaining work and last halt. retry status EVENT --details includes the full original-to-child mapping. Event listing defaults to 20 with has_more and positive --limit for more; retry preview retains the complete proposed selection."
+      }
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Registration moves a settled arrival into a queued envelope and direct enqueue copies an explicit file; neither starts a source delivery or creates its database delivery record."},
@@ -116,7 +118,7 @@
       {"status": "unspecified", "statement": "No queue capacity, maximum file size, throughput, scheduling fairness, or wall-clock completion bound is promised here."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1, Annals provider release, spool receipt shape, library schema, and Nucleus protocol are separate compatibility axes."},
+      {"status": "declared", "statement": "Capability contract version 2, Annals provider release, spool receipt shape, library schema, and Nucleus protocol are separate compatibility axes."},
       {"status": "declared", "statement": "Supported installation and recovery procedures preserve historical envelopes and use product-owned migration rather than manual reinterpretation."},
       {"status": "unspecified", "statement": "No cross-release spool-format support window or deprecation period is promised."}
     ],

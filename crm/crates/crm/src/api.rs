@@ -193,6 +193,45 @@ pub struct MaintenanceStatus {
     pub worker_alive: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProfileSummary {
+    pub id: String,
+    pub title: String,
+    pub updated_at: String,
+}
+impl From<&ProfileEntry> for ProfileSummary {
+    fn from(entry: &ProfileEntry) -> Self {
+        Self {
+            id: entry.id.clone(),
+            title: entry.title.clone(),
+            updated_at: entry.updated_at.clone(),
+        }
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RevisionSummary {
+    pub case_id: String,
+    pub revision: u64,
+    pub stage: Stage,
+    pub summary: String,
+    pub advisory: Option<String>,
+    pub attention: bool,
+    pub created_at: String,
+}
+impl From<&CaseRevision> for RevisionSummary {
+    fn from(revision: &CaseRevision) -> Self {
+        Self {
+            case_id: revision.case_id.clone(),
+            revision: revision.revision,
+            stage: revision.stage,
+            summary: revision.summary.clone(),
+            advisory: revision.advisory.clone(),
+            attention: revision.attention,
+            created_at: revision.created_at.clone(),
+        }
+    }
+}
+
 /// Every public CLI success payload. Hidden workers have no public response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -215,8 +254,12 @@ pub enum Data {
     ProfileEntry {
         entry: ProfileEntry,
     },
+    ProfileReceipt {
+        entry: ProfileSummary,
+    },
     ProfileList {
-        entries: Vec<ProfileEntry>,
+        entries: Vec<ProfileSummary>,
+        has_more: bool,
     },
     Doctor {
         database: PathBuf,
@@ -226,19 +269,22 @@ pub enum Data {
         nucleus: String,
     },
     CaseCreated {
-        case: CaseRevision,
+        case: RevisionSummary,
     },
     CaseList {
         cases: Vec<CaseListItem>,
+        has_more: bool,
     },
     CaseRevision {
         case: CaseRevision,
     },
     CaseHistory {
-        revisions: Vec<CaseRevision>,
+        revisions: Vec<RevisionSummary>,
+        has_more: bool,
     },
     SearchResults {
         results: Vec<SearchResult>,
+        has_more: bool,
     },
     UpdateQueued {
         update: UpdateView,
@@ -250,6 +296,7 @@ pub enum Data {
     },
     UpdateList {
         updates: Vec<UpdateView>,
+        has_more: bool,
     },
     Update {
         update: UpdateView,
@@ -301,6 +348,7 @@ pub enum Request {
     },
     CaseHistory {
         case: String,
+        limit: usize,
     },
     Search {
         query: String,
@@ -392,7 +440,9 @@ impl Client {
                     args.extend(["--revision".into(), revision.to_string().into()]);
                 }
             }
-            Request::CaseHistory { case } => push(&["case", "history", case]),
+            Request::CaseHistory { case, limit } => {
+                push(&["case", "history", case, "--limit", &limit.to_string()]);
+            }
             Request::Search { query, limit } => {
                 push(&["search", query, "--limit", &limit.to_string()]);
             }

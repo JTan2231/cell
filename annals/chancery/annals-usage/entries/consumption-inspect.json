@@ -1,6 +1,6 @@
 {
   "id": "annals-usage.consumption.inspect",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -45,7 +45,7 @@
   ],
   "dependencies": [
     {"id": "annals.corpus.explore", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
+    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4}
   ],
   "does_not_authorize": [
     "Any Annals corpus or inbox mutation.",
@@ -86,11 +86,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Human output shows recent source deliveries, observed attempts, coverage, token categories, and any calculable known credit-equivalent."
-      },
-      {
-        "status": "declared",
-        "statement": "JSON additionally exposes projectionVersion, generation time, complete attempt and response projections, delivery attribution, coverage, known credit-equivalent and unpriced cache-write tokens, plus unattributed model runs."
+        "statement": "Report output version 2 defaults to delivery totals, attempt counts, coverage and calculable credit-equivalent, plus unattributed run identity/status/totals/coverage/errors. --details includes full attempt and response projections in text or JSON. Positive --limit defaults to 20; hasMore and unattributedHasMore declare further records. All projections remain live and fail when an authority is unavailable. Budget remains an account-global live allowance view."
       }
     ],
     "data_semantics": [

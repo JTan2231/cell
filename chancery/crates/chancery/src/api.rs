@@ -126,9 +126,17 @@ pub struct CatalogEntry {
     pub summary: String,
     pub kind: EntryKind,
     pub mode: Mode,
-    pub provider: ProviderIdentity,
-    pub provider_release: String,
-    pub contract_version: u32,
+    /// Only exceptions to the catalog defaults are repeated on a card.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub support: Option<Support>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compatibility: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub readiness: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CatalogDefaults {
     pub support: Support,
     pub availability: String,
     pub compatibility: String,
@@ -137,12 +145,49 @@ pub struct CatalogEntry {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ListResult {
+    pub defaults: CatalogDefaults,
     pub entries: Vec<CatalogEntry>,
     pub issues: Vec<Issue>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EntryIdentity {
+    pub id: String,
+    pub title: String,
+    pub kind: EntryKind,
+    pub mode: Mode,
+    pub contract_version: u32,
+    pub support: Support,
+}
+
+impl From<&EntryDocument> for EntryIdentity {
+    fn from(entry: &EntryDocument) -> Self {
+        Self {
+            id: entry.id.clone(),
+            title: entry.title.clone(),
+            kind: entry.kind,
+            mode: entry.mode,
+            contract_version: entry.contract_version,
+            support: entry.support,
+        }
+    }
+}
+
+/// One self-contained authored operating manual, without duplicate authoring representations.
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ShowResult {
+    pub provider: ProviderIdentity,
+    pub entry: EntryIdentity,
+    pub availability: String,
+    pub compatibility: String,
+    pub readiness: String,
+    pub dependency_statuses: Vec<DependencyStatus>,
+    pub manual: String,
+    pub issues: Vec<Issue>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FullShowResult {
     pub provider: ProviderIdentity,
     pub entry: EntryDocument,
     pub availability: String,
@@ -223,6 +268,36 @@ pub struct ResolveResult {
     pub dependency_closure: Vec<ContractDossier>,
     pub gaps: Vec<ResolutionGap>,
     pub issues: Vec<Issue>,
+}
+
+/// Outcome-only resolution; no contract bodies or basis dossier is implied.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ResolveSummary {
+    pub requested_id: String,
+    pub status: String,
+    pub contract_requirement: ContractRequirement,
+    pub facet_requirements: FacetRequirements,
+    pub declaration_status: String,
+    pub dependency_closure_status: String,
+    pub readiness: String,
+    pub gaps: Vec<ResolutionGap>,
+    pub issues: Vec<Issue>,
+}
+
+impl From<&ResolveResult> for ResolveSummary {
+    fn from(result: &ResolveResult) -> Self {
+        Self {
+            requested_id: result.requested_id.clone(),
+            status: result.status.clone(),
+            contract_requirement: result.contract_requirement.clone(),
+            facet_requirements: result.facet_requirements.clone(),
+            declaration_status: result.declaration_status.clone(),
+            dependency_closure_status: result.dependency_closure_status.clone(),
+            readiness: result.readiness.clone(),
+            gaps: result.gaps.clone(),
+            issues: result.issues.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -346,6 +421,14 @@ impl Client {
 
     pub fn show(&self, id: &str) -> Result<Output<ShowResult>, ClientError> {
         self.invoke(&["show".into(), id.into()])
+    }
+
+    pub fn show_full(&self, id: &str) -> Result<Output<FullShowResult>, ClientError> {
+        self.invoke(&["show".into(), id.into(), "--full".into()])
+    }
+
+    pub fn resolve_summary(&self, id: &str) -> Result<Output<ResolveSummary>, ClientError> {
+        self.invoke(&["resolve".into(), id.into(), "--summary".into()])
     }
 
     pub fn resolve(

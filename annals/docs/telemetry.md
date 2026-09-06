@@ -52,7 +52,7 @@ job unattempted.
 ## CLI
 
 ```text
-annals-usage report [--json] [--limit N] [--config PATH]
+annals-usage report [--json] [--details] [--limit N] [--config PATH]
 annals-usage budget [--json] [--config PATH]
 annals-usage doctor [--config PATH]
 annals-usage login --device-auth
@@ -60,10 +60,13 @@ annals-usage login --device-auth
 
 `report` joins recent delivery records from the Annals library with live
 Nucleus jobs, their ordered model output, and inbox job receipts. It defaults
-to the newest 20 deliveries. It shows each delivery's observed attempts,
-coverage, token categories, and any calculable known credit-equivalent. JSON
-additionally exposes the projection version, complete attempt and response
-projections, plus runs that cannot be attributed to a source delivery.
+to the newest 20 deliveries. It shows delivery totals, attempt counts,
+coverage and any calculable known credit-equivalent, plus unattributed run
+identities, status, totals, coverage and errors. Output version 2 includes
+`hasMore` and `unattributedHasMore`; increase positive `--limit` for more.
+`--details` includes complete attempt and response projections in both text and
+JSON. `--json` selects encoding only. `Client::report` returns
+`ConsumptionSummary`; `report_details` returns `ConsumptionReport`.
 Job-receipt discovery includes
 processing, done, duplicates, failed, and skipped envelopes; a skipped job
 remains a failed source delivery for reporting purposes.

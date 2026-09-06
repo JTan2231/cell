@@ -172,3 +172,7 @@ Use these types at imports and convert only to caller-local domain values.
 The client performs the same operations under this contract and never adds
 retry or authorization. See `crm/docs/rust-api.md`; the Rust structs and
 enums define the interface without a separate declaration layer.
+
+## Output selection
+
+Case creation returns a receipt with case ID, revision, stage, summary, complete advisory/attention and recorded time, without repeating Markdown. Tell durably returns its queued update and any activation warning. Exact case show retains full Markdown; runtime and domain settlement remain distinct.

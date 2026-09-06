@@ -200,7 +200,10 @@ pub enum WorkCommand {
     /// Retain a UTF-8 work containing source text without changing the corpus revision.
     Add(WorkAddArgs),
     /// List retained works.
-    List,
+    List {
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
     /// Show one retained work's metadata and structure.
     Show(WorkShowArgs),
 }
@@ -331,6 +334,11 @@ pub struct InboxRetryStartArgs {
 
 #[derive(Debug, Clone, Args)]
 pub struct InboxRetryStatusArgs {
+    /// Include the complete original-to-child item mapping.
+    #[arg(long)]
+    pub details: bool,
+    #[arg(long, default_value_t = 20)]
+    pub limit: usize,
     /// Retry event identifier. Omit to list recent and open events.
     #[arg(value_name = "EVENT_ID")]
     pub event_id: Option<i64>,
@@ -417,7 +425,10 @@ pub enum ChangeCommand {
     /// Atomically apply the selected pending reconciliation.
     Apply(ChangeSelectArgs),
     /// List reconciliation records.
-    List,
+    List {
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
 }
 
 #[derive(Debug, Clone, Args)]

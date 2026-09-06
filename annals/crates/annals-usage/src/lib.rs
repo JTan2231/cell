@@ -80,12 +80,29 @@ fn run() -> Result<Outcome, AppError> {
 
 fn run_report(options: &ReportOptions) -> Result<(), AppError> {
     let config = UsageConfig::load(options.config.as_deref())?;
-    let observations = with_runtime(load_nucleus_observations(&config, options.limit))?;
-    let report = report::build_report(&config, observations, options.limit)?;
+    if options.limit == 0 {
+        return Err(AppError::UnsupportedCommand(
+            "--limit must be positive".into(),
+        ));
+    }
+    let fetch_limit = options
+        .limit
+        .checked_add(1)
+        .ok_or_else(|| AppError::UnsupportedCommand("--limit is too large".into()))?;
+    let observations = with_runtime(load_nucleus_observations(&config, fetch_limit))?;
+    let mut report = report::build_report(&config, observations, fetch_limit)?;
+    report.has_more = report.deliveries.len() > options.limit;
+    report.unattributed_has_more = report.unattributed_runs.len() > options.limit;
+    report.deliveries.truncate(options.limit);
+    report.unattributed_runs.truncate(options.limit);
     if options.json {
-        write_json(&report)?;
+        if options.details {
+            write_json(&report)?;
+        } else {
+            write_json(&report::ConsumptionSummary::from(report))?;
+        }
     } else {
-        report::print_human(&report);
+        report::print_human(&report, options.details);
     }
     Ok(())
 }
@@ -380,7 +397,7 @@ fn write_json(value: &impl serde::Serialize) -> Result<(), AppError> {
 fn print_help() {
     println!(
         "annals-usage {}\n\n\
-         Usage:\n  annals-usage report [--json] [--limit N] [--config PATH]\n  \
+         Usage:\n  annals-usage report [--json] [--details] [--limit N] [--config PATH]\n  \
          annals-usage budget [--json] [--config PATH]\n  \
          annals-usage doctor [--config PATH]\n  \
          annals-usage login --device-auth\n\n\
@@ -392,6 +409,9 @@ fn print_help() {
 
 #[derive(Debug, Parser)]
 struct ReportOptions {
+    /// Include complete attempt and response projections.
+    #[arg(long)]
+    details: bool,
     #[arg(long)]
     config: Option<PathBuf>,
     #[arg(long)]

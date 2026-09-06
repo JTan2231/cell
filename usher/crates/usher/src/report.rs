@@ -244,3 +244,79 @@ impl Report {
         )
     }
 }
+
+/// Decision view for `check`; complete products and successful evidence are in `report`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct CheckReport {
+    pub schema_version: u32,
+    pub scope: String,
+    pub complete: usize,
+    pub incomplete: usize,
+    pub products: Vec<IncompleteProduct>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct IncompleteProduct {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity: Option<Finding>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantics: Option<Finding>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chancery: Option<Finding>,
+}
+impl From<&Report> for CheckReport {
+    fn from(report: &Report) -> Self {
+        let failed =
+            |finding: &Finding| (finding.status != Status::Declared).then(|| finding.clone());
+        Self {
+            schema_version: 2,
+            scope: report.scope.clone(),
+            complete: report.complete,
+            incomplete: report.incomplete,
+            products: report
+                .products
+                .iter()
+                .filter(|product| !product.complete)
+                .map(|product| IncompleteProduct {
+                    id: product.id.clone(),
+                    identity: failed(&product.identity),
+                    semantics: failed(&product.semantics),
+                    chancery: failed(&product.chancery),
+                })
+                .collect(),
+        }
+    }
+}
+impl CheckReport {
+    /// Render every incomplete finding after the counts.
+    ///
+    /// # Errors
+    /// Returns an error if the output cannot be written.
+    pub fn render(&self, output: &mut impl Write) -> io::Result<()> {
+        writeln!(
+            output,
+            "{} properly ushered; {} incomplete (repository declarations).",
+            self.complete, self.incomplete
+        )?;
+        for product in &self.products {
+            for (boundary, finding) in [
+                ("identity", &product.identity),
+                ("semantics", &product.semantics),
+                ("chancery", &product.chancery),
+            ] {
+                if let Some(finding) = finding {
+                    writeln!(
+                        output,
+                        "{}: {boundary} {}",
+                        product.id,
+                        finding.status.label()
+                    )?;
+                    for issue in &finding.issues {
+                        writeln!(output, "  {}: {}", issue.path, issue.message)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}

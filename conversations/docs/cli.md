@@ -4,8 +4,8 @@ All commands accept `--codex PATH` (or `CONVERSATIONS_CODEX`) and an optional
 stable `--host-id` (or `CONVERSATIONS_HOST_ID`). Without an override, macOS
 uses an opaque hash of the platform UUID; the raw hardware identifier is never
 returned or retained. macOS fails closed if that stable identity cannot be
-read; other platforms use hostname as a compatibility fallback. `--json` uses
-camel-case fields and stable typed references.
+read; other platforms use hostname as a compatibility fallback. `--json` preserves stable typed references; command-specific output envelopes
+and content selection are documented below.
 
 The CLI explicitly defaults `--app-server-stderr inherit`, preserving Codex
 diagnostics for an interactive operator. `--app-server-stderr suppress` routes
@@ -37,8 +37,11 @@ Lists task metadata without loading message content. Filters are:
 - `--updated-after UNIX_SECONDS` before any full-history read; and
 - `--title TEXT` for App Server's case-sensitive extracted-title search.
 
-Human output is a stable tab-separated table. JSON returns `ThreadSummary`
-objects.
+List defaults to 20 rows. JSON schema 2 returns `threads` and `has_more`;
+rows contain stable reference, title, archive flag, update time, source kind
+and observed runtime status. Human output carries the same selection.
+Increase positive `--limit` to read more. Library metadata methods still return
+complete `ThreadSummary` values.
 
 ## `conversations show THREAD_ID [--turn TURN_ID] [--json]`
 
@@ -68,16 +71,21 @@ Search has two parts: App Server searches extracted titles, while Conversations
 separately loads the selected normalized corpus and searches message text
 case-insensitively on the client. App Server title search is not a full-text
 index. `--thread-limit` caps the newest candidate summaries before histories
-are loaded; `--limit` caps matching messages afterward. Results are
-deduplicated by item ID across copied fork history. Without an updated-after or
+are loaded; positive `--limit` defaults to 20 hits afterward. Each title match
+emits one `kind: thread` hit. Matching messages emit `kind: message`, stable
+item reference, thread title, role and a marked `excerpt` of at most 240 Unicode
+characters around the match. Message hits are deduplicated by item ID across
+copied fork history. JSON schema 2 includes `hits`, `has_more` and the explicit
+`thread_limit` search scope. Increase `--limit` for more hits; a result cap
+never turns an incomplete source read into success. Without an updated-after or
 thread limit, full-text search must read every selected history and can be
 expensive on a machine with many tasks.
 
 ## `conversations export [FILTERS] [--limit N] [--json]`
 
-Materializes the filtered, fork-deduplicated normalized corpus. Human output is
-a count summary; `--json` writes the full typed corpus to standard output. The
-JSON is user/assistant-only but still contains sensitive transcript text and
+Materializes the filtered, fork-deduplicated normalized corpus. Text renders
+the complete selected transcripts; `--json` encodes the same full corpus. The
+corpus is user/assistant-only but still contains sensitive transcript text and
 should be redirected only to an appropriately protected destination. `--limit`
 caps the newest selected summaries before any full-history read. Large unbounded
 exports necessarily read every selected task.

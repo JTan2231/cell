@@ -981,3 +981,20 @@ Deployment gate identity follows the canonical database path (including a
 symlink alias), or the canonical existing ancestor for a new database.
 Hardlinked databases are rejected before admission. Maintenance status still
 does not open or initialize the database.
+
+## Selection and receipt output
+
+`work list --limit N` and `change list --limit N` default to 20 and return
+schema-two selection pages (`items`, `has_more`). Increase the positive limit
+for more. Existing corpus cursors keep their frozen revision semantics.
+Successful applied and recorded/no-change reconciliation mutations return
+work, base/result revision, status, summary, operation count and recorded time
+where applicable. Pending proposals retain complete review content.
+`change show --work LABEL` and `change show --at REVISION` remain full reads.
+
+`inbox retry status EVENT_ID` returns event identity, window, state, counts,
+remaining work and last halt. Add `--details` for the complete original-to-child
+mapping. Start/continue return the compact receipt. Without an event ID, status
+lists 20 events by default, with `has_more` and `--limit N` for more.
+Text and JSON select the same content; output changes do not alter corpus
+history, retries, mutation authority or the accepted-account exchange.

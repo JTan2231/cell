@@ -69,3 +69,7 @@ when a duplicate would be harmful.
 The Email runtime does not call Chancery. Chancery provides installed,
 version-matched discovery documentation only and does not authorize or execute
 the send.
+
+## Output selection
+
+On Resend acceptance Email exits zero and prints Accepted followed by the message ID. This acknowledges transport acceptance, not final delivery. Errors remain bounded secret-safe diagnostics with nonzero exit; no output body or credential is echoed.

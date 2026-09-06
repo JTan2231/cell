@@ -8,10 +8,11 @@ use std::path::{Path, PathBuf};
 
 use nucleus_core::{
     AccountSnapshotQueryV1, AccountSnapshotV1, CancelJobResponseV1, ErrorResponseV1,
-    HealthResponseV1, JobAcceptedV1, JobId, JobRequestV1, JobV1, LaunchContextAcceptedV1,
-    LaunchContextRegistrationV1, ListJobsQueryV1, ListJobsResponseV1, LogSchemaV1, LogsQueryV1,
-    LogsResponseV1, PendingToolCallV1, RegisteredToolsetV1, SchemaId, ToolCallId, ToolCallsQueryV1,
-    ToolCallsResponseV1, ToolResultV1, ToolsetRegistrationV1,
+    HealthResponseV1, JobAcceptedV1, JobId, JobRequestV1, JobStatusV1, JobV1, JobWaitV1,
+    LaunchContextAcceptedV1, LaunchContextRegistrationV1, ListJobsQueryV1, ListJobsResponseV1,
+    LogSchemaV1, LogsQueryV1, LogsResponseV1, PendingToolCallV1, RegisteredToolsetV1, SchemaId,
+    ToolCallId, ToolCallSummaryV1, ToolCallsQueryV1, ToolCallsResponseV1, ToolResultV1,
+    ToolsetRegistrationV1,
 };
 use reqwest::{Method, StatusCode};
 use serde::Serialize;
@@ -255,6 +256,93 @@ impl NucleusClient {
     pub async fn get_job(&self, job_id: &JobId) -> Result<JobV1, ClientError> {
         self.get(&format!("/v1/jobs/{}", path_segment(job_id.as_str())))
             .await
+    }
+
+    /// Observe runtime state and pending call identities without request or output bodies.
+    /// Mailbox and job reads are successive observations, not an atomic snapshot.
+    ///
+    /// # Errors
+    /// Returns a [`ClientError`] if either supported read fails.
+    pub async fn job_status(&self, job_id: &JobId) -> Result<JobStatusV1, ClientError> {
+        let calls = self
+            .pending_tool_calls(
+                job_id,
+                &ToolCallsQueryV1 {
+                    after: 0,
+                    wait_seconds: 0,
+                },
+            )
+            .await?;
+        let job = self.get_job(job_id).await?;
+        let attempt = job
+            .attempts
+            .iter()
+            .find(|attempt| Some(&attempt.id) == job.summary.current_attempt_id.as_ref());
+        let pending_tool_calls = if job.summary.state.is_terminal() {
+            Vec::new()
+        } else {
+            calls
+                .calls
+                .into_iter()
+                .map(|pending| ToolCallSummaryV1 {
+                    id: pending.call.id,
+                    tool_name: pending.call.tool_name,
+                })
+                .collect()
+        };
+        Ok(JobStatusV1 {
+            version: job.version,
+            id: job.summary.id,
+            requester: job.summary.requester,
+            state: job.summary.state,
+            attempt_id: job.summary.current_attempt_id.clone(),
+            attempt_state: attempt.map(|attempt| attempt.state),
+            pending_tool_calls,
+            final_output_available: attempt.is_some_and(|attempt| attempt.output.is_some()),
+            terminal_reason: attempt.and_then(|attempt| attempt.terminal_reason),
+            terminal_message: attempt.and_then(|attempt| attempt.terminal_message.clone()),
+        })
+    }
+
+    /// Wait for a terminal runtime observation, returning once without cancelling on timeout.
+    ///
+    /// # Errors
+    /// Returns a [`ClientError`] when an observation fails. The initial read must finish
+    /// before a result can be returned, including with a zero timeout.
+    pub async fn wait_job(
+        &self,
+        job_id: &JobId,
+        timeout: std::time::Duration,
+    ) -> Result<JobWaitV1, ClientError> {
+        let started = tokio::time::Instant::now();
+        let mut status = self.job_status(job_id).await?;
+        loop {
+            if status.state.is_terminal() {
+                return Ok(JobWaitV1 {
+                    status,
+                    outcome: "terminal".into(),
+                });
+            }
+            let Some(remaining) = timeout.checked_sub(started.elapsed()) else {
+                return Ok(JobWaitV1 {
+                    status,
+                    outcome: "timeout".into(),
+                });
+            };
+            let observation = async {
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                self.job_status(job_id).await
+            };
+            match tokio::time::timeout(remaining, observation).await {
+                Ok(result) => status = result?,
+                Err(_) => {
+                    return Ok(JobWaitV1 {
+                        status,
+                        outcome: "timeout".into(),
+                    });
+                }
+            }
+        }
     }
 
     /// List jobs matching a validated query.

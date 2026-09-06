@@ -87,3 +87,7 @@ that root facet. Unsupported, unspecified, not-applicable, and undeclared
 facets remain unsatisfied. A reported gap should be taken back to the owning
 product contract; do not fill it by reading a database schema or implementation
 code and calling the inference a promise.
+
+## Output selection
+
+Resolve retains the complete root and transitive dependency dossiers, exact bases, requirements, declaration/closure status, readiness, gaps and issues. Human output puts outcome and gaps first. --summary selects only outcome, requirements, status, readiness, gaps and issues with identical exit semantics; JSON output schema is 3.

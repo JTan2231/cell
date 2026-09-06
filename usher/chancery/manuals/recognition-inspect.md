@@ -68,9 +68,10 @@ three findings are declared. Selection by `--product` occurs after global
 collision checks. Unknown or ambiguous selections are errors.
 
 `report` exits 0 when it can produce the report, including incomplete products.
-`check` emits the same report and exits 1 for incomplete selected products.
+`check` emits counts and all incomplete boundary findings, omits successful evidence,
+and exits 1 for incomplete selected products.
 Both exit 2 for command or inventory errors; an absent or empty inventory cannot
-produce a successful empty report. JSON output has `schema_version: 1` and
+produce a successful empty report. Report JSON has `schema_version: 1`; check JSON has `schema_version: 2`. Both have
 `scope: "repository_declarations"`; fatal errors have a schema-versioned
 `error` field. Findings contain no document bodies.
 
@@ -86,3 +87,7 @@ The same unchanged checkout and Usher version produce the same report. Reads
 are not an atomic filesystem snapshot; callers keep the checkout stable. Root
 CI additionally rejects results if its source candidate changes during the run.
 Fix the source declaration and rerun; Usher has no reset or repair command.
+
+## Output selection
+
+check returns schema-two counts and every incomplete identity/Semantics/Chancery finding, omitting successful evidence. report retains the complete schema-one product report. Exit 1 still means an incomplete check; fatal command/inventory errors exit 2. Both views describe repository declarations, never runtime readiness or actual registration.

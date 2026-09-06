@@ -73,7 +73,7 @@
     "Uninstall finds a Clockwork LaunchAgent plist, product-binding quiescence is unknown, or the requested action includes retained-state deletion without separate exact authority."
   ],
   "dependencies": [
-    {"id": "chancery.provider.publish", "min_contract": 3, "max_contract_exclusive": 4}
+    {"id": "chancery.provider.publish", "min_contract": 4, "max_contract_exclusive": 5}
   ],
   "interfaces": [
     {"label": "Deploy candidate", "invocation": "clockwork/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH --chancery ABSOLUTE_PATH"},

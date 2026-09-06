@@ -1,6 +1,6 @@
 {
   "id": "crm.steward.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -129,8 +129,8 @@
   "dependencies": [
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 1,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "promise": {
@@ -155,11 +155,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Deployment selects one content-addressed release for both public selectors; init creates or idempotently accepts schema two; doctor reports storage/requester readiness; recovery preserves or creates the exact allowed update. Migration reports changed, from_schema_version, and schema_version, preserves old rows, and creates an independently readable schema-one backup; a schema-two no-op creates no backup. The JSON backup is an absolute path when changed or null when unchanged."
-      },
-      {
-        "status": "declared",
-        "statement": "Maintenance status reports protocol_version 1, holds and drained with product-specific runtime evidence. Deployment verification checks the installed release and configured runtime readiness; it creates no model job or domain record."
+        "statement": "Update views preserve domain state, Nucleus correlation and runtime settlement, result-post status, failures and complete advisory/attention. Update list defaults to 20 with has_more and positive --limit for more; show/wait/resume/retry retain the complete selected operational view."
       }
     ],
     "data_semantics": [

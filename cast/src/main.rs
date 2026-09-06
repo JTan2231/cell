@@ -83,6 +83,8 @@ enum Command {
     },
     Search {
         query: String,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
     },
 }
 #[derive(Subcommand)]
@@ -100,6 +102,8 @@ enum StateCommand {
 #[derive(Subcommand)]
 enum ListCommand {
     List {
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
         #[arg(long)]
         json: bool,
     },
@@ -191,9 +195,40 @@ async fn execute(cli: Cli) -> Result<()> {
                 serde_json::to_value(store.snapshot()?)?
             }
         }
-        Command::Companies { .. } => serde_json::to_value(store.snapshot()?.companies)?,
-        Command::Jobs { .. } => serde_json::to_value(store.snapshot()?.jobs)?,
-        Command::Sources { .. } => serde_json::to_value(store.snapshot()?.source_health)?,
+        Command::Companies {
+            command: ListCommand::List { limit, .. },
+        } => {
+            let snapshot = store.snapshot()?;
+            page(
+                snapshot.snapshot_revision,
+                snapshot.companies.iter().map(company_summary).collect(),
+                limit,
+            )?
+        }
+        Command::Jobs {
+            command: ListCommand::List { limit, .. },
+        } => {
+            let snapshot = store.snapshot()?;
+            page(
+                snapshot.snapshot_revision,
+                snapshot
+                    .jobs
+                    .iter()
+                    .map(|job| job_summary(job, &snapshot))
+                    .collect(),
+                limit,
+            )?
+        }
+        Command::Sources {
+            command: ListCommand::List { limit, .. },
+        } => {
+            let snapshot = store.snapshot()?;
+            page(
+                snapshot.snapshot_revision,
+                snapshot.source_health.iter().map(source_summary).collect(),
+                limit,
+            )?
+        }
         Command::Company {
             command: ShowCommand::Show { id },
         } => serde_json::to_value(
@@ -247,16 +282,120 @@ async fn execute(cli: Cli) -> Result<()> {
             let _lock = store.lock()?;
             serde_json::to_value(store.disable_source(&id)?)?
         }
-        Command::Unresolved { .. } => {
+        Command::Unresolved {
+            command: ListCommand::List { limit, .. },
+        } => {
             let snapshot = store.snapshot()?;
-            json!({"companies":snapshot.companies.into_iter().filter(|c|c.domain.is_none()).collect::<Vec<_>>(),"sources":snapshot.source_health.into_iter().filter(|s|!matches!(s.status.as_str(),"complete"|"resolved"|"observed")).collect::<Vec<_>>()})
+            let mut items: Vec<_> = snapshot
+                .companies
+                .iter()
+                .filter(|c| c.domain.is_none())
+                .map(company_summary)
+                .collect();
+            items.extend(
+                snapshot
+                    .source_health
+                    .iter()
+                    .filter(|s| !matches!(s.status.as_str(), "complete" | "resolved" | "observed"))
+                    .map(source_summary),
+            );
+            page(snapshot.snapshot_revision, items, limit)?
         }
-        Command::Search { query } => {
-            let query = query.to_lowercase();
+        Command::Search { query, limit } => {
+            if query.trim().is_empty() {
+                return Err("search query must not be empty".into());
+            }
+            let folded = query.to_lowercase();
             let snapshot = store.snapshot()?;
-            json!({"companies":snapshot.companies.into_iter().filter(|c|c.name.to_lowercase().contains(&query)||c.domain.as_ref().is_some_and(|d|d.contains(&query))).collect::<Vec<_>>(),"jobs":snapshot.jobs.into_iter().filter(|j|j.title.to_lowercase().contains(&query)||j.description.as_ref().is_some_and(|d|d.to_lowercase().contains(&query))).collect::<Vec<_>>()})
+            let mut items = Vec::new();
+            for company in &snapshot.companies {
+                if let Some((field, text)) = [
+                    ("name", company.name.as_str()),
+                    ("domain", company.domain.as_deref().unwrap_or_default()),
+                ]
+                .into_iter()
+                .find(|(_, text)| text.to_lowercase().contains(&folded))
+                {
+                    let mut item = company_summary(company);
+                    item["matched_field"] = json!(field);
+                    item["excerpt"] = json!(match_excerpt(text, &query));
+                    items.push(item);
+                }
+            }
+            for job in &snapshot.jobs {
+                if let Some((field, text)) = [
+                    ("title", job.title.as_str()),
+                    (
+                        "description",
+                        job.description.as_deref().unwrap_or_default(),
+                    ),
+                ]
+                .into_iter()
+                .find(|(_, text)| text.to_lowercase().contains(&folded))
+                {
+                    let mut item = job_summary(job, &snapshot);
+                    item["matched_field"] = json!(field);
+                    item["excerpt"] = json!(match_excerpt(text, &query));
+                    items.push(item);
+                }
+            }
+            page(snapshot.snapshot_revision, items, limit)?
         }
     };
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
+}
+
+fn company_summary(company: &cast::models::Company) -> Value {
+    json!({"kind":"company","id":company.id,"revision":company.revision,"name":company.name,"domain":company.domain})
+}
+fn job_summary(job: &cast::models::Job, snapshot: &cast::models::Snapshot) -> Value {
+    let company = snapshot
+        .companies
+        .iter()
+        .find(|company| company.id == job.company_id);
+    json!({"kind":"job","id":job.id,"revision":job.revision,"company_id":job.company_id,
+        "company":company.map(|company| &company.name),"title":job.title,"location":job.location,"remote":job.remote,
+        "geographic_eligibility":job.geographic_eligibility,"availability":job.availability,"last_seen_at":job.last_seen_at})
+}
+fn source_summary(source: &cast::models::Source) -> Value {
+    json!({"kind":"source","id":source.id,"url":source.url,"company_id":source.company_id,"enabled":source.enabled,"status":source.status,
+        "last_attempt_at":source.last_attempt_at,"last_success_at":source.last_success_at,"next_due_at":source.next_due_at,"note":source.note})
+}
+fn page(revision: u64, mut items: Vec<Value>, limit: usize) -> Result<Value> {
+    if limit == 0 {
+        return Err("--limit must be positive".into());
+    }
+    let has_more = items.len() > limit;
+    items.truncate(limit);
+    Ok(json!({"schema_version":2,"snapshot_revision":revision,"items":items,"has_more":has_more}))
+}
+
+fn match_excerpt(text: &str, query: &str) -> String {
+    let position = text.to_lowercase().find(&query.to_lowercase()).unwrap_or(0);
+    let mut folded_bytes = 0;
+    let matched = text
+        .chars()
+        .take_while(|ch| {
+            let before = folded_bytes;
+            folded_bytes += ch.to_lowercase().map(char::len_utf8).sum::<usize>();
+            before < position
+        })
+        .count();
+    let chars: Vec<_> = text.chars().collect();
+    let start = matched.saturating_sub(60);
+    let end = (start + 238).min(chars.len());
+    let mut result = String::new();
+    if start > 0 {
+        result.push('…');
+    }
+    result.extend(
+        chars[start..end]
+            .iter()
+            .map(|ch| if ch.is_whitespace() { ' ' } else { *ch }),
+    );
+    if end < chars.len() {
+        result.push('…');
+    }
+    result
 }

@@ -1,6 +1,6 @@
 {
   "id": "annals.work.integrate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -48,7 +48,7 @@
     {"label": "Inspect reconciliation", "invocation": "/Users/joey/.local/bin/annals change show --work <LABEL>"}
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
+    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4}
   ],
   "does_not_authorize": [
     "Applying a material reconciliation unless `--apply` or a separate explicit apply request is authorized.",
@@ -69,8 +69,10 @@
       {"status": "unsupported", "statement": "The caller cannot supply arbitrary corpus writes, bypass draft validation, force a stale reconciliation, or make final model prose the domain result."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "The durable result is a valid reconciliation tied to one work and base revision, its projected corpus state and status, and, when authorized and material, the applied commit revision."},
-      {"status": "declared", "statement": "A mechanically equal projection is recorded as a no-change interpretation with no commit or revision advance."}
+      {
+        "status": "declared",
+        "statement": "Applied and recorded/no-change mutation results return work, base/result revision, status, summary and operation count, plus recorded time where applicable. Pending proposals retain full review content. change show retains complete selected reconciliation or accepted change; change list returns a schema-two items/has_more page defaulting to 20 with positive --limit for more. Domain results survive later runtime failure."
+      }
     ],
     "data_semantics": [
       {"status": "declared", "statement": "A reconciliation is a provisional evidence-grounded interpretation, not objective truth or a uniquely correct concept decomposition."},
@@ -101,7 +103,7 @@
       {"status": "unspecified", "statement": "No maximum work size, execution duration, queue latency, or Codex allowance consumption is promised here."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 is distinct from provider release, library schema, prompt version, model identity, and Nucleus public protocol."},
+      {"status": "declared", "statement": "Capability contract version 2 is distinct from provider release, library schema, prompt version, model identity, and Nucleus public protocol."},
       {"status": "declared", "statement": "Examination reuse requires the exact documented context; changed context requires a new reading or explicit reexamination."},
       {"status": "unspecified", "statement": "No cross-release pending-reconciliation support window or deprecation period is promised."}
     ],

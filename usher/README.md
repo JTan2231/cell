@@ -74,9 +74,12 @@ three findings are declared. Selection by `--product` occurs after global
 collision checks. Unknown or ambiguous selections are errors.
 
 `report` exits 0 when it can produce the report, including incomplete products.
-`check` emits the same report and exits 1 for incomplete selected products.
+`check` emits counts and every incomplete finding, omitting successful products
+and successful evidence, and exits 1 for incomplete selected products. Its JSON
+schema is 2; `report` retains full schema-one evidence. `CheckReport` is the
+provider-owned compact type.
 Both exit 2 for command or inventory errors; an absent or empty inventory cannot
-produce a successful empty report. JSON output has `schema_version: 1` and
+produce a successful empty report. Full report JSON has `schema_version: 1` and
 `scope: "repository_declarations"`; fatal errors have a schema-versioned
 `error` field. Findings contain no document bodies.
 

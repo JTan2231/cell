@@ -9,7 +9,7 @@ clockwork [--json] binding disable KEY [--select DEFINITION_DIGEST]
 clockwork [--json] binding list
 clockwork [--json] binding show KEY
 clockwork [--json] run KEY
-clockwork [--json] history [KEY] [--limit N]
+clockwork [--json] history [KEY] [--limit N] [--details]
 clockwork [--json] doctor
 ```
 
@@ -203,7 +203,7 @@ goal succeeded.
 ## Inspection
 
 `definition list` and `definition show DIGEST` expose registered immutable
-definitions. `binding list` returns all stable bindings and whether each is
+definitions. `binding list` selects stable bindings and whether each is
 enabled. `binding show KEY` returns the recorded binding and selected
 definition digest; it does not query launchd or expose the internal plist
 digest. An absent binding returns
@@ -212,10 +212,11 @@ an absent key. Paths, non-secret environment, hashes, and identifiers are privat
 metadata.
 
 `history [KEY]` returns newest activations first, optionally restricted to one
-key. `--limit` defaults to 100 and accepts 1 through 1000. Each row includes
-activation and definition identity, source (`manual` or `launchd`), whole Unix
-second timestamps, state, broker and direct-child PID where known, exit code,
-signal, and applicable detail. It contains no captured output body and no
+key. Definition/binding lists and history default to 20 rows, accept positive
+`--limit`, and return output-version-two pages (`items`, `has_more`). Increase
+`--limit` for more. History rows contain activation ID, key, trigger, timestamps,
+state, exit code, signal and failure detail. `history --details` includes the
+complete records with definition digest and process IDs. It contains no captured output body and no
 domain-success field.
 
 ## Doctor

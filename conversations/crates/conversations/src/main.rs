@@ -143,8 +143,8 @@ struct ListArgs {
     title: Option<String>,
 
     /// Limit rows after active and archived results are merged.
-    #[arg(long)]
-    limit: Option<usize>,
+    #[arg(long, default_value_t = 20)]
+    limit: usize,
 
     #[command(flatten)]
     output: OutputArgs,
@@ -216,9 +216,9 @@ struct SearchArgs {
     #[command(flatten)]
     filters: FilterArgs,
 
-    /// Limit matching messages after fork/copy deduplication.
-    #[arg(long)]
-    limit: Option<usize>,
+    /// Limit title and message hits after fork/copy deduplication.
+    #[arg(long, default_value_t = 20)]
+    limit: usize,
 
     /// Limit candidate tasks before loading their full histories.
     #[arg(long)]
@@ -287,12 +287,17 @@ fn run() -> Result<(), Box<dyn StdError>> {
         Command::List(args) => {
             let mut options = args.filters.options();
             options.title_query = args.title;
-            options.limit = args.limit;
-            let threads = client.list(&options)?;
+            options.limit = Some(selection_limit(args.limit)?);
+            let mut threads = client.list(&options)?;
+            let has_more = threads.len() > args.limit;
+            threads.truncate(args.limit);
             if args.output.json {
-                write_json(&threads)?;
+                write_json(
+                    &serde_json::json!({"schema_version":2,"threads":threads.iter().map(|thread| serde_json::json!({"reference":thread.reference,"title":thread.title(),"archived":thread.archived,"updatedAt":thread.updated_at,"sourceKind":thread.source_kind,"runtimeStatus":thread.runtime_status})).collect::<Vec<_>>(),"has_more":has_more}),
+                )?;
             } else {
                 write_thread_list(&threads)?;
+                page_hint(has_more);
             }
         }
         Command::Show(args) => {
@@ -329,11 +334,19 @@ fn run() -> Result<(), Box<dyn StdError>> {
             let mut options = args.filters.options();
             options.limit = args.thread_limit;
             let mut hits = client.search(&args.query, &options)?;
-            truncate(&mut hits, args.limit);
+            selection_limit(args.limit)?;
+            let has_more = hits.len() > args.limit;
+            hits.truncate(args.limit);
             if args.output.json {
-                write_json(&hits)?;
+                write_json(
+                    &serde_json::json!({"schema_version":2,"hits":hits,"has_more":has_more,"thread_limit":args.thread_limit}),
+                )?;
             } else {
                 write_search_hits(&hits)?;
+                page_hint(has_more);
+                if let Some(limit) = args.thread_limit {
+                    println!("Search scope: at most {limit} threads (--thread-limit).");
+                }
             }
         }
         Command::Export(args) => {
@@ -343,20 +356,9 @@ fn run() -> Result<(), Box<dyn StdError>> {
             if args.output.json {
                 write_json(&conversations)?;
             } else {
-                let turns = conversations
-                    .iter()
-                    .map(|conversation| conversation.turns.len())
-                    .sum::<usize>();
-                let messages = conversations
-                    .iter()
-                    .flat_map(|conversation| &conversation.turns)
-                    .map(|turn| turn.messages.len())
-                    .sum::<usize>();
-                println!(
-                    "exported corpus: {} threads, {turns} turns, {messages} user/assistant messages",
-                    conversations.len()
-                );
-                println!("use --json to write the normalized corpus to standard output");
+                for conversation in &conversations {
+                    write_conversation(conversation)?;
+                }
             }
         }
         Command::Refresh(args) => {
@@ -372,12 +374,6 @@ fn run() -> Result<(), Box<dyn StdError>> {
         }
     }
     Ok(())
-}
-
-fn truncate<T>(values: &mut Vec<T>, limit: Option<usize>) {
-    if let Some(limit) = limit {
-        values.truncate(limit);
-    }
 }
 
 fn write_json<T: Serialize>(value: &T) -> Result<(), Box<dyn StdError>> {
@@ -458,19 +454,48 @@ fn write_conversation(conversation: &Conversation) -> io::Result<()> {
 fn write_search_hits(hits: &[SearchHit]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut output = stdout.lock();
-    writeln!(output, "THREAD\tTURN\tITEM\tROLE\tTEXT")?;
     for hit in hits {
-        writeln!(
-            output,
-            "{}\t{}\t{}\t{}\t{}",
-            hit.message.reference.thread_id,
-            hit.message.reference.turn_id,
-            hit.message.reference.item_id,
-            role_name(hit.message.role),
-            one_line(&hit.message.text)
-        )?;
+        match hit {
+            SearchHit::Thread { reference, title } => writeln!(
+                output,
+                "{}/{} title: {}",
+                reference.host_id,
+                reference.thread_id,
+                one_line(title)
+            )?,
+            SearchHit::Message {
+                reference,
+                title,
+                role,
+                excerpt,
+            } => writeln!(
+                output,
+                "{}/{}/{}/{} [{}] {}\n  excerpt: {}",
+                reference.host_id,
+                reference.thread_id,
+                reference.turn_id,
+                reference.item_id,
+                role_name(*role),
+                one_line(title),
+                excerpt
+            )?,
+        }
     }
     Ok(())
+}
+
+fn selection_limit(limit: usize) -> Result<usize, Box<dyn StdError>> {
+    if limit == 0 {
+        return Err("--limit must be positive".into());
+    }
+    limit
+        .checked_add(1)
+        .ok_or_else(|| "--limit is too large".into())
+}
+fn page_hint(has_more: bool) {
+    if has_more {
+        println!("More results available; increase --limit.");
+    }
 }
 
 fn write_activity(report: &ActivityReport) -> io::Result<()> {

@@ -86,8 +86,8 @@
   "dependencies": [
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 1,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "does_not_authorize": [

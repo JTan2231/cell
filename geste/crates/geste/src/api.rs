@@ -19,7 +19,7 @@ pub struct Success<T> {
 impl<T> Success<T> {
     pub fn new(data: T) -> Self {
         Self {
-            schema_version: 1,
+            schema_version: 2,
             ok: true,
             data,
         }
@@ -40,7 +40,7 @@ pub struct Failure {
 impl Failure {
     pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
-            schema_version: 1,
+            schema_version: 2,
             ok: false,
             error: ErrorBody {
                 code: code.into(),
@@ -79,13 +79,13 @@ impl From<serde_json::Error> for ClientError {
     }
 }
 
-/// Decode the existing geste envelope without changing its wire format.
+/// Decode the version-two Geste output envelope.
 pub fn decode_response<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, ClientError> {
     let value: serde_json::Value = serde_json::from_slice(bytes)?;
     if value
         .get("schema_version")
         .and_then(serde_json::Value::as_u64)
-        != Some(1)
+        != Some(2)
     {
         return Err(ClientError::Protocol("unsupported response schema".into()));
     }
@@ -188,6 +188,12 @@ pub fn decode_capture(bytes: &[u8]) -> Result<Capture, CaptureError> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RevisionReceipt {
+    pub episode: String,
+    pub revision: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Data {
     Init {
@@ -205,15 +211,17 @@ pub enum Data {
     SearchResults {
         query_terms: Vec<String>,
         results: Vec<SearchResult>,
+        has_more: bool,
     },
     EpisodeCreated {
-        episode: RevisionView,
+        episode: RevisionReceipt,
     },
     EpisodeRevised {
-        episode: RevisionView,
+        episode: RevisionReceipt,
     },
     EpisodeList {
         episodes: Vec<EpisodeListItem>,
+        has_more: bool,
     },
     EpisodeRevision {
         episode: RevisionView,

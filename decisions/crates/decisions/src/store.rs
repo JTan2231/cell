@@ -648,6 +648,7 @@ impl Store {
                 "unable to read Krisis account delivery status",
             )?;
         Ok(ObservationStatus {
+            failures_has_more: false,
             observer_baseline_at: self.observer_baseline_at()?,
             queued: counts[0],
             processing: counts[1],

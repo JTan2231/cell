@@ -53,3 +53,7 @@ counts, stable references, and counts of structurally validated completed file
 changes. It never emits transcript bodies, file paths, diffs, commands, tool
 output, approvals, or reasoning. Session hints are exact-thread-first; lineage
 fallback must find exactly one thread containing the requested turn.
+
+## Output selection
+
+CLI list/search return schema-two selections with has_more and a positive --limit default of 20. List rows contain reference, title, archive/update/source/runtime-status metadata. Search emits one thread hit per title match and separate message hits with stable reference, title, role and at most 240 Unicode characters of marked matching excerpt; it declares the optional thread_limit scope. Show and export retain complete normalized user/assistant transcripts; --json changes encoding only. Activity remains content-free and refresh returns metadata counts. Rust metadata methods retain complete ThreadSummary values.

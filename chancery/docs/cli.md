@@ -2,8 +2,8 @@
 
 ```text
 chancery [--registry PATH] [--json] list [--mode MODE] [--kind KIND]
-chancery [--registry PATH] [--json] show ID
-chancery [--registry PATH] [--json] resolve ID [--min-contract VERSION] [--max-contract-exclusive VERSION] [--require FACET]...
+chancery [--registry PATH] [--json] show ID [--full]
+chancery [--registry PATH] [--json] resolve ID [--min-contract VERSION] [--max-contract-exclusive VERSION] [--require FACET]... [--summary]
 chancery [--registry PATH] [--json] doctor
 chancery [--json] validate BUNDLE
 ```
@@ -35,27 +35,26 @@ development are visibly distinct:
 
 ```text
 Installed Chancery catalog
+Defaults: supported · installed · compatible · readiness not_checked (not probed). Exceptions appear below.
 
 USE — ordinary outcome work
 
 todo.concern.capture-and-route — Save and research a concern for later
   Save one actionable concern with its source, then research a pending proposal to attach it, create or revise a todo, unify duplicates, defer it, or dismiss it.
-  capability · use · Todo 0.3.0 · supported · installed · compatible · not_checked
 
 OPERATE — administration, diagnosis, and recovery
 
 nucleus.execution.operate — Manage Nucleus agent jobs and service
   Check readiness and account access, submit or inspect agent jobs, read their output, cancel work, or operate the per-user Nucleus service.
-  capability · operate · Nucleus 0.3.0 · supported · installed · compatible · not_checked
 ```
 
-Each card contains the stable ID, title, summary, kind, mode, provider release,
-owner-declared support, installed availability, contract compatibility, and
-readiness classification. `availability=installed` means the indexed bundle is
-present and valid. `compatibility=unavailable` means a declared contract
-dependency is absent, out of range, cyclic, or transitively unavailable.
-`readiness=not_checked` or `session_dependent` is deliberately not a live
-health claim.
+Each card contains the stable ID, title and summary. Kind and mode remain
+available in JSON and grouping/filtering. Common support, availability,
+compatibility and readiness appear once under `defaults`; cards carry only
+exceptions. Provider release and contract version belong to `show`.
+`availability=installed` means valid indexed documentation, and
+`compatibility=unavailable` means a missing, incompatible or cyclic dependency.
+Readiness is never probed. Operation readiness remains `session_dependent`.
 
 Use `--mode use|operate|develop` or `--kind capability|operation` only when a
 caller deliberately wants a narrower view. Plain `list` is always the complete
@@ -73,37 +72,16 @@ After identifying one or more plausible entries, read each complete contract:
 /Users/joey/.local/bin/chancery show todo.concern.capture-and-route
 ```
 
-The human output begins:
+`show` prints identity, release, support, availability, compatibility,
+readiness, dependency statuses, and the complete authored operating manual
+once. JSON carries the same selected identity and manual. The manual must
+contain applicability, exact interfaces, effects, authority, success, recovery,
+privacy, exclusions, and any operation checkpoints needed to act correctly.
+It does not prove readiness or execute an interface.
 
-```text
-todo.concern.capture-and-route
-Save and research a concern for later
-
-Kind:              capability
-Mode:              use
-Owner:             Todo
-Provider release:  0.3.0
-Support:           supported
-Availability:      installed
-Compatibility:     compatible
-Readiness:         not_checked
-Contract version:  1
-
-USE WHEN
-
-  - The user wants an actionable concern or follow-up durably retained for later rather than completed now.
-
-DO NOT USE WHEN
-
-  - The user wants the work completed in the current request.
-```
-
-It continues with outcome, stable interfaces, effects, authority, success,
-failure and recovery, privacy, non-authorizations, dependencies, session
-surfaces, operation steps/checkpoints/adaptation/stop conditions when
-applicable, and the complete installed Markdown manual. Reading `show` should
-be enough to decide and carry out the represented request without inspecting
-source code. It still does not prove live readiness or execute an interface.
+`show ID --full` includes the original structured authoring fields and
+normalized claims as well as the manual. Use it to inspect authoring or compare
+declarations. `resolve` remains the full outward-promise and dependency read.
 
 ## `resolve`
 
@@ -118,7 +96,12 @@ outward-promise dossier:
 request, keywords, provider guess, or ranking criteria. Candidate selection
 remains with the interactive agent; extra positional text is a usage error.
 
-The dossier contains:
+Outcome and gaps precede the contract bodies in human output.
+`resolve ID --summary` returns only outcome, requirements, declaration and
+closure status, readiness, gaps and issues. It accepts the same bounds and
+facets and returns the same exit status as the full resolution.
+
+The full dossier contains:
 
 - the root provider identity, release, schema, promise scope, complete entry
   and manual, normalized facet coverage, direct dependency status,
@@ -237,27 +220,21 @@ provider promise scope; older entries resolve with explicit normalized gaps.
 prose. A catalog result has this shape:
 
 ```json
-{"schema_version":2,"ok":true,"data":{"entries":[{"id":"todo.concern.capture-and-route","title":"Save and research a concern for later","summary":"Save one actionable concern with its source, then research a pending proposal to attach it, create or revise a todo, unify duplicates, defer it, or dismiss it.","kind":"capability","mode":"use","provider":{"id":"todo","name":"Todo","release":"0.3.0"},"provider_release":"0.3.0","contract_version":1,"support":"supported","availability":"installed","compatibility":"compatible","readiness":"not_checked"}],"issues":[]}}
+{"schema_version":3,"ok":true,"data":{"defaults":{"support":"supported","availability":"installed","compatibility":"compatible","readiness":"not_checked"},"entries":[{"id":"example.read","title":"Read examples","summary":"Inspect saved examples.","kind":"capability","mode":"use"}],"issues":[]}}
 ```
 
 Invalid doctor or validate reports retain the complete data report with
 `"ok":false`. Command errors use stderr:
 
 ```json
-{"schema_version":2,"ok":false,"error":{"code":"entry_not_found","message":"installed entry not found: missing.entry"}}
+{"schema_version":3,"ok":false,"error":{"code":"entry_not_found","message":"installed entry not found: missing.entry"}}
 ```
 
-The JSON `show` result contains the complete current entry document, provider
-identity, availability, compatibility, readiness, dependency statuses, manual
-text, and registry issues. Neither list nor show emits legacy routing metadata.
-The JSON `resolve` result adds the requested ID, resolution and declaration
-status, contract and facet requirement results, root dossier, dependency
-closure, gaps, and registry issues. Each dossier includes its exact basis.
-
-Consumers should use the output schema version and named fields, not human
-formatting. Output schema 2 removed the former semantic request-resolution
-documents; the new exact-ID dossier is deterministic and does not restore that
-matcher. The output-envelope schema is independent from the provider schema.
+Output schema 3 versions the compact list and ordinary show projections.
+`FullShowResult` retains the complete entry through `--full`; `ResolveResult`
+retains the full dossier, and `ResolveSummary` carries outcome and gaps only.
+Use the provider-owned Rust client and named fields. `--json` changes encoding,
+not the selected content. Provider schemas remain independent and unchanged.
 
 ## Exit status
 

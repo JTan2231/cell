@@ -68,7 +68,7 @@
     "The requested behavior cannot be represented within Geste's reviewed manual v0.1 boundary."
   ],
   "dependencies": [
-    {"id": "semantics.repository.explore", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "does_not_authorize": [
     "Running `release.sh`, which commits, tags, and pushes.",

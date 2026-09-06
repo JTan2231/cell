@@ -1,6 +1,6 @@
 {
   "id": "krisis.decision.capture",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -44,10 +44,10 @@
     "Annals receives only the deterministic account Markdown and exact Source JSON anchor described by this contract."
   ],
   "dependencies": [
-    {"id": "conversations.history.explore", "min_contract": 3, "max_contract_exclusive": 4},
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3},
+    {"id": "conversations.history.explore", "min_contract": 4, "max_contract_exclusive": 5},
+    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4},
     {"id": "annals.decision-account.exchange", "min_contract": 1, "max_contract_exclusive": 2},
-    {"id": "clockwork.schedule.operate", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "clockwork.schedule.operate", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "interfaces": [
     {"label": "Observer status", "invocation": "/Users/joey/.local/bin/krisis observe status"},
@@ -75,9 +75,14 @@
       {"status": "unsupported", "statement": "File-change evidence, raw items, real source IDs, paths, commands, tools, reasoning, approvals, web, and local execution are not classifier inputs."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Krisis records complete binary authority coverage, stable decision IDs and exact spans, deterministic account SHA-256 digests, delivery state, Nucleus correlation, and matching Annals acceptance receipts."},
-      {"status": "declared", "statement": "Account Markdown contains ordered Decision, Authority, Context, Action, Result, and Source sections; absent context, action, or result is rendered as Unknown."},
-      {"status": "unsupported", "statement": "Krisis publishes no confidence, disposition, review, supersession, importance, current-force, enactment, truth, or longitudinal result field."}
+      {
+        "status": "declared",
+        "statement": "Activation, hook, process and Annals acceptance receipts retain their documented identity and domain meaning. Observer status retains complete counts and at most 20 failure IDs/codes by default, with failures_has_more and positive --limit for more. Full source-account and legacy lifecycle reads preserve their existing schemas and authority."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Krisis publishes no confidence, disposition, review, supersession, importance, current-force, enactment, truth, or longitudinal result field."
+      }
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Decision means an attributable user settlement constraining intended future behavior or state; no-decision is durable negative coverage for one authority."},

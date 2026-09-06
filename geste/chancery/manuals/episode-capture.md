@@ -95,3 +95,7 @@ Use these types at imports and convert only to caller-local domain values.
 The client performs the same operations under this contract and never adds
 retry or authorization. See `geste/docs/rust-api.md`; the Rust structs and
 enums define the interface without a separate declaration layer.
+
+## Output selection
+
+Output envelope schema 2 returns episode_created/episode_revised with episode ID and committed revision only. Exact input digest and complete normalized capture remain committed together and are retrieved through episode show. Capture and database schemas remain 1.

@@ -76,6 +76,9 @@ impl ReportScope {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConsumptionReport {
+    pub output_version: u32,
+    pub has_more: bool,
+    pub unattributed_has_more: bool,
     pub generated_at: String,
     pub projection_version: String,
     pub deliveries: Vec<DeliveryReport>,
@@ -86,6 +89,7 @@ pub struct ConsumptionReport {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeliveryReport {
+    pub attempt_count: usize,
     pub delivery_id: i64,
     pub source_name: String,
     pub delivery_status: String,
@@ -95,6 +99,7 @@ pub struct DeliveryReport {
     pub selected_model_run_id: Option<i64>,
     pub coverage: String,
     pub incremental_usage: Option<TokenUsageBreakdown>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attempts: Vec<RunReport>,
     pub known_credit_equivalent: Option<f64>,
     pub unpriced_cache_write_tokens: i64,
@@ -183,6 +188,7 @@ pub(crate) fn build_report(
             selected_model_run_id,
             coverage,
             incremental_usage: usage,
+            attempt_count: attempts.len(),
             attempts,
             known_credit_equivalent,
             unpriced_cache_write_tokens,
@@ -190,6 +196,7 @@ pub(crate) fn build_report(
     }
 
     Ok(ConsumptionReport {
+        output_version: 2, has_more: false, unattributed_has_more: false,
         generated_at: OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .unwrap_or_else(|_| "unavailable".to_owned()),
@@ -204,7 +211,7 @@ pub(crate) fn build_report(
     })
 }
 
-pub(crate) fn print_human(report: &ConsumptionReport) {
+pub(crate) fn print_human(report: &ConsumptionReport, details: bool) {
     println!("Annals consumption report");
     println!("Generated: {}", report.generated_at);
     println!("Projection: annals-usage {}", report.projection_version);
@@ -222,8 +229,7 @@ pub(crate) fn print_human(report: &ConsumptionReport) {
         );
         println!(
             "  Coverage: {}  Attempts: {}",
-            delivery.coverage,
-            delivery.attempts.len()
+            delivery.coverage, delivery.attempt_count
         );
         if let Some(model_run_id) = delivery.selected_model_run_id {
             println!("  Selected examination: model run {model_run_id}");
@@ -240,7 +246,7 @@ pub(crate) fn print_human(report: &ConsumptionReport) {
                 grouped(delivery.unpriced_cache_write_tokens)
             );
         }
-        for attempt in &delivery.attempts {
+        for attempt in delivery.attempts.iter().filter(|_| details) {
             print_run(attempt, "  ");
         }
     }
@@ -251,10 +257,23 @@ pub(crate) fn print_human(report: &ConsumptionReport) {
             report.unattributed_runs.len()
         );
         for run in &report.unattributed_runs {
-            print_run(run, "  ");
+            if details {
+                print_run(run, "  ");
+            } else {
+                println!("  {}: {} / {}", run.job_id, run.status, run.coverage);
+                if let Some(usage) = run.usage {
+                    print_usage(usage, "    ");
+                }
+                if let Some(error) = &run.error {
+                    println!("    Error: {error}");
+                }
+            }
         }
     }
     println!();
+    if report.has_more || report.unattributed_has_more {
+        println!("More records available; increase --limit.");
+    }
     for note in &report.notes {
         println!("Note: {note}");
     }
@@ -883,6 +902,55 @@ pub(crate) enum ReportError {
     TokenOverflow,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsumptionSummary {
+    pub output_version: u32,
+    pub generated_at: String,
+    pub projection_version: String,
+    pub deliveries: Vec<DeliveryReport>,
+    pub unattributed_runs: Vec<RunSummary>,
+    pub notes: Vec<String>,
+    pub has_more: bool,
+    pub unattributed_has_more: bool,
+}
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunSummary {
+    pub job_id: String,
+    pub status: String,
+    pub coverage: String,
+    pub usage: Option<TokenUsageBreakdown>,
+    pub error: Option<String>,
+}
+impl From<ConsumptionReport> for ConsumptionSummary {
+    fn from(mut report: ConsumptionReport) -> Self {
+        for delivery in &mut report.deliveries {
+            delivery.attempts.clear();
+        }
+        Self {
+            output_version: 2,
+            generated_at: report.generated_at,
+            projection_version: report.projection_version,
+            deliveries: report.deliveries,
+            notes: report.notes,
+            has_more: report.has_more,
+            unattributed_has_more: report.unattributed_has_more,
+            unattributed_runs: report
+                .unattributed_runs
+                .into_iter()
+                .map(|run| RunSummary {
+                    job_id: run.job_id,
+                    status: run.status,
+                    coverage: run.coverage,
+                    usage: run.usage,
+                    error: run.error,
+                })
+                .collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -898,6 +966,49 @@ mod tests {
         reduce_records,
     };
     use crate::config::UsageConfig;
+
+    #[test]
+    fn summary_preserves_usage_coverage_errors_and_truncation_without_attempt_bodies()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let usage = json!({"inputTokens":100,"cachedInputTokens":20,"cacheWriteInputTokens":0,
+            "outputTokens":10,"reasoningOutputTokens":2,"totalTokens":110});
+        let run = json!({"jobId":"job-1","modelRunToken":"token-1","model":"fixture",
+            "status":"failed","coverage":"partial","startedAtMs":1,"usage":usage,
+            "exactResponseStreamComplete":false,"error":"incomplete response stream",
+            "responseCount":0,"responses":[]});
+        let full: super::ConsumptionReport = serde_json::from_value(json!({
+            "outputVersion":2,"hasMore":true,"unattributedHasMore":true,
+            "generatedAt":"fixture","projectionVersion":"fixture","notes":["partial source"],
+            "deliveries":[{"attemptCount":1,"deliveryId":1,"sourceName":"fixture",
+                "deliveryStatus":"failed","coverage":"partial","incrementalUsage":usage,
+                "attempts":[run],"knownCreditEquivalent":0.2,"unpricedCacheWriteTokens":0}],
+            "unattributedRuns":[run]
+        }))?;
+        let mut expected = serde_json::to_value(&full)?;
+        expected["deliveries"][0]
+            .as_object_mut()
+            .ok_or("delivery object")?
+            .remove("attempts");
+        let compact = serde_json::to_value(super::ConsumptionSummary::from(full))?;
+        for key in [
+            "deliveries",
+            "notes",
+            "hasMore",
+            "unattributedHasMore",
+            "projectionVersion",
+            "generatedAt",
+        ] {
+            assert_eq!(compact[key], expected[key], "{key}");
+        }
+        for key in ["jobId", "status", "coverage", "usage", "error"] {
+            assert_eq!(
+                compact["unattributedRuns"][0][key], expected["unattributedRuns"][0][key],
+                "{key}"
+            );
+        }
+        assert!(compact["unattributedRuns"][0].get("responses").is_none());
+        Ok(())
+    }
 
     #[test]
     fn groups_integer_digits() {

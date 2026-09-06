@@ -1,6 +1,6 @@
 {
   "id": "todo.concern.capture-and-route",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -47,7 +47,7 @@
     {"label": "Inspect proposal", "invocation": "/Users/joey/.local/bin/todo routing show <ROUTING_ID>"}
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 1, "max_contract_exclusive": 3}
+    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4}
   ],
   "does_not_authorize": [
     "Accepting or rejecting the routing proposal.",
@@ -68,8 +68,10 @@
       {"status": "unsupported", "statement": "Placeholder files, source bytes as durable Todo state, automatic routing authority, shell access, workspace access, and web search are not inputs."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Capture returns one durable cN containing direction and canonical source-path provenance; successful research returns one pending rN with a sealed attach, create, revise, unify, dismiss, or defer proposal and frozen bases."},
-      {"status": "declared", "statement": "If research fails after capture, the committed concern remains the durable output and the later runtime failure is reported separately."}
+      {
+        "status": "declared",
+        "statement": "Capture and routing retain immutable concern/proposal and explicit-decision semantics. Concern list defaults to 20 rows of ID, status, recorded time and a marked excerpt capped at 240 characters, with has_more and positive --limit for more. concern show retains full provenance and routing history."
+      }
     ],
     "data_semantics": [
       {"status": "declared", "statement": "A concern preserves originating direction and provenance; a routing proposal is model-produced research that cannot apply or authorize its proposed disposition."},
@@ -96,7 +98,7 @@
       {"status": "unspecified", "statement": "No research latency, model-quality, candidate-count, or retained-source availability service-level objective is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 preserves distinct cN, rN, and tN semantics and uses immutable versioned Nucleus tool and result schemas."},
+      {"status": "declared", "statement": "Capability contract version 2 preserves distinct cN, rN, and tN semantics and uses immutable versioned Nucleus tool and result schemas."},
       {"status": "unspecified", "statement": "No deprecation date or cross-version migration window for this public capability is promised."}
     ],
     "reliances": [

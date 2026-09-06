@@ -1,4 +1,4 @@
-use usher::api::{ErrorReport, inspect};
+use usher::api::{CheckReport, ErrorReport, inspect};
 
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -43,7 +43,15 @@ fn run(cli: Cli) -> Result<u8, String> {
     };
     let report = inspect(&selection.root, selection.product.as_deref())?;
     let mut output = io::stdout().lock();
-    if cli.json {
+    if checking {
+        let check = CheckReport::from(&report);
+        if cli.json {
+            serde_json::to_writer_pretty(&mut output, &check).map_err(|e| e.to_string())?;
+            writeln!(output).map_err(|e| e.to_string())?;
+        } else {
+            check.render(&mut output).map_err(|e| e.to_string())?;
+        }
+    } else if cli.json {
         serde_json::to_writer_pretty(&mut output, &report).map_err(|e| e.to_string())?;
         writeln!(output).map_err(|e| e.to_string())?;
     } else {
