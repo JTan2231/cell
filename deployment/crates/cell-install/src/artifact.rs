@@ -317,7 +317,7 @@ pub fn verify_release(spec: &InstallSpec, release: &Path) -> Result<Installation
     }
 }
 
-fn verify_tree_ownership(path: &Path, uid: u32) -> Result<()> {
+pub(crate) fn verify_tree_ownership(path: &Path, uid: u32) -> Result<()> {
     let meta = fs::symlink_metadata(path)?;
     if meta.uid() != uid || meta.mode() & 0o022 != 0 || meta.file_type().is_symlink() {
         return Err(Error::new(

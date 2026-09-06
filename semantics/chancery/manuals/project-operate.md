@@ -12,12 +12,13 @@ Build and deploy only a green candidate:
 ```sh
 semantics/ci.sh
 cargo build --release --locked --package semantics
-semantics/packaging/macos/deploy-user.sh \
+/absolute/path/to/target/release/semantics-install install \
   --binary /absolute/path/to/target/release/semantics \
+  --bundle /absolute/path/to/cell/semantics/chancery \
   --clockwork /absolute/path/to/clockwork
 ```
 
-The deployer owns one transaction across service quiescence, database and
+The Rust `semantics-install` binary owns one transaction across service quiescence, database and
 sidecar backup, candidate doctor, content-addressed release selection, public
 CLI/provider selectors, and the `semantics/worker` Clockwork binding. It
 hashes the unrendered template into the release, renders exact absolute paths
@@ -43,13 +44,12 @@ both scheduler cleanups, and removes public selectors. When a newly selected
 candidate cannot be cleared back to a prior null selection, its exact private
 `current` release selector and authenticated hold are retained as ownership
 evidence. Semantics retains exact release bytes for
-registered definitions. Use
-the retained private transaction backup, including the database,
-prior schedule state, and selector record, for explicit
-recovery.
+registered definitions. Use `semantics-install recover --transaction ABSOLUTE_TRANSACTION --clockwork ABSOLUTE_CLOCKWORK` with the retained private database, prior schedule and selector receipts. A candidate retained after a prior null selection requires explicit `recover --forward`; it verifies the authenticated exact candidate, runs scrubbed doctor and restores its binding before releasing its hold. A durably committed transaction always resumes forward. Recovery verifies the complete saved database inventory before replacing live files and never chooses a legacy watermark.
 
 The release-independent maintenance marker must be a current-user-owned,
-mode-`0600`, non-hard-linked regular file. An existing marker is validated and
+mode-`0600`, non-hard-linked regular file. Both the pinned worker runner and
+the public command frontend honor it, fencing public work through publication
+and durable commit. An existing marker is validated and
 never truncated. `--keep-maintenance` retains a Semantics-owned marker plus
 private receipt bound to the exact key, release ID, and definition digest; a
 later successful invocation of the same release without that option releases
@@ -105,7 +105,7 @@ same run: runtime drain, authentication, harness, required Semantics
 capabilities, and protocol remain checked. Ordinary reconciliation still
 requires normal Nucleus admission.
 
-The Cell adapter composes the existing deployer while preserving project
+The compiled Cell adapter invokes the Rust installer while preserving project
 pause, activation and scan cursors, and captured schedule enabled booleans.
 Ordinary updates omit the legacy watermark operation below. It requires
 maintenance support from currently installed public binaries before effects;
@@ -218,7 +218,7 @@ does not ingest those product-owned log bodies.
 ## Uninstall
 
 ```sh
-semantics/packaging/macos/uninstall-user.sh \
+/absolute/path/to/target/release/semantics-install uninstall \
   --clockwork /absolute/path/to/clockwork
 ```
 

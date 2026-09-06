@@ -1,6 +1,6 @@
 {
   "id": "crm.steward.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -20,28 +20,28 @@
   ],
   "outcome": "A version-matched content-addressed release whose command and sole providers/crm selector follow one current release, an explicitly initialized schema-two database, a backed-up explicit schema-one migration, an evidence-backed readiness diagnosis, or one guarded hidden-worker recovery transition.",
   "effects": [
-    "Deployment stages immutable binary, deployer, manifest, and CRM-owned Chancery bundle bytes under private application support, then changes the current release selected by both public surfaces under product and shared Chancery catalog-writer locks.",
-    "Deployment writes ~/.local/bin/crm and exactly one Chancery provider selector but starts no daemon, worker, schedule, or database operation.",
+    "Deployment stages immutable binary, Rust installer, cell-install-v2 manifest, and CRM-owned Chancery bundle bytes under private application support, then changes the current release selected by all public surfaces under product and shared Chancery catalog-writer locks.",
+    "Deployment writes ~/.local/bin/crm, ~/.local/bin/crm-install, and exactly one Chancery provider selector but starts no daemon, worker, schedule, or database operation.",
     "A separate crm init creates schema two or idempotently accepts an existing supported schema; doctor checks storage/readiness and idempotently registers the immutable Nucleus schemas/toolset; resume processes one queued, running, or applied-but-runtime-unsettled update synchronously and retry queues a successor before launching a hidden child.",
     "A separate crm migrate --backup PATH adds the profile table and advances schema markers from one to two transactionally after a private SQLite-aware backup; deployment never performs this effect.",
     "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. Deployment verification checks installation and dependency readiness without starting model jobs or synthetic domain work."
   ],
   "authority": [
-    "CRM's deployer owns its content-addressed releases, current and previous selectors, command selector, and only providers/crm.",
+    "CRM's Rust installer owns its content-addressed releases, current and previous selectors, command and installer selectors, and only providers/crm.",
     "CRM owns schema-two initialization and explicit schema migration, database integrity/privacy checks, update recovery admission, domain success, and retry policy.",
     "Nucleus owns strict execution readiness, agent supervision, job/output evidence, and mailbox transport, not CRM state or retry decisions."
   ],
   "success": [
     "The candidate version matches its provider release, the exact release tree and manifest match staged bytes, and command/provider selectors resolve through the same current release.",
     "Identical deployment is idempotent; an update rejects a stale expected-current precondition and retains a valid previous selector; failed post-switch smoke restores binary and provider views together.",
-    "The deployer refuses symbolic, foreign, traversal, fabricated, or tampered owned paths and never opens or changes crm.db.",
+    "The Rust installer refuses symbolic, foreign, traversal, fabricated, or tampered owned paths and never opens or changes crm.db.",
     "After explicit init, doctor checks schema identity and required tables, foreign keys, SQLite integrity, secure database/sidecar permissions, and required Nucleus/toolset readiness.",
     "Resume creates no successor for uncertain work; retry creates a successor update only when the selected update is failed or lost.",
     "Explicit migration refuses a live worker PID and running or runtime-unsettled applied work, preserves queued and retained case rows, creates a new independent backup, and validates integrity before committing schema two."
   ],
   "failure_and_recovery": [
-    "A failed deployment restores the prior current/previous release selectors and both public selectors; if coherent restoration cannot be proved, it detaches CRM's public selectors and stops fail-closed.",
-    "After committed deployment, redeploy the exact previous binary with its packaged deployer only when its schema remains compatible; never rewrite selectors or CRM rows manually.",
+    "A failed deployment restores the prior current/previous release selectors and the public selectors; if coherent restoration cannot be proved, it detaches CRM's public selectors and stops fail-closed.",
+    "After committed deployment, resolve previous to its canonical owned release directory and use a trusted tested crm-install recover --release to verify and select it only when its schema remains compatible; never execute an unverified retained installer or rewrite selectors or CRM rows manually.",
     "An absent database after deployment is expected; init is a separate intentional and idempotent-on-supported-schema effect.",
     "If Nucleus or a hidden worker is unavailable, retain queued work, diagnose exact readiness and attempt state, resume recoverable work, and retry only after positive terminal evidence.",
     "Stop new CRM work before migration. An existing backup target is refused; a schema change failure before commit leaves schema one intact. On schema two migration is unchanged and creates no backup. Before restoring schema one, quiesce use and preserve newer database/sidecar state; never pair the old database with newer WAL/SHM.",
@@ -60,7 +60,7 @@
   "automation": "none",
   "steps": [
     "Build and validate a green CRM candidate without changing installed state.",
-    "Run the product-owned deployer with the absolute candidate binary and, for a planned concurrent update, the expected current selector; inspect version, current release, command selector, provider selector, and manifest.",
+    "Run the product-owned Rust installer with the absolute candidate binary and provider bundle and, for a planned concurrent update, the expected current selector; inspect version, current release, command selector, provider selector, and manifest.",
     "Initialize a selected database only as a separate explicit action, then run crm doctor and inspect storage plus strict Nucleus/toolset readiness.",
     "If upgrading schema-one state, separately quiesce workers and new CRM use, run crm migrate --backup at a new private path, and retain the backup for database-aware rollback.",
     "For stuck work, inspect update and attempt evidence before selecting wait, resume, or an explicitly eligible retry."
@@ -86,11 +86,11 @@
   "interfaces": [
     {
       "label": "Deploy candidate",
-      "invocation": "crm/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH [--expected-current absent|releases/HASH]"
+      "invocation": "<TESTED_CRM_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/HASH]"
     },
     {
-      "label": "Redeploy previous release",
-      "invocation": "\"/Users/joey/Library/Application Support/CRM/install/previous/package/deploy-user.sh\" --binary \"/Users/joey/Library/Application Support/CRM/install/previous/bin/crm\""
+      "label": "Recover a verified retained program release",
+      "invocation": "<TRUSTED_CRM_INSTALL> recover --release ABSOLUTE_OWNED_RELEASE_DIRECTORY"
     },
     {
       "label": "Initialize selected database",
@@ -149,7 +149,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Deployment consumes one absolute candidate binary, an optional expected-current selector, and version-matched packaged deployer/provider; init consumes the selected database path, absolute or resolved against cwd; recovery consumes one exact update identity and its durable state. Migration consumes the selected schema-one database and a new backup path. A relative backup path resolves from cwd; its parent must be an existing private regular directory, and the destination must be separate from source/sidecar paths with no existing SQLite sidecars."
+        "statement": "Deployment consumes the tested Rust installer, an absolute candidate binary and provider bundle matching its version, and an optional expected-current selector; init consumes the selected database path, absolute or resolved against cwd; recovery consumes one exact update identity and its durable state. Migration consumes the selected schema-one database and a new backup path. A relative backup path resolves from cwd; its parent must be an existing private regular directory, and the destination must be separate from source/sidecar paths with no existing SQLite sidecars."
       }
     ],
     "outputs": [
@@ -173,7 +173,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Successful deployment stages and validates the complete owned release, rechecks current under product and catalog locks, and atomically publishes both selectors; doctor and update inspection read current local state at invocation."
+        "statement": "Successful deployment stages and validates the complete owned release, rechecks current under product and catalog locks, and atomically publishes the selected release; doctor and update inspection read current local state at invocation."
       },
       {
         "status": "unspecified",

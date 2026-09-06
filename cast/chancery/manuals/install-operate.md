@@ -4,13 +4,16 @@ Build and verify a candidate through the Cell product gate before installing:
 
 ```sh
 ./ci.sh cast
-cast/packaging/macos/deploy-user.sh --binary /absolute/path/to/cast
+<TESTED_CAST_INSTALL> install --binary <TESTED_CAST_BINARY> \
+  --bundle /Users/joey/rust/cell/cast/chancery
 ```
 
-The product-owned deployer stages the exact Rust payload, zsh frontend,
-deployer and Chancery provider bundle under
+The product-owned Rust installer stages the exact Rust payload, static zsh
+frontend, installer and Chancery provider bundle under
 `~/Library/Application Support/Cast/install/releases/HASH`. The installed
-`~/.local/bin/cast` and provider selector follow one atomic `current` release.
+`~/.local/bin/cast`, `~/.local/bin/cast-install`, and provider selector follow one
+atomic `current` release. The `cell-install-v2` manifest is `manifest.json`;
+`package/install` retains the Rust installer.
 The deployer takes product and catalog writer locks, refuses foreign selectors,
 checks candidate/provider versions and restores prior selectors after a failed
 switch. It does not require a Chancery runtime, create the discovery database,
@@ -18,8 +21,12 @@ run searches or install a scheduler.
 
 `--expected-current absent|releases/HASH` adds an optimistic selection guard;
 `--home PATH` supports an explicitly selected operator home. Deployment keeps
-prior releases available. Reinstalling a previously tested candidate restores
-its program/documentation release; it does not roll back discovery state.
+prior releases available. To recover one, resolve `install/previous` to its
+canonical owned release directory, then run a trusted tested
+`cast-install recover --release ABSOLUTE_RELEASE_DIRECTORY`. The installer
+verifies the retained legacy or `cell-install-v2` release before selection. Do
+not execute an unverified retained installer. Program recovery leaves discovery
+state unchanged.
 An abruptly killed deployer can leave its `.update-lock` directory. Confirm
 that no Cast deployer is running before removing that stale installation lock
 and rerunning the intended tested candidate; never remove another active

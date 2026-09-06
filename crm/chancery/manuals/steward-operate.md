@@ -9,21 +9,25 @@ Nucleus changes, or an otherwise ineligible retry.
 
 ```sh
 ./crm/ci.sh
-cargo build --release --locked --package crm
-crm/packaging/macos/deploy-user.sh \
-  --binary /Users/joey/rust/cell/target/release/crm
+<TESTED_CRM_INSTALL> install \
+  --binary <TESTED_CRM_BINARY> \
+  --bundle /Users/joey/rust/cell/crm/chancery
 ```
 
-The deployer requires a regular executable at an absolute path. It proves that
+The Rust installer requires a regular executable and complete provider bundle
+at absolute paths, matching its own tested version. It proves that
 the candidate version matches the packaged provider release, validates the
 exact bundle/tree and component hashes, stages one immutable content-addressed
 release, then publishes command and provider views through one current-release
-selector.
+selector. New releases retain `bin/crm-install` and `package/install`, with an
+exact `cell-install-v2` inventory in `manifest.json`. The installer also verifies
+the supported legacy release format.
 
 Owned paths are:
 
 ```text
 ~/.local/bin/crm
+~/.local/bin/crm-install
 ~/Library/Application Support/CRM/install/{current,previous,releases/}
 ~/Library/Application Support/Chancery/providers/crm
 ```
@@ -183,16 +187,16 @@ bytes, logs, or CI fixtures.
 
 ## Rollback
 
-After a committed deployment, use only a valid previous release and its
-packaged deployer:
+After a committed deployment, resolve `install/previous` to its canonical owned
+release directory. Use a trusted tested Rust installer to verify and select it:
 
 ```sh
-crm_previous="/Users/joey/Library/Application Support/CRM/install/previous"
-"$crm_previous/package/deploy-user.sh" \
-  --binary "$crm_previous/bin/crm"
+<TRUSTED_CRM_INSTALL> recover \
+  --release <VERIFIED_PREVIOUS_RELEASE_DIRECTORY>
 ```
 
-Normal ownership, exact-tree, manifest, hash, and version checks apply.
+Do not execute an unverified installer from the retained release. Normal
+ownership, exact-tree, manifest, hash, and version checks apply.
 Rollback switches only program/provider selection. It never rewrites CRM or
 Nucleus state. Stop when `previous` is absent/invalid or the older binary
 cannot read the retained database schema; use that release's database-aware

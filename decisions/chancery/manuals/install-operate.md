@@ -5,7 +5,7 @@ The public binary/provider is `krisis`; the compatibility provider is
 Existing Decisions application-support and log paths are intentionally retained
 for persistent-history compatibility.
 
-Deployment requires explicit absolute Krisis, Clockwork, Codex, Annals, and
+`krisis-install install` requires explicit absolute Krisis, Clockwork, Codex, Annals, and
 dedicated Annals-config paths plus the exact lowercase 32-hex decisions-library
 ID. The selected Codex path is recorded in the immutable Clockwork definition
 and used unchanged for final-cutover doctor and scheduled Conversations reads;
@@ -17,8 +17,8 @@ explicit Annals configuration. The default operation prepares and verifies a
 content-addressed release and Clockwork definition while retaining the
 maintenance gate; it does not select or activate them. After the outer cutover
 has separately proved its Annals and semantic prerequisites, `--final-cutover`
-performs writer shutdown, quiescent backup, migration, doctor, selector/hook
-publication, baseline activation, and schedule handoff. Clockwork process state
+performs writer shutdown, quiescent backup, migration, doctor, baseline
+activation, selector/hook publication, and schedule handoff. Clockwork process state
 is not cross-system proof.
 
 Every selected definition and legacy plist is inspected and attributed before
@@ -61,7 +61,7 @@ doctor can use this identity to prove deliberately held Nucleus readiness;
 runtime drain, authentication, harness, product capability, and protocol
 checks still apply. Observation processing requires normal Nucleus admission.
 
-The Cell adapter composes preparation and explicit final cutover while
+The sealed Rust `krisis-install adapter OP` boundary composes preparation and explicit final cutover while
 preserving captured schedule enabled booleans and baseline identity. It does
 not infer a legacy Semantics activation watermark. An ordinary Annals binary
 or config pin update proves the prior definition against its release and old
@@ -79,3 +79,32 @@ another owner's hold to force progress.
 
 The deployment adapter verifies the installed dependency configuration with
 doctor. Verification does not create observations or submit Nucleus jobs.
+
+The package builds both `krisis` and `krisis-install`. New releases retain the
+exact Rust helper at `bin/krisis-install` and `package/install`, with a complete
+`cell-install-v2` artifact manifest. Static frontend and observer scripts remain
+release data. The shared Rust library verifies artifacts and owns selector
+transactions; Krisis owns hook, database, admission, and scheduler lifecycle.
+`krisis-install verify-release ABSOLUTE_RELEASE` is read-only integrity proof.
+`krisis-install inspect` checks the selected installation. Retained
+`package/install install` uses its sibling package data and explicit exact
+payload/dependency pins. Source invocation supplies `--source-root` for the
+absolute Decisions product source directory. Legacy formats 2, 3, and 4 remain
+validated migration inputs; archived shell deployers do not install the new
+manifest. Uninstall uses `krisis-install uninstall --clockwork ABSOLUTE_PATH` and
+retains current/previous, releases, private state, receipts, and maintenance.
+
+For a source build, prepare with:
+
+```text
+krisis-install install --source-root ABSOLUTE_DECISIONS_SOURCE --binary ABSOLUTE_KRISIS --clockwork ABSOLUTE_CLOCKWORK --codex ABSOLUTE_CODEX --annals ABSOLUTE_ANNALS --annals-config ABSOLUTE_CONFIG --annals-library-id LOWERCASE_32_HEX
+```
+
+After the separate cutover prerequisites are proved, repeat the same inputs
+with `--final-cutover`. Add `--keep-maintenance` only after a successful exact
+preparation to retain its authenticated gate through external verification.
+Repeat the same inputs with `--release-maintenance` to release that gate after
+proving the exact current command, providers, hook, receipt, enabled observer,
+and retired legacy schedules. `--home` selects an absolute operator home;
+`--expected-current absent|releases/HASH` optionally refuses a changed selector.
+The marker and receipt are distinct from the coordinator's named CLI hold.

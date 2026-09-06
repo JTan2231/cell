@@ -1,6 +1,6 @@
 {
   "id": "weaver.workflow.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -68,7 +68,7 @@
     },
     {
       "label": "Deploy candidate",
-      "invocation": "/Users/joey/rust/cell/weaver/packaging/macos/deploy-user.sh --binary <ABSOLUTE_WEAVER_BINARY>"
+      "invocation": "<TESTED_WEAVER_INSTALL> install --binary <ABSOLUTE_WEAVER_BINARY> --bundle <MATCHING_WEAVER_PROVIDER_BUNDLE>"
     },
     {
       "label": "Hold deployment admission",

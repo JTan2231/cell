@@ -46,7 +46,7 @@ inventory of supported outward promises. The project-local
 later explicit Semantics registration; it is source only and has not been
 registered or seeded by this change.
 
-`release.sh` commits, tags, and pushes. The macOS packaging scripts change
+`release.sh` commits, tags, and pushes. The Rust `clockwork-install` command changes
 installed selectors. Neither is a build command, and neither should be run
 without separate authority.
 

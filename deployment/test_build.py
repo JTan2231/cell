@@ -56,7 +56,7 @@ class BuildTests(unittest.TestCase):
         self.write("Cargo.toml", "[workspace]\nmembers = []\n")
         self.write("Cargo.lock", "version = 4\n")
         self.write("source.txt", "source\n")
-        self.write("deployment/adapter_support.py", "# shared adapter\n")
+        self.write("deployment/crates/cell-install/src/lib.rs", "// shared adapter\n")
         packages = []
         for name in ("alpha", "beta"):
             binaries = [name, name + "-helper"] if name == "alpha" else [name]

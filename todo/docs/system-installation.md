@@ -27,8 +27,10 @@ deployment's sender and recipient to the deployer:
 ```sh
 cd /Users/joey/rust/cell/todo
 ./ci.sh
-./packaging/macos/deploy-user.sh \
-  --binary "/Users/joey/rust/cell/target/release/todo" \
+<TESTED_TODO_INSTALL> install \
+  --binary <TESTED_TODO_BINARY> \
+  --bundle /Users/joey/rust/cell/todo/chancery \
+  --package /Users/joey/rust/cell/todo/packaging/macos \
   --email-from 'todo@joeytan.dev' \
   --email-to 'j.tan2231@gmail.com'
 ```
@@ -49,17 +51,16 @@ The layout is:
   install/
     releases/<content-hash>/
       bin/todo
+      bin/todo-install
       bin/todo-daily-email
       libexec/todo
-      package/todo
-      package/todo-daily-email
-      package/deploy-user.sh
+      package/install
       package/org.todo.daily-email.plist
       share/chancery/todo/
         provider.json
         entries/
         manuals/
-      manifest.txt
+      manifest.json
     current -> releases/<content-hash>
     previous -> releases/<content-hash>
 ~/Library/Logs/Todo/
@@ -67,7 +68,14 @@ The layout is:
   email.stderr.log
 ```
 
-`~/.local/bin/todo` selects `config.toml` when no explicit database or config
+`todo-install` is a Rust executable built and sealed beside the tested Todo
+binary. It uses shared `cell-install-v2` exact immutable inventories and
+selector transactions. Todo still owns database migration, admission and
+schedule recovery. The former format-1 package remains verifiable during
+migration. `todo-install inspect` and `verify-release ABSOLUTE_PATH` are
+read-only and never send email or execute a retained release.
+
+The installed Rust `~/.local/bin/todo` frontend selects `config.toml` when no explicit database or config
 selector is present. The config points at `todo.db` and selects high liaison
 quality. Its `[email]` section contains the deployment-specific `from` and `to`
 values. Nucleus is resolved through `NUCLEUS_SOCKET` when set, or its standard
@@ -94,7 +102,13 @@ Fresh installation bootstraps only when no existing plist or disabled override
 records an operator choice. The deployer never changes launchd enable/disable
 overrides. A service that is both loaded and disabled is refused before
 quiescence because launchd cannot reload it without changing that override.
-Coordinated deployment retains Todo's maintenance hold throughout these changes.
+Standalone installation creates its own durable admission hold and coordinated
+deployment retains its captured run's hold throughout these changes. Public
+commands stay suspended during migration and database recovery. Recovery uses
+SQLite's exclusive destination locking to restore the migration backup instead
+of replacing a database underneath an active connection. If exclusive recovery
+or any schedule restoration cannot be proved, maintenance and the private
+transaction directory remain for product recovery.
 The Todo deployment adapter captures loaded/disabled state and proves that the
 live plist matches the selected release's rendered template. Verification and
 recovery retain the hold if those controls drift, including interruption between
@@ -114,7 +128,7 @@ An identical package reuses its release directory. A fresh install requires
 `--email-from` and `--email-to` together. On an update, omitting both preserves
 the existing `config.toml` byte-for-byte when it already has an `[email]`
 section; an old config without that section requires both flags once. Providing
-both regenerates the standard installed config with the supplied values, and
+both updates the email section while preserving the other configured settings, and
 supplying only one is an error.
 
 ## Manual database migration

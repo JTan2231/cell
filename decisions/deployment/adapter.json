@@ -1,1 +1,16 @@
-{"schema":1,"product":"krisis","application":"Decisions","dependencies":["annals","nucleus","clockwork","conversations"],"description":"Deploy Krisis with owned observation admission, transactional exact Annals pin updates and retained observer control."}
+{
+  "schema": 1,
+  "product": "krisis",
+  "application": "Decisions",
+  "dependencies": [
+    "annals",
+    "nucleus",
+    "clockwork",
+    "conversations"
+  ],
+  "description": "Deploy Krisis with owned observation admission, transactional exact Annals pin updates and retained observer control.",
+  "adapter_binary": "krisis-install",
+  "maintenance_products": [
+    "nucleus"
+  ]
+}

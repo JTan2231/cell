@@ -10,27 +10,32 @@ Build and validate the candidate first. Deployment is a separate authorized
 effect:
 
 ```sh
-clockwork/packaging/macos/deploy-user.sh \
-  --binary /absolute/path/to/clockwork \
+<TESTED_CLOCKWORK_INSTALL> install \
+  --binary <TESTED_CLOCKWORK_BINARY> \
+  --bundle /Users/joey/rust/cell/clockwork/chancery \
   --chancery /absolute/path/to/chancery
 ```
 
-The deployer requires a regular executable candidate, regular product-owned
-deployer and uninstaller, complete provider bundle, and a separately supplied
-regular executable candidate Chancery reader. The candidate's `clockwork
-VERSION` output must exactly match provider release. It hashes the binary, both
-packaging scripts, and complete provider tree into one release under
+The Rust installer requires a regular executable candidate, complete provider
+bundle, and a separately supplied regular executable candidate Chancery reader,
+all at absolute paths. The candidate's `clockwork
+VERSION` output must exactly match provider and installer release. It hashes the
+binary, Rust installer, public layout, and complete provider tree into one release under
 `$HOME/Library/Application Support/Clockwork/install/releases`, stores a
-canonical manifest, then asks that reader to validate the exact provider copy
+`cell-install-v2` manifest in `manifest.json`, then asks that reader to validate the exact provider copy
 inside the staged release before any public selector mutation. Before commit,
 the same reader must discover all three Clockwork entries through the installed
 providers registry and selected provider path.
+
+The release retains the installer at `bin/clockwork-install` and `package/install`.
+`~/.local/bin/clockwork-install` follows current alongside the product command
+and provider. The installer also verifies the supported legacy release format.
 
 Packaging may create missing current-user `.local/bin` and Chancery parent
 directories. It validates but does not chmod an existing shared parent;
 Clockwork changes modes only within its own installation/state tree.
 
-Both stable public selectors pass through one atomic `install/current` release
+The stable public selectors pass through one atomic `install/current` release
 selector:
 
 ```text
@@ -50,7 +55,7 @@ or changed release bytes are refused rather than adopted.
 
 If an installed version/help smoke fails before commit, the deployer restores
 the prior current and previous selectors and public command/provider views. If
-that cannot be completed coherently, it detaches all four public selectors and
+that cannot be completed coherently, it detaches all owned public selectors and
 reports the fail-closed state while retaining releases. Inspect the reported
 owned paths before retrying; do not replace a foreign path or bypass content
 checks.
@@ -71,17 +76,18 @@ proving their recorded broker and any child absent. It executes no product,
 changes no binding, and proves no future timer or product-domain result.
 
 When diagnosing a failure, preserve its evidence and separate program failure
-from product-definition or domain failure. Roll program bytes back only by
-redeploying the exact packaged previous candidate:
+from product-definition or domain failure. Resolve `install/previous` to its
+canonical owned release directory, then use a trusted tested Rust installer to
+verify and select that retained release:
 
 ```sh
-clockwork_previous="/Users/joey/Library/Application Support/Clockwork/install/previous"
-"$clockwork_previous/package/deploy-user.sh" \
-  --binary "$clockwork_previous/bin/clockwork" \
+<TRUSTED_CLOCKWORK_INSTALL> recover \
+  --release <VERIFIED_PREVIOUS_RELEASE_DIRECTORY> \
   --chancery /absolute/path/to/chancery
 ```
 
-Normal content, version, and ownership checks still apply. Program rollback
+Do not execute an unverified installer from the retained release. Normal
+content, version, and ownership checks still apply. Program rollback
 does not restore or rewrite a product binding. Generated plists pin an exact
 content-addressed installed Clockwork binary, so never prune a Clockwork release while a plist
 or running activation may refer to it.
@@ -90,12 +96,13 @@ To detach the stable public selectors, first disable every binding through the
 schedule contract and verify quiescence. Then:
 
 ```sh
-clockwork/packaging/macos/uninstall-user.sh
+<TRUSTED_CLOCKWORK_INSTALL> uninstall
 ```
 
 The uninstaller refuses while any regular or symbolic
 `~/Library/LaunchAgents/org.clockwork.*.plist` remains. It validates and
 removes only Clockwork's owned `~/.local/bin/clockwork`,
+`~/.local/bin/clockwork-install`,
 `providers/clockwork`, `install/current`, and `install/previous` selectors. It
 serializes with deployment through `/usr/bin/shlock` on the private product
 installation lock, including its atomic live/stale PID decision. When the

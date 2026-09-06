@@ -1235,6 +1235,36 @@ fn verify_installed_binary(layout: &Layout, binary: &Path) -> Result<()> {
                 "installed Clockwork release directory has no content identity",
             )
         })?;
+    if release_root.join("manifest.json").exists() {
+        let spec = clockwork::installation::specification();
+        let release =
+            cell_install::transaction::verify_release_at(&spec.layout(), release_root, &|root| {
+                spec.legacy(root)
+            })
+            .map_err(|_| {
+                Error::new(
+                    "clockwork_binary_tampered",
+                    "Clockwork immutable release verification failed",
+                )
+            })?;
+        let actual = bytes_sha256(&fs::read(binary).context(
+            "clockwork_binary_unavailable",
+            "hash installed Clockwork executable",
+        )?);
+        if release.release_id != release_id
+            || release
+                .files
+                .get("bin/clockwork")
+                .map(|file| file.sha256.as_str())
+                != Some(actual.as_str())
+        {
+            return Err(Error::new(
+                "clockwork_binary_tampered",
+                "Clockwork executable differs from its release",
+            ));
+        }
+        return Ok(());
+    }
     let manifest_path = release_root.join("manifest.txt");
     let manifest = fs::read_to_string(&manifest_path).context(
         "clockwork_binary_unavailable",
@@ -1515,6 +1545,67 @@ mod tests {
     use super::render_plist;
     use crate::model::{Authority, LaunchImage, Manifest, Output, OverlapPolicy, Schedule};
     use crate::paths::Layout;
+
+    #[test]
+    fn version_two_installed_binary_proves_the_complete_release() {
+        use cell_install::transaction::{ProviderSpec, ReleasePlan, SourceFile, prepare_release};
+        let temporary = tempdir().expect("temporary directory");
+        let home = std::fs::canonicalize(temporary.path()).unwrap();
+        let source = home.join("input");
+        std::fs::write(&source, "fixture executable").unwrap();
+        let provider = home.join("provider.json");
+        std::fs::write(
+            &provider,
+            r#"{"provider":{"id":"clockwork","release":"1.0.0"}}"#,
+        )
+        .unwrap();
+        let spec = clockwork::installation::specification();
+        let files = BTreeMap::from([
+            (
+                "bin/clockwork".into(),
+                SourceFile {
+                    source: source.clone(),
+                    mode: 0o555,
+                },
+            ),
+            (
+                "bin/clockwork-install".into(),
+                SourceFile {
+                    source,
+                    mode: 0o555,
+                },
+            ),
+            (
+                "share/chancery/clockwork/provider.json".into(),
+                SourceFile {
+                    source: provider,
+                    mode: 0o444,
+                },
+            ),
+        ]);
+        let prepared = prepare_release(
+            &spec.layout(),
+            &home,
+            &ReleasePlan {
+                files,
+                versions: BTreeMap::from([("clockwork".into(), "1.0.0".into())]),
+                providers: BTreeMap::from([(
+                    "clockwork".into(),
+                    ProviderSpec {
+                        path: "share/chancery/clockwork".into(),
+                        version: "1.0.0".into(),
+                    },
+                )]),
+            },
+        )
+        .unwrap();
+        let layout =
+            Layout::discover(Some(home.join("Library/Application Support/Clockwork"))).unwrap();
+        let binary = prepared.root.join("bin/clockwork");
+        super::verify_installed_binary(&layout, &binary).unwrap();
+        std::fs::write(prepared.root.join("unexpected"), "unsealed").unwrap();
+        assert!(super::verify_installed_binary(&layout, &binary).is_err());
+    }
 
     #[test]
     fn plist_contains_only_the_private_clockwork_entrypoint() {

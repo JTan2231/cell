@@ -1,6 +1,6 @@
 {
   "id": "semantics.project.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -86,11 +86,11 @@
     {"label": "Inspect deployment admission", "invocation": "/Users/joey/.local/bin/semantics --database ABSOLUTE_DATABASE --json maintenance status"},
     {"label": "Hold deployment admission", "invocation": "/Users/joey/.local/bin/semantics --database ABSOLUTE_DATABASE --json maintenance hold RUN_ID"},
     {"label": "Release own deployment hold", "invocation": "/Users/joey/.local/bin/semantics --database ABSOLUTE_DATABASE --json maintenance release RUN_ID"},
-    {"label": "Deploy", "invocation": "semantics/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH --clockwork ABSOLUTE_CLOCKWORK_PATH [--final-decisions-watermark OPAQUE_CURSOR --keep-maintenance]"},
+    {"label": "Deploy", "invocation": "/absolute/path/to/target/release/semantics-install install --binary ABSOLUTE_PATH --bundle ABSOLUTE_PROVIDER_BUNDLE --clockwork ABSOLUTE_CLOCKWORK_PATH [--final-decisions-watermark OPAQUE_CURSOR --keep-maintenance]"},
     {"label": "Doctor", "invocation": "/Users/joey/.local/bin/semantics --json doctor"},
     {"label": "Register project", "invocation": "/Users/joey/.local/bin/semantics project register ID ABSOLUTE_ROOT"},
     {"label": "Intake status", "invocation": "/Users/joey/.local/bin/semantics intake status"},
-    {"label": "Uninstall and retain state", "invocation": "semantics/packaging/macos/uninstall-user.sh --clockwork ABSOLUTE_CLOCKWORK_PATH"}
+    {"label": "Uninstall and retain state", "invocation": "/absolute/path/to/target/release/semantics-install uninstall --clockwork ABSOLUTE_CLOCKWORK_PATH"}
   ],
   "does_not_authorize": [
     "Deleting retained database, releases, logs, or project files.",

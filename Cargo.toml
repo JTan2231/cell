@@ -32,7 +32,7 @@ resolver = "3"
 # Todo, Chancery, Weaver, Email, Conversations, Krisis, Semantics, Geste,
 # Clockwork, CRM, and Usher declare independent product versions in their
 # manifests.
-version = "0.4.1"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT"

@@ -177,6 +177,15 @@ The HTTP surfaces are GET `/v1/maintenance` and POST
 `{"run_id":"OWNER"}` and returns maintenance status. The typed client owns
 these request/response types.
 
+The Rust `nucleus-install` executable is sealed beside the matching tested CLI
+and daemon. Its `install --binary ABS --daemon ABS --codex ABS --bundle ABS`
+command uses shared immutable `cell-install-v2` packages and invokes the
+existing Nucleus-owned Rust service installer. Public CLI and daemon copies
+remain service-owned so its captured prior binaries and schema rollback
+evidence are preserved. The predecessor format-1 package remains verifiable.
+`inspect` and `verify-release ABS` are read-only; they never execute a retained
+installer or restore authentication.
+
 The macOS deployer accepts `--expected-current absent|releases/HASH` and checks
 it under the product update lock before selector mutation. With
 `CELL_DEPLOYMENT_RUN_ID`, service install/restart requires the sole drained

@@ -4,7 +4,7 @@ PRODUCT_NAME=Krisis
 PRODUCT_DIR=decisions
 CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
-DEPLOY_PROFILE=custom
+DEPLOY_PROFILE=rust-install-v1
 DEPLOY_CONFLICT_KEYS='global'
 PRODUCT_ALIASES='krisis decisions'
 CI_GATE_ID=krisis
@@ -17,22 +17,20 @@ CLIPPY_KEEP_GOING=0
 TEST_NO_FAIL_FAST=0
 CI_SHELL_CHECKS='sh|decisions/release.sh
 sh|decisions/packaging/macos/krisis
-sh|decisions/packaging/macos/deploy-user.sh
-sh|decisions/packaging/macos/uninstall-user.sh
 sh|decisions/packaging/macos/test-frontend.sh
 sh|decisions/packaging/macos/test-observer-runner.sh
-sh|decisions/packaging/macos/test-deploy-user.sh
 sh|decisions/packaging/macos/krisis-observer'
 CI_RUN_CHECKS='always|decisions/packaging/macos/test-frontend.sh
-always|decisions/packaging/macos/test-observer-runner.sh
-always|decisions/packaging/macos/test-deploy-user.sh'
+always|decisions/packaging/macos/test-observer-runner.sh'
 CI_PLIST_CHECKS='always|convert|decisions/packaging/macos/hooks.json'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
 CI_EXTRA_BEFORE_RUST=pipeline/extras/decisions-catalog.sh
-CI_BINARY_CHECKS='krisis|target/release/krisis|krisis'
+CI_BINARY_CHECKS='krisis|target/release/krisis|krisis
+krisis|target/release/krisis-install|krisis-install'
 RELEASE_UNITS='krisis|Krisis|package|decisions/crates/decisions/Cargo.toml|krisis-|1'
 RELEASE_COMPANION_MANIFESTS='krisis|decisions/crates/krisis-api/Cargo.toml'
 RELEASE_METADATA_NO_DEPS=1
-RELEASE_BINARY_CHECKS='krisis|target/release/krisis|krisis'
+RELEASE_BINARY_CHECKS='krisis|target/release/krisis|krisis
+krisis|target/release/krisis-install|krisis-install'
 PROVIDERS='krisis|krisis|decisions/chancery|3
 krisis|decisions|decisions/chancery-legacy|1'

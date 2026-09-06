@@ -36,8 +36,10 @@ only with explicit installed-state authority:
 ```sh
 cd /Users/joey/rust/cell
 ./todo/ci.sh
-./todo/packaging/macos/deploy-user.sh \
+<TESTED_TODO_INSTALL> install \
   --binary <ABSOLUTE_TODO_BINARY> \
+  --bundle /Users/joey/rust/cell/todo/chancery \
+  --package /Users/joey/rust/cell/todo/packaging/macos \
   --email-from <SENDER> \
   --email-to <RECIPIENT>
 ```
@@ -45,6 +47,12 @@ cd /Users/joey/rust/cell
 A fresh install requires both email-address flags. An update may preserve
 existing complete email configuration by omitting both; supplying only one is
 an error.
+
+The Rust `todo-install` executable is sealed with the tested Todo binary.
+It uses shared `cell-install-v2` immutable file inventories and selector
+transactions, while Todo owns admission, database migration and schedule
+recovery. The predecessor format-1 release remains verifiable. The installed
+frontend is Rust; the static zsh email runner retains its credential contract.
 
 The deployer stages a content-addressed release, records whether the email
 LaunchAgent is loaded, quiesces it, creates a private transaction directory,
@@ -62,6 +70,12 @@ The coordinated adapter captures loaded/disabled state and checks the owned
 rendered plist against the selected release. An ambiguous service-state change
 keeps the deployment hold during verification or recovery; it is not silently
 reloaded or reported recovered.
+
+Standalone installation creates its own durable admission hold; coordinated
+installation uses the captured run's hold. Recovery restores a migration backup
+through SQLite's exclusive destination locking while public commands remain
+suspended. Failed recovery retains maintenance and private transaction data;
+it never treats matching program files as proof of database recovery.
 
 Nucleus authentication and state are never part of Todo rollback. The Resend
 key remains in the process environment rather than Todo config or plist.

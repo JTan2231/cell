@@ -1,11 +1,12 @@
 [package]
 name = "semantics"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT"
 
 [dependencies]
+cell-install.workspace = true
 cell-maintenance.workspace = true
 annals-api.workspace = true
 krisis-api.workspace = true
@@ -15,6 +16,7 @@ fs2 = "0.4"
 nucleus-client = { path = "../nucleus/crates/nucleus-client" }
 nucleus-core = { path = "../nucleus/crates/nucleus-core" }
 rusqlite = { version = "0.40.0", features = ["bundled"] }
+rustix = { version = "1.1.4", features = ["process", "fs"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["raw_value"] }
 sha2 = "0.10"
@@ -22,6 +24,7 @@ tempfile = "3.20"
 thiserror = "2.0"
 time = { version = "0.3", features = ["formatting"] }
 tokio = { version = "1.53", features = ["full"] }
+toml.workspace = true
 uuid = { version = "1.18", features = ["v7"] }
 
 [dev-dependencies]

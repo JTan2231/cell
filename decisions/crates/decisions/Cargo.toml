@@ -1,14 +1,21 @@
 [package]
 name = "decisions"
-version = "0.6.0"
+version = "0.7.0"
 edition.workspace = true
+default-run = "krisis"
 
 [[bin]]
 name = "krisis"
 path = "src/main.rs"
 
+[[bin]]
+name = "krisis-install"
+path = "src/bin/krisis-install.rs"
+
 [dependencies]
 cell-maintenance.workspace = true
+cell-install.workspace = true
+clockwork = { path = "../../../clockwork/crates/clockwork" }
 annals-api.workspace = true
 krisis-api.workspace = true
 clap.workspace = true
@@ -23,6 +30,7 @@ serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 time = { workspace = true, features = ["local-offset"] }
+toml.workspace = true
 tokio.workspace = true
 uuid.workspace = true
 

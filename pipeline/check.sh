@@ -16,7 +16,6 @@ for script_path in \
     pipeline/check.sh \
     pipeline/integrated.sh \
     pipeline/recognition.sh \
-    pipeline/extras/deployment-generated.sh \
     pipeline/extras/decisions-catalog.sh \
     pipeline/extras/semantics-catalog.sh \
     pipeline/extras/todo-catalog.sh
@@ -64,13 +63,10 @@ EOF
 "$PIPELINE_ROOT/pipeline/generate.sh" --check
 "$PIPELINE_ROOT/pipeline/generate.sh" --check \
     --product nucleus --product crm
-python3 "$PIPELINE_ROOT/deployment/generate.py" --check
 PYTHONDONTWRITEBYTECODE=1 python3 "$PIPELINE_ROOT/pipeline/test_release.py" -q
 PYTHONDONTWRITEBYTECODE=1 python3 "$PIPELINE_ROOT/pipeline/test_todo_catalog.py" -q
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q ci_broker.test_broker
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_coordinator
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_build
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_adapters
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_stateful_adapters
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_cleanup
 printf '%s\n' 'pipeline/test.sh: green'

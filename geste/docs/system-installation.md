@@ -8,9 +8,9 @@ Build and validate first:
 
 ```sh
 ./geste/ci.sh
-cargo build --release --locked --package geste
-geste/packaging/macos/deploy-user.sh \
-  --binary /Users/joey/rust/cell/target/release/geste
+<TESTED_GESTE_INSTALL> install \
+  --binary <TESTED_GESTE_BINARY> \
+  --bundle /Users/joey/rust/cell/geste/chancery
 ```
 
 Deployment publishes stable command and provider selectors through one
@@ -21,7 +21,7 @@ not initialize or migrate domain state.
 
 A PID-aware product lock serializes Geste updates. Provider publication also
 takes the shared Chancery catalog-writer lock, always after the product lock,
-so generated selector-only deployers cannot publish concurrently; stale lock
+so shared Rust installers cannot publish concurrently; stale lock
 owners are recovered. Deployment snapshots `current` before waiting and
 rejects a stale cutover. Callers may instead supply
 `--expected-current absent|releases/HASH`. The one `current` switch is atomic;
@@ -34,6 +34,13 @@ Initialize explicitly after a fresh deployment:
 /Users/joey/.local/bin/geste init
 /Users/joey/.local/bin/geste --json doctor
 ```
+
+New releases use the shared Rust `cell-install-v2` manifest in `manifest.json`.
+The exact inventory includes `geste-install` at `bin/geste-install` and
+`package/install`, the product binary, and `share/chancery/geste`.
+`~/.local/bin/geste-install` follows the selected release. The Rust installer
+also verifies the supported legacy format when admitting an existing install or
+recovering a retained release.
 
 ## Paths
 
@@ -65,15 +72,16 @@ revision lacking its final seal.
 
 Verification checks the installed program and existing database without
 creating an episode. If an installed program regression requires rollback
-after deployment committed, preserve the failure evidence and redeploy the
-exact previous binary with its packaged deployer:
+after deployment committed, preserve the failure evidence. Resolve
+`install/previous` to its canonical owned release directory, then use a trusted
+tested Rust installer to verify and select it:
 
 ```sh
-geste_previous="/Users/joey/Library/Application Support/Geste/install/previous"
-"$geste_previous/package/deploy-user.sh" \
-  --binary "$geste_previous/bin/geste"
+<TRUSTED_GESTE_INSTALL> recover \
+  --release <VERIFIED_PREVIOUS_RELEASE_DIRECTORY>
 ```
 
+Do not execute an unverified installer from the retained release.
 Normal selector, exact-tree, manifest, component-hash, and version checks still
 apply. Stop if `previous` is absent or invalid; do not rewrite selectors by
 hand. Rollback changes installed program/provider selection and leaves the

@@ -9,13 +9,13 @@ Build and validate first, then deploy under separate authority:
 
 ```sh
 ./clockwork/ci.sh
-cargo build --release --locked --package clockwork
-clockwork/packaging/macos/deploy-user.sh \
-  --binary /Users/joey/rust/cell/target/release/clockwork \
+<TESTED_CLOCKWORK_INSTALL> install \
+  --binary <TESTED_CLOCKWORK_BINARY> \
+  --bundle /Users/joey/rust/cell/clockwork/chancery \
   --chancery /absolute/path/to/chancery
 ```
 
-Deployment stages the binary, packaging scripts, and complete provider bundle
+Deployment stages the binary, Rust installer, and complete provider bundle
 under one content-addressed release and atomically selects it for the stable
 command and provider paths. Before either selector can change, the explicitly
 supplied candidate Chancery reader must validate the exact provider copy inside
@@ -25,6 +25,13 @@ provider path. It retains the prior valid selector for rollback.
 It neither calls `clockwork binding switch` nor scans another product for jobs.
 Missing current-user `.local/bin` and Chancery parent directories may be
 created; existing shared parents are validated without changing their modes.
+
+New releases use the shared Rust `cell-install-v2` manifest in `manifest.json`.
+The exact inventory includes `clockwork-install` at `bin/clockwork-install` and
+`package/install`, the product binary, and `share/chancery/clockwork`.
+`~/.local/bin/clockwork-install` follows the selected release. The Rust installer
+also verifies the supported legacy format when admitting an existing install or
+recovering a retained release.
 
 ## Installed paths
 
@@ -63,18 +70,18 @@ product-domain success.
 
 A deployment failure before commit restores the exact prior current and
 previous selectors plus public command and provider views. If coherent
-restoration cannot be completed, it detaches all four public selectors and
+restoration cannot be completed, it detaches all owned public selectors and
 reports that fail-closed state while retaining releases. After a committed
-deployment, redeploy the exact previous candidate through its packaged
-deployer:
+deployment, resolve `install/previous` to its canonical owned release directory.
+Use a trusted tested Rust installer to verify and select that retained release:
 
 ```sh
-clockwork_previous="/Users/joey/Library/Application Support/Clockwork/install/previous"
-"$clockwork_previous/package/deploy-user.sh" \
-  --binary "$clockwork_previous/bin/clockwork" \
+<TRUSTED_CLOCKWORK_INSTALL> recover \
+  --release <VERIFIED_PREVIOUS_RELEASE_DIRECTORY> \
   --chancery /absolute/path/to/chancery
 ```
 
+Do not execute an unverified installer from the retained release.
 Program rollback changes the stable Clockwork binary/provider selector. It
 does not rewrite a binding or its generated plist. Because a generated plist
 pins an exact content-addressed installed Clockwork binary, do not prune a release while a
@@ -82,12 +89,12 @@ plist or running activation refers to it.
 
 ## Uninstall selector
 
-The packaged uninstaller removes only Clockwork's owned stable command,
-provider, current, and previous selectors after refusing any remaining
+The Rust installer's `uninstall` operation removes only Clockwork's owned command,
+installer, provider, current, and previous selectors after refusing any remaining
 `org.clockwork.*` LaunchAgent plist:
 
 ```sh
-clockwork/packaging/macos/uninstall-user.sh
+<TRUSTED_CLOCKWORK_INSTALL> uninstall
 ```
 
 Before running it, disable every binding and verify quiescence. The uninstaller

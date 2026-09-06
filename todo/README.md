@@ -126,8 +126,10 @@ tag.
 After a release build, deploy without administrator privileges:
 
 ```sh
-./packaging/macos/deploy-user.sh \
-  --binary "/Users/joey/rust/cell/target/release/todo" \
+<TESTED_TODO_INSTALL> install \
+  --binary <TESTED_TODO_BINARY> \
+  --bundle /Users/joey/rust/cell/todo/chancery \
+  --package /Users/joey/rust/cell/todo/packaging/macos \
   --email-from 'todo@joeytan.dev' \
   --email-to 'j.tan2231@gmail.com'
 ```

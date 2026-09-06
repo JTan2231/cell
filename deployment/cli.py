@@ -152,7 +152,7 @@ def catalog(root: Path, revision: str) -> dict[str, dict[str, Any]]:
             names(metadata.get("dependencies", []))
             adapter_binary = metadata.get("adapter_binary")
             if adapter_binary is not None:
-                if name != "usher" or adapter_binary != "usher-install":
+                if adapter_binary != f"{name}-install":
                     raise DeploymentError(f"unsupported committed binary adapter: {name}")
                 adapter_path = None
             else:
@@ -540,9 +540,9 @@ class Run:
                        manifest: dict[str, Any] | None) -> Path:
         binary = self.data["catalog"][product]["metadata"].get("adapter_binary")
         record = self.record(product)
-        if (product != "usher" or binary != "usher-install" or product not in self.data["products"]
+        if (binary != f"{product}-install"
                 or directory is None or manifest is None or not record.get("prepared")):
-            raise DeploymentError(f"{product} binary adapter requires its prepared selected candidate")
+            raise DeploymentError(f"{product} binary adapter requires its prepared candidate")
         receipt = record.get("build_receipt", {})
         if (record.get("candidate_id") != manifest["candidate_id"]
                 or receipt.get("state") != "built" or receipt.get("product") != product
@@ -607,9 +607,25 @@ class Run:
         self.data["source_key"] = source_key
         self.save()
         preparation = self.path / "preparation"
+        # Affected-only products need the same trustworthy installer boundary
+        # as selected products. Prepare their declared maintenance closure once,
+        # before any hold; this does not select them for installation.
+        prepared_products = set(self.data["products"])
+        pending = list(prepared_products)
+        while pending:
+            product = pending.pop()
+            metadata = self.data["catalog"][product]["metadata"]
+            for affected in names(metadata.get("maintenance_products", [])):
+                entry = self.data["catalog"].get(affected)
+                if entry is None or entry["metadata"] is None:
+                    raise DeploymentError("maintenance declaration names an unavailable product")
+                if entry["metadata"].get("adapter_binary") and affected not in prepared_products:
+                    prepared_products.add(affected)
+                    pending.append(affected)
+        self.data["prepared_products"] = sorted(prepared_products)
         command = [self.data["python"], str(self.worktree / "deployment" / "build.py"),
                    "--source-root", str(self.worktree), "--output", str(preparation)]
-        for product in self.data["products"]:
+        for product in self.data["prepared_products"]:
             command.extend(["--product", product])
         returncode, _ = self.command("cell", "release-build", command, cwd=self.worktree)
         if returncode:
@@ -619,7 +635,7 @@ class Run:
                 or result.get("source_key") != source_key):
             raise DeploymentError("release build does not match the selected source")
         self.data["build"] = {key: result[key] for key in ("cache_hit", "build_key", "elapsed_seconds") if key in result}
-        for product in self.data["products"]:
+        for product in self.data["prepared_products"]:
             record = self.record(product)
             output = preparation / "candidates" / product
             manifest = candidate.verify(output, product=product, commit=self.data["source_commit"])
@@ -679,8 +695,14 @@ class Run:
         self.prepare()
         self.inspect()
         affected = self.data["affected"]
-        self.phase("hold", affected)
-        self.phase("drain", affected)
+        requesters = [product for product in affected if product != "nucleus"]
+        self.phase("hold", requesters)
+        self.phase("drain", requesters)
+        if "nucleus" in affected:
+            # Requester workflows may need continuation jobs while settling.
+            # Close Nucleus admission only after those workflows have drained.
+            self.phase("hold", ["nucleus"])
+            self.phase("drain", ["nucleus"])
         self.phase("apply", self.data["products"])
         self.phase("verify", affected)
         release_order = [product for product in affected if product != "nucleus"]
@@ -768,10 +790,10 @@ def run_worker(path: Path, lock_fd: int | None = None) -> int:
     try:
         run.check_source()
         cleanup_command = [run.data["python"], str(run.source / "deployment" / "cleanup.py")]
-        if ("usher" in run.data["products"]
-                and run.data["catalog"]["usher"]["metadata"].get("adapter_binary")):
-            directory, manifest = run.candidate_for("usher")
-            cleanup_command.extend(["--usher-installer", str(run.sealed_adapter("usher", directory, manifest))])
+        for product in run.data.get("prepared_products", run.data["products"]):
+            if run.data["catalog"][product]["metadata"].get("adapter_binary"):
+                directory, manifest = run.candidate_for(product)
+                cleanup_command.extend(["--installer", f"{product}={run.sealed_adapter(product, directory, manifest)}"])
         returncode, output = run.command("cell", "cleanup", cleanup_command)
         if returncode:
             raise DeploymentError("installed release history cleanup failed")

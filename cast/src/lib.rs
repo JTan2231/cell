@@ -50,3 +50,5 @@ pub fn normalize_url(value: &str) -> Result<String> {
     }
     Ok(url.into())
 }
+
+pub mod installation;

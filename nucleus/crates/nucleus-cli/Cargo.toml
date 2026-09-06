@@ -1,5 +1,6 @@
 [package]
 name = "nucleus-cli"
+default-run = "nucleus"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,6 +11,7 @@ name = "nucleus"
 path = "src/main.rs"
 
 [dependencies]
+cell-install.workspace = true
 cell-maintenance.workspace = true
 clap.workspace = true
 fs2.workspace = true

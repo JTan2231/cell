@@ -1,11 +1,13 @@
 [package]
+default-run = "cast"
 name = "cast"
-version = "0.2.0"
+version = "0.3.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+cell-install.workspace = true
 clap.workspace = true
 fs2.workspace = true
 reqwest = { workspace = true, features = ["rustls"] }

@@ -9,9 +9,9 @@ Build and validate first:
 
 ```sh
 ./crm/ci.sh
-cargo build --release --locked --package crm
-crm/packaging/macos/deploy-user.sh \
-  --binary /Users/joey/rust/cell/target/release/crm
+<TESTED_CRM_INSTALL> install \
+  --binary <TESTED_CRM_BINARY> \
+  --bundle /Users/joey/rust/cell/crm/chancery
 ```
 
 Deployment publishes stable command and provider selectors through one
@@ -23,7 +23,7 @@ worker.
 
 A PID-aware product lock serializes CRM updates. Provider publication also
 takes the shared Chancery catalog-writer lock, always after the product lock,
-so generated selector-only deployers cannot publish concurrently; stale lock
+so shared Rust installers cannot publish concurrently; stale lock
 owners are recovered. Deployment snapshots `current` before waiting and
 rejects a stale cutover. Callers may instead supply
 `--expected-current absent|releases/HASH`. The one `current` switch is atomic;
@@ -50,6 +50,13 @@ live workers and unsettled active updates. See the [data model](data-model.md#in
 for transaction, backup, and database rollback semantics. A program downgrade
 to a schema-one release requires restoring the compatible backup separately;
 selector rollback does not downgrade the database.
+
+New releases use the shared Rust `cell-install-v2` manifest in `manifest.json`.
+The exact inventory includes `crm-install` at `bin/crm-install` and
+`package/install`, the product binary, and `share/chancery/crm`.
+`~/.local/bin/crm-install` follows the selected release. The Rust installer
+also verifies the supported legacy format when admitting an existing install or
+recovering a retained release.
 
 ## Paths
 
@@ -86,15 +93,16 @@ prove a source, case claim, contact decision, connection, or employment result.
 ## Rollback
 
 If deployment fails before commit, the deployer restores both binary and
-provider views. After a committed update, preserve diagnostic evidence and redeploy
-the exact previous binary with its packaged deployer:
+provider views. After a committed update, preserve diagnostic evidence. Resolve
+`install/previous` to its canonical owned release directory, then use a trusted
+tested Rust installer to verify and select that retained release:
 
 ```sh
-crm_previous="/Users/joey/Library/Application Support/CRM/install/previous"
-"$crm_previous/package/deploy-user.sh" \
-  --binary "$crm_previous/bin/crm"
+<TRUSTED_CRM_INSTALL> recover \
+  --release <VERIFIED_PREVIOUS_RELEASE_DIRECTORY>
 ```
 
+Do not execute an unverified installer from the retained release.
 Normal selector, exact-tree, manifest, component-hash, and version checks still
 apply. Stop if `previous` is absent or invalid. Rollback changes program and
 provider selection only; it never rewrites CRM state or Nucleus history. A

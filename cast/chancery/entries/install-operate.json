@@ -1,6 +1,6 @@
 {
   "id": "cast.install.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -19,7 +19,7 @@
   "interfaces": [
     {
       "label": "Install the tested candidate",
-      "invocation": "/Users/joey/rust/cell/cast/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH"
+      "invocation": "<TESTED_CAST_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/HASH]"
     },
     {
       "label": "Initialize state",
@@ -51,7 +51,7 @@
     }
   ],
   "effects": [
-    "Deployment stages a content-addressed wrapper, Rust payload, deployer and exact provider bundle and advances only Cast-owned command/provider selectors. It creates no collection database or schedule.",
+    "Deployment stages a content-addressed wrapper, Rust payload, Rust installer and exact provider bundle and advances only Cast-owned command/provider selectors. It creates no collection database or schedule.",
     "Init creates private local state. Explicit configuration changes affect subsequent collection; diagnostic reads do not start paid searches.",
     "The installed wrapper sources ~/.zshrc with output suppressed and starts the Rust payload with only the documented environment and two provider keys.",
     "Source add retains an explicit source. Ordinary websites may use an existing company ID or a hostname candidate; supported ATS URLs use their canonical provider/tenant owner and reject --company-id. Source disable preserves evidence but removes that source from ordinary collection.",
@@ -95,7 +95,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "The deployer accepts --binary, optional --home and --expected-current. The CLI accepts --state-dir and explicit init, configuration, diagnostic or state reconcile-ownership commands. Ordinary website source controls accept an optional company ID; supported ATS sources reject that override and use their canonical tenant owner."
+        "statement": "The Rust installer install command accepts --binary and --bundle at absolute paths, plus optional --home and --expected-current. Its recover command accepts --release at a canonical owned release directory. The CLI accepts --state-dir and explicit init, configuration, diagnostic or state reconcile-ownership commands. Ordinary website source controls accept an optional company ID; supported ATS sources reject that override and use their canonical tenant owner."
       }
     ],
     "outputs": [
@@ -113,7 +113,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Release identity hashes program, frontend, deployer and provider bytes. Provider release and database/config/export schemas remain separate; request-budget units are defined by Cast configuration."
+        "statement": "Release identity hashes program, frontend, Rust installer and provider bytes. Provider release and database/config/export schemas remain separate; request-budget units are defined by Cast configuration."
       }
     ],
     "completeness_and_freshness": [
@@ -141,7 +141,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Installation creates no daemon, LaunchAgent, scheduler binding, model job or remote-provider request. No live-state migration is performed by the deployer."
+        "statement": "Installation creates no daemon, LaunchAgent, scheduler binding, model job or remote-provider request. No live-state migration is performed by the Rust installer."
       },
       {
         "status": "unspecified",

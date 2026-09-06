@@ -1,6 +1,6 @@
 {
   "id": "annals.install.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -53,21 +53,62 @@
     "Deployment must preserve private user ownership and permissions across both current and rollback generations."
   ],
   "interfaces": [
-    {"label": "Inspect deployment admission", "invocation": "/Users/joey/.local/bin/annals --library ABSOLUTE_DATABASE --json maintenance status"},
-    {"label": "Hold deployment admission", "invocation": "/Users/joey/.local/bin/annals --library ABSOLUTE_DATABASE --json maintenance hold RUN_ID"},
-    {"label": "Release own deployment hold", "invocation": "/Users/joey/.local/bin/annals --library ABSOLUTE_DATABASE --json maintenance release RUN_ID"},
-    {"label": "Deploy or update", "invocation": "/Users/joey/rust/cell/annals/packaging/launchd/deploy-user.sh --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --clockwork <ABSOLUTE_CLOCKWORK_BINARY>"},
-    {"label": "Fresh-state cutover", "invocation": "/Users/joey/rust/cell/annals/packaging/launchd/deploy-user.sh --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --clockwork <ABSOLUTE_CLOCKWORK_BINARY> --fresh-state"},
-    {"label": "Legacy system migration", "invocation": "sudo /Users/joey/rust/cell/annals/packaging/launchd/migrate-to-user.sh --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --clockwork <ABSOLUTE_CLOCKWORK_BINARY>"},
-    {"label": "Provision decisions library", "invocation": "<ABSOLUTE_CONTENT_RELEASE>/package/provision-decisions-user.sh --release-root <ABSOLUTE_CONTENT_RELEASE> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --clockwork <ABSOLUTE_CLOCKWORK_BINARY> [--keep-maintenance]"},
-    {"label": "Installed Annals version", "invocation": "/Users/joey/.local/bin/annals --version"},
-    {"label": "Installed Usage version", "invocation": "/Users/joey/.local/bin/annals-usage --version"},
-    {"label": "Inbox status", "invocation": "/Users/joey/.local/bin/annals inbox status"},
-    {"label": "Usage doctor", "invocation": "/Users/joey/.local/bin/annals-usage doctor"}
+    {
+      "label": "Inspect deployment admission",
+      "invocation": "/Users/joey/.local/bin/annals --library ABSOLUTE_DATABASE --json maintenance status"
+    },
+    {
+      "label": "Hold deployment admission",
+      "invocation": "/Users/joey/.local/bin/annals --library ABSOLUTE_DATABASE --json maintenance hold RUN_ID"
+    },
+    {
+      "label": "Release own deployment hold",
+      "invocation": "/Users/joey/.local/bin/annals --library ABSOLUTE_DATABASE --json maintenance release RUN_ID"
+    },
+    {
+      "label": "Deploy or update",
+      "invocation": "/Users/joey/.local/bin/annals-install install --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --bundle <ABSOLUTE_ANNALS_PROVIDER> --usage-bundle <ABSOLUTE_USAGE_PROVIDER> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --clockwork <ABSOLUTE_CLOCKWORK_BINARY>"
+    },
+    {
+      "label": "Fresh-state cutover",
+      "invocation": "/Users/joey/.local/bin/annals-install install --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --bundle <ABSOLUTE_ANNALS_PROVIDER> --usage-bundle <ABSOLUTE_USAGE_PROVIDER> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --clockwork <ABSOLUTE_CLOCKWORK_BINARY> --fresh-state"
+    },
+    {
+      "label": "Legacy system migration",
+      "invocation": "sudo /Users/joey/.local/bin/annals-install migrate-to-user --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --bundle <ABSOLUTE_ANNALS_PROVIDER> --usage-bundle <ABSOLUTE_USAGE_PROVIDER> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --clockwork <ABSOLUTE_CLOCKWORK_BINARY>"
+    },
+    {
+      "label": "Provision decisions library",
+      "invocation": "<ABSOLUTE_CONTENT_RELEASE>/bin/annals-install provision-decisions --release-root <ABSOLUTE_CONTENT_RELEASE> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --clockwork <ABSOLUTE_CLOCKWORK_BINARY> [--keep-maintenance]"
+    },
+    {
+      "label": "Installed Annals version",
+      "invocation": "/Users/joey/.local/bin/annals --version"
+    },
+    {
+      "label": "Installed Usage version",
+      "invocation": "/Users/joey/.local/bin/annals-usage --version"
+    },
+    {
+      "label": "Inbox status",
+      "invocation": "/Users/joey/.local/bin/annals inbox status"
+    },
+    {
+      "label": "Usage doctor",
+      "invocation": "/Users/joey/.local/bin/annals-usage doctor"
+    }
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4},
-    {"id": "clockwork.schedule.operate", "min_contract": 2, "max_contract_exclusive": 3}
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
   ],
   "does_not_authorize": [
     "Running `annals/release.sh`, which commits, tags, and pushes.",
@@ -80,67 +121,190 @@
   ],
   "promise": {
     "consumers": [
-      {"status": "declared", "statement": "An authorized local macOS operator may install, update, verify, or recover the user-owned Annals and Annals Usage deployment, or separately provision its dedicated decisions library and schedule."},
-      {"status": "unsupported", "statement": "This operation is not source development, Git publication, routine library administration, implicit fresh-state replacement, or storage cleanup."}
+      {
+        "status": "declared",
+        "statement": "An authorized local macOS operator may install, update, verify, or recover the user-owned Annals and Annals Usage deployment, or separately provision its dedicated decisions library and schedule."
+      },
+      {
+        "status": "unsupported",
+        "statement": "This operation is not source development, Git publication, routine library administration, implicit fresh-state replacement, or storage cleanup."
+      }
     ],
     "preconditions": [
-      {"status": "declared", "statement": "Coordinated updates require maintenance support from each currently installed affected executable before holds or product effects; a new candidate cannot fence an old public command. All affected holds and product/dependency drain must be proved before selected products are applied."},
-      {"status": "declared", "statement": "Candidate Annals and Annals Usage binaries have passed the product gate, and the caller supplies absolute candidate binary, Nucleus binary, Nucleus socket, and compatible Clockwork paths with enough physical capacity for staging and recovery writes."},
-      {"status": "declared", "statement": "An ordinary update requires every selected `annals/inbox` definition to match the complete current Annals release and executable contract field for field; legacy system migration requires the binding to be absent or disabled with no selected digest before commit."},
-      {"status": "declared", "statement": "Fresh-state replacement additionally requires explicit destructive authority, retained prior-generation rollback material, and a verified uncompleted-backlog import and recovery plan."},
-      {"status": "declared", "statement": "Decisions provisioning requires a complete format-four content release whose independently hashed provisioner and both decisions templates are unchanged; any selected prior decisions definition must match that dedicated state and a fully verified Annals content release field for field."},
-      {"status": "declared", "statement": "Existing decisions config, database sidecars, spool control and identity files, maintenance state, and fixed logs must be operator-owned private regular files with exactly one hard link; the database must carry the immutable decisions role."}
+      {
+        "status": "declared",
+        "statement": "Coordinated updates require maintenance support from each currently installed affected executable before holds or product effects; a new candidate cannot fence an old public command. All affected holds and product/dependency drain must be proved before selected products are applied."
+      },
+      {
+        "status": "declared",
+        "statement": "Candidate Annals and Annals Usage binaries have passed the product gate, and the caller supplies absolute candidate binary, Nucleus binary, Nucleus socket, and compatible Clockwork paths with enough physical capacity for staging and recovery writes."
+      },
+      {
+        "status": "declared",
+        "statement": "An ordinary update requires every selected `annals/inbox` definition to match the complete current Annals release and executable contract field for field; legacy system migration requires the binding to be absent or disabled with no selected digest before commit."
+      },
+      {
+        "status": "declared",
+        "statement": "Fresh-state replacement additionally requires explicit destructive authority, retained prior-generation rollback material, and a verified uncompleted-backlog import and recovery plan."
+      },
+      {
+        "status": "declared",
+        "statement": "Decisions provisioning requires a complete cell-install-v2 content release whose exact release-local Rust installer supplies the compiled configuration and native definition rendering; any selected prior decisions definition must match that dedicated state and a fully verified Annals content release field for field."
+      },
+      {
+        "status": "declared",
+        "statement": "Existing decisions config, database sidecars, spool control and identity files, maintenance state, and fixed logs must be operator-owned private regular files with exactly one hard link; the database must carry the immutable decisions role."
+      }
     ],
     "inputs": [
-      {"status": "declared", "statement": "Maintenance accepts the selected library path and one run ID of 1–128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. A controlled installer command may set CELL_DEPLOYMENT_RUN_ID; existing holds require that exact sole owner and exclusive drained admission, while absent holds use ordinary admission."},
-      {"status": "declared", "statement": "Primary deployment accepts absolute Annals, Annals Usage, Nucleus binary, Nucleus socket, and Clockwork binary paths plus optional --fresh-state; decisions provisioning instead accepts one exact absolute content-release root, Nucleus socket, Clockwork binary, and optional --keep-maintenance."},
-      {"status": "unsupported", "statement": "The deployer does not accept release publication, arbitrary cleanup, manual receipt editing, implicit data deletion, or Nucleus replacement as installation inputs."}
+      {
+        "status": "declared",
+        "statement": "Maintenance accepts the selected library path and one run ID of 1\u2013128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. A controlled installer command may set CELL_DEPLOYMENT_RUN_ID; existing holds require that exact sole owner and exclusive drained admission, while absent holds use ordinary admission."
+      },
+      {
+        "status": "declared",
+        "statement": "Primary deployment accepts absolute Annals, Annals Usage, Nucleus binary, Nucleus socket, and Clockwork binary paths plus optional --fresh-state; decisions provisioning instead accepts one exact absolute content-release root, Nucleus socket, Clockwork binary, and optional --keep-maintenance."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The deployer does not accept release publication, arbitrary cleanup, manual receipt editing, implicit data deletion, or Nucleus replacement as installation inputs."
+      }
     ],
     "outputs": [
-      {"status": "declared", "statement": "Maintenance returns the standard ok/data envelope with protocol_version 1, contract_version 1, holds, and drained without opening or initializing SQLite. Drained describes participating live command admission and is not by itself proof that durable work or Nucleus jobs are terminal."},
-      {"status": "declared", "statement": "Success selects a complete format-four content-addressed release containing both binaries, the release-local inbox runner, primary and decisions Clockwork templates, decisions config and provisioner, legacy ownership-check template, configuration, provider bundles, and a verified compatible library and spool generation, then binds the exact definition digest."},
-      {"status": "declared", "statement": "Decisions provisioning success returns one body-free ok/data envelope containing the absolute config path, persistent library ID, exact Clockwork key and definition digest, selected/enabled booleans, maintenance state, and content release ID."},
-      {"status": "declared", "statement": "Verification exposes installed versions, Nucleus health, Annals statistics and inbox status, and Annals Usage diagnostics without submitting model work."}
+      {
+        "status": "declared",
+        "statement": "Maintenance returns the standard ok/data envelope with protocol_version 1, contract_version 1, holds, and drained without opening or initializing SQLite. Drained describes participating live command admission and is not by itself proof that durable work or Nucleus jobs are terminal."
+      },
+      {
+        "status": "declared",
+        "statement": "Success selects a complete cell-install-v2 content-addressed release containing both independently versioned payloads, the exact Rust installer and native frontend/runner roles, both provider bundles and a strict file inventory; product-owned configuration and a compatible library/spool generation are verified before the exact native Clockwork definition is selected."
+      },
+      {
+        "status": "declared",
+        "statement": "Decisions provisioning success returns one body-free ok/data envelope containing the absolute config path, persistent library ID, exact Clockwork key and definition digest, selected/enabled booleans, maintenance state, and content release ID."
+      },
+      {
+        "status": "declared",
+        "statement": "Verification exposes installed versions, Nucleus health, Annals statistics and inbox status, and Annals Usage diagnostics without submitting model work."
+      }
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "An ordinary update migrates and preserves the active library and spool; fresh state replaces them together and imports uncompleted backlog in preserved lane order."},
-      {"status": "declared", "statement": "Maintenance is an Annals deployment boundary distinct from operator pause and storage gate; it clears only after the complete cutover commits."},
-      {"status": "declared", "statement": "A measured closed storage gate does not itself reject deployment, while an unreadable probe or insufficient physical capacity can fail required inspection or writes."}
+      {
+        "status": "declared",
+        "statement": "An ordinary update migrates and preserves the active library and spool; fresh state replaces them together and imports uncompleted backlog in preserved lane order."
+      },
+      {
+        "status": "declared",
+        "statement": "Maintenance is an Annals deployment boundary distinct from operator pause and storage gate; it clears only after the complete cutover commits."
+      },
+      {
+        "status": "declared",
+        "statement": "A measured closed storage gate does not itself reject deployment, while an unreadable probe or insufficient physical capacity can fail required inspection or writes."
+      }
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Product versions, provider releases, content-addressed release identity, current selector, Clockwork keys `annals/inbox` and `annals/decisions-inbox`, immutable definition digests, persistent decisions library ID, library schema, and library/spool rollback generations are distinct identities."},
-      {"status": "declared", "statement": "Storage checks and reserve comparisons use filesystem bytes; freshness and service checks are observations made during the selected deployment."}
+      {
+        "status": "declared",
+        "statement": "Product versions, provider releases, content-addressed release identity, current selector, Clockwork keys `annals/inbox` and `annals/decisions-inbox`, immutable definition digests, persistent decisions library ID, library schema, and library/spool rollback generations are distinct identities."
+      },
+      {
+        "status": "declared",
+        "statement": "Storage checks and reserve comparisons use filesystem bytes; freshness and service checks are observations made during the selected deployment."
+      }
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "The current selector changes only after the staged release, configuration, library migration or replacement, spool, provider bundles, and service checks form one complete candidate generation."},
-      {"status": "declared", "statement": "Post-cutover checks inspect the newly selected installed commands and current service state rather than a retained readiness snapshot."},
-      {"status": "unspecified", "statement": "No deployment-duration, service-availability, rollback-retention duration, or disk-capacity service-level objective is promised."}
+      {
+        "status": "declared",
+        "statement": "The current selector changes only after the staged release, configuration, library migration or replacement, spool, provider bundles, and service checks form one complete candidate generation."
+      },
+      {
+        "status": "declared",
+        "statement": "Post-cutover checks inspect the newly selected installed commands and current service state rather than a retained readiness snapshot."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No deployment-duration, service-availability, rollback-retention duration, or disk-capacity service-level objective is promised."
+      }
     ],
     "access": [
-      {"status": "declared", "statement": "The supported boundary is the repository-owned macOS deployers operating the current user's private primary installation or physically separate decisions state and only their respective Clockwork keys."},
-      {"status": "unsupported", "statement": "The operation does not own or replace Nucleus, publish Git state, delete recovery material, or grant direct library and spool editing."}
+      {
+        "status": "declared",
+        "statement": "The supported boundary is the repository-owned macOS deployers operating the current user's private primary installation or physically separate decisions state and only their respective Clockwork keys."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The operation does not own or replace Nucleus, publish Git state, delete recovery material, or grant direct library and spool editing."
+      }
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "The durable per-library gate is the private sibling <database>.cell-maintenance. Hold atomically prevents new mutations, admitted commands may settle, and repeated holds or releases are idempotent. Release removes only the named owner and preserves operator pause. Corpus and decision-feed reads plus inbox pause and interrupt remain available; public CLI client mutations share the same fence before database access."},
-      {"status": "declared", "statement": "Cell's Annals adapter composes supported primary and dedicated-library initialization or migration without choosing a legacy activation watermark. Group verification precedes release of this run's holds; retained installer maintenance and uncertain recovery remain authoritative."},
-      {"status": "declared", "statement": "Deployment stages and registers an inactive exact-release definition, establishes maintenance, proves and disables only an exact current-release Clockwork selection and quiesces any owned legacy LaunchAgent, captures recovery state, performs supported migration or authorized replacement, switches selectors and exactly one Clockwork binding, verifies, then clears maintenance."},
-      {"status": "declared", "statement": "The former-system migration is the exception to pre-commit definition registration: its child renders an inert definition under maintenance, and the outer migration durably records the target state as permanent before registering and selecting it. RunAtLoad remains maintenance-gated until the system service is proved absent and exact legacy retirement completes."},
-      {"status": "declared", "statement": "Rollback restores the exact prior definition only when that binding was enabled, or restores the prior owned legacy LaunchAgent, never both. A previously absent or disabled binding remains disabled without transient activation; its inactive selected digest may remain the candidate digest. If exclusive restoration cannot be proved, Annals leaves unproved scheduler state untouched, keeps maintenance, removes its public selectors, and retains private recovery material."},
-      {"status": "declared", "statement": "An ordinary pre-commit failure restores the captured program, service, configuration, library, and spool generation before work resumes."},
-      {"status": "declared", "statement": "Fresh state treats library and spool plus uncompleted backlog as one rollback generation; credentials remain forward-only and outside binary or database rollback."},
-      {"status": "declared", "statement": "Decisions provisioning stages fresh state off-path, binds a fresh spool, engages maintenance before publication, registers the candidate inactive, drains only an enabled proved prior, backs up before migration, verifies inbox and feed readiness, switches only `annals/decisions-inbox`, then clears only its own gate unless --keep-maintenance was requested."},
-      {"status": "declared", "statement": "The primary `annals/inbox` binding and general library stay available throughout decisions provisioning; both deployment paths serialize through Annals' shared update lock."}
+      {
+        "status": "declared",
+        "statement": "The durable per-library gate is the private sibling <database>.cell-maintenance. Hold atomically prevents new mutations, admitted commands may settle, and repeated holds or releases are idempotent. Release removes only the named owner and preserves operator pause. Corpus and decision-feed reads plus inbox pause and interrupt remain available; public CLI client mutations share the same fence before database access."
+      },
+      {
+        "status": "declared",
+        "statement": "Cell's Annals adapter composes supported primary and dedicated-library initialization or migration without choosing a legacy activation watermark. Group verification precedes release of this run's holds; retained installer maintenance and uncertain recovery remain authoritative."
+      },
+      {
+        "status": "declared",
+        "statement": "Deployment stages and registers an inactive exact-release definition, establishes maintenance, proves and disables only an exact current-release Clockwork selection and quiesces any owned legacy LaunchAgent, captures recovery state, performs supported migration or authorized replacement, switches selectors and exactly one Clockwork binding, verifies, then clears maintenance."
+      },
+      {
+        "status": "declared",
+        "statement": "The former-system migration is the exception to pre-commit definition registration: its child renders an inert definition under maintenance, and the outer migration durably records the target state as permanent before registering and selecting it. RunAtLoad remains maintenance-gated until the system service is proved absent and exact legacy retirement completes."
+      },
+      {
+        "status": "declared",
+        "statement": "Rollback restores the exact prior definition only when that binding was enabled, or restores the prior owned legacy LaunchAgent, never both. A previously absent or disabled binding remains disabled without transient activation; its inactive selected digest may remain the candidate digest. If exclusive restoration cannot be proved, Annals leaves unproved scheduler state untouched, keeps maintenance, removes its public selectors, and retains private recovery material."
+      },
+      {
+        "status": "declared",
+        "statement": "An ordinary pre-commit failure restores the captured program, service, configuration, library, and spool generation before work resumes."
+      },
+      {
+        "status": "declared",
+        "statement": "Fresh state treats library and spool plus uncompleted backlog as one rollback generation; credentials remain forward-only and outside binary or database rollback."
+      },
+      {
+        "status": "declared",
+        "statement": "Decisions provisioning stages fresh state off-path, binds a fresh spool, engages maintenance before publication, registers the candidate inactive, drains only an enabled proved prior, backs up before migration, verifies inbox and feed readiness, switches only `annals/decisions-inbox`, then clears only its own gate unless --keep-maintenance was requested."
+      },
+      {
+        "status": "declared",
+        "statement": "The primary `annals/inbox` binding and general library stay available throughout decisions provisioning; both deployment paths serialize through Annals' shared update lock."
+      }
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "The supported deployers are per-user macOS Clockwork installations, require absolute inputs, serialize on one Annals update lock, stage one complete generation, and need enough physical capacity for release, backup, migration, and rollback artifacts."},
-      {"status": "unsupported", "statement": "Deployment authority never implies fresh state, data cleanup, reserve reduction, prior-generation deletion, or service work outside Annals."},
-      {"status": "unspecified", "statement": "No maximum installed-state size, deployment time, retained-generation count, or service downtime bound is promised here."}
+      {
+        "status": "declared",
+        "statement": "The supported deployers are per-user macOS Clockwork installations, require absolute inputs, serialize on one Annals update lock, stage one complete generation, and need enough physical capacity for release, backup, migration, and rollback artifacts."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Deployment authority never implies fresh state, data cleanup, reserve reduction, prior-generation deletion, or service work outside Annals."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No maximum installed-state size, deployment time, retained-generation count, or service downtime bound is promised here."
+      }
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Annals Usage doctor may prove readiness under the same sole Nucleus deployment hold through the typed health_for_deployment interface, including runtime drain, authentication, and harness readiness; it does not turn held public Nucleus admission into normal job admission."},
-      {"status": "declared", "statement": "Annals and Annals Usage package versions, provider releases, library schema, Nucleus protocol, and installed generation are checked as separate axes and cut over together where the package owns them."},
-      {"status": "declared", "statement": "Library changes use only supported migrations or explicit fresh state; provider selectors follow the same release generation as their executables for rollback."},
-      {"status": "unspecified", "statement": "No cross-release installation support window, migration horizon, or deprecation period is promised."}
+      {
+        "status": "declared",
+        "statement": "Annals Usage doctor may prove readiness under the same sole Nucleus deployment hold through the typed health_for_deployment interface, including runtime drain, authentication, and harness readiness; it does not turn held public Nucleus admission into normal job admission."
+      },
+      {
+        "status": "declared",
+        "statement": "Annals and Annals Usage package versions, provider releases, library schema, Nucleus protocol, and installed generation are checked as separate axes and cut over together where the package owns them."
+      },
+      {
+        "status": "declared",
+        "statement": "Library changes use only supported migrations or explicit fresh state; provider selectors follow the same release generation as their executables for rollback."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No cross-release installation support window, migration horizon, or deprecation period is promised."
+      }
     ],
     "reliances": [
       {
@@ -157,7 +321,10 @@
         "kind": "control",
         "contract": "clockwork.schedule.operate"
       },
-      {"status": "unspecified", "statement": "Annals promises no launchd availability or wake-up latency beyond the observations exposed by Clockwork."}
+      {
+        "status": "unspecified",
+        "statement": "Annals promises no launchd availability or wake-up latency beyond the observations exposed by Clockwork."
+      }
     ]
   },
   "manual": "manuals/install-operate.md"

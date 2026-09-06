@@ -59,9 +59,10 @@ deployer so the executable release and its Chancery provider bundle are staged
 together:
 
 ```sh
-/Users/joey/rust/cell/nucleus/packaging/macos/deploy-user.sh \
-  --binary /Users/joey/rust/cell/target/release/nucleus \
-  --daemon /Users/joey/rust/cell/target/release/nucleusd \
+<TESTED_NUCLEUS_INSTALL> install \
+  --binary <TESTED_NUCLEUS_BINARY> \
+  --daemon <TESTED_NUCLEUS_DAEMON> \
+  --bundle /Users/joey/rust/cell/nucleus/chancery \
   --codex /opt/homebrew/bin/codex \
   --codex-home "$HOME/path/to/current-signed-in-codex-home"
 /Users/joey/rust/cell/target/release/nucleus service status

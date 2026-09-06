@@ -37,7 +37,7 @@ personal paths.
 semantics/ci.sh
 ```
 
-The complete gate is offline. It validates shell behavior and Clockwork template contents,
+The complete gate is offline. It validates the compiled Rust installer against synthetic packaging and recovery fixtures, static runtime shell behavior and Clockwork template contents,
 release-local runner/frontend behavior, content-addressed deployment,
 database quiescence and rollback, retained-state uninstall, Chancery provider
 and dependency contracts, rustfmt, clippy, tests, rustdoc, and a release build.

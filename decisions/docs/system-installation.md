@@ -6,7 +6,8 @@ or a live model job.
 
 ## Installed identities
 
-- executable and public command: `krisis`
+- runtime executable and public command: `krisis`
+- product-owned Rust installation command: `krisis-install`
 - Chancery providers: `krisis` 0.4.0 and read-only compatibility provider
   `decisions` 0.4.0
 - active Clockwork key: `krisis/observer`
@@ -39,7 +40,8 @@ the observer never discovers a different installation at runtime. A packaged
 prepare accepts:
 
 ```text
-deploy-user.sh \
+krisis-install install \
+  --source-root /absolute/path/to/cell/decisions \
   --binary /absolute/path/to/krisis \
   --clockwork /absolute/path/to/clockwork \
   --codex /absolute/path/to/codex \
@@ -68,8 +70,8 @@ Final cutover validates every current selector, selected Clockwork definition,
 target-bound observer ownership receipt, and legacy plist before mutation. It
 disables only proven-owned enabled
 schedules, suspends the old hook command for its timeout, proves SQLite
-quiescence, and saves the database and sidecars. It then selects the prepared
-release, migrates through schema 4, and runs doctor in a scrubbed environment.
+quiescence, and saves the database and sidecars. It runs the exact prepared payload through schema 4 and doctor in a scrubbed
+environment before publishing the candidate command and providers.
 
 Doctor uses the same explicitly selected Codex executable as the observer and
 checks Conversations, exact Nucleus capabilities and requester contract, and:
@@ -100,10 +102,11 @@ Interactive `krisis` diagnostics remain detailed.
 
 ## Coordinated deployment maintenance
 
-`decisions/deployment/adapter.py` is the Krisis product boundary used by Cell's
-deployment coordinator. It composes the existing prepare and final-cutover
-deployer, retains product-owned maintenance through group verification, and
-releases it only through the deployer's matching owned-hold operation. It
+`krisis-install adapter OP` is the sealed Rust product boundary used by Cell's
+deployment coordinator. It composes the product-owned prepare and final-cutover
+lifecycle, retains product-owned maintenance through group verification, and
+releases only the coordinator's named hold after verification. The separate
+installer marker is authenticated by its own receipt and inode. It
 preserves captured schedule enabled booleans and the write-once observer
 baseline. An ordinary update never invents a legacy activation watermark or
 performs an implicit Semantics cutover.
@@ -174,3 +177,37 @@ Deleting those requires a separate destructive decision.
 
 The deployment adapter verifies the installed dependency configuration with
 doctor. Verification does not create observations or submit Nucleus jobs.
+
+## Retained installation artifacts
+
+The package builds and seals both `krisis` and `krisis-install`. The shared
+`cell-install` Rust library verifies the complete `cell-install-v2` manifest,
+artifact hashes and modes, both provider bundles, and current/previous/public
+selectors. Krisis owns the hook, private state, dependency pins, scheduler
+handoff, maintenance receipts, and database recovery. The static `krisis`
+frontend and `krisis-observer` interpreter script remain release data because
+the runtime contract pins those exact interpreted images.
+
+Each release retains `bin/krisis-install` and the same executable at
+`package/install`. `krisis-install verify-release ABSOLUTE_RELEASE` performs
+read-only integrity verification. `krisis-install inspect [--home ABSOLUTE_HOME]`
+checks the selected installation. Retained `package/install install` finds its
+sibling package and provider data; pass the exact retained payload as `--binary`
+and the same explicit dependency pins. Legacy formats 2, 3, and 4 remain exact
+readable evidence for the supported Decisions-to-Krisis handoff. Archived shell
+deployers do not understand the new manifest and are not the forward installer.
+
+`krisis-install uninstall --clockwork ABSOLUTE_CLOCKWORK` detaches only owned
+public selectors and the exact hook. Current/previous, releases, private state,
+receipts, and the maintenance marker remain. Reinstallation uses the retained
+Rust installer and its authenticated prepare/final-cutover flow. No command
+infers safe database rollback from program versions or manifest identity.
+
+After exact preparation, `--final-cutover --keep-maintenance` retains the
+installer gate through external verification. Repeat the same candidate and
+pins with `--release-maintenance` to prove the installed surfaces and remove
+only that authenticated gate. `--expected-current absent|releases/HASH` is an
+optional stale-selector guard. Controlled rollback keeps public commands
+suspended until database restoration is proved. An uncertain publication is
+first repaired to that suspended view, never to an executable old command over
+candidate database state.

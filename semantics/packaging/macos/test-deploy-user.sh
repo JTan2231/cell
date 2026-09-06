@@ -4,6 +4,7 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/semantics-deploy.XXXXXX")
+temporary=$(CDPATH='' cd "$temporary" && pwd -P)
 holder=
 cleanup() {
     if [ -n "$holder" ]; then
@@ -19,9 +20,22 @@ share="$temporary/package/share/chancery"
 mkdir -p "$package" "$share"
 cp "$SCRIPT_DIR/semantics" "$SCRIPT_DIR/semantics-worker" \
     "$SCRIPT_DIR/semantics-worker.clockwork.toml.in" \
-    "$SCRIPT_DIR/deploy-user.sh" "$SCRIPT_DIR/uninstall-user.sh" \
     "$SCRIPT_DIR/org.semantics.worker.plist" "$package/"
 cp -R "$SCRIPT_DIR/../../chancery" "$share/semantics"
+# These fixture launchers exercise the built Rust installer; no deployment
+# implementation is retained in a shell script.
+: "${SEMANTICS_INSTALL_TEST_BINARY:?Rust packaging test requires its built installer}"
+cat >"$package/deploy-user.sh" <<'EOF'
+#!/bin/sh
+set -eu
+bundle=$(CDPATH='' cd "$(dirname "$0")/../share/chancery/semantics" && pwd)
+exec "$SEMANTICS_INSTALL_TEST_BINARY" install --bundle "$bundle" "$@"
+EOF
+cat >"$package/uninstall-user.sh" <<'EOF'
+#!/bin/sh
+set -eu
+exec "$SEMANTICS_INSTALL_TEST_BINARY" uninstall "$@"
+EOF
 chmod 0755 "$package/semantics" "$package/semantics-worker" \
     "$package/deploy-user.sh" "$package/uninstall-user.sh"
 SEMANTICS_TEST_VERSION=$(awk -F '"' \
@@ -459,8 +473,7 @@ legacy_selected_definition=$(sed -n '2p' \
 [ "$(plutil -extract definition_digest raw \
     "$legacy_state/.deployment-maintenance.json")" = "$legacy_selected_definition" ]
 grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*3' "$legacy_provider"
-grep -Fx "version=$SEMANTICS_TEST_VERSION" \
-    "$legacy_state/install/current/manifest.txt" >/dev/null
+[ "$(plutil -extract versions.semantics raw "$legacy_state/install/current/manifest.json")" = "$SEMANTICS_TEST_VERSION" ]
 grep -Fx 'version=0.1.0' "$legacy_state/install/previous/manifest.txt" >/dev/null
 HOME="$legacy_home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" \
     --home "$legacy_home" --launchctl "$launchctl" >/dev/null
@@ -749,9 +762,7 @@ HOME="$home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clock
     --home "$home" --launchctl "$launchctl" >/dev/null
 grep -Fx 'retained maintenance evidence' \
     "$home/Library/Application Support/Semantics/.clockwork-maintenance" >/dev/null
-grep -Fx 'maintenance_preexisting=1' "$state/install/last-update.txt" >/dev/null
-grep -Fx 'maintenance_owned=0' "$state/install/last-update.txt" >/dev/null
-grep -Fx 'maintenance_retained=1' "$state/install/last-update.txt" >/dev/null
+[ "$(plutil -extract maintenance_retained raw "$state/install/last-update.json")" = true ]
 rm -f "$home/Library/Application Support/Semantics/.clockwork-maintenance"
 
 null_recovery_home="$temporary/NullRecoveryHome"
@@ -772,9 +783,9 @@ null_recovery_binding="$null_recovery_home/Library/Application Support/Clockwork
 [ -f "$null_recovery_state/.deployment-maintenance.json" ]
 [ "$(sed -n '1p' "$null_recovery_binding")" = false ]
 grep -Eq '^[0-9a-f]{64}$' "$null_recovery_binding"
-HOME="$null_recovery_home" "$package/deploy-user.sh" --binary "$candidate" \
-    --clockwork "$clockwork" --home "$null_recovery_home" \
-    --launchctl "$launchctl" >/dev/null
+null_transaction=$(find "$null_recovery_state/install" -mindepth 1 -maxdepth 1 -type d -name '.transaction.*' -print | head -1)
+HOME="$null_recovery_home" "$SEMANTICS_INSTALL_TEST_BINARY" recover --forward --transaction "$null_transaction" \
+    --clockwork "$clockwork" --home "$null_recovery_home" --launchctl "$launchctl" >/dev/null
 [ -L "$null_recovery_home/.local/bin/semantics" ]
 [ ! -e "$null_recovery_state/.clockwork-maintenance" ]
 [ ! -e "$null_recovery_state/.deployment-maintenance.json" ]
@@ -794,7 +805,7 @@ if HOME="$unsafe_home" "$package/deploy-user.sh" --binary "$candidate_two" --clo
     exit 1
 fi
 [ ! -e "$unsafe_home/.local/bin/semantics" ]
-grep -F 'domain admission is maintenance-gated' "$temporary/unsafe.stderr" >/dev/null
+grep -F 'Semantics remains maintenance-gated' "$temporary/unsafe.stderr" >/dev/null
 [ -f "$unsafe_state/.clockwork-maintenance" ]
 [ -f "$unsafe_state/.deployment-maintenance.json" ]
 [ -L "$unsafe_state/install/current" ]
@@ -805,6 +816,6 @@ grep -F 'domain admission is maintenance-gated' "$temporary/unsafe.stderr" >/dev
 unsafe_transaction=$(find "$unsafe_state/install" -mindepth 1 -maxdepth 1 -type d -name '.transaction.*' -print | head -1)
 [ -n "$unsafe_transaction" ]
 [ -f "$unsafe_transaction/semantics.db" ]
-[ -f "$unsafe_transaction/prior-install.txt" ]
+[ -f "$unsafe_transaction/transaction.json" ]
 grep -Fx 'unsafe rollback original database' "$unsafe_transaction/semantics.db" >/dev/null
 [ ! -f "$clockwork_loaded/org.clockwork.semantics.worker" ]

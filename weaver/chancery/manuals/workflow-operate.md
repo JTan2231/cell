@@ -57,11 +57,16 @@ Deployment is a separate installed-state action:
 ```sh
 cd /Users/joey/rust/cell/weaver
 ./ci.sh
-./packaging/macos/deploy-user.sh \
-  --binary "/Users/joey/rust/cell/target/release/weaver"
+<TESTED_WEAVER_INSTALL> install \
+  --binary <TESTED_WEAVER_BINARY> \
+  --bundle /Users/joey/rust/cell/weaver/chancery
 ```
 
-The deployer stages a complete content-addressed release containing Weaver, its
+The Rust `weaver-install` executable is sealed with the exact tested Weaver
+candidate and requires a version-matched provider bundle. Shared `cell-install`
+code verifies complete immutable inventories and owns selector compensation;
+Weaver owns maintenance and prototype retirement. The predecessor format-3
+release remains verifiable. The deployer stages a complete content-addressed release containing Weaver, its
 deployer, manifest, and version-matched Chancery provider bundle. It begins
 Weaver maintenance and lets an active workflow settle before changing
 selectors. It then removes only the exact superseded

@@ -222,13 +222,13 @@ pub fn inspect(spec: &InstallSpec, home: &Path) -> Result<Option<Installation>> 
     inspect_with(spec, &Paths::new(spec, home)?)
 }
 
-struct Lock {
+pub(crate) struct Lock {
     path: PathBuf,
     pid: String,
 }
 
 impl Lock {
-    fn acquire(path: PathBuf, uid: u32) -> Result<Self> {
+    pub(crate) fn acquire(path: PathBuf, uid: u32) -> Result<Self> {
         let wait: u64 = std::env::var("CELL_DEPLOY_LOCK_WAIT_SECONDS")
             .unwrap_or_else(|_| "300".to_owned())
             .parse()
@@ -448,8 +448,6 @@ fn atomic_selector(paths: &Paths, path: &Path, target: Option<&Path>) -> Result<
 }
 
 fn clean_scratch(paths: &Paths, selectors: bool) -> Result<()> {
-    let kind = if selectors { "selector" } else { "stage" };
-    let prefix = format!(".cell-install-{kind}-{}-", paths.product);
     let parents: std::collections::BTreeSet<_> = if selectors {
         paths
             .selector_paths()
@@ -459,8 +457,34 @@ fn clean_scratch(paths: &Paths, selectors: bool) -> Result<()> {
     } else {
         [paths.releases.clone()].into_iter().collect()
     };
+    let targets = paths.public.values().cloned().collect();
+    clean_scratch_at(
+        paths.product,
+        paths.uid,
+        &parents,
+        selectors.then_some(&targets),
+    )
+}
+
+pub(crate) fn clean_scratch_at(
+    product: &str,
+    uid: u32,
+    parents: &std::collections::BTreeSet<PathBuf>,
+    selectors: Option<&std::collections::BTreeSet<PathBuf>>,
+) -> Result<()> {
+    let kind = if selectors.is_some() {
+        "selector"
+    } else {
+        "stage"
+    };
+    let prefix = format!(".cell-install-{kind}-{product}-");
     for parent in parents {
-        for entry in fs::read_dir(parent)? {
+        let entries = match fs::read_dir(parent) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e.into()),
+        };
+        for entry in entries {
             let entry = entry?;
             let name = entry.file_name();
             let Some(rest) = name.to_str().and_then(|n| n.strip_prefix(&prefix)) else {
@@ -493,36 +517,42 @@ fn clean_scratch(paths: &Paths, selectors: bool) -> Result<()> {
             }
             let root = entry.path();
             let meta = fs::symlink_metadata(&root)?;
-            if !meta.is_dir() || meta.uid() != paths.uid || meta.mode() & 0o777 != 0o700 {
+            if !meta.is_dir() || meta.uid() != uid || meta.mode() & 0o777 != 0o700 {
                 return Err(Error::new("unsafe installation scratch retained"));
             }
-            validate_scratch_tree(paths, &root, selectors)?;
+            validate_scratch_tree(uid, &root, selectors)?;
             fs::remove_dir_all(root)?;
         }
     }
     Ok(())
 }
 
-fn validate_scratch_tree(paths: &Paths, root: &Path, selectors: bool) -> Result<()> {
+fn validate_scratch_tree(
+    uid: u32,
+    root: &Path,
+    selectors: Option<&std::collections::BTreeSet<PathBuf>>,
+) -> Result<()> {
     for entry in fs::read_dir(root)? {
         let entry = entry?;
         let path = entry.path();
         let meta = fs::symlink_metadata(&path)?;
-        if meta.uid() != paths.uid || (!meta.file_type().is_symlink() && meta.mode() & 0o022 != 0) {
+        if meta.uid() != uid || (!meta.file_type().is_symlink() && meta.mode() & 0o022 != 0) {
             return Err(Error::new("unsafe scratch artifact retained"));
         }
-        if selectors {
+        if let Some(targets) = selectors {
+            if entry.file_name() == "copy" && meta.is_file() {
+                regular(&path)?;
+                continue;
+            }
             if entry.file_name() != "link" || !meta.file_type().is_symlink() {
                 return Err(Error::new("unrecognized selector scratch retained"));
             }
             let target = fs::read_link(&path)?;
-            if !paths.public.values().any(|value| *value == target)
-                && release_selector(&target).is_err()
-            {
+            if !targets.contains(&target) && release_selector(&target).is_err() {
                 return Err(Error::new("foreign selector scratch retained"));
             }
         } else if meta.is_dir() {
-            validate_scratch_tree(paths, &path, false)?;
+            validate_scratch_tree(uid, &path, None)?;
         } else {
             regular(&path)?;
         }

@@ -4,14 +4,16 @@ Chancery installs as a user-owned CLI with no service or scheduled process:
 
 ```text
 ~/.local/bin/chancery -> current Chancery release
+~/.local/bin/chancery-install -> current Chancery installer
 ~/Library/Application Support/Chancery/
   providers/                 product-owned provider selectors
   install/
     releases/RELEASE_ID/
       bin/chancery
-      package/deploy-user.sh
-      share/chancery/          Chancery-owned provider bundle
-      manifest.txt
+      bin/chancery-install
+      package/install
+      share/chancery/chancery/ Chancery-owned provider bundle
+      manifest.json           cell-install-v2 exact inventory
     current -> releases/RELEASE_ID
     previous -> releases/RELEASE_ID
 ```
@@ -25,12 +27,13 @@ unavailable.
 Deploy with:
 
 ```sh
-./packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH
+<TESTED_CHANCERY_INSTALL> install --binary <TESTED_CHANCERY_BINARY> \
+  --bundle /Users/joey/rust/cell/chancery/provider
 ```
 
 The deployer stages a content-addressed release, switches `current`,
-`previous`, and `~/.local/bin/chancery` atomically with rollback, then verifies
-the installed command. No Nucleus health or authentication is required.
+`previous`, and the command, installer, and provider selectors with rollback,
+then verifies the installed command. No Nucleus health or authentication is required.
 
 ## Product-owned publication
 
@@ -43,9 +46,10 @@ exactly one provider selector. For example:
   -> ~/Library/Application Support/Todo/install/current/share/chancery/todo
 ```
 
-Chancery's own single-provider release uses `share/chancery` as its bundle
-root. Other products use the provider-ID child so one combined release can
-carry more than one independently versioned provider, as Annals does.
+Every new shared Rust installation uses the provider-ID child. Earlier Chancery
+releases used `share/chancery` directly; the Rust installer verifies that legacy
+layout when admitting an existing installation or recovering a retained release.
+A combined release can carry independently versioned providers, as Annals does.
 
 The selector may exist before the Chancery CLI is installed. Publishing it is
 a packaging action only; the product runtime never invokes Chancery. A product
@@ -65,6 +69,12 @@ Chancery owns `providers/chancery`. Its deployment refuses to take over an
 existing selector with a foreign target and never removes other providers.
 Uninstalling Chancery's binary should likewise preserve product selectors;
 they become readable again when a compatible Chancery reader is installed.
+
+To recover a retained program release, use a trusted tested `chancery-install
+recover --release ABSOLUTE_RELEASE_DIRECTORY`, with the canonical owned directory
+resolved from `install/previous`. The installer validates the retained release
+before selecting it. Do not execute an unverified installer from that release.
+Recovery changes Chancery's program and documentation only.
 
 ## Inspection and recovery
 

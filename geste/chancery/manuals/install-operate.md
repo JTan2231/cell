@@ -8,16 +8,20 @@ Build and validate the candidate first. Deployment is a separate authorized
 effect:
 
 ```sh
-geste/packaging/macos/deploy-user.sh \
-  --binary /absolute/path/to/geste
+<TESTED_GESTE_INSTALL> install \
+  --binary <TESTED_GESTE_BINARY> \
+  --bundle /Users/joey/rust/cell/geste/chancery
 ```
 
-The deployer requires a regular executable candidate and regular product-owned
-deployer and Chancery bundle. The binary's `geste VERSION` output must match
-the provider release exactly. It hashes the binary, deployer, and complete
+The Rust installer requires a regular executable candidate and a complete
+version-matched Chancery bundle, each at an absolute path. The binary's `geste VERSION` output must match
+the provider and installer release exactly. It hashes the binary, Rust installer,
+public layout, and complete
 provider tree into one content-addressed release under
 `$HOME/Library/Application Support/Geste/install/releases` and retains a
-canonical manifest.
+`cell-install-v2` manifest in `manifest.json`. The release retains the installer
+at `bin/geste-install` and `package/install`; `~/.local/bin/geste-install` follows
+current alongside the product command and provider.
 
 The stable command and Geste's sole provider selector both pass through one
 atomic `install/current` release selector:
@@ -34,7 +38,7 @@ On update, the one current-link replacement switches the binary and provider
 view together; `previous` retains the prior valid release. Identical
 redeployment is idempotent. Existing current and previous releases are accepted
 only after selector form, directory shape, manifest, provider-version, and
-content hashes are proved. The version-0.1 release and provider trees are exact;
+content hashes are proved. Legacy and `cell-install-v2` release trees are exact;
 unmanifested files or directories are refused. Symbolic candidates, traversal
 selectors, fabricated or tampered releases, regular-file selectors, and
 selectors aimed outside this installation are refused rather than adopted.
@@ -53,10 +57,10 @@ the last known valid release before retrying; do not bypass refusal or overwrite
 a foreign path.
 
 If an installed program regression requires rollback after deployment committed,
-retain the failure evidence and
-redeploy the exact `install/previous/bin/geste` candidate with
-`install/previous/package/deploy-user.sh`. This runs the normal validation and
-makes that content address current again. Stop if `previous` is absent or
+retain the failure evidence and resolve `install/previous` to its canonical
+owned release directory. Use a trusted tested `geste-install recover --release
+ABSOLUTE_RELEASE_DIRECTORY` to verify and select it. Do not execute an unverified
+installer from the retained release. Stop if `previous` is absent or
 invalid; never rewrite the selectors manually. Program rollback does not
 rewrite or delete the separately retained episode database.
 

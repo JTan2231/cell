@@ -1,7 +1,7 @@
 # macOS user installation
 
-Semantics installs one content-addressed release for the current user, one CLI
-selector, one Chancery provider selector, and one immutable Clockwork
+Semantics installs one content-addressed release for the current user, the `semantics` and `semantics-install` CLI
+selectors, one Chancery provider selector, and one immutable Clockwork
 definition bound as `semantics/worker`. The SQLite database, releases, and
 body-free product logs are retained by uninstall.
 
@@ -10,12 +10,12 @@ body-free product logs are retained by uninstall.
 - Installed Annals with one provisioned decisions library and
   `annals.decision-account.exchange` contract 1. Its explicit config is
   `~/Library/Application Support/Annals/decisions/config.toml` by default.
-- Installed Conversations 0.3 with `conversations.history.explore` contract 3
+- Installed Conversations with `conversations.history.explore` contract 4
   and exact thread-summary cwd lookup.
-- A healthy Nucleus service satisfying `nucleus.execution.operate` contract 1
+- A healthy Nucleus service satisfying `nucleus.execution.operate` contract 3
   and all capabilities checked by Semantics doctor.
 - An installed Clockwork command satisfying `clockwork.schedule.operate`
-  contract 1 for the same macOS user.
+  contract 2 for the same macOS user.
 - Chancery for discovery and provider publication. Semantics runtime does not
   call it.
 
@@ -24,8 +24,9 @@ Build and validate the candidate first:
 ```sh
 semantics/ci.sh
 cargo build --release --locked --package semantics
-semantics/packaging/macos/deploy-user.sh \
+/absolute/path/to/target/release/semantics-install install \
   --binary /absolute/path/to/target/release/semantics \
+  --bundle /absolute/path/to/cell/semantics/chancery \
   --clockwork "$HOME/.local/bin/clockwork"
 ```
 
@@ -52,7 +53,7 @@ release hash; neither `current` nor the public CLI is execution identity.
 It also holds the same cross-process worker lock used by `intake run`, excluding
 a long-running manual reconciliation even while SQLite is momentarily closed.
 Only then does the exact candidate run `--json doctor` in a scrubbed
-environment while the old release and provider selectors remain published.
+environment while the private old release selector remains selected and all public entries are suspended.
 Doctor captures one Annals watermark, walks bounded pages from every distinct
 installed cursor until an unchanged empty page, and reads every page twice at
 that fixed watermark. It rejects changed replay, identity duplication,
@@ -84,10 +85,20 @@ claim that both scheduler cleanups succeeded, prevents domain admission.
 Deploy and uninstall share one update lock, so scheduler, selector, and
 database transitions cannot race each other.
 
+The Rust `semantics-install` binary owns the transaction. `cell-install` stages
+an exact `cell-install-v2` manifest covering the payload, installer, static
+frontend and worker, unrendered schedule template, and provider inventory.
+The installer accepts retained Semantics format-one and format-two releases
+through an exact read-only legacy verifier; those releases retain their original
+bytes. Public selectors are suspended before migration and remain suspended
+through failed-publication compensation until Semantics restores the database.
+The static runtime shell artifacts remain because the installed Clockwork
+contract pins the interpreted worker and its `/bin/sh` hash.
+
 ## Coordinated deployment maintenance
 
-`semantics/deployment/adapter.py` is Semantics' product boundary for the Cell
-deployment coordinator. It composes the existing deployer, migration,
+`semantics-install adapter OPERATION` is Semantics' product boundary for the Cell
+deployment coordinator. It uses the Rust installer, migration,
 scrubbed doctor, selector ownership checks, and rollback procedure. The
 coordinator establishes and drains all affected product holds before applying
 selected candidates. The adapter preserves project pauses, existing cursor
@@ -125,6 +136,7 @@ another owner's marker or a project pause.
 
 ```text
 ~/.local/bin/semantics
+~/.local/bin/semantics-install
 ~/Library/Application Support/Semantics/semantics.db
 ~/Library/Application Support/Semantics/install/{current,previous,releases/}
 ~/Library/Application Support/Semantics/{.clockwork-maintenance,.deployment-maintenance.json}
@@ -151,7 +163,9 @@ ancestry are proved before Nucleus admission. Unsafe reuse, symlinks, or an
 proved for that invocation.
 The private, current-user-owned, mode-`0600`, non-hard-linked
 `.clockwork-maintenance` marker in Semantics application support is checked by
-every release-pinned runner. Deployment accepts an existing marker only with
+every release-pinned runner and by the public command frontend. The installer
+invokes its verified payload directly for doctor while public work remains
+fenced through publication and durable commit. Deployment accepts an existing marker only with
 that exact shape and never truncates it. A matching private
 `.deployment-maintenance.json` receipt authenticates a Semantics-owned hold by
 the exact `semantics/worker` key, content-addressed release ID, and Clockwork
@@ -199,8 +213,9 @@ never recorded as admitted. Hold the external Krisis and Annals lifecycle
 gates, then pass the captured value to the deployer:
 
 ```sh
-semantics/packaging/macos/deploy-user.sh \
+/absolute/path/to/target/release/semantics-install install \
   --binary /absolute/path/to/target/release/semantics \
+  --bundle /absolute/path/to/cell/semantics/chancery \
   --clockwork "$HOME/.local/bin/clockwork" \
   --final-decisions-watermark "$FINAL_DECISIONS_WATERMARK" \
   --keep-maintenance
@@ -223,7 +238,8 @@ exact authenticated hold with a successful idempotent invocation of the
 installed release, omitting both cutover options:
 
 ```sh
-"$HOME/Library/Application Support/Semantics/install/current/package/deploy-user.sh" \
+"$HOME/Library/Application Support/Semantics/install/current/package/install" install \
+  --bundle "$HOME/Library/Application Support/Semantics/install/current/share/chancery/semantics" \
   --binary "$HOME/Library/Application Support/Semantics/install/current/libexec/semantics" \
   --clockwork "$HOME/.local/bin/clockwork"
 ```
@@ -235,6 +251,38 @@ digest and does not depend on the live file for replay.
 
 ## Recovery and uninstall
 
+An interrupted or unproved transaction is retained privately as
+`install/.transaction.*/transaction.json` with the database and sidecars, exact
+selector receipts, prior scheduler state and authenticated hold evidence.
+The original selection is recorded before effects, and the complete saved
+database inventory and hashes are verified before rollback replaces any live
+database file. A durable committed phase is written before the owned gate is
+released; recovery of that phase always resumes the candidate forward.
+Successful backups are retained in `backups/deployments/`; `last-update.json`
+records the installation receipt. Recovery never treats a program rollback
+as authorization to discard committed domain state.
+
+Use the current candidate installer with the exact retained transaction:
+
+```sh
+/absolute/path/to/semantics-install recover \
+  --transaction "/absolute/path/to/Semantics/install/.transaction.EXACT" \
+  --clockwork "$HOME/.local/bin/clockwork"
+```
+
+A product lock left by an interrupted Rust installer is reclaimed only when
+its exact private owner record identifies a process proved absent. Foreign or
+unrecognized locks remain for attended inspection.
+
+A prior null Clockwork selection cannot be restored after candidate selection.
+In that case, explicitly choose `recover --forward` with the same transaction.
+It verifies the authenticated candidate hold, exact retained release and
+Clockwork definition, runs scrubbed doctor while gated, restores the candidate
+selectors and binding, then releases that owned hold. It does not choose or
+repeat a legacy activation watermark. Recovery refuses foreign artifacts and
+retains maintenance on uncertainty.
+
+
 Inspect doctor, both collections in `semantics intake status`, the Clockwork binding and process
 history, and the body-free stderr log. Clockwork exit state does not replace
 the Semantics worker report or durable intake state. Pause a project before
@@ -242,7 +290,7 @@ semantic maintenance. Use `intake retry`
 only after investigating the failed event; it refuses unsafe Nucleus replay.
 
 ```sh
-semantics/packaging/macos/uninstall-user.sh \
+/absolute/path/to/target/release/semantics-install uninstall \
   --clockwork "$HOME/.local/bin/clockwork"
 ```
 

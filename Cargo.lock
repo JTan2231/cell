@@ -13,10 +13,11 @@ dependencies = [
 
 [[package]]
 name = "annals"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "annals-api",
  "base64",
+ "cell-install",
  "cell-maintenance",
  "clap",
  "fs2",
@@ -25,6 +26,7 @@ dependencies = [
  "nucleus-core",
  "nucleus-daemon",
  "rusqlite",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",
@@ -38,7 +40,7 @@ dependencies = [
 
 [[package]]
 name = "annals-api"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "krisis-api",
  "rusqlite",
@@ -238,8 +240,9 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "cast"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
+ "cell-install",
  "clap",
  "fs2",
  "futures-util",
@@ -315,8 +318,9 @@ dependencies = [
 
 [[package]]
 name = "chancery"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
+ "cell-install",
  "clap",
  "serde",
  "serde_json",
@@ -368,8 +372,9 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "clockwork"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
+ "cell-install",
  "clap",
  "fs2",
  "hex",
@@ -411,8 +416,9 @@ dependencies = [
 
 [[package]]
 name = "conversations"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
+ "cell-install",
  "clap",
  "serde",
  "serde_json",
@@ -457,8 +463,9 @@ dependencies = [
 
 [[package]]
 name = "crm"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
+ "cell-install",
  "cell-maintenance",
  "clap",
  "nucleus-client",
@@ -509,11 +516,13 @@ dependencies = [
 
 [[package]]
 name = "decisions"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "annals-api",
+ "cell-install",
  "cell-maintenance",
  "clap",
+ "clockwork",
  "conversations",
  "fs2",
  "krisis-api",
@@ -528,6 +537,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "toml",
  "uuid",
 ]
 
@@ -611,12 +621,14 @@ checksum = "b2972feb8dffe7bc8c5463b1dacda1b0dfbed3710e50f977d965429692d74cd8"
 
 [[package]]
 name = "email"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
+ "cell-install",
  "clap",
  "reqwest",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "uuid",
 ]
@@ -798,8 +810,9 @@ dependencies = [
 
 [[package]]
 name = "geste"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
+ "cell-install",
  "clap",
  "rusqlite",
  "serde",
@@ -1220,7 +1233,7 @@ dependencies = [
 
 [[package]]
 name = "krisis-api"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1384,8 +1397,9 @@ dependencies = [
 
 [[package]]
 name = "nucleus-cli"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
+ "cell-install",
  "cell-maintenance",
  "clap",
  "fs2",
@@ -1402,7 +1416,7 @@ dependencies = [
 
 [[package]]
 name = "nucleus-client"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "nucleus-core",
  "reqwest",
@@ -1415,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "nucleus-codex"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "base64",
  "fs2",
@@ -1430,7 +1444,7 @@ dependencies = [
 
 [[package]]
 name = "nucleus-core"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1439,7 +1453,7 @@ dependencies = [
 
 [[package]]
 name = "nucleus-daemon"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "axum",
  "base64",
@@ -1464,7 +1478,7 @@ dependencies = [
 
 [[package]]
 name = "nucleus-store"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "rusqlite",
  "sha2",
@@ -2097,9 +2111,10 @@ dependencies = [
 
 [[package]]
 name = "semantics"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "annals-api",
+ "cell-install",
  "cell-maintenance",
  "clap",
  "conversations",
@@ -2108,6 +2123,7 @@ dependencies = [
  "nucleus-client",
  "nucleus-core",
  "rusqlite",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",
@@ -2115,6 +2131,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "toml",
  "uuid",
 ]
 
@@ -2497,8 +2514,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "todo"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
+ "cell-install",
  "cell-maintenance",
  "clap",
  "nucleus-client",
@@ -2931,8 +2949,9 @@ dependencies = [
 
 [[package]]
 name = "weaver"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
+ "cell-install",
  "cell-maintenance",
  "clap",
  "fs2",

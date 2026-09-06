@@ -1,8 +1,15 @@
 //! Owned, current-user program installation. Runtime maintenance and database
 //! recovery remain the caller's responsibility.
 
+pub mod adapter;
 mod artifact;
+pub mod command;
 mod installation;
+pub mod legacy;
+pub mod simple;
+pub mod transaction;
+
+pub use transaction::*;
 
 pub use artifact::{
     FileEntry, Manifest, ReleaseInput, file_digest, provider_inventory, verify_release,
@@ -48,7 +55,8 @@ pub struct Error {
 }
 
 impl Error {
-    pub(crate) fn new(message: impl Into<String>) -> Self {
+    #[must_use]
+    pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
             disposition: Disposition::Unchanged,

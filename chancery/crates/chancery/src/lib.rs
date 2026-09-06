@@ -70,3 +70,5 @@ pub fn run_cli() -> i32 {
         }
     }
 }
+
+pub mod installation;

@@ -38,9 +38,9 @@ if fault.get("sleep") == [name, op]:
     (run / "child-started").write_text("yes")
     time.sleep(30)
 if fault.get("spawn_sleep") == [name, op]:
-    from deployment.adapter_support import command
+    import os, subprocess
     child_code = "import os,pathlib,time;pathlib.Path(" + repr(str(run / "descendant-started")) + ").write_text(str(os.getpid()));time.sleep(30)"
-    command([sys.executable, "-c", child_code])
+    subprocess.run([sys.executable, "-c", child_code], check=True, pass_fds=(int(os.environ["CELL_DEPLOYMENT_LOCK_FD"]),))
 if op == "inspect":
     data = {"maintenance_products": ["beta"] if name == "alpha" else [], "after": []}
 else:
@@ -81,16 +81,16 @@ for name in args.product:
     binary.chmod(0o755)
     spec = name + "|target/release/" + name + "|" + name
     versions = {name: name + " 1.0.0"}
-    installer = binary.with_name("usher-install")
-    if name == "usher":
-        installer.write_text((root / "usher/packaging/installer-fixture").read_text())
+    installer = binary.with_name(name + "-install")
+    if (root / name / "packaging/installer-fixture").exists():
+        installer.write_text((root / name / "packaging/installer-fixture").read_text())
         installer.chmod(0o755)
-        if not (root / "usher/packaging/skip-installer").exists():
-            spec += "\\nusher|target/release/usher-install|usher-install"
-            versions["usher-install"] = "usher-install 1.0.0"
+        if not (root / name / "packaging/skip-installer").exists():
+            spec += "\\n" + name + "|target/release/" + name + "-install|" + name + "-install"
+            versions[name + "-install"] = name + "-install 1.0.0"
     records[name] = candidate.stage_build(root, name, args.output / "candidates" / name, spec,
         target=root / "target", source_key=source_key, expected_versions=versions)
-    if name == "usher":
+    if (root / name / "packaging/installer-fixture").exists():
         installer.write_text("later target contents must never execute")
 (args.output / "result.json").write_text(json.dumps({"schema":1, "state":"built",
     "source_key":source_key, "candidates":records, "cache_hit":False}))
@@ -108,7 +108,7 @@ class Fixture:
         self.git("config", "user.name", "Offline deployment fixture")
         self.git("config", "user.email", "fixture@example.invalid")
         self.write(".gitignore", "target/\n__pycache__/\n")
-        for relative in ("deployment/__init__.py", "deployment/cli.py", "deployment/candidate.py", "deployment/adapter_support.py",
+        for relative in ("deployment/__init__.py", "deployment/cli.py", "deployment/candidate.py",
                          "ci_broker/__init__.py", "ci_broker/client.py", "ci_broker/broker.py"):
             self.write(relative, (ROOT / relative).read_text())
         # The pinned cleanup subprocess never touches actual installations in
@@ -149,16 +149,18 @@ class Fixture:
     def create(self, products: tuple[str, ...] = ("alpha",)) -> Path:
         return cli.create_run(self.repo, products, self.storage)
 
-    def add_binary_adapter(self, *, stage_installer: bool = True) -> None:
-        self.write("pipeline/products/usher.sh", "PRODUCT_ID=usher\nPRODUCT_DIR=usher\nDEPLOY_PROFILE=rust-install-v1\n")
-        self.write("usher/deployment/adapter.json", json.dumps({
-            "schema": 1, "product": "usher", "dependencies": [], "adapter_binary": "usher-install"}))
+    def add_binary_adapter(self, *, stage_installer: bool = True, name: str = "usher", affected: tuple[str, ...] = ()) -> None:
+        self.write(f"pipeline/products/{name}.sh", f"PRODUCT_ID={name}\nPRODUCT_DIR={name}\nDEPLOY_PROFILE=rust-install-v1\n")
+        self.write(f"{name}/deployment/adapter.json", json.dumps({
+            "schema": 1, "product": name, "dependencies": [], "adapter_binary": f"{name}-install",
+            "maintenance_products": list(affected)}))
         installer = f"#!{sys.executable}\n" + FAKE_ADAPTER.replace(
-            "op = sys.argv[1]", 'if sys.argv[1:] == ["--version"]:\n    print("usher-install 1.0.0")\n    sys.exit(0)\nassert sys.argv[1] == "adapter"\nop = sys.argv[2]')
-        self.write("usher/packaging/installer-fixture", installer)
+            "op = sys.argv[1]", f'if sys.argv[1:] == ["--version"]:\n    print("{name}-install 1.0.0")\n    sys.exit(0)\nassert sys.argv[1] == "adapter"\nop = sys.argv[2]')
+        installer = installer.replace('["beta"] if name == "alpha" else []', repr(list(affected)))
+        self.write(f"{name}/packaging/installer-fixture", installer)
         if not stage_installer:
-            self.write("usher/packaging/skip-installer", "yes")
-        self.write("usher/ci.sh", "#!/bin/sh\nexit 99\n", executable=True)
+            self.write(f"{name}/packaging/skip-installer", "yes")
+        self.write(f"{name}/ci.sh", "#!/bin/sh\nexit 99\n", executable=True)
         self.write("deployment/cleanup.py", 'import json,sys\nprint(json.dumps({"arguments":sys.argv[1:]}))\n')
         self.commit()
 
@@ -199,7 +201,7 @@ class DeploymentTests(unittest.TestCase):
                                              ("inspect", "hold", "drain", "apply", "verify", "release")])
         state = cli.read_json(path / "run.json")
         self.assertEqual(state["release_history_cleanup"]["arguments"], [
-            "--usher-installer", str(path / "preparation/candidates/usher/bin/usher-install")])
+            "--installer", "usher=" + str(path / "preparation/candidates/usher/bin/usher-install")])
         self.assertEqual((path / "worktree/target/release/usher-install").read_text(),
                          "later target contents must never execute")
 
@@ -208,9 +210,22 @@ class DeploymentTests(unittest.TestCase):
         path = self.fixture.create(("usher",))
         with cli.deployment_lock(self.fixture.storage) as lock_fd:
             run = cli.Run(path, lock_fd)
-            with self.assertRaisesRegex(cli.DeploymentError, "prepared selected candidate"):
+            with self.assertRaisesRegex(cli.DeploymentError, "prepared candidate"):
                 run.adapter("usher", "inspect")
         self.assertFalse((path / "observed.jsonl").exists())
+
+    def test_affected_binary_installer_is_prepared_without_selecting_upgrade(self):
+        self.fixture.add_binary_adapter(name="nucleus")
+        self.fixture.add_binary_adapter(name="requester", affected=("nucleus",))
+        path = self.fixture.create(("requester",))
+        self.assertEqual(cli.run_worker(path), 0)
+        state = cli.read_json(path / "run.json")
+        self.assertEqual(state["products"], ["requester"])
+        self.assertEqual(state["prepared_products"], ["nucleus", "requester"])
+        observed = self.observed(path)
+        self.assertNotIn(["nucleus", "apply"], observed)
+        self.assertLess(observed.index(["requester", "drain"]), observed.index(["nucleus", "hold"]))
+        self.assertEqual(observed[-1], ["nucleus", "release"])
 
     def test_binary_adapter_rejects_candidate_without_declared_installer(self):
         self.fixture.add_binary_adapter(stage_installer=False)

@@ -89,3 +89,5 @@ pub fn main_entry() -> i32 {
         }
     }
 }
+
+pub mod installation;

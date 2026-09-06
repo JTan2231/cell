@@ -30,12 +30,13 @@ local execution, web, launch context, and dynamic tools all disabled.
   install/
     releases/RELEASE_ID/
       bin/weaver
-      package/deploy-user.sh
+      bin/weaver-install
+      package/install
       share/chancery/weaver/
         provider.json
         entries/
         manuals/
-      manifest.txt
+      manifest.json
     current -> releases/RELEASE_ID
     previous -> releases/RELEASE_ID
 ~/Library/Application Support/Chancery/providers/
@@ -70,9 +71,17 @@ candidate path to the deployer:
 nucleus health
 cd /Users/joey/rust/cell/weaver
 ./ci.sh
-./packaging/macos/deploy-user.sh \
-  --binary "/Users/joey/rust/cell/target/release/weaver"
+<TESTED_WEAVER_INSTALL> install \
+  --binary <TESTED_WEAVER_BINARY> \
+  --bundle /Users/joey/rust/cell/weaver/chancery
 ```
+
+`weaver-install` is a Rust binary built and sealed beside the tested Weaver
+executable. The provider bundle and installer must match that program version.
+It uses `cell-install-v2` exact file inventories and the shared installation
+transaction. The predecessor format-3 release remains verifiable during the
+migration. `weaver-install inspect` is read-only; `verify-release ABSOLUTE_PATH`
+validates a retained release without executing its contents.
 
 The deployer verifies the candidate version and help, runs `weaver doctor`, and
 stages a complete content-addressed release. It then acquires the installation

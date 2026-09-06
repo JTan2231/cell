@@ -4,7 +4,7 @@ PRODUCT_NAME=Conversations
 PRODUCT_DIR=conversations
 CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
-DEPLOY_PROFILE=selector-only-v1
+DEPLOY_PROFILE=rust-install-v1
 DEPLOY_CONFLICT_KEYS='product:conversations
 chancery-catalog'
 CARGO_MANIFEST=Cargo.toml
@@ -12,13 +12,11 @@ CARGO_PACKAGES=conversations
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|conversations/release.sh
-sh|conversations/packaging/macos/deploy-user.sh
-sh|conversations/packaging/macos/test-deploy-user.sh'
-CI_RUN_CHECKS='darwin|conversations/packaging/macos/test-deploy-user.sh'
+CI_SHELL_CHECKS='sh|conversations/release.sh'
+CI_RUN_CHECKS=''
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-CI_EXTRA_BEFORE_RUST=pipeline/extras/deployment-generated.sh
 RELEASE_UNITS='conversations|Conversations|package|conversations/crates/conversations/Cargo.toml|conversations-|1'
 RELEASE_METADATA_NO_DEPS=1
-RELEASE_BINARY_CHECKS='conversations|target/release/conversations|conversations'
+RELEASE_BINARY_CHECKS='conversations|target/release/conversations|conversations
+conversations|target/release/conversations-install|conversations-install'
 PROVIDERS='conversations|conversations|conversations/chancery|2'

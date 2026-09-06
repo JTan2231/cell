@@ -4,7 +4,7 @@ PRODUCT_NAME=Geste
 PRODUCT_DIR=geste
 CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
-DEPLOY_PROFILE=selector-only-v1
+DEPLOY_PROFILE=rust-install-v1
 DEPLOY_CONFLICT_KEYS='product:geste
 chancery-catalog'
 CARGO_MANIFEST=Cargo.toml
@@ -12,13 +12,11 @@ CARGO_PACKAGES=geste
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|geste/release.sh
-sh|geste/packaging/macos/deploy-user.sh
-sh|geste/packaging/macos/test-deploy-user.sh'
-CI_RUN_CHECKS='darwin|geste/packaging/macos/test-deploy-user.sh'
+CI_SHELL_CHECKS='sh|geste/release.sh'
+CI_RUN_CHECKS=''
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-CI_EXTRA_BEFORE_RUST=pipeline/extras/deployment-generated.sh
 RELEASE_UNITS='geste|Geste|package|geste/crates/geste/Cargo.toml|geste-|1'
 RELEASE_METADATA_NO_DEPS=1
-RELEASE_BINARY_CHECKS='geste|target/release/geste|geste'
+RELEASE_BINARY_CHECKS='geste|target/release/geste|geste
+geste|target/release/geste-install|geste-install'
 PROVIDERS='geste|geste|geste/chancery|4'

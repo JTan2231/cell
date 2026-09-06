@@ -14,9 +14,11 @@ explicit installed-state authority:
 ```sh
 cd /Users/joey/rust/cell
 ./annals/ci.sh
-./annals/packaging/launchd/deploy-user.sh \
+./target/release/annals-install install \
   --binary <ABSOLUTE_ANNALS_BINARY> \
   --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> \
+  --bundle "/Users/joey/rust/cell/annals/chancery/annals" \
+  --usage-bundle "/Users/joey/rust/cell/annals/chancery/annals-usage" \
   --nucleus <ABSOLUTE_NUCLEUS_BINARY> \
   --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> \
   --clockwork <ABSOLUTE_CLOCKWORK_BINARY>
@@ -39,8 +41,7 @@ or migration is unsupported; reinspection detects attributable changes where
 possible, fails the handoff closed, and may retain maintenance for recovery.
 
 The immutable definition requests run-at-load and a 300-second interval,
-skips overlap, has no activation timeout, and pins `/bin/sh` plus the
-release-local Annals runner by SHA-256. The runner executes only its sibling
+skips overlap, has no activation timeout, and pins the native release-local Rust Annals runner by SHA-256. The runner executes only its sibling
 release payload as `annals --quiet inbox run` in the Annals state directory
 with an explicit nonsecret environment and umask `077`. Clockwork records
 process outcomes but does not inspect Annals domain state or ingest
@@ -67,8 +68,10 @@ activation; its inactive selected digest may remain the candidate digest. If
 that exclusive restoration cannot be proved, Annals leaves unproved scheduler
 state untouched, keeps maintenance, removes its public selectors, and retains
 private recovery material. Do not remove maintenance markers, edit
-receipts, or swap database files manually after interruption; inspect the
-deployer result and follow the installation guide's exact recovery procedure.
+receipts, or swap database files manually after interruption. Run the exact retained
+`annals-install recover TRANSACTION_PATH`; it proves the product journal and
+release evidence before restoring pre-commit state or completing a committed
+operation. Recovery material is retained in `backups/deployments/`.
 
 The attended migration from the former system LaunchDaemon uses a narrower
 handoff. Its child fresh-state deploy keeps Annals maintenance in place and
@@ -96,16 +99,16 @@ immutable content release, run as the current (non-root) user:
 
 ```sh
 release="$HOME/Library/Application Support/Annals/install/releases/<64-hex-release-id>"
-"$release/package/provision-decisions-user.sh" \
+"$release/bin/annals-install" provision-decisions \
   --release-root "$release" \
   --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock" \
   --clockwork /Users/joey/.local/bin/clockwork
 ```
 
-The provisioner and both of its unrendered templates are separate members of
-the format-four release identity. The invoked provisioner must match the
-selected release's recorded hash; a source sibling, mutable selector, or
-tampered package member is rejected before state or binding mutation.
+The Rust provisioner is the exact release-local installer in the strict
+`cell-install-v2` file inventory. Its configuration and native definition
+rendering are compiled into those admitted bytes. A source sibling, mutable
+selector, or tampered executable is rejected before state or binding mutation.
 
 This authorizes creation or supported migration only under
 `$HOME/Library/Application Support/Annals/decisions` and registration or
@@ -187,9 +190,11 @@ the documented product recovery procedure.
 boundary:
 
 ```sh
-./annals/packaging/launchd/deploy-user.sh \
+./target/release/annals-install install \
   --binary <ABSOLUTE_ANNALS_BINARY> \
   --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> \
+  --bundle "/Users/joey/rust/cell/annals/chancery/annals" \
+  --usage-bundle "/Users/joey/rust/cell/annals/chancery/annals-usage" \
   --nucleus <ABSOLUTE_NUCLEUS_BINARY> \
   --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> \
   --clockwork <ABSOLUTE_CLOCKWORK_BINARY> \

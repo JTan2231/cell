@@ -40,7 +40,7 @@
     "Release bundles contain only program, deployment, and Chancery documentation bytes, never narrative repository inputs."
   ],
   "dependencies": [
-    {"id": "weaver.workflow.operate", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "weaver.workflow.operate", "min_contract": 2, "max_contract_exclusive": 3},
     {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 3},
     {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3}
   ],

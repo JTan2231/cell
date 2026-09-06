@@ -5,26 +5,9 @@
   "dependencies": [
     "nucleus"
   ],
-  "description": "Product-owned ordinary Weaver installation update.",
-  "deployer": "weaver/packaging/macos/deploy-user.sh",
-  "expected_current": true,
-  "proofs": {
-    "binary_sha256": "bin/weaver",
-    "deployer_sha256": "package/deploy-user.sh"
-  },
+  "description": "Product-owned Rust installation, maintained workflow settlement and exact prototype retirement.",
+  "adapter_binary": "weaver-install",
   "maintenance_products": [
     "nucleus"
-  ],
-  "drain_command": true,
-  "formats": [
-    "3"
-  ],
-  "source_proofs": {
-    "deployer_sha256": "weaver/packaging/macos/deploy-user.sh"
-  },
-  "candidate_proofs": {
-    "binary_sha256": "weaver"
-  },
-  "bundle_source": "weaver/chancery",
-  "ready_command": true
+  ]
 }

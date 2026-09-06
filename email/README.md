@@ -27,8 +27,9 @@ export RESEND_API_KEY='re_replace_with_the_real_key'
 
 cd /Users/joey/rust/cell/email
 ./ci.sh
-./packaging/macos/deploy-user.sh \
-  --binary /Users/joey/rust/cell/target/release/email
+<TESTED_EMAIL_INSTALL> install \
+  --binary <TESTED_EMAIL_BINARY> \
+  --bundle /Users/joey/rust/cell/email/chancery
 ```
 
 The installed command is `~/.local/bin/email`. Installation details and

@@ -5,20 +5,6 @@
   "dependencies": [
     "chancery"
   ],
-  "description": "Product-owned ordinary Clockwork installation update.",
-  "deployer": "clockwork/packaging/macos/deploy-user.sh",
-  "expected_current": true,
-  "proofs": {
-    "binary_sha256": "bin/clockwork",
-    "deployer_sha256": "package/deploy-user.sh",
-    "uninstaller_sha256": "package/uninstall-user.sh"
-  },
-  "source_proofs": {
-    "deployer_sha256": "clockwork/packaging/macos/deploy-user.sh",
-    "uninstaller_sha256": "clockwork/packaging/macos/uninstall-user.sh"
-  },
-  "candidate_proofs": {
-    "binary_sha256": "clockwork"
-  },
-  "bundle_source": "clockwork/chancery"
+  "description": "Installation through the shared Rust transaction library.",
+  "adapter_binary": "clockwork-install"
 }

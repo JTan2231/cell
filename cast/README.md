@@ -6,7 +6,8 @@ consistent JSON snapshot for a separate job-selection workflow.
 
 ```sh
 ./ci.sh cast
-cast/packaging/macos/deploy-user.sh --binary /absolute/path/to/tested/cast
+<TESTED_CAST_INSTALL> install --binary <TESTED_CAST_BINARY> \
+  --bundle /Users/joey/rust/cell/cast/chancery
 cast init
 cast run
 cast export --json

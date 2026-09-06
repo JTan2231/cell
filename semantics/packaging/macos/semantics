@@ -2,4 +2,10 @@
 
 set -eu
 
+maintenance="$HOME/Library/Application Support/Semantics/.clockwork-maintenance"
+if [ -e "$maintenance" ] || [ -L "$maintenance" ]; then
+    printf '%s\n' 'semantics: installation maintenance is active; use the retained installer for recovery' >&2
+    exit 1
+fi
+
 exec "$HOME/Library/Application Support/Semantics/install/current/libexec/semantics" "$@"

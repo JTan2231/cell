@@ -1392,13 +1392,18 @@ provider registry or documentation storage.
 5. Deploy matching CLI and daemon candidates with the exact Codex executable:
 
    ```sh
-   /Users/joey/rust/cell/nucleus/packaging/macos/deploy-user.sh \
-     --binary /Users/joey/rust/cell/target/release/nucleus \
-     --daemon /Users/joey/rust/cell/target/release/nucleusd \
+   <TESTED_NUCLEUS_INSTALL> install \
+     --binary <TESTED_NUCLEUS_BINARY> \
+     --daemon <TESTED_NUCLEUS_DAEMON> \
+     --bundle /Users/joey/rust/cell/nucleus/chancery \
      --codex /absolute/path/to/codex
    ```
 
-6. The installer stages files, replaces the LaunchAgent, and allows up to two
+6. Use `nucleus-install` from that same sealed candidate. The Rust packaging
+   installer uses shared `cell-install-v2` inventories and selector transactions,
+   then invokes the existing Nucleus Rust service installer. Public CLI and
+   daemon copies remain service-owned so its rollback capture sees the actual
+   previous programs. The installer stages files, replaces the LaunchAgent, and allows up to two
    minutes for first-start migration, compaction, and health. A failed cutover
    restores captured binaries and service configuration only when the database
    schema did not change. It refuses an unsafe binary-only rollback after a
@@ -1597,7 +1602,7 @@ directory.
   current requester ownership and shared acceptance checks.
 - [`examples/`](/Users/joey/rust/cell/nucleus/examples): complete request, schema,
   and toolset templates.
-- [`packaging/macos/deploy-user.sh`](/Users/joey/rust/cell/nucleus/packaging/macos/deploy-user.sh):
+- [`nucleus-install`](/Users/joey/rust/cell/nucleus/crates/nucleus-cli/src/bin/nucleus-install.rs):
   guarded user-service deployment.
 - [`release.sh`](/Users/joey/rust/cell/nucleus/release.sh): publication workflow; it
   commits, tags, and pushes.
@@ -1682,3 +1687,20 @@ directory.
 - [CLI contract](/Users/joey/rust/cell/chancery/docs/cli.md)
 - [Provider manifest](/Users/joey/rust/cell/chancery/docs/manifest.md)
 - [User-owned installation](/Users/joey/rust/cell/chancery/docs/system-installation.md)
+
+### Shared product installation
+
+The remaining product installers now use shared `cell-install-v2` file
+transactions and dedicated Rust `PRODUCT-install` executables. The release
+builder prepares all selected products and their declared maintenance closure
+in one Cargo invocation before holds. Affected-only products receive a sealed
+installer for inspection and recovery but are not upgraded. Requester holds
+and drains precede the Nucleus hold so existing continuation work can finish.
+Products retain authority over configuration, database backup/recovery,
+authentication and schedule/service control; database compatibility must be
+proved before public commands are restored. Nucleus's guarded service installer
+continues to own its public CLI/daemon copies and forward-only schema boundary.
+Cleanup uses only prepared candidate verifiers and retains unverified product
+history and selected schedule pins, including disabled bindings. See
+[Cell deployment](../../deployment/README.md) for the executable protocol and
+interrupted-operation boundaries.

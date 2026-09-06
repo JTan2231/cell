@@ -30,14 +30,15 @@ it starts. Python 3.11 or newer, Git, normal product build tools, and the curren
 macOS user session remain host prerequisites. The coordinator must be committed
 on `main` before use. There is no background daemon or detached deployment API.
 
-The deployment runtime uses Python's standard TOML reader for exact schedule
-definition comparisons. Ordinary CI/broker bootstrapping and selector-only
-script generation retain their existing Python 3.10 prerequisite.
+The coordinator and release builder use Python. Product installation and
+deployment adapters are Rust executables backed by `cell-install`; retained
+shell frontends are runtime assets for credential loading and scheduled jobs.
 
 ## Preparation and cutover
 
 Each run creates a detached Git worktree at its selected commit and calls the
-shared release builder once for all selected products. Development is expected
+shared release builder once for all selected products and the declared
+maintenance closure. Preparing an affected product does not select its upgrade. Development is expected
 to have completed the relevant CI checks. Deployment does not run CI or require
 a prior CI receipt: preparation builds production binaries and checks their
 versions, hashes, and exact source material. Tests, formatting, Clippy,
@@ -78,27 +79,30 @@ All candidates are prepared before maintenance begins. The coordinator then:
 
 1. Inspects selected products and every additional product whose admission must
    be held. It retains each product-owned baseline, prerequisites and ordering.
-2. Establishes every run-owned hold, then drains all affected products. An
-   unselected requester may be held without changing its installed release.
+2. Establishes requester holds and drains their work before holding and draining
+   Nucleus, so continuations can finish. An unselected requester may be held
+   without changing its installed release.
 3. Applies selected product adapters in their declared order.
 4. Checks installed candidate identity and service readiness while every
    affected product remains held. No model jobs or synthetic records are created.
 5. Releases requester holds only after all readiness checks pass, then releases
    Nucleus last.
 
-The first stateful adapters deliberately use a conservative impact closure:
+Stateful adapters use a conservative impact closure:
 requester selection includes Nucleus, and Nucleus includes all its registered
 requester products. Consequently a stateful run can hold and verify unselected
 requesters, and all of those installations must already expose compatible
 maintenance operations. It never upgrades them implicitly to satisfy that
-precondition. Stateless selector-only pilots do not require this bootstrap.
+precondition. Stateless products do not require this maintenance closure.
 
 The coordinator owns sequencing and temporary execution state. Product adapters own
 configuration discovery, admission, quiescence, migration, service control,
-runtime readiness and recovery. Existing deployers retain their ownership,
-product and Chancery writer locks. The shared generated profile below stays
-limited to products whose deployment only changes program/documentation
-selectors. The coordinator does not turn those scripts into stateful deployers.
+runtime readiness and recovery. The shared transaction library owns exact immutable artifact manifests, public
+file selection, product and Chancery writer locks, attribution checks and file
+compensation. Products own their runtime state, admission holds, database
+backups, schedules, services and recovery decisions. Database recovery must be
+proved before restoring public commands. Nucleus's existing guarded service
+installer continues to own copied executables and authentication state.
 
 ## Temporary state and failure handling
 
@@ -148,8 +152,7 @@ hold or release reply is uncertain until a successful release is captured.
 Successful recovery still returns deployment failure, with explicit released
 maintenance. Cleanup failure preserves the verified installation outcome.
 
-Product command failures retain a short structured error code or a recognized
-operational failure category. The shared adapter does not relay arbitrary child
+Product command failures retain bounded execution status. The shared adapter does not relay arbitrary child
 messages, command arguments, credentials, or domain bodies; unrecognized failures
 retain their executable and exit status.
 
@@ -158,7 +161,7 @@ installed Cell release history under the same global lock. It preserves current
 releases and releases pinned by selected schedules (including disabled ones),
 service definitions, current product receipts/configuration, and running
 processes. Cleanup errors are reported separately: installed products stay in
-place and no recovery or rollback begins. Direct legacy product deployers still
+place and no recovery or rollback begins. Direct product installers
 retain their own previous releases; automatic pruning belongs to a successful
 coordinated deployment.
 
@@ -172,9 +175,8 @@ cannot prove that an old resident daemon was replaced.
 
 ## Product adapter protocol, version 1
 
-The product owns `PRODUCT_DIR/deployment/adapter.json` and its adapter
-implementation. Most products use `adapter.py`; Usher declares the sealed
-installer executable in literal JSON:
+The product owns `PRODUCT_DIR/deployment/adapter.json` and its Rust installer.
+Each declaration names its sealed installer executable in literal JSON:
 
 ```json
 {"schema":1,"product":"usher","dependencies":[],"application":"Usher","adapter_binary":"usher-install","description":"Install Usher"}
@@ -192,14 +194,13 @@ accepted. Standard input is one JSON object containing:
 - `recovery`, the captured operation and hold/application/verification progress
   during recovery within the active invocation.
 
-`candidate_dir` and `candidate` are null for affected-only products. Binaries
-reside at `candidate_dir/bin/COMMAND`; `candidate.binaries[COMMAND]` records
-`path`, `sha256` and `version`. The source archive contains version-matched
-deployer, provider and adapter source bytes. It is checked before every operation.
-For Usher, candidate sealing includes `usher` and `usher-install`; its adapter
-executes `candidate_dir/bin/usher-install adapter OP` rather than compiling or
-using the shared target during cutover. The enclosing coordinator and other
-products' adapters retain their existing Python implementation.
+`candidate_dir` and `candidate` identify a sealed candidate for selected and
+affected products. Binaries reside at `candidate_dir/bin/COMMAND`; the manifest
+records each path, SHA-256 and version plus exact packaging/provider source
+hashes. The adapter executes `PRODUCT-install adapter OP` from the candidate,
+checks the source and its own bytes, and refuses `apply` for an affected-only
+product. A declared `maintenance_products` closure makes these executables
+available before inspection and before any hold.
 
 Standard output must be exactly one bounded JSON object, with diagnostics on
 standard error:
@@ -242,7 +243,8 @@ Usher's separate `usher-install` executable uses the shared `cell-install`
 library for local installation mechanics. It owns Usher's product policy and
 the version-one coordinator adapter; the `usher` recognition command remains
 read-only. `cell-install` is workspace infrastructure with no separate product
-identity or release publication. Only Usher uses this installer path.
+identity or release publication. Usher retains its compatible version-one file format. The other products use
+the version-two transaction format described below.
 
 Prepare both executables with the shared release builder, then install them:
 
@@ -280,39 +282,38 @@ Recovery does not edit immutable release bytes.
 See [Usher installation](../usher/chancery/manuals/install-operate.md) for
 the exact operational boundary.
 
-Usher no longer has a checked-in shell installer or Python product adapter.
-Conversations, Geste and CRM retain the generated profile below, and stateful
-products retain their product-owned lifecycle and recovery mechanics.
+## Shared Rust installation transactions
 
-## Selector-only deployment generation
+Every product builds a dedicated `PRODUCT-install` executable alongside its
+runtime executables in the release builder's single Cargo invocation. Product
+versions remain independent; Annals Usage remains a separate release unit.
+The `cell-install-v2` manifest records exact file digests and modes, independent
+executable/provider versions, public entry mappings and a stable content identity.
+The immutable tree retains `package/install` for supported recovery. Legacy
+formats are accepted only through the product's explicit complete byte proof.
 
-`generate.py` renders complete, self-contained macOS deployers for products
-whose deployment changes only an immutable program release and its command and
-Chancery provider selectors. Product runtime state is outside this profile.
-Generation requires Python 3.10 or newer; generated deployers themselves use
-only the documented macOS shell tools.
+Conversations, CRM, Geste, Chancery, Email, Cast and Clockwork use the common
+program-selection entry point. Their product specifications supply the layout,
+legacy proof and runtime frontend where needed. Clockwork additionally validates
+its provider with the supplied Chancery reader; its runtime recognizes its own
+fully verified version-two release when pinning schedule definitions. CRM's
+coordinated route preserves admission and explicit database migration handling.
+Stateful products provide typed lifecycle code around the same file transaction.
+See each installed product's installation contract for its exact arguments and
+recovery limits.
 
-Regenerate or check the checked-in scripts with:
+Publication rechecks the captured selection under the product lock and holds
+the Chancery writer lock through validation and compensation. Suspended public
+commands stay absent during state rollback. Explicit interrupted-publication
+recovery accepts only absent entries or entries attributable to the captured
+prior release and exact candidate; foreign replacements are retained and stop
+recovery. Directory locks preserve the legacy mkdir protocol and reclaim only a
+recognized private owner marker whose process is proven dead. Empty legacy locks
+and unknown or live owners require product/operator recovery.
 
-```sh
-python3 deployment/generate.py
-python3 deployment/generate.py --check
-```
-
-The profile has no arbitrary shell hooks. A product that needs service control,
-database work, maintenance, scheduling, or authentication keeps
-a product-owned deployer. Every product that publishes a Chancery provider uses
-the same catalog-writer lock; custom/stateful profiles also keep their existing
-product and lifecycle locks and are conservatively declared as globally
-conflicting to an orchestrator. The generated deployer stages outside the
-shared catalog lock, takes its product lock before the catalog writer lock,
-publishes one atomic `current` selector, and packages its exact own bytes for
-rollback.
-
-Each descriptor supplies only product identity/display names, application
-support/binary/provider names, help text, the existing manifest-format toggle,
-and existing completion-output variants. There are no lifecycle hooks.
-
-`--expected-current absent|releases/<sha256>` supplies an optional optimistic
-concurrency precondition. When omitted, the deployer snapshots `current` before
-waiting for its product lock and rejects the operation if that selection changes.
+After coordinated success, cleanup uses only supplied sealed candidate installers
+for read-only `verify-release` proof. A product without such a verifier keeps all
+its history. Every live-reference, receipt, transaction-marker and release proof
+completes before deletion; current releases and selected schedule pins, including
+disabled bindings, remain protected. Retained release executables are never
+chosen as cleanup's authority.

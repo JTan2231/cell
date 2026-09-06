@@ -28,3 +28,5 @@ pub use error::{Error, Result};
 pub fn main_entry() -> i32 {
     app::main_entry()
 }
+
+pub mod installation;

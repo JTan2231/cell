@@ -1,6 +1,6 @@
 {
   "id": "todo.install.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -54,7 +54,7 @@
     },
     {
       "label": "Deploy candidate",
-      "invocation": "/Users/joey/rust/cell/todo/packaging/macos/deploy-user.sh --binary <ABSOLUTE_TODO_BINARY> --email-from <SENDER> --email-to <RECIPIENT>"
+      "invocation": "<TESTED_TODO_INSTALL> install --binary <ABSOLUTE_TODO_BINARY> --bundle <MATCHING_TODO_PROVIDER_BUNDLE> --package <MATCHING_RUNTIME_PACKAGE_DIRECTORY> --email-from <SENDER> --email-to <RECIPIENT>"
     },
     {
       "label": "Preview installed email",

@@ -3,7 +3,7 @@
   "provider": {
     "id": "conversations",
     "name": "Conversations",
-    "release": "0.4.0"
+    "release": "0.5.0"
   },
   "promise_scope": {
     "authoritative_for": [

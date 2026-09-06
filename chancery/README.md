@@ -41,8 +41,9 @@ catalog.
 After a release build:
 
 ```sh
-./packaging/macos/deploy-user.sh \
-  --binary "$PWD/../target/release/chancery"
+<TESTED_CHANCERY_INSTALL> install \
+  --binary <TESTED_CHANCERY_BINARY> \
+  --bundle /Users/joey/rust/cell/chancery/provider
 ```
 
 See [the documentation index](docs/README.md) for the CLI, bundle contract,

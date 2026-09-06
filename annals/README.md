@@ -25,7 +25,7 @@ Schema version 5 records that physical separation as an immutable database
 kind, so configuration or direct path selection cannot turn a decisions
 library into a general source inlet.
 The explicit macOS provisioner, shipped and hashed as
-`package/provision-decisions-user.sh` in each content release, creates or
+`bin/annals-install provision-decisions` in each content release, creates or
 updates that private library and only its independent
 `annals/decisions-inbox` Clockwork binding; it never changes the primary
 `annals/inbox` schedule.
@@ -262,9 +262,11 @@ Clockwork frontend:
 
 ```sh
 ./ci.sh
-./packaging/launchd/deploy-user.sh \
+../target/release/annals-install install \
   --binary "$PWD/../target/release/annals" \
   --usage-binary "$PWD/../target/release/annals-usage" \
+  --bundle "$PWD/chancery/annals" \
+  --usage-bundle "$PWD/chancery/annals-usage" \
   --nucleus "$HOME/.local/bin/nucleus" \
   --nucleus-socket "$HOME/Library/Application Support/Nucleus/nucleus.sock" \
   --clockwork "$HOME/.local/bin/clockwork"
@@ -334,8 +336,7 @@ annals inbox resume
 Drop complete UTF-8 files into
 `$HOME/Library/Application Support/Annals/spool/incoming`. The one-shot worker
 is requested at binding load and every 300 seconds by Clockwork. The immutable
-definition records the exact release ID and root, pins `/bin/sh` and the
-release-local runner by SHA-256, skips overlap, has no activation timeout, and
+definition records the exact release ID and root, pins the native Rust release-local runner by SHA-256, skips overlap, has no activation timeout, and
 inherits no ambient environment. Annals' release manifest and retention rules,
 not Clockwork's top-level launch-image check, own the sibling payload and full
 release integrity. The interval is not a wake-up deadline, and Annals makes no

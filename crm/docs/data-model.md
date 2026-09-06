@@ -169,7 +169,7 @@ changes retry eligibility.
 existing supported CRM schema is idempotent. New Unix database bytes are mode
 0600 before SQLite opens them; an existing symbolic link or non-regular target
 is rejected before open, and opening a regular database also tightens database
-and existing sidecar permissions. The packaged deployer creates its default
+and existing sidecar permissions. The Rust installer creates its default
 state directory mode 0700. Ordinary commands refuse absent, foreign,
 incomplete, newer, or older schemas and never migrate implicitly.
 

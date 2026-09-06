@@ -22,7 +22,7 @@ owns the decision about which immutable definition the stable key currently
 selects and the direct child's runtime record.
 
 Program deployment is a separate packaging boundary. It stages Clockwork's
-binary, packaging scripts, and provider as one content-addressed release, then
+binary, Rust installer, and provider as one content-addressed release, then
 requires an explicitly supplied candidate Chancery reader to validate the
 exact staged provider copy before changing either public selector. That
 deployment does not open runtime state or mutate a product binding.

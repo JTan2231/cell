@@ -151,11 +151,15 @@ command.
 After a release build, deploy without administrator privileges:
 
 ```sh
-./packaging/macos/deploy-user.sh \
-  --binary "/Users/joey/rust/cell/target/release/weaver"
+<TESTED_WEAVER_INSTALL> install \
+  --binary <TESTED_WEAVER_BINARY> \
+  --bundle /Users/joey/rust/cell/weaver/chancery
 ```
 
-This installs `~/.local/bin/weaver`, private operational state, complete
+Use the `weaver-install` executable from the same sealed tested candidate as
+`weaver`; its version must match the provider bundle. The Rust installer uses
+the shared `cell-install` crate for exact artifacts, locks, selectors and
+compensation. This installs `~/.local/bin/weaver`, `~/.local/bin/weaver-install`, private operational state, complete
 content-addressed releases, and Weaver's one global Chancery provider selector.
 It deliberately installs no LaunchAgent: repository I/O must stay in the
 interactive caller's process lineage. An update establishes Weaver maintenance,

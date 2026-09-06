@@ -17,27 +17,30 @@ key in the installed user's `~/.zshrc`:
 export RESEND_API_KEY='re_replace_with_the_real_key'
 ```
 
-Then run the product gate and deploy the release binary:
+Run the product gate, then install its exact tested binary and Rust installer:
 
 ```sh
 cd /Users/joey/rust/cell/email
 ./ci.sh
-./packaging/macos/deploy-user.sh \
-  --binary /Users/joey/rust/cell/target/release/email
+<TESTED_EMAIL_INSTALL> install \
+  --binary <TESTED_EMAIL_BINARY> \
+  --bundle /Users/joey/rust/cell/email/chancery
 ```
 
 The installed layout is:
 
 ```text
 ~/.local/bin/email -> Email's current release wrapper
+~/.local/bin/email-install -> Email's current Rust installer
 ~/Library/Application Support/Email/install/
   releases/<content-hash>/
     bin/email
     libexec/email
-    package/deploy-user.sh
+    bin/email-install
+    package/install
     package/email
     share/chancery/email/
-    manifest.txt
+    manifest.json  (cell-install-v2)
   current -> releases/<content-hash>
   previous -> releases/<content-hash>
 ~/Library/Application Support/Chancery/providers/
@@ -52,12 +55,17 @@ secret is not stored in Email files or passed in command arguments.
 Help and version probes bypass `.zshrc` and execute the release payload
 directly, so an upstream readiness check does not read transport credentials.
 
-The release identity covers the payload, wrapper, deployer, and Chancery
+The release identity covers the payload, wrapper, Rust installer, public layout,
+and Chancery
 provider bundle. The installer validates an existing release before reuse,
 retains the superseded release through `previous`, rejects a provider selector
 owned by another installation, and restores all selectors when a post-switch
-check fails. Re-deploying the binary retained by `previous` is the rollback
-procedure.
+check fails. For rollback, resolve `install/previous` to its canonical owned
+release directory, then run a trusted tested `email-install recover --release
+ABSOLUTE_RELEASE_DIRECTORY`. The installer verifies the retained legacy or
+`cell-install-v2` release before selecting it; do not execute an unverified
+retained installer. Installation and recovery run only help/version probes and
+never source `.zshrc` or send a message.
 
 The installer creates Email's provider selector whether or not Chancery is
 installed. Email remains usable without the Chancery binary or registry. After

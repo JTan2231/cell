@@ -21,3 +21,8 @@ arg=sample
 arg=--revision
 arg=3'
 [ "$output" = "$expected" ]
+touch "$home/Library/Application Support/Semantics/.clockwork-maintenance"
+if HOME="$home" "$SCRIPT_DIR/semantics" repository show sample >/dev/null 2>&1; then
+    printf '%s\n' 'frontend admitted a public command during installer maintenance' >&2
+    exit 1
+fi

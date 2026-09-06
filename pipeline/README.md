@@ -61,8 +61,11 @@ that want a candidate from a full CI run. They run the same complete checks, sea
 the exact release executables before their admitted body exits, and return a
 broker receipt on success. Staging stays inside the shared Cargo lane; it is
 not a way to skip CI admission. Release and deployment preparation instead use
-the shared release builder described below. For Usher, both paths seal `usher`
-and `usher-install`; the coordinator invokes the sealed installer's Rust adapter.
+the shared release builder described below. Each product seals its runtime executables and dedicated `PRODUCT-install`;
+the coordinator invokes that sealed installer's Rust adapter. The shared
+`cell-install` library owns immutable artifact selection while product Rust
+code owns lifecycle and recovery. Static credential and scheduled-job shell
+frontends remain versioned runtime assets.
 Presentation options precede `--stage-candidate`; staging always requests the
 complete machine receipt even when the enclosing caller suppresses summaries.
 

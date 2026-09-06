@@ -987,3 +987,5 @@ mod host_id_tests {
         assert!(matches!(error, Error::HostIdentityUnavailable));
     }
 }
+
+pub mod installation;

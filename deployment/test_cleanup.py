@@ -37,6 +37,13 @@ class ReleaseCleanupTests(unittest.TestCase):
             "ProgramArguments": [str(self.plist_pin / "bin/clockwork")]}))
         self.domain = self.base / "Annals/annals.db"
         self.domain.write_text("retained domain state")
+        self.verifiers = {}
+        for product in ("annals", "decisions", "clockwork"):
+            verifier = self.home / "sealed-candidates" / product / "bin" / (product + "-install")
+            verifier.parent.mkdir(parents=True)
+            verifier.write_text("admitted candidate fixture")
+            verifier.chmod(0o555)
+            self.verifiers[product] = verifier
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -54,6 +61,9 @@ class ReleaseCleanupTests(unittest.TestCase):
         return path
 
     def inspect(self, argv):
+        if argv[0] in self.verifiers.values():
+            self.assertEqual(argv[1], "verify-release")
+            return json.dumps({"ok": True, "data": {"release_id": argv[2].name}})
         argv = [str(value) for value in argv]
         if argv[0] == "/usr/bin/shlock":
             Path(argv[-1]).write_text(str(os.getpid()) + "\n")
@@ -70,10 +80,11 @@ class ReleaseCleanupTests(unittest.TestCase):
                                                        "manifest": {"release_root": str(self.disabled_pin)}}})
         raise AssertionError("unexpected inspection: " + repr(argv))
 
-    def run_cleanup(self, usher_installer=None, inspect=None):
+    def run_cleanup(self, usher_installer=None, inspect=None, installers=None):
         with mock.patch.object(cleanup, "require_deployment_lock"), \
                 mock.patch.object(cleanup, "inspect_command", side_effect=inspect or self.inspect):
-            return cleanup.clean_installed_release_history(self.home, usher_installer)
+            return cleanup.clean_installed_release_history(self.home, usher_installer,
+                installers=self.verifiers if installers is None else installers)
 
     def usher_releases(self):
         current = self.release("Usher", self.current)
@@ -140,7 +151,8 @@ class ReleaseCleanupTests(unittest.TestCase):
 
     def test_prunes_only_unreferenced_history_and_releases_its_locks(self):
         self.assertEqual(self.run_cleanup(), {"removed_releases": 3, "removed_previous_links": 3,
-                                             "removed_history_receipts": 1, "retained_releases": 7})
+            "removed_history_receipts": 1, "retained_releases": 7,
+            "product_history": {product: "verified" for product in self.verifiers}})
         for application in ("Annals", "Decisions", "Clockwork"):
             install = self.base / application / "install"
             self.assertTrue((install / "current").exists())
@@ -173,7 +185,8 @@ class ReleaseCleanupTests(unittest.TestCase):
 
         with mock.patch.object(cleanup, "require_deployment_lock"), \
                 mock.patch.object(cleanup, "inspect_command", side_effect=inspect):
-            self.assertEqual(cleanup.clean_installed_release_history(self.home)["removed_releases"], 3)
+            self.assertEqual(cleanup.clean_installed_release_history(
+                self.home, installers=self.verifiers)["removed_releases"], 3)
         self.assertEqual(calls, [20, 40])
         self.assertTrue(self.disabled_pin.is_dir())
 
@@ -189,7 +202,7 @@ class ReleaseCleanupTests(unittest.TestCase):
                 with mock.patch.object(cleanup, "require_deployment_lock"), \
                         mock.patch.object(cleanup, "inspect_command", side_effect=inspect):
                     with self.assertRaises(cleanup.CleanupError):
-                        cleanup.clean_installed_release_history(self.home)
+                        cleanup.clean_installed_release_history(self.home, installers=self.verifiers)
                 self.assertTrue(self.disabled_pin.is_dir())
                 self.assertTrue(self.history.exists())
                 self.assertTrue((self.base / "Annals/install/previous").is_symlink())
@@ -211,6 +224,104 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertTrue(lock.is_dir())
         self.assertFalse((self.base / "Annals/install/.update-lock").exists())
         self.assertTrue(self.history.exists())
+
+    def test_all_products_retain_history_without_an_admitted_verifier(self):
+        result = self.run_cleanup(installers={})
+        self.assertEqual(result["removed_releases"], 0)
+        self.assertEqual(result["removed_previous_links"], 0)
+        self.assertEqual(result["removed_history_receipts"], 0)
+        self.assertEqual(result["product_history"], {
+            product: "retained_without_verified_installer" for product in self.verifiers})
+        for application in ("Annals", "Decisions", "Clockwork"):
+            install = self.base / application / "install"
+            self.assertTrue((install / "previous").is_symlink())
+            self.assertTrue((install / "releases" / self.old).is_dir())
+        self.assertTrue(self.history.exists())
+
+    def test_verifier_map_prunes_only_covered_products(self):
+        result = self.run_cleanup(installers={"annals": self.verifiers["annals"]})
+        self.assertEqual(result["removed_releases"], 1)
+        self.assertEqual(result["removed_previous_links"], 1)
+        self.assertFalse(self.history.exists())
+        self.assertTrue((self.base / "Decisions/install/previous").is_symlink())
+        self.assertTrue((self.base / "Clockwork/install/releases" / self.old).is_dir())
+
+    def test_legacy_and_v2_cast_history_use_supplied_product_verifier(self):
+        current = self.release("Cast", self.current)
+        old = self.release("Cast", self.old)
+        current.chmod(0o755)
+        (current / "manifest.txt").unlink()
+        (current / "manifest.json").write_text(json.dumps({
+            "format": "cell-install-v2", "product": "cast", "versions": {"cast": "1.0.0"},
+            "providers": {"cast": {"path": "share/chancery/cast", "version": "1.0.0"}},
+            "files": {}, "public": [], "release_id": current.name}))
+        current.chmod(0o555)
+        install = current.parent.parent
+        (install / "current").symlink_to("releases/" + self.current)
+        (install / "previous").symlink_to("releases/" + self.old)
+        verifier = self.home / "sealed-cast-install"
+        verifier.write_text("admitted candidate fixture")
+        verifier.chmod(0o555)
+        seen = []
+
+        def inspect(argv):
+            if argv[0] == verifier:
+                self.assertEqual(argv[1], "verify-release")
+                seen.append(argv[2])
+                return json.dumps({"ok": True, "data": {"release_id": argv[2].name}})
+            return self.inspect(argv)
+
+        result = self.run_cleanup(inspect=inspect, installers={**self.verifiers, "cast": verifier})
+        self.assertEqual(set(seen), {current, old})
+        self.assertEqual(result["product_history"]["cast"], "verified")
+        self.assertTrue(current.is_dir())
+        self.assertFalse(old.exists())
+
+    def test_retained_installer_cannot_authorize_deletion(self):
+        retained = self.base / "Annals/install/releases" / self.current / "program"
+        retained.chmod(0o555)
+        with self.assertRaisesRegex(cleanup.CleanupError, "retained installers"):
+            self.run_cleanup(installers={"annals": retained})
+        self.assertTrue(self.history.exists())
+        self.assertTrue((self.base / "Annals/install/previous").is_symlink())
+
+    def test_one_product_verification_failure_prevents_every_deletion(self):
+        def inspect(argv):
+            if argv[0] == self.verifiers["clockwork"] and argv[2].name == self.old:
+                return json.dumps({"ok": False, "data": {"release_id": argv[2].name}})
+            return self.inspect(argv)
+
+        with self.assertRaisesRegex(cleanup.CleanupError, "did not prove its identity"):
+            self.run_cleanup(inspect=inspect)
+        self.assertTrue(self.history.exists())
+        for application in ("Annals", "Decisions", "Clockwork"):
+            self.assertTrue((self.base / application / "install/previous").is_symlink())
+            self.assertTrue((self.base / application / "install/releases" / self.old).is_dir())
+
+    def test_stateful_maintenance_and_transaction_barriers_preserve_history(self):
+        for relative in ("Annals/spool/.maintenance", "Annals/decisions/spool/.maintenance",
+                         "Decisions/.clockwork-maintenance", "Annals/install/transaction.primary.run",
+                         "Semantics/.clockwork-maintenance", "Weaver/.maintenance"):
+            with self.subTest(relative=relative):
+                marker = self.base / relative
+                marker.parent.mkdir(parents=True, exist_ok=True)
+                marker.write_text("retained recovery evidence")
+                with self.assertRaisesRegex(cleanup.CleanupError, "maintenance|transaction"):
+                    self.run_cleanup()
+                self.assertTrue(marker.exists())
+                self.assertTrue(self.history.exists())
+                self.assertTrue((self.base / "Annals/install/previous").is_symlink())
+                marker.unlink()
+
+    def test_product_verifier_arguments_are_explicit_and_unambiguous(self):
+        self.assertEqual(cleanup.parse_installers(["krisis=/sealed/krisis-install"]),
+                         {"decisions": Path("/sealed/krisis-install")})
+        for arguments in (["unknown=/sealed/tool"], ["annals"],
+                          ["krisis=/one", "decisions=/two"]):
+            with self.subTest(arguments=arguments), self.assertRaises(cleanup.CleanupError):
+                cleanup.parse_installers(arguments)
+        with self.assertRaisesRegex(cleanup.CleanupError, "exact sealed candidate"):
+            self.run_cleanup(installers={"annals": Path("relative")})
 
 
 if __name__ == "__main__":

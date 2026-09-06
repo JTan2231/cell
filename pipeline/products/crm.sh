@@ -4,7 +4,7 @@ PRODUCT_NAME=CRM
 PRODUCT_DIR=crm
 CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
-DEPLOY_PROFILE=selector-only-v1
+DEPLOY_PROFILE=rust-install-v1
 DEPLOY_CONFLICT_KEYS='product:crm
 chancery-catalog'
 CARGO_MANIFEST=Cargo.toml
@@ -12,13 +12,11 @@ CARGO_PACKAGES=crm
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|crm/release.sh
-sh|crm/packaging/macos/deploy-user.sh
-sh|crm/packaging/macos/test-deploy-user.sh'
-CI_RUN_CHECKS='darwin|crm/packaging/macos/test-deploy-user.sh'
+CI_SHELL_CHECKS='sh|crm/release.sh'
+CI_RUN_CHECKS=''
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-CI_EXTRA_BEFORE_RUST=pipeline/extras/deployment-generated.sh
 RELEASE_UNITS='crm|CRM|package|crm/crates/crm/Cargo.toml|crm-|1'
 RELEASE_METADATA_NO_DEPS=1
-RELEASE_BINARY_CHECKS='crm|target/release/crm|crm'
+RELEASE_BINARY_CHECKS='crm|target/release/crm|crm
+crm|target/release/crm-install|crm-install'
 PROVIDERS='crm|crm|crm/chancery|5'
