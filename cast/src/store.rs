@@ -31,12 +31,18 @@ pub struct Store {
 }
 
 pub struct ProductLock {
-    _file: File,
-    locked: Arc<AtomicBool>,
+    file: File,
+    locked: Option<Arc<AtomicBool>>,
 }
 impl Drop for ProductLock {
     fn drop(&mut self) {
-        self.locked.store(false, Ordering::Release);
+        // Closing only this descriptor does not release flock while a child
+        // retains a duplicate between fork and exec. Release before advertising
+        // that the local store is available for another mutation.
+        let _ = FileExt::unlock(&self.file);
+        if let Some(locked) = &self.locked {
+            locked.store(false, Ordering::Release);
+        }
     }
 }
 
@@ -79,6 +85,10 @@ impl Store {
         initialization_lock
             .try_lock_exclusive()
             .map_err(|_| "another Cast mutation is running")?;
+        let initialization_lock = ProductLock {
+            file: initialization_lock,
+            locked: None,
+        };
         let path = directory.join("cast.sqlite3");
         if path.exists() {
             return Self::open(directory);
@@ -127,8 +137,8 @@ impl Store {
             .map_err(|_| "another Cast mutation is running")?;
         self.locked.store(true, Ordering::Release);
         Ok(ProductLock {
-            _file: file,
-            locked: self.locked.clone(),
+            file,
+            locked: Some(self.locked.clone()),
         })
     }
 
@@ -1142,6 +1152,24 @@ mod tests {
         let store = Store::init(dir.path())?;
         Ok((dir, store))
     }
+
+    #[test]
+    fn dropped_product_lock_releases_even_with_a_duplicated_descriptor() -> Result<()> {
+        let (directory, store) = store()?;
+        let guard = store.lock()?;
+        // A descriptor inherited between fork and exec references the same flock.
+        // Retaining a duplicate makes that short-lived condition deterministic.
+        let inherited = guard.file.try_clone()?;
+        assert!(Store::open(directory.path())?.lock().is_err());
+        drop(guard);
+        let reacquired = Store::open(directory.path())?.lock().map_err(|error| {
+            format!("dropping the guard must release the lock before inherited descriptors close: {error}")
+        })?;
+        drop(reacquired);
+        drop(inherited);
+        Ok(())
+    }
+
     #[test]
     fn material_revision_and_aliases_are_stable() -> Result<()> {
         let (_dir, store) = store()?;
