@@ -60,6 +60,7 @@ separately maintained discovery catalog.
 | --- | --- | --- | --- |
 | Todo | An actionable concern or follow-up should be researched and retained for later. | Concern provenance, routing and its explicit decisions, stable todo identities, dated situation assessments, proposed or accepted designs, open/done state, and working notes. | Work requested for immediate completion, general knowledge, implementation execution, or shared runtime policy. |
 | CRM | Employment-relevant people, opportunities, and contemplated contact should be retained as evidence-grounded cases, or reusable career profile material should be stored. | Its local SQLite library, mutable Markdown profile entries, queued steward runs, immutable case revisions, evidence, and advisory review notes. | Sending or authorizing outreach, scheduled intake, treating an advisory as a gate, or storing CRM domain state in Nucleus. |
+| Cast | Previously unknown employers and job postings should be discovered and monitored through ordinary HTTP. | Private discovery records, company/job identities, extracted evidence, source coverage and freshness, local request budgets, query configuration and consistent exports. | Personal selection, CRM stewardship, application packets, email, application submission or agent execution. |
 | Annals | Immutable source material should be retained or reconciled with an evidence-grounded conceptual corpus, or that corpus should be searched or explored. | Each selected physical library's retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, cross-library federation, or account telemetry. |
 | Weaver | Authored repository inputs should become the current five-stage public-facing narrative outputs. | Current-run admission, stage order and input snapshots, repository output writes, validation, cancellation intent, and recovery. | Publishing, editing a public profile, treating generated text as factual authority, or general job orchestration. |
 | Email | A plain-text email should be sent to the single fixed recipient. | The synchronous Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, or agent execution. |
@@ -77,6 +78,7 @@ Typical routing examples:
 - “Leave this concern for later” is Todo work.
 - “Retain this possible employment connection and assess the case for contact”
   is CRM work.
+- “Discover new employers and refresh their public job postings” is Cast work.
 - “Incorporate this report into what we know” is Annals work.
 - “What does the corpus say about predicate locking?” is an Annals query.
 - “Build the current public-facing narrative” is Weaver work.
@@ -106,6 +108,7 @@ annals --version
 annals-usage --version
 todo --version
 crm --version
+cast --version
 email --version
 conversations --version
 krisis --version
@@ -150,6 +153,7 @@ Semantics worker ---/
 Annals Usage <------ Nucleus output atoms and account reads
 Todo SQLite <------- Todo's validated stage tools and explicit decisions
 CRM SQLite <-------- CRM's queued intake and validated case revisions
+Cast SQLite <------- Cast HTTP adapters --> search providers and careers sources
 Weaver outputs <---- Weaver's detached repository worker
 Email -------------> Resend
 Conversations ------> normal-user Codex app-server
@@ -189,6 +193,15 @@ CRM database, not Nucleus completion or model prose, is steward success. CRM is
 the sole authority for that result. Advisory review notes are prominent on
 every CRM consumption surface but never block capture, revision, or later
 action. CRM has no scheduler and no direct-Codex fallback.
+
+Cast is an ordinary Rust discovery CLI with its own private SQLite state. It
+searches configured providers, follows public careers sources, and retains
+distilled employer/posting evidence, coverage, freshness and conservative local
+budget accounting. It invokes no Nucleus job, CRM steward, browser, packet
+builder or email sender. Downstream products consume its supported snapshot
+and retain their own selection, application and notification state. Collection
+success is the committed evidence and explicit coverage outcome; provider
+failure or partial collection cannot establish that a job closed.
 
 Weaver submits five content-only jobs in order. Its detached interactive-lineage
 worker owns repository reads and atomic Markdown output writes; Nucleus and the
@@ -269,7 +282,7 @@ lexical precedent candidates; the agent checks applicability and current
 contracts before reuse.
 
 Nucleus, Annals, Annals Usage, Todo, Chancery, Weaver, Email, Conversations,
-Krisis, Semantics, Geste, Clockwork, CRM, and Usher share the Cell source
+Krisis, Semantics, Geste, Clockwork, CRM, Usher and Cast share the Cell source
 repository, Cargo workspace, and lockfile. That source layout does not
 merge their release, installation, state, backup, recovery, or domain-success
 boundaries. Product runtimes do not call Chancery. Their installers only
@@ -330,7 +343,7 @@ recognition check in the broker's heavy lane, including for selected-product
 runs. It passes the expected source key to that check and each independently
 scheduled product gate, and rejects the plan with exit 75 if the worktree
 changes. A complete run then rebuilds Chancery for that same candidate and
-validates the integrated fifteen-provider, 52-entry source graph.
+validates the integrated sixteen-provider, 55-entry source graph.
 This aggregate evidence does not merge product release authority or turn one
 product gate into another's gate.
 
@@ -465,6 +478,7 @@ CRM deployer still changes only program/provider selectors.
 ~/.local/bin/geste
 ~/.local/bin/clockwork
 ~/.local/bin/crm
+~/.local/bin/cast
 ~/.codex/hooks.json
 ~/Library/LaunchAgents/org.nucleus.daemon.plist
 ~/Library/LaunchAgents/org.clockwork.annals.inbox.plist
@@ -523,6 +537,12 @@ Krisis/retained Decisions compatibility do.
 ~/Library/Application Support/CRM/
   crm.db
   install/
+
+~/Library/Application Support/Cast/
+  install/
+
+~/.local/share/cast/
+  cast.sqlite3
 
 ~/Library/Logs/Semantics/
   worker.stdout.log
@@ -657,6 +677,23 @@ CRM-owned adapter invokes this same migration under its drained hold before
 switching program selectors. Program rollback to schema one also requires
 a separate quiescent database restore and must preserve newer state before
 removing it from the active view.
+
+Cast's product-owned installer stages a Rust payload, zsh frontend and matching
+provider bundle and switches only program/documentation selectors. It does not
+initialize discovery state, perform collection, migrate a database or activate
+a scheduler. The frontend sources the user's `~/.zshrc` with output suppressed
+and passes only `THEIRSTACK_API_KEY`, `BRAVE_SEARCH_API_KEY`, `HOME`, a fixed
+system `PATH` and an explicitly selected `CAST_STATE_DIR` to the payload.
+The two keys do not enter Cast configuration, its database or command arguments.
+Discovery state defaults to `~/.local/share/cast`; `--state-dir` selects another
+private directory. Program rollback and discovery-state recovery remain separate.
+The explicit `cast state reconcile-ownership` repair takes the Cast mutation lock
+and transactionally corrects ATS tenant ownership and uncertain older JSON-LD
+observations. It preserves source/job IDs, paid usage, run history and query
+checkpoints; it performs no remote request. Re-export afterward and refresh
+uncertain observations through bounded collection. Do not erase state to reset
+its budget accounting.
+Cast needs no pause to establish Nucleus quiescence because it never calls it.
 
 ## Compatibility model
 
@@ -1192,6 +1229,7 @@ provider registry or documentation storage.
 | --- | --- | --- |
 | Todo concerns, routing and explicit decisions, identities, assessments, designs, lifecycle, provenance, database, email delivery, or deployment | Todo | Preserve its Nucleus adapter contract when affected; the direct Resend path does not become a Nucleus job, and Nucleus does not gain Todo fields. |
 | CRM profile entries, intake, cases, evidence, revisions, advisories, queued steward runs, database, or deployment | CRM | Preserve its bounded Nucleus adapter and prominent nonblocking advisories; Nucleus gains no CRM fields, domain success, scheduling, or retry authority. |
+| Cast company/job identity, source adapters, observations, freshness, local budgets, configuration, exports or deployment | Cast | Keep ordinary HTTP collection separate from Nucleus, CRM stewardship and downstream selection/application/email state; preserve evidence and explicit coverage. |
 | Annals works, physical-library identity, concepts, evidence, reconciliation, inbox, producer acceptance, decision feed, retry, or corpus migration | Annals | Keep primary and decisions libraries isolated; preserve job correlation and adapter behavior when affected; Nucleus does not gain Annals workflow state. |
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
 | Weaver workflow state, stage prompts, repository inputs or outputs, validation, cancellation, recovery, or deployment | Weaver | Preserve its Nucleus invocation and correlation contract; Nucleus does not gain narrative repository authority or retry policy. |
@@ -1208,7 +1246,7 @@ provider registry or documentation storage.
 | Managed-authentication, canonical-refresh, or attended-login behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and check account and service readiness. |
 | Nucleus service layout or installer | Nucleus CLI/packaging | Preserve state/log ownership, rollback, launchd behavior, and requester configuration. |
 | Chancery bundle schema, catalog, contract reader, exact-ID resolver, or directory installation | Chancery | Preserve read-only behavior, failure isolation, exact basis, explicit gaps, complete installed inventory, and provider-owned selectors; do not introduce semantic matching or a product runtime dependency. |
-| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the fifteen-provider source graph, and update only that product's Chancery selectors. |
+| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the sixteen-provider source graph, and update only that product's Chancery selectors. |
 
 ## Guarded change playbooks
 
@@ -1394,6 +1432,9 @@ Use these placement rules to keep the manual current and small:
 - **CRM:** reusable Markdown profile entries, employment-relationship cases,
   supplied content, case revisions, evidence, steward-run state, and conspicuous nonblocking advisories. It is
   not outreach authority or a scheduler.
+- **Cast:** company/job discovery evidence, source coverage and freshness,
+  collection configuration, local budgets and the read handoff. Downstream
+  selection, application packets and email state remain separate.
 - **Annals:** retained source material and evidence-grounded conceptual
   knowledge. It may retain released documentation, but it is not the sole
   editable runbook.
@@ -1464,6 +1505,13 @@ directory.
 - [CLI contract](/Users/joey/rust/cell/crm/docs/cli.md)
 - [Data model](/Users/joey/rust/cell/crm/docs/data-model.md)
 - [User-owned installation](/Users/joey/rust/cell/crm/docs/system-installation.md)
+
+### Cast
+
+- [README](/Users/joey/rust/cell/cast/README.md)
+- [Collection contract](/Users/joey/rust/cell/cast/chancery/manuals/discovery-collect.md)
+- [Read handoff](/Users/joey/rust/cell/cast/chancery/manuals/discovery-explore.md)
+- [Installation and recovery](/Users/joey/rust/cell/cast/chancery/manuals/install-operate.md)
 
 ### Weaver
 

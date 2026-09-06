@@ -22,6 +22,7 @@ members = [
     "clockwork/crates/clockwork",
     "crm/crates/crm",
     "usher/crates/usher",
+    "cast",
 ]
 resolver = "3"
 

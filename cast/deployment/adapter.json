@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "product": "cast",
+  "application": "Cast",
+  "dependencies": [],
+  "description": "Product-owned ordinary Cast installation update.",
+  "deployer": "cast/packaging/macos/deploy-user.sh",
+  "expected_current": true,
+  "proofs": {
+    "payload_sha256": "libexec/cast",
+    "frontend_sha256": [
+      "bin/cast",
+      "package/cast"
+    ],
+    "deployer_sha256": "package/deploy-user.sh"
+  },
+  "payload": "libexec/cast",
+  "allow_absent": true,
+  "bundle_key": "provider_sha256",
+  "bundle_path_lines": false,
+  "source_proofs": {
+    "deployer_sha256": "cast/packaging/macos/deploy-user.sh",
+    "frontend_sha256": "cast/packaging/macos/cast"
+  },
+  "candidate_proofs": {
+    "payload_sha256": "cast"
+  },
+  "bundle_source": "cast/chancery"
+}

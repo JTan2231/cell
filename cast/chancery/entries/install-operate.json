@@ -1,0 +1,167 @@
+{
+  "id": "cast.install.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install or configure Cast discovery",
+  "summary": "Install the Cast CLI and matching provider bundle, initialize private state, inspect readiness and budgets, change collection configuration, or reconcile retained employer ownership.",
+  "use_when": [
+    "Cast should be installed, initialized, diagnosed or explicitly reconfigured.",
+    "The caller needs to inspect local budgets or determine why configured sources are unavailable.",
+    "Existing ATS or older JSON-LD records need the supported employer-ownership correction without resetting paid usage."
+  ],
+  "do_not_use_when": [
+    "A current discovery run or a read-only employer/job export is the requested outcome.",
+    "A schedule, provider subscription purchase, credential change, database deletion or downstream action is intended."
+  ],
+  "outcome": "An installed matching program/documentation release, initialized Cast state, supported diagnostic result, explicitly replaced configuration or transactionally reconciled employer ownership.",
+  "interfaces": [
+    {
+      "label": "Install the tested candidate",
+      "invocation": "/Users/joey/rust/cell/cast/packaging/macos/deploy-user.sh --binary ABSOLUTE_PATH"
+    },
+    {
+      "label": "Initialize state",
+      "invocation": "/Users/joey/.local/bin/cast init"
+    },
+    {
+      "label": "Inspect readiness",
+      "invocation": "/Users/joey/.local/bin/cast doctor"
+    },
+    {
+      "label": "Show configuration",
+      "invocation": "/Users/joey/.local/bin/cast config show"
+    },
+    {
+      "label": "Replace configuration",
+      "invocation": "/Users/joey/.local/bin/cast config set --file PATH"
+    },
+    {
+      "label": "Add a careers source",
+      "invocation": "/Users/joey/.local/bin/cast source add URL [--company-id COMPANY_ID]"
+    },
+    {
+      "label": "Disable collection from a source",
+      "invocation": "/Users/joey/.local/bin/cast source disable SOURCE_ID"
+    },
+    {
+      "label": "Reconcile retained employer ownership",
+      "invocation": "/Users/joey/.local/bin/cast state reconcile-ownership"
+    }
+  ],
+  "effects": [
+    "Deployment stages a content-addressed wrapper, Rust payload, deployer and exact provider bundle and advances only Cast-owned command/provider selectors. It creates no collection database or schedule.",
+    "Init creates private local state. Explicit configuration changes affect subsequent collection; diagnostic reads do not start paid searches.",
+    "The installed wrapper sources ~/.zshrc with output suppressed and starts the Rust payload with only the documented environment and two provider keys.",
+    "Source add retains an explicit source. Ordinary websites may use an existing company ID or a hostname candidate; supported ATS URLs use their canonical provider/tenant owner and reject --company-id. Source disable preserves evidence but removes that source from ordinary collection.",
+    "Ownership reconciliation locally corrects ATS source/job associations, quarantines unproven or shared-host JSON-LD jobs as unknown, restores affected search-candidate names and clears misleading shared-host company domains, website URLs and aliases. It preserves source/job IDs, evidence, paid request accounting, run history and query checkpoints."
+  ],
+  "authority": [
+    "Cast owns its installation, state schema, configuration validation and local allowance accounting.",
+    "The caller owns chosen collection policy and provider accounts; provider balances are separate external facts."
+  ],
+  "success": [
+    "Installation switches command and matching documentation coherently and passes version/help checks.",
+    "Initialization, configuration or diagnosis returns its documented outcome without claiming that an external collection succeeded.",
+    "Ownership repair returns moved_sources, moved_jobs, quarantined_jobs, renamed_candidates and cleared_shared_identities counts after one committed transaction; changed jobs/companies retain identity and gain material revisions."
+  ],
+  "failure_and_recovery": [
+    "Deployment refuses foreign selectors and mismatched provider/candidate versions; a failed switch restores prior Cast selectors.",
+    "Program rollback does not restore domain state. Preserve the state directory consistently before any database recovery, and do not hand-edit database rows.",
+    "Resolve missing keys or provider restrictions separately; configuration changes do not purchase credits or reset accumulated usage."
+  ],
+  "privacy": [
+    "Keys remain in the caller environment and user-owned shell configuration, outside the Cast database and installed provider bundle.",
+    "State and exports may reveal personal search interests and should remain private."
+  ],
+  "does_not_authorize": [
+    "Selecting jobs for the user, creating CRM cases or application packets, sending email, submitting applications, invoking an agent or browser, or enabling a schedule.",
+    "Changing provider billing, automatic purchases, another product installation, or deleting retained state."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user may install Cast, initialize selected state, inspect configuration/readiness, explicitly change collection policy and invoke the supported ownership repair."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Installation requires a tested executable candidate matching provider release, user-owned paths and available macOS shell tools. State operations require the appropriate valid selected directory and configuration."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "The deployer accepts --binary, optional --home and --expected-current. The CLI accepts --state-dir and explicit init, configuration, diagnostic or state reconcile-ownership commands. Ordinary website source controls accept an optional company ID; supported ATS sources reject that override and use their canonical tenant owner."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Deployment exposes matching Cast command and provider selectors. State commands return configuration, readiness, budget information or ownership-repair counts without exposing keys."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Deployment readiness is program integrity, not provider authentication or collection success. Local budgets are conservative Cast counters, not authoritative provider invoices."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Release identity hashes program, frontend, deployer and provider bytes. Provider release and database/config/export schemas remain separate; request-budget units are defined by Cast configuration."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Configuration and diagnostic reads reflect selected local state. External credentials and provider allowances require their own actual provider interactions."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No current provider balance or successful network-collection guarantee follows from installation or local diagnosis."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Installed command is ~/.local/bin/cast; immutable releases are beneath ~/Library/Application Support/Cast/install. Discovery state defaults to ~/.local/share/cast and may be selected explicitly. The wrapper reads THEIRSTACK_API_KEY and BRAVE_SEARCH_API_KEY from ~/.zshrc."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Deployment uses product/catalog locks and atomic current selection with coherent program/provider rollback. Initialization, collection and ownership reconciliation are separate explicit operations. Reconciliation holds one mutation lock and transaction; repeated repair is materially idempotent, while every invocation advances the snapshot revision."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Installation creates no daemon, LaunchAgent, scheduler binding, model job or remote-provider request. No live-state migration is performed by the deployer."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future migration or deployment-latency service level is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Capability version 1 publishes Cast 0.1 installation and state-operation boundaries. Incompatible state changes require an explicit recovery and migration design."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Installed credential loading relies on the user-owned ~/.zshrc executed by zsh; Chancery documents but does not execute or validate that shell configuration.",
+        "target": "user-shell-configuration",
+        "kind": "readiness"
+      }
+    ]
+  },
+  "manual": "manuals/install-operate.md"
+}

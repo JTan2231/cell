@@ -1,0 +1,158 @@
+{
+  "id": "cast.discovery.collect",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Discover companies and collect current jobs",
+  "summary": "Run bounded code-based company discovery and public careers-source collection, retaining company/job evidence, source coverage, freshness and request-budget usage.",
+  "use_when": [
+    "New employers and postings should be found through configured recurring query families.",
+    "Previously discovered employer careers sources should be refreshed with ordinary HTTP."
+  ],
+  "do_not_use_when": [
+    "The request is only to inspect retained results.",
+    "The caller needs exhaustive market coverage, personal job selection, application preparation, contact or a browser/agent fallback."
+  ],
+  "outcome": "One recorded bounded collection run with retained discoveries and explicit completed, incomplete, deferred or failed source work.",
+  "interfaces": [
+    {
+      "label": "Collect due work",
+      "invocation": "/Users/joey/.local/bin/cast run"
+    },
+    {
+      "label": "Collect without waiting for due times",
+      "invocation": "/Users/joey/.local/bin/cast run --force"
+    },
+    {
+      "label": "Use isolated state",
+      "invocation": "/Users/joey/.local/bin/cast --state-dir PATH run"
+    },
+    {
+      "label": "Limit one run",
+      "invocation": "/Users/joey/.local/bin/cast run --source PROVIDER_OR_QUERY_ID --max-requests N"
+    },
+    {
+      "label": "Refresh one posting",
+      "invocation": "/Users/joey/.local/bin/cast job refresh JOB_ID"
+    }
+  ],
+  "effects": [
+    "Reads configured sources over HTTP, may consume TheirStack credits or Brave search allowance, and writes extracted company/job records plus run, source, cursor and budget state.",
+    "Does not retain whole provider responses or invoke another Cell product."
+  ],
+  "authority": [
+    "Cast owns source admission, extracted retained observations, identity correlation and conservative local accounting.",
+    "External sources own their returned facts, public posting availability and provider billing."
+  ],
+  "success": [
+    "The bounded run settles its admitted work and retains both discoveries and explicit coverage/error outcomes.",
+    "Inspect source outcomes and the snapshot separately; process completion does not mean every configured source succeeded or that the job market was exhaustively searched."
+  ],
+  "failure_and_recovery": [
+    "Inspect retained run and source diagnostics before another run. Missing credentials, budget exhaustion and unsupported pages remain explicit gaps.",
+    "A failed or partial fetch does not imply that jobs closed. Later runs retry due work under retained state and budgets."
+  ],
+  "privacy": [
+    "Configured search terms and source requests leave the machine for their providers. Extracted evidence and posting text remain in private local state unless the caller exports it.",
+    "Credentials are supplied through THEIRSTACK_API_KEY and BRAVE_SEARCH_API_KEY and are not printed or stored in collection config."
+  ],
+  "does_not_authorize": [
+    "Selecting jobs for the user, creating CRM cases or application packets, sending email, submitting applications, invoking an agent or browser, or enabling a schedule."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user may invoke configured company discovery and careers-source refresh through the local Cast CLI."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The caller selects initialized Cast state, valid configuration, network access, and credentials for enabled paid providers; local request budgets admit each request."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Inputs are persisted query configuration, current query/source cursors, selected state directory and optional force flag. Force bypasses due-time selection, not request budgets."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Collection emits a run result and retains normalized companies, jobs, source health, query coverage and conservative budget usage."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "First/last seen are Cast observation times. Provider publication/update dates remain separately attributed. Fetch failure and collection incompleteness are not absence or closure. Generic JSON-LD needs a hiring-organization root homepage URL without query/fragment matching the page/job host or its parent employer domain for employer_jsonld_owned attribution. Shared recruiting hosts such as join.com and curriculo.me require a separate adapter; search or directory results alone do not establish employer observations."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Opaque company/job/source identities belong to Cast; native identifiers remain source-scoped. ATS sources use canonical provider/tenant owners independently of linking websites or aggregators. Website-domain and ATS-tenant records can remain separate even when names match. Local counters use TheirStack credits, Brave requests, HTTP requests and elapsed seconds."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Each source outcome records the coverage actually achieved; freshness derives from successful observations, not the latest attempt."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Exhaustive employer coverage, external factual truth, current employment eligibility and provider billing reconciliation are not guaranteed."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The local process uses bounded HTTP adapters. No model, browser, Nucleus, CRM or email capability is invoked."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Collection serializes writers for one state directory, persists checkpoint and budget state, and leaves incomplete work inspectable for subsequent runs."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Default local caps are 200 total and 60 daily TheirStack credits, 1,000 monthly and 30 daily Brave requests, 500 HTTP requests per run, 3,000 daily HTTP requests, a 600-second run deadline and 50 careers-source verifications per run."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No market-coverage, provider-availability, completion-latency or future API-compatibility service level is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Capability version 1 publishes Cast 0.1 collection behavior; configuration and export schema versions remain separate."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future migration or deprecation window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Discovery depends on TheirStack, Brave and Hacker News source APIs when configured. Their external billing, returned data and availability have no dedicated installed Chancery contract.",
+        "target": "discovery-providers",
+        "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "Careers verification depends on employer websites and supported public ATS APIs; no dedicated installed Chancery contract covers those external sources.",
+        "target": "employer-careers-sources",
+        "kind": "external"
+      }
+    ]
+  },
+  "manual": "manuals/discovery-collect.md"
+}

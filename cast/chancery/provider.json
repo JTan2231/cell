@@ -1,0 +1,42 @@
+{
+  "schema_version": 3,
+  "provider": {
+    "id": "cast",
+    "name": "Cast",
+    "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Cast owns retained company and job identities, extracted discovery evidence, collection coverage and freshness, local query configuration, conservative request-budget accounting, source retry state, consistent JSON exports, and its program packaging."
+    ],
+    "not_authoritative_for": [
+      "Publishers and providers own external facts and coverage. Downstream products own personal selection, CRM cases, application packets, application submission and email delivery."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Cast CLI outcomes for company and job discovery, retained-record inspection and export, configuration and diagnosis, and program installation in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help/version display, direct SQLite access, implementation helpers, current remote-provider readiness, scheduled activation, agents, computer use and downstream application work."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Cast is a current-user local CLI. Its database belongs to the selected private state directory; provider credentials arrive through the process environment. The installed wrapper sources ~/.zshrc and passes only the two provider keys and its documented environment."
+    ],
+    "shared_privacy_and_retention": [
+      "Retained state and exports include private search interests, company/job evidence, extracted posting text, source locators and collection history. Ordinary response bodies are transient. API keys do not belong in config, database, command arguments or logs."
+    ],
+    "compatibility_and_retirement": [
+      "Cast provider release, capability contract version, database schema and export schema are distinct. Installed bundles change only through a matching product release."
+    ],
+    "operational_limits": [
+      "Cast uses ordinary Rust and HTTP with explicit local budgets. It invokes no model, Nucleus, CRM steward, computer-use tool or email sender and installs no schedule. External catalog and job coverage is incomplete."
+    ]
+  },
+  "entries": [
+    "entries/discovery-collect.json",
+    "entries/discovery-explore.json",
+    "entries/install-operate.json"
+  ]
+}

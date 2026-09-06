@@ -3,8 +3,8 @@
 # Shared helpers for the checked-in Cell pipeline descriptors. This file is
 # sourced by the CI, release, generator, and self-test entry points.
 
-PIPELINE_EXPECTED_PRODUCT_COUNT=13
-PIPELINE_EXPECTED_PROVIDER_ENTRIES=52
+PIPELINE_EXPECTED_PRODUCT_COUNT=14
+PIPELINE_EXPECTED_PROVIDER_ENTRIES=55
 
 pipeline_products() {
     for descriptor in "$PIPELINE_ROOT"/pipeline/products/*.sh; do
