@@ -8,14 +8,20 @@ subject and plain-text body immediately through Resend from
 email 'Subject' 'Body'
 email 'Subject' - < body.txt
 email --idempotency-key 'decisions/daily/2026-09-01' 'Subject' - < body.txt
+email --idempotency-key 'packets/daily/2026-09-06' --attach resume.pdf 'Jobs' - < body.txt
 ```
 
 The second form reads the body from standard input. An authorized calling
 product can supply one stable idempotency key for one exact message; ordinary
 interactive calls receive a fresh `email/<UUIDv7>` key. Email still sends
-immediately. There is no recipient option, draft store, HTML mode, attachment
+immediately. There is no recipient option, draft store, HTML mode, remote attachment URL
 support, scheduler, daemon, or delivery database. A successful command means
 Resend accepted the submission; it does not prove final Gmail delivery.
+
+Repeat `--attach PATH` for multiple local files. Each file is captured once
+before sending; filenames and exact bytes are part of the idempotent request.
+Only basenames and contents leave the machine, never local source paths.
+Callers must retain the exact files when they own later retries.
 
 ## Build, test, and install
 
@@ -41,7 +47,7 @@ normalized promise, substantive external reliances, exact basis, and explicit
 gaps. Resolution does not load credentials, check Resend readiness, or send a
 message.
 
-Sending discloses the supplied subject and body to Resend and Gmail. The
+Sending discloses the supplied subject, body, and attached filenames and bytes to Resend and Gmail. The
 runtime does not call Chancery; Chancery only reads the documentation staged
 with the installed Email release.
 
@@ -52,3 +58,8 @@ plain-text submission as the CLI, which uses that implementation. Callers own
 send authorization and any supplied occurrence key. `Receipt` means Resend
 accepted the submission. The API does not add configurable addresses, HTML or
 retained delivery state.
+
+`Attachment { filename, content }` and `send_with_attachments(&message,
+&attachments)` extend that interface without changing `Message` or `send`.
+The caller supplies captured bytes and a basename; Email does not read files
+through the Rust API or fetch remote attachments.

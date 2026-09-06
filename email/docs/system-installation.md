@@ -98,5 +98,5 @@ email --idempotency-key 'product/event/2026-09-01' 'Subject' - < body.txt
 ```
 
 Command success proves Resend acceptance. Gmail receipt must be observed
-separately. Sending discloses the exact subject and body to Resend and Gmail;
+separately. Sending discloses the exact subject, body, and attached filenames and bytes to Resend and Gmail;
 a caller key is also disclosed to Resend. Email retains none of them locally.

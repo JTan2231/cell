@@ -61,9 +61,10 @@ separately maintained discovery catalog.
 | Todo | An actionable concern or follow-up should be researched and retained for later. | Concern provenance, routing and its explicit decisions, stable todo identities, dated situation assessments, proposed or accepted designs, open/done state, and working notes. | Work requested for immediate completion, general knowledge, implementation execution, or shared runtime policy. |
 | CRM | Employment-relevant people, opportunities, and contemplated contact should be retained as evidence-grounded cases, or reusable career profile material should be stored. | Its local SQLite library, mutable Markdown profile entries, queued steward runs, immutable case revisions, evidence, and advisory review notes. | Sending or authorizing outreach, scheduled intake, treating an advisory as a gate, or storing CRM domain state in Nucleus. |
 | Cast | Previously unknown employers and job postings should be discovered and monitored through ordinary HTTP. | Private discovery records, company/job identities, extracted evidence, source coverage and freshness, local request budgets, query configuration and consistent exports. | Personal selection, CRM stewardship, application packets, email, application submission or agent execution. |
+| Job Packets (source prototype) | A retained Cast opportunity needs a private paragraph brief and resume with only Jackson bullets tailored, or a dated edition should be previewed and explicitly sent. | Captured posting/career/template inputs, accepted Nucleus stages, fixed-template rendering, opportunity exclusion, frozen editions and recorded send outcomes. | Discovery, CRM editing, changes to fixed resume content, employer contact, applications, or an installed recurring delivery service. |
 | Annals | Immutable source material should be retained or reconciled with an evidence-grounded conceptual corpus, or that corpus should be searched or explored. | Each selected physical library's retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, cross-library federation, or account telemetry. |
 | Weaver | Authored repository inputs should become the current five-stage public-facing narrative outputs. | Current-run admission, stage order and input snapshots, repository output writes, validation, cancellation intent, and recovery. | Publishing, editing a public profile, treating generated text as factual authority, or general job orchestration. |
-| Email | A plain-text email should be sent to the single fixed recipient. | The synchronous Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, or agent execution. |
+| Email | A plain-text email, optionally with authorized local file attachments, should be sent to the single fixed recipient. | The synchronous frozen Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, remote attachment URLs, or agent execution. |
 | Conversations | Codex tasks on this Mac should be listed, inspected, or searched. | A read-only normalized view over the normal user's Codex App Server. | Decision classification, durable projections, live-process supervision, or Nucleus's isolated job history. |
 | Krisis | Attributable decisions in completed root user turns should be identified and delivered as immutable accounts to the dedicated Annals decisions library. | The observation baseline and coverage, bounded classification, source anchors, account projection, durable outbox, Annals acceptance receipts, and recovery. | Judging truth, importance, applicability, enactment, current force, review state, supersession, retaining the canonical account library, or sending a digest. |
 | Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from accepted accounts in the dedicated Annals decisions library. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, decision-feed intake, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, transcript storage, or interpreting Annals retention as semantic truth. |
@@ -203,6 +204,58 @@ and retain their own selection, application and notification state. Collection
 success is the committed evidence and explicit coverage outcome; provider
 failure or partial collection cannot establish that a job closed.
 
+Job Packets is a source-built requester prototype, not an installed or
+activated service. Its requester program is `job-packets`; one packet ID
+correlates a brief job followed by a resume job, both using exact model
+`gpt-5.6-sol` at `max` effort. The runner consumes Cast's supported export,
+fetches full employer posting evidence, and captures CRM profile entries
+through supported list/read operations. Each model independently chooses
+which entries to inspect through `list_career_entries` and
+`read_career_entry`, served from the same retained career snapshot. Separate
+CRM reads are not a transactional snapshot; capture checks entry timestamps
+and refuses an incomplete list. CRM retains editing authority.
+
+The brief is one plain paragraph of at most 150 words plus a private pursuit
+assessment. Only a worthwhile opportunity proceeds to resume preparation. The
+resume model authors only Jackson work-experience bullet text and private
+career-entry references. The renderer escapes that text and preserves every
+byte outside the original resume's Jackson bullet span. The original
+template, captured inputs, exact requests, tool receipts, accepted results,
+editable source and PDF remain requester-owned private artifacts. Both jobs
+have workspace access `none`, no local execution or web search, and no launch
+context. Validated stage submission and successful fixed-template rendering,
+not final model prose, establish packet readiness.
+
+Job Packets freezes at most three previously unsent ready packets in one dated
+edition, including exact paragraphs, copied PDFs and attachment digests. It
+rechecks posting evidence before creating a new edition and reserves selected
+opportunities against later editions. Explicit `send` validates retained
+attachment digests and invokes Email with a stable edition key; only an
+`Accepted ID` receipt records submission acceptance. Uncertain sends remain
+held, with no blind resend or current reconciliation command. Accepted stages
+survive later failures; there is no automatic replacement Nucleus job or
+direct-Codex fallback. No live delivery proof follows from this implementation.
+
+The separate `preview DAY --ad-hoc RUN_ID` / `send DAY --ad-hoc RUN_ID` path
+supports explicitly authorized test emails from retained completed packets.
+It reads the packet database without opening it for writes and performs no
+Cast, CRM, posting HTTP, Nucleus or rendering call. The `[TEST]` payload,
+copied PDFs, hashes, stable key and receipt live under private
+`ad-hoc/RUN_ID/`; normal packet reservations, editions and sent flags remain
+unchanged. A repeated accepted test is a no-op, and uncertainty stays held.
+Retained posting evidence is not refreshed, so this path supplies no new
+vacancy-freshness proof and consumes no Cast API budget.
+Optional reviewed paragraph overrides are frozen only in the test occurrence
+beside the original accepted brief and source-state hashes; ordinary brief
+and resume artifacts remain unchanged. Packet selection may include previously
+sent or reserved records because ad hoc test history is independent.
+
+The stored defaults are three packets and 09:00 `America/Chicago`, with no
+candidate or token budget. Execution, source and rendering timeouts still
+apply. These settings install no Clockwork binding or LaunchAgent and provide
+no scheduled activation. A future production scheduler, installer and
+recovery procedure remain separate integration work.
+
 Weaver submits five content-only jobs in order. Its detached interactive-lineage
 worker owns repository reads and atomic Markdown output writes; Nucleus and the
 Codex process never receive repository filesystem authority. Weaver success
@@ -212,6 +265,22 @@ Nucleus jobs.
 Email is a synchronous CLI that sends plain-text messages directly to Resend.
 It creates no Nucleus job, uses no Nucleus authentication, owns no daemon or
 domain database, and does not depend on Nucleus health.
+The source attachment extension accepts repeatable `--attach PATH` for local
+regular files, including resume PDFs. It captures each file once before
+network submission; attachment order, basenames and exact encoded bytes belong
+to the same frozen request and idempotency key throughout bounded retries.
+Only basenames and contents are transmitted, never local source paths. An
+upstream caller owns authorization and must preserve exact files for any later
+same-key invocation. `Accepted ID` means Resend accepted the message, not Gmail
+receipt. An older installed Email release without attachment contract 4 cannot
+serve attachment sends. For one authorized ad hoc test, Job Packets accepts an
+absolute `--email-executable` override without changing normal configuration.
+A private temporary copy of Email's existing credential wrapper may select
+the tested source binary by replacing only its two payload-executable paths.
+Preserve disabled tracing, secret loading, scrubbed environment and stdin
+handling; never write the key to an argument, file or output. This selects a
+tested candidate for that invocation without deploying Email. Remove the
+temporary wrapper afterward and retain the isolated test occurrence/receipt.
 
 Conversations is a stateless read-only adapter over the normal user's Codex App
 Server. It is deliberately separate from Nucleus's isolated per-job Codex home
@@ -282,7 +351,7 @@ lexical precedent candidates; the agent checks applicability and current
 contracts before reuse.
 
 Nucleus, Annals, Annals Usage, Todo, Chancery, Weaver, Email, Conversations,
-Krisis, Semantics, Geste, Clockwork, CRM, Usher and Cast share the Cell source
+Krisis, Semantics, Geste, Clockwork, CRM, Usher, Cast and Job Packets share the Cell source
 repository, Cargo workspace, and lockfile. That source layout does not
 merge their release, installation, state, backup, recovery, or domain-success
 boundaries. Product runtimes do not call Chancery. Their installers only
@@ -649,6 +718,16 @@ releases under `~/Library/Application Support/Email/install/`, and the
 `providers/email` selector. Email keeps no application state; send readiness
 depends on the installed binary, `RESEND_API_KEY`, and Resend, not on Nucleus or
 Chancery readiness.
+
+The Job Packets source CLI defaults to `~/.local/share/job-packets`; global
+`--state-dir` selects another absolute private directory. Back up its database,
+configuration, original template, packet directories and frozen editions
+together while the runner is inactive. It has no installed CLI selector,
+production deployment adapter or enabled schedule. Its checked-in Chancery
+bundle and `Semantics-Project: cell` marker declare source participation;
+they do not imply an installed provider or a separate registered semantic
+repository. Before Nucleus maintenance, prevent new manual Job Packets work
+and let any admitted packet stages settle as for other requesters.
 
 Annals, Todo, and Weaver have their own state, installation, backup, and recovery
 boundaries. Do not infer their state from Nucleus or copy their detailed
@@ -1348,6 +1427,7 @@ provider registry or documentation storage.
 | Todo concerns, routing and explicit decisions, identities, assessments, designs, lifecycle, provenance, database, email delivery, or deployment | Todo | Preserve its Nucleus adapter contract when affected; the direct Resend path does not become a Nucleus job, and Nucleus does not gain Todo fields. |
 | CRM profile entries, intake, cases, evidence, revisions, advisories, queued steward runs, database, or deployment | CRM | Preserve its bounded Nucleus adapter and prominent nonblocking advisories; Nucleus gains no CRM fields, domain success, scheduling, or retry authority. |
 | Cast company/job identity, source adapters, observations, freshness, local budgets, configuration, exports or deployment | Cast | Keep ordinary HTTP collection separate from Nucleus, CRM stewardship and downstream selection/application/email state; preserve evidence and explicit coverage. |
+| Job Packets source capture, constrained resume authoring, stages, editions or send history | Job Packets | Keep career editing in CRM, discovery in Cast, execution in Nucleus and acceptance transport in Email. Preserve fixed resume content and held uncertain sends; source defaults do not activate a schedule. |
 | Annals works, physical-library identity, concepts, evidence, reconciliation, inbox, producer acceptance, decision feed, retry, or corpus migration | Annals | Keep primary and decisions libraries isolated; preserve job correlation and adapter behavior when affected; Nucleus does not gain Annals workflow state. |
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
 | Weaver workflow state, stage prompts, repository inputs or outputs, validation, cancellation, recovery, or deployment | Weaver | Preserve its Nucleus invocation and correlation contract; Nucleus does not gain narrative repository authority or retry policy. |
@@ -1558,6 +1638,9 @@ Use these placement rules to keep the manual current and small:
 - **Cast:** company/job discovery evidence, source coverage and freshness,
   collection configuration, local budgets and the read handoff. Downstream
   selection, application packets and email state remain separate.
+- **Job Packets:** private captured career/posting/template inputs, accepted
+  brief and Jackson-bullet stages, rendered resumes, dated editions and send
+  outcomes. Production scheduling and installation are not yet implemented.
 - **Annals:** retained source material and evidence-grounded conceptual
   knowledge. It may retain released documentation, but it is not the sole
   editable runbook.
@@ -1635,6 +1718,11 @@ directory.
 - [Collection contract](/Users/joey/rust/cell/cast/chancery/manuals/discovery-collect.md)
 - [Read handoff](/Users/joey/rust/cell/cast/chancery/manuals/discovery-explore.md)
 - [Installation and recovery](/Users/joey/rust/cell/cast/chancery/manuals/install-operate.md)
+
+### Job Packets (source prototype)
+
+- [README](/Users/joey/rust/cell/job-packets/README.md)
+- [Preparation, preview, send and recovery contract](/Users/joey/rust/cell/job-packets/chancery/manuals/packet-prepare.md)
 
 ### Weaver
 

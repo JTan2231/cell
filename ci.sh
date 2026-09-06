@@ -6,7 +6,7 @@ ROOT=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 
 usage() {
     printf '%s\n' \
-        'Usage: ./ci.sh [--verbose] [nucleus|annals|todo|chancery|weaver|email|conversations|krisis|decisions|semantics|geste|clockwork|crm|usher|cast]...'
+        'Usage: ./ci.sh [--verbose] [nucleus|annals|todo|chancery|weaver|email|conversations|krisis|decisions|semantics|geste|clockwork|crm|usher|cast|job-packets]...'
 }
 
 verbose=
@@ -17,7 +17,7 @@ fi
 
 if [ "$#" -eq 0 ]; then
     set -- nucleus annals todo chancery weaver email conversations krisis \
-        semantics geste clockwork crm usher cast
+        semantics geste clockwork crm usher cast job-packets
 fi
 
 scope=$(printf '%s ' "$@")
@@ -37,6 +37,7 @@ clockwork_selected=0
 crm_selected=0
 usher_selected=0
 cast_selected=0
+job_packets_selected=0
 for project in "$@"; do
     case "$project" in
         nucleus) nucleus_selected=1 ;;
@@ -53,6 +54,7 @@ for project in "$@"; do
         crm) crm_selected=1 ;;
         usher) usher_selected=1 ;;
         cast) cast_selected=1 ;;
+        job-packets) job_packets_selected=1 ;;
         *) usage >&2; exit 2 ;;
     esac
 done
@@ -75,8 +77,8 @@ for project in "$@"; do
     esac
 done
 
-if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$krisis_selected$semantics_selected$geste_selected$clockwork_selected$crm_selected$usher_selected$cast_selected" = \
-    11111111111111 ]
+if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$krisis_selected$semantics_selected$geste_selected$clockwork_selected$crm_selected$usher_selected$cast_selected$job_packets_selected" = \
+    111111111111111 ]
 then
     scope=all
     python3 "$ROOT/ci_broker/client.py" run --quiet-result $verbose \

@@ -1,8 +1,9 @@
 # Send a personal email now
 
 Email sends one immediate plain-text message from its product-fixed sender to
-its fixed personal recipient. Use it after the user explicitly asks to send
-the supplied or approved message, or from an installed product whose contract
+its fixed personal recipient, with optional local file attachments. Use it
+after the user explicitly asks to send the supplied or approved message, or
+from an installed product whose contract
 already grants standing authority for the exact kind of notification.
 
 ## Send
@@ -28,6 +29,28 @@ payload can supply its stable idempotency key:
   'Subject' - < /absolute/path/to/body.txt
 ```
 
+Attach a local file with `--attach PATH`, repeating the option for more files:
+
+```sh
+/Users/joey/.local/bin/email \
+  --idempotency-key 'packets/daily/2026-09-06' \
+  --attach /absolute/job-one-resume.pdf --attach /absolute/job-two-resume.pdf \
+  'Daily jobs' - < /absolute/body.txt
+```
+
+Each attachment must be an authorized, readable regular local file with a
+UTF-8 basename containing no control characters or path separators. Relative
+paths use the caller's working directory. The CLI captures files once before
+any network request and transmits only basenames and base64-encoded bytes,
+never source paths. File-read errors do not echo paths or contents. Remote attachment
+URLs are unsupported. The full payload stays in memory until the command
+ends, and provider message-size and file-type limits still apply.
+
+Attachment order, filenames, and bytes belong to the exact idempotent payload.
+Retries within one invocation never reopen files. A later invocation reads
+them again: the caller must preserve the exact files and ordering for the same
+key. Email retains no attachment copy or send history after exit.
+
 The key must contain 1 to 256 visible ASCII characters without whitespace.
 It must identify that exact payload and contain no secret or message content.
 Resend retains idempotency keys for 24 hours; the same key and payload
@@ -41,8 +64,8 @@ command arguments, message text, product files, or Chancery contract.
 
 ## Authority and proof
 
-Email accepts the caller-provided subject and body, fixes both addresses,
-and submits the message immediately to Resend. A product caller, not Email,
+Email accepts the caller-provided subject, body, and attachments, fixes both
+addresses, and submits the message immediately to Resend. A product caller, not Email,
 owns standing authority, scheduling, occurrence state, rendering, and stable
 key selection. Email has no draft, preview, scheduler, daemon, local send
 history, or background retry queue.
@@ -53,10 +76,11 @@ delivery, spam classification, and inbox receipt. When the requested outcome
 includes delivery confirmation, inspect Gmail separately rather than inferring
 receipt from process exit.
 
-Sending discloses the exact subject and body to Resend and Gmail. A supplied
-idempotency key is disclosed to Resend as well. Email retains none of them
+Sending discloses the exact subject, body, and attached filenames and bytes to
+Resend and Gmail. A supplied idempotency key is disclosed to Resend as well.
+Email retains none of them
 locally. Do not invoke it for drafting, revising, or discussing a message, for
-another recipient, or for HTML, attachments, carbon copies, scheduling, or
+another recipient, or for HTML, remote attachment URLs, carbon copies, scheduling, or
 delivery tracking. The option does not itself authorize a send.
 
 On input, credential, network, or Resend failure, preserve the error for

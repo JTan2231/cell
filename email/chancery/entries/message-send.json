@@ -1,27 +1,28 @@
 {
   "id": "email.message.send",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Send a personal email now",
-  "summary": "Send a caller-provided subject and plain-text body immediately to the fixed personal recipient through Resend.",
+  "summary": "Send a caller-provided subject and plain-text body with optional local file attachments immediately to the fixed personal recipient through Resend.",
   "use_when": [
-    "The user explicitly asks to send an email now to their fixed personal inbox and supplies or approves the subject and body.",
+    "The user explicitly asks to send an email now to their fixed personal inbox and supplies or approves the subject, body, and any attachment filenames and bytes.",
     "A previously drafted message should now be sent exactly as approved.",
     "An installed local product has explicit standing authority for its defined immediate notification, owns the occurrence and exact frozen message, and supplies a stable idempotency key."
   ],
   "do_not_use_when": [
     "The user asks only to draft, revise, preview, or discuss an email.",
     "The intended recipient is anyone other than the fixed personal inbox.",
-    "The request needs HTML, attachments, carbon copies, scheduling, or delivery tracking."
+    "The request needs HTML, remote attachment URLs, carbon copies, scheduling, or delivery tracking."
   ],
-  "outcome": "Resend accepts one immediate plain-text email submission containing the caller-provided subject and body for the fixed recipient.",
+  "outcome": "Resend accepts one immediate plain-text email submission containing the caller-provided subject, body, and any attachment filenames and bytes for the fixed recipient.",
   "effects": [
     "Reads `RESEND_API_KEY` from the process environment and makes an authenticated network request to Resend.",
-    "Discloses the supplied subject and body to Resend and the fixed recipient's Gmail provider.",
+    "Discloses the supplied subject, body, and any attachment filenames and bytes to Resend and the fixed recipient's Gmail provider.",
     "Uses either a fresh generated idempotency key or a validated caller-supplied key in the Resend request.",
-    "Uses product-fixed sender and recipient addresses; callers cannot override either address."
+    "Uses product-fixed sender and recipient addresses; callers cannot override either address.",
+    "Reads explicitly selected local regular files once before any network request and includes their filenames and exact bytes as attachments."
   ],
   "authority": [
     "Email owns the fixed addresses, request construction, and command result.",
@@ -39,10 +40,11 @@
     "After ambiguous transport failure, inspect Resend before retrying when avoiding a duplicate matters."
   ],
   "privacy": [
-    "The exact subject and body leave the machine for Resend and Gmail when the command sends.",
+    "The exact subject, body, and any attachment filenames and bytes leave the machine for Resend and Gmail when the command sends.",
     "A caller-supplied idempotency key also leaves the machine for Resend and must not contain secrets or message content.",
-    "Email does not retain the subject, body, API key, or a delivery history in local product state.",
-    "The installed wrapper sources `~/.zshrc`, extracts only `RESEND_API_KEY`, and scrubs unrelated caller environment variables before starting the payload."
+    "Email does not retain the subject, body, attachments, API key, or a delivery history in local product state.",
+    "The installed wrapper sources `~/.zshrc`, extracts only `RESEND_API_KEY`, and scrubs unrelated caller environment variables before starting the payload.",
+    "Only attachment basenames and captured contents are transmitted; local source paths are not included in the provider payload or error diagnostics."
   ],
   "interfaces": [
     {
@@ -56,6 +58,10 @@
     {
       "label": "Send one product-owned occurrence",
       "invocation": "/Users/joey/.local/bin/email --idempotency-key KEY SUBJECT -"
+    },
+    {
+      "label": "Send local attachments",
+      "invocation": "/Users/joey/.local/bin/email --idempotency-key KEY --attach /absolute/resume.pdf SUBJECT -"
     }
   ],
   "does_not_authorize": [
@@ -78,7 +84,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "A real send requires explicit current-user authority or a calling product's documented standing authority, an approved exact subject and plain-text body, the product-fixed addresses, a valid RESEND_API_KEY, network access, and Resend availability."
+        "statement": "A real send requires explicit current-user authority or a calling product's documented standing authority, an approved exact subject and plain-text body, the product-fixed addresses, a valid RESEND_API_KEY, network access, and Resend availability. Any attachments must be authorized for disclosure and readable regular local files."
       },
       {
         "status": "declared",
@@ -88,11 +94,11 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "The supported CLI takes one required UTF-8 subject and one required UTF-8 plain-text body, with a body value of '-' selecting complete standard input, plus an optional caller-owned idempotency key."
+        "statement": "The supported CLI takes one required UTF-8 subject and one required UTF-8 plain-text body, with a body value of '-' selecting complete standard input, plus an optional caller-owned idempotency key. Repeatable --attach PATH captures each regular local file once; transmitted names are UTF-8 basenames without control characters or path separators. Remote URLs are unsupported."
       },
       {
         "status": "unsupported",
-        "statement": "Recipients, senders, HTML, attachments, carbon copies, schedules, drafts, previews, delivery callbacks, API keys in arguments, and hidden occurrence authority are not accepted inputs."
+        "statement": "Recipients, senders, HTML, remote attachment URLs, carbon copies, schedules, drafts, previews, delivery callbacks, API keys in arguments, and hidden occurrence authority are not accepted inputs."
       }
     ],
     "outputs": [
@@ -136,7 +142,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Each invocation freezes and submits the complete provided subject and body immediately, preserves standard input, and reports the acceptance or final bounded failure observed during that command."
+        "statement": "Each invocation freezes and submits the complete provided subject, body, and any attachment filenames and bytes immediately, preserves standard input, and reports the acceptance or final bounded failure observed during that command."
       },
       {
         "status": "declared",
@@ -164,7 +170,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "One command freezes the request and selected key, submits immediately, and retries only transport errors, rate limits, and server errors at most twice using the identical bytes and key."
+        "statement": "One command freezes the request and selected key, submits immediately, and retries only transport errors, rate limits, and server errors at most twice using the identical bytes and key. Attachment order, filenames, and base64-encoded captured bytes are part of the frozen request; retries never reopen attachment files."
       },
       {
         "status": "declared",
@@ -178,11 +184,11 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Each invocation supports one synchronous immediate plain-text message, one fixed sender, one fixed recipient, one optional bounded key, and no more than three attempts."
+        "statement": "Each invocation supports one synchronous immediate plain-text message, one fixed sender, one fixed recipient, one optional bounded key, and no more than three attempts. Attachment bytes are held in memory for the invocation and remain subject to Resend message-size and file-type limits."
       },
       {
         "status": "unsupported",
-        "statement": "There is no draft, preview, HTML, attachment, copy, recipient option, scheduler, daemon, background retry queue, retained delivery database, or final-receipt observer."
+        "statement": "There is no draft, preview, HTML, remote attachment URL, copy, recipient option, scheduler, daemon, background retry queue, retained delivery database, or final-receipt observer."
       },
       {
         "status": "unspecified",
@@ -192,7 +198,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Capability contract version 3 includes caller-supplied idempotency keys and remains distinct from the Email product and provider release and from Resend's external API behavior."
+        "statement": "Capability contract version 4 adds optional local attachments while preserving plain-text invocation and caller-supplied idempotency behavior; Message and send remain source-compatible and send_with_attachments extends the Rust API."
       },
       {
         "status": "unspecified",

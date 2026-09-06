@@ -4,8 +4,10 @@ pub mod api;
 
 use std::fmt;
 use std::io;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use base64::Engine as _;
 use clap::Parser;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT};
 use serde::{Deserialize, Serialize};
@@ -27,6 +29,9 @@ struct Cli {
     /// Stable caller-owned key used to deduplicate this exact request.
     #[arg(long, value_name = "KEY", value_parser = parse_idempotency_key)]
     idempotency_key: Option<String>,
+    /// Local file to attach; repeat for multiple files. Reads exact bytes before sending.
+    #[arg(long = "attach", value_name = "PATH")]
+    attachments: Vec<PathBuf>,
     /// Email subject.
     subject: String,
     /// Plain-text body, or - to read UTF-8 text from stdin.
@@ -39,6 +44,14 @@ struct ResendRequest<'a> {
     to: [&'static str; 1],
     subject: &'a str,
     text: &'a str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    attachments: Vec<ResendAttachment<'a>>,
+}
+
+#[derive(Serialize)]
+struct ResendAttachment<'a> {
+    filename: &'a str,
+    content: String,
 }
 
 #[derive(Deserialize)]
@@ -81,11 +94,19 @@ pub async fn main_entry() {
 async fn run() -> AppResult<()> {
     let cli = Cli::parse();
     let body = read_body(&cli.body, io::stdin().lock())?;
-    let receipt = api::send(&api::Message {
-        subject: cli.subject,
-        body,
-        idempotency_key: cli.idempotency_key,
-    })
+    let attachments = cli
+        .attachments
+        .iter()
+        .map(|path| read_attachment(path))
+        .collect::<AppResult<Vec<_>>>()?;
+    let receipt = api::send_with_attachments(
+        &api::Message {
+            subject: cli.subject,
+            body,
+            idempotency_key: cli.idempotency_key,
+        },
+        &attachments,
+    )
     .await?;
     println!("{receipt}");
     Ok(())
@@ -101,6 +122,40 @@ fn read_body(argument: &str, mut input: impl io::Read) -> AppResult<String> {
         .read_to_string(&mut body)
         .map_err(|_| AppError::new("unable to read a UTF-8 email body from stdin"))?;
     Ok(body)
+}
+
+fn validate_attachment_filename(filename: &str) -> AppResult<()> {
+    if filename.is_empty()
+        || filename == "."
+        || filename == ".."
+        || filename
+            .chars()
+            .any(|character| character.is_control() || character == '/' || character == '\\')
+    {
+        return Err(AppError::new(
+            "attachment filename must be a nonempty UTF-8 basename without control characters",
+        ));
+    }
+    Ok(())
+}
+
+fn read_attachment(path: &Path) -> AppResult<api::Attachment> {
+    let filename = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| AppError::new("attachment must have a UTF-8 filename"))?;
+    validate_attachment_filename(filename)?;
+    let metadata = std::fs::metadata(path)
+        .map_err(|_| AppError::new("unable to read local attachment file"))?;
+    if !metadata.is_file() {
+        return Err(AppError::new("attachment must be a regular local file"));
+    }
+    let content =
+        std::fs::read(path).map_err(|_| AppError::new("unable to read local attachment file"))?;
+    Ok(api::Attachment {
+        filename: filename.to_owned(),
+        content,
+    })
 }
 
 fn resend_api_key() -> AppResult<String> {
@@ -138,6 +193,7 @@ async fn send_to(
     idempotency_key: &str,
     subject: &str,
     body: &str,
+    attachments: &[api::Attachment],
 ) -> AppResult<String> {
     let mut headers = HeaderMap::new();
     let mut authorization = HeaderValue::from_str(&format!("Bearer {api_key}")).map_err(|_| {
@@ -160,6 +216,13 @@ async fn send_to(
         to: [TO],
         subject,
         text: body,
+        attachments: attachments
+            .iter()
+            .map(|attachment| ResendAttachment {
+                filename: &attachment.filename,
+                content: base64::engine::general_purpose::STANDARD.encode(&attachment.content),
+            })
+            .collect(),
     };
 
     for attempt in 0..=RETRY_DELAYS.len() {
@@ -220,8 +283,8 @@ mod tests {
     use uuid::{Uuid, Version};
 
     use super::{
-        Cli, FROM, TO, new_idempotency_key, parse_idempotency_key, read_body, send_to,
-        validate_api_key,
+        Cli, FROM, TO, new_idempotency_key, parse_idempotency_key, read_attachment, read_body,
+        send_to, validate_api_key, validate_attachment_filename,
     };
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -244,6 +307,7 @@ mod tests {
             cli,
             Cli {
                 idempotency_key: None,
+                attachments: Vec::new(),
                 subject: "A subject".to_owned(),
                 body: "A body".to_owned(),
             }
@@ -269,6 +333,7 @@ mod tests {
             cli,
             Cli {
                 idempotency_key: Some("decisions/daily/2026-09-01".to_owned()),
+                attachments: Vec::new(),
                 subject: "A subject".to_owned(),
                 body: "A body".to_owned(),
             }
@@ -278,6 +343,55 @@ mod tests {
             Cli::try_parse_from(["email", "--idempotency-key", "", "A subject", "A body",])
                 .is_err()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn cli_accepts_repeated_local_attachments() -> TestResult {
+        let cli = Cli::try_parse_from([
+            "email",
+            "--attach",
+            "/private/a.pdf",
+            "--attach",
+            "/private/b.pdf",
+            "Subject",
+            "-",
+        ])?;
+        assert_eq!(
+            cli.attachments,
+            [
+                std::path::PathBuf::from("/private/a.pdf"),
+                std::path::PathBuf::from("/private/b.pdf")
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn attachments_capture_bytes_without_transmitting_paths() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("resume.pdf");
+        std::fs::write(&path, b"%PDF-fixture\0\xff")?;
+        let attachment = read_attachment(&path)?;
+        std::fs::write(&path, b"changed after capture")?;
+        assert_eq!(attachment.filename, "resume.pdf");
+        assert_eq!(attachment.content, b"%PDF-fixture\0\xff");
+        assert!(read_attachment(directory.path()).is_err());
+        let missing = directory.path().join("secret-not-found.pdf");
+        let error = read_attachment(&missing)
+            .err()
+            .ok_or("missing file was accepted")?;
+        assert!(!error.to_string().contains("secret-not-found"));
+        for invalid in [
+            "",
+            ".",
+            "..",
+            "/private/resume.pdf",
+            "..\\resume.pdf",
+            "bad\nname.pdf",
+        ] {
+            assert!(validate_attachment_filename(invalid).is_err());
+        }
         Ok(())
     }
 
@@ -362,6 +476,7 @@ mod tests {
             "email/fixture",
             "Hello ✓",
             "First line\nSecond line",
+            &[],
         )
         .await?;
         assert_eq!(email_id, "email_123");
@@ -407,7 +522,19 @@ mod tests {
             },
         ])?;
 
-        let email_id = send_to(&endpoint, "test-secret", "email/frozen", "Subject", "Body").await?;
+        let attachment = super::api::Attachment {
+            filename: "resume.pdf".to_owned(),
+            content: b"%PDF-1.7\n".to_vec(),
+        };
+        let email_id = send_to(
+            &endpoint,
+            "test-secret",
+            "email/frozen",
+            "Subject",
+            "Body",
+            &[attachment],
+        )
+        .await?;
         assert_eq!(email_id, "email_after_retry");
 
         let first = requests.recv_timeout(Duration::from_secs(2))?;
@@ -422,6 +549,14 @@ mod tests {
         }
         assert_eq!(split_request(&first)?.1, split_request(&second)?.1);
         assert_eq!(split_request(&second)?.1, split_request(&third)?.1);
+        let payload: Value = serde_json::from_str(split_request(&first)?.1)?;
+        assert_eq!(
+            payload["attachments"],
+            serde_json::json!([{
+                "filename": "resume.pdf",
+                "content": "JVBERi0xLjcK"
+            }])
+        );
         finish_server(server)?;
         assert!(requests.try_recv().is_err());
         Ok(())
@@ -440,6 +575,7 @@ mod tests {
             "email/fixture",
             "Subject",
             "private body",
+            &[],
         )
         .await
         .err()
@@ -463,10 +599,17 @@ mod tests {
             reason: "OK",
             body: r#"{"id":"  ","message":"test-secret"}"#,
         }])?;
-        let error = send_to(&endpoint, "test-secret", "email/fixture", "Subject", "Body")
-            .await
-            .err()
-            .ok_or("invalid response unexpectedly succeeded")?;
+        let error = send_to(
+            &endpoint,
+            "test-secret",
+            "email/fixture",
+            "Subject",
+            "Body",
+            &[],
+        )
+        .await
+        .err()
+        .ok_or("invalid response unexpectedly succeeded")?;
         assert_eq!(error.to_string(), "Resend returned an invalid email ID");
         assert!(!error.to_string().contains("test-secret"));
         finish_server(server)?;

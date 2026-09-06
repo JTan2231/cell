@@ -7,7 +7,7 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Email owns construction and synchronous submission of one caller-provided plain-text message from its fixed sender to its fixed personal recipient, including bounded request retry and command reporting.",
+      "Email owns construction and synchronous submission of one caller-provided plain-text message with optional local file attachments from its fixed sender to its fixed personal recipient, including bounded request retry and command reporting.",
       "Email owns use of a generated or caller-supplied idempotency key for the frozen Resend request and reports the message identifier returned on Resend acceptance."
     ],
     "not_authoritative_for": [
@@ -16,11 +16,11 @@
     ],
     "inventory": {
       "covers": [
-        "All supported user-facing Email CLI outcomes for immediate plain-text submission to the product-fixed recipient in this release."
+        "All supported user-facing Email CLI outcomes for immediate plain-text submission with optional local file attachments to the product-fixed recipient in this release."
       ],
       "completeness": "complete",
       "excludes": [
-        "Help and version display, installation and release operations, drafting, previews, arbitrary recipients or senders, HTML, attachments, copies, scheduling, queues, delivery tracking, and live external readiness are outside this inventory claim."
+        "Help and version display, installation and release operations, drafting, previews, arbitrary recipients or senders, HTML, remote attachment URLs, copies, scheduling, queues, delivery tracking, and live external readiness are outside this inventory claim."
       ]
     },
     "shared_access_and_trust": [
@@ -28,8 +28,8 @@
       "Catalog presence, command availability, and possession of an idempotency key do not authorize sending."
     ],
     "shared_privacy_and_retention": [
-      "A real send discloses the exact subject and body to Resend and Gmail and discloses any caller-supplied idempotency key to Resend.",
-      "Email retains no subject, body, API key, idempotency key, queue, or delivery history in local product state."
+      "A real send discloses the exact subject, body, and any attachment filenames and bytes to Resend and Gmail and discloses any caller-supplied idempotency key to Resend.",
+      "Email retains no subject, body, attachments, API key, idempotency key, queue, or delivery history in local product state."
     ],
     "compatibility_and_retirement": [
       "Provider release identifies the installed bundle, while entry contract version identifies the supported send semantics.",

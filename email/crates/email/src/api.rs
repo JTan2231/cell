@@ -11,6 +11,14 @@ pub struct Message {
     pub idempotency_key: Option<String>,
 }
 
+/// One caller-owned file attachment, already captured as exact bytes.
+/// Only the filename and content are disclosed; local paths are not transmitted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Attachment {
+    pub filename: String,
+    pub content: Vec<u8>,
+}
+
 /// Resend accepted the submission; this is not a final-delivery receipt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Receipt {
@@ -29,6 +37,22 @@ impl std::fmt::Display for Receipt {
 /// # Errors
 /// Returns the existing input, credential or bounded transport failure.
 pub async fn send(message: &Message) -> Result<Receipt, Error> {
+    send_with_attachments(message, &[]).await
+}
+
+/// Submit a fixed-recipient message with captured file attachments.
+/// Attachment order, names, and bytes form part of the exact idempotent payload.
+/// The caller owns authorization for disclosing each attachment as well as the body.
+///
+/// # Errors
+/// Returns an invalid attachment filename, input, credential, or transport failure.
+pub async fn send_with_attachments(
+    message: &Message,
+    attachments: &[Attachment],
+) -> Result<Receipt, Error> {
+    for attachment in attachments {
+        crate::validate_attachment_filename(&attachment.filename)?;
+    }
     let key = match &message.idempotency_key {
         Some(key) => crate::parse_idempotency_key(key).map_err(Error::new)?,
         None => crate::new_idempotency_key(),
@@ -40,6 +64,7 @@ pub async fn send(message: &Message) -> Result<Receipt, Error> {
         &key,
         &message.subject,
         &message.body,
+        attachments,
     )
     .await?;
     Ok(Receipt { id })
