@@ -109,6 +109,26 @@ pub(crate) fn run(
         ));
     }
     let expected_digest = store.observation_job_request_digest(&job_id)?;
+    let output = verify_nucleus(socket, &job_id, &requester_id, &expected_digest)?;
+    let proof = json!({"protocol_version": 1, "verified": true, "observation_id": observation.id,
+        "account_id": pending.account_id, "source_sha256": pending.source_sha256,
+        "accounts_pending_in_isolated_outbox": 1, "nucleus": output, "directory": root});
+    write_once(
+        &root.join("verified.json"),
+        &serde_json::to_vec_pretty(&proof).context(
+            "deployment_canary_failed",
+            "unable to encode canary evidence",
+        )?,
+    )?;
+    Ok(proof)
+}
+
+fn verify_nucleus(
+    socket: &Path,
+    job_id: &str,
+    requester_id: &str,
+    expected_digest: &str,
+) -> AppResult<Value> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -116,12 +136,12 @@ pub(crate) fn run(
             "deployment_canary_failed",
             "unable to initialize canary verifier",
         )?;
-    let output = runtime.block_on(async {
+    runtime.block_on(async {
         let client = NucleusClient::new(socket)
             .context("deployment_canary_failed", "unable to connect to Nucleus")?;
-        tokio::time::timeout(Duration::from_secs(120), async {
+        tokio::time::timeout(Duration::from_mins(2), async {
             loop {
-                let job = client.get_job(&JobId::new(&job_id)).await.context(
+                let job = client.get_job(&JobId::new(job_id)).await.context(
                     "deployment_canary_failed",
                     "unable to inspect the same Nucleus canary",
                 )?;
@@ -160,18 +180,7 @@ pub(crate) fn run(
         })
         .await
         .map_err(|_| failed("the same canary remains unfinished; retain its state"))?
-    })?;
-    let proof = json!({"protocol_version": 1, "verified": true, "observation_id": observation.id,
-        "account_id": pending.account_id, "source_sha256": pending.source_sha256,
-        "accounts_pending_in_isolated_outbox": 1, "nucleus": output, "directory": root});
-    write_once(
-        &root.join("verified.json"),
-        &serde_json::to_vec_pretty(&proof).context(
-            "deployment_canary_failed",
-            "unable to encode canary evidence",
-        )?,
-    )?;
-    Ok(proof)
+    })
 }
 
 fn transcript(session: &str) -> ThreadTranscript {
