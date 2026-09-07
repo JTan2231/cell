@@ -68,8 +68,46 @@ impl Stage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Brief {
+    /// Frozen display text: labeled sections for new briefs, a paragraph for legacy briefs.
     pub paragraph: String,
     pub pursue: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BriefSubmission {
+    why_it_works: String,
+    role: String,
+    #[serde(default)]
+    culture: Option<String>,
+    pursue: bool,
+}
+
+impl BriefSubmission {
+    fn into_brief(self) -> Result<Brief> {
+        if !self.pursue {
+            return Ok(Brief {
+                paragraph: String::new(),
+                pursue: false,
+            });
+        }
+        let why = self.why_it_works.trim();
+        let role = self.role.trim();
+        let culture = self
+            .culture
+            .as_deref()
+            .map(str::trim)
+            .filter(|text| !text.is_empty());
+        validate_brief_sections(why, role, culture)?;
+        let mut paragraph = format!("Why it works: {why}\n\nRole: {role}");
+        if let Some(culture) = culture {
+            paragraph.push_str(&format!("\n\nCulture: {culture}"));
+        }
+        Ok(Brief {
+            paragraph,
+            pursue: true,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -218,6 +256,15 @@ pub fn retained_request(path: &Path) -> Result<JobRequestV1> {
     Ok(state.request)
 }
 
+/// Read the guidance frozen into an existing brief stage so a resumed packet
+/// keeps its exact inputs when the instructions for newly prepared packets change.
+pub fn retained_guidance(path: &Path) -> Result<String> {
+    let state: StageState = serde_json::from_slice(&fs::read(path)?)?;
+    ensure!(state.version == 1, "unsupported stage state version");
+    retained_tool_namespace(&state)?;
+    Ok(state.inputs.guidance)
+}
+
 fn load_or_create(path: &Path, kind: Stage, inputs: StageInputs) -> Result<StageState> {
     if path.exists() {
         let state: StageState = serde_json::from_slice(&fs::read(path)?)?;
@@ -288,7 +335,7 @@ fn build_request(stage: Stage, inputs: &StageInputs, cwd: &Path) -> Result<JobRe
         .collect();
     let task = match stage {
         Stage::Brief => {
-            "Assess whether this is a worthwhile opportunity for Joey using his preferences, supported work history, and this posting. Read relevant career entries, including preferences and disclosure guidance, before deciding. Submit exactly one brief with submit_brief. It must be one plain paragraph, at most 150 words, briefly explaining the appeal, credible fit, and material concerns or unknowns. No heading, table, list, or promotional fluff. Set pursue=false for a hard-constraint mismatch, clearly unsuitable role, or insufficient evidence to recommend it. Do not author a resume in this stage."
+            "Assess whether this is a worthwhile opportunity for Joey using his preferences, supported work history, and this posting. Read relevant career entries, including preferences and disclosure guidance, before deciding. Keep the pursuit assessment private: set pursue=false for a hard-constraint mismatch, clearly unsuitable role, or insufficient evidence to recommend it. Otherwise submit a short, confident recommendation with submit_brief. Supply separate plain-text fields without headings or list markers: why_it_works is one or two direct sentences explaining the strongest evidence-backed reasons this role works for Joey (at most 45 words); role is a flat statement of the main tech stack, responsibilities, and process expectations (at most 30 words); culture is a flat statement of concrete company working norms (at most 25 words). Role and culture must each fit one or two short lines and must not compare anything with Joey's experience or preferences. Use only the captured posting and existing material for employer facts. Omit culture or set it to null when that material provides no substantive culture information; missing culture does not affect pursuit. Do not research it or substitute a warning, placeholder, or generic culture claim. Aim for 60-90 words across all supplied fields, with a hard maximum of 90; shorter is welcome. Explain why it works, never why it might work: no hedging, caveats, drawbacks, unknowns, or suggestions to investigate further in the displayed brief. Confidence must come from specific supported reasons, never invented facts or promises of hiring success. If pursue=false, leave why_it_works and role empty and culture absent or null; no recommendation is needed for a declined role. Stop after a successful submission. Do not author a resume in this stage."
         }
         Stage::Resume => {
             "Author only the Jackson National work-experience bullet points for Joey's resume. Every other byte of resume content is fixed by the requester and is outside your authoring authority: names, contact details, dates, employers, role title, education, projects, skills, other experience, and layout. Read the complete relevant career entries independently; the brief is positioning guidance and is not evidence. Select, order, and word truthful Jackson experience for the posting, preserving scope, ownership, dates, numbers, and disclosure restrictions. Return plain text bullet contents (no bullet markers or newlines) using submit_resume, with private evidence references for every bullet. Use original Jackson bullets only as a length and style reference: their facts may be superseded, and only the captured CRM career records support authored claims. Keep the combined content approximately the same length as the original Jackson bullets to fit the unchanged template. Never invent a technology, credential, metric, achievement, or employer requirement. If a claim is unsupported, omit it. The submission tool renders and checks your candidate before accepting it. If it returns rendering feedback, revise and submit again within this job. Stop after a successful acceptance. Do not author any other resume section."
@@ -451,34 +498,70 @@ fn toolset_ref(stage: Stage, namespace: &str) -> ToolsetRef {
     ToolsetRef {
         provider: namespace.into(),
         name: stage.name().into(),
-        version: 1,
+        version: if stage == Stage::Brief && namespace == TOOL_NAMESPACE {
+            2
+        } else {
+            1
+        },
     }
 }
 
-// Requests and tool registrations are immutable. The product rename changes
-// new identities only; recovery must use the namespace frozen in each request.
+// Recovery uses the exact namespace and version frozen in each request.
 fn retained_tool_namespace(state: &StageState) -> Result<&'static str> {
     let namespace = match state.request.requester.program.as_str() {
         TOOL_NAMESPACE => TOOL_NAMESPACE,
         LEGACY_TOOL_NAMESPACE => LEGACY_TOOL_NAMESPACE,
         _ => bail!("stage request has an unsupported requester identity"),
     };
+    let toolset = state
+        .request
+        .invocation
+        .toolset
+        .as_ref()
+        .context("stage toolset is missing")?;
     ensure!(
-        state.request.invocation.toolset.as_ref() == Some(&toolset_ref(state.stage, namespace)),
+        toolset.provider.as_str() == namespace
+            && toolset.name.as_str() == state.stage.name()
+            && (toolset.version == 1
+                || (namespace == TOOL_NAMESPACE
+                    && state.stage == Stage::Brief
+                    && toolset.version == 2)),
         "stage request has a conflicting retained toolset identity"
     );
     Ok(namespace)
 }
 
-fn argument_schema_id(namespace: &str, name: &str) -> String {
-    format!("{namespace}.{}.arguments.v1", name.replace('_', "-"))
+fn sectioned_brief(state: &StageState) -> bool {
+    state.stage == Stage::Brief
+        && state
+            .request
+            .invocation
+            .toolset
+            .as_ref()
+            .is_some_and(|toolset| toolset.version == 2)
+}
+
+fn argument_schema_id(namespace: &str, name: &str, sectioned: bool) -> String {
+    let version = if sectioned && name == "submit_brief" {
+        2
+    } else {
+        1
+    };
+    format!(
+        "{namespace}.{}.arguments.v{version}",
+        name.replace('_', "-")
+    )
 }
 
 fn result_schema_id(namespace: &str) -> String {
     format!("{namespace}.tool-result.v1")
 }
 
-fn tool_definitions(stage: Stage, namespace: &str) -> Result<ToolsetDefinitionsV1> {
+fn tool_definitions(
+    stage: Stage,
+    namespace: &str,
+    sectioned: bool,
+) -> Result<ToolsetDefinitionsV1> {
     let mut definitions = vec![
         (
             "list_career_entries",
@@ -492,6 +575,15 @@ fn tool_definitions(stage: Stage, namespace: &str) -> Result<ToolsetDefinitionsV
         ),
     ];
     match stage {
+        Stage::Brief if sectioned => definitions.push(("submit_brief", "Commit a concise recommendation with separate why_it_works, role, optional culture, and a private pursuit assessment. Use plain text without labels. Omit unsupported culture.", json!({
+            "type":"object","additionalProperties":false,"required":["why_it_works","role","pursue"],
+            "properties":{
+                "why_it_works":{"type":"string"},
+                "role":{"type":"string"},
+                "culture":{"type":["string","null"]},
+                "pursue":{"type":"boolean"}
+            }
+        }))),
         Stage::Brief => definitions.push(("submit_brief", "Commit the final brief assessment once: one concise plain paragraph and whether to pursue the role.", json!({
             "type":"object","additionalProperties":false,"required":["paragraph","pursue"],
             "properties":{"paragraph":{"type":"string","minLength":1},"pursue":{"type":"boolean"}}
@@ -514,7 +606,7 @@ fn tool_definitions(stage: Stage, namespace: &str) -> Result<ToolsetDefinitionsV
                 Ok(ToolDefinitionV1 {
                     name: name.into(),
                     description: description.into(),
-                    input_schema_id: argument_schema_id(namespace, name).into(),
+                    input_schema_id: argument_schema_id(namespace, name, sectioned).into(),
                     input_schema: to_raw_value(&schema)?,
                 })
             })
@@ -524,13 +616,18 @@ fn tool_definitions(stage: Stage, namespace: &str) -> Result<ToolsetDefinitionsV
 
 async fn register_tools(client: &NucleusClient, state: &StageState) -> Result<()> {
     let namespace = retained_tool_namespace(state)?;
-    let definitions = tool_definitions(state.stage, namespace)?;
+    let sectioned = sectioned_brief(state);
+    let definitions = tool_definitions(state.stage, namespace, sectioned)?;
     for tool in &definitions.tools {
         client
             .register_schema(&LogSchemaV1::new(
                 tool.input_schema_id.clone(),
                 &tool.name,
-                "1",
+                if sectioned && tool.name == "submit_brief" {
+                    "2"
+                } else {
+                    "1"
+                },
                 "application/schema+json",
                 namespace,
                 tool.input_schema.clone(),
@@ -552,7 +649,12 @@ async fn register_tools(client: &NucleusClient, state: &StageState) -> Result<()
         ))
         .await?;
     let registration = ToolsetRegistrationV1::new(
-        toolset_ref(state.stage, namespace),
+        state
+            .request
+            .invocation
+            .toolset
+            .clone()
+            .context("stage toolset is missing")?,
         "nucleus.toolset-definitions.v1",
         definitions,
     )?;
@@ -603,7 +705,7 @@ fn bind_tool_result_validated(
         return Ok(receipt.response.clone());
     }
     let namespace = retained_tool_namespace(state)?;
-    let expected = argument_schema_id(namespace, &call.tool_name);
+    let expected = argument_schema_id(namespace, &call.tool_name, sectioned_brief(state));
     let allowed = [
         "list_career_entries",
         "read_career_entry",
@@ -672,8 +774,13 @@ fn execute_tool(
                 state.stage == Stage::Brief,
                 "brief submission not allowed in this stage"
             );
-            let brief: Brief = serde_json::from_str(call.arguments.get())?;
-            validate_brief(&brief)?;
+            let brief = if sectioned_brief(state) {
+                serde_json::from_str::<BriefSubmission>(call.arguments.get())?.into_brief()?
+            } else {
+                let brief: Brief = serde_json::from_str(call.arguments.get())?;
+                validate_brief(&brief)?;
+                brief
+            };
             accept(state, StageResult::Brief(brief))
         }
         "submit_resume" => {
@@ -706,6 +813,59 @@ fn validate_brief(brief: &Brief) -> Result<()> {
         "brief must not have a heading or list marker"
     );
     Ok(())
+}
+
+fn validate_brief_sections(why: &str, role: &str, culture: Option<&str>) -> Result<()> {
+    let mut total = 0;
+    for (name, text, limit) in [("Why it works", why, 45), ("Role", role, 30)]
+        .into_iter()
+        .chain(culture.map(|text| ("Culture", text, 25)))
+    {
+        let words = text.split_whitespace().count();
+        ensure!(
+            !text.trim().is_empty()
+                && !text.contains(['\n', '\r'])
+                && !text.starts_with(['#', '*', '-', '•'])
+                && words <= limit,
+            "{name} must be plain nonempty single-line text without headings or list markers, at most {limit} words"
+        );
+        total += words;
+    }
+    ensure!(
+        total <= 90,
+        "brief content must be at most 90 words in total"
+    );
+    Ok(())
+}
+
+/// Validate frozen display text while retaining support for the old paragraph format.
+pub(crate) fn validate_brief_text(text: &str) -> Result<()> {
+    if !text.contains(['\n', '\r']) {
+        ensure!(
+            !text.trim().is_empty() && text.split_whitespace().count() <= 150,
+            "legacy brief must be one nonempty paragraph of at most 150 words"
+        );
+        return Ok(());
+    }
+    let sections: Vec<_> = text.split("\n\n").collect();
+    ensure!(
+        (2..=3).contains(&sections.len()),
+        "brief must contain two or three labeled sections"
+    );
+    let why = sections[0]
+        .strip_prefix("Why it works: ")
+        .context("missing Why it works section")?;
+    let role = sections[1]
+        .strip_prefix("Role: ")
+        .context("missing Role section")?;
+    let culture = sections
+        .get(2)
+        .map(|text| {
+            text.strip_prefix("Culture: ")
+                .context("invalid Culture section")
+        })
+        .transpose()?;
+    validate_brief_sections(why, role, culture)
 }
 
 fn validate_resume(resume: &Resume, entries: &[CareerEntry]) -> Result<()> {
@@ -801,6 +961,7 @@ mod tests {
             arguments_schema_id: SchemaId::new(argument_schema_id(
                 retained_tool_namespace(state).unwrap(),
                 name,
+                sectioned_brief(state),
             )),
             arguments: to_raw_value(value).unwrap(),
         }
@@ -840,7 +1001,7 @@ mod tests {
             Some(toolset_ref(Stage::Resume, TOOL_NAMESPACE))
         );
         assert_eq!(
-            tool_definitions(Stage::Resume, TOOL_NAMESPACE)
+            tool_definitions(Stage::Resume, TOOL_NAMESPACE, false)
                 .unwrap()
                 .tools
                 .iter()
@@ -930,7 +1091,7 @@ mod tests {
             &state,
             "call-1",
             "submit_brief",
-            &json!({"paragraph":"Relevant work and preferences make this worth considering, with compensation still unknown.","pursue":true}),
+            &json!({"why_it_works":"Your production service experience fits the team's backend ownership needs.","role":"Rust services, design reviews, and production support.","culture":null,"pursue":true}),
         );
         let response = bind_tool_result(&path, &mut state, &first).unwrap();
         let mut restarted = load_or_create(&path, Stage::Brief, inputs()).unwrap();
@@ -943,14 +1104,14 @@ mod tests {
             &restarted,
             "call-1",
             "submit_brief",
-            &json!({"paragraph":"Other result","pursue":false}),
+            &json!({"why_it_works":"","role":"","culture":null,"pursue":false}),
         );
         assert!(bind_tool_result(&path, &mut restarted, &conflicting).is_err());
         let replacement = call(
             &restarted,
             "call-2",
             "submit_brief",
-            &json!({"paragraph":"Other result","pursue":false}),
+            &json!({"why_it_works":"","role":"","culture":null,"pursue":false}),
         );
         assert!(
             bind_tool_result(&path, &mut restarted, &replacement)
@@ -991,7 +1152,7 @@ mod tests {
             &state,
             "call-1",
             "submit_brief",
-            &json!({"paragraph":"One paragraph\nAnother paragraph","pursue":true}),
+            &json!({"why_it_works":"One paragraph\nAnother paragraph","role":"Backend services.","culture":null,"pursue":true}),
         );
         assert!(
             bind_tool_result(&path, &mut state, &invalid)
@@ -1115,7 +1276,7 @@ mod tests {
         let socket = dir.path().join("nucleus.sock");
         let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         use_legacy_identity(&mut state);
-        let definitions = tool_definitions(Stage::Brief, LEGACY_TOOL_NAMESPACE).unwrap();
+        let definitions = tool_definitions(Stage::Brief, LEGACY_TOOL_NAMESPACE, false).unwrap();
         let mut exchanges = Vec::new();
         for tool in &definitions.tools {
             exchanges.push((
@@ -1178,7 +1339,7 @@ mod tests {
             &state,
             "call-1",
             "submit_brief",
-            &json!({"paragraph":"Supported fit, with location still unknown.","pursue":true}),
+            &json!({"why_it_works":"Your production service experience fits the team's backend ownership needs.","role":"Rust services, design reviews, and production support.","culture":null,"pursue":true}),
         );
         let response = bind_tool_result(&path, &mut state, &pending).unwrap();
         let running = runtime_job(&state, nucleus_core::JobState::WaitingOnRequester);

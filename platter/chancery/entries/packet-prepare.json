@@ -1,11 +1,11 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Prepare and preview private job application packets",
-  "summary": "Prepare unsent Cast jobs as a paragraph and Jackson-only tailored resume, preview up to three packets, and explicitly send a normal edition or an isolated test from retained material.",
+  "summary": "Prepare unsent Cast jobs as a concise sectioned brief and Jackson-only tailored resume, preview up to three packets, and explicitly send a normal edition or an isolated test from retained material.",
   "use_when": [
     "The user wants a private brief and a constrained tailored resume for a retained Cast job.",
     "The user wants to prepare or preview an edition of up to three previously unsent opportunities, inspect retained status, or explicitly send a frozen edition.",
@@ -142,7 +142,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Preparation retains a single-paragraph brief, pursuit assessment, plain-text Jackson bullets with private career-entry references, generated LaTeX and PDF. Preview retains subject, body, ordered PDF files, packet identities and idempotency key. Status reports local records; send retains acceptance or unresolved state."
+        "statement": "New preparation retains a labeled Why it works and Role brief with optional Culture, a private pursuit assessment, plain-text Jackson bullets with private career-entry references, generated LaTeX and PDF. The rendered brief remains in the existing paragraph string field. Preview retains subject, body, ordered PDF files, packet identities and idempotency key. Status reports local records; send retains acceptance or unresolved state."
       },
       {
         "status": "declared",
@@ -152,7 +152,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "The brief is at most 150 words and assesses preference fit, supported experience and concerns. Career references establish provenance, not verified truth. The resume model cannot author fixed sections, dates, identity, employers, projects, skills or layout."
+        "statement": "New briefs contain at most 90 words across sections. Why it works gives one or two direct, confident, evidence-grounded sentences of at most 45 words. Role states stack, responsibilities and process expectations in one or two short lines of at most 30 words. Optional Culture states working norms in one or two short lines of at most 25 words. Role and Culture make no comparison with the user's experience. Displayed briefs omit caveats, downsides and hedging; pursuit criteria remain private. Career references establish provenance, not verified truth. The resume model cannot author fixed sections, dates, identity, employers, projects, skills or layout."
       },
       {
         "status": "declared",
@@ -172,7 +172,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Both stages use the same retained posting and captured CRM library. CRM separate list/read calls are not a transactional snapshot; capture checks entry timestamps and refuses incomplete list results. Cast excerpts alone do not satisfy full posting input. A new preview rechecks full posting evidence and defers changed or unavailable sources; reopening an already frozen edition does not refresh it."
+        "statement": "Both stages use the same retained posting and captured CRM library. Culture appears only when supported by the posting or existing captured material; otherwise it is omitted without extra research or an uncertainty note. CRM separate list/read calls are not a transactional snapshot; capture checks entry timestamps and refuses incomplete list results. Cast excerpts alone do not satisfy full posting input. A new preview rechecks full posting evidence and defers changed or unavailable sources; reopening an already frozen edition does not refresh it."
       },
       {
         "status": "unspecified",
@@ -216,7 +216,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Package/provider 0.1.0 and contract 1 describe this release. Source-built and installed CLI behavior share this contract; only a published installed selector advertises local availability."
+        "statement": "Package/provider 0.1.1 and preparation contract 2 describe this source release. New brief jobs use platter/brief/2 and platter.submit-brief.arguments.v2 with why_it_works, role, optional culture and private pursue fields. Retained v1 requests and accepted outputs remain supported without rewriting them; existing frozen editions are unchanged. New editions separate headers and brief sections with whitespace and omit the packet-count footer. Ad hoc editions preserve retained sectioned briefs and continue accepting reviewed single-paragraph overrides of at most 150 words. Source-built and installed CLI behavior share this contract; only a published installed selector advertises local availability."
       },
       {
         "status": "unspecified",

@@ -77,8 +77,29 @@ only. The models have no direct database, general filesystem, shell, web or
 external messaging access. Posting and career text remain source material,
 not authority to change those tool permissions.
 
-The first job submits one plain paragraph of at most 150 words and a pursuit
-assessment. A declined opportunity is retained without preparing a resume.
+New first-stage jobs use toolset `platter/brief/2` and submission schema
+`platter.submit-brief.arguments.v2`. They submit separate `why_it_works`, `role`
+and optional `culture` fields, plus the private `pursue` assessment:
+
+- **Why it works:** one or two direct, confident, evidence-grounded sentences,
+  at most 45 words, explaining why the opportunity works for the user.
+- **Role:** one or two short lines, at most 30 words, stating the tech stack,
+  responsibilities and process expectations without comparing them with the
+  user's experience.
+- **Culture:** one or two short lines, at most 25 words, stating working norms
+  without a comparison with the user. Omit it, or submit `null`, when the
+  posting or existing captured material does not support a useful summary.
+  No additional culture research is performed.
+
+The section content totals at most 90 words. Displayed copy contains no
+caveats, downsides or hedging; the existing pursuit criteria stay private.
+Platter renders the accepted fields as labeled blocks separated by blank
+lines in the existing stored `paragraph` field. Retained v1 requests and
+accepted single-paragraph briefs remain supported without rewriting them.
+A declined v2 submission uses `pursue=false`, empty `why_it_works` and `role`
+strings, and absent or `null` `culture`. Platter retains an empty display
+string and skips resume preparation without generating an affirmative
+recommendation.
 The second job independently reads the career library and submits only plain
 Jackson bullet text with private supporting entry references. It may use the
 brief for positioning, but the brief cannot establish a new career fact.
@@ -99,8 +120,10 @@ again on the next invocation. Changed postings become stale and need reviewed
 regeneration; they no longer block preparation of other opportunities.
 `preview DATE` rechecks the full posting and defers unavailable or
 changed evidence. It selects one through three ready packets, freezes the
-exact subject and paragraph text, copies and hashes their PDFs and reserves the selected
-opportunities. Existing frozen editions remain stable. A preview does not send.
+exact subject and brief text, copies and hashes their PDFs and reserves the selected
+opportunities. New editions separate each opportunity header from its brief
+with a blank line and omit the packet-count footer. Existing frozen editions
+remain stable. A preview does not send.
 When none are ready, no edition is created. Existing frozen editions are
 returned as retained; reopening one does not refresh its evidence.
 
@@ -141,13 +164,14 @@ preview path still refreshes posting evidence; use `--ad-hoc` when the intended
 operation is a test from retained data.
 
 The occurrence lives under `ad-hoc/RUN_ID/` in private Platter state. It
-contains its own exact `[TEST]` subject, paragraphs, ordered copied PDF files,
+contains its own exact `[TEST]` subject, briefs, ordered copied PDF files,
 payload and attachment hashes, stable idempotency key, state and acceptance
 receipt. It neither creates an ordinary edition nor reserves a packet or
 changes its sent status. Those opportunities remain eligible for the normal
 daily pipeline. Repeating the same occurrence must preserve its retained day,
 selection and payload.
 
+Retained sectioned briefs keep their labeled blocks in ad hoc editions.
 An optional `--brief-overrides /absolute/reviewed-paragraphs.json` maps selected
 packet IDs to reviewed paragraph strings. Each must be one plain paragraph
 of at most 150 words. The override is frozen only in the test occurrence,

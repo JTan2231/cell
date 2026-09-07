@@ -205,10 +205,10 @@ pub fn preview(
         fs::File::open(&attachment)?.sync_all()?;
         let reviewed_override = overrides.get(&record.id).cloned();
         let paragraph = reviewed_override.as_deref().unwrap_or(&brief.paragraph);
-        validate_paragraph(paragraph)?;
+        crate::agent::validate_brief_text(paragraph)?;
         write!(
             edition.body,
-            "{}. {} — {}\n{}\n{}\n\n",
+            "{}. {} — {}\n{}\n\n{}\n\n",
             index + 1,
             employer,
             captured.job.title,

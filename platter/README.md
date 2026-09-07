@@ -1,10 +1,19 @@
 # Platter
 
 Platter prepares up to three previously unsent opportunities from Cast.
-Each packet contains a brief paragraph and a tailored resume PDF. Two Nucleus
+Each packet contains a short, sectioned brief and a tailored resume PDF. Two Nucleus
 jobs use `gpt-5.6-sol` with `max` reasoning: one assesses and briefs the role,
 and the second writes only the Jackson work-experience bullets when the role
 is worth pursuing. Both can investigate the same captured CRM career library.
+
+New briefs give a direct, evidence-grounded **Why it works**, a flat **Role**
+summary of stack, responsibilities and process, and an optional **Culture**
+summary. Role and culture each use one or two short lines without comparing
+the job with the user's experience. Culture is omitted when the posting or
+existing captured material does not support it; no extra research is performed.
+The brief contains no caveats, downsides or hedging and stays within 90 words.
+Pursuit assessment remains private. Retained older briefs and frozen editions
+stay unchanged.
 
 Everything outside the Jackson bullet span in the original resume's LaTeX
 source is fixed, including identity, dates, employers, other experience,
@@ -55,7 +64,7 @@ platter send 2026-09-07 --ad-hoc sample-1 \
 ```
 
 The preview prints a `[TEST]` edition and freezes the selected retained
-paragraphs and PDFs under private `ad-hoc/sample-1/` state. Sending requires
+briefs and PDFs under private `ad-hoc/sample-1/` state. Sending requires
 explicit test-send authority and retains its own receipt. Reusing the same
 ad hoc ID after acceptance does not send again; an uncertain attempt remains
 held. The optional Email executable override affects this send only. A tested

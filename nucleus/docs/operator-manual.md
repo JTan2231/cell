@@ -213,8 +213,20 @@ which entries to inspect through `list_career_entries` and
 CRM reads are not a transactional snapshot; capture checks entry timestamps
 and refuses an incomplete list. CRM retains editing authority.
 
-The brief is one plain paragraph of at most 150 words plus a private pursuit
-assessment. Only a worthwhile opportunity proceeds to resume preparation. The
+New brief jobs use `platter/brief/2` and
+`platter.submit-brief.arguments.v2` to submit `why_it_works`, `role`, optional
+`culture` and private `pursue`. Why it works gives one or two direct, confident,
+evidence-grounded sentences of at most 45 words. Role states stack,
+responsibilities and process in one or two short lines of at most 30 words;
+Culture states working norms in one or two short lines of at most 25 words.
+Role and Culture do not compare the opportunity with the user's experience.
+Culture is omitted when the posting or existing captured material does not
+support it, with no extra research or uncertainty note. Displayed section
+content totals at most 90 words and contains no caveats, downsides or hedging.
+The pursuit criteria remain private. Platter renders labeled blocks into the
+existing brief `paragraph` string; retained v1 requests and accepted outputs
+remain supported without rewriting them.
+Only a worthwhile opportunity proceeds to resume preparation. The
 resume model authors only Jackson work-experience bullet text and private
 career-entry references. The renderer escapes that text and preserves every
 byte outside the original resume's Jackson bullet span. The original
@@ -225,7 +237,9 @@ context. Validated stage submission and successful fixed-template rendering,
 not final model prose, establish packet readiness.
 
 Platter freezes at most three previously unsent ready packets in one dated
-edition, including exact paragraphs, copied PDFs and attachment digests. It
+edition, including exact briefs, copied PDFs and attachment digests. New
+editions separate headers and brief blocks with whitespace and omit the
+packet-count footer; existing frozen editions remain unchanged. It
 rechecks posting evidence before creating a new edition and reserves selected
 opportunities against later editions. Explicit `send` validates retained
 attachment digests and invokes Email with a stable edition key; only an
