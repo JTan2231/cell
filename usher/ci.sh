@@ -4,15 +4,5 @@
 set -eu
 PRODUCT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 CELL_ROOT=$(CDPATH='' cd "$PRODUCT_DIR/.." && pwd)
-flags=
-while [ "$#" -gt 0 ]; do
-    case "$1" in
-        --verbose|--quiet-result) flags="$flags $1"; shift ;;
-        *) break ;;
-    esac
-done
-if [ "${1:-}" = --stage-candidate ]; then
-    flags="$flags --verbose-receipt"
-fi
-# flags contains only the fixed presentation options above.
-exec python3 "$CELL_ROOT/ci_broker/client.py" run $flags --repo-root "$CELL_ROOT" --gate "usher" --lane "heavy" -- "$CELL_ROOT/pipeline/ci.sh" "usher" "$@"
+export PYTHONDONTWRITEBYTECODE=1
+exec python3 "$CELL_ROOT/pipeline/select_changes.py" product "usher" "$@"

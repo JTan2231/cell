@@ -17,10 +17,23 @@ untracked changes relative to `HEAD`. It uses the product roots in the pipeline
 descriptors. A changed product descriptor also selects that product. Deletions
 and both paths of a rename count.
 
+Every selected product runs its product tests. Installer, maintenance,
+packaging, and shared infrastructure tests run when their declared platform
+inputs change or a product is new. Shared installer changes also select the
+affected consumer products. Ordinary shared dependencies do not expand scope.
+
 To check a product even when it has no outstanding changes:
 
 ```sh
 ./ci.sh nucleus
+```
+
+To request a product's platform tests:
+
+```sh
+./ci.sh --platform nucleus
+# Or, with the same selection policy:
+./nucleus/ci.sh --platform
 ```
 
 Use the default command for routine validation. Run full CI only when the user
@@ -32,12 +45,14 @@ When full CI is requested, run every product gate and integrated catalog validat
 ./ci.sh --all
 ```
 
-`--all` cannot be combined with product names. Add `--verbose` to any mode for
-detailed output. Every mode runs the common pipeline preflight and Usher
-recognition check, even when no products are selected. Shared or unowned
-changes are reported but do not select more products. Root CI does not add
-dependent products. Its result reports the selected scope; use `--all` for
-full validation.
+`--all` includes both test groups and cannot be combined with product names.
+`--platform` without product names also requests all products and platform
+suites. Add `--verbose` for detailed output. Every root run checks pipeline
+structure and Usher recognition, even when no products are selected. These
+checks do not run platform regression suites. CI reports its `HEAD` baseline,
+selected products, and platform run/skip reasons. Explicit product arguments
+limit product coverage; affected products outside that scope are reported.
+Committed branch changes are outside this working-tree comparison.
 
 Product gates use one host-wide CI broker and wait for its result. Linked Git
 worktrees share one Cargo target and one heavy execution lane. Agents can

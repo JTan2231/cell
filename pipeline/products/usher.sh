@@ -8,8 +8,7 @@ DEPLOY_PROFILE=rust-install-v1
 DEPLOY_CONFLICT_KEYS='product:usher
 chancery-catalog'
 CARGO_MANIFEST=Cargo.toml
-CARGO_PACKAGES='cell-install
-usher'
+CARGO_PACKAGES=usher
 CARGO_OFFLINE=1
 CI_SHELL_CHECKS='sh|usher/release.sh'
 CI_RUN_CHECKS=''

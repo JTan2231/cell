@@ -36,7 +36,8 @@ class ChangedProjectTests(unittest.TestCase):
         hooks.mkdir()
         self.git("config", "core.hooksPath", str(hooks))
 
-        for relative in ("ci.sh", "pipeline/select_changes.py", "pipeline/lib.sh"):
+        for relative in ("ci.sh", "pipeline/select_changes.py", "pipeline/lib.sh",
+                         "pipeline/platform_inputs.py"):
             self.write(relative, (SOURCE / relative).read_text(), executable=True)
         self.write(".gitignore", "ignored/\n")
         self.write("Cargo.lock", "shared lockfile\n")
@@ -60,10 +61,23 @@ RELEASE_UNITS='{product}|{product}|package|{directory}/Cargo.toml|{product}-|1'
                        f'[package]\nname = "{product}"\nversion = "1.0.0"\n')
             self.write(f"{directory}/tracked.txt", f"original {product} source\n")
             self.write(f"{directory}/ci.sh", self.wrapper(product), executable=True)
-        for filename, label in (("test.sh", "preflight"),
+        for filename, label in (("check.sh", "preflight"),
                                 ("recognition.sh", "recognition"),
                                 ("integrated.sh", "integrated")):
             self.write(f"pipeline/{filename}", self.wrapper(label), executable=True)
+        self.write("pipeline/ci.sh", '''#!/bin/sh
+set -eu
+ROOT=$(CDPATH='' cd "$(dirname "$0")/.." && pwd)
+exec python3 "$ROOT/fixture_gate.py" "$@"
+''', executable=True)
+        self.write("pipeline/platform.sh", '''#!/bin/sh
+set -eu
+ROOT=$(CDPATH='' cd "$(dirname "$0")/.." && pwd)
+if [ "$1" = catalog ]; then
+    exec "$ROOT/pipeline/integrated.sh"
+fi
+exec python3 "$ROOT/fixture_gate.py" "shared-$1"
+''', executable=True)
 
         # Root infrastructure gates use this adapter. Only source hashing calls
         # the real client; fake gate bodies never enter the production broker.
@@ -267,8 +281,7 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         gates = self.gates()
         self.assertEqual([gate["gate"] for gate in gates],
                          ["preflight", "recognition", "beta"])
-        self.assertIn("--verbose", gates[-1]["args"])
-        self.assertIn("--quiet-result", gates[-1]["args"])
+        self.assertEqual(gates[-1]["args"], ["--tests", "product"])
         self.assertTrue(gates[-1]["source"].startswith("sha256:"))
 
     def test_explicit_alias_uses_descriptor_directory(self):
@@ -282,8 +295,12 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assert_passed(result)
         gates = [gate["gate"] for gate in self.gates()]
         self.assertEqual(gates[:2], ["preflight", "recognition"])
-        self.assertEqual(set(gates[2:-1]), {"alpha", "beta", "krisis"})
-        self.assertEqual(len(gates), 6)
+        self.assertEqual(set(gates[2:-1]), {
+            "alpha", "beta", "krisis", "shared-pipeline", "shared-broker",
+            "shared-deployment", "shared-build", "shared-cleanup", "shared-install",
+            "shared-maintenance",
+        })
+        self.assertEqual(len(gates), 13)
         self.assertEqual(gates[-1], "integrated")
 
     def test_explicitly_listing_every_project_does_not_request_integrated_check(self):
@@ -298,7 +315,9 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         result = self.ci("--all", FIXTURE_FAIL_AT="alpha")
         self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
         self.assertEqual([gate["gate"] for gate in self.gates()],
-                         ["preflight", "recognition", "alpha"])
+                         ["preflight", "recognition", "shared-pipeline", "shared-broker",
+                          "shared-deployment", "shared-build", "shared-cleanup", "shared-install",
+                          "shared-maintenance", "alpha"])
 
     def test_preflight_failure_stops_before_recognition(self):
         result = self.ci("--all", FIXTURE_FAIL_AT="preflight")

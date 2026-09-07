@@ -394,28 +394,64 @@ The root `./ci.sh` defaults to products with staged, unstaged, or nonignored
 untracked changes relative to `HEAD`. It maps changed paths to each descriptor's
 `PRODUCT_DIR`; changing a product's own `pipeline/products/PRODUCT.sh`
 descriptor also selects it. Deletions and both paths of a rename count.
-Committed branch changes do not count as outstanding changes. Shared or unowned
-changes are reported without adding gates, and selection does not expand to
-dependent products.
+Committed branch changes do not count as outstanding changes. This same
+comparison controls product, platform, and new-product selection. The plan
+reports the baseline commit and the reason each platform suite runs or skips.
+
+Each selected product runs its product tests: commands, APIs, records, domain
+rules, ordinary persistence, and doctests. Nucleus API tests are product tests.
+Platform tests cover installation, upgrades, packaging, maintenance, recovery,
+and shared CI/release/deployment machinery. Installer binary unit tests,
+integration targets named `install` or `maintenance`, shared installation and
+maintenance libraries, shell runners, and catalog regressions belong here.
+Formatting, Clippy, provider validation, documentation, release builds, and
+binary version checks remain part of every selected product gate.
+
+[`pipeline/platform_inputs.py`](../../pipeline/platform_inputs.py) declares the
+platform inputs. Product lifecycle inputs select that product's platform
+tests. Shared installer and maintenance changes select affected consumers in
+default CI. Broker, pipeline, deployment, build, cleanup, and catalog inputs
+select their own shared suites. A new descriptor relative to HEAD selects its
+product's platform tests and the shared introduction/catalog checks. Prose and
+package/provider release-version-only edits do not trigger platform tests.
+Other product Cargo manifest edits select that product's platform tests; root
+build inputs select the shared build suite. Mixed
+runtime/lifecycle files are conservative inputs: any edit selects their
+platform coverage. Root manifest and lockfile changes do not expand
+dependency coverage; explicitly request platform tests when such a dependency
+change affects installation.
 
 Use `./ci.sh` for routine validation. Agents use `--all` only when the user
 explicitly requests full CI.
 
-Explicit product arguments run those gates even when their source is clean.
-`./ci.sh --all` runs every product gate and integrated source graph validation.
-`--all` cannot be combined with product arguments. Each mode runs
-`pipeline/test.sh` as a brokered light preflight and a candidate Usher
-recognition check in the heavy lane, even when no products are selected. The
-private `pipeline/check.sh` preflight body does not invoke Cargo.
+Explicit product arguments run those products even when their source is clean,
+and limit product coverage. CI reports affected platform products outside the
+requested scope. `./ci.sh --platform PRODUCT` adds that product's platform
+tests and shared installation primitives. A direct `PRODUCT/ci.sh` uses the
+same selection policy within that product's scope; it also accepts `--platform`.
+`./ci.sh --all` runs every product and platform suite, including integrated
+source graph validation. `--platform` without product names also requests full
+coverage. `--all` cannot be combined with product arguments.
 
-Root CI binds its selection to one exact source key and Git status. It passes
+Every root run checks pipeline structure in the light lane and candidate Usher
+recognition in the heavy lane, even when no products are selected. The private
+`pipeline/check.sh` body checks syntax, descriptors, provider counts, and
+generated wrapper drift. It does not run regression suites or invoke Cargo.
+Recognition no longer runs shared maintenance tests. `pipeline/test.sh` is an
+explicit request for shared platform suites, optionally named: `pipeline`,
+`broker`, `deployment`, `build`, `cleanup`, `install`, `maintenance`, or `catalog`.
+
+The shared CI dispatcher binds its selection to one exact source key, HEAD,
+and Git status. It passes
 the expected source key to recognition and each independently scheduled product
 gate. Source or Git status changes during planning or execution reject the run
-as stale with exit 75. Only `--all` then rebuilds Chancery for that candidate and
-validates the integrated source graph. This aggregate evidence does not merge
+as stale with exit 75. Product bodies receive their test-group selection as
+part of the brokered command identity. The broker schedules execution and does
+not decide relevance. Selected catalog coverage rebuilds Chancery for that
+candidate and validates the integrated source graph. This aggregate evidence does not merge
 product release authority or turn one product gate into another's gate.
 Root CI suppresses child success summaries. It reports selection before execution
-and the completed scope on success.
+and the completed product/platform scope on success.
 A scoped success does not establish full repository validation. Use
 `./ci.sh --verbose [PRODUCT...]` or `./ci.sh --all --verbose` for detailed output,
 or a product's public `ci.sh --verbose` for that gate.

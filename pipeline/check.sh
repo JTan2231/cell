@@ -17,6 +17,7 @@ for script_path in \
     pipeline/check.sh \
     pipeline/integrated.sh \
     pipeline/recognition.sh \
+    pipeline/platform.sh \
     pipeline/extras/decisions-catalog.sh \
     pipeline/extras/semantics-catalog.sh \
     pipeline/extras/todo-catalog.sh
@@ -33,12 +34,6 @@ while IFS= read -r product_id; do
     sh -n "$PIPELINE_ROOT/pipeline/products/$product_id.sh"
     sh -n "$PIPELINE_ROOT/$PRODUCT_DIR/ci.sh" \
         "$PIPELINE_ROOT/$PRODUCT_DIR/release.sh"
-    set +e
-    "$PIPELINE_ROOT/$PRODUCT_DIR/release.sh" >/dev/null 2>&1
-    release_status=$?
-    set -e
-    [ "$release_status" -eq 2 ] \
-        || pipeline_fail "$product_id release usage should exit 2; found $release_status"
     product_count=$((product_count + 1))
 
     while IFS='|' read -r unit provider_id provider_dir expected_entries; do
@@ -62,13 +57,4 @@ EOF
     || pipeline_fail "expected $PIPELINE_EXPECTED_PROVIDER_ENTRIES provider entries; found $provider_entry_count"
 
 "$PIPELINE_ROOT/pipeline/generate.sh" --check
-"$PIPELINE_ROOT/pipeline/generate.sh" --check \
-    --product nucleus --product crm
-PYTHONDONTWRITEBYTECODE=1 python3 "$PIPELINE_ROOT/pipeline/test_release.py" -q
-PYTHONDONTWRITEBYTECODE=1 python3 "$PIPELINE_ROOT/pipeline/test_select_changes.py" -q
-PYTHONDONTWRITEBYTECODE=1 python3 "$PIPELINE_ROOT/pipeline/test_todo_catalog.py" -q
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q ci_broker.test_broker
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_coordinator
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_build
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_cleanup
-printf '%s\n' 'pipeline/test.sh: green'
+printf '%s\n' 'pipeline/check.sh: structure checks passed'

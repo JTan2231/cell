@@ -89,6 +89,8 @@ child PID. Journal, ownership, configuration, or heartbeat failure stops or
 rejects the body. The broker never falls back to a CI run outside its controls.
 It records an expired runner as lost.
 
-Public `ci.sh` entry points always invoke this client. Root and release plans
-use those entry points, so each product gate has its own queue entry. The shared
+Public `ci.sh` entry points use the shared CI dispatcher, which always invokes
+this client. The dispatcher selects relevant product and platform tests; the
+broker schedules each product or shared suite as a separate queue entry.
+Product test-group selection is part of the brokered command identity. The shared
 `pipeline/ci.sh` body is internal. Callers cannot use it to bypass admission.

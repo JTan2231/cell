@@ -48,7 +48,7 @@ EOF
 
     while IFS='|' read -r run_condition script_path; do
         [ -n "$run_condition" ] || continue
-        if pipeline_should_run "$run_condition"; then
+        if [ "$test_groups" = all ] && pipeline_should_run "$run_condition"; then
             "$PIPELINE_ROOT/$script_path"
         fi
     done <<EOF
@@ -108,7 +108,9 @@ EOF
 
 ci_run_extra() {
     extra_path=$1
-    [ -z "$extra_path" ] || "$PIPELINE_ROOT/$extra_path"
+    if [ "$test_groups" = all ] && [ -n "$extra_path" ]; then
+        "$PIPELINE_ROOT/$extra_path"
+    fi
 }
 
 ci_fmt() {
@@ -154,21 +156,22 @@ EOF
 }
 
 ci_test() {
-    printf '%s\n' '==> tests'
-    set -- cargo test --manifest-path "$PIPELINE_ROOT/$CARGO_MANIFEST"
-    while IFS= read -r cargo_package; do
-        [ -n "$cargo_package" ] || continue
-        set -- "$@" --package "$cargo_package"
-    done <<EOF
-$(ci_packages)
-EOF
-    set -- "$@" --locked
+    test_group=$1
+    printf '==> %s tests\n' "$test_group"
+    set -- python3 "$PIPELINE_ROOT/pipeline/cargo_tests.py" \
+        --manifest-path "$PIPELINE_ROOT/$CARGO_MANIFEST" --group "$test_group"
     if [ "$TEST_NO_FAIL_FAST" = 1 ]; then
         set -- "$@" --no-fail-fast
     fi
     if [ "$CARGO_OFFLINE" = 1 ]; then
         set -- "$@" --offline
     fi
+    while IFS= read -r cargo_package; do
+        [ -n "$cargo_package" ] || continue
+        set -- "$@" "$cargo_package"
+    done <<EOF
+$(ci_packages)
+EOF
     "$@"
 }
 
@@ -230,15 +233,28 @@ EOF
 product_id=$1
 shift
 stage_candidate=
-if [ "$#" -gt 0 ]; then
-    [ "$#" -eq 2 ] && [ "$1" = --stage-candidate ] \
-        || ci_fail 'usage: PRODUCT [--stage-candidate ABSOLUTE_DIRECTORY]'
-    stage_candidate=$2
-    case "$stage_candidate" in
-        /*) ;;
-        *) ci_fail 'candidate staging directory must be absolute' ;;
+test_groups=
+while [ "$#" -gt 0 ]; do
+    [ "$#" -ge 2 ] || ci_fail 'missing private gate option value'
+    case "$1" in
+        --tests)
+            test_groups=$2
+            case "$test_groups" in product|all) ;; *) ci_fail 'invalid test groups' ;; esac
+            ;;
+        --stage-candidate)
+            stage_candidate=$2
+            case "$stage_candidate" in
+                /*) ;;
+                *) ci_fail 'candidate staging directory must be absolute' ;;
+            esac
+            ;;
+        *) ci_fail 'usage: PRODUCT --tests product|all [--stage-candidate ABSOLUTE_DIRECTORY]' ;;
     esac
-fi
+    shift 2
+done
+[ -n "$test_groups" ] || ci_fail 'the public dispatcher must select test groups'
+[ -z "$stage_candidate" ] || [ "$test_groups" = all ] \
+    || ci_fail 'candidate staging requires both test groups'
 pipeline_load_descriptor "$product_id"
 pipeline_validate_descriptor
 
@@ -277,8 +293,14 @@ ci_stage='rustfmt'
 ci_fmt
 ci_stage='clippy'
 ci_clippy
-ci_stage='tests'
-ci_test
+ci_stage='product tests'
+ci_test product
+if [ "$test_groups" = all ]; then
+    ci_stage='platform tests'
+    ci_test platform
+else
+    printf '%s\n' '==> platform tests skipped by CI selection'
+fi
 if [ "$CI_PROVIDER_VALIDATION_PHASE" = after-tests ]; then
     ci_stage='provider bundles'
     ci_validate_providers

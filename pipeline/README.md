@@ -7,9 +7,10 @@ entry points and drift checks require Python 3.10 or newer.
 
 `generate.sh --write` updates checked-in product entry points.
 `generate.sh --check` rejects drift. In either mode, repeat `--product PRODUCT`
-to select products. `test.sh` submits descriptor, provider-inventory,
-shell-syntax, generation, and Python checks to the broker's light lane.
-Its private body, `check.sh`, never invokes Cargo.
+to select products. The routine `check.sh` body checks descriptor shape,
+provider counts, shell syntax, and generated wrapper drift in the light lane.
+It does not run regression suites or invoke Cargo. `test.sh` is now an explicit
+request for shared platform suites; it is not the routine preflight.
 
 Each `products/*.sh` descriptor names the product's Cargo packages and manifest,
 shell and packaging checks, provider bundles, independently versioned release
@@ -35,37 +36,93 @@ count as outstanding changes.
 Use `./ci.sh` for routine validation. Agents use `--all` only when the user
 explicitly requests full CI.
 
-Explicit product arguments run those gates even when their source is clean.
-`./ci.sh --all` runs every product gate and integrated catalog validation;
-`--all` cannot be combined with product arguments. `--verbose` works with each
-mode. Shared or unowned changes are reported without adding product gates.
-Selection does not expand to dependent products. A run with no selected
-products still runs the common preflight and recognition check. Its success
-does not establish full repository validation.
+There are two test groups:
+
+- Product tests cover product commands, APIs, records, rules, and ordinary
+  persistence. Every selected product runs these tests, including library and
+  binary unit tests, ordinary integration targets, and doctests. Nucleus API
+  tests belong here too.
+- Platform tests cover installation, upgrades, packaging, maintenance,
+  recovery, and shared CI/release/deployment machinery. Cargo integration
+  targets named `install` or `maintenance`, installer binary unit tests, and
+  the `cell-install` and `cell-maintenance` packages belong here. Shell frontend
+  and runner regressions and product catalog regressions also belong here.
+
+`cargo_tests.py` selects Cargo targets from metadata inside the admitted gate.
+It does not filter test function names or drop unrelated integration targets.
+Formatting, Clippy, provider validation, documentation, release builds, and
+binary version checks remain part of each selected product gate. Library unit
+tests that mix product and lifecycle behavior still run as a complete target.
+
+`platform_inputs.py` is the explicit platform input map. Product installer
+sources, packaging, migrations, schemas, maintenance modules, selected runtime
+command files, and operational descriptor edits select that product's platform
+tests. Non-version Cargo manifest edits select their owner's platform tests;
+root build inputs select the shared build suite. Shared installer changes
+select all installer consumers; its common integration fixture selects only
+the products that use that fixture. Shared
+maintenance changes select its declared consumers. Broker, pipeline,
+deployment, build, cleanup, and catalog changes select their own shared suites.
+A descriptor absent from `HEAD` selects the new product's platform tests, the
+shared pipeline introduction checks, and integrated catalog validation.
+
+Prose, descriptor comments, and package/provider release-version-only edits do
+not select platform tests. Root manifests and lockfiles do not trigger blanket
+consumer coverage. If a shared dependency change affects the installation
+boundary, request `--platform` for the affected products.
+Mixed runtime/lifecycle files are conservative inputs: any edit to such a file
+selects platform tests. Move the lifecycle code to its own module to narrow
+that boundary. When adding or moving a platform input or target, update this
+map in the same change.
+
+Explicit product arguments run those products even when their source is clean.
+They limit product coverage; CI reports affected platform products outside the
+requested scope. Without explicit arguments, shared platform inputs can add
+their affected consumers. There is no general dependency expansion.
+
+| Command | Coverage |
+| --- | --- |
+| `./ci.sh` | Changed products, plus platform coverage selected from the same changes |
+| `./ci.sh todo` or `todo/ci.sh` | Todo product tests, plus selected platform coverage |
+| `./ci.sh --platform todo` or `todo/ci.sh --platform` | Todo product and platform tests, plus shared installation primitives |
+| `./ci.sh --all` | Every product and shared platform suite, including integrated catalog validation |
+| `./ci.sh --platform` | Explicit full coverage, equivalent to `--all` |
+| `pipeline/test.sh broker` | Explicit broker regression suite |
+| `pipeline/test.sh` | All shared platform suites |
+
+The shared suite names are `pipeline`, `broker`, `deployment`, `build`,
+`cleanup`, `install`, `maintenance`, and `catalog`. `--all` cannot be combined
+with product arguments. `--verbose` works with each mode. A root run with no
+selected products still checks structure and recognition. Its success does
+not establish full repository validation.
 
 Root CI binds the selection and every gate to one source candidate and rejects
-source or Git status changes during planning or execution as stale. Usher reads
+source, Git status, or HEAD changes during planning or execution as stale. The
+same comparison to HEAD controls product, platform, and new-product selection.
+The plan names that baseline and reports platform run/skip reasons. Usher reads
 the descriptors' literal assignments without executing them. It checks each
 product's identity, Semantics marker, and Chancery introduction. Root CI runs
 `pipeline/recognition.sh` as a brokered heavy body against its exact source
 candidate before the selected product gates. Full Chancery validation remains
 in the existing product and integrated catalog gates.
-The same root recognition body also formats, lints and tests the shared
-`cell-maintenance` library. Usher's product gate checks the shared `cell-install`
-library and both `usher` and its product-owned `usher-install` executable.
-The shared libraries are infrastructure rather than separate product identities
-or release units.
+Recognition does not run shared library tests. The `install` and `maintenance`
+platform gates format, lint, and test those libraries separately. They are
+infrastructure, with no separate product identity or release unit.
 
-Product `ci.sh` files request admission from the host CI broker and wait for
-its result. The broker invokes the private `pipeline/ci.sh` body. An inherited
-environment flag cannot bypass admission. Root CI uses the public product
-entry points, so the broker schedules each product gate separately. Complete
+Root and product `ci.sh` entry points use one dispatcher in `select_changes.py`.
+It selects coverage and requests admission from the host CI broker for each
+product or shared suite separately. The broker schedules execution; it does not
+decide relevance. Product bodies receive `--tests product|all` as part of their
+brokered command identity. Product-only and full gates cannot join each other.
+An inherited environment flag cannot bypass admission. Complete
 the relevant CI checks during development. Release and deployment neither
 rerun CI nor require a stored CI receipt.
 
 The broker captures build and test transcripts. A direct product gate prints
 one success result. Root `./ci.sh` suppresses child success results, reports
-selection before execution, and prints the completed scope on success.
+selection before execution, and prints the completed product and platform
+scope on success. Direct product commands use the same policy within their
+explicit product scope, without repeating root structure and recognition.
 Failures identify the gate and include bounded
 diagnostics and a private log path. The transcript identifies the failed stage.
 Use `./ci.sh --verbose [PRODUCT...]`, `./ci.sh --all --verbose`,
