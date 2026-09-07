@@ -385,7 +385,7 @@ fn doctor_checks_fake_prerequisites_without_creating_private_state() -> Result<(
     assert_eq!(value["data"]["ready"], true);
     assert_eq!(value["data"]["local"]["initialized"], false);
     assert!(!root.exists());
-    assert!(!maintenance::gate(&home).path().exists());
+    assert!(!maintenance::gate(&home).path()?.exists());
     assert_eq!(server.join().unwrap()?.len(), 1);
     Ok(())
 }

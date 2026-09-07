@@ -1,13 +1,10 @@
-//! Constrained Nucleus jobs with requester-owned, durable output and tool receipts.
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, File, OpenOptions};
-use std::io::Write;
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+//! Constrained Nucleus execution; accepted content is retained as run artifacts.
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use crate::store::Store;
 use anyhow::{Context, Result, bail, ensure};
-use fs2::FileExt;
 use nucleus_client::{ClientError, NucleusClient};
 use nucleus_core::{
     AbsolutePath, AgentInvocationV1, BuiltinToolsV1, HarnessCapability, HealthResponseV1,
@@ -31,7 +28,7 @@ pub struct CareerEntry {
     pub markdown: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StageInputs {
     pub packet_id: String,
@@ -134,57 +131,44 @@ pub enum StageResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Receipt {
-    call: ToolCallV1,
-    response: ToolResultV1,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct StageState {
     version: u32,
     stage: Stage,
-    inputs: StageInputs,
     request: JobRequestV1,
-    receipts: BTreeMap<String, Receipt>,
+    input_sha256: String,
+    runtime: Option<RuntimeState>,
+    #[serde(skip)]
+    inputs: StageInputs,
+    #[serde(skip)]
     accepted: Option<StageResult>,
-    runtime: Option<JobV1>,
 }
 
-/// Runs or resumes one exact stage. `state_path` is private domain authority;
-/// keep it with packet backups. Reusing it with changed inputs is an error.
-/// The caller serializes packet work; this function also locks the stage.
-/// There is no replacement-job retry or direct harness fallback.
-///
-/// # Errors
-/// Returns errors for conflicting state, unavailable execution, invalid calls,
-/// a deadline, or terminal execution without an accepted domain result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RuntimeState {
+    state: nucleus_core::JobState,
+    attempt_id: Option<nucleus_core::AttemptId>,
+}
+
 pub async fn run_stage(
     client: &NucleusClient,
-    state_path: &Path,
+    store: &Store,
     stage: Stage,
     inputs: StageInputs,
     deadline: Option<Instant>,
 ) -> Result<StageResult> {
-    run_stage_impl(client, state_path, stage, inputs, deadline, None).await
+    run_stage_impl(client, store, stage, inputs, deadline, None).await
 }
 
-/// Resume variant that validates and renders candidate Jackson bullets before
-/// accepting them. Validation errors are returned to the same model job as
-/// tool feedback; no replacement attempt is created.
-///
-/// # Errors
-/// Returns the same state, execution, and deadline errors as [`run_stage`].
 pub async fn run_stage_with_resume_validator(
     client: &NucleusClient,
-    state_path: &Path,
+    store: &Store,
     inputs: StageInputs,
     deadline: Option<Instant>,
     validator: &dyn Fn(&Resume) -> Result<()>,
 ) -> Result<StageResult> {
     run_stage_impl(
         client,
-        state_path,
+        store,
         Stage::Resume,
         inputs,
         deadline,
@@ -197,30 +181,14 @@ type ResumeValidator<'a> = Option<&'a dyn Fn(&Resume) -> Result<()>>;
 
 async fn run_stage_impl(
     client: &NucleusClient,
-    state_path: &Path,
+    store: &Store,
     kind: Stage,
     inputs: StageInputs,
     deadline: Option<Instant>,
     validator: ResumeValidator<'_>,
 ) -> Result<StageResult> {
-    ensure!(
-        state_path.is_absolute(),
-        "stage state path must be absolute"
-    );
-    let parent = state_path.parent().context("stage state needs a parent")?;
-    fs::create_dir_all(parent)?;
-    fs::set_permissions(parent, fs::Permissions::from_mode(0o700))?;
-    let lock = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .mode(0o600)
-        .open(state_path.with_extension("lock"))?;
-    lock.try_lock_exclusive()
-        .context("this stage is already running")?;
-    let mut state = load_or_create(state_path, kind, inputs)?;
-    let operation = run_stage_inner(client, state_path, &mut state, validator);
+    let mut state = load_or_create(store, kind, inputs)?;
+    let operation = run_stage_inner(client, store, &mut state, validator);
     if let Some(deadline) = deadline {
         if let Ok(result) = tokio::time::timeout(
             deadline.saturating_duration_since(Instant::now()),
@@ -230,68 +198,97 @@ async fn run_stage_impl(
         {
             result
         } else {
-            // Cancellation cannot undo a committed result; keep all state
-            // and correlation so the next invocation can inspect it.
             let _ =
                 tokio::time::timeout(Duration::from_secs(2), client.cancel_job(&state.request.id))
                     .await;
-            bail!(
-                "work deadline reached; exact Nucleus job cancellation requested; stage state retained"
-            )
+            bail!("work deadline reached; exact Nucleus job cancellation requested; run retained")
         }
     } else {
         operation.await
     }
 }
 
-/// Read the exact durable execution request without creating or changing state.
-///
-/// # Errors
-/// Returns errors for unreadable or unsupported retained stage state.
-pub fn retained_request(path: &Path) -> Result<JobRequestV1> {
-    let state: StageState = serde_json::from_slice(&fs::read(path)?)?;
-    ensure!(state.version == 1, "unsupported stage state version");
+pub fn retained_request(store: &Store, run: &str, stage: Stage) -> Result<Option<JobRequestV1>> {
+    let Some(value) = store.execution(run, stage.name())? else {
+        return Ok(None);
+    };
+    let state: StageState = serde_json::from_value(value)?;
+    ensure!(state.version == 2, "unsupported execution state version");
     retained_tool_namespace(&state)?;
     state.request.validate()?;
-    Ok(state.request)
+    Ok(Some(state.request))
 }
 
-/// Read the guidance frozen into an existing brief stage so a resumed packet
-/// keeps its exact inputs when the instructions for newly prepared packets change.
-pub fn retained_guidance(path: &Path) -> Result<String> {
-    let state: StageState = serde_json::from_slice(&fs::read(path)?)?;
-    ensure!(state.version == 1, "unsupported stage state version");
-    retained_tool_namespace(&state)?;
-    Ok(state.inputs.guidance)
+pub fn retained_guidance(store: &Store, run: &str) -> Result<Option<String>> {
+    retained_request(store, run, Stage::Brief)?
+        .map(|request| {
+            let prompt: Value = serde_json::from_str(&request.prompt)?;
+            Ok(prompt
+                .get("preferences_and_disclosure_guidance")
+                .and_then(Value::as_str)
+                .context("retained guidance missing")?
+                .to_owned())
+        })
+        .transpose()
 }
 
-fn load_or_create(path: &Path, kind: Stage, inputs: StageInputs) -> Result<StageState> {
-    if path.exists() {
-        let state: StageState = serde_json::from_slice(&fs::read(path)?)?;
-        ensure!(state.version == 1, "unsupported stage state version");
+fn load_or_create(store: &Store, kind: Stage, inputs: StageInputs) -> Result<StageState> {
+    validate_inputs(&inputs)?;
+    let input_sha256 = crate::store::digest(&serde_json::to_vec(&inputs)?);
+    let mut state = if let Some(value) = store.execution(&inputs.packet_id, kind.name())? {
+        let state: StageState = serde_json::from_value(value)?;
         ensure!(
-            state.stage == kind && state.inputs == inputs,
+            state.version == 2 && state.stage == kind && state.input_sha256 == input_sha256,
             "stage input conflict: retained job inputs are immutable"
         );
         retained_tool_namespace(&state)?;
-        return Ok(state);
-    }
-    validate_inputs(&inputs)?;
-    let state = StageState {
-        version: 1,
-        stage: kind,
-        request: build_request(
-            kind,
-            &inputs,
-            path.parent().context("stage parent missing")?,
-        )?,
-        inputs,
-        receipts: BTreeMap::new(),
-        accepted: None,
-        runtime: None,
+        state
+    } else {
+        StageState {
+            version: 2,
+            stage: kind,
+            request: build_request(kind, &inputs, store.root())?,
+            input_sha256,
+            runtime: None,
+            inputs: inputs.clone(),
+            accepted: None,
+        }
     };
-    persist(path, &state)?;
+    state.inputs = inputs;
+    state.accepted = match kind {
+        Stage::Brief => store
+            .content(&state.inputs.packet_id, "brief")?
+            .map(StageResult::Brief),
+        Stage::Resume => store
+            .content(&state.inputs.packet_id, "resume-content")?
+            .map(StageResult::Resume),
+    };
+    persist(store, &state)?;
     Ok(state)
+}
+
+/// Import only correlation and execution progress from predecessor stage files.
+/// Accepted content is imported separately; tool history remains Nucleus-owned.
+pub(crate) fn import_execution(value: &Value) -> Result<Value> {
+    let inputs: StageInputs =
+        serde_json::from_value(value.get("inputs").context("stage inputs missing")?.clone())?;
+    let job: Option<JobV1> =
+        serde_json::from_value(value.get("runtime").cloned().unwrap_or(Value::Null))?;
+    let state = StageState {
+        version: 2,
+        stage: serde_json::from_value(value["stage"].clone())?,
+        request: serde_json::from_value(value["request"].clone())?,
+        input_sha256: crate::store::digest(&serde_json::to_vec(&inputs)?),
+        runtime: job.map(|job| RuntimeState {
+            state: job.summary.state,
+            attempt_id: job.summary.current_attempt_id,
+        }),
+        inputs,
+        accepted: None,
+    };
+    retained_tool_namespace(&state)?;
+    state.request.validate()?;
+    Ok(serde_json::to_value(state)?)
 }
 
 fn validate_inputs(inputs: &StageInputs) -> Result<()> {
@@ -433,14 +430,14 @@ fn validate_health(health: &HealthResponseV1, require_admission: bool) -> Result
 
 async fn run_stage_inner(
     client: &NucleusClient,
-    path: &Path,
+    store: &Store,
     state: &mut StageState,
     validator: ResumeValidator<'_>,
 ) -> Result<StageResult> {
     if state
         .runtime
         .as_ref()
-        .is_some_and(|job| job.summary.state.is_terminal())
+        .is_some_and(|job| job.state.is_terminal())
     {
         return terminal_result(state);
     }
@@ -453,7 +450,7 @@ async fn run_stage_inner(
         Err(ClientError::Api { status: 404, .. }) => {
             check_readiness(client).await?;
             register_tools(client, state).await?;
-            // Exact request was fsynced before any potentially ambiguous submit.
+            // Exact request was committed before any potentially ambiguous submit.
             client.submit_job(&state.request).await?;
         }
         Err(error) => return Err(error.into()),
@@ -462,8 +459,11 @@ async fn run_stage_inner(
         let job = client.get_job(&state.request.id).await?;
         ensure!(job.request == state.request, "Nucleus request changed");
         let terminal = job.summary.state.is_terminal();
-        state.runtime = Some(job);
-        persist(path, state)?;
+        state.runtime = Some(RuntimeState {
+            state: job.summary.state,
+            attempt_id: job.summary.current_attempt_id,
+        });
+        persist(store, state)?;
         if terminal {
             return terminal_result(state);
         }
@@ -482,7 +482,7 @@ async fn run_stage_inner(
         );
         for pending_call in pending.calls {
             let call = pending_call.call;
-            let response = bind_tool_result_validated(path, state, &call, validator)?;
+            let response = bind_tool_result_validated(store, state, &call, validator)?;
             client
                 .post_tool_result(&state.request.id, &call.id, &response)
                 .await?;
@@ -668,17 +668,8 @@ async fn register_tools(client: &NucleusClient, state: &StageState) -> Result<()
     Ok(())
 }
 
-#[cfg(test)]
-fn bind_tool_result(
-    path: &Path,
-    state: &mut StageState,
-    call: &ToolCallV1,
-) -> Result<ToolResultV1> {
-    bind_tool_result_validated(path, state, call, None)
-}
-
 fn bind_tool_result_validated(
-    path: &Path,
+    store: &Store,
     state: &mut StageState,
     call: &ToolCallV1,
     validator: ResumeValidator<'_>,
@@ -690,19 +681,12 @@ fn bind_tool_result_validated(
     if let Some(attempt_id) = state
         .runtime
         .as_ref()
-        .and_then(|job| job.summary.current_attempt_id.as_ref())
+        .and_then(|job| job.attempt_id.as_ref())
     {
         ensure!(
             &call.attempt_id == attempt_id,
             "tool call belongs to another attempt"
         );
-    }
-    if let Some(receipt) = state.receipts.get(call.id.as_str()) {
-        ensure!(
-            serde_json::to_vec(&receipt.call)? == serde_json::to_vec(call)?,
-            "conflicting tool call identity"
-        );
-        return Ok(receipt.response.clone());
     }
     let namespace = retained_tool_namespace(state)?;
     let expected = argument_schema_id(namespace, &call.tool_name, sectioned_brief(state));
@@ -727,15 +711,20 @@ fn bind_tool_result_validated(
         result: to_raw_value(&value)?,
         is_error,
     };
-    state.receipts.insert(
-        call.id.to_string(),
-        Receipt {
-            call: call.clone(),
-            response: response.clone(),
-        },
-    );
-    // The accepted result and exact receipt are one atomic domain commit.
-    persist(path, state)?;
+    // Content records themselves make successful submissions idempotent. Nucleus
+    // owns the mailbox response, including diagnostics and read-only calls.
+    if !is_error {
+        if let Some(result) = &state.accepted {
+            match result {
+                StageResult::Brief(brief) => {
+                    store.put_content(&state.inputs.packet_id, "brief", brief)?;
+                }
+                StageResult::Resume(resume) => {
+                    store.put_content(&state.inputs.packet_id, "resume-content", resume)?;
+                }
+            }
+        }
+    }
     Ok(response)
 }
 
@@ -916,23 +905,42 @@ fn accept(state: &mut StageState, result: StageResult) -> Result<Value> {
     Ok(json!({"accepted":true,"packet_id":state.inputs.packet_id,"stage":state.stage}))
 }
 
-fn persist(path: &Path, state: &StageState) -> Result<()> {
-    let parent = path.parent().context("stage parent missing")?;
-    let mut file = tempfile::NamedTempFile::new_in(parent)?;
-    file.as_file()
-        .set_permissions(fs::Permissions::from_mode(0o600))?;
-    serde_json::to_writer_pretty(&mut file, state)?;
-    file.write_all(b"\n")?;
-    file.as_file().sync_all()?;
-    file.persist(path).map_err(|error| error.error)?;
-    File::open(parent)?.sync_all()?;
-    Ok(())
+fn persist(store: &Store, state: &StageState) -> Result<()> {
+    store.save_execution(&state.inputs.packet_id, state.stage.name(), state)
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use std::fs;
+
+    fn fixture_store(root: &Path) -> Store {
+        let store = Store::open(root).unwrap();
+        store
+            .insert(&crate::store::PacketRecord {
+                id: "packet-1".into(),
+                opportunity: "fixture-role".into(),
+                job_id: "cast-1".into(),
+                company: "Example".into(),
+                title: "Engineer".into(),
+                status: "preparing".into(),
+                directory: String::new(),
+            })
+            .unwrap();
+        store
+    }
+    fn stage_bytes(store: &Store) -> Vec<u8> {
+        serde_json::to_vec(&store.execution("packet-1", "brief").unwrap()).unwrap()
+    }
+    fn bind_tool_result(
+        store: &Store,
+        state: &mut StageState,
+        call: &ToolCallV1,
+    ) -> Result<ToolResultV1> {
+        bind_tool_result_validated(store, state, call, None)
+    }
+
     use nucleus_core::{AttemptId, SchemaId, ToolCallId};
 
     fn inputs() -> StageInputs {
@@ -968,7 +976,7 @@ mod tests {
     }
 
     fn use_legacy_identity(state: &mut StageState) {
-        assert!(state.receipts.is_empty() && state.runtime.is_none());
+        assert!(state.runtime.is_none());
         state.request.id = nucleus_core::JobId::new(state.request.id.as_str().replacen(
             "platter-",
             "job-packets-",
@@ -1014,7 +1022,7 @@ mod tests {
     #[test]
     fn restart_reuses_exact_request_and_rejects_changed_snapshot() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("brief.json");
+        let path = fixture_store(dir.path());
         let state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         let reloaded = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         assert_eq!(state.request, reloaded.request);
@@ -1026,14 +1034,19 @@ mod tests {
     #[test]
     fn legacy_pending_calls_keep_frozen_request_and_schema_identity() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("brief.json");
+        let path = fixture_store(dir.path());
         let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         use_legacy_identity(&mut state);
         persist(&path, &state).unwrap();
-        let original_bytes = fs::read(&path).unwrap();
+        let original_bytes = stage_bytes(&path);
         let mut restarted = load_or_create(&path, Stage::Brief, inputs()).unwrap();
-        assert_eq!(retained_request(&path).unwrap(), state.request);
-        assert_eq!(fs::read(&path).unwrap(), original_bytes);
+        assert_eq!(
+            retained_request(&path, "packet-1", Stage::Brief)
+                .unwrap()
+                .unwrap(),
+            state.request
+        );
+        assert_eq!(stage_bytes(&path), original_bytes);
         let pending = call(
             &restarted,
             "legacy-call",
@@ -1052,12 +1065,12 @@ mod tests {
         assert_eq!(response.requester, state.request.requester);
         let mut reloaded = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         assert_eq!(reloaded.request, state.request);
-        let accepted_bytes = fs::read(&path).unwrap();
+        let accepted_bytes = stage_bytes(&path);
         assert_eq!(
             serde_json::to_vec(&bind_tool_result(&path, &mut reloaded, &pending).unwrap()).unwrap(),
             serde_json::to_vec(&response).unwrap()
         );
-        assert_eq!(fs::read(&path).unwrap(), accepted_bytes);
+        assert_eq!(stage_bytes(&path), accepted_bytes);
         let mut foreign_schema = call(
             &reloaded,
             "wrong-namespace",
@@ -1066,26 +1079,26 @@ mod tests {
         );
         foreign_schema.arguments_schema_id = "platter.list-career-entries.arguments.v1".into();
         assert!(bind_tool_result(&path, &mut reloaded, &foreign_schema).is_err());
-        assert_eq!(fs::read(&path).unwrap(), accepted_bytes);
+        assert_eq!(stage_bytes(&path), accepted_bytes);
     }
 
     #[test]
     fn conflicting_retained_toolset_is_rejected_without_rewriting_state() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("brief.json");
+        let path = fixture_store(dir.path());
         let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         state.request.invocation.toolset = Some(toolset_ref(Stage::Brief, LEGACY_TOOL_NAMESPACE));
         persist(&path, &state).unwrap();
-        let before = fs::read(&path).unwrap();
+        let before = stage_bytes(&path);
         assert!(load_or_create(&path, Stage::Brief, inputs()).is_err());
-        assert!(retained_request(&path).is_err());
-        assert_eq!(fs::read(&path).unwrap(), before);
+        assert!(retained_request(&path, "packet-1", Stage::Brief).is_err());
+        assert_eq!(stage_bytes(&path), before);
     }
 
     #[test]
     fn domain_commit_survives_restart_and_exact_receipt_replay() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("brief.json");
+        let path = fixture_store(dir.path());
         let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         let first = call(
             &state,
@@ -1146,7 +1159,7 @@ mod tests {
     #[test]
     fn malformed_brief_never_commits() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("brief.json");
+        let path = fixture_store(dir.path());
         let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         let invalid = call(
             &state,
@@ -1165,7 +1178,7 @@ mod tests {
     #[test]
     fn career_tools_only_read_frozen_entries() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("brief.json");
+        let path = fixture_store(dir.path());
         let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         let read = call(
             &state,
@@ -1272,7 +1285,7 @@ mod tests {
     #[tokio::test]
     async fn legacy_recovery_registers_legacy_schema_and_toolset_metadata() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("brief.json");
+        let path = fixture_store(dir.path());
         let socket = dir.path().join("nucleus.sock");
         let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         use_legacy_identity(&mut state);
@@ -1332,7 +1345,7 @@ mod tests {
     #[tokio::test]
     async fn restart_replays_committed_receipt_and_runtime_failure_preserves_success() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("brief.json");
+        let path = fixture_store(dir.path());
         let socket = dir.path().join("nucleus.sock");
         let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         let pending = call(
@@ -1399,7 +1412,7 @@ mod tests {
     #[tokio::test]
     async fn legacy_runtime_pending_call_resumes_without_submitting_new_work() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("brief.json");
+        let path = fixture_store(dir.path());
         let socket = dir.path().join("nucleus.sock");
         let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         use_legacy_identity(&mut state);
@@ -1456,7 +1469,7 @@ mod tests {
     #[tokio::test]
     async fn runtime_completion_without_domain_commit_fails_and_never_resubmits() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("brief.json");
+        let path = fixture_store(dir.path());
         let socket = dir.path().join("nucleus.sock");
         let state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         let completed = runtime_job(&state, nucleus_core::JobState::Completed);
@@ -1552,7 +1565,7 @@ mod tests {
     #[test]
     fn rendering_rejection_returns_feedback_without_committing_resume() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("resume.json");
+        let path = fixture_store(dir.path());
         let mut state = load_or_create(&path, Stage::Resume, inputs()).unwrap();
         let payload = json!({"jackson_bullets":["Supported Jackson work"],"evidence":[{"bullet_index":0,"career_entry_ids":["story-1"]}]});
         let first = call(&state, "call-1", "submit_resume", &payload);

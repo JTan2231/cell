@@ -63,3 +63,7 @@ retained delivery state.
 &attachments)` extend that interface without changing `Message` or `send`.
 The caller supplies captured bytes and a basename; Email does not read files
 through the Rust API or fetch remote attachments.
+
+Callers holding attachment bytes in a database can use `--payload-stdin` with
+body `-` to supply JSON containing the body and ordered base64 attachments.
+See the [CLI contract](docs/cli.md). Email retains no local payload files.

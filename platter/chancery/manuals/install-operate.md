@@ -1,12 +1,9 @@
 # Install and maintain Platter
 
-Platter's Rust installer packages the `platter` command, `platter-install`
-recovery executable and matching Chancery provider as one immutable release.
-Its supported mutation route is the Cell deployment coordinator. Direct
-`platter-install install` and `recover` are refused because replacing this
-requester must preserve admission, pending Nucleus work and domain state.
-
-Building a candidate is separate from installing it:
+Platter's Rust installer packages `platter`, the recovery installer and matching
+Chancery provider as one immutable release. Its mutation route remains Cell
+coordinated deployment. Direct installer `install` and `recover` are refused.
+Building a candidate does not install it or run domain work:
 
 ```sh
 ./ci.sh platter
@@ -14,156 +11,118 @@ python3 deployment/build.py --source-root /absolute/cell \
   --product platter --output /absolute/cell-build
 ```
 
-The builder prepares `candidates/platter/bin/platter`,
-`candidates/platter/bin/platter-install` and a sealed candidate manifest. It
-builds code and verifies candidate material; it does not install commands,
-prepare packets, render resumes, collect jobs, submit Nucleus jobs, send email
-or enable a schedule. CI is the separate development check.
-
-When installation has been authorized and the changes are committed on local
-`main`, the coordinator interface is:
+When installation is authorized and the changes are committed on local main:
 
 ```sh
 ./deploy.sh plan platter
 ./deploy.sh platter
 ```
 
-`plan` is read-only. A deployment selects its exact local `main` commit; it
-ignores uncommitted changes and does not publish a release, commit, tag or
-push. Platter orders selected Cast, CRM, Email and Nucleus installations before its
-own cutover. The conservative
-maintenance closure includes Nucleus and its registered requesters, whose
-installed maintenance interfaces must already be compatible. Unselected
-products are not upgraded to satisfy a missing prerequisite.
+Plan is read-only. Deployment uses the exact committed main candidate; it does
+not publish commits, tags or releases. Selected Cast, CRM, Email and Nucleus
+upgrades precede Platter. Unselected products are not upgraded implicitly.
+Email must support the additive `--payload-stdin` interface before Platter can
+send database artifacts. Tectonic, Python 3 with pypdf, supported source data
+and compatible authenticated Nucleus remain independently required.
 
-## Installed files and private state
+## Owned storage
 
-Owned installation files are beneath
-`~/Library/Application Support/Platter/install/releases/HASH`. The
-`cell-install-v2` manifest records exact executable and provider versions,
-file modes, digests and public entry mappings. `package/install` retains the
-installer. The owned `current` selector publishes the matching
-`~/.local/bin/platter`, `~/.local/bin/platter-install` and Chancery
-`providers/platter` selector together. The installer retains prior releases for verified recovery. Cell coordinated
-cleanup follows its separate rules for removing unreferenced release history.
-Foreign selectors, altered retained files and mismatched candidate/provider
-versions stop publication. Product and catalog writer locks protect the
-atomic selection and file compensation.
+Immutable installation files and prior releases remain beneath
+`~/Library/Application Support/Platter/install/releases/HASH`. The owned current
+selector publishes `~/.local/bin/platter`, `~/.local/bin/platter-install` and its
+Chancery provider together. Installation manifests contain executable/provider
+identities and modes, not private domain content. Altered releases, foreign
+selectors or changed candidate identities stop publication.
 
-Installation does not initialize a resume, create packets, or replace private
-inputs. Fresh runtime state defaults to `~/.local/share/platter`. If only the
-predecessor `~/.local/share/job-packets` exists, Platter uses it in place. If
-both exist, CLI callers must explicitly choose `--state-dir ABSOLUTE_PATH`;
-the coordinator refuses ambiguous default state. Existing absolute artifact
-paths, packet IDs, exact Nucleus requests, tool receipts, edition keys and
-ad hoc send receipts remain unchanged. New work uses requester program
-`platter`; retained predecessor work keeps `job-packets` identity.
+All durable runtime content and maintenance holds live in schema-two
+`packets.sqlite3` at the canonical root. Fresh state uses
+`~/.local/share/platter`; a sole `~/.local/share/job-packets` predecessor remains
+in place. Both roots are ambiguous and refused. An explicit `--state-dir` must
+match the canonical root; independent custom live libraries are unsupported.
+The database has private mode 0600 inside a private directory. SQLite recovery
+journals remain beside it. Disposable renderer files and caches are confined
+to that directory and removed after rendering; this is not memory-only LaTeX.
 
-The private state schema remains 1. Unknown schemas, invalid original
-resume snapshots and inconsistent retained state are refused. The original
-resume, captured CRM material, stage inputs, PDFs, editions and receipts stay
-outside the immutable install tree and the source repository. Back up the
-whole runtime directory consistently while work is inactive; a database
-backup alone does not contain the original resume or artifacts.
+Configuration, original template, captured inputs, compact execution records,
+accepted artifacts, PDFs, frozen editions, explicit job eligibility, send
+receipts and hold owners are covered by a consistent SQLite backup. Platter
+retains no second tool-call ledger. Nucleus's evidence and credentials remain
+separate and are not part of a Platter backup.
 
-## Maintenance and readiness
-
-The CLI provides these operational interfaces:
+## Maintenance and schema migration
 
 ```sh
 platter --json maintenance status
 platter --json maintenance hold OWNER
 CELL_DEPLOYMENT_RUN_ID=OWNER platter --json maintenance drain
-platter --json maintenance release OWNER
+CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate --backup /absolute/private/backup.sqlite3
 platter --json doctor
-CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate \
-  --backup /absolute/private/backup.sqlite3
+platter --json doctor --state-only
+platter --json maintenance release OWNER
 ```
 
-`CELL_DEPLOYMENT_RUN_ID` must match the sole retained hold for drain and
-migration; the coordinator supplies it. Ordinary status and owner hold/release
-commands do not submit model work.
+Owner holds are durable database rows and do not expire. A process holds an
+advisory activity lock on the state directory for its entire mutating
+command. Holds prevent admission while allowing existing work to finish.
+Installation admission requires the sole matching owner and drained local
+activity. The predecessor maintenance gate and runner lock are also observed
+while present, so a coordinated transition accounts for old binaries already
+running. Empty predecessor gate files are retired on a drained final release.
 
-A per-user durable gate under
-`~/Library/Application Support/Platter/deployment-maintenance` fences every
-mutating Platter command, including callers selecting custom state. Owner
-holds do not expire. Releasing one owner preserves other owners' holds.
-Existing admitted commands can finish; the default-state runner lock also
-accounts for a still-running predecessor CLI.
+Maintenance observes all pages of nonterminal jobs under both `platter` and
+`job-packets`. Drain cancels orphaned matching work only once local admissions
+and the predecessor runner have settled. It creates no replacement jobs or
+synthetic domain records. Unresolved jobs and other hold owners prevent cutover.
+Requester holds/draining precede Nucleus's hold, and Nucleus is released last.
 
-Status checks live admissions and nonterminal Nucleus work under both
-`platter` and `job-packets` requester programs, following all result pages.
-Once no live runner or admission remains, drain cancels orphaned matching
-Nucleus jobs and waits for terminal state. It does not submit replacement
-jobs or run requester tools. Accepted stages and receipts remain retained;
-cancellation leaves any unaccepted attempt subject to the ordinary explicit
-recovery limits. An unresolved job or competing hold prevents cutover.
+Migration is an explicit one-way schema-one to schema-two import. It preserves
+packet IDs as run IDs, captured bytes, exact Nucleus requests, frozen subjects,
+bodies, attachment names/order, idempotency keys and acceptance/uncertainty.
+Legacy reserved/sent jobs become ineligible; their preparation runs remain
+ready. Test occurrences become edition rows without a type discriminator and
+do not determine job eligibility. Any remaining owned runtime files are
+retained as imported artifacts. Duplicate tool history is not imported.
 
-The coordinator holds and drains requesters before Nucleus, applies the
-selected candidate, verifies while held, then releases requester holds and
-Nucleus last. `migrate --backup` requires the deployment hold and quiescence,
-checks supported schema and captured template, and takes a private consistent
-SQLite backup when a database exists. This release needs no schema change and
-never initializes missing domain state as part of installation.
+The import commits transactionally before filesystem cleanup. It then writes
+a complete schema-two backup and records a hashed cleanup manifest. A missing,
+conflicting or changed source file stops import; backup or cleanup failure
+retains originals and recovery information. Reinvocation resumes cleanup only
+when the chosen backup and remaining source hashes still agree. Only manifest
+files are removed. A backup created here is a schema-two recovery image, not an
+old-binary rollback image. No production migration is implied by a source edit.
 
-`doctor` checks existing local state and the configured Cast, CRM, Email,
-renderer and Nucleus prerequisites without creating domain work. Email must
-support repeated local `--attach` arguments; an older Email installation must
-be upgraded separately when authorized. Renderer readiness requires Tectonic,
-Python 3 and `pypdf`. `PLATTER_TECTONIC` and `PLATTER_PYTHON` may select absolute
-executables. Otherwise resolution checks `~/.local/bin`, `/usr/local/bin`,
-`/opt/homebrew/bin` and `/usr/bin` in that order, independent of the caller
-PATH. Preparation uses the same resolver. Nucleus must have compatible authenticated harness
-readiness; during deployment its exact run-owned hold is checked.
-These probes do not call Cast collection, consume Cast API-key budgets, submit
-model jobs, render a document, send email or read a provider account balance.
-`doctor --state-only` proves retained schema and template compatibility without
-execution, rendering or delivery prerequisites. Recovery of an unchanged prior
-Platter installation, and verification of an affected-only prior installation,
-use this check under the existing quiescence proof. Selected candidate
-verification still requires full readiness.
-Cast and CRM probes inspect executable identity only; they do not read
-exports, profile contents or prove those libraries initialized. These checks
-establish local readiness at observation time, not future source availability,
-model success, final PDF fidelity or inbox receipt.
+Old binaries cannot operate schema two. Do not restore an old binary against
+the migrated database. Recovery after this boundary requires a compatible
+candidate or an explicitly selected complete predecessor database/files backup
+with its matching binary. Installation file compensation does not undo schema
+migration. Preserve holds after unresolved recovery.
 
-## Inspection and recovery
+## Readiness and recovery
 
-The installer exposes read-only verification separately from publication:
+`doctor` checks retained state, configured executable identities, Email's
+byte-payload interface, renderer availability and strict authenticated Nucleus
+readiness. Renderer overrides are absolute `PLATTER_TECTONIC` and
+`PLATTER_PYTHON`; fallback search is `~/.local/bin`, `/usr/local/bin`,
+`/opt/homebrew/bin`, `/usr/bin`. These checks do not collect jobs, read CRM
+profiles, render a PDF, submit a model job or send mail. Cast/CRM executable
+identity is not proof that their libraries are initialized. `--state-only`
+requires neither rendering nor external service readiness.
+
+Read-only installation interfaces remain:
 
 ```sh
 platter-install inspect
-platter-install verify --binary /absolute/tested/platter \
-  --bundle /absolute/cell/platter/chancery
+platter-install verify --binary /absolute/candidate/platter --bundle /absolute/cell/platter/chancery
 platter-install verify-release /absolute/owned/release
 ```
 
-`inspect` and `verify` accept an explicit `--home ABSOLUTE_PATH`. `verify`
-compares the installed release with the supplied candidate and executing
-installer. `verify-release` checks retained release integrity without changing
-selectors. No prior installed Platter release format is supported; the
-predecessor compatibility is runtime state compatibility, not an invented
-legacy installation format.
+Inspect and verify accept `--home ABSOLUTE_PATH`. The sealed version-one
+`platter-install adapter OP` remains the coordinator boundary for inspect,
+hold, drain, apply, verify, release and recover. Apply requires exact run-owned
+maintenance. Candidate and source material are verified; affected-only products
+are not upgraded. Interrupted or unsafe recovery retains its owner hold.
 
-The coordinator invokes the sealed `platter-install adapter OP` with its
-version-one JSON request for `inspect`, `hold`, `drain`, `apply`, `verify`,
-`release` or `recover`. This internal boundary verifies the candidate and
-source material, captures prior selection, and rejects installation of an
-affected-only product. Inspection is read-only. Apply requires the exact
-run-owned drained hold; changing selection since inspection is refused.
-
-On an ordinary publication failure, shared installation transactions restore
-coherent prior selectors. Coordinated recovery proves a coherent unchanged
-prior or exact candidate installation, supported domain state and readiness
-before releasing holds. It does not blindly repeat an uncertain apply or
-restore a database merely because an older binary exists. An unsafe or
-interrupted recovery leaves maintenance held and reports its owner. Preserve
-the held state and use a reviewed product recovery procedure; do not delete
-holds or alter immutable releases to bypass the failed proof. There is no
-supported arbitrary direct rollback or incompatible schema migration.
-
-No installer operation creates a Clockwork binding, LaunchAgent, recurring
-09:00 delivery or send authorization. Runtime artifacts and send history have
-no automatic pruning. The install manifest excludes private resume content,
-career entries and credentials. Candidate builds and coordinator workspaces
-follow Cell's separate cache and temporary-file retention rules.
+No installation operation initializes a resume, prepares packets, sends email,
+creates a Clockwork binding or enables recurring delivery. Domain artifacts
+and accepted editions have no automatic pruning. Candidate workspaces and
+installation release history remain under Cell's separate retention rules.

@@ -1,15 +1,15 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Prepare and preview private job application packets",
-  "summary": "Prepare unsent Cast jobs as a concise sectioned brief and Jackson-only tailored resume, preview up to three packets, and explicitly send a normal edition or an isolated test from retained material.",
+  "summary": "Prepare eligible Cast jobs as private briefs and Jackson-only resumes in SQLite, freeze editions, and explicitly send retained attachment bytes.",
   "use_when": [
-    "The user wants a private brief and a constrained tailored resume for a retained Cast job.",
-    "The user wants to prepare or preview an edition of up to three previously unsent opportunities, inspect retained status, or explicitly send a frozen edition.",
-    "The user explicitly wants an ad hoc test email using retained completed packets without source/API refresh or changes to ordinary packet sent flags."
+    "The user wants to prepare or preview eligible Cast opportunities with a concise brief and a constrained resume.",
+    "The user wants an explicitly authorized send or another edition composed from retained materials.",
+    "The user wants to change job eligibility or export a retained artifact to an explicit destination."
   ],
   "do_not_use_when": [
     "The request is job discovery, CRM editing, employer outreach or application submission.",
@@ -42,40 +42,47 @@
       "invocation": "platter status"
     },
     {
-      "label": "Preview retained packets as an isolated test",
+      "label": "Preview retained packets as an retained-material edition",
       "invocation": "platter preview YYYY-MM-DD --ad-hoc RUN_ID --packet PACKET_ID"
     },
     {
-      "label": "Send an authorized isolated test",
+      "label": "Send an authorized retained-material edition",
       "invocation": "platter send YYYY-MM-DD --ad-hoc RUN_ID --email-executable /absolute/private/email-wrapper"
     },
     {
-      "label": "Preview an isolated test with reviewed paragraph overrides",
+      "label": "Preview an retained-material edition with reviewed paragraph overrides",
       "invocation": "platter preview YYYY-MM-DD --ad-hoc RUN_ID --packet PACKET_ID --brief-overrides /absolute/reviewed-paragraphs.json"
+    },
+    {
+      "label": "Change explicit job eligibility",
+      "invocation": "platter eligibility CAST_JOB_ID true|false"
+    },
+    {
+      "label": "Export a retained artifact",
+      "invocation": "platter export ARTIFACT_ID /absolute/chosen/output.pdf"
     }
   ],
   "effects": [
-    "Initialization captures a private original resume template and creates local configuration/state.",
-    "Preparation reads Cast export and CRM profile list/read interfaces, fetches full supported employer posting evidence, submits two sequential constrained Nucleus jobs when pursuit is appropriate, and renders local resume artifacts.",
-    "Preview rechecks supported full posting evidence before freezing, retains exact brief text and copied PDF attachments, and reserves selected opportunities. Explicit send invokes fixed-recipient Email with the retained payload and occurrence key.",
-    "Ad hoc preview reads retained packet rows/stages/artifacts and creates only an isolated test occurrence with copied PDFs. It makes no Cast, CRM, source HTTP, Nucleus or rendering call. Ad hoc send updates only that occurrence and invokes the selected fixed-recipient Email implementation."
+    "Initialization imports the original template and configuration into the canonical SQLite library.",
+    "Preparation captures Cast posting and CRM career inputs, runs constrained Nucleus stages and retains accepted content and rendered bytes as artifacts referencing the preparation run.",
+    "Ordinary preview refreshes source evidence, freezes subject/body and ordered artifact references, and explicitly sets selected jobs ineligible in the same transaction.",
+    "Retained-material preview creates the same edition records without changing eligibility or calling Cast, CRM, employer sources, Nucleus or the renderer.",
+    "Send pipes body and attachment bytes to Email, retaining uncertainty before transport and acceptance afterward. Eligibility is independently mutable through the supported CLI. Export creates a new caller-selected file."
   ],
   "authority": [
-    "Platter validates and retains domain results independently of Nucleus terminal prose.",
-    "Only Jackson work-experience bullet contents may be authored. Every byte of the original resume source outside that span stays fixed.",
-    "A caller must already authorize the exact external send. Stored delivery settings, model output, preview and catalog presence do not grant send authority.",
-    "An ad hoc receipt does not reserve an ordinary packet or mark it sent. Test-send authority is explicit and does not create recurring-send authority."
+    "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
+    "Models author only plain Jackson bullets; all other original resume source bytes remain fixed.",
+    "Each send requires applicable user authority. Preview, stored schedules, catalog presence and model output grant no send authority."
   ],
   "success": [
-    "Preparation is ready only when the accepted brief and resume content are retained and the fixed-template resume renders successfully.",
-    "Preview durably selects an edition without sending it. Email acceptance records submission, not inbox receipt or an application outcome.",
-    "Ad hoc preview freezes a separate test payload without changing ordinary domain state; ad hoc send records acceptance only in that occurrence."
+    "Preparation succeeds when accepted brief/resume artifacts and a validated one-page PDF are retained.",
+    "Preview freezes exact message and ordered immutable artifacts without sending.",
+    "A recognized Accepted ID proves submission acceptance, not final inbox delivery. Job eligibility is an explicit field, never inferred from edition history."
   ],
   "failure_and_recovery": [
-    "Retain original template, captured inputs, stage requests, accepted results, tool receipts, PDFs, database and edition files together. Reinvoke preparation to inspect or resume exact retained stage work; changed stage inputs are rejected.",
-    "Already reserved or sent opportunities are excluded from later editions. An uncertain send is held and is not blindly repeated.",
-    "There is no automatic replacement-job retry, ambiguous-send reconciliation command or schedule. Resolve exceptional state through a reviewed product change; never rewrite database rows to bypass it.",
-    "An accepted ad hoc occurrence is not resent under the same RUN_ID. A sending or uncertain occurrence remains held. Retain its payload and receipt; a different RUN_ID represents a separately authorized test."
+    "A consistent schema-two SQLite backup contains the complete retained Platter library. Schema-one file-backed state requires maintained migration.",
+    "Exact pending Nucleus requests are retained. Successful submissions resolve to immutable run content; Platter stores no separate tool-receipt ledger.",
+    "Accepted content survives later execution failure. Uncertain sends remain held and accepted editions are not resent. There is no automatic new model attempt, direct Codex fallback or ambiguous-send reconciliation."
   ],
   "privacy": [
     "Private state includes career history, preferences, contact details, source text and tailored resumes. Keep it outside the repository and exclude it from commits.",
@@ -118,35 +125,35 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Preparation requires initialized private Platter state, the original supported LaTeX resume template, readable supported Cast and CRM interfaces, full supported employer posting evidence, strict compatible authenticated Nucleus readiness and local resume rendering tools. Send additionally requires an authorized frozen edition and Email attachment support."
+        "statement": "Initialized schema-two Platter state, complete supported employer evidence, readable Cast/CRM interfaces, strict authenticated Nucleus and supported renderer prerequisites are required for new preparation. Sending requires authorization and Email with --payload-stdin."
       },
       {
         "status": "declared",
-        "statement": "Ad hoc operations require existing retained completed packet artifacts and writable private ad hoc occurrence storage; they require no source, Cast, CRM or Nucleus readiness. Sending additionally requires explicit test-send authority and a compatible fixed-recipient Email executable."
+        "statement": "Retained-material preview needs completed artifacts only. It makes no source, model or rendering calls."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Inputs are an original absolute resume path at initialization, an optional selected private state directory, an exact Cast job ID for individual preparation, or a YYYY-MM-DD edition date. Configuration retains executable paths, count three, 09:00 and America/Chicago by default. Optional --stop-after-seconds requests an explicit bounded invocation; it is not a daily budget."
+        "statement": "Fresh canonical state is ~/.local/share/platter; a sole ~/.local/share/job-packets predecessor stays in place. Both roots are ambiguous and refused; --state-dir must match the canonical root. Original resume and override paths are import inputs, not continuing content dependencies."
       },
       {
         "status": "declared",
-        "statement": "Preview and send accept --ad-hoc RUN_ID for an isolated test. Preview optionally selects repeated --packet PACKET_ID values. Ad hoc send may select --email-executable ABS without changing normal configuration. RUN_ID contains 1 through 80 ASCII letters, digits, underscores or hyphens. Optional --brief-overrides ABS_JSON maps selected packet IDs to reviewed single paragraphs of at most 150 words. Without --packet, preview selects the first up to three retained complete records by packet ID, including ordinary sent or reserved records."
+        "statement": "Preparation selects a Cast job or eligible daily pool. Optional --stop-after-seconds bounds only its invocation. Default count is three, stored delivery is 09:00 America/Chicago, and no schedule is installed."
       },
       {
         "status": "declared",
-        "statement": "Fresh default state is ~/.local/share/platter. If only ~/.local/share/job-packets exists, continue using it in place. If both exist, an explicit --state-dir is required. The rename preserves original templates, packet identities, absolute artifact paths, retained Nucleus requests and send receipts."
+        "statement": "--ad-hoc RUN_ID selects another retained-material edition identity, not a test type. It accepts up to three --packet selections, optional imported --brief-overrides and an invocation-local absolute --email-executable on send. RUN_ID is 1 through 80 ASCII letters, digits, underscores or hyphens."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "New preparation retains a labeled Why it works and Role brief with optional Culture, a private pursuit assessment, plain-text Jackson bullets with private career-entry references, generated LaTeX and PDF. The rendered brief remains in the existing paragraph string field. Preview retains subject, body, ordered PDF files, packet identities and idempotency key. Status reports local records; send retains acceptance or unresolved state."
+        "statement": "SQLite retains jobs with eligible fields, preparation runs with captured inputs and compact execution correlation, immutable brief/resume/source/PDF artifacts, exact editions, ordered artifact references, receipts, configuration and maintenance holds. Artifacts reference their producing run; imported templates have no run."
       },
       {
         "status": "declared",
-        "statement": "Ad hoc preview and send retain independent occurrence.json, copied PDF files, exact TEST message, payload/attachment hashes, stable key and receipt under ad-hoc/RUN_ID; ordinary packet and edition state is untouched."
+        "statement": "CLI attachment references are artifact IDs. Export explicitly writes a new private file at the chosen destination. Rendering uses disposable files and redirected caches beneath the runtime root, removed after use; it is not memory-only rendering."
       }
     ],
     "data_semantics": [
@@ -156,17 +163,17 @@
       },
       {
         "status": "declared",
-        "statement": "A test occurrence uses retained material only and does not establish current posting availability. Its acceptance is independent of ordinary daily sent history. Reviewed paragraph overrides affect only the test occurrence; it retains the original accepted brief and source-state hashes without editing original artifacts."
+        "statement": "Eligibility answers whether Platter may consider a job. Ordinary preview explicitly sets selected jobs ineligible; retained-material preview and send leave the field alone. Eligibility can be changed without rewriting delivery evidence. All editions share one representation and ordinary subject format; imported frozen subjects remain unchanged."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Opportunity identity uses supported canonical ATS namespace/tenant/posting identities or normalized posting URLs; edition identity is its requested date. Three is a ceiling on complete packets, not a quota. Equivalent repostings that lack shared identifiers may remain unresolved."
+        "statement": "Canonical supported ATS identities or normalized URLs identify opportunities. A run ID identifies one preparation; artifacts reference that run. Three packets is a ceiling, not a quota. Perfect repost deduplication is not promised."
       },
       {
         "status": "declared",
-        "statement": "An ad hoc RUN_ID names one exact independent test occurrence. Reuse preserves the captured day, selected packets and exact payload; a new ID represents a new authorized test. Supplied packet order or override mappings must agree with an existing occurrence; a deliberately changed payload needs a new ID."
+        "statement": "Ordinary edition identity is its day; --ad-hoc retains a caller-supplied occurrence ID. Frozen date, selection, message, ordered attachment names/bytes and idempotency key are immutable. A deliberately changed payload requires a new identity."
       }
     ],
     "completeness_and_freshness": [
@@ -186,21 +193,17 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Models can list/read captured career entries and submit only their stage output. They have no direct CRM database, shell, general filesystem, web or messaging authority. Local files and Nucleus access remain current-user protected."
-      },
-      {
-        "status": "declared",
-        "statement": "Ad hoc packet listing uses read-only SQLite access to Platter's own domain state. An optional absolute Email executable override is invocation-local. A temporary copy of the existing Email wrapper may select a tested candidate while preserving its private credential and stdin procedure."
+        "statement": "Current-user commands use a private canonical SQLite database. Models access only captured inputs through constrained requester tools. Email receives attachment bytes through stdin and retains credential and fixed-recipient authority."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Exact stage requests and tool responses are retained before ambiguous transport and replayed by identity. Accepted brief survives resume failure. Preview reserves ready opportunities and copies attachments. Confirmed acceptance marks selected opportunities sent; ambiguous send stays held."
+        "statement": "Successful stage outputs are immutable by producing run and kind. Repeated successful calls resolve to the same content; conflicts are refused. Exact Nucleus requests are retained before ambiguous admission; execution history remains Nucleus-owned."
       },
       {
         "status": "declared",
-        "statement": "Ad hoc occurrence state and payload are isolated from normal reservations, editions and sent flags. Payload/attachment hashes are verified before send, uncertainty is persisted before transport, accepted repeats do not resend and unresolved attempts remain held."
+        "statement": "Ordinary edition creation and eligibility changes commit together. Frozen message/attachments remain immutable. Sending state commits before Email runs, recognized acceptance commits afterward, and uncertain attempts remain held. Neither test types nor derived sent flags govern eligibility."
       }
     ],
     "operational_limits": [
@@ -216,11 +219,11 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Package/provider 0.1.1 and preparation contract 2 describe this source release. New brief jobs use platter/brief/2 and platter.submit-brief.arguments.v2 with why_it_works, role, optional culture and private pursue fields. Retained v1 requests and accepted outputs remain supported without rewriting them; existing frozen editions are unchanged. New editions separate headers and brief sections with whitespace and omit the packet-count footer. Ad hoc editions preserve retained sectioned briefs and continue accepting reviewed single-paragraph overrides of at most 150 words. Source-built and installed CLI behavior share this contract; only a published installed selector advertises local availability."
+        "statement": "Preparation contract 3 and private schema 2 require explicit migration from schema-one files. Packet IDs, exact Nucleus requests, frozen payloads and receipts are preserved. Older binaries cannot use schema two. Email attachment contract 4 additionally needs the advertised --payload-stdin extension. Historical brief toolsets and original accepted content remain decodable."
       },
       {
         "status": "unspecified",
-        "statement": "No template replacement, incompatible domain-state migration, future model support interval or deprecation window is promised. Installation and supported schema-compatible recovery have their own contract."
+        "statement": "No arbitrary incompatible rollback, future template replacement, model support interval or deprecation window is promised."
       }
     ],
     "reliances": [

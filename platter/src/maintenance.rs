@@ -1,10 +1,12 @@
-//! One user-owned fence covers every Platter state directory. Orphaned runtime
-//! jobs can be cancelled after all local runners settle; no work is submitted.
+//! Durable holds live beside domain records in the canonical Platter database.
+//! An advisory lock on the state directory serializes live commands without a lock file.
+use crate::store::{DATABASE, Store};
 use anyhow::{Context, Result, ensure};
-use cell_maintenance::{Admission, Gate};
+use cell_maintenance::Gate as LegacyGate;
 use fs2::FileExt as _;
 use nucleus_client::NucleusClient;
 use nucleus_core::{JobId, ListJobsQueryV1};
+use rusqlite::{OptionalExtension as _, TransactionBehavior};
 use serde::Serialize;
 use std::{
     fs::File,
@@ -21,9 +23,214 @@ pub struct Status {
     pub runner_active: bool,
 }
 
+pub struct Gate {
+    home: PathBuf,
+}
+pub struct Admission {
+    _directory: File,
+    _legacy: Option<cell_maintenance::Admission>,
+}
+
 #[must_use]
 pub fn gate(home: &Path) -> Gate {
-    Gate::new(home.join("Library/Application Support/Platter/deployment-maintenance"))
+    Gate { home: home.into() }
+}
+
+impl Gate {
+    fn root(&self) -> Result<PathBuf> {
+        crate::default_state_dir(&self.home)
+    }
+    fn legacy(&self) -> Result<Option<LegacyGate>> {
+        let path = self
+            .home
+            .join("Library/Application Support/Platter/deployment-maintenance");
+        Ok(if path.try_exists()? {
+            Some(LegacyGate::new(path))
+        } else {
+            None
+        })
+    }
+    pub fn path(&self) -> Result<PathBuf> {
+        Ok(self.root()?.join(DATABASE))
+    }
+    pub fn enter(&self) -> Result<Admission> {
+        self.admit(None)
+    }
+    pub fn enter_for(&self, owner: &str) -> Result<Admission> {
+        validate_owner(owner)?;
+        self.admit(Some(owner))
+    }
+    fn admit(&self, owner: Option<&str>) -> Result<Admission> {
+        let legacy_gate = self.legacy()?;
+        let legacy_owners = legacy_gate
+            .as_ref()
+            .map(LegacyGate::status)
+            .transpose()?
+            .map(|status| status.holds)
+            .unwrap_or_default();
+        let legacy = legacy_gate
+            .map(|gate| match owner {
+                Some(owner) => gate.enter_for(owner),
+                None => gate.enter(),
+            })
+            .transpose()?;
+        let store = Store::control(&self.root()?)?;
+        let file = File::open(store.root())?;
+        file.try_lock_exclusive().map_err(|error| {
+            if error.kind() == std::io::ErrorKind::WouldBlock {
+                cell_maintenance::Error::Busy
+            } else {
+                cell_maintenance::Error::Io(error)
+            }
+        })?;
+        let tx = rusqlite::Transaction::new_unchecked(
+            &store.connection,
+            TransactionBehavior::Immediate,
+        )?;
+        for owner in legacy_owners {
+            tx.execute(
+                "INSERT OR IGNORE INTO maintenance_holds VALUES(?1)",
+                [owner],
+            )?;
+        }
+        let holds = holds(&store.connection)?;
+        ensure!(
+            match owner {
+                Some(owner) => holds == [owner],
+                None => holds.is_empty(),
+            },
+            cell_maintenance::Error::Held
+        );
+        tx.commit()?;
+        Ok(Admission {
+            _directory: file,
+            _legacy: legacy,
+        })
+    }
+    pub fn hold(&self, owner: &str) -> Result<cell_maintenance::Status> {
+        validate_owner(owner)?;
+        let legacy = self.legacy()?;
+        if let Some(gate) = &legacy {
+            gate.hold(owner)?;
+        }
+        let store = Store::control(&self.root()?)?;
+        store.connection.execute(
+            "INSERT OR IGNORE INTO maintenance_holds VALUES(?1)",
+            [owner],
+        )?;
+        if let Some(gate) = legacy {
+            for owner in gate.status()?.holds {
+                store.connection.execute(
+                    "INSERT OR IGNORE INTO maintenance_holds VALUES(?1)",
+                    [owner],
+                )?;
+            }
+        }
+        self.status()
+    }
+    pub fn release(&self, owner: &str) -> Result<cell_maintenance::Status> {
+        validate_owner(owner)?;
+        let root = self.root()?;
+        if root.join(DATABASE).try_exists()? {
+            let store = Store::control(&root)?;
+            store
+                .connection
+                .execute("DELETE FROM maintenance_holds WHERE owner=?1", [owner])?;
+        }
+        if let Some(gate) = self.legacy()? {
+            gate.release(owner)?;
+        }
+        let status = self.status()?;
+        if status.holds.is_empty()
+            && status.drained
+            && root.join(DATABASE).try_exists()?
+            && Store::control(&root)?.version()? == crate::store::SCHEMA_VERSION
+        {
+            self.retire_legacy_gate()?;
+        }
+        Ok(status)
+    }
+    pub fn status(&self) -> Result<cell_maintenance::Status> {
+        let root = self.root()?;
+        let mut owners = std::collections::BTreeSet::new();
+        let mut drained = true;
+        if let Some(gate) = self.legacy()? {
+            let status = gate.status()?;
+            owners.extend(status.holds);
+            drained = status.drained;
+        }
+        let path = root.join(DATABASE);
+        if path.try_exists()? {
+            crate::store::regular_file(&path)?;
+            let connection = rusqlite::Connection::open_with_flags(
+                &path,
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+            )?;
+            let exists: Option<String>=connection.query_row("SELECT name FROM sqlite_master WHERE type='table' AND name='maintenance_holds'",[],|r|r.get(0)).optional()?;
+            if exists.is_some() {
+                owners.extend(holds(&connection)?);
+            }
+            let file = File::open(&root)?;
+            match file.try_lock_exclusive() {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => drained = false,
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Ok(cell_maintenance::Status {
+            contract_version: 1,
+            holds: owners.into_iter().collect(),
+            drained,
+        })
+    }
+    fn retire_legacy_gate(&self) -> Result<()> {
+        let Some(gate) = self.legacy()? else {
+            return Ok(());
+        };
+        let control = File::open(gate.path().join("control.lock"))?;
+        control.try_lock_exclusive()?;
+        let activity = File::open(gate.path().join("activity.lock"))?;
+        activity.try_lock_exclusive()?;
+        ensure!(
+            std::fs::read_dir(gate.path().join("holds"))?
+                .next()
+                .is_none(),
+            "legacy holds remain"
+        );
+        for entry in std::fs::read_dir(gate.path())? {
+            let entry = entry?;
+            ensure!(
+                matches!(
+                    entry.file_name().to_str(),
+                    Some("holds" | "control.lock" | "activity.lock")
+                ),
+                "unexpected legacy maintenance state; preserve it"
+            );
+        }
+        std::fs::remove_dir(gate.path().join("holds"))?;
+        std::fs::remove_file(gate.path().join("activity.lock"))?;
+        std::fs::remove_file(gate.path().join("control.lock"))?;
+        std::fs::remove_dir(gate.path())?;
+        Ok(())
+    }
+}
+fn holds(connection: &rusqlite::Connection) -> Result<Vec<String>> {
+    let mut statement = connection.prepare("SELECT owner FROM maintenance_holds ORDER BY owner")?;
+    Ok(statement
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+fn validate_owner(owner: &str) -> Result<()> {
+    ensure!(
+        !owner.is_empty()
+            && owner.len() <= 128
+            && !owner.starts_with('.')
+            && owner
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b)),
+        cell_maintenance::Error::InvalidOwner
+    );
+    Ok(())
 }
 
 /// Also observe the prototype's runner lock, which predates admission fencing.

@@ -1,11 +1,11 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Install and maintain Platter",
-  "summary": "Prepare and verify a Platter installation, coordinate requester maintenance and schema-compatible cutover, preserve predecessor packet history, or inspect local readiness without preparing jobs or sending email.",
+  "summary": "Install and maintain Platter, import schema-one runtime files into its complete SQLite library, and preserve packet and delivery history under coordinated maintenance.",
   "use_when": [
     "The user wants Platter installed, replaced, inspected or maintained.",
     "The caller needs prerequisite readiness, admission holds, draining or supported installed-release verification."
@@ -66,10 +66,10 @@
     }
   ],
   "effects": [
-    "Coordinated installation stages exact runtime, installer and provider bytes under a content-addressed release and publishes only Platter-owned command/provider selectors.",
-    "Durable per-user holds fence new mutating CLI work across state directories. Existing admitted callers finish; drain cancels orphaned nonterminal Platter and predecessor Nucleus jobs only after callers have stopped.",
-    "The schema-compatible deployment step validates existing state and creates a consistent private SQLite backup when a database exists. It initializes no resume or packet state and rewrites no historical request or receipt.",
-    "Read-only verification and readiness create no packet, discovery request, model job, PDF or email. Installation creates no scheduler binding or service."
+    "Coordinated installation publishes exact runtime/installer/provider bytes and owned selectors; it creates no domain work or schedule.",
+    "Owner-keyed SQLite holds fence the canonical library. A database-file activity lock serializes commands, while predecessor gate/runner locks are observed through cutover.",
+    "An explicit transaction imports legacy records and files into schema two, writes a complete schema-two backup, then removes only the hashed legacy files on its retained cleanup manifest.",
+    "Readiness checks validate state and executable/runtime prerequisites without preparing jobs, rendering PDFs or sending email."
   ],
   "authority": [
     "Platter owns domain compatibility, admission, drain policy, retained state and success. Nucleus owns execution state and cancellation.",
@@ -81,10 +81,10 @@
     "Inspection and doctor report their observed boundary; no report establishes employer freshness, future model success, Resend acceptance or inbox receipt."
   ],
   "failure_and_recovery": [
-    "Foreign selectors, altered files, incompatible schemas, conflicting holds, ambiguous state roots and changed selection stop the operation.",
-    "Publication failure compensates owned files. Coordinated recovery proves a coherent prior or candidate installation and compatible state before releasing holds; an uncertain apply is not blindly repeated.",
-    "Failed recovery retains the owner hold. Preserve state and follow reviewed product recovery; never delete holds, reset packet history or hand-edit immutable releases to bypass the failure.",
-    "Direct installer install and recover commands are unsupported. No arbitrary prior-release rollback, incompatible database migration or predecessor installed-release format is promised."
+    "Foreign selectors, altered releases, ambiguous state roots, unsupported schemas, missing legacy content and conflicting holds stop the operation.",
+    "Schema migration preserves exact input and delivery identities. Failure before import commit leaves schema one; failure afterward retains schema two plus originals and cleanup recovery metadata.",
+    "Older binaries cannot operate schema two. A binary-only rollback is unsafe; recovery needs a compatible candidate or an explicitly selected complete predecessor database/files backup and matching binary.",
+    "Uncertain apply or recovery remains held. No automatic model retry, domain reset or direct installer rollback is supported."
   ],
   "privacy": [
     "Private state and backup files contain career history, original resume and packet/send metadata. They remain separate from immutable public installation material and source control.",
@@ -137,25 +137,25 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "The coordinator selects exact committed source and supplies its sealed version-one adapter JSON with operation, run identity, candidate, prior selection and recovery evidence. Read-only installer verification accepts absolute candidate/bundle/release paths and optional explicit home. Maintenance uses an owner identity; migrate accepts an absolute backup path. CELL_DEPLOYMENT_RUN_ID matches the sole retained owner for drain and migration. PLATTER_TECTONIC and PLATTER_PYTHON may select absolute renderer executables; otherwise fixed current-user/Homebrew/system locations are searched independently of PATH."
+        "statement": "Cell selects exact committed source and supplies sealed adapter JSON. migrate requires the sole CELL_DEPLOYMENT_RUN_ID hold, drained requester work and an absolute backup path. Coordinated Platter backups use the canonical runtime root/backups directory. Renderer overrides remain absolute."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Immutable release manifests, matching current command/provider selectors, retained installer and prior releases, typed installation/maintenance/readiness outcomes and a private SQLite backup when existing state is validated for cutover."
+        "statement": "Coherent immutable installation selectors and integrity manifests, maintenance/readiness outcomes, or a self-contained schema-two SQLite backup with a resumable legacy cleanup manifest."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Installed identity is an exact byte-and-mode proof. A readiness result describes local prerequisites at observation time; it is not a domain success or external delivery result. A database backup is not a complete packet-artifact backup."
+        "statement": "Database schema 2 holds all durable Platter content, explicit job eligibility and maintenance state. A consistent SQLite backup contains the complete retained library. Nucleus history and credentials remain separately owned."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Platter product/provider release 0.1.0, contract version 1 and private schema 1 are separate identities. New Nucleus work uses platter; retained job-packets requests, packet IDs, edition/idempotency keys and receipts remain unchanged. Maintenance ownership is per deployment run, not a time-limited lease."
+        "statement": "Existing packet IDs become run IDs. Retained job-packets requester identities, Nucleus requests, edition keys, frozen bytes, attachment names/order and receipts remain exact. Hold ownership is durable and never expires automatically."
       }
     ],
     "completeness_and_freshness": [
@@ -171,33 +171,33 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Installed selectors are ~/.local/bin/platter, ~/.local/bin/platter-install and the Platter Chancery provider. Immutable releases live under ~/Library/Application Support/Platter/install. The per-user gate fences mutations even with custom --state-dir. Fresh default runtime state is ~/.local/share/platter; a sole predecessor ~/.local/share/job-packets is used in place, while both require an explicit choice."
+        "statement": "Installed commands/provider retain their owned selectors under Application Support and ~/.local/bin. Runtime state is the single canonical ~/.local/share/platter root or a sole predecessor job-packets root. Independent --state-dir libraries are unsupported. Owner holds reside in SQLite; predecessor gate files are retired after drained release."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Requester holds and draining precede Nucleus maintenance. Exact candidate/state/readiness checks precede release; Nucleus is released last. Holds survive process exit and one owner cannot remove another hold. Drain allows active CLI completion before cancelling orphaned work."
+        "statement": "Requester holds and draining precede Nucleus maintenance; verification precedes run-owned release and Nucleus is released last. Live command admission uses the database file itself. Existing legacy gate/runner activity is respected during transition."
       },
       {
         "status": "declared",
-        "statement": "Product/catalog locks, selection preconditions and atomic publication preserve coherent artifacts. Recovery requires proof before releasing admission; schema 1 is validated without transforming domain records. Existing absolute paths and accepted results are retained."
+        "statement": "Schema-one import is transactional. A complete schema-two backup precedes hashed legacy-file cleanup. Interrupted backup or cleanup is resumable without regenerating packets, resending or resetting identities."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "No schedule, daemon, model submission, source collection, live send, state initialization or artifact pruning is part of Platter installation. Shared coordinator drain waits are bounded; unresolved work retains maintenance."
+        "statement": "No installation operation prepares packets, sends email, initializes a resume or enables a schedule. Renderer scratch remains under the runtime root; program installations and Nucleus state remain separate."
       },
       {
         "status": "unspecified",
-        "statement": "No installation-latency guarantee, automatic incompatible migration, arbitrary rollback, future support interval or deprecation window is promised."
+        "statement": "No installation latency, arbitrary incompatible rollback, future support interval or deprecation window is promised."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only verified cell-install-v2 Platter releases are supported. The predecessor compatibility preserves private schema-1 runtime state in place and does not invent an older Platter installation. Direct mutating installer commands are refused; coordinated cutover and verified recovery share the product lifecycle boundary."
+        "statement": "Installation uses cell-install-v2, private schema two, preparation contract three and installation contract two. Schema one needs the explicit import. Older binaries cannot read the new schema; a prior executable alone is not a safe rollback."
       }
     ],
     "reliances": [

@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{Config, resume::ResumeTemplate, store::Store};
+use crate::{Config, store::Store};
 
 pub fn renderer(name: &str) -> Result<PathBuf> {
     let variable = match name {
@@ -50,20 +50,20 @@ fn executable(path: &Path) -> Result<()> {
 }
 
 pub fn local_state(root: &Path) -> Result<bool> {
-    let configuration = root.join("config.json").try_exists()?;
-    let database = root.join("packets.sqlite3").try_exists()?;
-    ensure!(
-        configuration == database,
-        "incomplete Platter initialization: configuration and database must both exist"
-    );
-    if configuration {
-        let settings = crate::workflow::config(root)?;
-        let template: ResumeTemplate =
-            serde_json::from_slice(&std::fs::read(&settings.original_resume)?)?;
-        template.validate()?;
-        Store::open_read_only(root)?;
+    if !root.join(crate::store::DATABASE).try_exists()? {
+        ensure!(
+            !root.join("config.json").try_exists()?,
+            "legacy initialization requires migration"
+        );
+        return Ok(false);
     }
-    Ok(configuration)
+    let store = Store::open_read_only(root)?;
+    let Some(settings) = store.setting::<Config>("config")? else {
+        return Ok(false);
+    };
+    settings.validate()?;
+    store.template()?.validate()?;
+    Ok(true)
 }
 
 fn probe(path: &Path, arguments: &[&str], label: &str) -> Result<String> {
@@ -98,8 +98,9 @@ pub fn local_dependencies(root: &Path) -> Result<Value> {
     }
     let help = probe(&settings.email_executable, &["--help"], "Email attachments")?;
     ensure!(
-        help.split_whitespace().any(|word| word == "--attach"),
-        "Email must support --attach before Platter installation; publish the attachment-capable Email release first"
+        help.split_whitespace()
+            .any(|word| word == "--payload-stdin"),
+        "Email must support --payload-stdin before Platter installation; deploy the byte-payload Email release first"
     );
     let tectonic = renderer("tectonic")?;
     let python = renderer("python3")?;
@@ -110,7 +111,7 @@ pub fn local_dependencies(root: &Path) -> Result<Value> {
         "Python pypdf",
     )?;
     Ok(
-        json!({"initialized":initialized,"state_dir":root,"schema_version":if initialized {Some(1)} else {None},"email_attachments":true,"tectonic":tectonic,"python":python,"schedule":"not installed"}),
+        json!({"initialized":initialized,"state_dir":root,"schema_version":if initialized {Some(crate::store::SCHEMA_VERSION)} else {None},"email_attachments":true,"tectonic":tectonic,"python":python,"schedule":"not installed"}),
     )
 }
 

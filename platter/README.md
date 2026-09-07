@@ -1,92 +1,67 @@
 # Platter
 
-Platter prepares up to three previously unsent opportunities from Cast.
-Each packet contains a short, sectioned brief and a tailored resume PDF. Two Nucleus
-jobs use `gpt-5.6-sol` with `max` reasoning: one assesses and briefs the role,
-and the second writes only the Jackson work-experience bullets when the role
-is worth pursuing. Both can investigate the same captured CRM career library.
+Platter prepares private job briefs and Jackson-only tailored resumes from
+Cast opportunities and captured CRM career entries. Nucleus owns constrained
+model execution; Platter owns its retained content and delivery decisions.
 
-New briefs give a direct, evidence-grounded **Why it works**, a flat **Role**
-summary of stack, responsibilities and process, and an optional **Culture**
-summary. Role and culture each use one or two short lines without comparing
-the job with the user's experience. Culture is omitted when the posting or
-existing captured material does not support it; no extra research is performed.
-The brief contains no caveats, downsides or hedging and stays within 90 words.
-Pursuit assessment remains private. Retained older briefs and frozen editions
-stay unchanged.
-
-Everything outside the Jackson bullet span in the original resume's LaTeX
-source is fixed, including identity, dates, employers, other experience,
-education, projects, skills and layout. Model output is plain bullet text,
-escaped before insertion. Generated PDFs must fit the original one-page
-layout. The original template and generated materials stay in private state.
-
-**The stored delivery setting is 09:00 in America/Chicago; no recurring
-schedule is installed or enabled.** There is no
-candidate or token budget. External account limits, execution timeouts and
-source/rendering constraints still apply.
-
-After installation, use `platter`; a source build can use
-`target/debug/platter` for the same interface.
+The private SQLite library holds jobs with explicit eligibility, preparation
+runs, immutable content artifacts, editions, ordered attachment references,
+configuration and maintenance holds. A packet is a run and its artifacts.
+There is no separate packet table, test-edition type or tool-receipt ledger.
+Artifacts reference the run that produced them. Imported templates have no run.
 
 ```sh
-./ci.sh platter
-platter init --resume /absolute/path/to/original-resume.tex
+platter init --resume /absolute/original-resume.tex
 platter prepare CAST_JOB_ID
 platter prepare-daily
 platter preview 2026-09-07
 platter status
+platter eligibility CAST_JOB_ID false
+platter export ARTIFACT_ID /absolute/chosen/resume.pdf
 ```
 
-`preview` freezes one through three ready packets into a dated edition,
-including the exact email text and copied PDF attachments. It reserves those
-opportunities so a later edition cannot select them again. It sends nothing.
-Only after the edition is authorized for delivery:
+Normal preview freezes an exact message and sets the selected jobs ineligible
+in the same transaction. Eligibility is an explicit field, independent of
+whether delivery records exist. Change it deliberately with `eligibility`.
+Retained-material preview uses the same edition model and leaves eligibility
+alone:
+
+```sh
+platter preview 2026-09-07 --ad-hoc another-edition --packet PACKET_ID
+```
+
+Only after the relevant send is authorized:
 
 ```sh
 platter send 2026-09-07
+platter send 2026-09-07 --ad-hoc another-edition
 ```
 
-Sending requires the Email implementation that supports repeated `--attach`
-arguments; an older installed Email command cannot send these editions.
-Email's recipient remains the fixed personal inbox. Acceptance is retained
-separately from final inbox receipt. An uncertain send is held for inspection
-and is not automatically retried.
+Email's `--payload-stdin` extension receives attachment bytes directly, with no
+exported attachment files. Accepted editions are not resent; uncertain sends
+remain held. Email's fixed recipient and credential ownership are unchanged.
 
-For an authorized test email using retained packets, create a separate ad hoc
-occurrence. This path does not refresh job sources, invoke Cast or CRM, run a
-model, reserve ordinary packets, or mark them sent:
+Both model stages use `gpt-5.6-sol` with max effort. Briefs contain Why it works,
+Role and optional Culture, at most 90 words total. Unsupported culture is
+omitted without additional research. The displayed recommendation has no
+caveats or hedging; the pursuit assessment remains private. The resume model
+can author only Jackson bullet text. Every other original source byte stays
+fixed, and PDFs must pass one-page rendering checks.
 
-```sh
-platter preview 2026-09-07 --ad-hoc sample-1 --packet PACKET_ID
-platter send 2026-09-07 --ad-hoc sample-1 \
-  --email-executable /absolute/private/email-candidate-wrapper
-```
+Fresh state uses `~/.local/share/platter/packets.sqlite3`. A sole predecessor
+`~/.local/share/job-packets` root remains in place. Two roots are ambiguous;
+independent custom live libraries are unsupported. Schema-one file-backed
+state requires the maintained migration before ordinary use. A schema-two
+SQLite backup contains the full retained library.
 
-The preview prints a `[TEST]` edition and freezes the selected retained
-briefs and PDFs under private `ad-hoc/sample-1/` state. Sending requires
-explicit test-send authority and retains its own receipt. Reusing the same
-ad hoc ID after acceptance does not send again; an uncertain attempt remains
-held. The optional Email executable override affects this send only. A tested
-source Email binary can use a temporary copy of Email's credential wrapper;
-no production Email deployment is necessary for the test.
-Preview can also accept `--brief-overrides /absolute/reviewed-paragraphs.json`,
-a mapping from selected packet IDs to reviewed paragraphs. Overrides belong
-only to the test occurrence; the accepted original briefs stay unchanged.
+Rendering still requires Tectonic, Python and pypdf. Disposable working files
+and redirected caches stay inside Platter's root and are removed after use.
+Explicit exports are user-owned copies. Nucleus retains its own runtime state.
 
-Cast owns discovery, CRM owns the career library, Nucleus owns constrained
-execution, and Platter owns preparation, accepted materials, editions and
-send history. No direct CRM or Cast database access is used. Similar roles
-without a shared canonical identifier are not guaranteed to deduplicate.
+The stored 09:00 America/Chicago setting creates no recurring schedule.
+There is no candidate or token budget; external and rendering limits remain.
 
-The full [CLI and recovery contract](chancery/manuals/packet-prepare.md)
-describes private state, source limitations and recovery. The [installation contract](docs/system-installation.md) describes the
-`platter-install` executable, coordinated maintenance and release recovery.
-Building this source does not install its command or Chancery selector. Until a
-separate semantic repository is registered, this product uses Cell terminology.
-
-Fresh state defaults to `~/.local/share/platter`. If only the predecessor
-`~/.local/share/job-packets` exists, Platter continues using it in place. If
-both exist, choose `--state-dir /absolute/private/directory` explicitly. The
-rename preserves retained requests, original resume, packet identities, send
-receipts and existing absolute artifact paths.
+See the [operating contract](chancery/manuals/packet-prepare.md),
+[data model](docs/data-model.md), and
+[installation and migration contract](chancery/manuals/install-operate.md).
+This source change does not install commands or migrate the live library.

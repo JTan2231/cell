@@ -97,3 +97,32 @@ the send.
 ## Output selection
 
 On Resend acceptance Email exits zero and prints Accepted followed by the message ID. This acknowledges transport acceptance, not final delivery. Errors remain bounded secret-safe diagnostics with nonzero exit; no output body or credential is echoed.
+
+## Byte payloads on stdin
+
+Email also accepts an in-memory attachment handoff without local attachment
+files:
+
+```sh
+email --payload-stdin --idempotency-key product/occurrence 'Subject' -
+```
+
+Standard input is one JSON object:
+
+```json
+{"body":"Exact plain-text message","attachments":[{"filename":"resume.pdf","content":"JVBERi0="}]}
+```
+
+`content` is standard base64 of the exact attachment bytes. Attachment order,
+filenames, subject and body are part of the idempotent payload. The example
+bytes only illustrate encoding; they are not a real resume. `--payload-stdin`
+requires body `-` and conflicts with `--attach`. Unknown fields, malformed JSON,
+invalid base64 and unsafe filenames fail before any network request. The
+payload stays in memory and is not written to disk. The wrapper preserves
+stdin and its existing credential loading; no credential belongs in the JSON.
+This extension preserves the fixed addresses, bounded transport retries,
+acceptance output and requirement for applicable send authorization. Email
+retains no local attachment copy or send history after exit.
+
+The flag is additive in Email 0.5.1 under attachment contract 4. A caller that
+needs byte input must select an executable that advertises `--payload-stdin`.

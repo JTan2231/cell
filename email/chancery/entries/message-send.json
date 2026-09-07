@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Send a personal email now",
-  "summary": "Send a caller-provided subject and plain-text body with optional local file attachments immediately to the fixed personal recipient through Resend.",
+  "summary": "Send a caller-provided plain-text message immediately to the fixed personal recipient through Resend, with optional local files or in-memory attachment bytes.",
   "use_when": [
     "The user explicitly asks to send an email now to their fixed personal inbox and supplies or approves the subject, body, and any attachment filenames and bytes.",
     "A previously drafted message should now be sent exactly as approved.",
@@ -62,6 +62,10 @@
     {
       "label": "Send local attachments",
       "invocation": "/Users/joey/.local/bin/email --idempotency-key KEY --attach /absolute/resume.pdf SUBJECT -"
+    },
+    {
+      "label": "Send body and attachment bytes from stdin",
+      "invocation": "email --payload-stdin --idempotency-key KEY SUBJECT -"
     }
   ],
   "does_not_authorize": [
@@ -99,6 +103,10 @@
       {
         "status": "unsupported",
         "statement": "Recipients, senders, HTML, remote attachment URLs, carbon copies, schedules, drafts, previews, delivery callbacks, API keys in arguments, and hidden occurrence authority are not accepted inputs."
+      },
+      {
+        "status": "declared",
+        "statement": "--payload-stdin with body - accepts one JSON object containing UTF-8 body and ordered attachments, each with filename and base64 content. It conflicts with --attach. Unknown fields, invalid base64 or unsafe filenames are rejected before network submission."
       }
     ],
     "outputs": [
@@ -109,6 +117,10 @@
       {
         "status": "unsupported",
         "statement": "Email returns no draft identity, queued occurrence, local send-history record, scheduled state, final Gmail receipt, delivery tracking result, or domain-success assertion for its caller."
+      },
+      {
+        "status": "declared",
+        "statement": "The byte-payload path captures content in memory, submits through the same fixed-recipient transport, prints the same Accepted ID on acceptance and retains no local payload or history."
       }
     ],
     "data_semantics": [
@@ -203,6 +215,10 @@
       {
         "status": "unspecified",
         "statement": "No future API migration protocol, cross-release support interval, fixed external-provider retention policy, or deprecation window is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Release 0.5.1 adds --payload-stdin to attachment contract 4. Existing subject/body and --attach invocations retain their behavior. Callers requiring byte input must check the selected executable advertises the new flag."
       }
     ],
     "reliances": [

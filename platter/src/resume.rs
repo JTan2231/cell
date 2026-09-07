@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -27,8 +27,8 @@ pub struct ResumeTemplate {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderedResume {
-    pub source_path: PathBuf,
-    pub pdf_path: PathBuf,
+    pub source: String,
+    pub pdf: Vec<u8>,
     pub pages: usize,
 }
 
@@ -134,7 +134,7 @@ impl ResumeTemplate {
         Ok(())
     }
 
-    /// Compile in private temporary space. Publish artifacts only after checks pass.
+    /// Compile in disposable private space and return validated bytes.
     /// Tectonic and Python 3 with pypdf use the same explicit resolution as doctor.
     ///
     /// # Errors
@@ -143,6 +143,22 @@ impl ResumeTemplate {
     pub fn render_pdf(&self, bullets: &[String], output_dir: &Path) -> Result<RenderedResume> {
         let source = self.render_latex(bullets)?;
         create_private_dir(output_dir)?;
+        // The caller holds Platter's database admission lock. Recover abandoned
+        // renderer work from an interrupted invocation before creating new work.
+        for entry in fs::read_dir(output_dir)? {
+            let entry = entry?;
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".resume-build-")
+            {
+                ensure!(
+                    entry.file_type()?.is_dir() && !entry.file_type()?.is_symlink(),
+                    "unexpected renderer scratch entry"
+                );
+                fs::remove_dir_all(entry.path())?;
+            }
+        }
         let build = tempfile::Builder::new()
             .prefix(".resume-build-")
             .tempdir_in(output_dir)
@@ -161,6 +177,7 @@ impl ResumeTemplate {
         compiler
             .args(["--untrusted", "--keep-logs", "--outdir", ".", "render.tex"])
             .current_dir(build.path());
+        isolate_environment(&mut compiler, build.path())?;
         run_checked(&mut compiler, build.path(), "tectonic")?;
         let log = fs::read_to_string(build.path().join("render.log"))?;
         ensure!(
@@ -180,6 +197,7 @@ impl ResumeTemplate {
                 "render.pdf",
             ])
             .current_dir(build.path());
+        isolate_environment(&mut inspect, build.path())?;
         let inspection = run_checked(&mut inspect, build.path(), "pdf-inspection")?;
         let PdfInspection { pages, text } =
             serde_json::from_str(&inspection).context("read PDF inspection result")?;
@@ -196,15 +214,8 @@ impl ResumeTemplate {
             "resume PDF is missing the Jackson heading"
         );
 
-        let source_path = output_dir.join("resume.tex");
-        let pdf_path = output_dir.join("resume.pdf");
-        fs::rename(build.path().join("resume.tex"), &source_path)?;
-        fs::rename(build.path().join("render.pdf"), &pdf_path)?;
-        Ok(RenderedResume {
-            source_path,
-            pdf_path,
-            pages,
-        })
+        let pdf = fs::read(build.path().join("render.pdf"))?;
+        Ok(RenderedResume { source, pdf, pages })
     }
 }
 
@@ -319,6 +330,28 @@ fn create_private_dir(path: &Path) -> Result<()> {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
     }
+    Ok(())
+}
+
+fn isolate_environment(command: &mut Command, directory: &Path) -> Result<()> {
+    let cache = directory.join("cache");
+    create_private_dir(&cache)?;
+    for name in [
+        "HOME",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "XDG_CACHE_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "TECTONIC_CACHE_DIR",
+        "TEXMFOUTPUT",
+        "TEXMFVAR",
+        "TEXMFCONFIG",
+    ] {
+        command.env(name, &cache);
+    }
+    command.env("PYTHONDONTWRITEBYTECODE", "1");
     Ok(())
 }
 

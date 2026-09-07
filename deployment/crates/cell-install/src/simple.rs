@@ -567,14 +567,26 @@ fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Resu
                         "--json".into(),
                         "migrate".into(),
                         "--backup".into(),
-                        spec.install_root(&context.home)
-                            .parent()
-                            .ok_or_else(|| Error::new("invalid state root"))?
-                            .join(format!(
-                                "{}-pre-migration-{}.sqlite",
-                                spec.product, context.request.run_id
-                            ))
-                            .into_os_string(),
+                        if spec.product == "platter" {
+                            let current = context.home.join(".local/share/platter");
+                            let legacy = context.home.join(".local/share/job-packets");
+                            if current.exists() && legacy.exists() {
+                                return Err(Error::new("ambiguous Platter runtime roots"));
+                            }
+                            let root = if legacy.exists() { legacy } else { current };
+                            root.join("backups")
+                                .join(format!("migration-{}.sqlite", context.request.run_id))
+                                .into_os_string()
+                        } else {
+                            spec.install_root(&context.home)
+                                .parent()
+                                .ok_or_else(|| Error::new("invalid state root"))?
+                                .join(format!(
+                                    "{}-pre-migration-{}.sqlite",
+                                    spec.product, context.request.run_id
+                                ))
+                                .into_os_string()
+                        },
                     ],
                     &BTreeMap::from([(
                         "CELL_DEPLOYMENT_RUN_ID".into(),

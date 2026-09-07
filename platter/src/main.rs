@@ -1,6 +1,5 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::{Parser, Subcommand};
-use fs2::FileExt as _;
 use platter::{ad_hoc, maintenance, readiness, store::Store, workflow};
 use std::{
     path::PathBuf,
@@ -66,6 +65,17 @@ enum Command {
         #[arg(long, requires = "ad_hoc")]
         email_executable: Option<PathBuf>,
     },
+    /// Change whether Platter may select this retained opportunity.
+    Eligibility {
+        job_id: String,
+        #[arg(value_parser = clap::value_parser!(bool))]
+        eligible: bool,
+    },
+    /// Export one retained artifact to an explicitly selected destination.
+    Export {
+        artifact_id: String,
+        output: PathBuf,
+    },
     Status,
 }
 
@@ -94,7 +104,6 @@ async fn main() {
 
 #[allow(clippy::too_many_lines)] // One serial dispatch owns admission and the runner lock.
 async fn run() -> Result<()> {
-    use std::os::unix::fs::OpenOptionsExt as _;
     let cli = Cli::parse();
     anyhow::ensure!(
         cli.stop_after_seconds.is_none()
@@ -102,12 +111,13 @@ async fn run() -> Result<()> {
         "--stop-after-seconds applies only to prepare and prepare-daily"
     );
     let home = maintenance::home()?;
-    let root = if let Some(root) = cli.state_dir {
-        root
-    } else {
-        platter::default_state_dir(&home)?
-    };
-    anyhow::ensure!(root.is_absolute(), "state directory must be absolute");
+    let root = platter::default_state_dir(&home)?;
+    if let Some(selected) = cli.state_dir {
+        anyhow::ensure!(
+            selected == root,
+            "Platter uses one canonical database; --state-dir must select its canonical state directory"
+        );
+    }
     let operation = administrative(&cli.command, &home, &root).await?;
     if let Some(data) = operation {
         println!("{}", serde_json::json!({"ok":true,"data":data}));
@@ -122,16 +132,6 @@ async fn run() -> Result<()> {
         return Ok(());
     }
     let _admission = maintenance::gate(&home).enter()?;
-    platter::private_dir(&root)?;
-    let lock = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .mode(0o600)
-        .open(root.join("runner.lock"))?;
-    lock.try_lock_exclusive()
-        .context("another Platter runner is active")?;
     let deadline = cli
         .stop_after_seconds
         .map(|seconds| Instant::now() + Duration::from_secs(seconds));
@@ -142,7 +142,7 @@ async fn run() -> Result<()> {
         }
         Command::Prepare { job_id } => {
             let result = workflow::prepare(&root, &job_id, deadline).await?;
-            println!("{}: {} ({})", result.id, result.status, result.directory);
+            println!("{}: {}", result.id, result.status);
         }
         Command::PrepareDaily => {
             let ready = workflow::prepare_daily(&root, deadline).await?;
@@ -186,6 +186,27 @@ async fn run() -> Result<()> {
             };
             println!("{}: {}", edition.day, edition.status);
         }
+        Command::Eligibility { job_id, eligible } => {
+            Store::open(&root)?.set_eligible(&job_id, eligible)?;
+            println!("{job_id}: eligible={eligible}");
+        }
+        Command::Export {
+            artifact_id,
+            output,
+        } => {
+            use std::io::Write as _;
+            use std::os::unix::fs::OpenOptionsExt as _;
+            anyhow::ensure!(output.is_absolute(), "export destination must be absolute");
+            let artifact = Store::open_read_only(&root)?.artifact(&artifact_id)?;
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&output)?;
+            file.write_all(&artifact.content)?;
+            file.sync_all()?;
+            println!("exported: {}", output.display());
+        }
         Command::Status
         | Command::Doctor { .. }
         | Command::Maintenance { .. }
@@ -209,15 +230,19 @@ async fn administrative(
         }),
         Command::Migrate { backup } => {
             anyhow::ensure!(backup.is_absolute(), "backup path must be absolute");
+            let status = maintenance::status(home, root).await?;
+            anyhow::ensure!(
+                status.drained,
+                "migration requires drained requester work; run maintenance drain first"
+            );
             let (_admission, _runner) = maintenance::install_admission(home, root)?;
+            platter::migration::migrate(root, backup)?;
             let report = readiness::doctor(root).await?;
-            if readiness::local_state(root)? {
-                Store::open_read_only(root)?.backup(backup)?;
-            }
             Some(
-                serde_json::json!({"schema_version":1,"backup":if root.join("packets.sqlite3").exists() {Some(backup)} else {None},"readiness":report}),
+                serde_json::json!({"schema_version":platter::store::SCHEMA_VERSION,"backup":backup,"readiness":report}),
             )
         }
+
         Command::Maintenance { command } => {
             let status = match command {
                 Maintenance::Status => maintenance::status(home, root).await?,
@@ -247,8 +272,12 @@ fn print_status(root: &std::path::Path) -> Result<()> {
     );
     for record in Store::open_read_only(root)?.list()? {
         println!(
-            "{} {} — {} — {}",
-            record.id, record.status, record.company, record.title
+            "{} {} eligible={} — {} — {}",
+            record.id,
+            record.status,
+            Store::open_read_only(root)?.is_eligible(&record.opportunity)?,
+            record.company,
+            record.title
         );
     }
     Ok(())

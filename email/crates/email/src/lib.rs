@@ -32,6 +32,9 @@ struct Cli {
     /// Local file to attach; repeat for multiple files. Reads exact bytes before sending.
     #[arg(long = "attach", value_name = "PATH")]
     attachments: Vec<PathBuf>,
+    /// Read a JSON body and base64 attachment payload from stdin; body must be -.
+    #[arg(long, conflicts_with = "attachments")]
+    payload_stdin: bool,
     /// Email subject.
     subject: String,
     /// Plain-text body, or - to read UTF-8 text from stdin.
@@ -93,12 +96,20 @@ pub async fn main_entry() {
 
 async fn run() -> AppResult<()> {
     let cli = Cli::parse();
-    let body = read_body(&cli.body, io::stdin().lock())?;
-    let attachments = cli
-        .attachments
-        .iter()
-        .map(|path| read_attachment(path))
-        .collect::<AppResult<Vec<_>>>()?;
+    let (body, attachments) = if cli.payload_stdin {
+        if cli.body != "-" {
+            return Err(AppError::new("--payload-stdin requires body -"));
+        }
+        read_payload(io::stdin().lock())?
+    } else {
+        (
+            read_body(&cli.body, io::stdin().lock())?,
+            cli.attachments
+                .iter()
+                .map(|path| read_attachment(path))
+                .collect::<AppResult<Vec<_>>>()?,
+        )
+    };
     let receipt = api::send_with_attachments(
         &api::Message {
             subject: cli.subject,
@@ -110,6 +121,40 @@ async fn run() -> AppResult<()> {
     .await?;
     println!("{receipt}");
     Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InputPayload {
+    body: String,
+    #[serde(default)]
+    attachments: Vec<InputAttachment>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InputAttachment {
+    filename: String,
+    content: String,
+}
+
+fn read_payload(input: impl io::Read) -> AppResult<(String, Vec<api::Attachment>)> {
+    let payload: InputPayload = serde_json::from_reader(input)
+        .map_err(|_| AppError::new("invalid JSON email payload on stdin"))?;
+    let attachments = payload
+        .attachments
+        .into_iter()
+        .map(|attachment| {
+            validate_attachment_filename(&attachment.filename)?;
+            let content = base64::engine::general_purpose::STANDARD
+                .decode(attachment.content)
+                .map_err(|_| AppError::new("invalid base64 attachment content"))?;
+            Ok(api::Attachment {
+                filename: attachment.filename,
+                content,
+            })
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+    Ok((payload.body, attachments))
 }
 
 fn read_body(argument: &str, mut input: impl io::Read) -> AppResult<String> {
@@ -308,6 +353,7 @@ mod tests {
             Cli {
                 idempotency_key: None,
                 attachments: Vec::new(),
+                payload_stdin: false,
                 subject: "A subject".to_owned(),
                 body: "A body".to_owned(),
             }
@@ -334,6 +380,7 @@ mod tests {
             Cli {
                 idempotency_key: Some("decisions/daily/2026-09-01".to_owned()),
                 attachments: Vec::new(),
+                payload_stdin: false,
                 subject: "A subject".to_owned(),
                 body: "A body".to_owned(),
             }

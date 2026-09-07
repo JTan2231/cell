@@ -4,6 +4,7 @@ pub mod ad_hoc;
 pub mod agent;
 pub mod installation;
 pub mod maintenance;
+pub mod migration;
 pub mod readiness;
 pub mod resume;
 pub mod source;
@@ -14,8 +15,8 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-/// Keep prototype state at its original path: retained artifacts and requests
-/// contain absolute paths, and delivery identities must never be rewritten.
+/// One canonical runtime root; a sole predecessor remains in place through
+/// the explicit database migration without changing delivery identities.
 pub fn default_state_dir(home: &Path) -> Result<PathBuf> {
     anyhow::ensure!(home.is_absolute(), "HOME must be absolute");
     let current = home.join(".local/share/platter");
@@ -37,7 +38,7 @@ pub fn default_state_dir(home: &Path) -> Result<PathBuf> {
     let legacy_exists = present(&legacy)?;
     anyhow::ensure!(
         !(current_exists && legacy_exists),
-        "both Platter and legacy job-packets state exist; choose --state-dir explicitly"
+        "both Platter and legacy job-packets state exist; consolidate the roots before selecting a canonical library"
     );
     Ok(if legacy_exists { legacy } else { current })
 }

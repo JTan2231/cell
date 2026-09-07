@@ -64,7 +64,7 @@ separately maintained discovery catalog.
 | Platter | A retained Cast opportunity needs a private paragraph brief and resume with only Jackson bullets tailored, or a dated edition should be previewed and explicitly sent. | Captured posting/career/template inputs, accepted Nucleus stages, fixed-template rendering, opportunity exclusion, frozen editions and recorded send outcomes. | Discovery, CRM editing, changes to fixed resume content, employer contact, applications, or an installed recurring delivery service. |
 | Annals | Immutable source material should be retained or reconciled with an evidence-grounded conceptual corpus, or that corpus should be searched or explored. | Each selected physical library's retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, cross-library federation, or account telemetry. |
 | Weaver | Authored repository inputs should become the current five-stage public-facing narrative outputs. | Current-run admission, stage order and input snapshots, repository output writes, validation, cancellation intent, and recovery. | Publishing, editing a public profile, treating generated text as factual authority, or general job orchestration. |
-| Email | A plain-text email, optionally with authorized local file attachments, should be sent to the single fixed recipient. | The synchronous frozen Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, remote attachment URLs, or agent execution. |
+| Email | A plain-text email, optionally with authorized local files or in-memory attachment bytes, should be sent to the single fixed recipient. | The synchronous frozen Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, remote attachment URLs, or agent execution. |
 | Conversations | Codex tasks on this Mac should be listed, inspected, or searched. | A read-only normalized view over the normal user's Codex App Server. | Decision classification, durable projections, live-process supervision, or Nucleus's isolated job history. |
 | Krisis | Attributable decisions in completed root user turns should be identified and delivered as immutable accounts to the dedicated Annals decisions library. | The observation baseline and coverage, bounded classification, source anchors, account projection, durable outbox, Annals acceptance receipts, and recovery. | Judging truth, importance, applicability, enactment, current force, review state, supersession, retaining the canonical account library, or sending a digest. |
 | Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from accepted accounts in the dedicated Annals decisions library. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, decision-feed intake, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, transcript storage, or interpreting Annals retention as semantic truth. |
@@ -230,37 +230,29 @@ Only a worthwhile opportunity proceeds to resume preparation. The
 resume model authors only Jackson work-experience bullet text and private
 career-entry references. The renderer escapes that text and preserves every
 byte outside the original resume's Jackson bullet span. The original
-template, captured inputs, exact requests, tool receipts, accepted results,
-editable source and PDF remain requester-owned private artifacts. Both jobs
-have workspace access `none`, no local execution or web search, and no launch
-context. Validated stage submission and successful fixed-template rendering,
-not final model prose, establish packet readiness.
+template, captured inputs, exact requests, accepted results, editable source
+and PDF live in Platter's schema-two SQLite library. Artifacts reference their
+producing preparation run; imported templates have no run. Nucleus owns
+execution and tool-call history. Platter retains compact correlation and
+progress needed for recovery, without copying a tool-receipt ledger. Both jobs
+have workspace access none and no local execution, web or launch context.
+Accepted content and validated one-page rendering establish packet readiness.
 
-Platter freezes at most three previously unsent ready packets in one dated
-edition, including exact briefs, copied PDFs and attachment digests. New
-editions separate headers and brief blocks with whitespace and omit the
-packet-count footer; existing frozen editions remain unchanged. It
-rechecks posting evidence before creating a new edition and reserves selected
-opportunities against later editions. Explicit `send` validates retained
-attachment digests and invokes Email with a stable edition key; only an
-`Accepted ID` receipt records submission acceptance. Uncertain sends remain
-held, with no blind resend or current reconciliation command. Accepted stages
-survive later failures; there is no automatic replacement Nucleus job or
-direct-Codex fallback. No live delivery proof follows from this implementation.
+Platter jobs have an explicit eligible field. Ordinary preview refreshes
+posting evidence and atomically freezes at most three ready packets while
+setting their jobs ineligible. Editions store exact subject/body, delivery key
+and outcome; ordered attachments reference immutable PDF artifacts. Eligibility
+is independently mutable and is not inferred from edition or receipt history.
+Sending commits uncertainty before piping exact attachment bytes to Email and
+retains recognized acceptance afterward. Accepted editions are not resent;
+uncertain outcomes stay held. Accepted stages survive later execution failure.
 
-The separate `preview DAY --ad-hoc RUN_ID` / `send DAY --ad-hoc RUN_ID` path
-supports explicitly authorized test emails from retained completed packets.
-It reads the packet database without opening it for writes and performs no
-Cast, CRM, posting HTTP, Nucleus or rendering call. The `[TEST]` payload,
-copied PDFs, hashes, stable key and receipt live under private
-`ad-hoc/RUN_ID/`; normal packet reservations, editions and sent flags remain
-unchanged. A repeated accepted test is a no-op, and uncertainty stays held.
-Retained posting evidence is not refreshed, so this path supplies no new
-vacancy-freshness proof and consumes no Cast API budget.
-Optional reviewed paragraph overrides are frozen only in the test occurrence
-beside the original accepted brief and source-state hashes; ordinary brief
-and resume artifacts remain unchanged. Packet selection may include previously
-sent or reserved records because ad hoc test history is independent.
+The `--ad-hoc RUN_ID` interface selects another edition from retained materials
+without changing eligibility or calling Cast, CRM, employer sources, Nucleus
+or rendering. All editions share the same model and subject convention; there
+is no test-edition discriminator. Imported frozen TEST subjects remain exact.
+Overrides become part of the edition's exact body, with no continuing override
+file dependency. Explicit exports create user-owned copies at chosen paths.
 
 The stored defaults are three packets and 09:00 `America/Chicago`, with no
 candidate or token budget. Execution, source and rendering timeouts still
@@ -278,22 +270,15 @@ Nucleus jobs.
 Email is a synchronous CLI that sends plain-text messages directly to Resend.
 It creates no Nucleus job, uses no Nucleus authentication, owns no daemon or
 domain database, and does not depend on Nucleus health.
-The source attachment extension accepts repeatable `--attach PATH` for local
-regular files, including resume PDFs. It captures each file once before
-network submission; attachment order, basenames and exact encoded bytes belong
-to the same frozen request and idempotency key throughout bounded retries.
-Only basenames and contents are transmitted, never local source paths. An
-upstream caller owns authorization and must preserve exact files for any later
-same-key invocation. `Accepted ID` means Resend accepted the message, not Gmail
-receipt. An older installed Email release without attachment contract 4 cannot
-serve attachment sends. For one authorized ad hoc test, Platter accepts an
-absolute `--email-executable` override without changing normal configuration.
-A private temporary copy of Email's existing credential wrapper may select
-the tested source binary by replacing only its two payload-executable paths.
-Preserve disabled tracing, secret loading, scrubbed environment and stdin
-handling; never write the key to an argument, file or output. This selects a
-tested candidate for that invocation without deploying Email. Remove the
-temporary wrapper afterward and retain the isolated test occurrence/receipt.
+Email accepts repeatable `--attach PATH` for local files, or the additive
+`--payload-stdin` interface with body `-` for JSON body and ordered base64
+attachments. Platter requires the latter flag. Input is captured in memory
+before transport; names, bytes, order, subject and body belong to the exact
+idempotent payload. Email writes no attachment copy or send history. The
+existing wrapper owns credential loading and preserves stdin. An invocation
+may select an absolute Email executable without changing normal configuration.
+Every send still requires applicable user authority. Accepted ID proves Resend
+acceptance rather than Gmail receipt.
 
 Conversations is a stateless read-only adapter over the normal user's Codex App
 Server. It is deliberately separate from Nucleus's isolated per-job Codex home
@@ -714,29 +699,35 @@ releases under `~/Library/Application Support/Email/install/`, and the
 depends on the installed binary, `RESEND_API_KEY`, and Resend, not on Nucleus or
 Chancery readiness.
 
-Platter's fresh state defaults to `~/.local/share/platter`. A sole predecessor
-`~/.local/share/job-packets` directory remains the default in place; if both
-exist, require an explicit global `--state-dir`. No rename moves artifacts or
-rewrites original templates, packet IDs, exact stage requests or send receipts.
-Back up the database, configuration, original template, packet directories and
-frozen editions together while the runner is inactive.
+Platter's canonical schema-two database is `packets.sqlite3` under
+`~/.local/share/platter`, or the sole predecessor `~/.local/share/job-packets`
+root in place. Both roots are ambiguous and independent custom live libraries
+are unsupported. All durable Platter content, configuration, job eligibility
+and maintenance holds are covered by a consistent SQLite backup. Disposable
+renderer work and redirected caches stay beneath the runtime root and are
+removed after use. Installed programs/fonts and Nucleus-owned evidence and
+credentials remain separate dependencies.
 
-Its `platter-install` packages the runtime, installer and provider under
-`~/Library/Application Support/Platter/install/releases/HASH`; owned command
-and provider selectors follow one verified current release. Mutating install
-and recovery operations run through Cell coordinated maintenance. They verify
-schema 1 and existing original-template state, create a consistent database
-backup when applicable and require local dependency readiness. No resume
-initialization, packet preparation, Cast collection, model job, email or
-schedule activation occurs during installation.
+`platter-install` retains its immutable runtime/installer/provider releases
+under Application Support and uses Cell coordinated cutover. The candidate
+explicitly imports legacy schema-one files transactionally, preserving run
+IDs, exact Nucleus requests, frozen payloads and delivery receipts. It writes
+a complete schema-two backup under the runtime root/backups directory before
+removing hashed files on its retained cleanup manifest. Backup or cleanup
+failure retains recovery state and originals. Older binaries cannot operate
+schema two; binary-only rollback is unsafe after import. Recovery needs a
+compatible candidate or an explicitly selected complete predecessor
+files/database backup and matching binary.
 
-The per-user Platter admission gate covers mutating callers even with custom
-state. Maintenance observes both `platter` and `job-packets` Nucleus identities
-and live runners. Existing callers finish; after they have stopped, drain
-cancels orphaned matching Nucleus jobs without submitting replacement work.
-Accepted stages and receipts survive cancellation. Nucleus maintenance includes
-Platter in its requester closure; readiness is checked while held before
-requester release, with Nucleus released last. Failed recovery retains holds.
+Owner-keyed SQLite holds fence the canonical database; live commands retain an
+advisory lock on the state directory. The predecessor gate and runner lock are
+observed during transition and empty old gate files are retired on drained
+release. Maintenance follows both platter and job-packets requester identities.
+Existing commands finish before drain cancels orphaned jobs; it never submits
+replacement work. Platter remains in Nucleus's requester maintenance closure,
+with Nucleus released last. Failed recovery retains owner holds. Installation
+initializes no resume, prepares no packet, sends no email and activates no
+schedule.
 See the [Platter installation contract](../../platter/chancery/manuals/install-operate.md)
 for commands, prerequisite limits and recovery boundaries. Its
 `Semantics-Project: cell` marker declares source participation, not a separately

@@ -1,237 +1,169 @@
 # Prepare private job packets
 
-Use Platter when the user wants a short brief and constrained tailored
-resume for a Cast opportunity, a preview of a dated edition, or an explicitly
-authorized send of that retained edition. Platter owns
-preparation and delivery state. It does not discover jobs, edit career facts,
-apply to employers, contact them or install recurring delivery.
+Platter captures Cast opportunities and CRM career entries, prepares a concise
+brief and a Jackson-only tailored resume through Nucleus, and freezes editions
+for explicitly authorized delivery through Email. Platter owns retained content,
+job eligibility and delivery outcomes. It does not discover jobs, edit CRM,
+apply to employers, contact them, or install recurring delivery.
 
-## Commands and prerequisites
+## Storage and commands
 
-After building and installing a tested release through the [installation
-procedure](install-operate.md), use the installed command. A source build may
-use `target/debug/platter` for the same interface:
+The canonical runtime database is `packets.sqlite3` under
+`~/.local/share/platter`. A sole predecessor `~/.local/share/job-packets`
+directory remains the canonical location in place. Two existing roots are
+ambiguous and are refused. `--state-dir`, if supplied, must equal the canonical
+root; it cannot create an independent live library that bypasses maintenance.
 
 ```sh
-./ci.sh platter
 platter init --resume /absolute/original-resume.tex
 platter prepare CAST_JOB_ID
 platter prepare-daily
 platter preview YYYY-MM-DD
 platter status
+platter eligibility CAST_JOB_ID false
+platter eligibility CAST_JOB_ID true
+platter export ARTIFACT_ID /absolute/chosen/resume.pdf
 ```
 
-Fresh state defaults to `~/.local/share/platter`. If only the predecessor
-`~/.local/share/job-packets` exists, it remains the default in place. If both
-exist, the command refuses an implicit choice: use
-`--state-dir /absolute/private/directory`. No directory, packet identity,
-original template, absolute artifact path, retained Nucleus request or send
-receipt is renamed or reset.
-Initialization captures the original supported LaTeX resume privately. The
-template must contain the expected Jackson National Life bullet structure;
-an arbitrary PDF or a different template cannot substitute silently.
-Configuration retains the original template path and executable paths for
-Cast, CRM and Email. Use absolute paths and keep private files outside Git.
+Initialization imports the supported original LaTeX source into an immutable
+artifact. The template must have the expected Jackson National Life bullet
+structure. Its original path is provenance; subsequent work reads its bytes
+from SQLite. Configuration, captured inputs, execution correlation, accepted
+brief and resume content, generated LaTeX/PDF bytes, editions, receipts and
+maintenance holds all live in that database. Artifact IDs are not file paths.
+An explicit export writes a private new file at the supplied destination and
+refuses to overwrite one. Platter never relies on exported copies.
 
-Preparation requires initialized Cast and CRM libraries, their supported CLI
-interfaces, accessible complete employer posting evidence, compatible strict
-Nucleus readiness and local resume rendering tools. Rendering requires
-`tectonic`, Python 3 with `pypdf`, and the original template's packages/fonts.
-Absolute `PLATTER_TECTONIC` and `PLATTER_PYTHON` overrides are supported; default
-resolution searches `~/.local/bin`, `/usr/local/bin`, `/opt/homebrew/bin` and
-`/usr/bin`, independently of the caller PATH.
-Availability of source code or this bundle proves none of that readiness.
+The core records are jobs, runs, artifacts, editions and ordered edition
+attachments. A packet is a run and its artifacts. Content references its
+producing run; imported templates have no producing run. Nucleus owns tool
+and execution history. Platter retains exact requests and compact execution
+progress needed for recovery, without a separate tool-receipt ledger.
 
-The agreed settings are a maximum of three ready packets, delivery at 09:00
-America/Chicago, and `gpt-5.6-sol` with `max` effort. **The 09:00 setting is
-stored configuration only. There is no schedule installer or active recurring
-delivery in this release.** No candidate or token budget limits preparation;
-ordinary source, runtime and rendering timeouts still apply.
-An explicitly bounded preparation invocation may use `--stop-after-seconds SECONDS`;
-reaching that deadline requests cancellation of its exact live Nucleus job
-and retains stage state. This opt-in wall-clock stop does not impose a daily
-preparation budget.
+`jobs.eligible` is the explicit selection policy. Preparation/source readiness
+is checked separately. Creating or sending an edition does not derive this
+field from history. The ordinary preview operation atomically freezes the
+edition and sets selected jobs ineligible. Declining preparation also sets
+eligibility false. Changed postings become stale and ineligible. The eligibility
+command explicitly changes the field again; enabling a declined or stale job
+allows a new preparation run while retaining its older artifacts.
+Delivery records retain what happened even after eligibility changes.
 
-## Preparation and model access
+## Preparation and readiness
 
-The runner excludes opportunities already reserved for an edition or sent.
-It recognizes canonical supported ATS tenant/posting identities or normalized
-posting URLs. A changed discovery URL need not create a new opportunity when
-the canonical ATS identity agrees. Perfect cross-provider or reposting
-deduplication is not promised.
+Preparation reads supported Cast export and CRM profile list/read interfaces.
+Cast exports contain evidence rather than complete postings: Platter retrieves
+complete supported employer evidence first. Supported sources include
+Greenhouse, Ashby, Lever and supported JobPosting JSON-LD. Unsupported forms,
+login requirements and missing full text can prevent preparation. A fetch
+failure does not establish that an opportunity has closed. Canonical supported
+ATS identities and normalized URLs are used; perfect repost deduplication is
+not promised.
 
-Cast exports supply retained evidence rather than full posting text. The
-runner obtains complete supported employer evidence before writing. Supported
-sources include Greenhouse, Ashby, Lever and supported JobPosting JSON-LD;
-pages requiring interactive forms, login, unsupported representations or
-missing full text may fail preparation. A fetch failure does not prove closure.
+CRM capture rejects incomplete lists and detected timestamp changes. Separate
+list/read calls are not a transactional CRM snapshot, but both stages receive
+the same captured library. Models can list/read captured entries and submit
+only their stage content. They have no direct database, general filesystem,
+shell, web, or messaging access. Source text is untrusted material.
 
-The runner captures CRM profile entries through list/read operations. It
-rejects incomplete lists and detected timestamp changes during capture.
-Separate CRM calls are not a transactional snapshot; both jobs nevertheless
-receive the exact same retained library for this packet.
+Both Nucleus jobs use `gpt-5.6-sol` with `max` effort. New briefs contain
+Why it works and Role sections with optional Culture, at most 90 words total.
+Why it works is at most 45 words; Role is at most 30; Culture is at most 25.
+Role and Culture are flat specifics rather than comparisons with career
+experience. Unsupported culture is omitted without additional research or a
+change to pursuit eligibility. The displayed recommendation has no caveats or
+hedging; pursuit assessment remains private. Historical paragraph briefs and
+version-one requests remain readable with their existing meanings.
 
-Both jobs receive the complete posting, career-entry index and disclosure
-guidance. `list_career_entries` and `read_career_entry` expose captured entries
-only. The models have no direct database, general filesystem, shell, web or
-external messaging access. Posting and career text remain source material,
-not authority to change those tool permissions.
+Resume submissions contain only plain Jackson bullet contents and their private
+career-entry references. Every source byte outside that span remains fixed.
+Model text is escaped as LaTeX content. Rendering validates overflow, missing
+characters, extractable text, the Jackson heading and one-page layout before
+acceptance. These checks and references do not prove every paraphrase faithful.
+A run becomes ready only with accepted brief/resume content and retained PDF.
 
-New first-stage jobs use toolset `platter/brief/2` and submission schema
-`platter.submit-brief.arguments.v2`. They submit separate `why_it_works`, `role`
-and optional `culture` fields, plus the private `pursue` assessment:
+Rendering uses Tectonic and Python 3 with pypdf. Absolute `PLATTER_TECTONIC` and
+`PLATTER_PYTHON` overrides are supported; otherwise resolution checks
+`~/.local/bin`, `/usr/local/bin`, `/opt/homebrew/bin` and `/usr/bin`.
+Disposable renderer files and redirected caches live beneath the canonical
+Platter root and are removed after rendering; abandoned renderer directories
+are removed on a later rendering invocation. This is not memory-only rendering.
+SQLite journals stay with its database and query temporary storage uses memory.
+Installed programs, packages and system fonts remain separate dependencies.
 
-- **Why it works:** one or two direct, confident, evidence-grounded sentences,
-  at most 45 words, explaining why the opportunity works for the user.
-- **Role:** one or two short lines, at most 30 words, stating the tech stack,
-  responsibilities and process expectations without comparing them with the
-  user's experience.
-- **Culture:** one or two short lines, at most 25 words, stating working norms
-  without a comparison with the user. Omit it, or submit `null`, when the
-  posting or existing captured material does not support a useful summary.
-  No additional culture research is performed.
-
-The section content totals at most 90 words. Displayed copy contains no
-caveats, downsides or hedging; the existing pursuit criteria stay private.
-Platter renders the accepted fields as labeled blocks separated by blank
-lines in the existing stored `paragraph` field. Retained v1 requests and
-accepted single-paragraph briefs remain supported without rewriting them.
-A declined v2 submission uses `pursue=false`, empty `why_it_works` and `role`
-strings, and absent or `null` `culture`. Platter retains an empty display
-string and skips resume preparation without generating an affirmative
-recommendation.
-The second job independently reads the career library and submits only plain
-Jackson bullet text with private supporting entry references. It may use the
-brief for positioning, but the brief cannot establish a new career fact.
-
-The renderer replaces only the permitted Jackson bullet span in the captured
-original source. Every byte outside it stays fixed. Model text is escaped as
-content, not executed as LaTeX. A packet becomes ready only after accepted
-content is retained and a one-page PDF passes the rendering checks. References
-and mechanical checks do not prove that every paraphrase is factually faithful;
-inspect real brief and resume artifacts before relying on recurring use.
+There is no candidate or token budget. An optional
+`--stop-after-seconds SECONDS` on preparation requests cancellation of the exact
+live Nucleus job at the deadline and retains progress. The normal external
+source, rendering and execution timeouts still apply. Three ready packets is
+an edition ceiling, not a quota. The stored 09:00 America/Chicago setting does
+not install or authorize a schedule.
 
 ## Editions and sending
 
-`prepare-daily` works toward three ready packets; three is a ceiling, not a
-quota. It resumes retained preparing packets and rechecks readiness before
-counting completed packets. Temporary fetch failures are deferred and checked
-again on the next invocation. Changed postings become stale and need reviewed
-regeneration; they no longer block preparation of other opportunities.
-`preview DATE` rechecks the full posting and defers unavailable or
-changed evidence. It selects one through three ready packets, freezes the
-exact subject and brief text, copies and hashes their PDFs and reserves the selected
-opportunities. New editions separate each opportunity header from its brief
-with a blank line and omit the packet-count footer. Existing frozen editions
-remain stable. A preview does not send.
-When none are ready, no edition is created. Existing frozen editions are
-returned as retained; reopening one does not refresh its evidence.
+Normal preview refreshes posting evidence, defers unavailable sources, and
+marks changed packets stale. Existing frozen editions return unchanged without
+freshness checks. An edition stores exact subject/body, its stable idempotency
+key, delivery status and receipt. Its ordered attachments reference immutable
+PDF artifacts, including their filenames. It does not copy PDFs to a directory.
 
-When sending that specific edition is already authorized:
+For an already authorized edition:
 
 ```sh
 platter send YYYY-MM-DD
 ```
 
-This invokes Email's fixed-recipient interface with a stable edition key,
-plain-text body and ordered local PDF attachments. Frozen attachment hashes
-must still match before Email is invoked. Email attachment contract
-4 is required; select a matching tested Email executable or upgrade an older
-installed command separately. Platter records provider acceptance and excludes those opportunities from
-future editions. Acceptance is not Gmail receipt, an application submission
-or an employer response. An ambiguous outcome remains held instead of being
-blindly retried. There is no ambiguous-send reconciliation command.
+Platter pipes the exact body and base64 attachment bytes through Email's
+`--payload-stdin` interface. The selected Email command must advertise that
+extension. It retains its fixed personal recipient and credential authority.
+Platter durably marks sending before invoking Email, and retains `Accepted ID`
+only after recognized acceptance. Acceptance is not Gmail receipt, an
+application, or an employer response. An accepted edition is not resent;
+interrupted or uncertain attempts stay held. There is no automatic ambiguous
+send reconciliation or replacement-job retry.
 
-## Ad hoc test editions
-
-An explicit ad hoc preview creates an independent test occurrence from retained
-completed packets:
+For another edition made exclusively from retained material:
 
 ```sh
-platter preview YYYY-MM-DD --ad-hoc RUN_ID \
-  --packet PACKET_ID
-```
-
-Repeat `--packet` to select additional retained packets, up to three. Without
-it, select the first up to three retained complete records in packet-ID order,
-including records already sent or reserved in the normal pipeline. `RUN_ID`
-contains 1 through 80 ASCII letters, digits, underscores or hyphens. This path
-reads the existing packet database without opening it for writes and reads
-retained accepted stages and artifacts. It makes no Cast, CRM, source HTTP,
-Nucleus or rendering call, so it consumes no Cast discovery/API budget. The
-posting is the retained evidence and receives no freshness check. The normal
-preview path still refreshes posting evidence; use `--ad-hoc` when the intended
-operation is a test from retained data.
-
-The occurrence lives under `ad-hoc/RUN_ID/` in private Platter state. It
-contains its own exact `[TEST]` subject, briefs, ordered copied PDF files,
-payload and attachment hashes, stable idempotency key, state and acceptance
-receipt. It neither creates an ordinary edition nor reserves a packet or
-changes its sent status. Those opportunities remain eligible for the normal
-daily pipeline. Repeating the same occurrence must preserve its retained day,
-selection and payload.
-
-Retained sectioned briefs keep their labeled blocks in ad hoc editions.
-An optional `--brief-overrides /absolute/reviewed-paragraphs.json` maps selected
-packet IDs to reviewed paragraph strings. Each must be one plain paragraph
-of at most 150 words. The override is frozen only in the test occurrence,
-alongside the original accepted brief and source-state hashes. It never edits
-the original brief or resume. An existing occurrence returns its frozen
-payload; any explicitly supplied packet selection/order or override mapping
-must agree with it. Use a new ID for an intentionally different test payload.
-
-When the user has authorized that test email:
-
-```sh
+platter preview YYYY-MM-DD --ad-hoc RUN_ID --packet PACKET_ID
 platter send YYYY-MM-DD --ad-hoc RUN_ID \
-  --email-executable /absolute/private/email-candidate-wrapper
+  --email-executable /absolute/private/email-wrapper
 ```
 
-The absolute Email executable override is optional and local to this send;
-it does not rewrite normal configuration or installed selectors. The selected
-Email implementation must support local attachments and its fixed personal
-recipient. Sending validates the frozen content, records uncertainty before
-transport and retains `Accepted ID` only in the ad hoc occurrence. An accepted
-occurrence is a no-op on repeated send. An interrupted or uncertain attempt
-stays held instead of being blindly resubmitted. A new `RUN_ID` is a deliberate
-new test and requires its own send authority.
+`--ad-hoc` remains a CLI selection operation, not an edition type. These
+editions use the same schema, ordinary subject format and sending behavior.
+The operation leaves job eligibility untouched and performs no Cast, CRM,
+source retrieval, Nucleus or rendering work. Without `--packet`, it selects up
+to three retained complete packets in ID order. Repeated `--packet` specifies
+one through three distinct packets. `RUN_ID` contains 1 through 80 ASCII
+letters, digits, underscores or hyphens. Reuse returns the frozen edition;
+explicit date/selection changes are refused. Legacy TEST subjects remain exact.
 
-For a tested source Email binary while the installed wrapper still selects an
-older release, create a private temporary copy of `email/packaging/macos/email`
-and replace only its two fixed payload-executable paths with the absolute
-tested binary path. Preserve its existing credential loading, disabled shell
-tracing, environment scrubbing and stdin handling, and make the copy executable
-only by the current user. Supply that copy as `--email-executable`. The key is
-loaded at invocation by the existing wrapper procedure; never place it in
-arguments, files, output or this contract. Remove the temporary wrapper after
-the test while retaining the ad hoc occurrence and receipt for duplicate-send
-protection. This does not deploy Email or prove final inbox delivery.
+Optional `--brief-overrides /absolute/paragraphs.json` imports a mapping of
+selected packet IDs to valid brief text into the frozen message body. The
+original accepted artifacts remain immutable. When an override is supplied
+again, recomposed body text must agree with the existing edition. A new ID is
+needed for changed content. The override file is not a continuing dependency.
+An Email executable override affects only that send and must be absolute.
+Every external send still requires its own applicable user authority.
 
-## Retention and recovery
+## Recovery and privacy
 
-The private state directory retains configuration, original template, captured
-posting and career inputs, exact Nucleus requests, accepted outputs and tool
-receipts, PDFs and editable source, the packet database and frozen editions.
-Back up the entire directory together while work is inactive. Nucleus keeps
-its own runtime evidence and credentials under its separate authority.
+A schema-two SQLite snapshot contains the entire retained Platter library.
+Use the maintained migration/backup operation rather than copying an open
+main database without its journal. Schema-one state must pass the explicit
+[installation migration](install-operate.md); ordinary work refuses it.
 
-Reinvoking preparation preserves accepted stages and inspects or resumes the
-exact retained request. Input conflicts are refused. A resume failure leaves
-the accepted brief available; a delivery failure leaves both materials.
-There is no automatic replacement-job retry or direct Codex fallback. A
-terminal failed/lost job or unresolved send may require a reviewed recovery
-implementation; do not edit SQLite or replace stage files to force success.
+Accepted outputs are immutable by run and kind. A repeated submission resolves
+to existing identical content; conflicting content is refused. Platter can
+recover mailbox work from exact retained requests. Nucleus terminal status
+alone does not establish domain success; an accepted artifact survives later
+runtime failure. Failed/lost attempts and unresolved delivery can require an
+explicit recovery change; do not edit SQLite to force success.
 
-Career inputs, private briefs, evidence references and resume contact details
-are sensitive. Model preparation discloses captured material through Nucleus
-to the model service. Only an authorized send discloses the brief and resume
-to Email, Resend and Gmail. Source retrieval discloses ordinary HTTP requests
-to employer sources. Neither catalog presence nor stored delivery settings
-grants additional authority.
-
-Installation, maintained replacement and retained-release verification are
-described by the separate [installation contract](install-operate.md). It does
-not activate a schedule or change schema 1 domain records. No completion-time
-guarantee, comprehensive source coverage or final delivery observer is
-promised. Code, tests and the source bundle move together; installed selectors
-remain a separate deployment action.
+Resume contact details, career history, captured evidence, briefs and supporting
+references remain private. Captured material is disclosed through Nucleus to
+the model service. Authorized sends disclose message and attachments to Email,
+Resend and Gmail. Source retrieval discloses HTTP requests to employers.
+Nucleus retains its own separate runtime evidence and credentials; this
+storage change does not relocate other products' state. No completion latency,
+comprehensive source coverage or final delivery observer is promised.
