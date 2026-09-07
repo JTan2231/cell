@@ -11,7 +11,7 @@
   ],
   "do_not_use_when": [
     "The request is only to inspect or recover the installed runtime.",
-    "The change belongs entirely to Todo, Annals, Weaver, or another requester domain.",
+    "The change belongs entirely to Todo, Annals, or another requester domain.",
     "The user has not authorized release publication or deployment."
   ],
   "outcome": "A minimal Nucleus change with the correct compatibility, execution-capacity, managed-authentication, migration, requester, documentation, CI, and recovery obligations satisfied.",

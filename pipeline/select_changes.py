@@ -242,6 +242,7 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Pl
     changes = changed_paths(before)
     reasons: dict[str, list[str]] = {product: [] for product in products}
     shared = []
+    retired_descriptors = []
     for path in sorted(changes):
         owners = [product for product, (directory, _) in products.items()
                   if path == directory or path.startswith(directory + "/")
@@ -251,7 +252,10 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Pl
                 reasons[owner].append(path)
         else:
             if path.startswith("pipeline/products/") and path.endswith(".sh"):
-                raise SelectionError(f"changed descriptor has no product owner: {path!r}")
+                current = root / path
+                if current.exists() or current.is_symlink() or at_head(root, path) is None:
+                    raise SelectionError(f"changed descriptor has no product owner: {path!r}")
+                retired_descriptors.append(path)
             shared.append(path)
 
     everything = args.all or (args.platform and not args.products)
@@ -270,6 +274,7 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Pl
 
     platform: dict[str, list[str]] = {product: [] for product in products}
     suites: dict[str, list[str]] = {suite: [] for suite in SHARED_INPUTS}
+    suites["catalog"].extend(retired_descriptors)
     for path in sorted(changes):
         if not platform_change(root, path):
             continue

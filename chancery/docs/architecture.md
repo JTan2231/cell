@@ -47,7 +47,7 @@ one atomic selector in the Chancery registry. These actions add no runtime
 dependency on Chancery.
 
 At query time Chancery reads provider files only. It does not call Nucleus,
-Todo, Annals, Weaver, Codex, a skill, a browser, or computer use. After reading
+Todo, Annals, Codex, a skill, a browser, or computer use. After reading
 a contract, the interactive caller may use an interface named by the contract;
 that is a separate action with its own authorization and failure semantics.
 

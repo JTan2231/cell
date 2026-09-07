@@ -174,10 +174,9 @@ PASS  annals-usage  0.4.0   3 entries
 PASS  chancery      0.2.0   3 entries
 PASS  nucleus       0.3.0   3 entries
 PASS  todo          0.3.0   7 entries
-PASS  weaver        0.1.0   3 entries
 
-Providers: 6 valid, 0 excluded
-Entries:   25
+Providers: 5 valid, 0 excluded
+Entries:   23
 Status:    valid
 ```
 

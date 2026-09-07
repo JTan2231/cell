@@ -95,7 +95,7 @@
   ],
   "does_not_authorize": [
     "A new requester attempt after failure or loss.",
-    "Acceptance of any Todo, Annals, Weaver, or other requester-owned domain result.",
+    "Acceptance of any Todo, Annals, or other requester-owned domain result.",
     "Restarting or uninstalling the service while active attempts matter."
   ],
   "promise": {

@@ -15,7 +15,7 @@ cancellation, perform attended authentication recovery, or operate the macOS
 user service.
 
 Do not route a generic request here merely because it mentions a job, agent, or
-model. Todo, Annals, Weaver, and other requesters remain authoritative for the
+model. Todo, Annals, and other requesters remain authoritative for the
 work that motivated their Nucleus jobs. Ordinary work in the current Codex
 session normally needs no Nucleus job at all.
 

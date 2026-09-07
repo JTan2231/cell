@@ -13,7 +13,6 @@ members = [
     "annals/crates/annals-usage",
     "todo/crates/todo",
     "chancery/crates/chancery",
-    "weaver/crates/weaver",
     "email/crates/email",
     "conversations/crates/conversations",
     "decisions/crates/decisions",
@@ -30,7 +29,7 @@ resolver = "3"
 
 [workspace.package]
 # The six Nucleus crates share this release version. Annals, Annals Usage,
-# Todo, Chancery, Weaver, Email, Conversations, Krisis, Semantics,
+# Todo, Chancery, Email, Conversations, Krisis, Semantics,
 # Clockwork, CRM, and Usher declare independent product versions in their
 # manifests.
 version = "0.5.0"

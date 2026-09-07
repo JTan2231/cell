@@ -380,7 +380,7 @@ class ReleaseCleanupTests(unittest.TestCase):
     def test_stateful_maintenance_and_transaction_barriers_preserve_history(self):
         for relative in ("Annals/spool/.maintenance", "Annals/decisions/spool/.maintenance",
                          "Decisions/.clockwork-maintenance", "Annals/install/transaction.primary.run",
-                         "Semantics/.clockwork-maintenance", "Weaver/.maintenance"):
+                         "Semantics/.clockwork-maintenance"):
             with self.subTest(relative=relative):
                 marker = self.base / relative
                 marker.parent.mkdir(parents=True, exist_ok=True)

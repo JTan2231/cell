@@ -32,8 +32,6 @@ PRODUCT_RUNTIME_INPUTS = {
                   "semantics/src/main.rs"),
     "crm": ("crm/crates/crm/src/store.rs", "crm/crates/crm/src/cli.rs",
             "crm/crates/crm/src/main.rs"),
-    "weaver": ("weaver/crates/weaver/src/main.rs", "weaver/crates/weaver/src/cli.rs",
-               "weaver/crates/weaver/src/state.rs"),
     "platter": ("platter/src/main.rs", "platter/src/cli.rs", "platter/src/store.rs",
                 "platter/src/readiness.rs"),
     "paperboy": ("paperboy/src/main.rs", "paperboy/src/operations.rs",
@@ -61,7 +59,7 @@ SHARED_INPUTS = {
 # cell-install is the common installer for every current product. A newly
 # introduced product also gets this suite. cell-maintenance has fewer consumers.
 MAINTENANCE_CONSUMERS = frozenset((
-    "nucleus", "annals", "todo", "weaver", "decisions", "semantics", "crm",
+    "nucleus", "annals", "todo", "decisions", "semantics", "crm",
     "platter", "paperboy",
 ))
 INSTALL_FIXTURE_CONSUMERS = frozenset((

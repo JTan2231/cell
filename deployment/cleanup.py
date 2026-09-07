@@ -18,7 +18,7 @@ import tomllib
 
 PRODUCTS = {
     "annals": "Annals", "decisions": "Decisions", "semantics": "Semantics",
-    "crm": "CRM", "todo": "Todo", "weaver": "Weaver", "nucleus": "Nucleus",
+    "crm": "CRM", "todo": "Todo", "nucleus": "Nucleus",
     "chancery": "Chancery", "clockwork": "Clockwork", "conversations": "Conversations",
     "email": "Email", "usher": "Usher", "cast": "Cast",
     "platter": "Platter", "paperboy": "Paperboy",
@@ -168,7 +168,7 @@ def live_pins(home, installs, currents):
                     retain(str(path.resolve(strict=False)))
     base = home / "Library/Application Support"
     for relative in ("Annals/config.toml", "Annals/usage.toml", "Annals/decisions/config.toml",
-                     "Todo/config.toml", "Weaver/current.json"):
+                     "Todo/config.toml"):
         path = base / relative
         if path.exists() or path.is_symlink():
             retain(read_record(path))
@@ -288,7 +288,6 @@ def lifecycle_barriers(base, application, install):
         "Annals": ["spool/.maintenance", "decisions/spool/.maintenance"],
         "Decisions": [".clockwork-maintenance"],
         "Semantics": [".clockwork-maintenance"],
-        "Weaver": [".maintenance"],
     }
     for relative in markers.get(application, []):
         path = base / application / relative

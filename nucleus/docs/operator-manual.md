@@ -57,7 +57,6 @@ installed catalog for discovery.
 | Cast | Previously unknown employers and job postings should be discovered and monitored through ordinary HTTP. | Companies and jobs with stable identities, posting inputs, collection request outcomes and observation times, local request budgets, query configuration and consistent exports. | Personal selection, CRM stewardship, application packets, email, application submission or agent execution. |
 | Platter | A retained Cast opportunity needs a private brief and resume with only Jackson bullets tailored, or an authorized daily edition should be prepared and emailed. | Captured posting/career/template inputs, accepted Nucleus stages, fixed-template rendering, job eligibility, frozen editions, daily runner and recorded send outcomes. | Discovery, CRM editing, changes to fixed resume content, employer contact, applications, or Clockwork timer delivery. |
 | Annals | Immutable source material should be retained or reconciled with a conceptual corpus, or that corpus should be searched or explored. | Each selected physical library's retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, cross-library federation, or account telemetry. |
-| Weaver | Authored repository inputs should become the current five-stage public-facing narrative outputs. | Current-run admission, stage order, authored input snapshots, generated repository outputs, validation, cancellation intent, and recovery. | Publishing, editing a public profile, or general job orchestration. |
 | Email | A plain-text email, optionally with authorized local files or in-memory attachment bytes, should be sent to the single fixed recipient. | The synchronous frozen Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, remote attachment URLs, or agent execution. |
 | Conversations | Codex tasks on this Mac should be listed, inspected, or searched. | A read-only normalized view over the normal user's Codex App Server. | Decision classification, durable projections, live-process supervision, or Nucleus's isolated job history. |
 | Krisis | Attributable decisions in completed root user turns should be identified and delivered as immutable accounts to the dedicated Annals decisions library. | The observation baseline and coverage, bounded classification, source anchors, account projection, durable outbox, Annals acceptance receipts, and recovery. | Retaining the canonical account library, running the legacy candidate-review workflow, or sending a digest. |
@@ -75,7 +74,6 @@ Typical routing examples:
 - “Discover new employers and refresh their public job postings” is Cast work.
 - “Incorporate this report into what we know” is Annals work.
 - “What does the corpus say about predicate locking?” is an Annals query.
-- “Build the current public-facing narrative” is Weaver work.
 - “Email me this update” is Email work.
 - “What does this project mean by grounding?” is a Semantics query when that
   folder is registered.
@@ -108,7 +106,6 @@ krisis --version
 semantics --version
 chancery --version
 chancery doctor
-weaver --version
 ```
 
 `nucleus health` is strict. It prints the readiness document but exits nonzero
@@ -127,8 +124,7 @@ protocol. Require synchronized product releases only when a contract requires it
 ```text
 Todo research -----\
 CRM steward --------+
-Annals -------------+
-Weaver -------------+--> Nucleus ----------> isolated Codex app-server --> account
+Annals -------------+--> Nucleus ----------> isolated Codex app-server --> account
 Krisis observer ----+
 Semantics worker ---/
    |                  |                        |
@@ -144,7 +140,6 @@ Annals Usage <------ Nucleus output atoms and account reads
 Todo SQLite <------- Todo's validated stage tools and explicit decisions
 CRM SQLite <-------- CRM's queued intake and validated case revisions
 Cast SQLite <------- Cast HTTP adapters --> search providers and careers sources
-Weaver outputs <---- Weaver's detached repository worker
 Email -------------> Resend
 Conversations ------> normal-user Codex app-server
 Codex Stop hook ----> Krisis SQLite observation queue
@@ -280,11 +275,6 @@ the scheduled runner. Keep the pinned release until the binding no longer uses
 it. Disabling the binding stops recurring sends. Unresolved stage/send recovery
 remains a separate operation; schedule changes do not reset delivery outcomes.
 
-Weaver submits five content-only jobs in order. Its detached worker retains
-interactive lineage and owns repository reads and atomic Markdown writes.
-Nucleus and Codex receive no repository filesystem authority. Weaver success
-requires persisted outputs and mechanical validation.
-
 Email is a synchronous CLI that sends plain-text messages directly to Resend.
 It creates no Nucleus job, uses no Nucleus authentication, owns no daemon or
 domain database, and does not depend on Nucleus health.
@@ -354,7 +344,7 @@ closed, versioned invocation. Nucleus validates it, starts one harness attempt,
 retains exact harness stdout, and coordinates dynamic tool calls. The requester
 continues to own the work that motivated the job.
 
-Nucleus, Annals, Annals Usage, Todo, Chancery, Weaver, Email, Conversations,
+Nucleus, Annals, Annals Usage, Todo, Chancery, Email, Conversations,
 Krisis, Semantics, Clockwork, CRM, Usher, Cast and Platter share the Cell source
 repository, Cargo workspace, and lockfile. That source layout does not
 merge their release, installation, state, backup, recovery, or domain-success
@@ -366,8 +356,7 @@ Keep these operational distinctions:
 1. **Nucleus completion is not domain success.** Todo succeeds when its
    stage-specific proposal, assessment, or design operation is durably
    recorded; authorization is a separate Todo decision. Annals succeeds
-   according to its retained reconciliation and delivery state. Weaver succeeds
-   only after it persists and validates the required narrative outputs.
+   according to its retained reconciliation and delivery state.
    Semantics succeeds when its validated revision and intake receipt are
    durable. CRM steward work succeeds when its validated case revision is
    committed. A model's final prose is diagnostic.
@@ -574,7 +563,7 @@ Git common directory's `cell-release-cache` (or `CELL_RELEASE_CACHE_DIR`).
 Deployment workspace cleanup preserves this cache, which has no automatic
 pruning.
 
-Nucleus, Annals, Krisis, Semantics, CRM, Todo, Weaver, and Platter provide durable
+Nucleus, Annals, Krisis, Semantics, CRM, Todo, and Platter provide durable
 holds owned by the deployment identity. Holds block new admission while existing
 work settles. They survive process exit and do not expire. Releasing one owner's
 hold preserves other holds and existing operator pauses. Product status includes
@@ -798,7 +787,7 @@ for commands, prerequisite limits and recovery boundaries. Its
 `Semantics-Project: cell` marker declares source participation, not a separately
 registered semantic repository or installed provider.
 
-Annals, Todo, and Weaver own their state, installation, backup, and recovery.
+Annals and Todo own their state, installation, backup, and recovery.
 Use their product procedures; do not infer their state from Nucleus. The primary
 Annals library and dedicated decisions library have separate databases, spools,
 configs, logs, histories, and recovery units. Clockwork owns the independent
@@ -999,7 +988,6 @@ applies to output. Excerpts are marked and bounded; failed reads remain errors.
 | Krisis | Counts and bounded failure IDs/codes | Increase status `--limit`; legacy lifecycle reads retain their existing protocol |
 | Usher | `check` counts and all incomplete findings | `report` |
 | Email | `Accepted ID` after Resend accepts the submission | Errors remain bounded; acceptance is not final delivery |
-| Weaver | Existing focused run state and artifact locators | Existing run/workflow detail and artifact reads |
 | CI/deployment | Existing conclusive receipt and bounded failure diagnostics | Existing `--verbose` and diagnostic paths |
 
 Nucleus status identifies the requester, job, current attempt, runtime state,
@@ -1021,12 +1009,9 @@ or authorize deployment.
 
 Nucleus has no global drain mode. Quiescence is established at its requesters:
 
-1. Do not start a synchronous Todo creation, invoke `crm tell`, start a new
-   Weaver submission, invoke `krisis observe process`, or start another manual
-   requester job.
-2. If Weaver has a nonterminal current run, select its exact run ID and let it
-   settle through `weaver wait RUN_ID`.
-3. Pause both Annals library inboxes that are active and wait for their
+1. Do not start a synchronous Todo creation, invoke `crm tell` or
+   `krisis observe process`, or start another manual requester job.
+2. Pause both Annals library inboxes that are active and wait for their
    independent deliveries to settle:
 
    ```sh
@@ -1036,7 +1021,7 @@ Nucleus has no global drain mode. Quiescence is established at its requesters:
    annals --config "$HOME/Library/Application Support/Annals/decisions/config.toml" inbox status
    ```
 
-4. Stop the Krisis observer and the Semantics worker so periodic work
+3. Stop the Krisis observer and the Semantics worker so periodic work
    cannot admit new jobs. On a Clockwork-cut-over installation, first capture
    each selected digest **and enabled state** with `binding show`, then disable
    only keys that were enabled. Leave an already disabled or absent key
@@ -1060,18 +1045,18 @@ Nucleus has no global drain mode. Quiescence is established at its requesters:
    launchctl bootout "gui/$(id -u)/org.semantics.worker"
    ```
 
-5. Inspect Nucleus `accepted`, `running`, and `waiting-on-requester` jobs.
-6. Wait for them to become terminal. Cancel a job only when abandoning that
+4. Inspect Nucleus `accepted`, `running`, and `waiting-on-requester` jobs.
+5. Wait for them to become terminal. Cancel a job only when abandoning that
    exact runtime attempt is intended:
 
    ```sh
    nucleus jobs cancel JOB_ID
    ```
 
-7. Perform the service, storage, or harness operation.
-8. Check Nucleus and requester readiness before resuming the Annals inboxes,
-   Krisis observer, Semantics worker, or new Weaver or CRM work. For Clockwork,
-   switch only a key that step 4 recorded as enabled back to its exact captured
+6. Perform the service, storage, or harness operation.
+7. Check Nucleus and requester readiness before resuming the Annals inboxes,
+   Krisis observer, Semantics worker, or new CRM work. For Clockwork,
+   switch only a key that step 3 recorded as enabled back to its exact captured
    digest; leave every originally disabled or absent key unchanged. For a
    legacy install, bootstrap only the exact previously loaded owned product
    plists.
@@ -1506,7 +1491,6 @@ provider registry or documentation storage.
 | Platter source capture, constrained resume authoring, stages, editions or send history | Platter | Keep career editing in CRM, discovery in Cast, execution in Nucleus and acceptance transport in Email. Preserve fixed resume content and held uncertain sends; source defaults do not activate a schedule. |
 | Annals works, physical-library identity, concepts, evidence, reconciliation, inbox, producer acceptance, decision feed, retry, or corpus migration | Annals | Keep primary and decisions libraries isolated; preserve job correlation and adapter behavior when affected; Nucleus does not gain Annals workflow state. |
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
-| Weaver workflow state, stage prompts, repository inputs or outputs, validation, cancellation, recovery, or deployment | Weaver | Preserve its Nucleus invocation and correlation contract; Nucleus does not gain narrative repository authority or retry policy. |
 | Email content, delivery, Resend access, fixed addresses, or deployment | Email | Keep the direct Resend path independent of Nucleus; Nucleus gains no email fields, credential, or delivery authority. |
 | Codex task enumeration, normalized transcript reads, App Server compatibility, or Conversations deployment | Conversations | Keep it read-only and separate from Nucleus's private Codex home; consumers must not treat persisted status as live-process proof. |
 | Decision identification, observation coverage, account projection, source anchors, Annals delivery, or Krisis deployment | Krisis | Preserve exact user authority, deterministic account identity, Annals acceptance receipts, and Nucleus correlation; no downstream consumer gains classification authority and Nucleus gains no decision fields. |
@@ -1805,13 +1789,6 @@ PID-aware file lock. Private packet state and database backups are retained.
 - [README](/Users/joey/rust/cell/platter/README.md)
 - [Preparation, preview, send and recovery contract](/Users/joey/rust/cell/platter/chancery/manuals/packet-prepare.md)
 - [Installation and maintenance contract](/Users/joey/rust/cell/platter/chancery/manuals/install-operate.md)
-
-### Weaver
-
-- [Documentation index](/Users/joey/rust/cell/weaver/docs/README.md)
-- [Architecture](/Users/joey/rust/cell/weaver/docs/architecture.md)
-- [CLI contract](/Users/joey/rust/cell/weaver/docs/cli.md)
-- [User-owned installation](/Users/joey/rust/cell/weaver/docs/system-installation.md)
 
 ### Email
 

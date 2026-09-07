@@ -209,6 +209,13 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         tokens, _ = self.plan()
         self.assertEqual(tokens[5:], ["beta"])
 
+    def test_retired_product_checks_pipeline_and_remaining_catalog(self):
+        self.git("rm", "-r", "pipeline/products/krisis.sh", "decisions")
+        result = self.ci()
+        self.assert_passed(result)
+        self.assertEqual([gate["gate"] for gate in self.gates()],
+                         ["preflight", "recognition", "shared-pipeline", "integrated"])
+
     def test_shared_changes_are_reported_without_selecting_projects(self):
         self.write("Cargo.lock", "changed shared lockfile\n")
         self.write("unowned notes.txt", "new shared input\n")
