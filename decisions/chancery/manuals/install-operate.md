@@ -79,6 +79,10 @@ another owner's hold to force progress.
 
 The deployment adapter verifies the installed dependency configuration with
 doctor. Verification does not create observations or submit Nucleus jobs.
+When Krisis is selected for upgrade, verification requires the exact admitted
+candidate and candidate dependency pins. When it participates only in
+maintenance, verification requires the unchanged captured installation and
+checks readiness with its retained dependency pins.
 
 The package builds both `krisis` and `krisis-install`. New releases retain the
 exact Rust helper at `bin/krisis-install` and `package/install`, with a complete

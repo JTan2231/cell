@@ -268,11 +268,16 @@ impl Adapter {
     }
     fn verify(&self) -> Result<Value> {
         self.clean()?;
+        let selected = self.context.selected();
         let info = self
             .snapshot()?
             .current
             .ok_or_else(|| Error::new("installed Krisis is absent"))?;
-        package::matches_candidate(&self.paths, &info, &self.options()?)?;
+        if selected {
+            package::matches_candidate(&self.paths, &info, &self.options()?)?;
+        } else {
+            self.check_prior()?;
+        }
         for flag in ["--version", "--help"] {
             checked(
                 &self.paths,
@@ -284,7 +289,7 @@ impl Adapter {
         }
         let mut result = inspect_result(Some(&info));
         result["controls"] = self.restore_controls()?;
-        self.readiness(true)?;
+        self.readiness(selected)?;
         Ok(result)
     }
     fn recover(&self) -> Result<Value> {
@@ -368,7 +373,7 @@ pub fn execute(operation: Operation) -> Result<Value> {
         }
         Operation::Verify => (
             "verified",
-            "Krisis candidate, controls and readiness verified",
+            "Krisis installation, controls and readiness verified",
             adapter.verify()?,
         ),
         Operation::Release => {

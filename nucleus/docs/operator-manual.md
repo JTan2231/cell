@@ -517,10 +517,10 @@ domain work; an empty process list alone does not establish a drain.
 
 After all affected products are held and drained, the coordinator applies the
 selected candidates in dependency order and checks their installed identity and
-ordinary service readiness. Nucleus reports `acceptingJobs=false` while held;
-Annals requires exact candidate identity when selected for upgrade; when held
-only as an affected product, it verifies the unchanged inspected installation
-and its library readiness instead.
+ordinary service readiness. Annals and Krisis require exact candidate identity
+when selected for upgrade; when held only as affected products, they verify
+their unchanged inspected installations and readiness using retained
+configuration instead. Nucleus reports `acceptingJobs=false` while held;
 `maintenance health RUN_ID` checks its sole matching owner, drained work,
 authentication and exact supported harness. Deployment creates no model jobs or
 synthetic domain records. After every readiness check passes, requester holds
