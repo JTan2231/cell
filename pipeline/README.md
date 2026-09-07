@@ -25,9 +25,28 @@ independent release unit. Release preflight requires matching versions, then
 updates, checks, commits, or restores every companion with the primary manifest,
 root lockfile, and provider bundles. Companions have no separate release tag.
 
-The descriptor files define the product inventory. Usher reads their literal
-assignments without executing them. It checks each product's identity,
-Semantics marker, and Chancery introduction. Root CI runs
+The descriptor files define the product inventory. Root `./ci.sh` selects
+products with staged, unstaged, or nonignored untracked changes relative to
+`HEAD`. A changed path selects the product whose descriptor `PRODUCT_DIR`
+contains it. An edit to `pipeline/products/PRODUCT.sh` selects that product.
+Deletions and both paths of a rename count. Committed branch changes do not
+count as outstanding changes.
+
+Use `./ci.sh` for routine validation. Agents use `--all` only when the user
+explicitly requests full CI.
+
+Explicit product arguments run those gates even when their source is clean.
+`./ci.sh --all` runs every product gate and integrated catalog validation;
+`--all` cannot be combined with product arguments. `--verbose` works with each
+mode. Shared or unowned changes are reported without adding product gates.
+Selection does not expand to dependent products. A run with no selected
+products still runs the common preflight and recognition check. Its success
+does not establish full repository validation.
+
+Root CI binds the selection and every gate to one source candidate and rejects
+source or Git status changes during planning or execution as stale. Usher reads
+the descriptors' literal assignments without executing them. It checks each
+product's identity, Semantics marker, and Chancery introduction. Root CI runs
 `pipeline/recognition.sh` as a brokered heavy body against its exact source
 candidate before the selected product gates. Full Chancery validation remains
 in the existing product and integrated catalog gates.
@@ -45,10 +64,12 @@ the relevant CI checks during development. Release and deployment neither
 rerun CI nor require a stored CI receipt.
 
 The broker captures build and test transcripts. A direct product gate prints
-one success result. Root `./ci.sh` suppresses child success results and prints
-the selected scope once. Failures identify the gate and include bounded
+one success result. Root `./ci.sh` suppresses child success results, reports
+selection before execution, and prints the completed scope on success.
+Failures identify the gate and include bounded
 diagnostics and a private log path. The transcript identifies the failed stage.
-Use `./ci.sh --verbose [PRODUCT...]`, `PRODUCT/ci.sh --verbose`, or
+Use `./ci.sh --verbose [PRODUCT...]`, `./ci.sh --all --verbose`,
+`PRODUCT/ci.sh --verbose`, or
 `pipeline/test.sh --verbose` for detailed output. `--quiet-result` suppresses
 only the success summary for an enclosing caller. These options change
 presentation only.

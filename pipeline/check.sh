@@ -8,6 +8,7 @@ export PIPELINE_ROOT
 cd "$PIPELINE_ROOT"
 
 for script_path in \
+    ci.sh \
     pipeline/lib.sh \
     pipeline/ci.sh \
     pipeline/release.sh \
@@ -64,6 +65,7 @@ EOF
 "$PIPELINE_ROOT/pipeline/generate.sh" --check \
     --product nucleus --product crm
 PYTHONDONTWRITEBYTECODE=1 python3 "$PIPELINE_ROOT/pipeline/test_release.py" -q
+PYTHONDONTWRITEBYTECODE=1 python3 "$PIPELINE_ROOT/pipeline/test_select_changes.py" -q
 PYTHONDONTWRITEBYTECODE=1 python3 "$PIPELINE_ROOT/pipeline/test_todo_catalog.py" -q
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q ci_broker.test_broker
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q deployment.test_coordinator

@@ -3,96 +3,54 @@
 set -eu
 
 ROOT=$(CDPATH='' cd "$(dirname "$0")" && pwd)
+PIPELINE_ROOT=$ROOT
+export PIPELINE_ROOT
+. "$ROOT/pipeline/lib.sh"
 
-usage() {
-    printf '%s\n' \
-        'Usage: ./ci.sh [--verbose] [nucleus|annals|todo|chancery|weaver|email|conversations|krisis|decisions|semantics|clockwork|crm|usher|cast|platter|paperboy]...'
-}
-
-verbose=
-if [ "${1:-}" = --verbose ]; then
-    verbose=--verbose
-    shift
-fi
-
-if [ "$#" -eq 0 ]; then
-    set -- nucleus annals todo chancery weaver email conversations krisis \
-        semantics clockwork crm usher cast platter paperboy
-fi
-
-scope=$(printf '%s ' "$@")
-scope=${scope% }
-
-nucleus_selected=0
-annals_selected=0
-todo_selected=0
-chancery_selected=0
-weaver_selected=0
-email_selected=0
-conversations_selected=0
-krisis_selected=0
-semantics_selected=0
-clockwork_selected=0
-crm_selected=0
-usher_selected=0
-cast_selected=0
-platter_selected=0
-paperboy_selected=0
-for project in "$@"; do
-    case "$project" in
-        nucleus) nucleus_selected=1 ;;
-        annals) annals_selected=1 ;;
-        todo) todo_selected=1 ;;
-        chancery) chancery_selected=1 ;;
-        weaver) weaver_selected=1 ;;
-        email) email_selected=1 ;;
-        conversations) conversations_selected=1 ;;
-        krisis|decisions) krisis_selected=1 ;;
-        semantics) semantics_selected=1 ;;
-        clockwork) clockwork_selected=1 ;;
-        crm) crm_selected=1 ;;
-        usher) usher_selected=1 ;;
-        cast) cast_selected=1 ;;
-        platter) platter_selected=1 ;;
-        paperboy) paperboy_selected=1 ;;
-        *) usage >&2; exit 2 ;;
+for option in "$@"; do
+    case "$option" in
+        -h|--help) exec python3 "$ROOT/pipeline/select_changes.py" plan --help ;;
     esac
 done
 
-# These checks are read-only and do not consume the shared Cargo lane. Run them
-# before binding the exact source candidate used by every selected product.
-"$ROOT/pipeline/test.sh" --quiet-result $verbose
-source_key=$(python3 "$ROOT/ci_broker/client.py" source-key --repo-root "$ROOT")
+plan=$(python3 "$ROOT/pipeline/select_changes.py" plan "$@")
+# The helper emits only fixed modes, hashes, a count, and validated product IDs.
+# Disable pathname expansion while splitting those tokens; never evaluate them.
+set -f
+set -- $plan
+mode=$1
+verbose=$2
+source_key=$3
+status_key=$4
+product_count=$5
+shift 5
+case "$verbose" in
+    verbose) verbose=--verbose ;;
+    quiet) verbose= ;;
+esac
+scope=${*:-root-only}
+skipped=$((product_count - $#))
 CELL_CI_EXPECTED_SOURCE_KEY=$source_key
 export CELL_CI_EXPECTED_SOURCE_KEY
 
+"$ROOT/pipeline/test.sh" --quiet-result $verbose
 python3 "$ROOT/ci_broker/client.py" run --quiet-result $verbose \
     --repo-root "$ROOT" --gate cell.recognition --lane heavy -- \
     "$ROOT/pipeline/recognition.sh"
 
 for project in "$@"; do
-    case "$project" in
-        krisis) "$ROOT/decisions/ci.sh" --quiet-result $verbose ;;
-        *) "$ROOT/$project/ci.sh" --quiet-result $verbose ;;
-    esac
+    pipeline_load_descriptor "$project"
+    "$ROOT/$PRODUCT_DIR/ci.sh" --quiet-result $verbose
 done
 
-if [ "$nucleus_selected$annals_selected$todo_selected$chancery_selected$weaver_selected$email_selected$conversations_selected$krisis_selected$semantics_selected$clockwork_selected$crm_selected$usher_selected$cast_selected$platter_selected$paperboy_selected" = \
-    111111111111111 ]
-then
+if [ "$mode" = all ]; then
     scope=all
     python3 "$ROOT/ci_broker/client.py" run --quiet-result $verbose \
         --repo-root "$ROOT" --gate cell.integrated --lane heavy -- \
         "$ROOT/pipeline/integrated.sh"
 fi
 
-observed_source_key=$(python3 "$ROOT/ci_broker/client.py" \
-    source-key --repo-root "$ROOT")
-if [ "$observed_source_key" != "$source_key" ]; then
-    printf '%s\n' \
-        'ci.sh: source changed while the root plan was running; results are stale' >&2
-    exit 75
-fi
+python3 "$ROOT/pipeline/select_changes.py" check "$source_key" "$status_key"
 unset CELL_CI_EXPECTED_SOURCE_KEY
 
-printf 'ci: passed; scope=%s\n' "$scope"
+printf 'ci: passed; mode=%s; scope=%s; skipped=%s\n' "$mode" "$scope" "$skipped"

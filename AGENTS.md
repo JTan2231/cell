@@ -34,3 +34,5 @@ Semantics-Project: cell
   `nucleus/docs/operator-manual.md` in the same change.
 - Preserve the product instructions in nested `AGENTS.md` files.
 - Every code change must leave `./ci.sh` green.
+- Use the default `./ci.sh` for routine validation. Run `./ci.sh --all` only
+  when the user explicitly requests full CI. Do not add `--all` on your own.

@@ -12,18 +12,39 @@ documents between agents with different responsibilities.
 ./ci.sh
 ```
 
-To check one product while iterating, for example:
+By default, root CI checks products with staged, unstaged, or nonignored
+untracked changes relative to `HEAD`. It uses the product roots in the pipeline
+descriptors. A changed product descriptor also selects that product. Deletions
+and both paths of a rename count.
+
+To check a product even when it has no outstanding changes:
 
 ```sh
 ./ci.sh nucleus
 ```
 
+Use the default command for routine validation. Run full CI only when the user
+explicitly requests it; agents must not add `--all` on their own.
+
+When full CI is requested, run every product gate and integrated catalog validation:
+
+```sh
+./ci.sh --all
+```
+
+`--all` cannot be combined with product names. Add `--verbose` to any mode for
+detailed output. Every mode runs the common pipeline preflight and Usher
+recognition check, even when no products are selected. Shared or unowned
+changes are reported but do not select more products. Root CI does not add
+dependent products. Its result reports the selected scope; use `--all` for
+full validation.
+
 Product gates use one host-wide CI broker and wait for its result. Linked Git
 worktrees share one Cargo target and one heavy execution lane. Agents can
 request CI without creating separate compiler work or writable targets.
 Requests use a fair queue. An exact clean candidate can join identical work
-already in progress. If the source changes during execution, the broker rejects
-the result as stale. CI requires Python 3.10 or newer. See
+already in progress. Source or Git status changes during planning or execution
+are rejected as stale. CI requires Python 3.10 or newer. See
 [the broker contract](ci_broker/README.md).
 
 The checked-in [pipeline descriptors](pipeline/README.md) define shared product

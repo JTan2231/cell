@@ -390,19 +390,35 @@ are discarded. `--verbose` requests detailed output, while
 `--verbose-receipt` preserves the full machine receipt used for candidate
 staging. Presentation options do not change execution identity or exit codes.
 
-The root `./ci.sh` first runs `pipeline/test.sh` as a brokered light preflight,
-then records one exact source key and runs a candidate Usher
-recognition check in the broker's heavy lane, including for selected-product
-runs. It passes the expected source key to that check and each independently
-scheduled product gate, and rejects the plan with exit 75 if the worktree
-changes. A complete run then rebuilds Chancery for that same candidate and
-validates the integrated source graph.
-This aggregate evidence does not merge product release authority or turn one
-product gate into another's gate.
-Root CI suppresses child success summaries and reports the selected scope once.
-Use `./ci.sh --verbose [PRODUCT...]` for detailed output or a product's public
-`ci.sh --verbose` for that gate. The private `pipeline/check.sh` preflight body
-does not invoke Cargo.
+The root `./ci.sh` defaults to products with staged, unstaged, or nonignored
+untracked changes relative to `HEAD`. It maps changed paths to each descriptor's
+`PRODUCT_DIR`; changing a product's own `pipeline/products/PRODUCT.sh`
+descriptor also selects it. Deletions and both paths of a rename count.
+Committed branch changes do not count as outstanding changes. Shared or unowned
+changes are reported without adding gates, and selection does not expand to
+dependent products.
+
+Use `./ci.sh` for routine validation. Agents use `--all` only when the user
+explicitly requests full CI.
+
+Explicit product arguments run those gates even when their source is clean.
+`./ci.sh --all` runs every product gate and integrated source graph validation.
+`--all` cannot be combined with product arguments. Each mode runs
+`pipeline/test.sh` as a brokered light preflight and a candidate Usher
+recognition check in the heavy lane, even when no products are selected. The
+private `pipeline/check.sh` preflight body does not invoke Cargo.
+
+Root CI binds its selection to one exact source key and Git status. It passes
+the expected source key to recognition and each independently scheduled product
+gate. Source or Git status changes during planning or execution reject the run
+as stale with exit 75. Only `--all` then rebuilds Chancery for that candidate and
+validates the integrated source graph. This aggregate evidence does not merge
+product release authority or turn one product gate into another's gate.
+Root CI suppresses child success summaries. It reports selection before execution
+and the completed scope on success.
+A scoped success does not establish full repository validation. Use
+`./ci.sh --verbose [PRODUCT...]` or `./ci.sh --all --verbose` for detailed output,
+or a product's public `ci.sh --verbose` for that gate.
 
 Usher reads every `pipeline/products/*.sh` descriptor as literal data and
 requires an unambiguous product identity/root, an exact root Semantics marker,
