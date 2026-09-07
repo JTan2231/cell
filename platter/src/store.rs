@@ -33,6 +33,79 @@ pub struct Edition {
 }
 
 impl Store {
+    pub fn open_read_only(directory: &Path) -> Result<Self> {
+        Self::read_path(&directory.join("packets.sqlite3"))
+    }
+
+    fn read_path(path: &Path) -> Result<Self> {
+        use std::os::unix::fs::MetadataExt as _;
+        let metadata = std::fs::symlink_metadata(path)?;
+        ensure!(
+            metadata.is_file() && !metadata.file_type().is_symlink() && metadata.nlink() == 1,
+            "database must be a regular file"
+        );
+        let connection =
+            Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        ensure!(
+            connection.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))? == 1,
+            "unsupported Platter database schema"
+        );
+        let check: String = connection.query_row("PRAGMA quick_check", [], |row| row.get(0))?;
+        ensure!(check == "ok", "Platter database integrity check failed");
+        let store = Self { connection };
+        store.list()?;
+        let mut editions = store.connection.prepare("SELECT json FROM editions")?;
+        for json in editions.query_map([], |row| row.get::<_, String>(0))? {
+            let _: Edition = serde_json::from_str(&json?)?;
+        }
+        drop(editions);
+        Ok(store)
+    }
+
+    /// `SQLite` produces a consistent standalone snapshot, including WAL content.
+    pub fn backup(&self, destination: &Path) -> Result<()> {
+        use std::os::unix::fs::PermissionsExt as _;
+        ensure!(destination.is_absolute(), "backup path must be absolute");
+        match std::fs::symlink_metadata(destination) {
+            Ok(_) => {
+                let retained = Self::read_path(destination)?;
+                ensure!(
+                    self.snapshot()? == retained.snapshot()?,
+                    "existing backup does not match current state"
+                );
+                return Ok(());
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        let parent = destination
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("backup parent missing"))?;
+        crate::private_dir(parent)?;
+        let temporary = tempfile::NamedTempFile::new_in(parent)?;
+        self.connection.execute(
+            "VACUUM INTO ?1",
+            [temporary.path().to_string_lossy().as_ref()],
+        )?;
+        std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o600))?;
+        temporary.as_file().sync_all()?;
+        temporary.persist_noclobber(destination)?;
+        std::fs::File::open(parent)?.sync_all()?;
+        Ok(())
+    }
+
+    fn snapshot(&self) -> Result<serde_json::Value> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT day,json FROM editions ORDER BY day")?;
+        let editions = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(serde_json::json!({"packets":self.list()?,"editions":editions}))
+    }
+
     pub fn open(directory: &Path) -> Result<Self> {
         use std::os::unix::fs::PermissionsExt as _;
         crate::private_dir(directory)?;
@@ -43,7 +116,7 @@ impl Store {
         let version: i64 = connection.pragma_query_value(None, "user_version", |r| r.get(0))?;
         ensure!(
             matches!(version, 0 | 1),
-            "unsupported Job Packets database schema"
+            "unsupported Platter database schema"
         );
         if version == 0 {
             let tables: i64 = connection.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'", [], |row| row.get(0))?;

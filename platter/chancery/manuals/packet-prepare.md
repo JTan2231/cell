@@ -1,26 +1,32 @@
 # Prepare private job packets
 
-Use Job Packets when the user wants a short brief and constrained tailored
+Use Platter when the user wants a short brief and constrained tailored
 resume for a Cast opportunity, a preview of a dated edition, or an explicitly
-authorized send of that retained edition. This source-built prototype owns
+authorized send of that retained edition. Platter owns
 preparation and delivery state. It does not discover jobs, edit career facts,
 apply to employers, contact them or install recurring delivery.
 
 ## Commands and prerequisites
 
-Run from the Cell checkout after its product gate succeeds:
+After building and installing a tested release through the [installation
+procedure](install-operate.md), use the installed command. A source build may
+use `target/debug/platter` for the same interface:
 
 ```sh
-./ci.sh job-packets
-target/debug/job-packets init --resume /absolute/original-resume.tex
-target/debug/job-packets prepare CAST_JOB_ID
-target/debug/job-packets prepare-daily
-target/debug/job-packets preview YYYY-MM-DD
-target/debug/job-packets status
+./ci.sh platter
+platter init --resume /absolute/original-resume.tex
+platter prepare CAST_JOB_ID
+platter prepare-daily
+platter preview YYYY-MM-DD
+platter status
 ```
 
-Default state is `~/.local/share/job-packets`. Use
-`--state-dir /absolute/private/directory` to select separate private state.
+Fresh state defaults to `~/.local/share/platter`. If only the predecessor
+`~/.local/share/job-packets` exists, it remains the default in place. If both
+exist, the command refuses an implicit choice: use
+`--state-dir /absolute/private/directory`. No directory, packet identity,
+original template, absolute artifact path, retained Nucleus request or send
+receipt is renamed or reset.
 Initialization captures the original supported LaTeX resume privately. The
 template must contain the expected Jackson National Life bullet structure;
 an arbitrary PDF or a different template cannot substitute silently.
@@ -31,6 +37,9 @@ Preparation requires initialized Cast and CRM libraries, their supported CLI
 interfaces, accessible complete employer posting evidence, compatible strict
 Nucleus readiness and local resume rendering tools. Rendering requires
 `tectonic`, Python 3 with `pypdf`, and the original template's packages/fonts.
+Absolute `PLATTER_TECTONIC` and `PLATTER_PYTHON` overrides are supported; default
+resolution searches `~/.local/bin`, `/usr/local/bin`, `/opt/homebrew/bin` and
+`/usr/bin`, independently of the caller PATH.
 Availability of source code or this bundle proves none of that readiness.
 
 The agreed settings are a maximum of three ready packets, delivery at 09:00
@@ -98,18 +107,17 @@ returned as retained; reopening one does not refresh its evidence.
 When sending that specific edition is already authorized:
 
 ```sh
-target/debug/job-packets send YYYY-MM-DD
+platter send YYYY-MM-DD
 ```
 
 This invokes Email's fixed-recipient interface with a stable edition key,
 plain-text body and ordered local PDF attachments. Frozen attachment hashes
 must still match before Email is invoked. Email attachment contract
 4 is required; select a matching tested Email executable or upgrade an older
-installed command separately. Job
-Packets records provider acceptance and excludes those opportunities from
+installed command separately. Platter records provider acceptance and excludes those opportunities from
 future editions. Acceptance is not Gmail receipt, an application submission
 or an employer response. An ambiguous outcome remains held instead of being
-blindly retried. This prototype has no ambiguous-send reconciliation command.
+blindly retried. There is no ambiguous-send reconciliation command.
 
 ## Ad hoc test editions
 
@@ -117,7 +125,7 @@ An explicit ad hoc preview creates an independent test occurrence from retained
 completed packets:
 
 ```sh
-target/debug/job-packets preview YYYY-MM-DD --ad-hoc RUN_ID \
+platter preview YYYY-MM-DD --ad-hoc RUN_ID \
   --packet PACKET_ID
 ```
 
@@ -132,7 +140,7 @@ posting is the retained evidence and receives no freshness check. The normal
 preview path still refreshes posting evidence; use `--ad-hoc` when the intended
 operation is a test from retained data.
 
-The occurrence lives under `ad-hoc/RUN_ID/` in private Job Packets state. It
+The occurrence lives under `ad-hoc/RUN_ID/` in private Platter state. It
 contains its own exact `[TEST]` subject, paragraphs, ordered copied PDF files,
 payload and attachment hashes, stable idempotency key, state and acceptance
 receipt. It neither creates an ordinary edition nor reserves a packet or
@@ -151,7 +159,7 @@ must agree with it. Use a new ID for an intentionally different test payload.
 When the user has authorized that test email:
 
 ```sh
-target/debug/job-packets send YYYY-MM-DD --ad-hoc RUN_ID \
+platter send YYYY-MM-DD --ad-hoc RUN_ID \
   --email-executable /absolute/private/email-candidate-wrapper
 ```
 
@@ -197,7 +205,9 @@ to Email, Resend and Gmail. Source retrieval discloses ordinary HTTP requests
 to employer sources. Neither catalog presence nor stored delivery settings
 grants additional authority.
 
-This release promises no production installation, automatic migration,
-schedule, completion-time guarantee, comprehensive source coverage or final
-delivery observer. Code, tests and the source bundle move together; installed
-selectors remain a separate deployment action.
+Installation, maintained replacement and retained-release verification are
+described by the separate [installation contract](install-operate.md). It does
+not activate a schedule or change schema 1 domain records. No completion-time
+guarantee, comprehensive source coverage or final delivery observer is
+promised. Code, tests and the source bundle move together; installed selectors
+remain a separate deployment action.

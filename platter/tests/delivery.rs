@@ -1,6 +1,6 @@
 //! Offline delivery acceptance and recovery checks against a fake Email CLI.
 use anyhow::{Context, Result};
-use job_packets::{
+use platter::{
     Config,
     store::{Edition, PacketRecord, Store},
     workflow,
@@ -44,7 +44,7 @@ impl Fixture {
             email_executable: email.clone(),
             original_resume: root.join("unused-original-resume.json"),
         };
-        job_packets::write_json(&root.join("config.json"), &config)?;
+        platter::write_json(&root.join("config.json"), &config)?;
         let attachment = root.join("resume.pdf");
         fs::write(&attachment, b"%PDF-1.4\nfrozen private resume fixture\n")?;
         let packet = PacketRecord {
@@ -64,7 +64,7 @@ impl Fixture {
             packet_ids: vec![packet.id.clone()],
             attachments: vec![attachment.to_string_lossy().into_owned()],
             attachment_sha256: vec![format!("{:x}", Sha256::digest(fs::read(&attachment)?))],
-            idempotency_key: "job-packets/2026-09-06/test-occurrence".into(),
+            idempotency_key: "platter/2026-09-06/test-occurrence".into(),
             receipt: None,
         };
         let mut store = Store::open(root)?;

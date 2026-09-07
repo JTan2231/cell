@@ -1,6 +1,6 @@
 //! Offline debug sends must not consume discovery budgets or ordinary jobs.
 use anyhow::{Context, Result};
-use job_packets::{
+use platter::{
     Config, ad_hoc,
     store::{Edition, PacketRecord, Store},
 };
@@ -44,31 +44,31 @@ impl Fixture {
             email_executable: forbidden,
             original_resume: root.join("original.json"),
         };
-        job_packets::write_json(&root.join("config.json"), &config)?;
+        platter::write_json(&root.join("config.json"), &config)?;
         let mut store = Store::open(root)?;
         let mut ids = Vec::new();
         for index in 1..=3 {
             let id = format!("packet-{index}");
             let packet = root.join("packets").join(&id);
-            job_packets::private_dir(&packet)?;
+            platter::private_dir(&packet)?;
             let resume = packet.join("resume.pdf");
             fs::write(&resume, b"%PDF-1.4\naccepted test resume\n")?;
-            job_packets::write_json(
+            platter::write_json(
                 &packet.join("inputs.json"),
                 &serde_json::json!({
                     "company":"synthetic-source-label","job":{"title":format!("Engineer {index}"),"url":"https://example.invalid/retained-role"},
                     "posting":{"url":"https://example.invalid/retained-role","retrieved_at":"2026-09-06T21:00:00Z","text":serde_json::json!({"company_name":format!("Employer {index}")}).to_string()}
                 }),
             )?;
-            job_packets::write_json(
+            platter::write_json(
                 &packet.join("brief-stage.json"),
                 &serde_json::json!({"accepted":{"stage":"brief","result":{"paragraph":format!("Original brief {index} grounded in retained evidence."),"pursue":true}}}),
             )?;
-            job_packets::write_json(
+            platter::write_json(
                 &packet.join("resume-stage.json"),
                 &serde_json::json!({"accepted":{"stage":"resume","result":{"jackson_bullets":["Supported Jackson work"],"evidence":[{"bullet_index":0,"career_entry_ids":["career-1"]}]}}}),
             )?;
-            job_packets::write_json(
+            platter::write_json(
                 &packet.join("artifacts.json"),
                 &serde_json::json!({"resume_pdf":resume,"pages":1}),
             )?;
@@ -137,7 +137,7 @@ fn three_packet_debug_preview_and_repeated_send_leave_ordinary_state_byte_identi
     let fixture = Fixture::new("Accepted receipt-1")?;
     let original_brief = fs::read(fixture.root().join("packets/packet-1/brief-stage.json"))?;
     let overrides = fixture.root().join("reviewed-briefs.json");
-    job_packets::write_json(
+    platter::write_json(
         &overrides,
         &serde_json::json!({"packet-1":"Reviewed brief with the corrected compensation wording."}),
     )?;
@@ -259,7 +259,7 @@ fn changed_frozen_attachment_or_selection_is_rejected_before_email() -> Result<(
     let occurrence_path = fixture.root().join("ad-hoc/payload/occurrence.json");
     let mut occurrence: serde_json::Value = serde_json::from_slice(&fs::read(&occurrence_path)?)?;
     occurrence["edition"]["body"] = serde_json::json!("changed after freezing");
-    job_packets::write_json(&occurrence_path, &occurrence)?;
+    platter::write_json(&occurrence_path, &occurrence)?;
     assert!(
         ad_hoc::send(
             fixture.root(),

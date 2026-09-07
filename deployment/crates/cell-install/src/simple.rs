@@ -91,6 +91,9 @@ impl Spec {
     /// # Errors
     /// Returns an error for foreign or unproved predecessor content.
     pub fn legacy(&self, root: &Path) -> Result<ReleaseInfo> {
+        if self.legacy.proofs.is_empty() && self.legacy.providers.is_empty() {
+            return Err(Error::new("no predecessor release format is supported"));
+        }
         let values = legacy::manifest(&root.join(self.legacy.manifest))?;
         if values
             .get("product")
@@ -402,13 +405,15 @@ fn current(spec: &Spec, home: &Path) -> Result<InstallSnapshot> {
 }
 
 fn maintained(spec: &Spec, context: &Context, operation: &str, owner: bool) -> Result<Value> {
-    maintained_at(
-        spec,
-        context,
-        operation,
-        owner,
-        &context.home.join(".local/bin").join(spec.product),
-    )
+    // A first installation still needs the product's state and maintenance
+    // boundary. Only a proved absent installation may use the sealed candidate;
+    // a damaged or foreign public selector must never trigger this fallback.
+    let binary = if current(spec, &context.home)?.current.is_none() {
+        context.binary(spec.product)?
+    } else {
+        context.home.join(".local/bin").join(spec.product)
+    };
+    maintained_at(spec, context, operation, owner, &binary)
 }
 
 fn maintained_at(
@@ -566,8 +571,8 @@ fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Resu
                             .parent()
                             .ok_or_else(|| Error::new("invalid state root"))?
                             .join(format!(
-                                "crm-pre-migration-{}.sqlite",
-                                context.request.run_id
+                                "{}-pre-migration-{}.sqlite",
+                                spec.product, context.request.run_id
                             ))
                             .into_os_string(),
                     ],
@@ -623,9 +628,25 @@ fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Resu
                     ));
                 }
                 if !(is_prior && before) {
+                    let binary = if observed.current.is_none() {
+                        context.binary(spec.product)?
+                    } else {
+                        context.home.join(".local/bin").join(spec.product)
+                    };
+                    let mut check: Vec<OsString> = vec!["--json".into(), "doctor".into()];
+                    // An unchanged Platter installation may be affected only,
+                    // or its candidate prerequisites may have failed before
+                    // publication. Releasing that prior state requires local
+                    // compatibility, not readiness to start new domain work.
+                    if spec.product == "platter"
+                        && is_prior
+                        && (operation == Operation::Recover || !context.selected())
+                    {
+                        check.push("--state-only".into());
+                    }
                     command::json(
-                        &context.home.join(".local/bin").join(spec.product),
-                        &["--json".into(), "doctor".into()],
+                        &binary,
+                        &check,
                         &BTreeMap::from([(
                             "CELL_DEPLOYMENT_RUN_ID".into(),
                             context.request.run_id.clone().into(),

@@ -20,7 +20,8 @@ use serde_json::{Value, json, value::to_raw_value};
 use uuid::Uuid;
 
 pub const MODEL: &str = "gpt-5.6-sol";
-const RESULT_SCHEMA: &str = "job-packets.tool-result.v1";
+const TOOL_NAMESPACE: &str = "platter";
+const LEGACY_TOOL_NAMESPACE: &str = "job-packets";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -205,6 +206,18 @@ async fn run_stage_impl(
     }
 }
 
+/// Read the exact durable execution request without creating or changing state.
+///
+/// # Errors
+/// Returns errors for unreadable or unsupported retained stage state.
+pub fn retained_request(path: &Path) -> Result<JobRequestV1> {
+    let state: StageState = serde_json::from_slice(&fs::read(path)?)?;
+    ensure!(state.version == 1, "unsupported stage state version");
+    retained_tool_namespace(&state)?;
+    state.request.validate()?;
+    Ok(state.request)
+}
+
 fn load_or_create(path: &Path, kind: Stage, inputs: StageInputs) -> Result<StageState> {
     if path.exists() {
         let state: StageState = serde_json::from_slice(&fs::read(path)?)?;
@@ -213,6 +226,7 @@ fn load_or_create(path: &Path, kind: Stage, inputs: StageInputs) -> Result<Stage
             state.stage == kind && state.inputs == inputs,
             "stage input conflict: retained job inputs are immutable"
         );
+        retained_tool_namespace(&state)?;
         return Ok(state);
     }
     validate_inputs(&inputs)?;
@@ -266,7 +280,7 @@ fn build_request(stage: Stage, inputs: &StageInputs, cwd: &Path) -> Result<JobRe
         TimeoutSeconds::new(3600),
     );
     invocation.reasoning_effort = Some(ReasoningEffort::Max);
-    invocation.toolset = Some(toolset_ref(stage));
+    invocation.toolset = Some(toolset_ref(stage, TOOL_NAMESPACE));
     let index: Vec<Value> = inputs
         .career_entries
         .iter()
@@ -292,10 +306,10 @@ fn build_request(stage: Stage, inputs: &StageInputs, cwd: &Path) -> Result<JobRe
         "accepted_brief_positioning_only":inputs.brief,
     }))?;
     let request = JobRequestV1::new(
-        format!("job-packets-{}-{}", stage.name(), Uuid::now_v7()),
-        format!("Job packet {}: {}", stage.name(), inputs.packet_id),
+        format!("platter-{}-{}", stage.name(), Uuid::now_v7()),
+        format!("Platter {}: {}", stage.name(), inputs.packet_id),
         Requester {
-            program: "job-packets".to_owned(),
+            program: "platter".to_owned(),
             id: inputs.packet_id.clone(),
         },
         instructions,
@@ -313,15 +327,29 @@ fn build_request(stage: Stage, inputs: &StageInputs, cwd: &Path) -> Result<JobRe
 /// Returns an error when the service is unavailable or required proof is missing.
 pub async fn check_readiness(client: &NucleusClient) -> Result<HealthResponseV1> {
     let health = client.health().await?;
-    validate_health(&health)?;
+    validate_health(&health, true)?;
     Ok(health)
 }
 
-fn validate_health(health: &HealthResponseV1) -> Result<()> {
+/// Prove installation readiness while the exact deployment owner holds Nucleus.
+/// This never authorizes ordinary stage admission while the service is held.
+///
+/// # Errors
+/// Returns errors unless the owner's sole hold, full drain, and required runtime
+/// capabilities are proven by read-only Nucleus observations.
+pub async fn check_deployment_readiness(
+    client: &NucleusClient,
+    owner: &str,
+) -> Result<HealthResponseV1> {
+    let health = client.health_for_deployment(owner).await?;
+    validate_health(&health, false)?;
+    Ok(health)
+}
+
+fn validate_health(health: &HealthResponseV1, require_admission: bool) -> Result<()> {
     ensure!(
         health.version == 1
-            && health.status == "ok"
-            && health.accepting_jobs
+            && (!require_admission || (health.status == "ok" && health.accepting_jobs))
             && health.supported_protocol_versions.contains(&1)
             && health.authentication.configured
             && health.authentication.authenticated
@@ -377,7 +405,7 @@ async fn run_stage_inner(
         ),
         Err(ClientError::Api { status: 404, .. }) => {
             check_readiness(client).await?;
-            register_tools(client, state.stage).await?;
+            register_tools(client, state).await?;
             // Exact request was fsynced before any potentially ambiguous submit.
             client.submit_job(&state.request).await?;
         }
@@ -419,19 +447,38 @@ fn terminal_result(state: &StageState) -> Result<StageResult> {
     state.accepted.clone().context("Nucleus job ended without an accepted domain result; inspect retained runtime state before authorizing a new attempt")
 }
 
-fn toolset_ref(stage: Stage) -> ToolsetRef {
+fn toolset_ref(stage: Stage, namespace: &str) -> ToolsetRef {
     ToolsetRef {
-        provider: "job-packets".into(),
+        provider: namespace.into(),
         name: stage.name().into(),
         version: 1,
     }
 }
 
-fn argument_schema_id(name: &str) -> String {
-    format!("job-packets.{}.arguments.v1", name.replace('_', "-"))
+// Requests and tool registrations are immutable. The product rename changes
+// new identities only; recovery must use the namespace frozen in each request.
+fn retained_tool_namespace(state: &StageState) -> Result<&'static str> {
+    let namespace = match state.request.requester.program.as_str() {
+        TOOL_NAMESPACE => TOOL_NAMESPACE,
+        LEGACY_TOOL_NAMESPACE => LEGACY_TOOL_NAMESPACE,
+        _ => bail!("stage request has an unsupported requester identity"),
+    };
+    ensure!(
+        state.request.invocation.toolset.as_ref() == Some(&toolset_ref(state.stage, namespace)),
+        "stage request has a conflicting retained toolset identity"
+    );
+    Ok(namespace)
 }
 
-fn tool_definitions(stage: Stage) -> Result<ToolsetDefinitionsV1> {
+fn argument_schema_id(namespace: &str, name: &str) -> String {
+    format!("{namespace}.{}.arguments.v1", name.replace('_', "-"))
+}
+
+fn result_schema_id(namespace: &str) -> String {
+    format!("{namespace}.tool-result.v1")
+}
+
+fn tool_definitions(stage: Stage, namespace: &str) -> Result<ToolsetDefinitionsV1> {
     let mut definitions = vec![
         (
             "list_career_entries",
@@ -467,7 +514,7 @@ fn tool_definitions(stage: Stage) -> Result<ToolsetDefinitionsV1> {
                 Ok(ToolDefinitionV1 {
                     name: name.into(),
                     description: description.into(),
-                    input_schema_id: argument_schema_id(name).into(),
+                    input_schema_id: argument_schema_id(namespace, name).into(),
                     input_schema: to_raw_value(&schema)?,
                 })
             })
@@ -475,8 +522,9 @@ fn tool_definitions(stage: Stage) -> Result<ToolsetDefinitionsV1> {
     })
 }
 
-async fn register_tools(client: &NucleusClient, stage: Stage) -> Result<()> {
-    let definitions = tool_definitions(stage)?;
+async fn register_tools(client: &NucleusClient, state: &StageState) -> Result<()> {
+    let namespace = retained_tool_namespace(state)?;
+    let definitions = tool_definitions(state.stage, namespace)?;
     for tool in &definitions.tools {
         client
             .register_schema(&LogSchemaV1::new(
@@ -484,23 +532,27 @@ async fn register_tools(client: &NucleusClient, stage: Stage) -> Result<()> {
                 &tool.name,
                 "1",
                 "application/schema+json",
-                "job-packets",
+                namespace,
                 tool.input_schema.clone(),
             ))
             .await?;
     }
     client
         .register_schema(&LogSchemaV1::new(
-            RESULT_SCHEMA,
-            "Job packet tool result",
+            result_schema_id(namespace),
+            if namespace == LEGACY_TOOL_NAMESPACE {
+                "Job packet tool result"
+            } else {
+                "Platter tool result"
+            },
             "1",
             "application/schema+json",
-            "job-packets",
+            namespace,
             to_raw_value(&json!({"type":"object"}))?,
         ))
         .await?;
     let registration = ToolsetRegistrationV1::new(
-        toolset_ref(stage),
+        toolset_ref(state.stage, namespace),
         "nucleus.toolset-definitions.v1",
         definitions,
     )?;
@@ -550,7 +602,8 @@ fn bind_tool_result_validated(
         );
         return Ok(receipt.response.clone());
     }
-    let expected = argument_schema_id(&call.tool_name);
+    let namespace = retained_tool_namespace(state)?;
+    let expected = argument_schema_id(namespace, &call.tool_name);
     let allowed = [
         "list_career_entries",
         "read_career_entry",
@@ -568,7 +621,7 @@ fn bind_tool_result_validated(
         version: 1,
         call_id: call.id.clone(),
         requester: state.request.requester.clone(),
-        result_schema_id: RESULT_SCHEMA.into(),
+        result_schema_id: result_schema_id(namespace).into(),
         result: to_raw_value(&value)?,
         is_error,
     };
@@ -745,9 +798,25 @@ mod tests {
             attempt_id: AttemptId::new("attempt-1"),
             request_sequence: 1,
             tool_name: name.into(),
-            arguments_schema_id: SchemaId::new(argument_schema_id(name)),
+            arguments_schema_id: SchemaId::new(argument_schema_id(
+                retained_tool_namespace(state).unwrap(),
+                name,
+            )),
             arguments: to_raw_value(value).unwrap(),
         }
+    }
+
+    fn use_legacy_identity(state: &mut StageState) {
+        assert!(state.receipts.is_empty() && state.runtime.is_none());
+        state.request.id = nucleus_core::JobId::new(state.request.id.as_str().replacen(
+            "platter-",
+            "job-packets-",
+            1,
+        ));
+        state.request.label = state.request.label.replacen("Platter ", "Job packet ", 1);
+        state.request.requester.program = LEGACY_TOOL_NAMESPACE.into();
+        state.request.invocation.toolset = Some(toolset_ref(state.stage, LEGACY_TOOL_NAMESPACE));
+        state.request.validate().unwrap();
     }
 
     #[test]
@@ -764,8 +833,14 @@ mod tests {
                 && !request.invocation.builtin_tools.web_search
         );
         assert!(request.invocation.launch_context.is_none());
+        assert!(request.id.as_str().starts_with("platter-resume-"));
+        assert_eq!(request.requester.program, TOOL_NAMESPACE);
         assert_eq!(
-            tool_definitions(Stage::Resume)
+            request.invocation.toolset,
+            Some(toolset_ref(Stage::Resume, TOOL_NAMESPACE))
+        );
+        assert_eq!(
+            tool_definitions(Stage::Resume, TOOL_NAMESPACE)
                 .unwrap()
                 .tools
                 .iter()
@@ -785,6 +860,65 @@ mod tests {
         let mut changed = inputs();
         changed.posting.push_str(" different");
         assert!(load_or_create(&path, Stage::Brief, changed).is_err());
+    }
+
+    #[test]
+    fn legacy_pending_calls_keep_frozen_request_and_schema_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("brief.json");
+        let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
+        use_legacy_identity(&mut state);
+        persist(&path, &state).unwrap();
+        let original_bytes = fs::read(&path).unwrap();
+        let mut restarted = load_or_create(&path, Stage::Brief, inputs()).unwrap();
+        assert_eq!(retained_request(&path).unwrap(), state.request);
+        assert_eq!(fs::read(&path).unwrap(), original_bytes);
+        let pending = call(
+            &restarted,
+            "legacy-call",
+            "submit_brief",
+            &json!({"paragraph":"Supported fit with compensation unknown.","pursue":true}),
+        );
+        assert_eq!(
+            pending.arguments_schema_id.as_str(),
+            "job-packets.submit-brief.arguments.v1"
+        );
+        let response = bind_tool_result(&path, &mut restarted, &pending).unwrap();
+        assert_eq!(
+            response.result_schema_id.as_str(),
+            "job-packets.tool-result.v1"
+        );
+        assert_eq!(response.requester, state.request.requester);
+        let mut reloaded = load_or_create(&path, Stage::Brief, inputs()).unwrap();
+        assert_eq!(reloaded.request, state.request);
+        let accepted_bytes = fs::read(&path).unwrap();
+        assert_eq!(
+            serde_json::to_vec(&bind_tool_result(&path, &mut reloaded, &pending).unwrap()).unwrap(),
+            serde_json::to_vec(&response).unwrap()
+        );
+        assert_eq!(fs::read(&path).unwrap(), accepted_bytes);
+        let mut foreign_schema = call(
+            &reloaded,
+            "wrong-namespace",
+            "list_career_entries",
+            &json!({}),
+        );
+        foreign_schema.arguments_schema_id = "platter.list-career-entries.arguments.v1".into();
+        assert!(bind_tool_result(&path, &mut reloaded, &foreign_schema).is_err());
+        assert_eq!(fs::read(&path).unwrap(), accepted_bytes);
+    }
+
+    #[test]
+    fn conflicting_retained_toolset_is_rejected_without_rewriting_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("brief.json");
+        let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
+        state.request.invocation.toolset = Some(toolset_ref(Stage::Brief, LEGACY_TOOL_NAMESPACE));
+        persist(&path, &state).unwrap();
+        let before = fs::read(&path).unwrap();
+        assert!(load_or_create(&path, Stage::Brief, inputs()).is_err());
+        assert!(retained_request(&path).is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
     }
 
     #[test]
@@ -975,6 +1109,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn legacy_recovery_registers_legacy_schema_and_toolset_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("brief.json");
+        let socket = dir.path().join("nucleus.sock");
+        let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
+        use_legacy_identity(&mut state);
+        let definitions = tool_definitions(Stage::Brief, LEGACY_TOOL_NAMESPACE).unwrap();
+        let mut exchanges = Vec::new();
+        for tool in &definitions.tools {
+            exchanges.push((
+                "POST /v1/schemas ".into(),
+                json!(LogSchemaV1::new(
+                    tool.input_schema_id.clone(),
+                    &tool.name,
+                    "1",
+                    "application/schema+json",
+                    "job-packets",
+                    tool.input_schema.clone(),
+                )),
+            ));
+        }
+        exchanges.push((
+            "POST /v1/schemas ".into(),
+            json!(LogSchemaV1::new(
+                "job-packets.tool-result.v1",
+                "Job packet tool result",
+                "1",
+                "application/schema+json",
+                "job-packets",
+                to_raw_value(&json!({"type":"object"})).unwrap(),
+            )),
+        ));
+        let registration = ToolsetRegistrationV1::new(
+            state.request.invocation.toolset.clone().unwrap(),
+            "nucleus.toolset-definitions.v1",
+            definitions,
+        )
+        .unwrap();
+        exchanges.push((
+            "POST /v1/toolsets ".into(),
+            json!({
+                "version":1,"toolset":registration.toolset,
+                "definitionsSchemaId":registration.definitions_schema_id,
+                "digest":registration.digest,"registeredAt":"2026-09-06T21:00:00Z"
+            }),
+        ));
+        let expected_schemas: Vec<Value> = exchanges[..4]
+            .iter()
+            .map(|(_, response)| response.clone())
+            .collect();
+        let server = fake_mailbox(&socket, exchanges);
+        register_tools(&NucleusClient::new(&socket).unwrap(), &state)
+            .await
+            .unwrap();
+        let requests = server.await.unwrap();
+        assert_eq!(requests[..4], expected_schemas);
+        assert_eq!(requests[4], json!(registration));
+    }
+
+    #[tokio::test]
     async fn restart_replays_committed_receipt_and_runtime_failure_preserves_success() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("brief.json");
@@ -1042,6 +1236,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn legacy_runtime_pending_call_resumes_without_submitting_new_work() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("brief.json");
+        let socket = dir.path().join("nucleus.sock");
+        let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
+        use_legacy_identity(&mut state);
+        persist(&path, &state).unwrap();
+        let pending = call(
+            &state,
+            "legacy-call",
+            "submit_brief",
+            &json!({"paragraph":"Supported fit, with location still unknown.","pursue":true}),
+        );
+        let running = runtime_job(&state, nucleus_core::JobState::WaitingOnRequester);
+        let completed = runtime_job(&state, nucleus_core::JobState::Completed);
+        let id = state.request.id.to_string();
+        let pending_record = nucleus_core::PendingToolCallV1 {
+            version: 1,
+            call: pending,
+            state: nucleus_core::ToolCallState::Pending,
+            created_at: "2026-09-06T21:00:00Z".into(),
+            answered_at: None,
+        };
+        let server = fake_mailbox(
+            &socket,
+            vec![
+                (format!("GET /v1/jobs/{id} "), json!(running)),
+                (format!("GET /v1/jobs/{id} "), json!(running)),
+                (
+                    format!("GET /v1/jobs/{id}/tool-calls?"),
+                    json!({"version":1,"jobId":id,"calls":[pending_record],"nextSequence":1}),
+                ),
+                (
+                    format!("POST /v1/jobs/{id}/tool-calls/legacy-call/result "),
+                    json!(pending_record),
+                ),
+                (format!("GET /v1/jobs/{id} "), json!(completed)),
+            ],
+        );
+        let accepted = run_stage(
+            &NucleusClient::new(&socket).unwrap(),
+            &path,
+            Stage::Brief,
+            inputs(),
+            Some(Instant::now() + Duration::from_secs(5)),
+        )
+        .await
+        .unwrap();
+        let requests = server.await.unwrap();
+        assert_eq!(requests[3]["resultSchemaId"], "job-packets.tool-result.v1");
+        assert_eq!(requests[3]["requester"], json!(state.request.requester));
+        let reloaded = load_or_create(&path, Stage::Brief, inputs()).unwrap();
+        assert_eq!(reloaded.request, state.request);
+        assert_eq!(reloaded.accepted, Some(accepted));
+    }
+
+    #[tokio::test]
     async fn runtime_completion_without_domain_commit_fails_and_never_resubmits() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("brief.json");
@@ -1083,13 +1334,60 @@ mod tests {
             "authentication":{"codexHome":"/private/nucleus","configured":true,"authenticated":true},
             "execution":{"maxActiveJobs":8,"activeJobs":8,"availableSlots":0}
         })).unwrap();
-        validate_health(&health).unwrap();
+        validate_health(&health, true).unwrap();
         health.execution.as_mut().unwrap().available_slots = 1;
-        assert!(validate_health(&health).is_err());
+        assert!(validate_health(&health, true).is_err());
         health.execution.as_mut().unwrap().available_slots = 0;
         health.capabilities.pop();
-        assert!(validate_health(&health).is_err());
+        assert!(validate_health(&health, true).is_err());
     }
+
+    #[tokio::test]
+    async fn deployment_readiness_requires_exact_hold_and_runtime_capabilities() {
+        let health = json!({
+            "version":1,"status":"maintenance","daemonVersion":"0.5.0","acceptingJobs":false,
+            "checkedAt":"2026-09-06T21:00:00Z","supportedProtocolVersions":[1],
+            "harness":{"harness":"codex","harnessVersion":"proved","adapterVersion":"1"},
+            "harnessExecutable":"/fixture/codex",
+            "capabilities":["exact-model","reasoning-effort","workspace-none","builtin-local-execution","builtin-web-search","dynamic-client-tools"],
+            "authentication":{"codexHome":"/private/nucleus","configured":true,"authenticated":true},
+            "execution":{"maxActiveJobs":8,"activeJobs":0,"availableSlots":8}
+        });
+        assert!(validate_health(&serde_json::from_value(health.clone()).unwrap(), true).is_err());
+        for (owner, remove_capability, ready) in [
+            ("deployment-1", false, true),
+            ("other-owner", false, false),
+            ("deployment-1", true, false),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let socket = dir.path().join("nucleus.sock");
+            let mut observed_health = health.clone();
+            if remove_capability {
+                observed_health["capabilities"]
+                    .as_array_mut()
+                    .unwrap()
+                    .pop();
+            }
+            let server = fake_mailbox(
+                &socket,
+                vec![
+                    ("GET /v1/health ".into(), observed_health),
+                    (
+                        "GET /v1/maintenance ".into(),
+                        json!({"protocol_version":1,"holds":[owner],"drained":true,"nonterminal_jobs":0}),
+                    ),
+                ],
+            );
+            assert_eq!(
+                check_deployment_readiness(&NucleusClient::new(&socket).unwrap(), "deployment-1")
+                    .await
+                    .is_ok(),
+                ready
+            );
+            assert_eq!(server.await.unwrap().len(), 2);
+        }
+    }
+
     #[test]
     fn rendering_rejection_returns_feedback_without_committing_resume() {
         let dir = tempfile::tempdir().unwrap();

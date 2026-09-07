@@ -27,7 +27,7 @@ pub fn initialize(root: &Path, resume: &Path) -> Result<()> {
     crate::private_dir(root)?;
     ensure!(
         !root.join("config.json").exists(),
-        "Job Packets is already initialized"
+        "Platter is already initialized"
     );
     let template = ResumeTemplate::load(resume)?;
     let snapshot = root.join("original-resume.json");
@@ -292,7 +292,7 @@ pub async fn preview(root: &Path, day: &str) -> Result<Option<Edition>> {
         packet_ids: Vec::new(),
         attachments: Vec::new(),
         attachment_sha256: Vec::new(),
-        idempotency_key: format!("job-packets/{day}/{}", uuid::Uuid::now_v7()),
+        idempotency_key: format!("platter/{day}/{}", uuid::Uuid::now_v7()),
         receipt: None,
     };
     for (index, record) in selected.iter().enumerate() {

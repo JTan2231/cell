@@ -156,7 +156,7 @@ pub fn preview(
         packet_ids: Vec::new(),
         attachments: Vec::new(),
         attachment_sha256: Vec::new(),
-        idempotency_key: format!("job-packets/ad-hoc/{run_id}/{}", uuid::Uuid::now_v7()),
+        idempotency_key: format!("platter/ad-hoc/{run_id}/{}", uuid::Uuid::now_v7()),
         receipt: None,
     };
     let mut briefs = Vec::new();
@@ -313,7 +313,7 @@ fn retained_packets(root: &Path) -> Result<Vec<PacketRecord>> {
     )?;
     ensure!(
         connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))? == 1,
-        "unsupported Job Packets schema"
+        "unsupported Platter schema"
     );
     let mut statement = connection.prepare(
         "SELECT id,opportunity,job_id,company,title,status,directory FROM packets ORDER BY id",

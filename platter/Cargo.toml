@@ -1,5 +1,5 @@
 [package]
-name = "job-packets"
+name = "platter"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,8 @@ license.workspace = true
 anyhow = "1"
 cast = { path = "../cast" }
 crm = { path = "../crm/crates/crm" }
+cell-install.workspace = true
+cell-maintenance.workspace = true
 nucleus-client.workspace = true
 nucleus-core.workspace = true
 clap.workspace = true

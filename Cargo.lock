@@ -1280,33 +1280,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "job-packets"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cast",
- "chrono",
- "chrono-tz",
- "clap",
- "crm",
- "fs2",
- "nucleus-client",
- "nucleus-core",
- "reqwest",
- "rusqlite",
- "scraper",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "jobserver"
 version = "0.1.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1771,6 +1744,35 @@ name = "pkg-config"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
+
+[[package]]
+name = "platter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cast",
+ "cell-install",
+ "cell-maintenance",
+ "chrono",
+ "chrono-tz",
+ "clap",
+ "crm",
+ "fs2",
+ "nucleus-client",
+ "nucleus-core",
+ "reqwest",
+ "rusqlite",
+ "scraper",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "url",
+ "uuid",
+]
 
 [[package]]
 name = "potential_utf"

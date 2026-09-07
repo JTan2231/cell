@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "product": "platter",
+  "application": "Platter",
+  "dependencies": ["cast", "crm", "email", "nucleus"],
+  "maintenance_products": ["nucleus"],
+  "description": "Verified Platter installation through coordinated requester maintenance.",
+  "adapter_binary": "platter-install"
+}

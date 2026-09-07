@@ -135,7 +135,7 @@ impl ResumeTemplate {
     }
 
     /// Compile in private temporary space. Publish artifacts only after checks pass.
-    /// Tectonic and Python 3 with pypdf must be available on PATH.
+    /// Tectonic and Python 3 with pypdf use the same explicit resolution as doctor.
     ///
     /// # Errors
     /// Returns input, filesystem, compiler, overflow, page count and text-check
@@ -157,7 +157,7 @@ impl ResumeTemplate {
              \\ifdefined\\pdfglyphtounicode\\else\\def\\pdfglyphtounicode#1#2{}\\fi\n\
              \\input{resume.tex}\n",
         )?;
-        let mut compiler = Command::new("tectonic");
+        let mut compiler = Command::new(crate::readiness::renderer("tectonic")?);
         compiler
             .args(["--untrusted", "--keep-logs", "--outdir", ".", "render.tex"])
             .current_dir(build.path());
@@ -172,7 +172,7 @@ impl ResumeTemplate {
             "resume contains characters the fixed template cannot render; revise Jackson text"
         );
 
-        let mut inspect = Command::new("python3");
+        let mut inspect = Command::new(crate::readiness::renderer("python3")?);
         inspect
             .args([
                 "-c",

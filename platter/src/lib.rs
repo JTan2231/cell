@@ -2,6 +2,9 @@
 #![allow(clippy::missing_errors_doc)]
 pub mod ad_hoc;
 pub mod agent;
+pub mod installation;
+pub mod maintenance;
+pub mod readiness;
 pub mod resume;
 pub mod source;
 pub mod store;
@@ -10,6 +13,34 @@ pub mod workflow;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+
+/// Keep prototype state at its original path: retained artifacts and requests
+/// contain absolute paths, and delivery identities must never be rewritten.
+pub fn default_state_dir(home: &Path) -> Result<PathBuf> {
+    anyhow::ensure!(home.is_absolute(), "HOME must be absolute");
+    let current = home.join(".local/share/platter");
+    let legacy = home.join(".local/share/job-packets");
+    let present = |path: &Path| -> Result<bool> {
+        match std::fs::symlink_metadata(path) {
+            Ok(metadata) => {
+                anyhow::ensure!(
+                    metadata.is_dir() && !metadata.file_type().is_symlink(),
+                    "state directory must be a regular directory"
+                );
+                Ok(true)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(error.into()),
+        }
+    };
+    let current_exists = present(&current)?;
+    let legacy_exists = present(&legacy)?;
+    anyhow::ensure!(
+        !(current_exists && legacy_exists),
+        "both Platter and legacy job-packets state exist; choose --state-dir explicitly"
+    );
+    Ok(if legacy_exists { legacy } else { current })
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

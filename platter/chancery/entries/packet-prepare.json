@@ -1,5 +1,5 @@
 {
-  "id": "job-packets.packet.prepare",
+  "id": "platter.packet.prepare",
   "contract_version": 1,
   "kind": "capability",
   "mode": "use",
@@ -19,39 +19,39 @@
   "interfaces": [
     {
       "label": "Initialize from original resume",
-      "invocation": "target/debug/job-packets init --resume /absolute/original.tex"
+      "invocation": "platter init --resume /absolute/original.tex"
     },
     {
       "label": "Prepare one Cast opportunity",
-      "invocation": "target/debug/job-packets prepare JOB_ID"
+      "invocation": "platter prepare JOB_ID"
     },
     {
       "label": "Prepare the daily ready pool",
-      "invocation": "target/debug/job-packets prepare-daily"
+      "invocation": "platter prepare-daily"
     },
     {
       "label": "Freeze and preview a dated edition",
-      "invocation": "target/debug/job-packets preview YYYY-MM-DD"
+      "invocation": "platter preview YYYY-MM-DD"
     },
     {
       "label": "Send one authorized frozen edition",
-      "invocation": "target/debug/job-packets send YYYY-MM-DD"
+      "invocation": "platter send YYYY-MM-DD"
     },
     {
       "label": "Inspect local state",
-      "invocation": "target/debug/job-packets status"
+      "invocation": "platter status"
     },
     {
       "label": "Preview retained packets as an isolated test",
-      "invocation": "target/debug/job-packets preview YYYY-MM-DD --ad-hoc RUN_ID --packet PACKET_ID"
+      "invocation": "platter preview YYYY-MM-DD --ad-hoc RUN_ID --packet PACKET_ID"
     },
     {
       "label": "Send an authorized isolated test",
-      "invocation": "target/debug/job-packets send YYYY-MM-DD --ad-hoc RUN_ID --email-executable /absolute/private/email-wrapper"
+      "invocation": "platter send YYYY-MM-DD --ad-hoc RUN_ID --email-executable /absolute/private/email-wrapper"
     },
     {
       "label": "Preview an isolated test with reviewed paragraph overrides",
-      "invocation": "target/debug/job-packets preview YYYY-MM-DD --ad-hoc RUN_ID --packet PACKET_ID --brief-overrides /absolute/reviewed-paragraphs.json"
+      "invocation": "platter preview YYYY-MM-DD --ad-hoc RUN_ID --packet PACKET_ID --brief-overrides /absolute/reviewed-paragraphs.json"
     }
   ],
   "effects": [
@@ -61,7 +61,7 @@
     "Ad hoc preview reads retained packet rows/stages/artifacts and creates only an isolated test occurrence with copied PDFs. It makes no Cast, CRM, source HTTP, Nucleus or rendering call. Ad hoc send updates only that occurrence and invokes the selected fixed-recipient Email implementation."
   ],
   "authority": [
-    "Job Packets validates and retains domain results independently of Nucleus terminal prose.",
+    "Platter validates and retains domain results independently of Nucleus terminal prose.",
     "Only Jackson work-experience bullet contents may be authored. Every byte of the original resume source outside that span stays fixed.",
     "A caller must already authorize the exact external send. Stored delivery settings, model output, preview and catalog presence do not grant send authority.",
     "An ad hoc receipt does not reserve an ordinary packet or mark it sent. Test-send authority is explicit and does not create recurring-send authority."
@@ -74,7 +74,7 @@
   "failure_and_recovery": [
     "Retain original template, captured inputs, stage requests, accepted results, tool receipts, PDFs, database and edition files together. Reinvoke preparation to inspect or resume exact retained stage work; changed stage inputs are rejected.",
     "Already reserved or sent opportunities are excluded from later editions. An uncertain send is held and is not blindly repeated.",
-    "The prototype has no automatic replacement-job retry, ambiguous-send reconciliation command, production installer or schedule. Resolve exceptional state through a reviewed product change; never rewrite database rows to bypass it.",
+    "There is no automatic replacement-job retry, ambiguous-send reconciliation command or schedule. Resolve exceptional state through a reviewed product change; never rewrite database rows to bypass it.",
     "An accepted ad hoc occurrence is not resent under the same RUN_ID. A sending or uncertain occurrence remains held. Retain its payload and receipt; a different RUN_ID represents a separately authorized test."
   ],
   "privacy": [
@@ -112,13 +112,13 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user and an explicitly authorized local caller can operate the source-built prototype CLI."
+        "statement": "The current user and an explicitly authorized local caller can operate the Platter CLI."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Preparation requires initialized private Job Packets state, the original supported LaTeX resume template, readable supported Cast and CRM interfaces, full supported employer posting evidence, strict compatible authenticated Nucleus readiness and local resume rendering tools. Send additionally requires an authorized frozen edition and Email attachment support."
+        "statement": "Preparation requires initialized private Platter state, the original supported LaTeX resume template, readable supported Cast and CRM interfaces, full supported employer posting evidence, strict compatible authenticated Nucleus readiness and local resume rendering tools. Send additionally requires an authorized frozen edition and Email attachment support."
       },
       {
         "status": "declared",
@@ -133,6 +133,10 @@
       {
         "status": "declared",
         "statement": "Preview and send accept --ad-hoc RUN_ID for an isolated test. Preview optionally selects repeated --packet PACKET_ID values. Ad hoc send may select --email-executable ABS without changing normal configuration. RUN_ID contains 1 through 80 ASCII letters, digits, underscores or hyphens. Optional --brief-overrides ABS_JSON maps selected packet IDs to reviewed single paragraphs of at most 150 words. Without --packet, preview selects the first up to three retained complete records by packet ID, including ordinary sent or reserved records."
+      },
+      {
+        "status": "declared",
+        "statement": "Fresh default state is ~/.local/share/platter. If only ~/.local/share/job-packets exists, continue using it in place. If both exist, an explicit --state-dir is required. The rename preserves original templates, packet identities, absolute artifact paths, retained Nucleus requests and send receipts."
       }
     ],
     "outputs": [
@@ -186,7 +190,7 @@
       },
       {
         "status": "declared",
-        "statement": "Ad hoc packet listing uses read-only SQLite access to Job Packets own domain state. An optional absolute Email executable override is invocation-local. A temporary copy of the existing Email wrapper may select a tested candidate while preserving its private credential and stdin procedure."
+        "statement": "Ad hoc packet listing uses read-only SQLite access to Platter's own domain state. An optional absolute Email executable override is invocation-local. A temporary copy of the existing Email wrapper may select a tested candidate while preserving its private credential and stdin procedure."
       }
     ],
     "lifecycle_and_consistency": [
@@ -206,17 +210,17 @@
       },
       {
         "status": "unspecified",
-        "statement": "No preparation-latency, completion-time, delivery-time or throughput guarantee exists. The stored 09:00 setting has no activation mechanism in this prototype."
+        "statement": "No preparation-latency, completion-time, delivery-time or throughput guarantee exists. The stored 09:00 setting has no activation mechanism in this release."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Source package/provider 0.1.0 and contract 1 describe this prototype. A distinct installed release and provider selector would be necessary to advertise production availability."
+        "statement": "Package/provider 0.1.0 and contract 1 describe this release. Source-built and installed CLI behavior share this contract; only a published installed selector advertises local availability."
       },
       {
         "status": "unspecified",
-        "statement": "No automatic migration, rollback, template replacement, future model support interval or deprecation window is promised."
+        "statement": "No template replacement, incompatible domain-state migration, future model support interval or deprecation window is promised. Installation and supported schema-compatible recovery have their own contract."
       }
     ],
     "reliances": [

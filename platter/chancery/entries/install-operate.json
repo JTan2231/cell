@@ -1,0 +1,232 @@
+{
+  "id": "platter.install.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install and maintain Platter",
+  "summary": "Prepare and verify a Platter installation, coordinate requester maintenance and schema-compatible cutover, preserve predecessor packet history, or inspect local readiness without preparing jobs or sending email.",
+  "use_when": [
+    "The user wants Platter installed, replaced, inspected or maintained.",
+    "The caller needs prerequisite readiness, admission holds, draining or supported installed-release verification."
+  ],
+  "do_not_use_when": [
+    "The requested outcome is packet preparation, a test email, job discovery, profile editing or scheduled delivery.",
+    "The caller expects arbitrary direct rollback, a schema reset or implicit installation of dependencies."
+  ],
+  "outcome": "A verified coherent Platter command and provider installation, supported maintenance state or read-only readiness result, with retained domain history preserved.",
+  "interfaces": [
+    {
+      "label": "Plan coordinated installation",
+      "invocation": "./deploy.sh plan platter"
+    },
+    {
+      "label": "Install the committed candidate under maintenance",
+      "invocation": "./deploy.sh platter"
+    },
+    {
+      "label": "Inspect owned installation",
+      "invocation": "platter-install inspect [--home ABSOLUTE_PATH]"
+    },
+    {
+      "label": "Verify exact installed candidate",
+      "invocation": "platter-install verify --binary ABSOLUTE_PATH --bundle ABSOLUTE_PATH [--home ABSOLUTE_PATH]"
+    },
+    {
+      "label": "Verify retained release integrity",
+      "invocation": "platter-install verify-release ABSOLUTE_RELEASE_DIRECTORY"
+    },
+    {
+      "label": "Inspect maintenance",
+      "invocation": "platter --json maintenance status"
+    },
+    {
+      "label": "Hold admission",
+      "invocation": "platter --json maintenance hold OWNER"
+    },
+    {
+      "label": "Drain admitted work",
+      "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER platter --json maintenance drain"
+    },
+    {
+      "label": "Release one maintenance owner",
+      "invocation": "platter --json maintenance release OWNER"
+    },
+    {
+      "label": "Inspect local prerequisites",
+      "invocation": "platter --json doctor"
+    },
+    {
+      "label": "Verify retained state compatibility",
+      "invocation": "platter --json doctor --state-only"
+    },
+    {
+      "label": "Validate supported state and take deployment backup",
+      "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate --backup ABSOLUTE_PATH"
+    }
+  ],
+  "effects": [
+    "Coordinated installation stages exact runtime, installer and provider bytes under a content-addressed release and publishes only Platter-owned command/provider selectors.",
+    "Durable per-user holds fence new mutating CLI work across state directories. Existing admitted callers finish; drain cancels orphaned nonterminal Platter and predecessor Nucleus jobs only after callers have stopped.",
+    "The schema-compatible deployment step validates existing state and creates a consistent private SQLite backup when a database exists. It initializes no resume or packet state and rewrites no historical request or receipt.",
+    "Read-only verification and readiness create no packet, discovery request, model job, PDF or email. Installation creates no scheduler binding or service."
+  ],
+  "authority": [
+    "Platter owns domain compatibility, admission, drain policy, retained state and success. Nucleus owns execution state and cancellation.",
+    "Cell coordinates selected product installation and maintenance; the shared installer owns artifact integrity, owned selectors, writer locks and file compensation.",
+    "Catalog presence, a successful build or stored delivery time grants no installation, send, recurring-delivery or dependency-upgrade authority."
+  ],
+  "success": [
+    "Installation succeeds only after exact candidate selection, state and local prerequisites are verified while held and run-owned maintenance is released.",
+    "Inspection and doctor report their observed boundary; no report establishes employer freshness, future model success, Resend acceptance or inbox receipt."
+  ],
+  "failure_and_recovery": [
+    "Foreign selectors, altered files, incompatible schemas, conflicting holds, ambiguous state roots and changed selection stop the operation.",
+    "Publication failure compensates owned files. Coordinated recovery proves a coherent prior or candidate installation and compatible state before releasing holds; an uncertain apply is not blindly repeated.",
+    "Failed recovery retains the owner hold. Preserve state and follow reviewed product recovery; never delete holds, reset packet history or hand-edit immutable releases to bypass the failure.",
+    "Direct installer install and recover commands are unsupported. No arbitrary prior-release rollback, incompatible database migration or predecessor installed-release format is promised."
+  ],
+  "privacy": [
+    "Private state and backup files contain career history, original resume and packet/send metadata. They remain separate from immutable public installation material and source control.",
+    "Installation manifests retain executable/provider identity and local paths, never private resume bodies or provider keys. Model and email disclosures belong only to separately authorized runtime operations."
+  ],
+  "dependencies": [
+    {
+      "id": "cast.discovery.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "crm.profile.maintain",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "email.message.send",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    }
+  ],
+  "does_not_authorize": [
+    "Preparing packets, sending email, collecting jobs, consuming Cast API-key budgets or submitting replacement Nucleus work.",
+    "Installing or enabling a daily schedule, changing provider credentials/billing or upgrading unselected dependencies.",
+    "Resetting sent flags, deleting retained artifacts, changing fixed resume content or bypassing an unresolved maintenance hold."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user and the Cell coordinator may operate the supported installation, readiness and maintenance interfaces."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Coordinated deployment requires committed local main source, a verified candidate, owned current-user paths and compatible maintenance interfaces throughout the Nucleus requester closure. Required runtime commands, Email attachment support and local renderer tooling must be available. When selected together, Cast, CRM, Email and Nucleus are applied before Platter; ordering declarations do not implicitly select their upgrades."
+      },
+      {
+        "status": "declared",
+        "statement": "A state backup requires the exact deployment hold and quiescence. Unsupported state or ambiguous default roots stop installation; initialization is a separate explicit runtime operation."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "The coordinator selects exact committed source and supplies its sealed version-one adapter JSON with operation, run identity, candidate, prior selection and recovery evidence. Read-only installer verification accepts absolute candidate/bundle/release paths and optional explicit home. Maintenance uses an owner identity; migrate accepts an absolute backup path. CELL_DEPLOYMENT_RUN_ID matches the sole retained owner for drain and migration. PLATTER_TECTONIC and PLATTER_PYTHON may select absolute renderer executables; otherwise fixed current-user/Homebrew/system locations are searched independently of PATH."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Immutable release manifests, matching current command/provider selectors, retained installer and prior releases, typed installation/maintenance/readiness outcomes and a private SQLite backup when existing state is validated for cutover."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Installed identity is an exact byte-and-mode proof. A readiness result describes local prerequisites at observation time; it is not a domain success or external delivery result. A database backup is not a complete packet-artifact backup."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Platter product/provider release 0.1.0, contract version 1 and private schema 1 are separate identities. New Nucleus work uses platter; retained job-packets requests, packet IDs, edition/idempotency keys and receipts remain unchanged. Maintenance ownership is per deployment run, not a time-limited lease."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Maintenance checks live admissions and every page of matching nonterminal Nucleus jobs for both requester identities. Doctor validates existing local state, Cast/CRM/Email executable identity, Email attachment flag, renderer tools and compatible Nucleus health without exercising domain operations. It does not prove initialized Cast or CRM libraries or read their domain contents."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Installation checks do not prove remote provider account balances, source freshness, complete resume rendering, future runtime capacity or final inbox delivery."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Installed selectors are ~/.local/bin/platter, ~/.local/bin/platter-install and the Platter Chancery provider. Immutable releases live under ~/Library/Application Support/Platter/install. The per-user gate fences mutations even with custom --state-dir. Fresh default runtime state is ~/.local/share/platter; a sole predecessor ~/.local/share/job-packets is used in place, while both require an explicit choice."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Requester holds and draining precede Nucleus maintenance. Exact candidate/state/readiness checks precede release; Nucleus is released last. Holds survive process exit and one owner cannot remove another hold. Drain allows active CLI completion before cancelling orphaned work."
+      },
+      {
+        "status": "declared",
+        "statement": "Product/catalog locks, selection preconditions and atomic publication preserve coherent artifacts. Recovery requires proof before releasing admission; schema 1 is validated without transforming domain records. Existing absolute paths and accepted results are retained."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "No schedule, daemon, model submission, source collection, live send, state initialization or artifact pruning is part of Platter installation. Shared coordinator drain waits are bounded; unresolved work retains maintenance."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No installation-latency guarantee, automatic incompatible migration, arbitrary rollback, future support interval or deprecation window is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Only verified cell-install-v2 Platter releases are supported. The predecessor compatibility preserves private schema-1 runtime state in place and does not invent an older Platter installation. Direct mutating installer commands are refused; coordinated cutover and verified recovery share the product lifecycle boundary."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Nucleus supplies compatible execution health and cancellation of matching orphaned jobs.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Runtime prerequisite probes rely on supported Cast and CRM commands and Email attachment support; unselected installations are not upgraded implicitly.",
+        "target": "runtime-dependencies",
+        "kind": "readiness"
+      },
+      {
+        "status": "declared",
+        "statement": "Cell deployment source and cell-install transactions supply exact committed candidate preparation, coordinator sequencing, artifact integrity and file compensation. Their source operational manual remains the authority; this entry does not claim an independent installed Cell capability contract.",
+        "target": "cell-deployment",
+        "kind": "control"
+      },
+      {
+        "status": "declared",
+        "statement": "Resume readiness depends on Tectonic, Python 3 with pypdf, and the original template packages/fonts.",
+        "target": "resume-renderer",
+        "kind": "external"
+      }
+    ]
+  },
+  "manual": "manuals/install-operate.md"
+}

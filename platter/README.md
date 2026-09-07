@@ -1,6 +1,6 @@
-# Job Packets
+# Platter
 
-Job Packets prepares up to three previously unsent opportunities from Cast.
+Platter prepares up to three previously unsent opportunities from Cast.
 Each packet contains a brief paragraph and a tailored resume PDF. Two Nucleus
 jobs use `gpt-5.6-sol` with `max` reasoning: one assesses and briefs the role,
 and the second writes only the Jackson work-experience bullets when the role
@@ -12,18 +12,21 @@ education, projects, skills and layout. Model output is plain bullet text,
 escaped before insertion. Generated PDFs must fit the original one-page
 layout. The original template and generated materials stay in private state.
 
-This is a source-built prototype. **The stored delivery setting is 09:00 in
-America/Chicago; no recurring schedule is installed or enabled.** There is no
+**The stored delivery setting is 09:00 in America/Chicago; no recurring
+schedule is installed or enabled.** There is no
 candidate or token budget. External account limits, execution timeouts and
 source/rendering constraints still apply.
 
+After installation, use `platter`; a source build can use
+`target/debug/platter` for the same interface.
+
 ```sh
-./ci.sh job-packets
-target/debug/job-packets init --resume /absolute/path/to/original-resume.tex
-target/debug/job-packets prepare CAST_JOB_ID
-target/debug/job-packets prepare-daily
-target/debug/job-packets preview 2026-09-07
-target/debug/job-packets status
+./ci.sh platter
+platter init --resume /absolute/path/to/original-resume.tex
+platter prepare CAST_JOB_ID
+platter prepare-daily
+platter preview 2026-09-07
+platter status
 ```
 
 `preview` freezes one through three ready packets into a dated edition,
@@ -32,7 +35,7 @@ opportunities so a later edition cannot select them again. It sends nothing.
 Only after the edition is authorized for delivery:
 
 ```sh
-target/debug/job-packets send 2026-09-07
+platter send 2026-09-07
 ```
 
 Sending requires the Email implementation that supports repeated `--attach`
@@ -46,8 +49,8 @@ occurrence. This path does not refresh job sources, invoke Cast or CRM, run a
 model, reserve ordinary packets, or mark them sent:
 
 ```sh
-target/debug/job-packets preview 2026-09-07 --ad-hoc sample-1 --packet PACKET_ID
-target/debug/job-packets send 2026-09-07 --ad-hoc sample-1 \
+platter preview 2026-09-07 --ad-hoc sample-1 --packet PACKET_ID
+platter send 2026-09-07 --ad-hoc sample-1 \
   --email-executable /absolute/private/email-candidate-wrapper
 ```
 
@@ -63,11 +66,18 @@ a mapping from selected packet IDs to reviewed paragraphs. Overrides belong
 only to the test occurrence; the accepted original briefs stay unchanged.
 
 Cast owns discovery, CRM owns the career library, Nucleus owns constrained
-execution, and Job Packets owns preparation, accepted materials, editions and
+execution, and Platter owns preparation, accepted materials, editions and
 send history. No direct CRM or Cast database access is used. Similar roles
 without a shared canonical identifier are not guaranteed to deduplicate.
 
-The full [prototype CLI and recovery contract](chancery/manuals/packet-prepare.md)
-describes private state, source limitations and recovery. The source provider
-bundle is validated by CI; it is not an installed Chancery selector. Until a
+The full [CLI and recovery contract](chancery/manuals/packet-prepare.md)
+describes private state, source limitations and recovery. The [installation contract](docs/system-installation.md) describes the
+`platter-install` executable, coordinated maintenance and release recovery.
+Building this source does not install its command or Chancery selector. Until a
 separate semantic repository is registered, this product uses Cell terminology.
+
+Fresh state defaults to `~/.local/share/platter`. If only the predecessor
+`~/.local/share/job-packets` exists, Platter continues using it in place. If
+both exist, choose `--state-dir /absolute/private/directory` explicitly. The
+rename preserves retained requests, original resume, packet identities, send
+receipts and existing absolute artifact paths.

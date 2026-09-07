@@ -24,7 +24,7 @@ members = [
     "crm/crates/crm",
     "usher/crates/usher",
     "cast",
-    "job-packets",
+    "platter",
 ]
 resolver = "3"
 
