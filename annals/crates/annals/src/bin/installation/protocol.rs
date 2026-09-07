@@ -382,10 +382,16 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
             ))
         }
         Operation::Verify => {
-            verify(&context, &snapshot, true)?;
+            let selected = context.selected();
+            if !selected && snapshot != prior(&context)? {
+                return Err(Error::new(
+                    "unselected Annals installation changed since inspection",
+                ));
+            }
+            verify(&context, &snapshot, selected)?;
             Ok(reply(
                 "verified",
-                "Annals candidate and both library readiness boundaries verified",
+                "Annals installation and both library readiness boundaries verified",
                 json!({"installed":snapshot}),
             ))
         }

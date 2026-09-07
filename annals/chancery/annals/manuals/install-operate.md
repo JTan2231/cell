@@ -237,4 +237,7 @@ definition, fully rendered legacy plist, and selector targets before mutation.
 
 The deployment adapter verifies library statistics, inbox status, the decisions
 feed watermark, and Annals Usage doctor while preserving operator pauses.
+When Annals is selected for upgrade, verification requires the exact admitted
+candidate. When it participates only in maintenance, verification requires its
+installed release to remain identical to the captured inspection baseline.
 Verification does not create works, reconciliations, or Nucleus jobs.
