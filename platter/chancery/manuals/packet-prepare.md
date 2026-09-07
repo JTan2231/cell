@@ -4,7 +4,7 @@ Platter captures Cast opportunities and CRM career entries. It uses Nucleus to
 prepare a concise brief and Jackson-only tailored resume, then freezes editions
 for authorized delivery through Email. Platter owns retained content, job
 eligibility and delivery outcomes. It does not discover jobs, edit CRM, apply
-to employers, contact them or install recurring delivery.
+to employers, contact them or activate a schedule.
 
 ## Storage and commands
 
@@ -98,6 +98,37 @@ an edition ceiling, not a quota. The stored 09:00 America/Chicago setting does
 not install or authorize a schedule.
 
 ## Editions and sending
+
+For a daily edition with applicable send authorization:
+
+```sh
+platter run-daily
+```
+
+This single command captures the date in Platter's configured time zone after
+admission, then prepares the ready pool, performs ordinary preview for that
+date, and sends the frozen edition. One mutation admission lock covers all
+three operations. The date stays fixed if preparation crosses midnight.
+If that date already has an edition, the command uses the existing send path
+before any preparation: a frozen edition sends its exact retained bytes, an
+accepted edition returns its recorded result without resending, and an
+uncertain edition fails without retrying or preparing replacement packets.
+No ready packets means no edition or email. A later explicit invocation may
+try an empty day again. Missed dates are not backfilled. Preparation failures
+retain their existing per-job handling; a failed Cast export stops the run.
+Output contains the edition date, delivery status and selected packet count,
+or the no-edition result. It does not print the message body or PDF bytes.
+
+An explicit user instruction to enable daily sending supplies standing
+authority for each ordinary daily brief and its resume attachments to Email's
+fixed personal recipient. Without that authority, use preparation or preview
+only. A manually managed Clockwork binding may invoke the exact installed
+`run-daily` binary at 18:00 machine-local time. Binding activation is a separate
+authorized operation under `clockwork.schedule.operate`; the installer and
+stored 09:00 fields do not enable it. Platter status and doctor report the
+schedule as external and do not probe the binding. Email's installed wrapper
+loads its existing credential; no credential belongs in a schedule definition.
+Starting at 18:00 makes no promise about completion or inbox arrival time.
 
 Normal preview fetches posting text again, defers unavailable sources and marks
 changed packets stale. Existing frozen editions return stored contents without

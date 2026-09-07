@@ -208,6 +208,22 @@ pub async fn prepare_daily(root: &Path, deadline: Option<Instant>) -> Result<Vec
     ready(&store)
 }
 
+/// Run one authorized daily delivery. The CLI holds mutation admission throughout.
+pub async fn run_daily(root: &Path, now: chrono::DateTime<chrono::Utc>) -> Result<Option<Edition>> {
+    let timezone: chrono_tz::Tz = config(root)?.timezone.parse()?;
+    let day = now.with_timezone(&timezone).format("%Y-%m-%d").to_string();
+    // Frozen, accepted and uncertain editions take the existing send path before
+    // preparation can consume more resources or change job eligibility.
+    if Store::open_read_only(root)?.edition(&day)?.is_some() {
+        return send(root, &day).map(Some);
+    }
+    prepare_daily(root, None).await?;
+    if preview(root, &day).await?.is_none() {
+        return Ok(None);
+    }
+    send(root, &day).map(Some)
+}
+
 fn ready(store: &Store) -> Result<Vec<PacketRecord>> {
     let mut selected = vec![];
     for record in store.list()? {

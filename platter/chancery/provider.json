@@ -3,22 +3,22 @@
   "provider": {
     "id": "platter",
     "name": "Platter",
-    "release": "0.2.2"
+    "release": "0.2.3"
   },
   "promise_scope": {
     "authoritative_for": [
       "Platter owns its canonical SQLite library: captured inputs, preparation runs, immutable content artifacts, explicit job eligibility, frozen editions, recorded delivery outcomes, settings and maintenance holds. Editions share one model; retained-material selection is an operation."
     ],
     "not_authoritative_for": [
-      "Cast owns discovery records. CRM owns career entries. Employer endpoints supply posting text. Nucleus owns execution. Email and Resend own submission acceptance. Gmail owns final receipt."
+      "Cast owns discovery records. CRM owns career entries. Employer endpoints supply posting text. Nucleus owns execution. Email and Resend own submission acceptance. Gmail owns final receipt. Clockwork owns scheduled activation and runtime process history."
     ],
     "inventory": {
       "covers": [
-        "All Platter initialization, preparation, ordinary and retained-material edition selection, explicit send, eligibility, export, local status, readiness, migration and maintained installation outcomes."
+        "All Platter initialization, preparation, authorized daily preparation and delivery, ordinary and retained-material edition selection, explicit send, eligibility, export, local status, readiness, migration and maintained installation outcomes."
       ],
       "completeness": "complete",
       "excludes": [
-        "Help/version, production scheduling, automatic application submission, employer contact, CRM writes and final inbox delivery observation."
+        "Help/version, Clockwork activation management, automatic application submission, employer contact, CRM writes and final inbox delivery observation."
       ]
     },
     "shared_access_and_trust": [
@@ -28,10 +28,10 @@
       "Original resume, captured CRM entries, posting text, model inputs/results, evidence references, PDFs, editions and send outcomes are private retained data. Nucleus/model processing receives career material; explicit send discloses the brief and resume attachments to Email, Resend and Gmail."
     ],
     "compatibility_and_retirement": [
-      "Release 0.2.0 uses preparation contract 3, installation contract 2 and private schema 2. Explicit one-way import preserves predecessor IDs, exact requests and frozen deliveries. Old binaries cannot read schema two. Historical brief schemas remain supported."
+      "Release 0.2.3 adds run-daily under preparation contract 3, installation contract 2 and private schema 2. Explicit one-way import preserves predecessor IDs, exact requests and frozen deliveries. Old binaries cannot read schema two. Historical brief schemas remain supported."
     ],
     "operational_limits": [
-      "Each edition contains up to three new ready packets. There is no candidate or token budget. Jobs use gpt-5.6-sol at max effort. The stored 09:00 America/Chicago setting does not install or enable a schedule. Check source, runtime and rendering readiness separately."
+      "Each edition contains up to three new ready packets. There is no candidate or token budget. Jobs use gpt-5.6-sol at max effort. run-daily needs applicable send authorization; it neither backfills dates nor resends accepted or uncertain editions. Activation is managed separately through Clockwork; stored 09:00 fields do not schedule work. Check source, runtime and rendering readiness separately."
     ]
   },
   "entries": [

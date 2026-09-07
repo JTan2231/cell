@@ -140,3 +140,31 @@ No installation operation initializes a resume, prepares packets, sends email,
 creates a Clockwork binding or enables recurring delivery. Domain artifacts
 and accepted editions have no automatic pruning. Candidate workspaces and
 installation release history remain under Cell's separate retention rules.
+
+## Separately managed daily activation
+
+With user authorization for recurring daily emails, Clockwork can activate the
+verified release's `bin/platter` with the literal argument `run-daily`. Use the
+installed `clockwork.schedule.operate` contract for definition registration,
+binding changes and recovery. The `platter/daily` binding uses a daily local
+calendar trigger at 18:00, run-at-load false, and skip-on-overlap. The Platter
+configuration time zone determines the edition date; Clockwork's trigger
+follows the machine zone. Installation does not create or update this binding.
+
+Before replacing a scheduled release, capture its binding digest and enabled
+state, then disable the binding for cutover. Deploy through Cell, verify the
+candidate release, and register a new definition pinned to its exact release
+root, executable and manifest SHA-256. Preserve the prior schedule, environment,
+working directory and private output paths. Under a Platter maintenance hold
+with drained local work, switch only a previously enabled binding; retain a
+previously disabled binding as disabled with its selected new definition.
+Release the hold after the binding result is coherent. If deployment fails,
+restore only the verified prior binding and its captured enabled state. Do not
+restore a definition whose command is absent from the selected release.
+
+Inspect `clockwork binding show platter/daily` and its selected definition for
+the actual schedule. `clockwork history platter/daily --limit 20` reports
+process outcomes; Platter's retained edition and receipt establish submission
+acceptance. `clockwork binding disable platter/daily` stops future activations
+and retains the definition and history. Uncertain sends stay held under the
+preparation contract; changing a binding does not authorize another send.

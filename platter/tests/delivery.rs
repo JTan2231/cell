@@ -217,3 +217,95 @@ fn ambiguous_receipt_remains_unresolved_and_cannot_send_again() -> Result<()> {
     assert_eq!(fixture.current_edition()?.status, "sending");
     Ok(())
 }
+
+#[tokio::test]
+async fn daily_sends_the_local_date_once_without_preparing_after_freeze() -> Result<()> {
+    let fixture = Fixture::new("Accepted daily-receipt")?;
+    // September 7 UTC is still September 6 in the configured Chicago zone.
+    let now = "2026-09-07T02:00:00Z".parse()?;
+    let first = workflow::run_daily(fixture.root(), now)
+        .await?
+        .context("daily edition missing")?;
+    let second = workflow::run_daily(fixture.root(), now)
+        .await?
+        .context("accepted edition missing")?;
+    assert_eq!(first.day, "2026-09-06");
+    assert_eq!(first.status, "sent");
+    assert_eq!(first.body, fixture.edition.body);
+    assert_eq!(first.attachments, fixture.edition.attachments);
+    assert_eq!(second.receipt, first.receipt);
+    assert_eq!(first.idempotency_key, fixture.edition.idempotency_key);
+    assert_eq!(
+        fs::read_to_string(fixture.email_output("calls"))?,
+        "invoked\n"
+    );
+    // Cast and CRM do not exist in this fixture, so either preparation would fail.
+    Ok(())
+}
+
+#[tokio::test]
+async fn daily_holds_uncertain_sends_without_preparing_or_resending() -> Result<()> {
+    let fixture = Fixture::new("ambiguous provider response")?;
+    let now = "2026-09-06T23:00:00Z".parse()?;
+    assert!(workflow::run_daily(fixture.root(), now).await.is_err());
+    let error = workflow::run_daily(fixture.root(), now)
+        .await
+        .err()
+        .context("uncertain daily send unexpectedly retried")?;
+    assert!(error.to_string().contains("send outcome is unresolved"));
+    assert_eq!(fixture.current_edition()?.status, "sending");
+    assert_eq!(
+        fs::read_to_string(fixture.email_output("calls"))?,
+        "invoked\n"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn daily_empty_pool_creates_no_edition_or_email() -> Result<()> {
+    let fixture = Fixture::new("Accepted unexpected")?;
+    let mut settings = workflow::config(fixture.root())?;
+    settings.cast_executable = fixture.root().join("empty-cast");
+    fs::write(
+        &settings.cast_executable,
+        "#!/bin/sh\n/bin/cat \"$0.json\"\n",
+    )?;
+    fs::set_permissions(&settings.cast_executable, fs::Permissions::from_mode(0o700))?;
+    platter::write_json(
+        &fixture.root().join("empty-cast.json"),
+        &serde_json::json!({
+            "schema_version": 1, "snapshot_revision": 1,
+            "captured_at": "2026-09-07T23:00:00Z",
+            "companies": [], "jobs": [], "source_health": [], "coverage": []
+        }),
+    )?;
+    Store::open(fixture.root())?.set_setting("config", &settings)?;
+    let result = workflow::run_daily(fixture.root(), "2026-09-07T23:00:00Z".parse()?).await?;
+    assert!(result.is_none());
+    assert!(
+        Store::open(fixture.root())?
+            .edition("2026-09-07")?
+            .is_none()
+    );
+    assert!(!fixture.email_output("calls").exists());
+    assert_eq!(fixture.current_edition()?.status, "frozen");
+    Ok(())
+}
+
+#[tokio::test]
+async fn daily_preparation_failure_does_not_send_or_create_an_edition() -> Result<()> {
+    let fixture = Fixture::new("Accepted unexpected")?;
+    assert!(
+        workflow::run_daily(fixture.root(), "2026-09-07T23:00:00Z".parse()?)
+            .await
+            .is_err()
+    );
+    assert!(
+        Store::open(fixture.root())?
+            .edition("2026-09-07")?
+            .is_none()
+    );
+    assert!(!fixture.email_output("calls").exists());
+    assert_eq!(fixture.current_edition()?.status, "frozen");
+    Ok(())
+}

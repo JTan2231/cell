@@ -49,6 +49,8 @@ enum Command {
         job_id: String,
     },
     PrepareDaily,
+    /// Prepare, freeze and send today's edition with applicable send authorization.
+    RunDaily,
     Preview {
         day: String,
         #[arg(long)]
@@ -147,6 +149,18 @@ async fn run() -> Result<()> {
         Command::PrepareDaily => {
             let ready = workflow::prepare_daily(&root, deadline).await?;
             println!("{} complete new packets ready", ready.len());
+        }
+        Command::RunDaily => {
+            if let Some(edition) = workflow::run_daily(&root, chrono::Utc::now()).await? {
+                println!(
+                    "{}: {} ({} packets)",
+                    edition.day,
+                    edition.status,
+                    edition.packet_ids.len()
+                );
+            } else {
+                println!("No complete new packets ready; no edition created or sent");
+            }
         }
         Command::Preview {
             day,
@@ -267,8 +281,8 @@ fn print_status(root: &std::path::Path) -> Result<()> {
     let settings = workflow::config(root)?;
     println!("state: {}", root.display());
     println!(
-        "daily: up to {} at {:02}:{:02} {}; model=gpt-5.6-sol/max; preparation budget=none; schedule=not installed",
-        settings.daily_count, settings.delivery_hour, settings.delivery_minute, settings.timezone
+        "daily: up to {} packets; edition timezone={}; model=gpt-5.6-sol/max; preparation budget=none; schedule=external (inspect Clockwork)",
+        settings.daily_count, settings.timezone
     );
     for record in Store::open_read_only(root)?.list()? {
         println!(

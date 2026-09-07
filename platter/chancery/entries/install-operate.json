@@ -8,7 +8,8 @@
   "summary": "Install and maintain Platter under coordinated maintenance. Import schema-one runtime files into SQLite while preserving packet and delivery history.",
   "use_when": [
     "The user wants Platter installed, replaced, inspected or maintained.",
-    "The caller needs prerequisite readiness, admission holds, draining or supported installed-release verification."
+    "The caller needs prerequisite readiness, admission holds, draining or supported installed-release verification.",
+    "An operator must preserve a separately managed Clockwork daily binding while upgrading its pinned Platter runner."
   ],
   "do_not_use_when": [
     "The requested outcome is packet preparation, a test email, job discovery, profile editing or scheduled delivery.",
@@ -110,6 +111,11 @@
       "id": "email.message.send",
       "min_contract": 4,
       "max_contract_exclusive": 5
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
@@ -182,6 +188,10 @@
       {
         "status": "declared",
         "statement": "Schema-one import is transactional. A complete schema-two backup precedes hashed legacy-file cleanup. Interrupted backup or cleanup is resumable without regenerating packets, resending or resetting identities."
+      },
+      {
+        "status": "declared",
+        "statement": "Installation does not update an operator-managed platter/daily binding. Capture and disable it for scheduled-runner cutover, deploy and verify Platter through Cell, then register the exact new runner definition and restore the prior enabled state under drained Platter maintenance. Preserve prior binding and verified release evidence for recovery."
       }
     ],
     "operational_limits": [
@@ -225,6 +235,13 @@
         "statement": "Resume readiness depends on Tectonic, Python 3 with pypdf, and the original template packages/fonts.",
         "target": "resume-renderer",
         "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "Separately managed daily-runner activation and binding recovery use Clockwork schedule contract 2. This is an operator action; Platter installation never activates or updates a binding.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
       }
     ]
   },

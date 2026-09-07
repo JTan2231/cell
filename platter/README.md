@@ -41,6 +41,21 @@ Email's `--payload-stdin` extension receives attachment bytes directly, with no
 exported attachment files. Accepted editions are not resent; uncertain sends
 remain held. Email's fixed recipient and credential ownership are unchanged.
 
+With standing authorization to email each daily edition to the fixed personal
+inbox, use one runner:
+
+```sh
+platter run-daily
+```
+
+It captures today's date in the configured time zone, prepares the ready pool,
+freezes that date's edition and sends it. An existing edition goes straight to
+the send operation: accepted editions return their retained result, frozen
+editions send their exact bytes, and uncertain sends remain held. An empty
+ready pool creates no edition or email. One admission lock covers the whole
+run. Output reports the edition date, delivery status and packet count without
+printing message or attachment content.
+
 Both model stages use `gpt-5.6-sol` with max effort. Briefs contain Why it works,
 Role and optional Culture, at most 90 words total. Unsupported culture is
 omitted without additional research. The displayed recommendation has no
@@ -64,6 +79,12 @@ and redirected caches stay inside Platter's root and are removed after use.
 Explicit exports are user-owned copies. Nucleus retains its own runtime state.
 
 The stored 09:00 America/Chicago setting creates no recurring schedule.
+The separately managed `platter/daily` Clockwork binding starts `run-daily` at
+18:00 machine-local time, with run-at-load disabled and overlapping activations
+skipped. Clockwork owns activation timing; the configured Platter time zone
+selects the edition date. Inspect Clockwork for the enabled schedule. Platter
+status and doctor do not probe it. The pinned runner must be updated separately
+when Platter is deployed; see the installation contract.
 There is no candidate or token budget; external and rendering limits remain.
 
 See the [operating contract](chancery/manuals/packet-prepare.md),

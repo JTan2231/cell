@@ -55,7 +55,7 @@ installed catalog for discovery.
 | Todo | An actionable concern or follow-up should be researched and retained for later. | Concern provenance, routing and its explicit decisions, stable todo identities, dated situation assessments, proposed or accepted designs, open/done state, and working notes. | Work requested for immediate completion, general knowledge, implementation execution, or shared runtime policy. |
 | CRM | Employment-relevant people, opportunities, and contemplated contact should be stored as cases, or reusable career profile material should be stored. | Its local SQLite library, mutable Markdown profile entries, queued steward runs, immutable case revisions, evidence, and advisory review notes. | Sending or authorizing outreach, scheduled intake, treating an advisory as a gate, or storing CRM domain state in Nucleus. |
 | Cast | Previously unknown employers and job postings should be discovered and monitored through ordinary HTTP. | Companies and jobs with stable identities, posting inputs, collection request outcomes and observation times, local request budgets, query configuration and consistent exports. | Personal selection, CRM stewardship, application packets, email, application submission or agent execution. |
-| Platter | A retained Cast opportunity needs a private paragraph brief and resume with only Jackson bullets tailored, or a dated edition should be previewed and explicitly sent. | Captured posting/career/template inputs, accepted Nucleus stages, fixed-template rendering, opportunity exclusion, frozen editions and recorded send outcomes. | Discovery, CRM editing, changes to fixed resume content, employer contact, applications, or an installed recurring delivery service. |
+| Platter | A retained Cast opportunity needs a private brief and resume with only Jackson bullets tailored, or an authorized daily edition should be prepared and emailed. | Captured posting/career/template inputs, accepted Nucleus stages, fixed-template rendering, job eligibility, frozen editions, daily runner and recorded send outcomes. | Discovery, CRM editing, changes to fixed resume content, employer contact, applications, or Clockwork timer delivery. |
 | Annals | Immutable source material should be retained or reconciled with a conceptual corpus, or that corpus should be searched or explored. | Each selected physical library's retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, cross-library federation, or account telemetry. |
 | Weaver | Authored repository inputs should become the current five-stage public-facing narrative outputs. | Current-run admission, stage order, authored input snapshots, generated repository outputs, validation, cancellation intent, and recovery. | Publishing, editing a public profile, or general job orchestration. |
 | Email | A plain-text email, optionally with authorized local files or in-memory attachment bytes, should be sent to the single fixed recipient. | The synchronous frozen Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, remote attachment URLs, or agent execution. |
@@ -249,9 +249,31 @@ file dependency. Explicit exports create user-owned copies at chosen paths.
 The stored defaults are three packets and 09:00 `America/Chicago`, with no
 candidate or token budget. Execution, source and rendering timeouts still
 apply. These settings install no Clockwork binding or LaunchAgent and provide
-no scheduled activation. `platter-install` provides verified packaging and
-Cell coordinated maintenance; a production delivery scheduler and unresolved
-stage/send recovery remain separate integration work.
+no scheduled activation. The separately operated `platter/daily` Clockwork
+binding starts the verified installed `platter run-daily` command each day
+at 18:00 machine-local time. The current machine zone is `America/Chicago`.
+It does not run at load and skips overlapping activations. With the user's
+standing authorization for daily email, the runner captures the configured
+zone's date once, prepares the ready pool, freezes that date's ordinary edition
+and sends its exact message and attachments. One Platter admission lock covers
+the run. Existing editions use the send path before preparation: accepted
+editions return their result, frozen editions send, and uncertain sends stay
+held. An empty pool creates no edition or email. The runner does not backfill
+missed dates. Status and doctor identify scheduling as external; inspect the
+Clockwork binding and selected definition for the actual activation schedule.
+
+The private definition and prior-binding record live under
+`~/Library/Application Support/Platter/schedules/`. Child output is appended to
+`~/Library/Logs/Platter/daily.stdout.log` and `daily.stderr.log`. Use
+`clockwork binding show platter/daily` to inspect the enabled selection and
+`clockwork binding disable platter/daily` to stop future activations. Activation
+history describes process outcomes; Platter records establish packet readiness.
+The definition pins an exact Platter release. `platter-install` does not update
+this operator-managed binding: preserve its enabled state, register the verified
+replacement definition, and switch it under Platter maintenance when upgrading
+the scheduled runner. Keep the pinned release until the binding no longer uses
+it. Disabling the binding stops recurring sends. Unresolved stage/send recovery
+remains a separate operation; schedule changes do not reset delivery outcomes.
 
 Weaver submits five content-only jobs in order. Its detached worker retains
 interactive lineage and owns repository reads and atomic Markdown writes.

@@ -4,16 +4,17 @@
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Prepare and preview private job application packets",
-  "summary": "Prepare private briefs and Jackson-only resumes for eligible Cast jobs. Store them in SQLite, freeze editions, and send retained attachment bytes when authorized.",
+  "title": "Prepare and deliver private job application packets",
+  "summary": "Prepare private briefs and Jackson-only resumes for eligible Cast jobs. Freeze editions and send retained attachment bytes, including one daily run when recurring email is authorized.",
   "use_when": [
     "The user wants to prepare or preview eligible Cast opportunities with a concise brief and a constrained resume.",
     "The user wants an explicitly authorized send or another edition composed from retained materials.",
-    "The user wants to change job eligibility or export a retained artifact to an explicit destination."
+    "The user wants to change job eligibility or export a retained artifact to an explicit destination.",
+    "The user has authorized daily email and wants one invocation to prepare, freeze and send the current local-date edition."
   ],
   "do_not_use_when": [
     "The request is job discovery, CRM editing, employer outreach or application submission.",
-    "The caller expects an installed automatic 09:00 delivery service or a change to any fixed resume content."
+    "The caller expects stored delivery settings or installation alone to enable a schedule, or wants a change to fixed resume content."
   ],
   "outcome": "Stored accepted brief, Jackson bullets, source references and rendered resume. Preview freezes one through three ready packets. An authorized send separately records provider acceptance.",
   "interfaces": [
@@ -28,6 +29,10 @@
     {
       "label": "Prepare the daily ready pool",
       "invocation": "platter prepare-daily"
+    },
+    {
+      "label": "Prepare, freeze and send the authorized daily edition",
+      "invocation": "platter run-daily"
     },
     {
       "label": "Freeze and preview a dated edition",
@@ -67,22 +72,25 @@
     "Preparation captures Cast posting and CRM career inputs, runs constrained Nucleus stages and retains accepted content and rendered bytes as artifacts referencing the preparation run.",
     "Ordinary preview fetches the posting again. It freezes subject, body and ordered artifact references, and sets selected jobs ineligible in the same transaction.",
     "Retained-material preview creates the same edition records without changing eligibility or calling Cast, CRM, employer sources, Nucleus or the renderer.",
-    "Send pipes body and attachment bytes to Email. It records uncertainty before transport and acceptance afterward. Eligibility changes separately through the CLI. Export creates a new caller-selected file."
+    "Send pipes body and attachment bytes to Email. It records uncertainty before transport and acceptance afterward. Eligibility changes separately through the CLI. Export creates a new caller-selected file.",
+    "run-daily captures one configured local date and holds mutation admission across preparation, ordinary preview and send. An existing edition goes directly to send; no ready packets creates no edition or email."
   ],
   "authority": [
     "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
     "Models author only plain Jackson bullets; all other original resume source bytes remain fixed.",
-    "Each send requires applicable user authority. Preview, stored schedules, catalog presence and model output grant no send authority."
+    "Each send requires applicable user authority. Explicit authorization to enable recurring daily email supplies standing authority for ordinary daily briefs and resume attachments to the fixed personal recipient. Preparation, preview, catalog presence and model output grant no send authority."
   ],
   "success": [
     "Preparation succeeds when accepted brief/resume artifacts and a validated one-page PDF are retained.",
     "Preview freezes exact message and ordered immutable artifacts without sending.",
-    "A recognized Accepted ID proves submission acceptance, not final inbox delivery. Job eligibility is an explicit field, never inferred from edition history."
+    "A recognized Accepted ID proves submission acceptance, not final inbox delivery. Job eligibility is an explicit field, never inferred from edition history.",
+    "run-daily returns the retained accepted edition, or a no-edition result when no packets are ready. Its output selects edition date, delivery status and packet count; it does not print message or attachment contents."
   ],
   "failure_and_recovery": [
     "A consistent schema-two SQLite backup contains the complete retained Platter library. Schema-one file-backed state requires maintained migration.",
     "Exact pending Nucleus requests are retained. Successful submissions resolve to immutable run content; Platter stores no separate tool-receipt ledger.",
-    "Accepted content survives later execution failure. Uncertain sends remain held and accepted editions are not resent. There is no automatic new model attempt, direct Codex fallback or ambiguous-send reconciliation."
+    "Accepted content survives later execution failure. Uncertain sends remain held and accepted editions are not resent. There is no automatic new model attempt, direct Codex fallback or ambiguous-send reconciliation.",
+    "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. A preparation/export failure leaves its existing retained progress and stops before send; individual posting failures keep the existing preparation policy."
   ],
   "privacy": [
     "Private state includes career history, preferences, contact details, source text and tailored resumes. Keep it outside the repository and exclude it from commits.",
@@ -108,6 +116,11 @@
       "id": "email.message.send",
       "min_contract": 4,
       "max_contract_exclusive": 5
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
@@ -139,7 +152,7 @@
       },
       {
         "status": "declared",
-        "statement": "Preparation selects a Cast job or eligible daily pool. Optional --stop-after-seconds bounds only its invocation. Default count is three, stored delivery is 09:00 America/Chicago, and no schedule is installed."
+        "statement": "Preparation selects a Cast job or eligible daily pool. Optional --stop-after-seconds applies only to prepare and prepare-daily. Default count is three; stored 09:00 fields create no schedule. run-daily captures the current date once in the configured time zone, then prepares, freezes and sends only that date."
       },
       {
         "status": "declared",
@@ -154,6 +167,10 @@
       {
         "status": "declared",
         "statement": "CLI attachment references are artifact IDs. Export explicitly writes a new private file at the chosen destination. Rendering uses disposable files and redirected caches beneath the runtime root, removed after use; it is not memory-only rendering."
+      },
+      {
+        "status": "declared",
+        "statement": "run-daily returns a compact edition date, status and selected packet count, or a no-edition result. It writes no message or PDF bytes to stdout. Status and doctor identify scheduling as external without checking the Clockwork binding."
       }
     ],
     "data_semantics": [
@@ -204,6 +221,10 @@
       {
         "status": "declared",
         "statement": "Ordinary edition creation and eligibility changes commit together. Frozen message/attachments remain immutable. Sending state commits before Email runs, recognized acceptance commits afterward, and uncertain attempts remain held. Neither test types nor derived sent flags govern eligibility."
+      },
+      {
+        "status": "declared",
+        "statement": "One CLI admission lock spans run-daily preparation, preview and send. An existing edition bypasses preparation and follows the retained send rules. Empty days create no edition or email and may be tried by a later invocation. The captured date stays fixed across midnight; missed dates are not backfilled."
       }
     ],
     "operational_limits": [
@@ -213,13 +234,13 @@
       },
       {
         "status": "unspecified",
-        "statement": "No preparation-latency, completion-time, delivery-time or throughput guarantee exists. The stored 09:00 setting has no activation mechanism in this release."
+        "statement": "No preparation-latency, completion-time, delivery-time or throughput guarantee exists. Activation is a separately authorized Clockwork operation; stored 09:00 fields do not control it."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 3 and private schema 2 require explicit migration from schema-one files. Packet IDs, exact Nucleus requests, frozen payloads and receipts are preserved. Older binaries cannot use schema two. Email attachment contract 4 additionally needs the advertised --payload-stdin extension. Historical brief toolsets and original accepted content remain decodable."
+        "statement": "Preparation contract 3 and private schema 2 require explicit migration from schema-one files. Packet IDs, exact Nucleus requests, frozen payloads and receipts are preserved. Older binaries cannot use schema two. Email attachment contract 4 additionally needs the advertised --payload-stdin extension. Historical brief toolsets and original accepted content remain decodable. Release 0.2.3 adds run-daily without a schema, toolset or model change; earlier preparation and send commands retain their behavior."
       },
       {
         "status": "unspecified",
@@ -266,6 +287,13 @@
         "statement": "PDF generation depends on locally available LaTeX, fonts and PDF inspection executables.",
         "target": "resume-renderer",
         "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "A separately authorized Clockwork binding may activate the exact released run-daily program. Clockwork owns the timer and process result; Platter owns date selection, admission, preparation and delivery outcomes. Direct invocation needs no timer.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
       }
     ]
   },

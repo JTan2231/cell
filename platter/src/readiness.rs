@@ -111,7 +111,7 @@ pub fn local_dependencies(root: &Path) -> Result<Value> {
         "Python pypdf",
     )?;
     Ok(
-        json!({"initialized":initialized,"state_dir":root,"schema_version":if initialized {Some(crate::store::SCHEMA_VERSION)} else {None},"email_attachments":true,"tectonic":tectonic,"python":python,"schedule":"not installed"}),
+        json!({"initialized":initialized,"state_dir":root,"schema_version":if initialized {Some(crate::store::SCHEMA_VERSION)} else {None},"email_attachments":true,"tectonic":tectonic,"python":python,"schedule":"external; not checked"}),
     )
 }
 
