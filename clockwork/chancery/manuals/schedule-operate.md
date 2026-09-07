@@ -1,10 +1,10 @@
 # Register and operate Clockwork schedules
 
-Clockwork is the current-user scheduled-activation broker for non-agent product
-runners. It has no daemon. launchd starts a short-lived Clockwork broker with
-one stable `owner/name` key; Clockwork selects an immutable definition,
-enforces per-key overlap, verifies the registered top-level image, directly
-spawns one child process group, waits, and records a runtime result.
+Clockwork schedules non-agent product runners for the current user. It has no
+daemon. launchd starts a short-lived Clockwork broker with one stable
+`owner/name` key. Clockwork selects an immutable definition, enforces per-key
+overlap, and verifies the registered top-level image. It then starts one child
+process group, waits, and records the runtime result.
 
 Clockwork owns this mechanical boundary. The product still owns its release,
 durable work, idempotency, locks, retries, secrets, output files, recovery, and
@@ -13,9 +13,10 @@ proof that product work succeeded.
 
 ## Register an immutable definition
 
-Prepare a current-user-owned, non-group/world-writable regular non-symbolic
-UTF-8 TOML file of at most 1 MiB. Unknown fields are rejected. A direct launch
-has this version-one shape:
+Prepare a regular UTF-8 TOML file of at most 1 MiB. The file must belong to the
+current user and must not be a symbolic link. Group and other users must not
+have write permission. Clockwork rejects unknown fields. A direct launch uses
+this version-one shape:
 
 ```toml
 schema_version = 1
@@ -137,9 +138,10 @@ the binding visibly disabled. An unattributable projection is retained without
 mutation, and Clockwork reports whether disabled state could be proved. Do not
 create an old-and-new dual schedule as recovery.
 
-For an existing binding or launchd projection, Clockwork fsyncs the operation, target definition, exact prior binding/plist/
-loaded-state observation, and exact candidate definition and plist bytes for a switch to a
-private per-key transition journal before mutation. Recovery refuses a current
+Before changing an existing binding or launchd projection, Clockwork fsyncs a
+private per-key transition journal. It contains the operation, target definition,
+and exact prior binding, plist, and loaded state. For a switch, it also contains
+the exact candidate definition and plist bytes. Recovery refuses a current
 binding or plist matching neither recorded projection. If the broker is
 abruptly terminated, `doctor` reports the pending key but deliberately does
 not choose a repair effect. Under the product's maintenance gate, rerun
@@ -260,4 +262,11 @@ a different reviewed contract.
 
 ## Output selection
 
-Registration and binding mutations retain definition/binding receipts; run retains one direct-child runtime outcome. Definition/binding lists and history return output-version-two items/has_more pages defaulting to 20 with positive --limit for more. History selects activation ID/key, trigger, timestamps, state, exit/signal and failure detail; --details includes definition digest and process IDs. Definition/binding show remain full selected metadata reads.
+Registration and binding changes return definition or binding receipts. Run
+returns one direct-child runtime outcome. Definition lists, binding lists, and
+history use output version 2 with `items` and `has_more`. They return up to 20
+rows by default. To read more, set `--limit` to a larger positive integer.
+
+History returns activation ID, key, trigger, timestamps, state, exit code,
+signal, and failure detail. `--details` adds the definition digest and process
+IDs. Definition and binding show return the full selected metadata.

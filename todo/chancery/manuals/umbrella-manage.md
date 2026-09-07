@@ -22,8 +22,8 @@ designs, decisions, staleness, and supersession.
 
 ## Decide routing explicitly
 
-The routing liaison can propose but never decide. After inspecting one pending
-proposal, explicit deterministic commands are:
+The routing liaison proposes; the caller decides. To decide a pending proposal
+after inspecting it:
 
 ```sh
 /Users/joey/.local/bin/todo routing accept <ROUTING_ID> \
@@ -50,10 +50,9 @@ identifiers while choosing one canonical survivor.
 /Users/joey/.local/bin/todo reopen <TODO_ID>
 ```
 
-Notes are immutable working annotations. Done and reopen are idempotent status
-transitions on the umbrella. They do not prove that an implementation plan ran
-or that external work is complete. Todo deliberately does not model execution,
-work items, or a general project graph.
+Notes are immutable. `done` sets umbrella status to `done`; `reopen` sets it to
+`open`. Both commands are idempotent. Todo stores concerns, direction, assessments,
+designs, notes and this open/done lifecycle.
 
 These reads and deterministic writes use Todo SQLite directly and do not
 invoke Nucleus. They can expose private directions, paths, notes, assessment
@@ -71,4 +70,7 @@ enums define the interface without a separate declaration layer.
 
 ## Output selection
 
-Todo list/search retain compact ID/title/lifecycle rows, default to 20, and include has_more with positive --limit for more. Exact show retains the complete selected umbrella with concerns, notes and current assessment/design summaries. Lifecycle and note mutations retain durable receipts and no implementation-success inference.
+Todo list and search return compact ID, title and lifecycle rows. They default
+to 20 results with `has_more`; use `--limit` with a positive integer for more.
+Show returns the selected umbrella, concerns, notes and current assessment and
+design summaries. Lifecycle and note changes return durable receipts.

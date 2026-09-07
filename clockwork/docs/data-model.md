@@ -2,7 +2,7 @@
 
 Clockwork uses one private SQLite database at
 `~/Library/Application Support/Clockwork/clockwork.db` by default. Schema
-version 1 has three durable aggregates: definitions, bindings, and activations.
+version 1 stores definitions, bindings, and activations.
 
 ## Definitions
 
@@ -10,9 +10,8 @@ A definition is a complete immutable snapshot of one stable key's schedule,
 launch image, literal arguments, working directory, non-secret environment,
 output paths, authority, timeout, and overlap policy. Its identity is the
 SHA-256 digest of the canonical JSON encoding of the fully concrete normalized
-definition content. Registration either returns the existing identical
-identity or inserts a new row; it never mutates an existing
-definition.
+definition content. Registration returns the existing identity for identical
+content or inserts a new row. It never changes an existing definition.
 
 Definitions also retain the canonical release root, whose final component is
 the product's caller-supplied exact 64-lowercase-hex content release identity.
@@ -42,12 +41,11 @@ the file. During an incomplete disable it retains the digest until external
 cleanup completes. The digest is internal ownership evidence rather than a
 product definition identity.
 
-Database selection, generated plist bytes, and launchd loaded state form one
-operational consistency unit during `switch` and `disable`, even though
-launchd is outside SQLite. Clockwork serializes the transition with a per-key
-management lock plus the activation transition gate, keeps the exact prior
-external and database state, and compensates on
-failure. It never treats a database-only write as a successful cutover.
+During `switch` and `disable`, database selection, generated plist bytes, and
+launchd loaded state must agree. Clockwork serializes the transition with a
+per-key management lock and the activation transition gate. It retains the
+exact prior external and database state for recovery on failure. A database
+write alone does not complete cutover.
 
 Before the first mutation of a binding or launchd projection that already
 exists, Clockwork fsyncs one private per-key transition journal beside its lock

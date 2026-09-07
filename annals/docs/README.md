@@ -1,7 +1,8 @@
 # Annals documentation
 
-Annals reconciles one immutable work with one frozen view of a conceptual
-corpus through a provisional, evidence-grounded interpretation.
+Annals interprets one immutable work against one frozen corpus revision.
+It records that interpretation with concepts, relationships, and exact source
+quotations.
 
 ```text
 immutable work + corpus revision
@@ -9,7 +10,7 @@ immutable work + corpus revision
        bounded inspection
               |
               v
-    best-current reconciliation
+    reconciliation request
               |
        stage / correct
               |
@@ -47,8 +48,7 @@ The implemented contracts are:
 
 The [Annals provider](../chancery/annals/provider.json) and independently
 versioned [Annals Usage provider](../chancery/annals-usage/provider.json)
-publish their release-matched installed outward contracts. After discovery
-selects an exact entry, `chancery resolve ENTRY_ID` assembles the provider
-scope, normalized facets, dependency contracts, exact basis, and explicit
-gaps. Annals Usage remains authority only for its live projection, not for
-Annals or Nucleus records.
+publish contracts that match their installed releases. Select an entry, then
+use `chancery resolve ENTRY_ID` to read its provider scope, normalized facets,
+dependency contracts, basis, and gaps. Annals Usage owns its live projection.
+Annals and Nucleus own their records.

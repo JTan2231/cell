@@ -2,10 +2,10 @@
 
 Semantics-Project: decisions
 
-- Keep changes simple; do not overcomplicate or overarchitect.
+- Keep changes simple.
 - This folder participates in the installed Semantics service. Its project
-  semantic repository is authoritative for project terminology and semantic
-  history. Before analyzing, reviewing, or changing code, tests,
+  semantic repository defines project terminology and records its history.
+  Before analyzing, reviewing, or changing code, tests,
   documentation, or interfaces, use Chancery to read
   `semantics.repository.explore` and query Semantics for this folder. Code,
   tests, and component documentation remain authoritative for actual behavior.

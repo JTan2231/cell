@@ -12,11 +12,10 @@ terminal `decision`/`no_decision` outcome.
 `observation_authority_items` is the admitted user authority set and
 `authority_verdicts` supplies exact binary coverage.
 
-`observation_jobs` and `observation_classification_receipts` retain Nucleus job,
-tool-call, exact call-argument and request digests, accepted-result, retry, and
-recovery correlation. New
-Krisis receipt bodies are reduced to a minimal marker after Annals acceptance;
-legacy Decisions receipt decoding is unchanged.
+`observation_jobs` and `observation_classification_receipts` retain Nucleus job
+and tool-call correlation, exact argument and request digests, accepted results,
+and retry and recovery correlation. After Annals acceptance, Krisis reduces new
+receipt bodies to a minimal marker. Legacy Decisions receipt decoding is unchanged.
 
 `decision_accounts` holds stable account identity, occurrence, precision,
 authority span, and—only before acceptance—generated statement/context/action/
@@ -39,7 +38,7 @@ precision is retained separately.
 
 The account Source JSON schema version, classifier capture-rule version,
 decision ID, Nucleus job/call IDs, Annals library/job IDs, digest, observation
-ID, and legacy Decisions lifecycle IDs are separate compatibility axes.
+ID, and legacy Decisions lifecycle IDs have independent compatibility rules.
 
 ## Retained legacy records
 
@@ -49,9 +48,9 @@ read-only `events`, and legacy `show` can decode prior state. Krisis creates no
 new digest, review, email, candidate, or lifecycle state through its public
 active path.
 
-The database is an operational capture ledger, not the decision library. Once
-Annals accepts an account, Krisis intentionally cannot reconstruct its prose
-from retained state; browse and search through Annals.
+The database records capture and delivery operations. After Annals accepts an
+account, Krisis cannot reconstruct its prose from retained state. Browse and
+search the account through Annals.
 
 Migration to schema 4 refuses any planned/submitted legacy
 `decisions-observe-*` correlation and any accepted legacy classification whose

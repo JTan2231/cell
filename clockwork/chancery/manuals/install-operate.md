@@ -1,10 +1,9 @@
 # Install or diagnose Clockwork
 
-Clockwork installs one current-user CLI/short-lived broker and one
-Clockwork-owned Chancery provider. Program deployment is intentionally
-independent from product schedule migration: it does not create or open the
-Clockwork runtime database, register a definition, switch or disable a binding,
-write an `org.clockwork.*` product plist, or run a product job.
+Clockwork installs a short-lived CLI/broker and a Chancery provider for the
+current user. Program deployment does not create or open the runtime database,
+register a definition, switch or disable a binding, write an `org.clockwork.*`
+product plist, or run a product job.
 
 Build and validate the candidate first. Deployment is a separate authorized
 effect:
@@ -53,7 +52,7 @@ and atomically replaces `current`. Symbolic candidates, foreign stable paths,
 selectors escaping the release tree, version mismatch, malformed manifests,
 or changed release bytes are refused rather than adopted.
 
-If an installed version/help smoke fails before commit, the deployer restores
+If an installed version or help check fails before commit, the deployer restores
 the prior current and previous selectors and public command/provider views. If
 that cannot be completed coherently, it detaches all owned public selectors and
 reports the fail-closed state while retaining releases. Inspect the reported
@@ -70,7 +69,8 @@ After a committed deployment, diagnose locally:
 ```
 
 Doctor opens the schema-one local store, initializes only an empty unversioned
-file, prepares private directories, runs SQLite `quick_check`, resolves the current executable and
+file, prepares private directories, runs SQLite `quick_check`, resolves the
+current executable and
 `/bin/launchctl`, and may mark retained `running` activations `lost` after
 proving their recorded broker and any child absent. It executes no product,
 changes no binding, and proves no future timer or product-domain result.

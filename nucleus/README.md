@@ -1,36 +1,33 @@
 # Nucleus
 
-Nucleus is a per-user, local job coordinator for agent harnesses. A requester
-submits a small, versioned invocation contract; Nucleus validates it against the
-installed harness, supervises the process, owns its authentication, and retains
-one exact observation for every non-sensitive harness stdout JSONL record.
-Host-managed authentication responses and managed-worker stderr are excluded
-so bearer credentials cannot enter durable job output. Requesters keep
-ownership of their domain work and execute any domain tools through Nucleus's
-durable mailbox.
+Nucleus coordinates local agent jobs for the current user. A requester submits
+a versioned invocation contract. Nucleus validates it against the installed
+harness, supervises the process, and owns authentication. It retains one exact
+observation for each non-sensitive harness stdout JSONL record. It excludes
+host-managed authentication responses and managed-worker stderr to keep bearer
+credentials out of durable job output. Requesters own their domain work and
+execute domain tools through Nucleus's durable mailbox.
 
 The daemon admits work durably and runs up to eight Codex jobs concurrently.
 Additional jobs remain accepted until a slot opens. Nucleus does not interpret
 workflow dependencies or detect shared mutation targets; requesters must
 isolate or serialize conflicting work.
 
-The first adapter is Codex app-server on macOS. Nucleus does not accept shell
-commands, arbitrary argv, retries, or workflow graphs. A requester that needs
-caller-process environment parity can register a short-lived, memory-only
-launch context; those values never enter the job or log database.
+The first adapter uses Codex app-server on macOS. Nucleus does not accept shell
+commands, arbitrary argv, retries, or workflow graphs. To use the caller's
+process environment, a requester can register a temporary launch context in
+memory. Those values never enter the job or log database.
 
 For operating the installed system or changing a boundary shared with Annals,
 Todo, or Codex, start with [the operator manual](docs/operator-manual.md). An
 installed release also makes its version-matched manual available with
 `nucleus manual`.
 
-The [release-matched Chancery provider](chancery/provider.json) publishes
-Nucleus's complete outward inventory for execution and service operation,
-requester integration, and product development. After Chancery discovery
-selects an exact entry, use `chancery resolve ENTRY_ID` to assemble its scoped
-promise, substantive reliances, dependency contracts, exact basis, and
-explicit gaps. Resolution does not inspect live Nucleus readiness or execute a
-job or service action.
+The [Chancery provider](chancery/provider.json) publishes contracts for execution,
+service operation, requester integration, and development at the matching
+release version. After selecting an exact entry, use `chancery resolve ENTRY_ID`
+for its scope, reliances, dependency contracts, exact basis, and gaps. Resolution
+does not test Nucleus readiness or execute a job or service action.
 
 ## Build and run
 
@@ -54,9 +51,8 @@ the same directory. For an isolated foreground instance:
   --codex-home /tmp/nucleus-codex-home
 ```
 
-Install it as the current user's always-on LaunchAgent through the packaged
-deployer so the executable release and its Chancery provider bundle are staged
-together:
+Use the packaged deployer to install the current user's always-on LaunchAgent.
+This stages the executables and Chancery bundle together:
 
 ```sh
 <TESTED_NUCLEUS_INSTALL> install \
@@ -88,11 +84,10 @@ not a shared runtime path. Static API-key jobs receive isolated snapshots.
 Managed ChatGPT jobs receive only in-memory access tokens from Nucleus; their
 401 callbacks are coalesced into one serialized refresh of the authoritative
 home, and no worker receives a refresh token or copies authentication back.
-Account reads and attended login also run against private staging homes; only a
-validated credential generation is atomically promoted into the authoritative
-home. Attended login waits for all active authentication sessions before
-changing the account, while ordinary account reads and refreshes can coexist
-with running jobs.
+Account reads and attended login use private staging homes. Nucleus atomically
+promotes only validated credentials into the authoritative home. Attended login
+waits for all active authentication sessions before changing the account.
+Ordinary account reads and refreshes can run alongside jobs.
 
 If Nucleus has no signed-in credential yet, authenticate the owned home with:
 
@@ -160,8 +155,7 @@ deployed Annals and Todo adapter contract.
 
 ## Scope
 
-Nucleus owns admission, compatibility checking, execution lifecycle,
-cancellation, exact harness-output retention, and retrieval. It reports that an agent
-turn completed; it cannot decide that an Annals reconciliation or Todo domain
-operation was successful, or authorize a Todo decision. That remains
-authoritative in the requester's database.
+Nucleus owns admission, compatibility checks, execution lifecycle, cancellation,
+and exact harness-output retention and retrieval. It reports agent-turn
+completion. Requesters own Annals reconciliation results, Todo domain results,
+and Todo decision authority in their own databases.

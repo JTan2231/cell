@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Discover installed capabilities and operations",
-  "summary": "List every installed capability and operation with enough meaning for an agent to select plausible contracts, then read their full operating boundaries.",
+  "summary": "List installed capabilities and operations so an agent can select plausible entries and read their complete operating contracts.",
   "use_when": [
     "A request may map to an installed local capability or adaptive operation.",
     "The exact supported outcome, effects, authority, recovery, privacy, or invocation must be understood without inspecting source code."
@@ -14,7 +14,7 @@
     "The correct capability is already known and its current contract has already been read in this session.",
     "The task is ordinary work with no plausible installed-system catalog need."
   ],
-  "outcome": "The caller receives a complete semantic catalog or one complete installed contract; no represented action is performed.",
+  "outcome": "The caller receives the complete catalog or one complete installed contract. Discovery executes no represented action.",
   "effects": [
     "Reads explicitly indexed JSON and Markdown from installed provider bundles.",
     "Writes no provider state and performs no readiness probe."
@@ -75,13 +75,13 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "List returns all IDs, titles and summaries grouped by mode, with shared status defaults and per-entry exceptions. Show returns identity, provider release, dependency/readiness facts, issues and the complete operating manual once; --full also returns structured authoring fields and normalized claims. JSON output schema 3 honors the same content selection."
+        "statement": "List returns IDs, titles, and summaries grouped by mode, with shared status defaults and entry exceptions. Show returns identity, provider release, dependency and readiness status, issues, and the complete manual once. --full adds structured authoring fields and normalized claims. JSON output schema 3 uses the same content selection."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Support is provider-declared, availability means the installed bundle is structurally valid, compatibility concerns documentation-contract dependencies, and readiness is never established by discovery."
+        "statement": "The provider declares support. Availability means the installed bundle is structurally valid. Compatibility describes documentation dependencies. Discovery does not establish readiness."
       }
     ],
     "identity_and_units": [
@@ -105,7 +105,7 @@
       },
       {
         "status": "unsupported",
-        "statement": "Catalog completeness does not mean every possible product behavior has been published or that represented runtimes are currently ready."
+        "statement": "Starting represented capabilities or probing their runtime readiness is outside catalog discovery."
       }
     ],
     "access": [
@@ -117,11 +117,11 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "One invocation canonicalizes each selector once, constructs one deterministic in-memory view, prints it, and exits without writing provider or registry state."
+        "statement": "Each invocation canonicalizes every selector once and constructs one deterministic view in memory. It prints that view and exits without writing provider or registry state."
       },
       {
         "status": "declared",
-        "statement": "A malformed provider is excluded as a unit, duplicate global entry IDs are excluded rather than selected by filesystem order, and dependency unavailability propagates transitively."
+        "statement": "Malformed providers are excluded as units. Duplicate global entry IDs are excluded, regardless of filesystem order. Dependency unavailability propagates transitively."
       }
     ],
     "operational_limits": [

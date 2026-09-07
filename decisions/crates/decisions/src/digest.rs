@@ -22,10 +22,10 @@ pub(crate) fn render(
         .collect::<Vec<_>>();
 
     let subject = if decisions.is_empty() && possible.is_empty() {
-        format!("Codex decisions for {report_date}: all clear")
+        format!("Codex decisions for {report_date}: no records selected")
     } else {
         format!(
-            "Codex decisions for {report_date}: {} {}, {} possible",
+            "Codex decisions for {report_date}: {} {}, {} awaiting review",
             decisions.len(),
             if decisions.len() == 1 {
                 "decision"
@@ -46,7 +46,7 @@ pub(crate) fn render(
     }
     if decisions.is_empty() && possible.is_empty() {
         body.push_str(
-            "All clear. Completed enacted-decision coverage found no attributable operative decisions.\n",
+            "The selected daily projection contains no decisions or candidates awaiting review.\n",
         );
         return (subject, body);
     }
@@ -64,7 +64,7 @@ pub(crate) fn render(
     }
 
     if !possible.is_empty() {
-        body.push_str("Possible decisions to review\n");
+        body.push_str("Candidates awaiting review\n");
         for candidate in possible {
             let _ = writeln!(
                 body,
@@ -106,10 +106,10 @@ mod tests {
     }
 
     #[test]
-    fn all_clear_is_explicit() {
+    fn empty_projection_is_explicit() {
         let (subject, body) = render("2026-08-31", Some(10), &[]);
-        assert!(subject.ends_with("all clear"));
-        assert!(body.contains("Completed enacted-decision coverage"));
+        assert!(subject.ends_with("no records selected"));
+        assert!(body.contains("The selected daily projection contains no decisions"));
         assert!(body.contains("Unix second 10"));
     }
 
@@ -123,8 +123,8 @@ mod tests {
                 candidate("medium", "unreviewed"),
             ],
         );
-        assert!(subject.contains("1 decision, 1 possible"));
+        assert!(subject.contains("1 decision, 1 awaiting review"));
         assert!(body.contains("Decisions\n"));
-        assert!(body.contains("Possible decisions to review\n"));
+        assert!(body.contains("Candidates awaiting review\n"));
     }
 }

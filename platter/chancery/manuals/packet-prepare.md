@@ -1,10 +1,10 @@
 # Prepare private job packets
 
-Platter captures Cast opportunities and CRM career entries, prepares a concise
-brief and a Jackson-only tailored resume through Nucleus, and freezes editions
-for explicitly authorized delivery through Email. Platter owns retained content,
-job eligibility and delivery outcomes. It does not discover jobs, edit CRM,
-apply to employers, contact them, or install recurring delivery.
+Platter captures Cast opportunities and CRM career entries. It uses Nucleus to
+prepare a concise brief and Jackson-only tailored resume, then freezes editions
+for authorized delivery through Email. Platter owns retained content, job
+eligibility and delivery outcomes. It does not discover jobs, edit CRM, apply
+to employers, contact them or install recurring delivery.
 
 ## Storage and commands
 
@@ -52,13 +52,12 @@ Delivery records retain what happened even after eligibility changes.
 ## Preparation and readiness
 
 Preparation reads supported Cast export and CRM profile list/read interfaces.
-Cast exports contain evidence rather than complete postings: Platter retrieves
-complete supported employer evidence first. Supported sources include
-Greenhouse, Ashby, Lever and supported JobPosting JSON-LD. Unsupported forms,
-login requirements and missing full text can prevent preparation. A fetch
-failure does not establish that an opportunity has closed. Canonical supported
-ATS identities and normalized URLs are used; perfect repost deduplication is
-not promised.
+Cast exports contain stored posting excerpts. Platter fetches full posting text
+through a supported adapter before writing. Sources include Greenhouse, Ashby,
+Lever and supported JobPosting JSON-LD. Preparation can fail when pages require
+unsupported forms or login, or omit full text. Canonical supported ATS
+identities and normalized URLs identify opportunities. Reposts without shared
+identifiers can remain separate.
 
 CRM capture rejects incomplete lists and detected timestamp changes. Separate
 list/read calls are not a transactional CRM snapshot, but both stages receive
@@ -79,7 +78,7 @@ Resume submissions contain only plain Jackson bullet contents and their private
 career-entry references. Every source byte outside that span remains fixed.
 Model text is escaped as LaTeX content. Rendering validates overflow, missing
 characters, extractable text, the Jackson heading and one-page layout before
-acceptance. These checks and references do not prove every paraphrase faithful.
+acceptance. Each bullet retains its captured career-entry references.
 A run becomes ready only with accepted brief/resume content and retained PDF.
 
 Rendering uses Tectonic and Python 3 with pypdf. Absolute `PLATTER_TECTONIC` and
@@ -100,11 +99,11 @@ not install or authorize a schedule.
 
 ## Editions and sending
 
-Normal preview refreshes posting evidence, defers unavailable sources, and
-marks changed packets stale. Existing frozen editions return unchanged without
-freshness checks. An edition stores exact subject/body, its stable idempotency
+Normal preview fetches posting text again, defers unavailable sources and marks
+changed packets stale. Existing frozen editions return stored contents without
+another fetch. An edition stores exact subject and body, a stable idempotency
 key, delivery status and receipt. Its ordered attachments reference immutable
-PDF artifacts, including their filenames. It does not copy PDFs to a directory.
+PDF artifacts and their filenames. It does not copy PDFs to a directory.
 
 For an already authorized edition:
 
@@ -164,6 +163,7 @@ Resume contact details, career history, captured evidence, briefs and supporting
 references remain private. Captured material is disclosed through Nucleus to
 the model service. Authorized sends disclose message and attachments to Email,
 Resend and Gmail. Source retrieval discloses HTTP requests to employers.
-Nucleus retains its own separate runtime evidence and credentials; this
-storage change does not relocate other products' state. No completion latency,
-comprehensive source coverage or final delivery observer is promised.
+Nucleus retains its own runtime records and credentials. This storage change
+does not relocate other products' state. No completion-time guarantee or final
+delivery observer is promised. Installation and migration use the separate
+[installation contract](install-operate.md).

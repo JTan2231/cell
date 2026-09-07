@@ -24,14 +24,14 @@ cd /Users/joey/rust/cell
   --clockwork <ABSOLUTE_CLOCKWORK_BINARY>
 ```
 
-The deployer stages a complete content-addressed release, checks candidate
-programs and the Nucleus boundary, establishes Annals maintenance, quiesces
-scheduled work, performs supported migration, switches the release and
-exact Clockwork definition digest, and checks the installed commands. It first
-registers the definition inactive. Before disabling or replacing a selected
-binding, it verifies the complete current Annals release and compares every
-stored executable-definition field with it; a same-key foreign definition is
-left untouched. The first handoff similarly removes only an exactly owned
+The deployer stages a complete content-addressed release and checks candidate
+programs and the Nucleus boundary. It starts Annals maintenance, drains
+scheduled work, and performs supported migration. It then switches the release
+and exact Clockwork definition digest, and checks the installed commands.
+The definition is first registered inactive. Before the deployer disables or
+replaces a binding, it verifies the current release and compares every stored
+executable-definition field with it. A foreign definition with the same key
+stays untouched. The first handoff similarly removes only an exactly owned
 legacy LaunchAgent. It does not stop, replace, or take ownership of Nucleus or
 Clockwork.
 
@@ -40,8 +40,9 @@ Concurrent same-user direct Clockwork mutation of `annals/inbox` during deploy
 or migration is unsupported; reinspection detects attributable changes where
 possible, fails the handoff closed, and may retain maintenance for recovery.
 
-The immutable definition requests run-at-load and a 300-second interval,
-skips overlap, has no activation timeout, and pins the native release-local Rust Annals runner by SHA-256. The runner executes only its sibling
+The immutable definition requests run-at-load and a 300-second interval. It
+skips overlap and has no activation timeout. It pins the native release-local
+Rust Annals runner by SHA-256. The runner executes only its sibling
 release payload as `annals --quiet inbox run` in the Annals state directory
 with an explicit nonsecret environment and umask `077`. Clockwork records
 process outcomes but does not inspect Annals domain state or ingest
@@ -117,20 +118,21 @@ change Nucleus, or inspect or mutate the primary `annals/inbox` binding. It
 shares Annals' product-wide `install/.update-lock`, so it cannot race the
 primary deployer.
 
-The provisioner validates the complete content release and complete selected
-prior definition, creates and binds fresh state off-path, establishes
-maintenance before a run-at-load definition can be selected, registers the
-candidate inactive, drains an enabled owned prior, takes a consistent backup
-before migration, proves inbox and feed readiness, then switches the exact
-definition. Fresh state is initialized with the immutable `decisions` role;
-an existing or migrated `general` database fails readiness even if its
-persistent ID matches the config. Foreign or concurrently changed state fails
-closed. A pre-commit
-failure restores captured state and the exact enabled or disabled-selected
-prior without activating a prior-disabled schedule. If an exact restoration
-cannot be proved, the dedicated library remains maintenance-gated and only an
-attributable candidate is disabled; retained transaction material is reported
-for recovery.
+The provisioner validates the complete release and selected prior definition.
+It creates and binds fresh state outside live paths, then starts maintenance
+before a run-at-load definition can be selected. It registers the candidate
+inactive, drains an enabled owned prior binding, and takes a consistent backup
+before migration. It checks inbox and feed readiness, then switches the exact
+definition.
+
+Fresh state has the immutable `decisions` role. A `general` database fails
+readiness even if its persistent ID matches the config. Foreign or
+concurrently changed state stops the operation. A pre-commit failure restores
+captured state and the exact prior selection and enabled state. A previously
+disabled schedule stays disabled throughout recovery. If exact restoration
+cannot be proved, the library retains maintenance. The provisioner disables
+only an attributable candidate and reports retained transaction material for
+recovery.
 
 Before opening existing state, the provisioner requires its config, database
 and SQLite sidecars, spool identity and control files, and maintenance files to

@@ -10,7 +10,6 @@
   deployment, diagnosis, rollback, and uninstall boundaries.
 - [Semantic seed](semantics-seed.md): project-local definitions prepared for a
   later explicit Semantics registration and seed.
-- [Chancery provider bundle](../chancery/provider.json): Clockwork's complete
-  supported public promise inventory for this release. Use `chancery show ID`
-  for a selected contract and `chancery resolve ID` for its normalized promise
-  and explicit gaps.
+- [Chancery provider bundle](../chancery/provider.json): all supported public
+  contracts for this release. Use `chancery show ID` to read a contract and
+  `chancery resolve ID` to read its resolved terms and declared gaps.

@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Save and research a concern for later",
-  "summary": "Save one actionable concern with its source, then research a pending proposal to attach it, create or revise a todo, unify duplicates, defer it, or dismiss it.",
+  "summary": "Save a concern and its source. Research a pending proposal to attach it, create or revise a todo, unify duplicates, defer or dismiss it.",
   "use_when": [
     "The user wants an actionable concern or follow-up durably retained for later rather than completed now.",
     "The concern should be researched against existing durable todo identities while preserving its source provenance."
@@ -15,7 +15,7 @@
     "The desired durable outcome is a casual note, preference, source archive, implementation plan, or general project graph.",
     "No readable UTF-8 source file can identify where the direction arose."
   ],
-  "outcome": "One durable `cN` concern is committed first and one pending `rN` routing proposal is researched; no routing decision or `tN` creation is implied.",
+  "outcome": "One committed `cN` concern and one researched pending `rN` proposal. This operation does not decide routing or create a `tN`.",
   "effects": [
     "Validates and stores the absolute source path plus the caller's direction, then commits one concern before model work begins.",
     "Submits a constrained Nucleus routing job that reads the source and a frozen bounded candidate snapshot and may consume Codex allowance.",
@@ -70,12 +70,12 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Capture and routing retain immutable concern/proposal and explicit-decision semantics. Concern list defaults to 20 rows of ID, status, recorded time and a marked excerpt capped at 240 characters, with has_more and positive --limit for more. concern show retains full provenance and routing history."
+        "statement": "Capture and routing preserve immutable concerns, sealed proposals and explicit decisions. Concern list defaults to 20 rows with ID, status, recorded time and a marked excerpt of at most 240 characters. Results include has_more; --limit accepts a positive integer. Concern show returns full provenance and routing history."
       }
     ],
     "data_semantics": [
       {"status": "declared", "statement": "A concern preserves originating direction and provenance; a routing proposal is model-produced research that cannot apply or authorize its proposed disposition."},
-      {"status": "declared", "statement": "Attach preserves umbrella direction, revise preserves identity, unify preserves both histories under one survivor, dismiss requires positive no-action evidence, and defer preserves an unresolved concern."}
+      {"status": "declared", "statement": "Attach preserves direction. Revise preserves identity. Unify preserves both histories under one survivor. Dismiss records the supplied basis for retaining no action. Defer preserves an unresolved concern."}
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "cN identifies one immutable concern and rN identifies one sealed routing proposal; neither identifier is a tN todo identity."},
@@ -83,7 +83,7 @@
     ],
     "completeness_and_freshness": [
       {"status": "declared", "statement": "Research uses the exact concern plus one frozen bounded candidate snapshot and records the basis needed to detect a later stale proposal."},
-      {"status": "unsupported", "statement": "The candidate snapshot is not a global proof that no other concern or external work is related, and a pending proposal is not guaranteed current after later Todo changes."}
+      {"status": "declared", "statement": "The candidate snapshot contains the host-selected Todo records for this run. Later Todo changes can make a pending proposal's recorded bases stale."}
     ],
     "access": [
       {"status": "declared", "statement": "The supported interface is the current-user local Todo CLI over its selected database, with selected source reads exposed to a constrained Nucleus stage."},

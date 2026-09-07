@@ -1,7 +1,6 @@
 # Architecture
 
-Clockwork centralizes scheduled activation mechanics without taking over the
-work a product performs.
+Clockwork manages scheduled activation. Each product owns the work it performs.
 
 ```text
 product release
@@ -46,19 +45,20 @@ exit into proof that a product accomplished its goal.
 
 ## Executable contract
 
-An executable is the registered **top-level launch image**, not an arbitrary
-command string and not a claim about a whole process tree.
+An executable is the registered **top-level launch image**. It identifies the
+program Clockwork starts, without describing a whole process tree.
 
-A direct definition pins one current-user-owned executable program file with a
-recognized Mach-O or fat-binary magic
-beneath an immutable release directory, its lowercase SHA-256 digest, literal
-arguments, an absolute working directory, and a scrubbed non-secret
-environment map. An interpreted definition pins schema one's sole interpreter
-profile, the exact root-owned `/bin/sh` bytes, plus a current-user-owned
-absolute regular executable script beneath the release, with a digest for
-each. `/bin/sh` is invoked directly with the script as its first operand;
-Clockwork does not use the script's shebang, and the literal `-c`
-command-string argument is rejected.
+A direct definition pins an executable program beneath an immutable release
+directory. The program must belong to the current user and have recognized
+Mach-O or fat-binary magic. The definition records its lowercase SHA-256 digest,
+literal arguments, absolute working directory, and scrubbed environment without
+secrets.
+
+An interpreted definition pins schema one's only interpreter profile: the exact
+root-owned `/bin/sh` bytes. It also pins an absolute regular executable script
+beneath the release, owned by the current user. Each image has its own digest.
+Clockwork invokes `/bin/sh` directly with the script as its first operand. It
+does not use the shebang and rejects the literal `-c` command-string argument.
 
 At registration and again before spawn, the pinned artifacts must be regular,
 non-symbolic, non-hard-linked, executable by the current user, and not group-
@@ -186,13 +186,13 @@ exit 1. An unfinished row is
 changed to `lost` only after its recorded broker and any recorded child are
 both demonstrably absent.
 
-Clockwork records no stdout or stderr body. Product definitions name distinct
-absolute product-owned output paths. Their existing canonical parent must be
-symlink-free, owner-writable/searchable, and not group- or world-writable; an
-existing destination must be a private, owner-writable regular non-symbolic,
-non-hard-linked file. Clockwork opens both
-destinations, verifies that their device/inode identities differ, and appends
-or creates them mode 0600, but the product owns their content and retention.
+Clockwork records no stdout or stderr body. Definitions name distinct absolute
+output paths owned by the product. Each existing canonical parent must have no
+symlinks, permit owner write and search access, and prohibit group and other
+users from writing. An existing destination must be a private regular file that
+the owner can write, with no symbolic or hard links. Clockwork opens both
+destinations, verifies different device/inode identities, and appends to them or
+creates them with mode 0600. The product owns their content and retention.
 Output may not overlap the product release or Clockwork-owned state, log, or
 LaunchAgent trees.
 

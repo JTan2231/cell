@@ -20,12 +20,12 @@
   "effects": [
     "The Cell product adapter composes the primary deployer with the exact installed release's dedicated decisions provisioner, establishes per-library run-owned admission, preserves operator pauses and prior schedule enabled booleans, and retains Annals' existing migration and recovery boundaries.",
     "Stages and atomically selects a complete content-addressed release containing Annals, Annals Usage, runners, configuration, and provider documentation.",
-    "Registers an immutable Clockwork definition for `annals/inbox`, proves any selected prior digest resolves to the complete exact current Annals release definition before disabling or replacing it, establishes maintenance, migrates the library, and atomically switches the binding only after the exact release is ready.",
+    "Registers an immutable Clockwork definition for `annals/inbox`. Before disabling or replacing a prior selection, verifies that its digest resolves to the complete current Annals release definition. Establishes maintenance, migrates the library, and atomically switches the binding after the release is ready.",
     "During legacy system migration, the child deployer returns an inert rendered definition under maintenance; the outer migration durably commits the permanent user-state root before it registers or selects that definition.",
     "Removes or restores a legacy LaunchDaemon or LaunchAgent only when its complete plist, owner, and mode match the exact Annals rendering; migration also proves the system service absent before removing its files or clearing maintenance, and additional launchd keys are foreign.",
     "With `--fresh-state`, replaces the library and spool together, imports uncompleted backlog in lane order, and retains the prior generation for rollback.",
-    "The decisions provisioner creates the separate database with its immutable decisions role and requires any existing state to retain that role after its supported schema check; it owns only that database's fresh bound spool, config, logs, backups, and `annals/decisions-inbox` definition, shares the Annals update lock, and never changes `annals/inbox`.",
-    "Before opening decisions state or selecting its schedule, the provisioner requires existing mutable control files and both fixed logs to be operator-owned private regular single-link files; absent logs are created privately and symbolic or hard-linked targets fail closed.",
+    "The decisions provisioner creates the separate database with its immutable decisions role. Existing state must retain that role after the supported schema check. It owns only that database's bound spool, config, logs, backups, and `annals/decisions-inbox` definition. It shares the Annals update lock and never changes `annals/inbox`.",
+    "Before opening decisions state or selecting its schedule, the provisioner checks existing mutable control files and both fixed logs. They must be operator-owned private regular files with one hard link. It creates absent logs privately and rejects symbolic or hard-linked targets.",
     "With `--keep-maintenance`, records and retains an Annals-owned decisions maintenance hold for an outer cutover; a later successful invocation clears only that matching owned hold.",
     "A failed pre-commit cutover restores captured program, service, configuration, library, and spool state according to the supported procedure."
   ],
@@ -149,7 +149,7 @@
       },
       {
         "status": "declared",
-        "statement": "Decisions provisioning requires a complete cell-install-v2 content release whose exact release-local Rust installer supplies the compiled configuration and native definition rendering; any selected prior decisions definition must match that dedicated state and a fully verified Annals content release field for field."
+        "statement": "Decisions provisioning requires a complete cell-install-v2 content release. Its exact release-local Rust installer supplies compiled configuration and native definition rendering. A selected prior decisions definition must match the dedicated state and a fully verified Annals content release field for field."
       },
       {
         "status": "declared",
@@ -177,7 +177,7 @@
       },
       {
         "status": "declared",
-        "statement": "Success selects a complete cell-install-v2 content-addressed release containing both independently versioned payloads, the exact Rust installer and native frontend/runner roles, both provider bundles and a strict file inventory; product-owned configuration and a compatible library/spool generation are verified before the exact native Clockwork definition is selected."
+        "statement": "Success selects a complete cell-install-v2 content-addressed release. It contains both independently versioned payloads, the exact Rust installer and native frontend/runner roles, both provider bundles, and a strict file inventory. The installer verifies configuration and a compatible library/spool generation before selecting the exact native Clockwork definition."
       },
       {
         "status": "declared",
@@ -247,7 +247,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment stages and registers an inactive exact-release definition, establishes maintenance, proves and disables only an exact current-release Clockwork selection and quiesces any owned legacy LaunchAgent, captures recovery state, performs supported migration or authorized replacement, switches selectors and exactly one Clockwork binding, verifies, then clears maintenance."
+        "statement": "Deployment stages and registers an inactive exact-release definition, then establishes maintenance. It verifies and disables only an exact current-release Clockwork selection and stops any owned legacy LaunchAgent. It captures recovery state, migrates or performs an authorized replacement, switches selectors and one Clockwork binding, verifies the result, then clears maintenance."
       },
       {
         "status": "declared",
@@ -267,7 +267,7 @@
       },
       {
         "status": "declared",
-        "statement": "Decisions provisioning stages fresh state off-path, binds a fresh spool, engages maintenance before publication, registers the candidate inactive, drains only an enabled proved prior, backs up before migration, verifies inbox and feed readiness, switches only `annals/decisions-inbox`, then clears only its own gate unless --keep-maintenance was requested."
+        "statement": "Decisions provisioning stages fresh state outside live paths, binds a fresh spool, and starts maintenance before publication. It registers the candidate inactive and drains only an enabled verified prior binding. It backs up before migration, verifies inbox and feed readiness, and switches only `annals/decisions-inbox`. It clears only its own gate unless --keep-maintenance was requested."
       },
       {
         "status": "declared",

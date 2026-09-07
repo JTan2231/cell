@@ -326,15 +326,15 @@ def setup(manifest_path: Path, run_dir: Path, annals: Path) -> None:
         "runner_sha256": sha256(run_dir / "runner.py"),
         "qualities": list(ARM_ORDER),
         "input_count": EXPECTED_INPUTS,
-        "policy": "apply only change proposals with no uncertainties",
+        "policy": "apply only change proposals whose uncertainties array is empty",
         "methodology_notes": [
             "Inputs retain every visible event message, including visible messages from "
             "rolled-back turns, to match the earlier three-work experiments.",
-            "Uncertain proposals remain unapplied and do not enter later corpus context.",
+            "Proposals with entries in uncertainties remain pending under this application policy.",
             "Later works therefore compare autonomous preset-specific corpus trajectories, "
             "not isolated independent trials.",
-            "Copied-forward context in works 16 through 18 is interactional reuse, not "
-            "independent corroboration.",
+            "Works 16 through 18 include copied-forward context from earlier "
+            "conversations.",
         ],
     }
     write_json(run_dir / "config.json", config)
@@ -443,7 +443,7 @@ def process_work(
     elif state["status"] == "pending":
         print(
             f"[{item['index']:02d}/20] {arm}: pending with "
-            f"{len(state['uncertainties'])} uncertainties",
+            f"{len(state['uncertainties'])} entries in uncertainties",
             flush=True,
         )
     elif state["status"] == "no_change":
@@ -771,7 +771,7 @@ def write_markdown_report(path: Path, report: dict[str, Any]) -> None:
             f"{high['tools']['failed_calls']} |",
             f"| Model proposals | {medium['proposals']['count']} | "
             f"{high['proposals']['count']} |",
-            f"| Uncertain proposals | {medium['proposals']['uncertain']} | "
+            f"| Proposals with uncertainties entries | {medium['proposals']['uncertain']} | "
             f"{high['proposals']['uncertain']} |",
             f"| Proposed operations | {medium['proposals']['operations']} | "
             f"{high['proposals']['operations']} |",
@@ -815,7 +815,7 @@ def proposal_cell(proposal: dict[str, Any] | None) -> str:
     uncertainties = len(proposal["uncertainties"])
     return (
         f"{proposal['outcome']}/{proposal['status']}; "
-        f"{proposal['operation_count']} ops; {uncertainties} uncertain"
+        f"{proposal['operation_count']} ops; {uncertainties} entries in uncertainties"
     )
 
 

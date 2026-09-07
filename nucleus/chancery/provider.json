@@ -7,12 +7,12 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Nucleus owns version-one invocation admission, a global eight-slot execution scheduler, one supervised attempt per job, job and cancellation lifecycle, exact non-authentication harness-output atoms, immutable schema and toolset registrations, the durable requester-tool mailbox, and its single-authority managed authentication broker.",
+      "Nucleus owns version-one invocation admission, the global eight-slot scheduler, and one supervised attempt per job. It also owns job and cancellation lifecycle, exact non-authentication output atoms, immutable schemas and toolsets, the durable requester-tool mailbox, and the managed authentication broker with one authoritative credential.",
       "Nucleus SQLite is authoritative for its operational job, attempt, registration, cancellation, mailbox, and output records; the installed service owns its per-user socket, private Codex home, and service lifecycle."
     ],
     "not_authoritative_for": [
       "Each requester remains authoritative for the domain state, domain success, idempotent mutation, duplicate handling, and whether a new attempt is safe.",
-      "Codex owns harness and account behavior, and Nucleus output or terminal state does not make model prose, a tool result, or a requester outcome domain truth."
+      "Codex owns harness and account behavior. Requesters own their domain records and the operations that commit them."
     ],
     "inventory": {
       "covers": [
@@ -32,11 +32,11 @@
       "Nucleus promises no automatic pruning policy for retained job or output records; provider documentation must contain no credentials, private runtime records, or requester source bodies."
     ],
     "compatibility_and_retirement": [
-      "Provider release, entry contract version, public invocation protocol, store schema, adapter version, exact harness compatibility, and immutable schema or toolset identity are separate compatibility axes.",
+      "Provider release, entry contract, invocation protocol, store schema, adapter, harness compatibility, and immutable schema or toolset identity have independent compatibility rules.",
       "Incompatible public meanings require a new version and retained historical decoding; no broader compatibility window or deprecation period is promised unless an entry states one."
     ],
     "operational_limits": [
-      "Version one admits exactly one attempt per job and permits at most eight active attempts globally; accepted jobs with pending attempts wait for a slot, and an attempt waiting on its requester continues to hold its slot. Nucleus provides no automatic retry, workflow graph, project registry, capability directory, or requester-domain interpretation. Run-owned durable maintenance holds block new admission and report actual job drain without deciding requester workflow recovery.",
+      "Version one admits one attempt per job and at most eight active attempts globally. Accepted jobs wait for a slot; attempts waiting on requesters keep their slots. Nucleus has no automatic retry, workflow graph, project registry, capability directory, or requester-domain interpretation. Durable maintenance holds belong to run IDs. They block new admission and report job drain; requesters decide workflow recovery.",
       "Account reads may overlap active jobs. The managed authentication broker keeps one authoritative private Codex home, serializes staged atomic refresh through worker cancellation, and excludes attended login until active job and account sessions have ended; authentication remains forward-only across program, database, and service rollback.",
       "Live acceptance remains bounded by installed service, credential, adapter, account, local storage, and exact harness readiness, none of which provider installation proves."
     ]

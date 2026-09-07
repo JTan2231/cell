@@ -9,9 +9,8 @@ Todo preserves distinct durable layers:
 - `dN`: proposed or accepted normative desired state; and
 - `nN`: immutable working note.
 
-Do not collapse those layers into a task planner, implementation workflow, or
-general project graph. Nucleus jobs are research provenance, not execution of
-the todo.
+Keep these layers separate. Do not add task planning, implementation workflows
+or a general project graph. Nucleus jobs perform research; they do not implement the todo.
 
 ## Ownership and shared execution
 
@@ -36,8 +35,8 @@ changes; historical registrations and decoders remain intact.
 1. Identify the owning layer and exact current contract in `todo/docs/cli.md`,
    `liaison.md`, `architecture.md`, `data-model.md`, or
    `system-installation.md`.
-2. Preserve model non-authority, explicit decision provenance, frozen bases,
-   stale checks, and historical immutability.
+2. Preserve explicit decisions and their provenance, frozen bases, stale checks
+   and immutable history. Models must not make authorization decisions.
 3. Make the smallest implementation and documentation change.
 4. Run:
 

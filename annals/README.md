@@ -16,14 +16,13 @@ bytes are accepted only for a request with an explicit `-` input path. Client
 construction has no effects; each call has the selected command's usual effects.
 The separate `annals-api` crate owns accepted-account exchange and usage views.
 
-Annals can also host a physically separate decisions library. Krisis
-idempotently hands one immutable decision account to that library; Annals owns
-the accepted bytes, ordinary inbox dispatch, interpretation, and a bounded
-read-only accepted-account feed. This producer boundary is additive and does
-not mix decision accounts into the primary conversation-export library.
-Schema version 5 records that physical separation as an immutable database
-kind, so configuration or direct path selection cannot turn a decisions
-library into a general source inlet.
+Annals can also host a physically separate decisions library. Krisis supplies
+immutable decision accounts through an idempotent handoff. Annals owns the
+accepted bytes, inbox dispatch, interpretation, and a bounded read-only
+accepted-account feed. Decision accounts do not enter the primary
+conversation-export library. Schema version 5 records the separation as an
+immutable database kind. Neither configuration nor direct path selection can
+make a decisions library accept general sources.
 The explicit macOS provisioner, shipped and hashed as
 `bin/annals-install provision-decisions` in each content release, creates or
 updates that private library and only its independent
@@ -93,15 +92,14 @@ annals --library ./annals.db roots
 annals --library ./annals.db lately
 ```
 
-`integrate` content-addresses the immutable work by its exact SHA-256 digest
-before model examination. It records a provisional, best-current
-reconciliation. Independently valid operations remain staged across correction
-calls, while plain-language source hints identify only the operations needing
-attention. Annals records the complete server-assembled request automatically
-when every operation works together. With `--apply`, a projected state
-transition is committed; if the projected corpus state is mechanically equal
-to the base, the reconciliation is stored with status `recorded` and the
-revision stays where it is.
+Before model examination, `integrate` retains the immutable work by its exact
+SHA-256 digest. It records a reconciliation of that work with the frozen corpus
+revision. Valid operations remain staged across correction calls. Source hints
+identify the operations that need attention. Annals automatically records the
+assembled request when all operations work together. With `--apply`, Annals
+commits a projected state transition. If the projected corpus state equals the
+base, Annals stores the reconciliation with status `recorded` and does not
+advance the revision.
 Optional free-form annotations are retained with the reconciliation. Their
 shape and text are contract-validated, but they have no corpus-validation or
 application semantics.
@@ -192,7 +190,7 @@ or `ANNALS_LIBRARY`, or select a TOML config with `--config` or
 
 The installed macOS `annals` frontend selects
 `$HOME/Library/Application Support/Annals/config.toml` when no explicit library
-or config selection is present. Consequently, commands such as `annals stats`,
+or config selection is present. Commands such as `annals stats`,
 `annals search`, `annals inbox status`, and the inbox control commands operate
 on the same user library and spool as the scheduled inbox worker. An explicit
 option or environment variable still selects a different target.
@@ -254,11 +252,9 @@ deployer.
 
 ## Scheduled macOS installation
 
-The macOS installation is deliberately user-owned. Deploy Nucleus and
-Clockwork first,
-import or establish authentication through Nucleus, and verify that its daemon
-is healthy. Then deploy Annals with the Nucleus executable, socket, and
-Clockwork frontend:
+The macOS installation belongs to the user. First, deploy Nucleus and Clockwork.
+Import or establish authentication through Nucleus and check daemon health.
+Then deploy Annals with the Nucleus executable, socket, and Clockwork frontend:
 
 ```sh
 ./ci.sh
@@ -275,20 +271,21 @@ Clockwork frontend:
 The deployer installs `~/.local/bin/annals` and
 `~/.local/bin/annals-usage`, versioned complete releases under
 `~/Library/Application Support/Annals/install`, and an immutable Clockwork
-definition selected by binding key `annals/inbox`. It selects the Nucleus socket in Annals'
-configuration and keeps the companion `usage.toml` beside the Annals library.
-Running the same command again is the unattended update process. It drains the
-worker between jobs, takes a consistent Annals library backup, switches both
-binaries through one release selector, updates both configurations within a
-rollback-protected transaction, verifies the result, and automatically
-restores the previous release and previously enabled binding if Clockwork
-cutover fails. Before any selected binding is disabled or replaced, its
-stored executable definition must match the complete current Annals release
-field for field; a same-key foreign selection is left untouched. A first
-handoff quiesces and removes the owned legacy `org.annals.inbox` LaunchAgent
-before selecting Clockwork, so both schedulers never intentionally coexist. Configuration,
-library data, logs, the operator pause state, and
-queued or archived sources are retained.
+definition selected by binding key `annals/inbox`. It sets the Nucleus socket
+in Annals' configuration and keeps `usage.toml` beside the Annals library.
+Run the same command for an unattended update. The update drains the worker
+between jobs, takes a consistent library backup, and switches both binaries
+through one release selector. It updates both configurations in a transaction
+that supports rollback, then verifies the result. If Clockwork cutover fails,
+it restores the previous release and previously enabled binding.
+
+Before Annals disables or replaces a binding, the stored executable definition
+must match the complete current release field for field. Annals leaves a
+foreign selection with the same key untouched. The first handoff stops and
+removes the owned legacy `org.annals.inbox` LaunchAgent before it selects
+Clockwork. The schedulers therefore never intentionally overlap. The update
+retains configuration, library data, logs, operator pause state, and queued or
+archived sources.
 For a later operator-requested rollback, `install/last-update.json` names a
 durable snapshot containing the prior configs and prior schedule record;
 restore that snapshot together with the `previous` release selector. If
@@ -302,10 +299,10 @@ authenticated dispatch preflight. Pause Annals, run `annals-usage login
 --device-auth` (which delegates to `nucleus auth login --device-auth`), verify
 with `annals-usage doctor`, and resume only the pause established for recovery.
 
-The current schema is version 5. Normal deployment additively migrates a
-version-3 or version-4 library to add bounded retry-event provenance when
-needed and the decision-account acceptance feed, and assigns the migrated
-database the immutable `general` kind, while retaining its contents and spool.
+The current schema is version 5. Normal deployment migrates a version-3 or
+version-4 library without replacing its contents or spool. The migration adds
+bounded retry-event provenance when needed and the decision-account acceptance
+feed. It assigns the database the immutable `general` kind.
 Fresh dedicated state is created with `annals init --kind decisions`. Version
 3 remains the intentional fresh-state boundary;
 the one-time cutover from an older schema adds `--fresh-state` to the command

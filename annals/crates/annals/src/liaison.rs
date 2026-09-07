@@ -296,14 +296,13 @@ fn close_incomplete_context(
 fn pointer_prompt(work: &str, base_revision: i64) -> String {
     format!(
         "You are the Annals liaison for the immutable work {work:?}, examining corpus revision \
-         {base_revision}.\n\nConstruct a provisional best-current reconciliation of the work with this \
+         {base_revision}.\n\nConstruct a reconciliation of the work with this \
          frozen corpus. Do not exclude material because it appears familiar, \
          minor, speculative, redundant, obvious, low-signal, or unlikely to be useful. Preserve \
          distinctions, qualifications, exceptions, examples, contradictions, relationships, and \
          reported states.\n\nChoose a coherent granularity relative \
-         to the work and current corpus. Do not assume a unique, objective, or final decomposition \
-         into atomic semantic units. Avoid mechanically creating one concept per sentence, but do \
-         not use estimated importance or novelty as an inclusion test.\n\nUse the Annals read tools \
+         to the work and current corpus. Group related source material into concepts while \
+         preserving distinctions. Include material regardless of estimated importance or novelty.\n\nUse the Annals read tools \
          to inspect the work and relevant corpus regions. Existing concepts are addressed by their \
          durable public IDs. The corpus is a directed acyclic graph: a parent is a broader scope, \
          several parents are symmetric, and there is no primary placement or sibling ordering. \
@@ -315,10 +314,10 @@ fn pointer_prompt(work: &str, base_revision: i64) -> String {
          a separate evidence link, subject to bounded fan-out; use filters when only a subset is \
          intended, and never provide source offsets. Work-read heading and quote anchors still must \
          resolve uniquely. Otherwise create or revise the corpus graph needed by your present interpretation. \
-         Treat the organization as provisional and revisable by later evidence.\n\nSubmit one reconciliation for this present interpretation with \
-         submit_reconciliation. Optional annotations are free-form observations with no confidence, \
-         review, validation, or application semantics; source information must still be expressed \
-         through grounded operations. Annals preserves independently valid operations if the initial \
+         Record the organization through concepts, relationships, and source quotations.\n\nSubmit one reconciliation for this present interpretation with \
+         submit_reconciliation. Optional annotations are retained as free-form observations alongside the reconciliation; \
+         corpus projection, validation and application use its operations and evidence. Source information \
+         must be expressed through those operations. Annals preserves independently valid operations if the initial \
          request needs correction. Revise only the operation IDs named by Annals, use \
          reconciliation_status when you need to recall staged content, and discard the draft only \
          when abandoning the complete request set. Continue until a submission or revision reports \
@@ -1456,8 +1455,8 @@ mod tests {
         let prompt = pointer_prompt("A retained paper", 7);
         assert!(prompt.contains("A retained paper"));
         assert!(prompt.contains("revision 7"));
-        assert!(prompt.contains("provisional best-current reconciliation"));
-        assert!(prompt.contains("provisional and revisable"));
+        assert!(prompt.contains("Construct a reconciliation"));
+        assert!(prompt.contains("Record the organization through concepts"));
         assert!(prompt.contains("durable public IDs"));
         assert!(prompt.contains("several parents are symmetric"));
         assert!(prompt.contains("submit_reconciliation"));
@@ -1689,7 +1688,7 @@ mod tests {
                 "parents": [],
                 "evidence": [{"quote": "Exact source language."}]
             }],
-            "annotations": ["This is the present interpretation at revision zero."]
+            "annotations": ["This reconciliation uses base revision zero."]
         });
         let recorded = Backend::call(&mut backend, Tool::SubmitReconciliation, request)
             .map_err(|error| format!("{}: {}", error.code(), error.message()))?;

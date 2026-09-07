@@ -48,8 +48,9 @@ From: Codex <codex@joeytan.dev>
 To:   j.tan2231@gmail.com
 ```
 
-The command requires a nonblank, whitespace-clean `RESEND_API_KEY` environment
-variable. Unless the caller supplies a key, one invocation creates one
+The command requires `RESEND_API_KEY` in the environment. Its value must be
+nonblank and whitespace-clean. Unless the caller supplies an
+idempotency key, each invocation creates one
 `email/<UUIDv7>` key. The selected key and request are frozen for at most three
 attempts. Transport errors, HTTP 429, and server errors are retried after two
 short bounded delays. Other Resend rejections fail immediately.
@@ -60,9 +61,9 @@ On acceptance, stdout is:
 Accepted <resend-message-id>
 ```
 
-and the process exits zero. Errors use the `email: ` prefix on stderr, omit the
-API key and response body, and exit nonzero. Acceptance is not proof of final
-Gmail delivery.
+The process then exits zero. On failure, Email exits nonzero and writes an
+error with the `email: ` prefix to stderr. Errors omit the API key and response
+body. Resend acceptance does not confirm Gmail delivery.
 
 ## Byte payloads on stdin
 
@@ -80,14 +81,15 @@ Standard input is one JSON object:
 ```
 
 `content` is standard base64 of the exact attachment bytes. Attachment order,
-filenames, subject and body are part of the idempotent payload. The example
-bytes only illustrate encoding; they are not a real resume. `--payload-stdin`
+filenames, subject, and body are part of the idempotent payload. The example
+bytes illustrate encoding and do not contain a real resume. `--payload-stdin`
 requires body `-` and conflicts with `--attach`. Unknown fields, malformed JSON,
-invalid base64 and unsafe filenames fail before any network request. The
-payload stays in memory and is not written to disk. The wrapper preserves
-stdin and its existing credential loading; no credential belongs in the JSON.
-This extension preserves the fixed addresses, bounded transport retries,
-acceptance output and requirement for applicable send authorization. Email
+invalid base64, and unsafe filenames fail before any network request.
+
+The payload stays in memory and is not written to disk. The wrapper preserves
+stdin and uses its existing credential loading. Do not include credentials in
+the JSON. This extension preserves the fixed addresses, bounded transport
+retries, acceptance output, and requirement for send authorization. Email
 retains no local attachment copy or send history after exit.
 
 The flag is additive in Email 0.5.1 under attachment contract 4. A caller that

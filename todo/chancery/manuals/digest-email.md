@@ -1,15 +1,15 @@
 # Preview or send the Todo daily attention digest
 
-The digest is a current, read-only projection over unresolved captured
-concerns and open canonical todos. It groups items by the attention they need:
+The digest reads unresolved concerns and open canonical todos. It groups them
+by the attention they need:
 
 - **Needs your decision** includes a routing proposal, situation choice, or
   desired-state design awaiting an explicit user decision.
 - **Needs follow-up** includes an unresolved concern without a pending routing
-  decision, or an open todo that needs assessment, reassessment, more evidence,
-  or desired-state design work.
-- **Other open todos** includes the remaining open todos. An accepted desired
-  state still leaves its todo open and does not claim implementation.
+  decision, or an open todo awaiting assessment, named assessment inputs,
+  reassessment after changed bases, or desired-state design work.
+- **Other open todos** includes the remaining open todos. Accepting a desired
+  state preserves the umbrella's open lifecycle.
 
 Empty sections are omitted. Every item leads with a current title or
 plain-language label and a plain-language status. A secondary `Reference:`
@@ -43,8 +43,8 @@ any external action.
 /Users/joey/.local/bin/todo email send
 ```
 
-Send requires `[email]` configuration and a nonblank, whitespace-clean
-`RESEND_API_KEY` in the process environment. It freezes one body and
+Send requires `[email]` configuration and `RESEND_API_KEY` in the process
+environment. The key must be nonblank with no surrounding whitespace. Send freezes one body and
 `todo-email/<UUIDv7>` idempotency key for up to three attempts on transport,
 rate-limit, or server failures. It sends immediately; Todo has no delivery
 database or background retry queue.
@@ -77,7 +77,7 @@ Preview does not authorize send. The API key must remain outside Todo
 configuration and the LaunchAgent plist; the installed runner reads it from
 the user's environment setup and launches Todo with a scrubbed environment.
 
-Sending or previewing the digest does not invoke Nucleus. On scheduled failure, inspect
+Neither send nor preview invokes Nucleus. If a scheduled send fails, inspect
 `~/Library/Logs/Todo/email.stderr.log` and Resend's records. A user LaunchAgent
 cannot guarantee a 09:00 submission while the Mac is powered off or the user
 is logged out.

@@ -7,10 +7,10 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Cast owns retained company and job identities, extracted discovery evidence, collection coverage and freshness, local query configuration, conservative request-budget accounting, source retry state, consistent JSON exports, and its program packaging."
+      "Cast owns company and job identities, extracted fields, source metadata, and collection outcomes and timestamps. It also owns query configuration, local budgets, source retry state, consistent JSON exports and program packaging."
     ],
     "not_authoritative_for": [
-      "Publishers and providers own external facts and coverage. Downstream products own personal selection, CRM cases, application packets, application submission and email delivery."
+      "Downstream products own personal selection, CRM cases, application packets, application submission and email delivery."
     ],
     "inventory": {
       "covers": [
@@ -22,7 +22,7 @@
       ]
     },
     "shared_access_and_trust": [
-      "Cast is a current-user local CLI. Its database belongs to the selected private state directory; provider credentials arrive through the process environment. The installed wrapper sources ~/.zshrc and passes only the two provider keys and its documented environment."
+      "Cast is a local CLI for the current user. It stores its database in the selected private state directory and reads provider credentials from the environment. The installed wrapper sources ~/.zshrc and passes only the two provider keys and the documented environment variables."
     ],
     "shared_privacy_and_retention": [
       "Retained state and exports include private search interests, company/job evidence, extracted posting text, source locators and collection history. Ordinary response bodies are transient. API keys do not belong in config, database, command arguments or logs."
@@ -31,7 +31,7 @@
       "Cast provider release, capability contract version, database schema and export schema are distinct. Installed bundles change only through a matching product release."
     ],
     "operational_limits": [
-      "Cast uses ordinary Rust and HTTP with explicit local budgets. It invokes no model, Nucleus, CRM steward, computer-use tool or email sender and installs no schedule. External catalog and job coverage is incomplete."
+      "Cast uses ordinary Rust and HTTP with explicit local budgets. It invokes no model, Nucleus, CRM steward, computer-use tool or email sender and installs no schedule."
     ]
   },
   "entries": [

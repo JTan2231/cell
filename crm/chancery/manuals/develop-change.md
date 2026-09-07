@@ -27,8 +27,8 @@ idempotency, or recovery change, read:
 /Users/joey/.local/bin/chancery resolve nucleus.requester.integrate
 ```
 
-Preserve reported readiness, unspecified, unsupported, and dependency outcomes
-rather than filling gaps from schemas or implementation code.
+Preserve reported readiness, unspecified, unsupported and dependency outcomes.
+Do not fill contract gaps from schemas or implementation code.
 
 ## Fixed version-0.3 boundary
 
@@ -58,8 +58,8 @@ Every immutable case revision has exactly:
 A non-null advisory is conspicuous on case list/search/show/history, tell
 acknowledgment, and update list/show/wait/resume/retry, and never blocks an
 otherwise valid operation. Human output uses the fixed non-blocking attention
-banner; JSON carries attention plus text. Stages and advisories are CRM state,
-not external truth, contact permission, or guaranteed outcomes.
+banner; JSON carries attention plus text. Stages and advisories are fields of
+the stored case revision.
 
 The hidden worker uses Codex model `gpt-5.6-terra`, medium reasoning, a
 1,200-second timeout, and immutable toolset `crm/case-steward/1`, with frozen
@@ -78,8 +78,8 @@ runtime failure cannot reverse the committed revision.
    packaging, or another product's contract.
 3. Implement with isolated synthetic fixtures. Never use a real CRM database,
    person, job-search note, prompt, or tool result in tests or artifacts.
-4. Keep database and Nucleus identities bidirectionally correlated. Persist the
-   exact request before ambiguous admission and make managed-tool delivery
+4. Retain database and Nucleus identities so each can be traced to the other.
+   Store the exact request before submission and make managed-tool delivery
    replay-safe. Recheck job identity and nonterminality before each domain tool
    dispatch.
 5. Preserve the base guard and one transaction for revision, tool receipt,
@@ -111,9 +111,9 @@ upgrade. A downgrade requires a quiescent database restore, preserving newer
 state and excluding stale schema-two WAL/SHM from the restored database.
 
 Ambiguous admission reuses only a byte-identical typed request with the same
-job ID. Resume preserves recoverable work. A genuinely new retry requires
-positive terminal evidence, no committed revision, a predecessor link, and a
-new job identity. Domain success survives later runtime failure.
+job ID. Resume preserves recoverable work. A new retry requires a recorded
+terminal outcome, no committed revision, a predecessor link and a new job
+identity. Domain success survives later runtime failure.
 
 ## Packaging and contract checks
 

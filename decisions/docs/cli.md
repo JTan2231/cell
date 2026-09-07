@@ -11,8 +11,8 @@ Annals delivery and doctor use three explicit values:
 - `--annals-config` / `KRISIS_ANNALS_CONFIG`
 - `--annals-library-id` / `KRISIS_ANNALS_LIBRARY_ID`
 
-The binary and config paths must be absolute. The expected library ID is exactly
-32 lowercase hexadecimal characters. Partial configuration is rejected.
+Supply all three values. The binary and config paths must be absolute. The
+library ID must contain exactly 32 lowercase hexadecimal characters.
 
 ## Deployment maintenance
 
@@ -60,11 +60,11 @@ the next Unix second.
 `krisis observe ingest` reads one Codex Stop-hook JSON object from standard
 input and durably stores only its session/turn correlation.
 
-`krisis observe process` requires the complete Annals configuration and first
-verifies `decision-feed watermark`. It then performs at most one unit of work:
-deliver the oldest target-bound pending account, otherwise resume or classify
-one target-bound observation. A changed config path or library identity fails
-closed. It is safe to invoke repeatedly and processing remains serial.
+`krisis observe process` requires all Annals configuration values and first
+verifies `decision-feed watermark`. It then delivers the oldest pending account
+bound to that target. If none is pending, it resumes or classifies one
+observation bound to the target. A changed config path or library identity
+causes failure. Repeated calls are safe; processing remains serial.
 
 `krisis observe status [--date YYYY-MM-DD]` reports baseline, queue states,
 failure summaries, and pending/accepted Annals account counts without invoking
@@ -104,6 +104,7 @@ does not open or initialize the database.
 
 `krisis observe status [--date YYYY-MM-DD] [--limit N]` retains global/window
 counts and displays at most 20 failure IDs and codes by default. JSON includes
-`failures_has_more`; increase a positive `--limit` for more. Failure counts are
+`failures_has_more`. To see more failures, set `--limit` to a larger positive
+integer. Failure counts are
 never truncated. The Rust client exposes `status_limit` for explicit selection.
 This does not change observer admission, retries or the legacy event stream.

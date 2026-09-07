@@ -1,9 +1,8 @@
 # Report declared Cell membership
 
-Usher reports whether a product has declared the essentials for recognition
-within Cell: its identity and owned root, its Semantics participation, and its
-Chancery presence. It is a Rust CLI with no database, daemon, network, model,
-service invocation, or retained completion state.
+Usher reads a product's declared identity, owned root, Semantics participation,
+and Chancery presence to report its Cell membership. It is a Rust CLI with no
+database, daemon, network or model calls, service invocation, or retained state.
 
 From a Cell checkout:
 
@@ -40,17 +39,15 @@ two providers; Krisis retains the `decisions` descriptor ID and declared aliases
    versions, and readable nonempty indexed manuals. Provider IDs cannot have
    multiple claimants. Usher supports provider schemas 1 through 3.
 
-These are **introduction projections**, not a replacement Chancery validator.
-Usher does not validate the remaining contract fields, promise scope, dependency
-graph, release alignment, or completeness of the published capabilities.
-Chancery's existing gates retain full bundle validation. Usher checks no
-Nucleus, Clockwork, or other relationship. Those affairs belong to the
-concerned systems.
+These **introduction projections** select provider identity, indexed entry
+identity and version, and indexed manual presence. Chancery validates bundle
+declarations and dependencies; product packaging checks release alignment.
+Usher applies the membership, path, read-limit, and collision rules described
+here.
 
-A marker declares participation; it does not prove registration, an existing
-vocabulary, or current vocabulary quality. A source bundle declares Chancery
-presence; it does not prove installation or runtime readiness. No installed
-service, database, environment-selected registry, or historical record is read.
+A marker records the declared Semantics project ID. A source bundle records
+the declared Chancery provider and indexed introductions. Recognition reads
+these repository files directly, using the rules above.
 
 ## Results and failures
 
@@ -62,9 +59,9 @@ identities, relative evidence paths, and explicit issues:
 - `invalid`: malformed or conflicting evidence, an unsafe path, or an invalid identity.
 - `unassessed`: unreadable evidence, an unsupported format, or a read limit.
 
-Combined findings retain every issue; the displayed status prioritizes
-unassessed, invalid, missing, then declared. A product is complete only when all
-three findings are declared. Selection by `--product` occurs after global
+Combined findings retain every issue. The displayed status prioritizes
+`unassessed`, `invalid`, `missing`, then `declared`. All three findings must be
+`declared` for a complete product. Selection by `--product` occurs after global
 collision checks. Unknown or ambiguous selections are errors.
 
 `report` exits 0 when it can produce the report, including incomplete products.
@@ -83,11 +80,15 @@ never executed. All evidence paths must be relative and remain under their
 owning roots without symlinks. Files must be regular UTF-8, at most 1 MiB;
 inventories are limited to 256 descriptors and each provider to 512 entries.
 
-The same unchanged checkout and Usher version produce the same report. Reads
-are not an atomic filesystem snapshot; callers keep the checkout stable. Root
+The same unchanged checkout and Usher version produce the same report. Keep the
+checkout stable during reads; they are not an atomic filesystem snapshot. Root
 CI additionally rejects results if its source candidate changes during the run.
-Fix the source declaration and rerun; Usher has no reset or repair command.
+Fix the source declaration and rerun. Usher has no reset or repair command.
 
 ## Output selection
 
-check returns schema-two counts and every incomplete identity/Semantics/Chancery finding, omitting successful evidence. report retains the complete schema-one product report. Exit 1 still means an incomplete check; fatal command/inventory errors exit 2. Both views describe repository declarations, never runtime readiness or actual registration.
+`check` uses schema 2. It returns counts and each incomplete identity, Semantics,
+or Chancery finding, and omits successful evidence. `report` returns the full
+product report in schema 1. An incomplete check exits 1. Fatal command or
+inventory errors exit 2. Both outputs describe repository declarations; they do
+not test runtime readiness or registration.

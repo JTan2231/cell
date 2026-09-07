@@ -68,10 +68,8 @@ one action:
   changing its identity;
 - `unify`: preserve several historical identities while selecting one
   canonical umbrella;
-- `dismiss`: retain the concern but record that positive evidence leaves no
-  actionable outcome;
-- `defer`: retain the unresolved choice because evidence or user direction is
-  insufficient.
+- `dismiss`: retain the concern and its supplied basis for retaining no action;
+- `defer`: retain the missing routing input or unresolved user choice.
 
 Research never performs the action. `routing show rN` displays the proposed
 action, exact frozen bases, rationale, evidence, limitations, and decision
@@ -91,16 +89,16 @@ record in the proposal's frozen basis changed, or any referenced umbrella is
 no longer open and canonical, acceptance fails with a stale basis conflict.
 There is no `--force`; reassess the concern instead.
 
-`todo new` is exactly the convenience boundary “capture, then research a
-pending routing proposal.” The concern commit happens before model submission
+`todo new` captures a concern, then researches a pending routing proposal.
+The concern commit happens before model submission
 and survives model or Nucleus failure. `new` never accepts the resulting `rN`,
 creates or revises a `tN`, or treats final model prose as authorization.
 
 ## Todo umbrella reads and lifecycle
 
 A `tN` is the stable identity for one enduring actionable concern. Its current
-title and direction are projections of the latest direction revision, not
-mutable columns that erase history. `show tN` reports the current revision,
+title and direction come from the latest direction revision; earlier revisions
+remain stored. `show tN` reports the current revision,
 attached concerns, notes, latest assessment and its stale reasons, proposed
 and accepted design state, and any supersession relationship.
 
@@ -109,10 +107,8 @@ includes completed or superseded history where applicable. Results use a
 stable deterministic order and are bounded by `--limit`. Search matches the
 umbrella read model rather than exposing revision tables as separate results.
 
-`note add` appends one immutable `nN` working note. `done` and `reopen` remain
-idempotent status transitions on the umbrella. They do not imply that a
-particular implementation plan ran, and no new execution or closure-evidence
-model is introduced by this version.
+`note add` appends one immutable `nN` working note. `done` and `reopen` are
+idempotent status transitions on the umbrella.
 
 ## Situation assessment
 
@@ -121,13 +117,13 @@ observed state. It freezes the current direction revision, attached-concern
 set, note cursor, accepted design (if any), and the evidence sources made
 available to the assessor. The result is one immutable, dated `aN` with:
 
-- subject identity and stable identity references;
-- grounded current-state, constraint, dependency, and gap findings;
+- subject identity and stable input references;
+- findings, constraints, dependencies and open items from the selected material;
 - jurisdiction findings that assign each system or actor a concrete
   `owner`, `participant`, or `consumer` responsibility, with exactly one owner
   per jurisdiction;
 - a mapping from every direction boundary to those findings;
-- material user choices, evidence gaps, or jurisdiction conflicts; and
+- unresolved user choices, missing assessment inputs or jurisdiction conflicts;
 - a disposition of `ready`, `needs_user_choice`, or `inconclusive`.
 
 The source catalog gives each concrete document a stable `s-...` ID. Reads
@@ -185,13 +181,13 @@ explicit non-goals. They do not contain implementation tasks, file edits,
 commands, sequencing, estimates, deployment actions, or implementation
 execution records.
 
-The first design submission is all-or-nothing. Todo validates its complete
-jurisdiction map, clauses, choices, and references before allocating `dN`; an
-invalid submission leaves no partial draft. Once an open draft exists, later
+The first design submission is atomic. Todo validates the jurisdiction map,
+clauses, choices and references before it allocates `dN`. An invalid submission
+leaves no partial draft. Once an open draft exists, later
 revisions name stable operations and use an expected draft version.
 
-No active choices is necessary but not sufficient for `ready`. The draft must
-also contain active clauses of all nine kinds (`ownership`, `boundary`,
+For `ready`, a draft must have no active choices. It must also contain active
+clauses of all nine kinds (`ownership`, `boundary`,
 `state`, `interface`, `lifecycle`, `failure`, `compatibility`, `acceptance`,
 and `non_goal`), and its active operations must collectively cite the
 direction body, every structured direction boundary, and every active
@@ -253,11 +249,9 @@ then performs the version-2 migration transactionally. It never overwrites a
 backup. When the database is already version 2, the command is a no-op and
 does not create, inspect, or otherwise touch the backup path.
 
-Migration preserves every `tN`, status transition, source, and working note.
+Migration preserves every `tN`, status transition, source and working note.
 It derives an initial direction revision and captured concern from each legacy
-todo, and retains the old researched note as a `legacy_unreviewed` design. That
-design is not accepted, and migration does not infer cross-todo identity,
-relationships, assessment facts, or completion evidence.
+todo, and stores the original researched note as a `legacy_unreviewed` design.
 
 The installed deployer supplies a transaction-local backup path, runs
 migration before its smoke test, and restores both the prior database and
@@ -301,13 +295,12 @@ other commands do not.
 
 ## Database and configuration selection
 
-The development binary requires one database target. `--config PATH` selects a
-config before `TODO_CONFIG`; then `--database PATH` selects a database before
-`TODO_DATABASE`, which selects one before the configured database. A database
-option may override the database from a simultaneously selected config while
-retaining that config's liaison settings. A relative database path in a
-configuration file is resolved relative to that file. Todo never silently
-creates `./todo.db`.
+The development binary requires one database target. For configuration,
+`--config PATH` takes precedence over `TODO_CONFIG`. For the database,
+`--database PATH` takes precedence over `TODO_DATABASE`, then the configured
+database. A database override preserves the selected config's liaison settings.
+Relative database paths in configuration resolve from that file. Todo never
+silently creates `./todo.db`.
 
 A minimal strict configuration is:
 
@@ -366,8 +359,8 @@ todo --json maintenance ready RUN_ID
 todo --json maintenance release RUN_ID
 ```
 
-Normal database/config selection applies. The selected database parent owns
-`deployment-maintenance/`; databases sharing a parent share the same gate.
+Normal database and config selection applies. The selected database's parent
+directory contains `deployment-maintenance/`. Databases in that directory share the gate.
 New research and ordinary mutations, including scheduled email send, retain a
 shared admission guard through completion. Holds prevent new admissions
 before input is retained, and do not interrupt already admitted research or
@@ -393,10 +386,10 @@ It creates no concern, routing proposal, or model job and sends no email.
 Ordinary Todo success remains its committed domain result after a later
 runtime failure.
 
-`maintenance ready RUN_ID` requires the sole drained hold and proves that this
-binary can read the actual configured database: current version, every required
-table/index/trigger definition, SQLite integrity, and foreign keys. This is the
-production storage compatibility proof after an interrupted migration.
+`maintenance ready RUN_ID` requires the sole drained hold. It checks whether
+this binary can read the configured database: version, required table, index
+and trigger definitions, SQLite integrity, and foreign keys. Use it to check
+storage compatibility after an interrupted migration.
 
 Deployment admission resolves the configured database to its canonical path and
 uses that database parent for `deployment-maintenance/`. Symbolic aliases share

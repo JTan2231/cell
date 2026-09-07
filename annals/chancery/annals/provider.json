@@ -11,8 +11,7 @@
       "The selected Annals library and canonical reducer are authoritative for those records and domain transitions."
     ],
     "not_authoritative_for": [
-      "Source material remains evidence rather than objective truth, and an Annals reconciliation is a provisional evidence-grounded interpretation rather than a uniquely correct decomposition.",
-      "Nucleus owns shared model execution, authentication, job and attempt state, and raw protocol output; Clockwork owns scheduled activation definitions, bindings, and execution history but not Annals inbox outcomes; Annals Usage owns only its separately versioned consumption projection."
+      "Nucleus owns shared model execution, authentication, job and attempt state, and raw protocol output. Clockwork owns scheduled activation definitions, bindings, and execution history. Annals owns inbox outcomes. Annals Usage owns its separately versioned consumption projection."
     ],
     "inventory": {
       "covers": [
@@ -25,7 +24,7 @@
     },
     "shared_access_and_trust": [
       "Annals interfaces are local-user surfaces over an explicitly resolved library and, where applicable, configured spool and Nucleus connection.",
-      "Read access does not authorize mutation, application, retry, deployment, destructive replacement, or disclosure; each entry declares its narrower effects and authority."
+      "Read access does not authorize mutation, application, retry, deployment, destructive replacement, or disclosure. Each entry declares its effects and authority."
     ],
     "shared_privacy_and_retention": [
       "Annals libraries, spools, backups, logs, and Nucleus requests may retain complete private source material, exact evidence, and model context.",

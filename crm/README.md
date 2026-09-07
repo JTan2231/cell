@@ -1,17 +1,17 @@
 # CRM
 
-CRM is a private local case library for employment-oriented relationship work.
-It also stores reusable career vignettes, statements, and other profile material
-as directly editable Markdown entries in the same database. It keeps the raw information a caller supplies, an immutable revision history,
-and exact execution correlations behind each AI-assisted update. Supported
+CRM is a private local library for employment-related cases. It also stores
+reusable career vignettes, statements and other profile material as editable
+Markdown entries. For each AI-assisted case update, it retains the caller's
+input, immutable revisions and exact execution correlations. Supported
 reads expose the case lineage and CRM/Nucleus identities; version 0.3 does not
 provide a raw-delivery or mailbox-receipt export command.
 
-CRM does not fetch sources, send messages, or certify that an external event
-happened. A `warranted`, `connected`, or `helped` stage is durable CRM state
-grounded in the retained case history; it is not permission, independent
-verification, or a substitute for the cited source. Any revision advisory is
-shown prominently and never acts as a gate.
+CRM stores case narratives, stages and supporting material. A `warranted`,
+`connected`, or `helped` stage is part of the stored case history. Source
+references remain attached to their deliveries. Any revision advisory is
+shown prominently and never acts as a gate. CRM performs local library reads
+and writes; the caller handles messages and other contact actions.
 
 ## Build and check
 
@@ -51,8 +51,7 @@ locally without AI. Existing schema-one databases require an explicit
 `crm migrate --backup PATH` before this release can use them.
 
 Start with [the documentation index](docs/README.md). The
-[CRM provider bundle](chancery/provider.json) is the release-matched index of
-supported outward promises. After choosing an exact entry, use
-`chancery resolve crm.library.explore` (or the chosen ID) for its normalized
-boundary and explicit gaps. `release.sh` publishes a Git release and is not a
-build or installation command.
+[CRM provider bundle](chancery/provider.json) lists the supported contracts for
+this release. After choosing an entry, use `chancery resolve crm.library.explore`
+(or the chosen ID) to read its boundary and explicit gaps. `release.sh` publishes
+a Git release; use separate commands to build or install.

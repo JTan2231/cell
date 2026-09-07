@@ -4,12 +4,12 @@ Read the root and Usher AGENTS.md instructions and Usher README. Query the
 maintained Semantics vocabulary through its public repository interface;
 until `usher` is registered, report that gap and use Cell for shared terms.
 
-Usher recognizes declared membership using only identity, Semantics
-participation, and Chancery presence. Read the exact evidence contract before
-changing the literal descriptor reader, identity mapping, participation marker,
-or provider introduction projection. Keep other relationships, vocabulary
-quality, full Chancery validation, installation and runtime readiness outside
-the report. Never source descriptors, invoke services, query databases, or add
+Usher recognizes declared membership from identity, Semantics participation,
+and Chancery presence. Read the evidence contract before changing the literal
+descriptor reader, identity mapping, participation marker, or provider
+introduction projection. Keep recognition limited to those
+repository files. Chancery owns full bundle validation. Never source
+descriptors, invoke services, query databases, or add
 an agent call to recognition.
 
 Use synthetic fixtures for missing declarations, malformed or unreadable
@@ -29,7 +29,7 @@ compatibility, tamper rejection, stale selection, and foreign ownership refusal.
 The product gate builds and stages both executables and validates the matching
 provider bundle.
 
-Run `./ci.sh` and inspect the candidate's report. Usher owns its independent
+Run `./ci.sh` and inspect the candidate's report. Usher owns its
 release and product installation policy. A release script commits, tags, and
 pushes; deployment changes installed selectors. Neither is a side effect of
 development. No other system operation is authorized by this contract.

@@ -18,11 +18,10 @@ Chancery installs as a user-owned CLI with no service or scheduled process:
     previous -> releases/RELEASE_ID
 ```
 
-Chancery deployment preserves provider selectors owned by other products. It
-publishes only `providers/chancery`, which follows Chancery's own current
-release. Each other provider installer owns exactly its selector. A broken
-selector is a provider failure, not a reason to make valid providers
-unavailable.
+Chancery publishes only `providers/chancery`, which follows its current release.
+It preserves other products' provider selectors. Each provider installer owns
+its selector. A broken selector affects that provider; valid providers remain
+available.
 
 Deploy with:
 
@@ -31,9 +30,10 @@ Deploy with:
   --bundle /Users/joey/rust/cell/chancery/provider
 ```
 
-The deployer stages a content-addressed release, switches `current`,
-`previous`, and the command, installer, and provider selectors with rollback,
-then verifies the installed command. No Nucleus health or authentication is required.
+The deployer stages a content-addressed release. It switches `current`,
+`previous`, and the command, installer, and provider selectors with rollback
+support. It then verifies the installed command. Nucleus health and
+authentication are not required.
 
 ## Product-owned publication
 
@@ -57,13 +57,12 @@ upgrade includes the bundle bytes in its release identity, advances `current`,
 and leaves the selector following that current release. A failed upgrade
 restores both product behavior and documentation coherently.
 
-Provider schema 3 adds provider promise scope and normalized entry
-declarations. Deploy a Chancery reader that accepts schema 3 before publishing
-the first schema-3 product bundle. That reader continues to accept schemas 1
-and 2, so providers can migrate independently; their exact-ID dossiers show
-missing scope and normalized facets as explicit gaps during the mixed-schema
-period. Only after the reader and required provider releases are installed may
-global instructions depend on `chancery resolve`.
+Provider schema 3 adds promise scope and normalized entry declarations. Before
+publishing schema-3 bundles, deploy a Chancery reader that accepts them. This
+reader also accepts schemas 1 and 2, so providers can migrate independently.
+During migration, exact-ID dossiers report missing scope and facets as gaps.
+Install the reader and required provider releases before global instructions
+depend on `chancery resolve`.
 
 Chancery owns `providers/chancery`. Its deployment refuses to take over an
 existing selector with a foreign target and never removes other providers.
@@ -85,11 +84,9 @@ Recovery changes Chancery's program and documentation only.
 /Users/joey/.local/bin/chancery resolve ENTRY_ID
 ```
 
-`doctor` checks provider structure and cross-provider contract compatibility,
-not live product readiness. `resolve` assembles the installed provider scope,
-normalized claims, dependency closure, and exact basis—or reports their
-explicit gaps—while continuing to report readiness separately as unchecked.
-Repair an invalid provider by
-validating its source bundle, running that product's deployment tests, and
-redeploying the owning product. Do not edit a content-addressed installed
-release or repoint a selector to a source checkout.
+`doctor` checks provider structure and cross-provider contract compatibility.
+`resolve` assembles provider scope, normalized claims, dependency closure, and
+exact source references. It reports gaps and leaves live readiness unchecked.
+To repair an invalid provider, validate its source bundle, run its deployment
+tests, and redeploy the product. Do not edit an installed content-addressed
+release or point a selector at a source checkout.

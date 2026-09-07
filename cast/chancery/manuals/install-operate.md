@@ -19,8 +19,8 @@ checks candidate/provider versions and restores prior selectors after a failed
 switch. It does not require a Chancery runtime, create the discovery database,
 run searches or install a scheduler.
 
-`--expected-current absent|releases/HASH` adds an optimistic selection guard;
-`--home PATH` supports an explicitly selected operator home. Deployment keeps
+Use `--expected-current absent|releases/HASH` to require the expected current
+selection. Use `--home PATH` to select the operator home. Deployment keeps
 prior releases available. To recover one, resolve `install/previous` to its
 canonical owned release directory, then run a trusted tested
 `cast-install recover --release ABSOLUTE_RELEASE_DIRECTORY`. The installer
@@ -46,16 +46,17 @@ cast source add https://job-boards.greenhouse.io/EMPLOYER
 cast source disable SOURCE_ID
 ```
 
-State defaults to `~/.local/share/cast`; select another directory through
-`--state-dir PATH` or `CAST_STATE_DIR`. The database is `cast.sqlite3`; the directory is private mode 0700 and the
-database is mode 0600. Config is persisted in database metadata.
+State defaults to `~/.local/share/cast`. To select another directory, use
+`--state-dir PATH` or `CAST_STATE_DIR`. The database is `cast.sqlite3`.
+The directory uses mode 0700; the database uses mode 0600. Cast stores
+configuration in database metadata.
 The installed wrapper preserves an explicit `CAST_STATE_DIR`, and the CLI flag
 can select state independently of environment. Installation state and discovery
 state are different recovery units.
 
 The Rust payload reads `THEIRSTACK_API_KEY` and `BRAVE_SEARCH_API_KEY` from its
-environment. The installed zsh frontend suppresses trace/output while sourcing
-`~/.zshrc`, extracts those two keys and launches with a scrubbed environment:
+environment. The installed zsh frontend suppresses trace and output while it
+sources `~/.zshrc`. It extracts those keys and starts the payload with only:
 `HOME`, fixed system `PATH`, optional `CAST_STATE_DIR`, and the two provider
 keys. The frontend preserves arguments and standard input. Help/version reads
 bypass shell configuration. No key appears in an argument, saved config,
@@ -63,8 +64,8 @@ provider contract or command output.
 
 `.zshrc` is user-owned executable shell configuration, so its own commands and
 side effects remain the user's responsibility. Local readiness can check
-configuration and credential presence; it is not proof of current provider
-balance, authentication or successful discovery.
+configuration and credential presence. Provider balance, authentication and
+collection results require provider interactions.
 
 ## Collection policy
 
@@ -72,7 +73,8 @@ The default configuration includes TheirStack, Brave and Hacker News queries.
 It retains intervals, terms and adapter parameters alongside request caps.
 Inspect the current complete config before replacing it. Defaults allow 200
 total and 60 daily TheirStack credits, 1,000 monthly and 30 daily Brave requests,
-500 HTTP requests per run, 3,000 daily HTTP requests, 600 seconds per run and 50 verifications per run. The total TheirStack allowance belongs
+500 HTTP requests per run, 3,000 daily HTTP requests, 600 seconds per run and
+50 careers collections per run. The total TheirStack allowance belongs
 to this Cast state; it is not a provider monthly balance.
 
 A forced run still respects budgets. Configuration changes do not reset
@@ -81,13 +83,11 @@ schedules, billing and downstream workflows remain separate operations.
 
 `source add URL --company-id COMPANY_ID` associates an ordinary website source
 with an existing company. For a supported ATS URL, omit `--company-id`: Cast
-assigns the canonical provider/tenant identity as its owner and rejects an
-explicit company override. A website linking to a board does not establish
-that it is the board's employer. Without `--company-id`, an ordinary website URL
-creates or reuses a company candidate from its hostname.
-`source disable SOURCE_ID` retains the source
-and its evidence while removing it from ordinary collection. It does not
-delete jobs, dismiss them or imply the employer stopped hiring.
+assigns its canonical provider/tenant company identity and rejects an explicit
+company override. Without `--company-id`, an ordinary website URL creates or
+reuses a company candidate from its hostname.
+`source disable SOURCE_ID` removes the source from ordinary collection while
+retaining the source, its jobs and its collected data.
 
 ## Recovery
 
@@ -106,18 +106,17 @@ cast status --json
 ```
 
 The repair holds the mutation lock and commits one transaction. It assigns ATS
-sources and their jobs to the provider/tenant owner, changes unproven older
-JSON-LD jobs to `unknown`, marks those sources for identity review, and restores
-unverified search candidates' names to their domains when appropriate. It also
-quarantines JSON-LD on shared recruiting hosts even when an older parser marked
-it owned, and clears misleading shared-host company domains, website URLs and
-their identity aliases. JSON
-output reports `moved_sources`, `moved_jobs`, `quarantined_jobs` and
-`renamed_candidates`, plus `cleared_shared_identities`. Source and job IDs, paid request accounting, run history,
-query coverage and cursors remain intact; changed jobs/companies gain revisions.
-It makes no network request. Repeating it after repair leaves material records
-unchanged, while each invocation advances the snapshot revision. Re-export after
-repair and perform a new bounded collection to refresh uncertain observations.
+sources and their jobs to the provider/tenant company, sets older JSON-LD jobs
+to `unknown`, marks their sources for the next collection, and restores affected
+search-candidate names to their domains. It also applies current adapter rules
+to shared recruiting hosts and clears their company domains, website URLs and
+identity aliases. JSON output reports `moved_sources`, `moved_jobs`,
+`quarantined_jobs`, `renamed_candidates` and `cleared_shared_identities`.
+Source and job IDs, paid request accounting, run history, query coverage and
+cursors remain intact. Changed jobs and companies gain revisions.
+The repair uses stored records. Repeating it leaves material records unchanged,
+while each invocation advances the snapshot revision. A later collection uses
+the updated associations.
 
 Before state recovery, stop all callers using the selected state directory and
 make a private consistent SQLite backup, including live sidecars when relevant.

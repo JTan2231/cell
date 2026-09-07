@@ -5,7 +5,7 @@
   "mode": "operate",
   "support": "supported",
   "title": "Install and maintain Platter",
-  "summary": "Install and maintain Platter, import schema-one runtime files into its complete SQLite library, and preserve packet and delivery history under coordinated maintenance.",
+  "summary": "Install and maintain Platter under coordinated maintenance. Import schema-one runtime files into SQLite while preserving packet and delivery history.",
   "use_when": [
     "The user wants Platter installed, replaced, inspected or maintained.",
     "The caller needs prerequisite readiness, admission holds, draining or supported installed-release verification."
@@ -14,7 +14,7 @@
     "The requested outcome is packet preparation, a test email, job discovery, profile editing or scheduled delivery.",
     "The caller expects arbitrary direct rollback, a schema reset or implicit installation of dependencies."
   ],
-  "outcome": "A verified coherent Platter command and provider installation, supported maintenance state or read-only readiness result, with retained domain history preserved.",
+  "outcome": "A verified installation with matching Platter command and provider, supported maintenance state, or a local readiness result. Stored domain history remains intact.",
   "interfaces": [
     {
       "label": "Plan coordinated installation",
@@ -78,7 +78,7 @@
   ],
   "success": [
     "Installation succeeds only after exact candidate selection, state and local prerequisites are verified while held and run-owned maintenance is released.",
-    "Inspection and doctor report their observed boundary; no report establishes employer freshness, future model success, Resend acceptance or inbox receipt."
+    "Inspection and doctor report the installation, configuration and dependency readiness checks they perform."
   ],
   "failure_and_recovery": [
     "Foreign selectors, altered releases, ambiguous state roots, unsupported schemas, missing legacy content and conflicting holds stop the operation.",
@@ -164,8 +164,8 @@
         "statement": "Maintenance checks live admissions and every page of matching nonterminal Nucleus jobs for both requester identities. Doctor validates existing local state, Cast/CRM/Email executable identity, Email attachment flag, renderer tools and compatible Nucleus health without exercising domain operations. It does not prove initialized Cast or CRM libraries or read their domain contents."
       },
       {
-        "status": "unsupported",
-        "statement": "Installation checks do not prove remote provider account balances, source freshness, complete resume rendering, future runtime capacity or final inbox delivery."
+        "status": "declared",
+        "statement": "Installation inspection reports selected releases and stored configuration; strict doctor checks the documented runtime dependencies."
       }
     ],
     "access": [
@@ -197,7 +197,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Installation uses cell-install-v2, private schema two, preparation contract three and installation contract two. Schema one needs the explicit import. Older binaries cannot read the new schema; a prior executable alone is not a safe rollback."
+        "statement": "Installation uses cell-install-v2, private schema two, preparation contract three and installation contract two. Schema one requires the explicit import. Older binaries cannot read schema two. Recovery requires a compatible candidate or a complete predecessor backup with its matching binary."
       }
     ],
     "reliances": [

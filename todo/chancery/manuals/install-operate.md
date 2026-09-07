@@ -22,11 +22,10 @@ callers and choose an absolute backup path that does not exist:
 
 Todo creates and retains a complete SQLite backup before the version-two
 transaction. Failure leaves the original usable. Against a current database,
-migrate is a true no-op and does not touch the supplied backup path.
+migrate is a no-op and does not touch the supplied backup path.
 
-Migration preserves identities, lifecycle, sources, notes, and historical
-direction. It does not infer cross-todo relationships, assessment facts,
-accepted design, implementation, or closure evidence.
+Migration preserves identities, lifecycle, sources, notes and historical
+direction in their documented destination records.
 
 ## Deploy or update on macOS
 
@@ -54,10 +53,10 @@ transactions, while Todo owns admission, database migration and schedule
 recovery. The predecessor format-1 release remains verifiable. The installed
 frontend is Rust; the static zsh email runner retains its credential contract.
 
-The deployer stages a content-addressed release, records whether the email
-LaunchAgent is loaded, quiesces it, creates a private transaction directory,
-runs the candidate's backup-bearing migration, switches the release selector,
-validates the installed CLI, then installs the final plist. Updates reload the
+The deployer stages a content-addressed release, records the email LaunchAgent's
+loaded state and stops it. It creates a private transaction directory, runs
+the candidate's migration with a backup, then switches the release selector.
+It validates the installed CLI before installing the final plist. Updates reload the
 schedule only if it was loaded before the update; unloaded schedules remain
 unloaded, and launchd enable/disable overrides are never changed. A fresh install
 loads its schedule only if no existing plist or disabled override records an
@@ -107,8 +106,8 @@ todo --json maintenance ready RUN_ID
 todo --json maintenance release RUN_ID
 ```
 
-Normal database/config selection applies. The selected database parent owns
-`deployment-maintenance/`; databases sharing a parent share the same gate.
+Normal database and config selection applies. The selected database's parent
+directory contains `deployment-maintenance/`. Databases in that directory share the gate.
 New research and ordinary mutations, including scheduled email send, retain a
 shared admission guard through completion. Holds prevent new admissions
 before input is retained, and do not interrupt already admitted research or
@@ -134,10 +133,10 @@ It creates no concern, routing proposal, or model job and sends no email.
 Ordinary Todo success remains its committed domain result after a later
 runtime failure.
 
-`maintenance ready RUN_ID` requires the sole drained hold and proves that this
-binary can read the actual configured database: current version, every required
-table/index/trigger definition, SQLite integrity, and foreign keys. This is the
-production storage compatibility proof after an interrupted migration.
+`maintenance ready RUN_ID` requires the sole drained hold. It checks whether
+this binary can read the configured database: version, required table, index
+and trigger definitions, SQLite integrity, and foreign keys. Use it to check
+storage compatibility after an interrupted migration.
 
 Deployment admission resolves the configured database to its canonical path and
 uses that database parent for `deployment-maintenance/`. Symbolic aliases share

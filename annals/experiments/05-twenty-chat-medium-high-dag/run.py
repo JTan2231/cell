@@ -332,8 +332,8 @@ def setup(manifest_path: Path, run_dir: Path, annals: Path) -> None:
             "projections apply immediately; equal projections remain recorded without a commit.",
             "Later works therefore compare autonomous preset-specific corpus trajectories, "
             "not isolated independent trials.",
-            "Copied-forward context in works 16 through 18 is interactional reuse, not "
-            "independent corroboration.",
+            "Works 16 through 18 include copied-forward context from earlier "
+            "conversations.",
             "The first arm alternates by work to reduce order-correlated runtime effects.",
         ],
     }

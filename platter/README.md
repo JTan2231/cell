@@ -65,3 +65,4 @@ See the [operating contract](chancery/manuals/packet-prepare.md),
 [data model](docs/data-model.md), and
 [installation and migration contract](chancery/manuals/install-operate.md).
 This source change does not install commands or migrate the live library.
+Until a separate semantic repository is registered, Platter uses Cell terminology.

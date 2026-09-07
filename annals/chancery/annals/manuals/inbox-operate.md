@@ -60,7 +60,7 @@ storage probe failure also leaves the job unattempted but exits nonzero.
 
 ## Storage recovery authority and scope
 
-Low storage is a safe stop, not cleanup authority. Preserve the queued work and
+Low storage stops dispatch without authorizing cleanup. Preserve queued work and
 report the affected paths and available bytes. Neither the Annals liaison nor
 an operating model or agent may, as storage remediation, delete, truncate,
 rotate, prune, move, compress, overwrite, or otherwise clear user data, or
@@ -144,4 +144,9 @@ domain recovery.
 
 ## Output selection
 
-Inbox operational reports retain queue, gate, storage, domain and failure facts. Retry start/continue and event status return identity, window, state, counts, remaining work and last halt. retry status EVENT --details includes the full original-to-child mapping. Event listing defaults to 20 with has_more and positive --limit for more; retry preview retains the complete proposed selection.
+Inbox reports retain queue, gate, storage, domain, and failure facts. Retry
+start/continue and event status return identity, window, state, counts,
+remaining work, and last halt. `retry status EVENT --details` includes the full
+original-to-child mapping. Event listing defaults to 20 and reports `has_more`.
+Increase positive `--limit` to read more. Retry preview retains the complete
+proposed selection.

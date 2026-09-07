@@ -1,9 +1,9 @@
 # System installation and scheduled inbox
 
-Annals can run as a scheduled, one-shot service around one configured library.
-Each service activation registers settled inbox files, drains the
-durable priority lane before the normal lane when dispatch is enabled, and
-exits when no runnable work remains. Sequence remains FIFO within each lane. A
+Annals can run as a scheduled one-shot service for one configured library.
+Each activation registers settled inbox files. If dispatch is enabled, it
+drains the durable priority lane before the normal lane. It exits when no
+runnable work remains. Each lane keeps FIFO sequence order. A
 paused activation still registers settled files and leaves them queued. Annals
 is not a resident daemon, contains no internal scheduler, and does not require
 a separate database server.
@@ -15,7 +15,7 @@ Annals library or corpus.
 
 ## Operational model
 
-The Annals library is the corpus source of truth. The spool is a visible
+The Annals library retains corpus state and history. The spool is a visible
 delivery queue with a small Annals-owned ordering index:
 
 ```text
@@ -168,7 +168,7 @@ running, or halted. Use an explicit `inbox run` for immediate ordinary work or
 wait for the next Clockwork or systemd activation. Both commands are idempotent
 when no retry event blocks resume, and an operator pause survives deployment.
 
-Bounded retry is an attended, quiescent operation:
+Bounded retry requires an operator and an idle worker.
 
 Only failures that reached retained-work identity are eligible. Correct and
 redeliver a pre-retention source failure as a new job because its archive has
@@ -558,11 +558,10 @@ Annals records that job as failed rather than silently changing the label.
 
 ## macOS user Clockwork binding
 
-The macOS installation belongs entirely to the logged-in user. This is the
-important maintenance boundary: Annals, Nucleus, Clockwork, their definitions,
-and all release files have exactly that user's
-authority. Updating the complete application therefore needs no stored
-administrator credential, privileged helper, or passwordless `sudo` rule.
+The macOS installation belongs to the logged-in user. Annals, Nucleus,
+Clockwork, their definitions, and all release files operate with that user's
+authority. Updates need no stored administrator credential, privileged helper,
+or passwordless `sudo` rule.
 
 The layout is:
 
@@ -619,13 +618,12 @@ delivery, and corpus success; Clockwork does not ingest Annals log bodies.
 
 ### Provision the dedicated decisions library
 
-Krisis decision accounts use a second physical Annals library, never the
-primary paths above. Annals owns the supported Rust per-user provisioner and its exact configuration
-and native Clockwork definition rendering. The ordinary primary-library
-deployer does not activate this second library. The Cell deployment adapter
-explicitly composes primary deployment with this product-owned provisioner;
-an independent operator can invoke it after an Annals content release has
-been installed and verified:
+Krisis decision accounts use a second physical Annals library. They never use
+the primary paths above. Annals owns the Rust per-user provisioner and its
+configuration and native Clockwork definition rendering. The primary-library
+deployer does not activate this library. The Cell deployment adapter calls
+both primary deployment and the decisions provisioner. An operator can invoke
+the provisioner after installing and verifying an Annals content release:
 
 ```sh
 release="$HOME/Library/Application Support/Annals/install/releases/<64-hex-release-id>"
@@ -643,18 +641,20 @@ registration or switching of only Clockwork key
 `annals/decisions-inbox`. The provisioner never inspects, disables, or selects
 `annals/inbox`, and it neither deploys a release nor changes Nucleus.
 
-The provisioner shares the primary deployer's product-wide
-`install/.update-lock`. It validates the complete release and any selected
-prior decisions definition, stages a fresh database and fresh spool off-path,
-binds their persistent library identity, publishes them maintenance-gated,
-registers the candidate definition inactive, disables and drains an enabled
-owned prior binding, backs up and migrates existing state, proves feed and
-inbox readiness, and switches the exact digest. Foreign, changed, or ambiguous
-same-key state stops untouched. Pre-commit failure restores an enabled or
-disabled-selected prior without transiently enabling prior-disabled work and
-restores captured database and config bytes. If exact scheduler restoration
-cannot be proved, it keeps decisions maintenance, disables only an attributable
-candidate, and retains the recovery transaction.
+The provisioner shares the primary deployer's `install/.update-lock`. It
+validates the complete release and selected prior decisions definition. It
+stages a fresh database and spool outside the live paths, binds their library
+identity, and publishes them under maintenance. It registers the candidate
+definition inactive, then disables and drains an enabled owned prior binding.
+It backs up and migrates existing state, checks feed and inbox readiness, and
+switches the exact digest.
+
+Foreign, changed, or ambiguous same-key state stops the operation untouched.
+A pre-commit failure restores the prior selection, its enabled state, and the
+captured database and configuration bytes. A previously disabled binding stays
+disabled throughout recovery. If exact scheduler restoration cannot be proved,
+the provisioner retains maintenance and the recovery transaction. It disables
+only a candidate it can attribute to the operation.
 
 Before it opens or migrates existing decisions state, it requires the config,
 database and SQLite sidecars, spool identity and control files, and maintenance
@@ -721,8 +721,8 @@ owned maintenance receipts, failed-update restoration, and tampered release
 refusal. Attended migration has its own exact-handoff fixtures. No fixture
 registers or switches live services.
 
-The underlying per-user launchd projection is available only while the user is logged in. It resumes at
-the next login after a logout or restart. A service that must run at the login
+The per-user launchd projection is available only while the user is logged in.
+It resumes at the next login after a logout or restart. A service that must run at the login
 window needs a system LaunchDaemon and cannot also be fully maintained by an
 unprivileged user.
 
@@ -772,10 +772,9 @@ annals inbox resume
 On Linux, run the same sequence as the service account and set
 `ANNALS_USAGE_CONFIG=/etc/annals/usage.toml` for `annals-usage`, as in the
 installation commands above. A failed inbox account preflight does not consume
-a job attempt: it exits before dispatch, leaving the envelope queued with no
-delivery record. This makes credential loss programmatically containable, while
-the attended device login remains the recovery step when Codex requires user
-authorization.
+a job attempt. It exits before dispatch and leaves the envelope queued with no
+delivery record. When Codex requires user authorization, recover through an
+attended device login.
 
 If the credential outage was discovered only after a release had already
 terminalized a stretch of jobs, keep the inbox paused after authentication
@@ -1086,9 +1085,9 @@ reported locations, then wait for the next scheduled activation or run
 `annals inbox run` explicitly. If the report is `storage_probe_failed`, correct
 the path or permission failure; do not bypass the check by editing spool state.
 
-Storage remediation is a user decision, not authority granted to Annals, its
-liaison, or another model or agent. They may report the affected paths and
-available bytes, preserve the queued work, and wait for direction. They must
+The user decides how to restore storage capacity. Annals, its liaison, and
+other models or agents can report affected paths and available bytes, preserve
+queued work, and wait for direction. They must
 not, as storage remediation, delete, truncate, rotate, prune, move, compress,
 overwrite, or otherwise clear library, spool, archive, backup, log, Nucleus, or
 unrelated host data, or lower or disable `minimum_available_bytes`, without the
@@ -1120,9 +1119,9 @@ envelope, and creates a distinct linked child for each member. `retry status`
 pairs each original failure with its child outcome, so the audit shows what was
 and was not recovered.
 
-An authenticated account preflight failure is earlier than job processing and
-has different effects: no envelope is claimed, no attempt is recorded, and no
-source delivery starts. The activation exits nonzero with the next job still
+An authenticated account preflight failure occurs before job processing.
+Annals claims no envelope, records no attempt, and starts no source delivery.
+The activation exits nonzero with the next job still
 queued. Follow the [attended reauthentication](#attended-reauthentication)
 sequence; do not move or repair the queued envelope.
 

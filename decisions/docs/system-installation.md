@@ -50,7 +50,7 @@ krisis-install install \
   --annals-library-id 0123456789abcdef0123456789abcdef
 ```
 
-The library ID must be exactly lowercase 32-hex. Krisis passes the explicit
+The library ID must contain exactly 32 lowercase hexadecimal characters. Krisis passes the explicit
 config to Annals; it never chooses a library by fallback or `--library`.
 
 ## Prepare and final cutover
@@ -66,12 +66,12 @@ semantic activation prerequisites. Krisis does not infer that proof from a
 running Clockwork process. Only then repeat the exact command with
 `--final-cutover`.
 
-Final cutover validates every current selector, selected Clockwork definition,
-target-bound observer ownership receipt, and legacy plist before mutation. It
-disables only proven-owned enabled
-schedules, suspends the old hook command for its timeout, proves SQLite
-quiescence, and saves the database and sidecars. It runs the exact prepared payload through schema 4 and doctor in a scrubbed
-environment before publishing the candidate command and providers.
+Before mutation, final cutover validates every current selector, selected
+Clockwork definition, observer ownership receipt bound to the target, and legacy
+plist. It disables enabled schedules only after verifying ownership. It then
+suspends the old hook command for its timeout, verifies SQLite is idle, and saves
+the database and sidecars. In a scrubbed environment, it runs the prepared
+payload through schema 4 migration and doctor before publishing the command and providers.
 
 Doctor uses the same explicitly selected Codex executable as the observer and
 checks Conversations, exact Nucleus capabilities and requester contract, and:

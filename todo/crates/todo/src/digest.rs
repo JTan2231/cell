@@ -206,7 +206,7 @@ fn classify_todo(
                 todo,
                 None,
                 &[design],
-                "Legacy research has not been reviewed under the current model.",
+                "Legacy research is retained as an unreviewed design.",
             ));
         }
         return Ok(todo_item(
@@ -224,7 +224,7 @@ fn classify_todo(
             todo,
             Some(assessment),
             &[],
-            "The situation changed; a new assessment is needed.",
+            "The assessment inputs changed; a new assessment is needed.",
         ));
     }
 
@@ -241,7 +241,7 @@ fn classify_todo(
             todo,
             Some(assessment),
             &[],
-            "More evidence is needed before the situation can be settled.",
+            "The assessment records unresolved items for this task.",
         )),
         "ready" => classify_ready_todo(todo, assessment, designs, assessment_was_returned),
         other => Err(AppError::database(
@@ -280,7 +280,7 @@ fn classify_ready_todo(
             todo,
             Some(assessment),
             &[],
-            "Design work found that more situation research is needed.",
+            "Design work requested additional assessment inputs.",
         ));
     }
 
@@ -326,7 +326,7 @@ fn classify_ready_todo(
         }
         "legacy_unreviewed" => (
             Section::Followup,
-            "Legacy research has not been reviewed under the current model.",
+            "Legacy research is retained as an unreviewed design.",
         ),
         other => {
             return Err(AppError::database(
@@ -429,7 +429,7 @@ mod tests {
     }
 
     #[test]
-    fn authorized_defer_remains_a_factually_labeled_followup() -> TestResult {
+    fn authorized_defer_remains_a_lifecycle_labeled_followup() -> TestResult {
         let (_directory, mut connection) = database()?;
         let concern = insert_pending_concern(&connection, "private deferred concern")?;
         insert_routing(&connection, concern, "deferred", "private defer rationale")?;
@@ -528,7 +528,7 @@ mod tests {
             .ok_or("returned todo missing")?;
         assert_eq!(
             returned.message,
-            "Design work found that more situation research is needed."
+            "Design work requested additional assessment inputs."
         );
         let stale = digest
             .followups
@@ -537,7 +537,7 @@ mod tests {
             .ok_or("stale todo missing")?;
         assert_eq!(
             stale.message,
-            "The situation changed; a new assessment is needed."
+            "The assessment inputs changed; a new assessment is needed."
         );
         assert!(!format!("{digest:?}").contains("private changed state"));
         Ok(())
@@ -583,7 +583,7 @@ mod tests {
             ),
             (
                 "inconclusive",
-                "More evidence is needed before the situation can be settled.",
+                "The assessment records unresolved items for this task.",
                 false,
             ),
         ];
@@ -656,7 +656,7 @@ mod tests {
         let digest = load(&mut connection)?;
         assert_eq!(
             digest.followups[0].message,
-            "Legacy research has not been reviewed under the current model."
+            "Legacy research is retained as an unreviewed design."
         );
         Ok(())
     }

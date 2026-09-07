@@ -72,7 +72,7 @@
       {"status": "unsupported", "statement": "This is not a manual one-work integration path, direct receipt editor, unbounded retry mechanism, or authorization for storage cleanup."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "Registration and enqueue require a configured private general Annals library and spool; decision-config operation requires a decisions library; dispatch additionally requires the matching immutable role, available configured reserve, a readable probe, and compatible authenticated Nucleus readiness."},
+      {"status": "declared", "statement": "Registration and enqueue require a configured private general Annals library and spool. Decision-config operation requires a decisions library. Dispatch also requires the matching immutable role, configured storage reserve, a readable storage probe, and compatible authenticated Nucleus readiness."},
       {"status": "declared", "statement": "Retry start requires an exact inclusive failed-delivery interval, paused quiescence, no processing job, no unfinished retry event, and no deployment maintenance."},
       {"status": "declared", "statement": "Interruption names one exact processing job, and prioritize or deprioritize names one queued ordinary job."}
     ],
@@ -83,7 +83,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Inbox operational reports retain queue, gate, storage, domain and failure facts. Retry start/continue and event status return identity, window, state, counts, remaining work and last halt. retry status EVENT --details includes the full original-to-child mapping. Event listing defaults to 20 with has_more and positive --limit for more; retry preview retains the complete proposed selection."
+        "statement": "Inbox reports retain queue, gate, storage, domain, and failure facts. Retry start/continue and event status return identity, window, state, counts, remaining work, and last halt. retry status EVENT --details includes the full original-to-child mapping. Event listing defaults to 20 and reports has_more. Increase positive --limit to read more. Retry preview retains the complete proposed selection."
       }
     ],
     "data_semantics": [
@@ -93,7 +93,7 @@
       {"status": "declared", "statement": "A retry event preserves original failed jobs and deliveries and creates fresh linked child jobs; it does not give an original job another attempt."}
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Job ID identifies one durable spool item, source-delivery ID identifies its Annals processing occasion, retry-event ID identifies frozen recovery membership, and a child job remains distinct from its original."},
+      {"status": "declared", "statement": "Job ID identifies one durable spool item. Source-delivery ID identifies its Annals processing occasion. Retry-event ID identifies frozen recovery membership. A child job remains distinct from its original."},
       {"status": "declared", "statement": "Queue sequence is immutable and monotonic, attempts are counted from zero to at most one per job, and storage gates compare available bytes with configured reserve bytes on both filesystems."},
       {"status": "declared", "statement": "Retry interval order is ascending failed-delivery completion time with delivery identity as the deterministic tie-break described by Annals."}
     ],
@@ -109,7 +109,7 @@
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "Each job moves from a complete queued envelope to at most one processing attempt and one terminal archive; terminal jobs never return to queued."},
       {"status": "declared", "statement": "A known item-local failure archives that item and ordinary draining may continue, while unexpected model or runtime failure archives the current job and ends the activation nonzero."},
-      {"status": "declared", "statement": "Pause prevents the next claim after active work finishes but permits registration; maintenance separately blocks spool mutation and resume clears only pause."},
+      {"status": "declared", "statement": "Pause prevents the next claim after active work finishes but permits registration. Maintenance separately blocks spool mutation. Resume clears only pause."},
       {"status": "declared", "statement": "A halted retry continues only its unattempted children and never retries a failed child; original failed history remains unchanged."}
     ],
     "operational_limits": [

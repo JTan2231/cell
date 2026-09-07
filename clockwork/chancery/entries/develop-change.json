@@ -5,7 +5,7 @@
   "mode": "develop",
   "support": "supported",
   "title": "Change Clockwork software and contracts",
-  "summary": "Modify Clockwork's strict definition boundary, binding lifecycle, direct supervision, storage, CLI, packaging, tests, documentation, or public contracts without absorbing product-domain scheduling authority.",
+  "summary": "Change Clockwork definitions, bindings, supervision, storage, CLI, packaging, tests, or documentation. Keep product-domain scheduling authority with each product.",
   "use_when": [
     "Clockwork code, schema, manifest, CLI or JSON behavior, generated plist, process supervision, packaging, tests, documentation, release workflow, or Chancery bundle is being changed."
   ],
@@ -14,7 +14,7 @@
     "Release publication, deployment, Semantics registration or seed, or a product binding change has not been separately authorized.",
     "The proposed feature is an agent runner, arbitrary command surface, workflow, retry engine, secret store, output capture system, or product-domain scheduler without a new boundary review."
   ],
-  "outcome": "A minimal tested Clockwork change whose executable contract, immutable definitions, binding cutover, supervision, persistence, packaging, and published promises remain synchronized and product authority remains outside Clockwork.",
+  "outcome": "A minimal tested change with consistent executable, definition, binding, supervision, persistence, packaging, and published contracts. Each product retains its domain authority.",
   "effects": [
     "Modifies Clockwork source, tests, documentation, packaging, release tooling, or product-owned Chancery contracts.",
     "Manifest, storage, cutover, or process-supervision changes can affect existing product integrations and private persistent state.",

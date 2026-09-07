@@ -1,13 +1,14 @@
 # Architecture
 
-Chancery is a stateless reader over installed provider bundles. It answers
-“what capabilities and operations are installed?” and “what does each one
-actually promise?” After an exact entry is selected, it also assembles the
-provider scope, normalized boundary claims, transitive documentation-contract
-closure, exact source basis, and unresolved gaps into one deterministic
-dossier. A product release publishes documentation; Chancery lists it; the
-interactive agent compares the user's request with the catalog and separately
-decides whether and how to invoke a represented interface.
+Chancery reads installed provider bundles without retaining state. It lists
+installed capabilities and operations and presents their contracts. For one
+selected entry, it assembles provider scope, normalized claims, transitive
+dependency contracts, exact source references, and unresolved gaps into a
+deterministic dossier.
+
+A product release publishes documentation. Chancery lists it. The interactive
+agent compares the user's request with the catalog, then decides whether and
+how to invoke the documented interface.
 
 ```text
 product release -- publishes --> provider bundle -- read by --> Chancery
@@ -35,36 +36,35 @@ index is disposable and derived; provider bundles remain authoritative.
 | Cross-capability choreography | The installed operation manual; each participant keeps its own domain authority |
 | Product implementation and release | Owning product |
 
-This prevents Chancery from becoming a second copy of product truth. It also
-prevents a syntactically valid document from being mistaken for runtime proof.
+Chancery presents the product-owned contracts. Runtime readiness is reported
+through the represented product's operating interface.
 
 ## One-way intersystem dependencies
 
-Product source owns a provider bundle. Product CI may invoke `chancery
-validate` as a development check. Product packaging copies the unchanged
-bundle into the product release and atomically owns one selector under the
-Chancery registry. None of those actions adds a Chancery call to the product's
-runtime path.
+Product source owns its provider bundle. Product CI can invoke `chancery
+validate`. Packaging copies the unchanged bundle into the release and publishes
+one atomic selector in the Chancery registry. These actions add no runtime
+dependency on Chancery.
 
 At query time Chancery reads provider files only. It does not call Nucleus,
 Todo, Annals, Weaver, Codex, a skill, a browser, or computer use. After reading
 a contract, the interactive caller may use an interface named by the contract;
 that is a separate action with its own authorization and failure semantics.
 
-Dependencies declared between entries are documentation-contract
-dependencies. For example, a requester capability may require the installed
-contract for the Nucleus execution capability at version 1. Chancery checks
-that the declared contract is present, in range, and itself dependency-
-compatible. Unavailability propagates through the installed contract graph and
-is displayed on the entry; the entry remains visible in the complete catalog.
-Chancery still does not check that the Nucleus daemon is healthy.
+Dependencies between entries identify required documentation contracts. For
+example, a requester can require version 1 of the Nucleus execution contract.
+Each dependency requires an installed contract with a permitted version. That
+contract must also have compatible dependencies.
 
-Substantive reliance is separate. A schema-3 entry may explicitly state that
-its outcome relies on another system's data, control, authority, readiness, or
-an external source and may bind that reliance to a versioned dependency
-contract. Chancery never converts the existing dependency graph into runtime
-or data lineage. A declared reliance without a dedicated contract remains a
-visible gap rather than inheriting meaning from a broad dependency.
+If a dependency is unavailable, Chancery marks dependent entries as unavailable.
+Those entries remain in the catalog. Chancery reads contract files for these
+checks. It does not test the Nucleus daemon.
+
+Substantive reliance is separate. A schema-3 entry can state that its outcome
+relies on another system's data, control, authority, readiness, or an external
+source. It can bind that reliance to a versioned dependency contract. Chancery
+does not infer runtime or data lineage from the dependency graph. A declared
+reliance without a dedicated contract remains a visible gap.
 
 ## Provider scope and normalized promises
 
@@ -81,14 +81,15 @@ applicability, outcome, interface, effects, authority, success, failure and
 recovery, privacy, dependencies, and exclusions. An optional schema-3
 declaration normalizes the facets that otherwise tend to remain prose:
 consumers, preconditions, inputs, outputs, data semantics, identity and units,
-completeness and freshness, access, lifecycle and consistency, operational
-limits, compatibility and evolution, and substantive reliances.
+selected-record coverage and observation times, access, lifecycle and
+consistency, operational limits, compatibility and evolution, and substantive
+reliances. The `completeness_and_freshness` facet names the selected records or
+operation whose scope and timestamps it describes.
 
-Every normalized claim is explicitly `declared`, `unsupported`, `unspecified`,
-or `not_applicable`. Omission is resolver-generated `undeclared`, never a
-positive inference. This allows one facet to preserve mixed facts—for example,
-transactional visibility may be declared while a wall-clock visibility bound
-is unspecified.
+Each normalized claim has `declared`, `unsupported`, `unspecified`, or
+`not_applicable` status. The resolver marks omissions as `undeclared`. A facet
+can contain mixed claims. For example, it can declare transactional visibility
+while leaving its wall-clock bound unspecified.
 
 Schemas 1 and 2 remain readable during rollout. They have no provider scope or
 normalized declarations, so exact-ID resolution returns their complete
@@ -126,21 +127,20 @@ audiences distinct:
 - `operate` is installation, readiness, administration, or recovery; and
 - `develop` changes an implementation or integration.
 
-An operation describes adaptive choreography across capabilities or volatile
-interactive surfaces. It records semantic steps, checkpoints, authorization,
-adaptation, recovery, and stop conditions. It is deliberately not an
-executable workflow. A computer-use operation can therefore remain useful as
-an interface changes, while exact stable CLI invocations remain in the owning
-capability contracts.
+An operation describes how to coordinate capabilities or changing interactive
+interfaces. It records semantic steps, checkpoints, authorization, adaptation,
+recovery, and stop conditions without executing a workflow. A computer-use
+operation can remain useful as an interface changes. Stable CLI invocations
+remain in the owning capability contracts.
 
 ## Failure isolation
 
-The registry has no database or daemon. Every invocation fixes each provider
-selector to one canonical bundle, validates explicitly indexed files, derives
-an in-memory view and any requested dossier, prints the result, and exits. An
-invalid provider is reported and excluded as a unit. Duplicate global entry IDs are not resolved by
-filesystem order. Missing or incompatible dependencies affect the referenced
-entries without corrupting their provider bundles.
+The registry has no database or daemon. Each invocation resolves provider
+selectors to canonical bundles, validates indexed files, and creates its view
+and requested dossier in memory. It then prints the result and exits. Invalid
+providers are reported and excluded as units. Filesystem order does not resolve
+duplicate global entry IDs. Missing or incompatible dependencies affect the
+referenced entries without corrupting their bundles.
 
 Chancery installation preserves product-owned provider selectors. Each product
 release includes its bundle in its own content hash; its installer advances or

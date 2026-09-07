@@ -7,7 +7,7 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Conversations owns its short-lived local App Server adapter, filters, typed normalized user-and-assistant corpus, stable references, completed-turn activity projection, completeness failures, and installation behavior published by this provider.",
+      "Conversations owns the local App Server adapter, filters, normalized user and assistant corpus, stable references, and completed-turn activity. It also owns incomplete-read failures and the installation behavior documented here.",
       "Each invocation owns and terminates only its private App Server process group and emits no retained Conversations database or index."
     ],
     "not_authoritative_for": [
@@ -36,7 +36,7 @@
       "Protocol or public-schema changes require compatible typed behavior, synthetic fixture proof, and documented fallback or explicit failure before an older contract is retired."
     ],
     "operational_limits": [
-      "Every operation is bounded to one short-lived App Server launch; full-text search and export are proportional to selected histories and no persistent index or network service is offered.",
+      "Each operation uses one short-lived App Server launch. Full-text search and export costs grow with the selected histories. Conversations has no persistent index or network service.",
       "No App Server availability, wall-clock latency, corpus-size, machine-wide liveness, or perpetual compatibility service-level objective is promised across this provider."
     ]
   },

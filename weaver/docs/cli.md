@@ -9,7 +9,7 @@ Global selectors apply to every command:
 --state-dir PATH  WEAVER_STATE_DIR  default: ~/Library/Application Support/Weaver
 ```
 
-Repository and state paths must resolve to the command's required safe shape;
+Repository and state paths must meet the command's path requirements.
 Weaver rejects unsafe narrative names, symlinked authority paths, missing
 authored inputs, and malformed generated-output trees.
 
@@ -39,14 +39,13 @@ current workflow record.
 
 ### `submit`
 
-Validate the project, atomically record one new current workflow, wake the
-detached worker, print its run ID, and exit. Nucleus readiness is a worker
-preflight before any prior output is cleared. An active current workflow or
-maintenance gate rejects admission. A terminal current workflow may be
-replaced; that replacement is intentional current state, not history loss from
-a hidden archive. `submit` does not send source files itself; the detached
-worker reads and freezes each stage's selected inputs immediately before it
-creates that stage's exact Nucleus request.
+Validate the project, atomically record one new current workflow, start the
+detached worker, print its run ID, and exit. The worker checks Nucleus readiness
+before it clears prior output. An active current workflow or maintenance gate
+prevents admission. A new submission can replace a terminal current workflow;
+Weaver keeps no workflow archive. The detached worker reads and freezes each
+stage's selected inputs immediately before it creates the Nucleus request.
+`submit` itself does not send source files.
 
 ### `status [RUN_ID]`
 
@@ -55,11 +54,10 @@ state. With `RUN_ID`, fail if the current record has since been replaced.
 
 ### `wait [RUN_ID]`
 
-Observe until the selected current workflow becomes terminal, then report its
-result. For a nonterminal run it immediately starts a detached worker and does
-so again every 30 seconds until terminal, making `wait` the explicit recovery
-entry point after a process or machine restart. With `RUN_ID`, fail rather than
-following a replacement.
+Wait for the selected current workflow to become terminal, then report its
+result. For a nonterminal run, start a detached worker immediately and every
+30 seconds until the run ends. Use `wait` to recover after a process or machine
+restart. With `RUN_ID`, fail if a new run replaced the selected run.
 
 ### `cancel [RUN_ID]`
 
@@ -72,8 +70,8 @@ stage output.
 ### `check NARRATIVE`
 
 Mechanically validate all five persisted stage files, story anchors and links,
-the exact review verdict, and final-output consistency. It invokes no model,
-does not establish freshness, and does not repeat editorial review.
+the exact review verdict, and final-output consistency. Rebuild to run the
+editorial stages again.
 
 ### `worker run`
 
@@ -109,13 +107,12 @@ weaver maintenance ready RUN_ID
 weaver maintenance release RUN_ID
 ```
 
-The selected private state root owns `deployment-maintenance/`. These durable
+The selected private state root contains `deployment-maintenance/`. Its durable
 run-owned holds are independent of legacy operator `.maintenance`. They block
-new submit admission, while the already admitted current workflow may finish
-or recover through wait, worker run, or maintenance drain using its exact
-persisted requests. Recovery owns a shared activity guard. Legacy operator
-maintenance continues to block claims; deployment never clears it to force
-progress.
+new submissions. The admitted current workflow can finish or recover through
+`wait`, `worker run`, or `maintenance drain` with its exact persisted requests.
+Recovery holds a shared activity guard. Legacy operator maintenance continues
+to block claims. Deployment never clears it to force progress.
 
 These commands emit JSON with `protocol_version: 1`, `holds`, `drained`,
 `nonterminal_run`, `worker_active`, and `operator_maintenance`. Drain requires

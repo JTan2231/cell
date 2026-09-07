@@ -1,12 +1,12 @@
 # Research liaisons
 
-Todo uses three narrowly different model stages. They share a runtime but not
-a prompt, toolset, or authority:
+Todo uses three model stages. They share a runtime. Each has its own prompt,
+toolset and authority:
 
 | Stage | Input question | Durable result | Cannot do |
 | --- | --- | --- | --- |
 | Concern routing | Which durable concern identity, if any, matches `cN`? | one pending `rN` | apply or authorize routing |
-| Situation assessment | What is true now, and who owns each state or decision? | one immutable `aN` | revise direction or choose design |
+| Situation assessment | What do the selected inputs describe, and which responsibilities do they assign? | one immutable `aN` | revise direction or choose design |
 | Design reconciliation | What desired state satisfies the direction against `aN`? | one `dN` draft or durable assessment return | plan, implement, or accept design |
 
 Model text is never authority. The validated Todo tool result is the domain
@@ -20,11 +20,9 @@ is terminal. Nucleus owns job state, raw protocol, Codex compatibility,
 authentication, and its single-use launch context. Todo owns every domain
 record created through a validated tool call.
 
-The version-2 stages have no shell, filesystem workspace, inherited process
-environment, or web search. They can inspect only the frozen material exposed
-through their stage tools or prompt. This makes the evidence boundary a
-durable part of the record rather than whatever happened to be visible to a
-broad research process.
+Version-2 stages have no shell, filesystem workspace, inherited process
+environment or web search. They can inspect only frozen material supplied
+through their tools or prompt. The record identifies this material.
 
 Source, candidate, and evidence text is untrusted input, not runtime
 instruction. Every material routing, assessment, and design claim carries
@@ -51,12 +49,12 @@ The routing prompt requires one of:
 - revise one `tN` whose enduring identity remains the same;
 - unify exactly two `tN` identities, naming the survivor and a complete
   reconciled direction;
-- dismiss when positive evidence establishes that no action remains; or
-- defer when the evidence or a material user choice is insufficient.
+- dismiss with a supplied basis for retaining no action; or
+- defer with the missing routing input or unresolved user choice.
 
-The liaison must preserve the user's direction and distinguish explicit user
-statements from assistant proposals and its own inference. Similar words,
-directory proximity, age, or a shared source are not identity evidence.
+The liaison preserves the user's direction and attributes user statements,
+assistant proposals and its own inferences separately. Identity matching uses
+the supplied candidate details and source references.
 
 Managed tools:
 
@@ -91,14 +89,14 @@ observation time. Submitted source evidence must resolve through that persisted
 mapping. The host's frozen Todo projection is persisted separately as the
 `todo-snapshot` base.
 
-Each assessed jurisdiction names all relevant parties, assigns each exactly one
-role of `owner`, `participant`, or `consumer`, describes each responsibility,
-and has exactly one owner.
+Each assessed jurisdiction names its parties and their responsibilities.
+Each party has one role: `owner`, `participant` or `consumer`. Each
+jurisdiction has exactly one owner.
 
-The prompt requires the assessor to distinguish committed, pushed, deployed,
-configured, in-progress, reverted, and merely proposed work. It maps every
-direction boundary to observed findings and records jurisdiction rather than
-assuming Todo owns external state.
+The prompt asks the assessor to describe the selected material's distinctions
+between committed, pushed, deployed, configured, in-progress, reverted and
+proposed work. It maps each direction boundary to findings and recorded
+responsibility assignments.
 
 Managed tools:
 
@@ -109,14 +107,14 @@ situation_source_search
 submit_situation_assessment
 ```
 
-An assessment contains a summary, subject identity, grounded findings,
-jurisdiction findings, direction mappings, unresolved items, and one
+An assessment contains a summary, subject identity, findings from selected
+inputs, jurisdiction assignments, direction mappings, unresolved items and one
 disposition:
 
-- `ready`: evidence is adequate for design reconciliation;
-- `needs_user_choice`: a material value or authority decision cannot be
-  inferred; or
-- `inconclusive`: a material evidence gap remains.
+- `ready`: the selected inputs support design reconciliation with no unresolved
+  items;
+- `needs_user_choice`: a material value or authority decision remains; or
+- `inconclusive`: named assessment material is missing.
 
 The assessor cannot alter the todo, route a concern, propose desired
 architecture, or turn a liaison runtime or tool failure into an inconclusive
@@ -125,9 +123,9 @@ assessment.
 ## Design reconciliation
 
 The host resolves `design propose tN` to one exact current ready `aN` and
-supplies that assessment, the current direction boundaries, and any accepted
-prior design. There are no external research tools in this stage because new
-facts belong in a new assessment.
+supplies that assessment, the current direction boundaries and any accepted
+prior design. The stage uses these captured inputs; additional source reading
+belongs to a separate assessment run.
 
 The host also supplies a closed catalog. The admitted grammar is exactly:
 
@@ -148,21 +146,20 @@ invent an alias or cite another assessment, predecessor, or correction.
 The liaison proposes desired ownership and boundaries through named,
 basis-linked records:
 
-- jurisdiction changes use `keep`, `move`, `add`, or `retire` with exact
-  expected and proposed multi-party assignments: `keep` preserves the owner,
-  `move` changes it, `add` has no expected set, and `retire` has no proposed
-  set; every nonempty set has exactly one owner and may retain participants and
-  consumers, and a jurisdiction that continues is represented explicitly with
-  `keep`;
+- jurisdiction changes use `keep`, `move`, `add` or `retire` with exact expected
+  and proposed party assignments. `keep` preserves the owner; `move` changes it.
+  `add` has no expected set; `retire` has no proposed set. Each nonempty set
+  has exactly one owner and may include participants and consumers. A continuing
+  jurisdiction must use `keep`;
 - clauses cover ownership, boundary, state, interface, lifecycle, failure,
   compatibility, acceptance, and non-goals; and
 - unresolved choices identify material questions the supplied user direction
   cannot decide.
 
-A design is not a work plan. The prompt forbids implementation tasks, file
-edits, commands, sequencing, estimates, deployment actions, and execution
-steps. A ready or accepted design is therefore not an instruction to execute
-and not evidence that implementation happened.
+A design records the proposed state, responsibility assignments and boundaries.
+The prompt excludes implementation tasks, file edits, commands, sequencing,
+estimates, deployment actions and execution steps. A separate user decision
+accepts or rejects the design.
 
 Managed tools:
 
@@ -174,10 +171,10 @@ discard_design_reconciliation
 return_for_assessment
 ```
 
-The first submission is atomic. The host validates the complete jurisdiction
-map, clauses, choices, references, and assembled design before allocating a
-`dN`; if any part is invalid, it records none of the submission and the liaison
-must correct and resubmit the complete draft. A successful initial submission
+The first submission is atomic. The host validates the jurisdiction map,
+clauses, choices, references and assembled design before it allocates a `dN`.
+If any part is invalid, it records none of the submission. The liaison must
+correct and resubmit the complete draft. A successful initial submission
 creates one `dN` and assigns stable operation IDs. It remains `open` while
 active choices exist; a complete zero-choice submission can seal as `ready` in
 the same transaction.

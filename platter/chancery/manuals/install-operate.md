@@ -1,8 +1,11 @@
 # Install and maintain Platter
 
-Platter's Rust installer packages `platter`, the recovery installer and matching
-Chancery provider as one immutable release. Its mutation route remains Cell
-coordinated deployment. Direct installer `install` and `recover` are refused.
+Platter's Rust installer packages the `platter` command, `platter-install`
+recovery executable and matching Chancery provider as one immutable release.
+Use the Cell deployment coordinator to change the installation. Direct
+`platter-install install` and `recover` are refused because replacing this
+requester must preserve admission, pending Nucleus work and domain state.
+
 Building a candidate does not install it or run domain work:
 
 ```sh
@@ -18,21 +21,30 @@ When installation is authorized and the changes are committed on local main:
 ./deploy.sh platter
 ```
 
-Plan is read-only. Deployment uses the exact committed main candidate; it does
-not publish commits, tags or releases. Selected Cast, CRM, Email and Nucleus
-upgrades precede Platter. Unselected products are not upgraded implicitly.
-Email must support the additive `--payload-stdin` interface before Platter can
-send database artifacts. Tectonic, Python 3 with pypdf, supported source data
-and compatible authenticated Nucleus remain independently required.
+`plan` is read-only. A deployment selects its exact local `main` commit; it
+ignores uncommitted changes and does not publish a release, commit, tag or
+push. When selected together, Cast, CRM, Email and Nucleus install before
+Platter. Maintenance includes Nucleus and its registered requesters, whose
+installed maintenance interfaces must already be compatible. Unselected
+products are not upgraded to satisfy a missing prerequisite.
+
+Email must support `--payload-stdin` before Platter can send database artifacts.
+Tectonic, Python 3 with pypdf, supported source data and compatible
+authenticated Nucleus remain separate prerequisites.
 
 ## Owned storage
 
 Immutable installation files and prior releases remain beneath
-`~/Library/Application Support/Platter/install/releases/HASH`. The owned current
-selector publishes `~/.local/bin/platter`, `~/.local/bin/platter-install` and its
-Chancery provider together. Installation manifests contain executable/provider
-identities and modes, not private domain content. Altered releases, foreign
-selectors or changed candidate identities stop publication.
+`~/Library/Application Support/Platter/install/releases/HASH`. The
+`cell-install-v2` manifest records exact executable and provider versions,
+file modes, digests and public entry mappings. `package/install` retains the
+installer. The owned `current` selector publishes the matching
+`~/.local/bin/platter`, `~/.local/bin/platter-install` and Chancery
+`providers/platter` selector together. Manifests contain no private domain
+content. Cell cleanup follows separate rules for unreferenced release history.
+Altered releases, foreign selectors or changed candidate identities stop
+publication. Product and catalog writer locks protect atomic selection and
+file compensation.
 
 All durable runtime content and maintenance holds live in schema-two
 `packets.sqlite3` at the canonical root. Fresh state uses
@@ -116,7 +128,9 @@ platter-install verify --binary /absolute/candidate/platter --bundle /absolute/c
 platter-install verify-release /absolute/owned/release
 ```
 
-Inspect and verify accept `--home ABSOLUTE_PATH`. The sealed version-one
+`inspect` and `verify` accept `--home ABSOLUTE_PATH`. `verify` compares the
+installed release with the candidate and executing installer. `verify-release`
+checks retained release integrity without changing selectors. The sealed version-one
 `platter-install adapter OP` remains the coordinator boundary for inspect,
 hold, drain, apply, verify, release and recover. Apply requires exact run-owned
 maintenance. Candidate and source material are verified; affected-only products

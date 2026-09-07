@@ -10,12 +10,11 @@ Chancery answers three questions from installed, version-matched documentation:
 3. Once one exact entry is selected, what complete outward promise, provider
    scope, dependency closure, exact basis, and unresolved gaps does it expose?
 
-It does not answer those questions by scanning source trees, historical notes,
-or arbitrary documentation. Every provider explicitly indexes its entries.
-Chancery fixes each installed provider selector to one canonical bundle for the
-duration of a command, validates the manifest and every indexed entry and
-manual, and excludes malformed providers as units. Product packaging
-separately checks the whole published tree before staging it.
+Each provider explicitly indexes its entries. For each command, Chancery
+resolves every installed provider selector to one fixed canonical bundle.
+It validates the manifest and indexed entries and manuals. Malformed providers
+are excluded as units. Product packaging separately checks the complete tree
+before staging. Chancery does not search source trees or historical notes.
 
 ## Routine discovery
 
@@ -33,10 +32,9 @@ compatibility and readiness appear once; cards retain exceptions. `show`
 provides owner, release and contract version.
 Registry issues remain visible.
 
-Compare the user's intended outcome with those meanings and form a semantic
-shortlist. Chancery does not receive the request, call a model, search the
-manuals, or select an entry. If no entry is plausibly relevant, proceed
-normally.
+Compare the intended outcome with the entries and select plausible matches.
+Chancery does not receive the request, call a model, search manuals, or select
+an entry. If no entry fits, proceed normally.
 
 Read every plausible operating contract before invoking anything:
 
@@ -44,13 +42,11 @@ Read every plausible operating contract before invoking anything:
 /Users/joey/.local/bin/chancery show ENTRY_ID
 ```
 
-Use the complete authored operating manual to decide whether the user's actual outcome fits.
-In particular, observe `use_when`, `do_not_use_when`, dependencies, side
-effects, privacy, and what the capability does not authorize. If several
-contracts remain materially different but plausible, apply ordinary semantic
-judgment or ask the user for the choice that matters. Then invoke the selected
-interface separately if the request authorizes it. Chancery itself never
-invokes it.
+Use each complete operating manual to determine whether the outcome fits.
+Observe `use_when`, `do_not_use_when`, dependencies, effects, privacy, and
+authorization limits. If several different contracts still fit, use judgment
+or ask the user about the material choice. If the request authorizes use,
+invoke the selected interface separately. Chancery never invokes it.
 
 When the request concerns a complete system promise or a design reliance,
 resolve the selected exact ID after discovery:
@@ -59,11 +55,11 @@ resolve the selected exact ID after discovery:
 /Users/joey/.local/bin/chancery resolve ENTRY_ID
 ```
 
-Resolution is deterministic, not semantic search. It assembles provider scope,
-normalized claims, complete root and transitive dependency contracts, exact
-basis digests, and explicit gaps. Treat `unsupported`, `unspecified`,
-`not_applicable`, and `undeclared` distinctly. Do not fill a gap from a schema
-or implementation detail and call it a promise.
+Resolution deterministically assembles provider scope, normalized claims, root
+and transitive dependency contracts, exact source digests, and gaps. Preserve
+the distinctions between `unsupported`, `unspecified`, `not_applicable`, and
+`undeclared`. Do not turn a schema or implementation detail into a promise to
+fill a gap.
 
 ## State and failure boundaries
 

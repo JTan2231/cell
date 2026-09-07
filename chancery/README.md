@@ -1,34 +1,37 @@
 # Chancery
 
+Chancery is the installed directory for local capabilities and adaptive
+operations. It lists catalog entries, reads versioned contracts, and resolves
+one exact entry ID. Resolution gathers provider scope, boundary claims,
+dependency contracts, source references, and gaps into one dossier.
+
+Chancery reads documentation only. It has no daemon, database, network access,
+Nucleus integration, or product-domain authority. It does not execute the
+documented interface, test readiness, or call a model. Product owners publish
+their contracts and own their installed provider selectors. The interactive
+agent compares the user's request with catalog titles and summaries to select
+plausible entries.
+
+Chancery owns bundle validation, catalog discovery, deterministic resolution,
+exact source identification, dependency closure, claim classification, and
+presentation.
+
+## Rust callers
+
 Rust callers use `chancery::api::Client` for typed list, show, resolve, doctor,
-and validate operations through an explicitly selected executable and registry.
-Reports preserve unresolved or invalid domain outcomes separately from transport errors.
+and validate operations. The caller selects an executable and registry.
+Reports distinguish unresolved or invalid domain results from transport errors.
 
 The Rust library exposes provider-owned bundle documents and CLI output types
 through `chancery::api`. `ProviderManifest::decode` and `EntryDocument::decode`
 use the same codecs as the CLI, including legacy schema handling. Decoding a
 document is separate from full bundle validation.
 
-`ProviderIntroduction` and `EntryIntroduction` are partial readers for the
-identity and indexed-manual fields used by Usher. They ignore unrelated fields
-and do not evaluate promises, dependencies, or complete bundle validity. Usher
-owns its membership policy. `Output<T>` and the command result types describe
-the existing JSON output; the CLI serializes those same types.
-
-Chancery is the installed, read-only directory and exact-ID promise resolver
-for local capabilities and adaptive operations. It lists complete semantic
-catalog cards, presents versioned contracts, and assembles a selected entry's
-provider scope, normalized boundary claims, dependency closure, exact basis,
-and explicit gaps without executing the represented application, operation,
-readiness check, or model.
-
-Chancery has no daemon, database, network access, Nucleus integration, or
-domain authority. Provider products own their capability truth and installed
-provider selectors. Chancery owns bundle validation, catalog discovery,
-deterministic dossier assembly, exact-basis identification, dependency
-closure, facet and gap classification, and presentation. The interactive agent
-uses ordinary language understanding to select plausible entries from the
-catalog.
+`ProviderIntroduction` and `EntryIntroduction` read the identity and
+indexed-manual fields that Usher needs. They ignore other fields and do not
+evaluate promises, dependencies, or full bundle validity. Usher owns membership
+policy. `Output<T>` and the command result types define the JSON output that
+the CLI serializes.
 
 ## Build and check
 

@@ -104,7 +104,7 @@ mod tests {
         let direction = serde_json::to_string(direction)?;
         let working_directory = serde_json::to_string(working_directory)?;
         Ok(format!(
-            "Research this need and create one actionable todo. The source is the provenance and first research lead, not the boundary of your investigation. Use the caller's working directory to identify the exact local subject before considering analogies.\n\nSource path:\n{source}\n\nCaller working directory:\n{working_directory}\n\nDirection:\n{direction}"
+            "Research this need and create one actionable todo. Read the source and references relevant to the supplied direction, and record the material used. Use the caller's working directory to identify the exact local subject before considering analogies.\n\nSource path:\n{source}\n\nCaller working directory:\n{working_directory}\n\nDirection:\n{direction}"
         ))
     }
 

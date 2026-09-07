@@ -2,10 +2,10 @@
 
 Semantics-Project: email
 
-- Keep changes simple; do not overcomplicate or overarchitect.
+- Keep changes simple.
 - This folder participates in the installed Semantics service. Its registered
-  semantic repository is authoritative for project terminology and semantic
-  history. Before project analysis or changes, use Chancery to read
+  semantic repository defines project terminology and records its history.
+  Before project analysis or changes, use Chancery to read
   `semantics.repository.explore` and query Semantics for this folder. Code,
   tests, and project documentation remain authoritative for actual behavior.
   Do not edit Semantics state directly; report an unresolved repository rather

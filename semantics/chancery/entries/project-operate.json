@@ -5,7 +5,7 @@
   "mode": "operate",
   "support": "supported",
   "title": "Maintain a project's semantic repository service",
-  "summary": "Install, register, seed, pause, resume, route, maintenance-hold, recover, or uninstall the project-scoped Semantics registry, repository, and Clockwork-bound serial 60-second worker.",
+  "summary": "Install, maintain, recover, or uninstall Semantics and its serial Clockwork worker. Register, seed, pause, resume, or route projects, and manage deployment holds.",
   "use_when": [
     "Semantics should be installed, updated, diagnosed, or uninstalled for this macOS user.",
     "A folder should join, move within, pause, resume, or retire from the project registry.",
@@ -26,12 +26,12 @@
   ],
   "authority": [
     "Semantics owns project identity, routing, cursor persistence, intake transitions, stable concept IDs, typed-effect validation, and the SQLite commit.",
-    "Annals owns decisions-library identity, acceptance event order, immutable account projection, and feed cursors; Conversations owns exact thread cwd metadata; Nucleus owns model execution and mailbox transport; Clockwork owns scheduled activation metadata and process lifecycle; none owns semantic truth.",
+    "Annals owns decisions-library identity, acceptance event order, immutable account projection, and feed cursors; Conversations owns exact thread cwd metadata; Nucleus owns model execution and mailbox transport; Clockwork owns scheduled activation metadata and process lifecycle; Semantics owns the semantic revision commit.",
     "A participating project's source and tests remain runtime authority; its root AGENTS.md owns participation instructions."
   ],
   "success": [
     "Doctor proves schema 2, exact markers, the explicitly configured Annals decisions feed and library identity, Conversations exact-cwd readiness, and Nucleus health, capabilities, successor schemas, and immutable toolset.",
-    "The `semantics/worker` binding selects one immutable definition with a 60-second interval, no run-at-load, overlap skip, no timeout, exact release-local runner and hashes, and a scrubbed key-free environment; deployment and uninstall prove that exact current-release identity before mutating a selected binding, the release-independent marker is current-user-owned mode 0600 and non-hard-linked, and the product worker lock remains the domain serialization boundary.",
+    "The `semantics/worker` binding selects one immutable definition with a 60-second interval, no run-at-load, overlap skip, no timeout, exact release-local runner and hashes, and a scrubbed environment without keys. Deployment and uninstall verify the current release identity before changing a selected binding. The marker outside the release belongs to the current user, has mode 0600, and has no hard links. The product worker lock serializes domain work.",
     "Each registered root is canonical and uniquely owned, and every new account-derived revision includes an exact Annals library/event/account grounding."
   ],
   "failure_and_recovery": [
@@ -39,7 +39,7 @@
     "Pause the affected project before semantic maintenance; paused state prevents a late Nucleus proposal from committing.",
     "A failed deployment restores prior selectors and the quiescent database plus sidecars. It restores the exact prior non-null Clockwork selection and enabled state, or restores the prior owned legacy LaunchAgent, never both. A previously absent or disabled-null binding becomes a disabled tombstone that may retain the candidate digest because Clockwork has no clear-selection operation; a previously disabled selected definition is restored without transient activation. Semantics retains exact release bytes for every registered immutable definition. Before releasing the worker flock, an unprovable rollback retains the release-independent maintenance gate, exact private current-release selector, authenticated hold, and recovery backup while attempting both scheduler cleanups and removing public selectors.",
     "Clockwork definition ownership is a point-in-time inspection rather than a compare-and-swap; Semantics serializes its own deploy and uninstall, while concurrent direct same-user mutation of `semantics/worker` is unsupported and may require maintenance-gated recovery.",
-    "New missing-route intake and preserved legacy unassigned or awaiting-review intake remain explicit. New accepted accounts never enter a confidence or review gate. Retry refuses an active or ambiguous prior Nucleus job and creates a new attempt only after positive terminal evidence.",
+    "New missing-route intake and preserved legacy unassigned or awaiting-review intake remain explicit. New accepted accounts are immediately eligible for reconciliation. Retry refuses an active or ambiguous prior Nucleus job and creates a new attempt only after positive terminal evidence.",
     "Never manufacture Annals or legacy Decisions cursors, edit SQLite, or clear a Nucleus correlation to force replay."
   ],
   "privacy": [
@@ -113,7 +113,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Project list returns ID, canonical current path, status and HEAD; project show and operational receipts retain their complete selected records. Ordinary repository show/search use compact terminology views; show --provenance returns the complete replay. Project, intake and maintenance effects retain their documented authority and recovery semantics."
+        "statement": "Project list returns ID, canonical current path, status, and HEAD. Project show and operational receipts return complete selected records. Ordinary repository show and search return compact terminology views. show --provenance returns the full replay. Project, intake, and maintenance operations retain their documented authority and recovery rules."
       }
     ],
     "data_semantics": [

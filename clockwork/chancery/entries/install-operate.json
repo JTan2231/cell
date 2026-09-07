@@ -16,7 +16,7 @@
     "A deployment should discover or migrate product schedules automatically.",
     "Retained Clockwork state, content-addressed releases, product logs, or product artifacts should be deleted."
   ],
-  "outcome": "A version-matched content-addressed Clockwork release selected for the stable command and provider, an evidence-backed local diagnosis, a validated previous-program rollback, or safely detached public selectors with private runtime state retained.",
+  "outcome": "A version-matched content-addressed release selected for the stable command and provider; a local diagnosis with evidence; a verified program rollback; or detached public selectors with private runtime state retained.",
   "effects": [
     "Deployment stages immutable binary, Rust installer, cell-install-v2 manifest, and Clockwork-owned Chancery bytes under private application support, invokes an explicitly supplied candidate Chancery reader on the exact staged provider, and atomically switches the current stable release selector only after that validation succeeds.",
     "Deployment may create missing current-user shared parent directories without changing the modes of existing parents; it writes only `~/.local/bin/clockwork`, `~/.local/bin/clockwork-install`, `providers/clockwork`, and Clockwork's installation tree, does not create or open the runtime database, and does not touch `org.clockwork.*` product plists.",
@@ -123,7 +123,7 @@
       {"status": "declared", "statement": "Installation manages one current-user product command selector, one installer selector, one provider selector, and one private content-addressed program-release tree; it starts no daemon and deploys no product binding."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Binary version and provider release must match exactly; program release, definition manifest, database schema, product release, and binding identity remain separate compatibility axes."},
+      {"status": "declared", "statement": "Binary version and provider release must match exactly. Program release, definition manifest, database schema, product release, and binding identity have independent compatibility rules."},
       {"status": "unspecified", "statement": "No automatic release pruning, retention horizon, cross-version state migration window, or deprecation period is promised."}
     ],
     "reliances": [

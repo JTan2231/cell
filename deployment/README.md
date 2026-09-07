@@ -9,26 +9,26 @@ Select systems from the Cell checkout:
 ./deploy.sh start nucleus annals semantics krisis
 ```
 
-`plan` reads committed declarations and makes no runtime changes. Starting a
-run selects the exact **local `main` commit** observed at admission; it ignores
-uncommitted edits, other branches and later commits. It never fetches, changes
-versions, commits, tags or pushes. Annals Usage is selected as part of the
-Annals installation, and `decisions` is an alias for `krisis`. Dependency
-declarations order selected products; each product's inspection proves required
-installed dependencies rather than silently installing unselected products.
+`plan` reads committed declarations without runtime changes. At admission, a
+run selects the exact **local `main` commit**. It ignores uncommitted edits,
+other branches, and later commits. It never fetches, changes versions, commits,
+tags, or pushes. Selecting Annals also selects Annals Usage. `decisions` is an
+alias for `krisis`. Dependency declarations set the order of selected products.
+Each product checks its required installed dependencies. It does not install
+unselected products.
 
-The invocation runs in the foreground until deployment finishes. By default it
-prints one final JSON result to standard output. `--verbose` adds operation
-progress on standard error; long-running operations otherwise produce at most
-one liveness line per minute, starting after the first minute. Failure diagnostic
-excerpts share a 4 KiB output budget across the original failure and recovery.
-Each failure cause appears once in the final result, bounded to 1 KiB. Adapter
-protocol replies and successful child logs are not terminal output. It uses no
-model, Nucleus job, or conversation continuation.
-Its Python executable and complete deployment source archive are pinned when
-it starts. Python 3.11 or newer, Git, normal product build tools, and the current
-macOS user session remain host prerequisites. The coordinator must be committed
-on `main` before use. There is no background daemon or detached deployment API.
+The command runs in the foreground until deployment ends. By default, it prints
+one final JSON result to standard output. `--verbose` adds progress on standard
+error. Otherwise, operations report activity at most once per minute after the
+first minute. Failure and recovery excerpts share a 4 KiB output limit. Each
+failure cause appears once in the result, with a 1 KiB limit. Adapter replies
+and successful child logs are not printed. Deployment uses no model, Nucleus
+job, or conversation continuation.
+
+At startup, deployment pins its Python executable and complete source archive.
+The host needs Python 3.11 or newer, Git, product build tools, and the current
+macOS user session. Commit the coordinator on `main` before use. There is no
+background daemon or detached deployment API.
 
 The coordinator and release builder use Python. Product installation and
 deployment adapters are Rust executables backed by `cell-install`; retained
@@ -36,14 +36,14 @@ shell frontends are runtime assets for credential loading and scheduled jobs.
 
 ## Preparation and cutover
 
-Each run creates a detached Git worktree at its selected commit and calls the
-shared release builder once for all selected products and the declared
-maintenance closure. Preparing an affected product does not select its upgrade. Development is expected
-to have completed the relevant CI checks. Deployment does not run CI or require
-a prior CI receipt: preparation builds production binaries and checks their
-versions, hashes, and exact source material. Tests, formatting, Clippy,
-documentation builds, recognition gates, and generator CI remain development
-checks.
+Each run creates a detached worktree at the selected commit. It calls the shared
+release builder once for selected products and the declared maintenance closure.
+Preparing an affected product does not select it for upgrade.
+
+Complete the relevant CI checks during development. Deployment does not run CI
+or require a CI receipt. Preparation builds production binaries and checks
+versions, hashes, and source material. Tests, formatting, Clippy, documentation
+builds, recognition gates, and generator CI remain development checks.
 
 The builder uses one release-profile Cargo invocation for the selected packages
 and binaries, then seals independent product candidates in parallel. It keeps
@@ -53,14 +53,13 @@ eight; `CELL_RELEASE_BUILD_JOBS` accepts a positive override. Completed build
 bundles persist in a content-addressed cache; preparation reuses a matching
 bundle only after checking its exact material and executable integrity.
 
-Build identity follows source bytes and build inputs rather than Git HEAD.
-This lets publication build after updating versions and reuse those artifacts
-when the same bytes become a commit. The existing schema-one candidate records
-executable hashes and versions, and packaging/adapter source hashes. Deployment
-binds that candidate to its exact selected commit after matching the source
-material and retains a separate build receipt. The runner deploys sealed
-executable copies, never a later view of a mutable Cargo target. A build record
-makes no claim that CI passed.
+Source bytes and build inputs determine build identity. Git HEAD does not.
+Publication can therefore build updated versions and reuse those artifacts
+after the same bytes are committed. A schema-one candidate records executable
+hashes and versions, plus packaging and adapter source hashes. Deployment
+matches the source material, binds the candidate to its selected commit, and
+retains a separate build receipt. It deploys sealed executable copies without
+reading a later Cargo target. Build records do not record CI success.
 
 The same builder can prepare candidates without publication or installation:
 
@@ -88,21 +87,23 @@ All candidates are prepared before maintenance begins. The coordinator then:
 5. Releases requester holds only after all readiness checks pass, then releases
    Nucleus last.
 
-Stateful adapters use a conservative impact closure:
-requester selection includes Nucleus, and Nucleus includes all its registered
-requester products. Consequently a stateful run can hold and verify unselected
-requesters, and all of those installations must already expose compatible
-maintenance operations. It never upgrades them implicitly to satisfy that
-precondition. Stateless products do not require this maintenance closure.
+Stateful adapters use a conservative impact closure. Selecting a requester
+includes Nucleus in that closure. Nucleus includes all its registered requesters.
+A stateful run can therefore hold and verify unselected requesters. Those
+installations must already provide compatible maintenance operations; the run
+does not upgrade them to meet this requirement. Stateless products do not need
+this maintenance closure.
 
-The coordinator owns sequencing and temporary execution state. Product adapters own
-configuration discovery, admission, quiescence, migration, service control,
-runtime readiness and recovery. The shared transaction library owns exact immutable artifact manifests, public
-file selection, product and Chancery writer locks, attribution checks and file
-compensation. Products own their runtime state, admission holds, database
-backups, schedules, services and recovery decisions. Database recovery must be
-proved before restoring public commands. Nucleus's existing guarded service
-installer continues to own copied executables and authentication state.
+The coordinator owns the operation sequence and temporary execution state.
+Product adapters own configuration discovery, admission, quiescence, migration,
+service control, readiness, and recovery. The shared transaction library owns
+immutable artifact manifests, public file selection, writer locks, attribution
+checks, and file compensation.
+
+Products own runtime state, admission holds, database backups, schedules,
+services, and recovery decisions. Prove database recovery before restoring public
+commands. Nucleus's guarded service installer owns copied executables and
+authentication state.
 
 ## Temporary state and failure handling
 
@@ -120,14 +121,14 @@ and deployer inherits the same lock. A surviving child therefore keeps another
 deployment out even if its supervisors exit. Existing product locks and
 admission gates remain necessary for coexistence with direct commands.
 
-Success means all required readiness checks passed and all run-owned holds were
-released. A completed failure uses the existing product recovery operations
-within that invocation. Recovery must identify a coherent prior or candidate
-installation and prove that releasing each hold is safe; every proof precedes
-release, and Nucleus releases last. Recovery never repeats an uncertain apply
-or clears another owner's hold. A failed deployment still returns failure even
-when recovery succeeds. Unsafe recovery retains the product's holds and reports
-the owner and error for its supported operational recovery procedure.
+Success requires all readiness checks to pass and all run-owned holds to be
+released. After a completed failure, the same invocation uses product recovery
+operations. Recovery must establish a coherent prior or candidate installation
+before releasing holds. Each release requires proof that it is safe; Nucleus
+releases last. Recovery never repeats an uncertain apply or clears another
+owner's hold. Successful recovery does not change a failed deployment result.
+If recovery cannot safely release a hold, it retains that hold and reports its
+owner and error for product recovery.
 
 After the worker exits, the parent closes its inherited lock descriptor and
 reacquires the host lock before unregistering the worktree and removing all
@@ -152,9 +153,9 @@ hold or release reply is uncertain until a successful release is captured.
 Successful recovery still returns deployment failure, with explicit released
 maintenance. Cleanup failure preserves the verified installation outcome.
 
-Product command failures retain bounded execution status. The shared adapter does not relay arbitrary child
-messages, command arguments, credentials, or domain bodies; unrecognized failures
-retain their executable and exit status.
+Product command failures retain bounded execution status. The shared adapter
+does not relay arbitrary child messages, arguments, credentials, or domain
+bodies. Unrecognized failures retain the executable and exit status.
 
 After successful readiness and release, the coordinator removes unreferenced
 installed Cell release history under the same global lock. It preserves current
@@ -165,9 +166,9 @@ place and no recovery or rollback begins. Direct product installers
 retain their own previous releases; automatic pruning belongs to a successful
 coordinated deployment.
 
-The cleanup reader accepts legacy complete Clockwork binding arrays and expands
-version-two selection pages until the inventory is complete. Unknown or incomplete
-inventories stop cleanup before deletion.
+The cleanup reader accepts complete legacy Clockwork binding arrays. For
+version-two selections, it reads pages until the inventory is complete. An
+unknown or incomplete inventory stops cleanup before deletion.
 
 An uncertain Nucleus apply retains its hold and requires the supported Nucleus
 service recovery procedure. Matching files, declared versions, and health alone
@@ -182,11 +183,10 @@ Each declaration names its sealed installer executable in literal JSON:
 {"schema":1,"product":"usher","dependencies":[],"application":"Usher","adapter_binary":"usher-install","description":"Install Usher"}
 ```
 
-`dependencies` contains ordering prerequisites among selected systems. It is not
-a claim that Chancery dependency edges describe deployment order. An adapter is
-invoked with a fixed operation argument: `inspect`, `hold`, `drain`, `apply`,
-`verify`, `release`, or `recover`. No caller-supplied command or workflow body is
-accepted. Standard input is one JSON object containing:
+`dependencies` sets ordering prerequisites among selected systems, separately
+from Chancery dependencies. The adapter accepts one fixed operation argument:
+`inspect`, `hold`, `drain`, `apply`, `verify`, `release`, or `recover`. It accepts
+no caller-supplied command or workflow body. Standard input is one JSON object:
 
 - `schema`, `product`, `run_id`, `run_dir` and immutable `source_root`;
 - `selected_products`, `candidate_dir`, and the candidate manifest;
@@ -230,12 +230,11 @@ boundary.
 
 ## Release publication policy
 
-Deployment consumes committed declared versions and content identities. Git
-release publication remains the separate product `release.sh` operation with
-its publication lock, version policy, release build, commit, tag and atomic
-push. The coordinator does not reinterpret an installed version as a release
-tag and does not introduce a universal cadence. Release and deployment share reusable build
-artifacts; they do not reuse or enforce completed CI evidence.
+Deployment uses committed versions and content identities. Product `release.sh`
+separately owns Git publication: its lock, version policy, build, commit, tag,
+and atomic push. The coordinator does not treat an installed version as a Git
+tag or impose a release cadence. Release and deployment share build artifacts.
+They neither reuse nor enforce completed CI results.
 
 ## Usher's Rust installer
 
@@ -317,12 +316,12 @@ recovery. Directory locks preserve the legacy mkdir protocol and reclaim only a
 recognized private owner marker whose process is proven dead. Empty legacy locks
 and unknown or live owners require product/operator recovery.
 
-After coordinated success, cleanup uses only supplied sealed candidate installers
-for read-only `verify-release` proof. A product without such a verifier keeps all
-its history. Every live-reference, receipt, transaction-marker and release proof
-completes before deletion; current releases and selected schedule pins, including
-disabled bindings, remain protected. Retained release executables are never
-chosen as cleanup's authority.
+After coordinated success, cleanup uses the supplied sealed candidate installers
+for read-only `verify-release` checks. If a product has no such verifier, cleanup
+retains all its history. It completes every live-reference, receipt,
+transaction-marker, and release check before deletion. Current releases and
+selected schedule pins, including disabled bindings, remain protected. Cleanup
+never uses retained release executables as its authority.
 
 Platter participates in this release-history cleanup through its sealed
 installer and PID-aware file lock. Its private packet state and database

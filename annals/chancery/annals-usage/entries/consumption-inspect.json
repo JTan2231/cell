@@ -22,7 +22,7 @@
     "Makes no model call and changes no Annals or Nucleus domain state."
   ],
   "authority": [
-    "Nucleus exact output atoms and job state, Annals model-run attribution, delivery records, and job receipts are the durable authorities.",
+    "Nucleus exact output records and job state, Annals model-run attribution, delivery records, and job receipts are the durable authorities.",
     "Annals Usage owns only the disposable live interpretation and its projection version."
   ],
   "success": [
@@ -86,7 +86,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Report output version 2 defaults to delivery totals, attempt counts, coverage and calculable credit-equivalent, plus unattributed run identity/status/totals/coverage/errors. --details includes full attempt and response projections in text or JSON. Positive --limit defaults to 20; hasMore and unattributedHasMore declare further records. All projections remain live and fail when an authority is unavailable. Budget remains an account-global live allowance view."
+        "statement": "Report output version 2 shows delivery totals, attempt counts, coverage, and any calculable credit-equivalent by default. It also shows unattributed run identity, status, totals, coverage, and errors. --details includes full attempt and response projections in text or JSON. Positive --limit defaults to 20. hasMore and unattributedHasMore indicate further records. Projections are live and fail when an authority is unavailable. Budget shows the live account-global allowance."
       }
     ],
     "data_semantics": [
@@ -96,7 +96,7 @@
       },
       {
         "status": "declared",
-        "statement": "An exact total sums distinct per-response usage for every observed attempt; cumulative uses a consistent final thread total fallback; unattributed runs remain visible rather than being assigned to a delivery."
+        "statement": "An exact total sums distinct per-response usage for every observed attempt. Cumulative uses a consistent final thread total as a fallback. Unattributed runs remain visible without assignment to a delivery."
       },
       {
         "status": "unsupported",
@@ -110,7 +110,7 @@
       },
       {
         "status": "declared",
-        "statement": "inputTokens includes cached and cache-write input, outputTokens includes reasoning, and totalTokens equals input plus output; subset categories must not be added twice."
+        "statement": "inputTokens includes cached and cache-write input. outputTokens includes reasoning. totalTokens equals input plus output. Do not add subset categories twice."
       },
       {
         "status": "declared",
@@ -170,7 +170,7 @@
       },
       {
         "status": "unsupported",
-        "statement": "A gap cannot be estimated, rate-card output cannot be promoted to invoice or subscription truth, and report output cannot be used to pair original and retry-child domain outcomes."
+        "statement": "Estimating tokens for an unreported segment, invoicing, subscription allocation, and pairing original/retry-child domain outcomes are outside this reporting surface."
       },
       {
         "status": "unspecified",
@@ -188,7 +188,7 @@
       },
       {
         "status": "unspecified",
-        "statement": "The external supported-model rate card has no installed contract ID, pinned digest, version, or freshness guarantee in this capability."
+        "statement": "Rate-card comparisons use the external supported-model rate card; this capability does not pin its version, digest, or installed contract ID."
       }
     ],
     "reliances": [

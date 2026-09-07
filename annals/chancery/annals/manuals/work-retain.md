@@ -1,9 +1,8 @@
 # Retain an immutable source in Annals
 
-Annals is a local, versioned knowledge library. This capability stops at the
-retention boundary: it preserves nonblank UTF-8 source bytes unchanged or
-recognizes bytes already present. It does not ask the AI reader to interpret
-the source and does not change the evidence-backed idea map.
+Annals is a local, versioned knowledge library. Retention preserves nonblank
+UTF-8 source bytes unchanged or recognizes bytes already present. It does not
+invoke the AI reader or change the corpus.
 
 ## Add a work
 
@@ -51,4 +50,7 @@ does not invoke Nucleus, Codex, or the network.
 
 ## Output selection
 
-Retention returns its durable work/delivery receipt. Work list defaults to 20 and returns a schema-two items/has_more page with positive --limit for more; work show retains complete selected work content and structure.
+Retention returns its durable work/delivery receipt. `work list` returns a
+schema-two `items`/`has_more` page with a default limit of 20. Increase positive
+`--limit` to read more. `work show` returns the selected work's complete content
+and structure.

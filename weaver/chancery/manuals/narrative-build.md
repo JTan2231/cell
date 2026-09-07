@@ -1,8 +1,8 @@
 # Build a public-facing narrative
 
 Weaver compiles authored narrative inputs into five current Markdown outputs.
-It is a durable content workflow, not a job-search, application, browser, or
-publication system.
+It stores and coordinates the content workflow. It does not search for jobs,
+submit applications, operate a browser, or publish.
 
 The selected repository must contain one narrative with `basis.md` and
 `brief.md`, plus the shared and stage-specific prompt contract under
@@ -29,8 +29,8 @@ cleared.
 
 The worker runs five stages in order: stories, themes, composition, editorial
 review, and finalization. Every stage is a separate Nucleus job. Immediately
-before a stage, Weaver reads only that stage's selected authored and generated
-inputs through the interactive caller's process lineage and embeds their
+before a stage, Weaver reads that stage's selected authored and generated
+inputs through the interactive caller's process lineage. It embeds their
 labeled contents in the exact request. Nucleus-launched Codex receives no
 repository working directory, local execution, web search, launch context, or
 dynamic toolset.
@@ -40,7 +40,7 @@ Weaver validates each nonempty Markdown result and atomically writes its
 uncompleted later outputs remain absent. Weaver does not restore the old five
 outputs or invent another model attempt.
 
-## Prove the result
+## Check the result
 
 ```sh
 /Users/joey/.local/bin/weaver \
@@ -57,9 +57,9 @@ story anchors and links, the exact review verdict, and final-output consistency.
 `PASS` and `REVISE` are mechanically valid and exit zero. `BLOCKED` is a valid
 diagnostic but not publishable narrative and exits 3.
 
-Nucleus completion alone does not prove a build. Weaver must persist every
-required output and the repository must pass mechanical validation. Generated
-text remains current working material rather than factual authority.
+A completed build has every required output persisted and passes the
+repository's mechanical validation. Generated text is current working material
+for the editorial workflow.
 
 ## Recovery and privacy
 

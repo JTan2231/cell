@@ -11,11 +11,11 @@
     "A ready, rejected, or abandoned design needs provenance-bearing correction or explicit decision."
   ],
   "do_not_use_when": [
-    "The current situation is unknown, stale, inconclusive, or still needs a material user choice.",
+    "The todo has no current ready assessment, or the selected assessment still records an unresolved user choice.",
     "The requested artifact is a task list, sequence, estimate, file edit, command, deployment, or implementation record.",
     "The owning umbrella is completed, superseded, or otherwise not open and canonical."
   ],
-  "outcome": "One basis-complete `dN` proposal or durable return for more assessment, followed only when explicitly requested by a deterministic provenance-bearing accept or reject decision.",
+  "outcome": "One `dN` proposal with all required bases, or a durable return for further assessment. An explicit request can then accept or reject a design with recorded provenance.",
   "effects": [
     "Propose and correct submit constrained Nucleus jobs and may consume Codex allowance.",
     "A proposal records desired ownership, boundaries, state, interfaces, lifecycle, failure, compatibility, acceptance, non-goals, and jurisdiction transitions against one exact assessment.",
@@ -32,7 +32,7 @@
     "Acceptance succeeds only while the exact assessment and umbrella bases remain current and stores the decision-source path."
   ],
   "failure_and_recovery": [
-    "When evidence is insufficient or stale, the liaison records a durable assessment return instead of inventing desired state.",
+    "When the selected assessment has missing inputs or changed bases, the liaison records a durable assessment return naming those references.",
     "A run ending with an open draft marks it abandoned; inspect and correct it explicitly rather than treating it as ready.",
     "A newer assessment blocks acceptance and correction against the older basis; reassess and reconcile again."
   ],
@@ -61,7 +61,7 @@
       {"status": "unsupported", "statement": "Implementation planners, task runners, deployment systems, and callers seeking current-state research are outside this capability."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "Proposal requires an open canonical tN whose newest assessment is current and ready; correction requires an eligible ready, rejected, or abandoned dN bound to an assessment that remains current and ready."},
+      {"status": "declared", "statement": "Proposal requires an open canonical tN whose newest assessment is current and ready. Correction requires an eligible ready, rejected or abandoned dN whose assessment remains current and ready."},
       {"status": "declared", "statement": "Accept or reject requires a readable UTF-8 authorization source, and acceptance additionally requires the exact design and all recorded umbrella bases to remain current."}
     ],
     "inputs": [
@@ -74,7 +74,7 @@
       {"status": "declared", "statement": "When the assessment cannot support design, the run records a separate immutable assessment return with exact aN, reason, and missing-or-stale references, allocating no dN before initial submission."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Design is normative desired state rather than observed state or implementation; ready is structural readiness for a user decision, and accepted records authorization without planning or performing work."},
+      {"status": "declared", "statement": "A design describes desired state. It does not describe observations or implementation. Ready means structurally ready for a user decision. Accepted records authorization without planning or performing work."},
       {"status": "declared", "statement": "Jurisdiction actions are keep, move, add, or retire, and active clauses cover ownership, boundary, state, interface, lifecycle, failure, compatibility, acceptance, and non-goal."}
     ],
     "identity_and_units": [
@@ -84,7 +84,7 @@
     "completeness_and_freshness": [
       {"status": "declared", "statement": "A ready design has no active choices, includes all nine clause kinds, and collectively covers the direction body, every structured direction boundary, and every active predecessor operation."},
       {"status": "declared", "statement": "Proposal, correction, and acceptance bind and recheck one exact current assessment and exact umbrella bases; a newer assessment blocks correction and acceptance against the older basis."},
-      {"status": "unsupported", "statement": "Design completeness does not establish current external facts, implementation completeness, deployment readiness, or execution success."}
+      {"status": "declared", "statement": "Design records contain proposed responsibility assignments, clauses, bases and user decisions."}
     ],
     "access": [
       {"status": "declared", "statement": "The current-user Todo CLI uses a constrained Nucleus liaison for propose or correct and deterministic direct Todo writes for accept or reject."},

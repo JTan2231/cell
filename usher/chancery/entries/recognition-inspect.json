@@ -11,10 +11,10 @@
     "CI should require valid identity, Semantics, and Chancery introduction evidence in the candidate checkout."
   ],
   "do_not_use_when": [
-    "Actual registration, installation, vocabulary quality, capability coverage, implementation conformance, or runtime readiness must be established.",
+    "The task requires a Semantics registration, Chancery installation or full bundle validation, or a runtime service probe.",
     "The task concerns relationships beyond Cell membership."
   ],
-  "outcome": "A deterministic, evidence-bearing membership report for all inventoried products or one selected product, and a check exit status based solely on required declarations.",
+  "outcome": "A deterministic membership report with evidence for all inventoried products or one selected product. The check exit status depends only on required declarations.",
   "effects": [
     "Reads the selected checkout inventory, root participation markers, provider manifests, indexed entry identity fields, and indexed manuals.",
     "Prints the report and exits; writes no file, state, registry, or service record and invokes no shell, agent, service, or network."
@@ -52,7 +52,7 @@
   ],
   "does_not_authorize": [
     "Registration, deployment, automatic repairs, vocabulary changes, or other product operations.",
-    "Interpreting a complete report as runtime readiness, installation, complete outward promises, or verified relationship quality."
+    "Using recognition to operate registrations, installations, or runtime services."
   ],
   "manual": "manuals/recognition-inspect.md",
   "promise": {
@@ -77,7 +77,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "check returns schema-two counts and every incomplete identity/Semantics/Chancery finding, omitting successful evidence. report retains the complete schema-one product report. Exit 1 still means an incomplete check; fatal command/inventory errors exit 2. Both views describe repository declarations, never runtime readiness or actual registration."
+        "statement": "check uses schema 2. It returns counts and each incomplete identity, Semantics, or Chancery finding, and omits successful evidence. report returns the full product report in schema 1. An incomplete check exits 1. Fatal command or inventory errors exit 2. Both outputs describe repository declarations; they do not test runtime readiness or registration."
       }
     ],
     "data_semantics": [
@@ -98,8 +98,8 @@
         "statement": "Every descriptor is examined in filename order, including broken descriptors. Global root, alias, semantic-project, and provider collisions are checked before filtering. The same unchanged inputs and Usher version produce the same report."
       },
       {
-        "status": "unsupported",
-        "statement": "The report does not prove actual registration, installation, freshness, vocabulary quality, full Chancery schema validity, exhaustive capabilities, or other relationships."
+        "status": "declared",
+        "statement": "Recognition reads product descriptors, Semantics markers, and Chancery introduction files from the selected checkout."
       }
     ],
     "access": [

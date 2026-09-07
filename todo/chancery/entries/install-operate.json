@@ -7,7 +7,7 @@
   "title": "Install, recover, or migrate Todo",
   "summary": "Initialize or migrate Todo's database, or deploy, validate, diagnose, and recover the user-owned macOS installation and daily email service.",
   "use_when": [
-    "Todo storage must be initialized or upgraded through its supported backup-bearing migrator.",
+    "Todo storage needs initialization or a supported migration with a backup.",
     "The installed CLI, content-addressed release, configuration, database, or daily email LaunchAgent must be deployed or diagnosed.",
     "A deployment must durably hold new admissions, observe actual runtime settlement, check installation readiness, or release only its own hold."
   ],
@@ -19,7 +19,7 @@
   "outcome": "A validated current Todo database and user-owned installation with explicit backup, rollback, configuration, Nucleus, email, and service state.",
   "effects": [
     "Initialization creates a new empty database and refuses to replace an existing path.",
-    "Migration creates a retained complete backup before the version-two transaction; current databases are true no-ops.",
+    "Migration creates and retains a complete backup before the version-two transaction. For a current database, migration is a no-op.",
     "Deployment stages and switches content-addressed releases, may migrate the database, rewrites installed configuration when requested, and installs or updates the daily email LaunchAgent.",
     "Deployment rollback can restore captured database, release, configuration, plist, and loaded-service state before commit.",
     "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. Deployment verification checks installation and dependency readiness without starting model jobs or synthetic domain work."
@@ -123,7 +123,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Database operation returns a new current database, a current migrated database plus retained complete backup, or a true no-op for an already-current database."
+        "statement": "Database operations create a current database or migrate it with a retained complete backup. Migration of an already-current database is a no-op."
       },
       {
         "status": "declared",
@@ -137,7 +137,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Migration preserves historical Todo identities and records conservatively and does not infer cross-todo relationships, assessments, accepted design, implementation, or closure evidence."
+        "statement": "Migration preserves historical Todo identities, lifecycle, source references, notes and researched text in their documented destination records."
       },
       {
         "status": "declared",
@@ -189,7 +189,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment maintenance protocol version 1 durably owns each hold by run ID, prevents new admission atomically, permits already-admitted work to settle, reports product-owned durable work in drain status, and releases only the named owner; independent operator pauses remain intact."
+        "statement": "Deployment maintenance protocol version 1 stores each hold with its run ID. It atomically prevents new admission while admitted work settles. Drain status reports durable Todo work. Release removes only the named owner's hold and preserves independent operator pauses."
       }
     ],
     "operational_limits": [

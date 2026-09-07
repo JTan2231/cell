@@ -5,14 +5,14 @@
   "mode": "use",
   "support": "supported",
   "title": "Inspect and export discovered companies and jobs",
-  "summary": "Read retained companies, jobs, collection outcomes and coverage, or export one consistent JSON snapshot for downstream selection without starting collection.",
+  "summary": "Read stored companies, jobs, collection outcomes and coverage. Export a consistent JSON snapshot for downstream selection. These reads do not start collection.",
   "use_when": [
-    "A caller needs retained employer/posting evidence or collection freshness and limitations.",
+    "A caller needs stored companies and jobs or the timestamps, limits and outcomes of collection work.",
     "A downstream product needs a consistent machine-readable discovery snapshot."
   ],
   "do_not_use_when": [
     "Current remote sources must be fetched or a discovery run started.",
-    "Stored observations should be treated as a personal recommendation, application state or guaranteed current availability."
+    "The caller needs a personal recommendation or application workflow."
   ],
   "outcome": "Retained discovery records or one consistent JSON snapshot carrying stable identities, revisions, evidence and collection coverage.",
   "interfaces": [
@@ -62,14 +62,14 @@
     "An explicit export --output writes and atomically replaces a private caller-selected file; stdout reads do not write an export."
   ],
   "authority": [
-    "Cast owns retained identities, revisions, evidence and read projections. External sources remain authoritative for their underlying facts.",
+    "Cast owns stored company and job identities, revisions, source metadata and read projections.",
     "Consumers own filtering, consumed revisions, packet state and notification history."
   ],
   "success": [
     "The requested read completes against supported initialized state. Export returns a consistent snapshot with its schema version, revision, capture time, companies, jobs, source health and query coverage."
   ],
   "failure_and_recovery": [
-    "Missing records or empty results describe only the selected retained state. Inspect source coverage before interpreting absence.",
+    "An empty result contains no stored records matching the selected query and limits.",
     "Use supported configuration/collection commands to refresh information and state reconcile-ownership for the documented ownership correction; do not inspect or repair SQLite directly."
   ],
   "privacy": [
@@ -77,7 +77,7 @@
   ],
   "does_not_authorize": [
     "Selecting jobs for the user, creating CRM cases or application packets, sending email, submitting applications, invoking an agent or browser, or enabling a schedule.",
-    "Refreshing external sources or treating stored evidence as fresh external truth."
+    "Fetching sources during a read operation."
   ],
   "promise": {
     "consumers": [
@@ -101,7 +101,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "List/search return schema-two pages with snapshot_revision, compact items and has_more; positive --limit defaults to 20. Job rows expose stable ID/revision, company, title, location/remote eligibility, availability and last_seen_at successful observation. Search adds matched_field and a marked excerpt of at most 240 Unicode characters. Status returns counts, budgets/usage, last run and failing/incomplete source and query summaries. Show/export preserve full records, evidence and snapshot coverage; exported snapshot schema remains 1."
+        "statement": "List and search return schema-two pages with snapshot_revision, compact items and has_more. The default limit is 20 items; --limit accepts a positive integer. Job rows contain stable ID and revision, company, title, location, remote eligibility, recorded availability and last_seen_at. Search adds matched_field and a marked excerpt of at most 240 Unicode characters. Status returns counts, budgets, usage, the last run and collection summaries for sources and queries. Show and export return full records, source metadata and collection outcomes. The export snapshot still uses schema 1."
       }
     ],
     "data_semantics": [
@@ -111,27 +111,27 @@
       },
       {
         "status": "declared",
-        "statement": "Description excerpts are capped at 1,200 characters. Third-party discovery has unknown availability until employer/ATS observation. Authoritative absence records missing; presumed_closed requires at least two complete missing scans and 24 hours since the first absence. Neither constitutes an employer hiring outcome."
+        "statement": "Description excerpts are capped at 1,200 characters. Third-party discovery records unknown. Employer/ATS observations record listed or an explicit unlisted flag. A posting absent from a completed employer-source scan records missing; presumed_closed requires at least two complete missing scans and 24 hours since the first absence."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Company, job and source IDs are opaque Cast identities; a snapshot revision identifies retained state at export. ATS sources use canonical provider/tenant owners independently of linking website candidates. Ownership correction can change job company_id and revision while preserving job/source IDs; equal company names alone do not establish a merge."
+        "statement": "Company, job and source IDs are opaque Cast identities. A snapshot revision identifies stored state at export. ATS sources use canonical provider/tenant owners independently of linking website candidates. Ownership correction can change a job's company_id and revision while preserving job and source IDs. Matching company names alone do not cause a merge."
       },
       {
         "status": "not_applicable",
-        "statement": "Reads define no billing, relevance-probability or confidence unit."
+        "statement": "Reads define no billing or physical unit."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Export is consistent for the selected retained state. Source coverage and successful observation times bound any conclusion about completeness or freshness."
+        "statement": "Export is one consistent view of the stored companies, jobs and collection records. Source records include successful observation and latest-attempt times."
       },
       {
-        "status": "unsupported",
-        "statement": "Reads do not refresh sources, guarantee job-market coverage or verify real-world truth."
+        "status": "declared",
+        "statement": "Read operations return stored records without fetching source URLs."
       }
     ],
     "access": [

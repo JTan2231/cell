@@ -5,7 +5,7 @@
   "mode": "operate",
   "support": "supported",
   "title": "Install or operate CRM and its steward",
-  "summary": "Deploy, verify, or recover the user-owned content-addressed CRM CLI and Chancery selector, separately initialize, migrate, or diagnose its private database, and inspect or explicitly recover queued hidden steward work.",
+  "summary": "Deploy, check or recover CRM and its Chancery selector. Separately initialize, migrate or diagnose its database, or inspect and recover hidden steward work.",
   "use_when": [
     "CRM should be installed or updated for this macOS user.",
     "The installed binary, provider selector, database integrity, Nucleus/toolset readiness, or hidden update state should be diagnosed.",
@@ -155,13 +155,13 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Update views preserve domain state, Nucleus correlation and runtime settlement, result-post status, failures and complete advisory/attention. Update list defaults to 20 with has_more and positive --limit for more; show/wait/resume/retry retain the complete selected operational view."
+        "statement": "Update views include domain state, Nucleus correlation, runtime settlement, result-post status, failures, and complete advisory and attention. Update list defaults to 20 results with has_more; --limit accepts a positive integer. Show, wait, resume and retry return the complete selected update view."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Current and previous name validated immutable release generations; an absent database after deployment is expected; CRM steward-update state, not Nucleus terminality alone, determines recovery and domain success."
+        "statement": "Current and previous identify validated immutable releases. Deployment does not create a database. CRM steward-update state determines recovery and domain success; terminal Nucleus state alone is insufficient."
       }
     ],
     "identity_and_units": [

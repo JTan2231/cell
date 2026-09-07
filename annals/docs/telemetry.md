@@ -29,10 +29,9 @@ record and, for an inbox examination, its source delivery and job receipt.
 `report` reads those authorities on every invocation. It does not copy them
 into another durable store. If Nucleus or an Annals attribution source cannot
 be read, the command fails instead of returning a stale retained report.
-Every result identifies its `annals-usage` projection version: human output
-prints it after the generation time and JSON exposes it as
-`projectionVersion`. Derived interpretations may therefore evolve without
-freezing them beside the atomic records.
+Every result identifies its `annals-usage` projection version. Human output
+prints it after the generation time. JSON exposes it as `projectionVersion`.
+The projection can therefore change independently of the retained records.
 
 Nucleus output records are the atomic reporting source. Annals Usage decodes
 token-usage, response-completion, and turn-completion messages and derives
@@ -61,15 +60,14 @@ annals-usage login --device-auth
 `report` joins recent delivery records from the Annals library with live
 Nucleus jobs, their ordered model output, and inbox job receipts. It defaults
 to the newest 20 deliveries. It shows delivery totals, attempt counts,
-coverage and any calculable known credit-equivalent, plus unattributed run
-identities, status, totals, coverage and errors. Output version 2 includes
-`hasMore` and `unattributedHasMore`; increase positive `--limit` for more.
+coverage, and any calculable credit-equivalent. It also shows unattributed run
+identities, status, totals, coverage, and errors. Output version 2 includes
+`hasMore` and `unattributedHasMore`. Increase positive `--limit` to read more.
 `--details` includes complete attempt and response projections in both text and
 JSON. `--json` selects encoding only. `Client::report` returns
 `ConsumptionSummary`; `report_details` returns `ConsumptionReport`.
-Job-receipt discovery includes
-processing, done, duplicates, failed, and skipped envelopes; a skipped job
-remains a failed source delivery for reporting purposes.
+Job-receipt discovery includes processing, done, duplicates, failed, and skipped
+envelopes. Reports count a skipped job as a failed source delivery.
 
 A retry child is a distinct source delivery and is reported separately from
 its original failure. If it starts a new examination, that Nucleus job and its
@@ -116,8 +114,8 @@ total          = input + output
 reasoning      <= output
 ```
 
-Consequently, never add cached or cache-write input to `inputTokens`, and never
-add reasoning output to `outputTokens`. The human report indents the subset
+Do not add cached or cache-write input to `inputTokens`. Do not add reasoning
+output to `outputTokens`. The human report indents the subset
 categories to make this relationship visible.
 
 An exact run total is the sum of the distinct upstream response-usage records
@@ -161,12 +159,11 @@ credit state. It does not expose the token denominator behind a subscription
 window or identify which source delivery consumed a percentage point.
 
 Other Codex activity on the same account contributes to the same snapshot.
-Differences between two separately run `budget` commands are therefore not
-reliable per-delivery accounting: they may include concurrent activity and
-rounding. `annals-usage report` is authoritative for Annals token consumption
-when its coverage is `exact`; `annals-usage budget` describes only the live
-account-wide state at its `observedAt` timestamp. There is no supported exact
-conversion between those measurements.
+Differences between two `budget` results can include concurrent activity and
+rounding. Do not use them for per-delivery accounting. `annals-usage report`
+is authoritative for Annals token consumption when its coverage is `exact`.
+`annals-usage budget` describes the live account-wide state at `observedAt`.
+There is no supported exact conversion between those measurements.
 
 Current ChatGPT credit rates are maintained against the [official rate
 card](https://learn.chatgpt.com/docs/pricing).

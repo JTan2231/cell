@@ -207,8 +207,8 @@ pub(crate) fn load_revision_snapshot(
 }
 
 /// Populate connection-local relational projections from the one replayed
-/// state.  Graph SQL may page and walk these TEMP rows, but they disappear with
-/// the connection and are never another source of truth.
+/// state. Graph SQL may page and walk these TEMP rows; the rows disappear with
+/// the connection, and retained commit effects remain the replay input.
 pub(crate) fn prepare_graph_revision(
     connection: &Connection,
     revision: i64,

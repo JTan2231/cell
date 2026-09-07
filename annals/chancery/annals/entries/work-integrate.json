@@ -5,14 +5,14 @@
   "mode": "use",
   "support": "supported",
   "title": "Incorporate a source into Annals knowledge",
-  "summary": "Have Annals' AI reader compare one retained source with the current evidence-backed idea map, then retain the proposed result or apply it when authorized.",
+  "summary": "Use Annals' AI reader to examine one retained source against the current corpus. Retain the proposed result or apply it when authorized.",
   "use_when": [
     "Immutable source material should be examined against the evidence-backed conceptual corpus.",
     "An already retained work should be deliberately integrated or reexamined at current HEAD."
   ],
   "do_not_use_when": [
     "Only unchanged source retention is wanted.",
-    "The requested result is a summary, truth judgment, action backlog, or generic semantic search.",
+    "The requested result is a summary, action backlog, or generic semantic search.",
     "The user has not authorized immediate application of a material proposed corpus change."
   ],
   "outcome": "A durable examination and reconciliation for one work at one frozen base revision, left pending, applied by explicit request, or recorded with no corpus change.",
@@ -52,13 +52,12 @@
   ],
   "does_not_authorize": [
     "Applying a material reconciliation unless `--apply` or a separate explicit apply request is authorized.",
-    "Treating the provisional concept decomposition as uniquely correct or objectively true.",
     "Publishing or disclosing the source or corpus."
   ],
   "promise": {
     "consumers": [
       {"status": "declared", "statement": "A local user or agent may request an evidence-grounded examination of one immutable work against one frozen Annals corpus revision."},
-      {"status": "unsupported", "statement": "This capability is not a summary, truth judgment, action backlog, generic semantic search, or silent corpus-application surface."}
+      {"status": "unsupported", "statement": "This capability is not a summary, action backlog, generic semantic search, or silent corpus-application surface."}
     ],
     "preconditions": [
       {"status": "declared", "statement": "A configured Annals library whose immutable role is general contains or can retain the selected nonblank UTF-8 work, and the configured Nucleus execution path is compatible, authenticated, and accepting work."},
@@ -71,22 +70,22 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Applied and recorded/no-change mutation results return work, base/result revision, status, summary and operation count, plus recorded time where applicable. Pending proposals retain full review content. change show retains complete selected reconciliation or accepted change; change list returns a schema-two items/has_more page defaulting to 20 with positive --limit for more. Domain results survive later runtime failure."
+        "statement": "Applied and recorded/no-change results return work, base/result revision, status, summary, operation count, and recorded time where applicable. Pending proposals retain full review content. change show returns the complete selected reconciliation or accepted change. change list returns a schema-two items/has_more page with a default limit of 20. Increase positive --limit to read more. Domain results survive later runtime failure."
       }
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "A reconciliation is a provisional evidence-grounded interpretation, not objective truth or a uniquely correct concept decomposition."},
+      {"status": "declared", "statement": "A reconciliation records an interpretation of one retained work at one base corpus revision through semantic operations and exact source quotations."},
       {"status": "declared", "statement": "Nucleus completion and liaison prose are execution evidence only; Annals records decide whether the domain reconciliation or application succeeded."}
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Work identity, base revision, prompt version, model, and reasoning effort form the documented exact examination-reuse context; reconciliation and commit identities remain distinct."},
+      {"status": "declared", "statement": "Examination reuse requires the same work identity, base revision, prompt version, model, and reasoning effort. Reconciliation and commit identities remain distinct."},
       {"status": "declared", "statement": "Existing concepts use public cN identifiers and corpus revisions are monotonic integer states; work labels select retained works."},
       {"status": "not_applicable", "statement": "This capability does not report token, allowance, price, or billing units."}
     ],
     "completeness_and_freshness": [
       {"status": "declared", "statement": "Each examination uses the complete selected immutable work and one frozen base corpus state; a selected reusable result matches the complete documented context."},
       {"status": "declared", "statement": "Application verifies current HEAD against the frozen base at apply time, so a pending result becomes stale rather than being silently rebased."},
-      {"status": "unspecified", "statement": "No model-completion latency, queue-time, or universal interpretation-quality service level is promised."}
+      {"status": "unspecified", "statement": "No model-completion latency or queue-time service level is promised."}
     ],
     "access": [
       {"status": "declared", "statement": "The supported surface is the local Annals CLI using its selected private library and configured local Nucleus requester boundary."},

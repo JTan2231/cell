@@ -11,8 +11,7 @@
       "The installed Weaver release and selected narrative output tree remain authoritative for actual operational state and current generated artifacts."
     ],
     "not_authoritative_for": [
-      "Each narrative repository owns its authored basis, brief, sources, prompts, editorial vocabulary, current output validity, and disclosure rules; Nucleus owns execution, authentication, and raw job history.",
-      "Weaver does not own job search, application submission, publication, upload, browser automation, public-profile editing, or the factual truth of generated text."
+      "Each narrative repository owns its authored basis, brief, sources, prompts, editorial vocabulary, current output validity, and disclosure rules; Nucleus owns execution, authentication, and raw job history."
     ],
     "inventory": {
       "covers": [
@@ -24,7 +23,7 @@
       ]
     },
     "shared_access_and_trust": [
-      "Weaver is a current-user local CLI whose detached interactive-lineage worker alone reads and writes the selected repository; Nucleus-launched Codex receives embedded content with no repository filesystem, local execution, web, launch-context, or dynamic-tool access.",
+      "Weaver runs as the current user. Only its detached interactive-lineage worker reads and writes the selected repository. Nucleus-launched Codex receives embedded content without repository filesystem, local execution, web, launch-context, or dynamic-tool access.",
       "Cancellation, maintenance, deployment, and release effects require the exact authority stated by the selected entry; catalog presence grants none of them."
     ],
     "shared_privacy_and_retention": [
@@ -32,12 +31,12 @@
       "Release bundles contain only Weaver program, deployment, and public Chancery documentation bytes and never narrative repository inputs."
     ],
     "compatibility_and_retirement": [
-      "Provider release identifies the Weaver release, entry contract version identifies public semantic compatibility, and Nucleus invocation protocol and repository contracts evolve separately.",
+      "Provider release identifies the Weaver release. Entry contract version identifies public semantic compatibility. The Nucleus invocation protocol and repository contracts evolve separately.",
       "Incompatible requester, state, repository, or installation changes require versioned contracts, recovery proof, coordinated dependency updates, and rollback before old behavior is retired."
     ],
     "operational_limits": [
       "Weaver admits one current workflow, runs five sequential one-attempt stages, owns no resident daemon or LaunchAgent, and exposes no automatic terminal-run retry.",
-      "No workflow-duration, model-latency, repository-size, publication, factual-correctness, or external-service service-level objective is promised across this provider."
+      "No workflow-duration, model-latency, repository-size, publication or external-service service-level objective is promised across this provider."
     ]
   },
   "entries": [

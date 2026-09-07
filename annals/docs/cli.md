@@ -9,8 +9,8 @@ annals [--config PATH] [--library PATH] [--json] [--quiet] [-v...] COMMAND
 The config path resolves from `--config`, then a nonempty `ANNALS_CONFIG`.
 The library path resolves from `--library`, then a nonempty `ANNALS_LIBRARY`,
 then the selected config's `library`. If neither a library nor a usable config
-selects one, the command fails with `library_not_configured`; Annals never
-falls back to `./annals.db`.
+selects one, the command fails with `library_not_configured`. Annals never
+defaults to `./annals.db`.
 
 The installed macOS frontend selects
 `$HOME/Library/Application Support/Annals/config.toml` only when the invocation
@@ -29,9 +29,9 @@ ANNALS_LIBRARY=./scratch.db annals stats
 An explicit library suppresses the frontend's user-config default. The
 uninstalled executable has no implicit config path, so repository and Linux
 uses must provide a config or library unless their own launcher supplies one.
-Relative `library` and `inbox.root` config paths are resolved from the config
-file's directory; command-line and environment paths remain relative to the
-process working directory.
+Relative `library` and `inbox.root` config paths resolve from the config file's
+directory. Command-line and environment paths resolve from the process working
+directory.
 `--json` emits one success object on stdout or one error object on stderr.
 `--quiet` suppresses successful human mutation messages. `-v` prints the
 resolved library path on stderr in human mode.
@@ -65,8 +65,8 @@ annals --library DATABASE --json maintenance release RUN_ID
 
 The usual explicit config or library selection chooses the maintenance boundary.
 Its private durable gate is the sibling directory
-`<canonical-database>.cell-maintenance`; each library has its own gate. These commands do
-not open, initialize, or migrate the database. Status also leaves an absent
+`<canonical-database>.cell-maintenance`. Each library has its own gate. These
+commands do not open, initialize, or migrate the database. Status leaves an absent
 gate absent. The standard success envelope contains `protocol_version: 1`,
 `contract_version: 1`, all `holds`, and `drained`. Drain reports whether live
 participating commands have released admission; deployment must separately
@@ -103,21 +103,20 @@ annals stats
 annals backup OUTPUT
 ```
 
-`init` creates revision zero, returns its persistent `library_id` and immutable
-kind, and refuses to replace an existing library. The default is `general`;
-only the decisions provisioner or an equally explicit dedicated-library setup
-uses `--kind decisions`. `migrate` upgrades a version-3 or version-4 library to
-version 5 by assigning the existing library the `general` kind, adding bounded
-inbox retry provenance when needed, and adding the decision-account acceptance
-feed; it does not reinterpret works, deliveries, reconciliations, or corpus
-history. Version 3 remains the
-deliberate fresh-state boundary, so
-the command rejects libraries older than version 3 without mutating them and
-refuses libraries created by a newer executable. Repeating `migrate` on a
-version-5 library is an idempotent current-format check. Use the macOS
-deployer's guarded `--fresh-state` cutover when replacing a pre-version-3
-installed library. The additive migration is one transaction; failure
-leaves the library at its prior version without partial tables.
+`init` creates revision zero and returns the persistent `library_id` and
+immutable kind. It refuses to replace an existing library. The default kind
+is `general`. Only the decisions provisioner or an explicitly selected
+dedicated-library setup uses `--kind decisions`.
+
+`migrate` upgrades a version-3 or version-4 library to version 5. It assigns
+the `general` kind, adds bounded inbox retry provenance when needed, and adds
+the decision-account acceptance feed. It does not reinterpret works,
+deliveries, reconciliations, or corpus history. It rejects libraries older
+than version 3 without changing them, and refuses libraries from a newer
+executable. On version 5, `migrate` is an idempotent current-format check.
+To replace an installed pre-version-3 library, use the macOS deployer's guarded
+`--fresh-state` cutover. Migration uses one transaction. A failure retains the
+prior version without partial tables.
 `stats` reports revision and corpus, graph, work, reconciliation, history,
 model-run, and database-size information.
 
@@ -132,8 +131,8 @@ annals --config DECISIONS_CONFIG decision-feed page \
   --watermark TOKEN --after CURSOR [--limit N]
 ```
 
-`accept` takes exactly one regular non-symbolic, nonblank UTF-8 Markdown file
-of at most 1 MiB. Its sections are exactly `# Decision`, `## Authority`,
+`accept` takes one nonblank UTF-8 Markdown file of at most 1 MiB. It must be a
+regular file, not a symbolic link. Its sections are exactly `# Decision`, `## Authority`,
 `## Context`, `## Action`, `## Result`, and `## Source`. Authority is a Markdown
 quotation. Source is one fenced JSON object containing schema version 1, the
 same decision ID, Unix occurrence time and precision, capture-rule version,
@@ -159,9 +158,9 @@ pause, priority, interrupt, dispatch, and bounded retry operations remain
 available for accepted jobs.
 
 `watermark` returns an opaque token for the current committed acceptance
-prefix. `page` requires that watermark and a prior watermark or item cursor,
-returns at most 200 ascending events, echoes both requested tokens, and uses
-the last event cursor as `next_cursor`. With no events it returns the exact
+prefix. `page` requires that watermark and a prior watermark or item cursor.
+It returns at most 200 ascending events and echoes both requested tokens.
+The last event cursor becomes `next_cursor`. With no events, it returns the exact
 `--after` token unchanged. Events contain no raw Markdown, transcript, path,
 confidence, review, disposition, or supersession data. The feed records no
 consumer acknowledgement.
@@ -234,9 +233,9 @@ canonical credential refresh, and eight-slot scheduling. Annals asks Nucleus
 for an authenticated account preflight before a queued dispatch; it may wait
 up to 30 seconds, and failure leaves the envelope queued with attempts zero.
 
-The liaison submits a provisional, best-current interpretation. It does not
-filter source material by estimated novelty or salience and does not claim an
-objective final decomposition into atomic concepts.
+The liaison submits an interpretation of the retained work at the frozen base
+revision. It preserves source material regardless of estimated novelty or
+salience and chooses concept granularity relative to the work and corpus.
 
 Without `--apply`, a reconciliation whose projected corpus state differs from
 its base remains pending. `--apply` immediately commits that pending
@@ -310,11 +309,11 @@ Registration creates no database source-delivery record. Human output reports
 the registered jobs; JSON includes each assigned job ID and sequence with
 `priority` set to `normal`.
 
-`inbox enqueue` copies each explicitly named regular file directly into a new
-durable queued envelope and leaves the original file unchanged. It bypasses
-`incoming/` and the settling interval: the envelope becomes dispatchable only
-after its material and receipt are complete, so admission cannot race a
-partial copy. Files receive immutable monotonic sequences in argument order
+`inbox enqueue` copies each named regular file into a new durable queued
+envelope and leaves the original unchanged. It bypasses `incoming/` and the
+settling interval. The envelope becomes dispatchable only after its material
+and receipt are complete, so dispatch cannot start during a partial copy.
+Files receive immutable monotonic sequences in argument order
 and enter the normal lane unless `--priority` selects the priority lane. The
 copy is rejected with `insufficient_storage` when its size would leave less
 than `minimum_available_bytes` available on the spool filesystem. The
@@ -433,7 +432,7 @@ disposition through recovery.
 `--through` are required and must name terminal failed inbox jobs. Annals orders
 failed source deliveries by `(completed_at, delivery ID)`, resolves both
 anchors in that order, and selects the inclusive interval. This is failure
-order, not job sequence: priority dispatch can make those orders differ. The
+order. Priority dispatch can make it differ from job sequence. The
 preview reports the ordered candidate jobs, delivery IDs, failure details, and
 count without creating an event or a child job. A failed delivery already used
 as an original in another event remains visible in its interval but is marked
@@ -483,10 +482,10 @@ never adopts an unrelated reconciliation for the same work. In particular, a
 pending record is reusable only while HEAD still equals its base; a stale or
 superseded record is not handed to the child.
 
-Publication is recoverable across the SQLite-and-spool boundary. An event is
-visible as `preparing` while its durable frozen items are being published, and
-recovery creates or recognizes each one exact child without widening the
-selection or duplicating an attempt. It becomes `running` while children are
+Publication supports recovery across SQLite and the spool. The event is
+`preparing` while Annals publishes its frozen items. Recovery creates or
+recognizes each item's exact child without expanding selection or duplicating
+an attempt. The event becomes `running` while children are
 processed. Before the first zero-attempt child claim in each start or continue
 invocation, Annals performs the same authenticated account preflight as
 ordinary dispatch. A failed preflight changes the event to `halted` but leaves
@@ -642,8 +641,8 @@ parent-child relationship.
 
 A processing delivery has not reached a terminal outcome and has no result.
 An inbox job-processing error fails the delivery on its first attempt.
-Source-bearing manual commands are serialized per library; the next such
-command finalizes any receipt abandoned by an interrupted predecessor with
+Source-bearing manual commands run serially per library. If an earlier command
+was interrupted, the next command finalizes its abandoned receipt with
 error `manual_ingestion_interrupted`. A failed delivery has status `failed`,
 no result, and a structured error. It can still identify a work and retention
 disposition when failure occurred after ingestion. An operator-skipped inbox
@@ -764,11 +763,11 @@ free-form annotations:
 ```
 
 Every object rejects unknown fields. Summaries, annotations, labels, handles,
-and quotations must be nonempty when present. Labels and handles have no outer
-whitespace or control characters. `annotations` may be omitted and defaults to
-an empty list. Annotations are retained as meta-level context only; they are
-not evidence, confidence levels, or review flags and do not affect projected
-corpus state, corpus validation, or application.
+and quotations must be nonempty when present. Labels and handles cannot contain
+outer whitespace or control characters. `annotations` is optional and defaults
+to an empty list. Annals retains annotations as descriptive context with the
+reconciliation. Corpus projection, validation, and application use its
+operations and evidence.
 
 ### Concept selectors
 
@@ -877,8 +876,8 @@ through work-and-quotation pairs.
 `graph` performs a bounded local expansion around one concept. `direction`
 chooses incoming parent edges, outgoing child edges, or both. Each concept
 appears once even when several routes reach it. When depth or node limits cut
-off the expansion, the response reports a frontier instead of implying that
-the returned neighborhood is complete. The response names its seed by ID,
+off the expansion, the response reports that boundary as a frontier.
+The response names its seed by ID,
 stores each selected label once in `nodes`, and represents edges as
 `{parent_id, child_id}` references into those nodes.
 

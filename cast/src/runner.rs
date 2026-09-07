@@ -14,7 +14,7 @@ pub struct RunOptions {
     pub only_source: Option<String>,
 }
 
-/// Runs due discovery and verification work within persistent request and time budgets.
+/// Runs due discovery and careers collection within persistent request and time budgets.
 ///
 /// # Errors
 /// Returns an error when state locking, configuration, or durable checkpointing fails.

@@ -2,10 +2,10 @@
 
 ## Readiness
 
-Before installation or maintenance, verify Annals decision-account exchange contract 1,
-Conversations history contract 4 with exact cwd metadata, and Nucleus execution
-contract 3, plus Clockwork schedule contract 2. Chancery documents these boundaries but is not called by the
-Semantics worker.
+Before installation or maintenance, verify Annals decision-account exchange
+contract 1, Conversations history contract 4 with exact cwd metadata, Nucleus
+execution contract 3, and Clockwork schedule contract 2. Chancery documents these
+contracts. The Semantics worker does not call Chancery.
 
 Build and deploy only a green candidate:
 
@@ -18,21 +18,25 @@ cargo build --release --locked --package semantics
   --clockwork /absolute/path/to/clockwork
 ```
 
-The Rust `semantics-install` binary owns one transaction across service quiescence, database and
-sidecar backup, candidate doctor, content-addressed release selection, public
-CLI/provider selectors, and the `semantics/worker` Clockwork binding. It
-hashes the unrendered template into the release, renders exact absolute paths
-only after that identity exists, proves any selected definition is the exact
-current release-owned runner and schedule. That point-in-time proof is not a
-Clockwork compare-and-swap; Semantics serializes its own lifecycle tools, and
-concurrent direct same-user binding mutation is unsupported and may force
-maintenance-gated recovery. It registers the candidate definition inactive,
-disables the prior binding,
-quiesces any owned legacy LaunchAgent, and refuses foreign or tampered
-artifacts. Deploy and uninstall share an update lock. Deployment also holds the
-worker's exact cross-process flock, so a manual long-running reconciliation
-cannot hide between point-in-time SQLite checks, and runs candidate doctor in a
-scrubbed environment. Rollback restores the exact prior Clockwork selection
+The Rust `semantics-install` binary owns the transaction that stops services,
+backs up the database and sidecars, runs candidate doctor, and selects the
+content-addressed release. That transaction also controls public CLI and
+provider selectors and the `semantics/worker` Clockwork binding.
+
+The installer hashes the unrendered template into the release. It renders
+absolute paths after the release identity exists and verifies the selected
+definition against the current release's exact runner and schedule. This check
+records the selection at that time; Clockwork does not perform a compare-and-swap.
+Semantics serializes its lifecycle tools. Direct concurrent changes to the
+binding are unsupported and can require recovery with maintenance held.
+
+The installer registers the inactive candidate definition, disables the prior
+binding, and stops any owned legacy LaunchAgent. It refuses foreign or changed
+artifacts. Deployment and uninstall share an update lock. Deployment also holds
+the worker's exact cross-process flock to exclude manual reconciliation between
+SQLite checks. It runs candidate doctor in a scrubbed environment.
+
+Rollback restores the exact prior Clockwork selection
 and enabled state, or the prior owned legacy LaunchAgent, never both. A
 previously absent or disabled-null binding becomes a disabled tombstone that
 may retain the candidate digest because Clockwork has no clear-selection
@@ -178,8 +182,7 @@ semantics --json intake run
 
 Use `intake assign EVENT PROJECT` only to correct unassigned account intake
 after verifying the exact project. Assignment history is audited. Every valid
-accepted account is immediately eligible for reconciliation; there is no
-confidence, disposition, review, or supersession gate. Exact authority-thread
+accepted account is immediately eligible for reconciliation. Exact authority-thread
 cwd and the deepest current registered root determine ownership. Preserved
 legacy Decisions intake remains visible in a separate status collection and
 retains its old states and grounding meaning.
@@ -237,4 +240,8 @@ doctor. Verification does not create projects, revisions, or Nucleus jobs.
 
 ## Output selection
 
-Project list returns ID, canonical current path, status and HEAD; project show and operational receipts retain their complete selected records. Ordinary repository show/search use compact terminology views; show --provenance returns the complete replay. Project, intake and maintenance effects retain their documented authority and recovery semantics.
+Project list returns ID, canonical current path, status, and HEAD. Project show
+and operational receipts return complete selected records. Ordinary repository
+show and search return compact terminology views. `show --provenance` returns
+the full replay. Project, intake, and maintenance operations retain their
+documented authority and recovery rules.

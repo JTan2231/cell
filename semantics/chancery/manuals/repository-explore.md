@@ -1,7 +1,6 @@
 # Explore a Semantics repository
 
-Use this capability when a participating project's maintained vocabulary—not
-its runtime implementation—should inform the work.
+Use this capability to read a participating project's maintained vocabulary.
 
 ## Select the project
 
@@ -23,11 +22,10 @@ HEAD revision.
 /Users/joey/.local/bin/semantics repository search PROJECT QUERY
 ```
 
-The result includes stable concept IDs, canonical labels and meanings,
-active/retired state, replacements and distinctions. The schema-two view
-includes project identity and the selected repository revision; search returns
-the same view with only matching concepts. No concept meaning is excerpted. Prefer stable concept identity over label matching when
-following a term across revisions.
+The result includes stable concept IDs, canonical labels, full meanings,
+active or retired state, replacements, and distinctions. The schema 2 view also
+includes project identity and the selected revision. Search returns the same
+view with only matching concepts. Use stable concept IDs to follow terms across revisions.
 
 For complete replay provenance (grounds, withdrawals, creation/change revisions),
 use `semantics repository show PROJECT --provenance [--revision N]`.
@@ -45,12 +43,11 @@ synthetic textual diff.
 
 Use the repository as authority for maintained terminology and its history.
 Use project source, tests, and current product documentation for actual runtime
-behavior. A grounding says why meaning entered or left the repository; it does
-not prove that all implementation details remain current.
+behavior. A grounding records why meaning entered or left the repository.
 
-Groundings may cite an Annals decisions-library/event/account triple, a
-preserved legacy Decisions event/decision pair, or a hashed seed. These are
-provenance rather than current-force claims.
+Groundings cite an Annals decisions-library/event/account triple, a
+preserved legacy Decisions event/decision pair, or a hashed seed, recording the
+source attached to a semantic revision.
 
 All commands here are local and read-only. They do not invoke Annals, Decisions,
 Conversations, Nucleus, Chancery, or a network service. Keep normalized
@@ -64,10 +61,7 @@ Rust callers may import `semantics::api` repository types and use its typed
 same local CLI and preserves its read-only effects and project authority.
 Project and intake operations are separately documented operational actions.
 
-Project lists select stable ID, canonical current path, status and HEAD.
-Ordinary repository show/search select schema version 2, project identity,
-revision and concepts with ID, label, complete meaning, active state,
-replacement and complete distinctions. `show --provenance` retains the full
-original full replay representation. Rust callers use `RepositoryView` for the
-ordinary read and `Client::repository_provenance` for the full replay.
-These are output projections, with no persistent schema or replay change.
+Project lists return stable ID, canonical current path, status, and HEAD.
+`show --provenance` returns the full replay representation. Rust callers use
+`RepositoryView` for ordinary reads and `Client::repository_provenance` for full
+replay. These output selections do not change the persistent schema or replay behavior.

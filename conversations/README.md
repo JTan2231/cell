@@ -24,12 +24,12 @@ events are excluded. On macOS the default host reference is derived from an
 opaque hash of the platform UUID, so a machine rename does not change it and
 the raw hardware identifier is never exposed.
 
-`activity` is a separate, opt-in completed-turn projection for local
-automation. It reports normalized message counts plus stable item references
+Use `activity` to read completed-turn metadata for local automation.
+It reports normalized message counts plus stable item references
 and counts for successfully completed file-change items. It never reports file
-paths, diffs, commands, tool output, approvals, or reasoning. A session hint is
-validated as an exact thread first; only an exact miss searches visible members
-of the same App Server session lineage, and multiple matching threads fail.
+paths, diffs, commands, tool output, approvals, or reasoning. Conversations first
+tries a session hint as an exact thread ID. If that thread is absent, it searches
+visible members of the same App Server session lineage. Multiple matches fail.
 
 Embedded Rust callers can use
 `AppServerClient::read_thread_summary(&ThreadRef)` to retrieve exact persisted
@@ -46,8 +46,8 @@ scheduled callers with private-log requirements should set
 The product-owned [`chancery/`](chancery/) bundle indexes Conversations' public
 capabilities. Use `chancery list`, then read every plausible entry with
 `chancery show`. After selecting one exact entry, use `chancery resolve
-<ENTRY_ID>` for its complete outward promise, documentation dependency closure,
-exact basis, and explicit gaps. Resolution does not check App Server readiness
+<ENTRY_ID>` for its contract, dependency contracts, sources, and declared gaps.
+Resolution does not check App Server readiness
 or authorize an effect, and its uncontracted App Server reliance remains a gap.
 
 See [CLI behavior](docs/cli.md), [architecture](docs/architecture.md), and

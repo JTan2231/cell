@@ -4333,7 +4333,7 @@ mod tests {
                 &invalid_ready_assessment,
                 &[],
             ),
-            "a ready assessment retained an unresolved evidence gap",
+            "a ready assessment retained an unresolved input item",
         )?;
         assert_eq!(error.code(), "ready_assessment_has_unresolved_items");
         let todo_base = AssessmentBase {

@@ -5,7 +5,7 @@
   "mode": "develop",
   "support": "supported",
   "title": "Publish a product capability to Chancery",
-  "summary": "Add or change a product-owned capability contract, stage it with the matching product release, and expose it through the installed directory without adding a runtime dependency.",
+  "summary": "Add or revise a product capability contract and publish it with the matching release. This adds no runtime dependency on Chancery.",
   "use_when": [
     "A product gains or changes a user-facing capability or adaptive operation that should be globally discoverable.",
     "An installed provider contract, manual, dependency, or selector must change."
@@ -66,7 +66,7 @@
   "automation": "none",
   "steps": [
     "Identify the durable user outcome and owning product before choosing an entry ID or mode.",
-    "Author a scoped provider promise plus discriminative entries and self-contained manuals from current product contracts, with normalized boundary claims, semantic request boundaries, effects, authority, success, failure recovery, privacy, interfaces, dependencies, and substantive reliance kept distinct.",
+    "Use current product contracts to author provider scope, distinct entries, and self-contained manuals. Keep request boundaries, normalized claims, effects, authority, success, recovery, privacy, interfaces, dependencies, and substantive reliances distinct.",
     "Validate the source bundle with the candidate Chancery reader before changing installed selectors.",
     "Stage the unchanged bundle inside the owning product's content-addressed release and make its installer own exactly one registry selector.",
     "Exercise product CI and deployment rollback, then deploy the product release.",
@@ -99,7 +99,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "The owning product currently supports the claimed outcome, its public contracts establish the claims, and its release and selector lifecycle can stage and roll back the exact bundle coherently."
+        "statement": "The product supports the outcome and its public contracts establish the claims. Its release process can stage and roll back the exact bundle and selector together."
       }
     ],
     "inputs": [
@@ -111,13 +111,13 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The authored bundle contains scoped provider promises, indexed entries, normalized claims and synchronized self-contained operating manuals. Ordinary show renders each manual once; it must contain all applicability, interfaces, effects, authority, success, recovery, privacy, exclusions and checkpoints needed for correct use. show --full and resolve retain the authoring and complete outward declarations. Structural validation does not prove prose completeness."
+        "statement": "The bundle contains provider scope, indexed entries, normalized claims, and matching self-contained manuals. Ordinary show renders each manual once. The manual must contain applicability, interfaces, effects, authority, success, recovery, privacy, exclusions, and required checkpoints. show --full and resolve retain authoring fields and complete outward declarations. Structural validation does not establish prose completeness."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Provider scope declares jurisdiction and a non-circular inventory boundary; entry claims distinguish declared support, explicit unsupported behavior, unspecified guarantees, and non-applicable facets."
+        "statement": "Provider scope declares jurisdiction and a non-circular inventory boundary; entry claims describe product records and operations and distinguish declared support, explicit unsupported behavior, unspecified guarantees, and non-applicable facets. The completeness_and_freshness facet names selected records or an operation and explains its counts and timestamps, using not_applicable when those measurements do not apply."
       },
       {
         "status": "declared",
@@ -137,11 +137,11 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "The provider's inventory claim must name a meaningful class of public outcomes and say whether coverage is complete or partial; it must not define completeness as merely whatever was indexed."
+        "statement": "The provider's inventory claim must name a bounded class of public outcomes and identify which of its capabilities are published or omitted."
       },
       {
         "status": "declared",
-        "statement": "The provider release identifies the exact published bundle bytes; installed freshness changes only when the product advances its owned selector."
+        "statement": "The provider release identifies the exact published bundle bytes; the selected bundle changes when the product advances its owned selector."
       }
     ],
     "access": [
@@ -157,7 +157,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The compatible reader deploys first, the owning product then stages and advances its bundle and selector atomically, integrated validation follows, and only then may global routing depend on the new contract."
+        "statement": "Deploy the compatible reader first. The product then stages and atomically advances its bundle and selector. After integrated validation, global routing can depend on the new contract."
       },
       {
         "status": "declared",
@@ -177,7 +177,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Schema additions follow reader-first deployment; incompatible entry semantics increment contract version; removal updates dependents and global routing before retiring the old contract."
+        "statement": "Deploy reader support before schema additions. Increment the contract version for incompatible entry semantics. Update dependents and global routing before removing an old contract."
       },
       {
         "status": "unspecified",

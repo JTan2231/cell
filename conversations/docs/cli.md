@@ -3,9 +3,10 @@
 All commands accept `--codex PATH` (or `CONVERSATIONS_CODEX`) and an optional
 stable `--host-id` (or `CONVERSATIONS_HOST_ID`). Without an override, macOS
 uses an opaque hash of the platform UUID; the raw hardware identifier is never
-returned or retained. macOS fails closed if that stable identity cannot be
-read; other platforms use hostname as a compatibility fallback. `--json` preserves stable typed references; command-specific output envelopes
-and content selection are documented below.
+returned or retained. The command fails on macOS if it cannot read that stable
+identity. Other platforms use the hostname as a compatibility fallback.
+`--json` preserves stable typed references. The sections below describe each
+command's output.
 
 The CLI explicitly defaults `--app-server-stderr inherit`, preserving Codex
 diagnostics for an interactive operator. `--app-server-stderr suppress` routes
@@ -37,10 +38,10 @@ Lists task metadata without loading message content. Filters are:
 - `--updated-after UNIX_SECONDS` before any full-history read; and
 - `--title TEXT` for App Server's case-sensitive extracted-title search.
 
-List defaults to 20 rows. JSON schema 2 returns `threads` and `has_more`;
+List returns up to 20 rows by default. JSON schema 2 returns `threads` and `has_more`;
 rows contain stable reference, title, archive flag, update time, source kind
 and observed runtime status. Human output carries the same selection.
-Increase positive `--limit` to read more. Library metadata methods still return
+To read more, set `--limit` to a larger positive integer. Library metadata methods return
 complete `ThreadSummary` values.
 
 ## `conversations show THREAD_ID [--turn TURN_ID] [--json]`
@@ -92,8 +93,8 @@ exports necessarily read every selected task.
 
 ## `conversations refresh [--json]`
 
-Explicitly enumerates active and archived stores with App Server's metadata
-scan-and-repair behavior enabled. It reports counts and does not load message
+Enumerates active and archived stores and allows App Server to scan and repair
+its metadata. It reports counts and does not load message
 content. Every other command uses state-database-only listing.
 
 An App Server protocol, pagination, timeout, or history-compatibility failure

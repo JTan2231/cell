@@ -16,9 +16,9 @@ AI reader.
 `init` creates revision zero with one immutable library kind and refuses to
 replace a path. It defaults to `general`; `--kind decisions` is only for a
 physically separate producer-accepted decisions library. `migrate` supports
-only documented prior schemas, assigns version-3 and version-4 libraries the
-`general` kind, runs transactionally, and refuses older or newer unsupported
-libraries without reinterpretation. Configuration cannot change a library's
+only documented prior schemas. It assigns version-3 and version-4 libraries
+the `general` kind in one transaction. It refuses unsupported older or newer
+libraries without reinterpreting them. Configuration cannot change a library's
 kind. `stats` is read-only.
 `backup` creates a consistent SQLite copy and refuses to replace its
 destination.

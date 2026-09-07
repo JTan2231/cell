@@ -6,10 +6,8 @@
 - [System installation](system-installation.md): macOS deployment, Clockwork schedule
   operation, rollback, and uninstall.
 
-The [Semantics provider bundle](../chancery/provider.json) publishes the
-complete supported CLI promise inventory for repository exploration, project
-operation, and product development in this release. Use `chancery show ID` for
-the full contract and `chancery resolve ID` for its normalized outward
-boundary, exact basis, and explicit gaps. Chancery is not a Semantics runtime
-dependency; the installed CLI remains usable if its discovery catalog is
-unavailable.
+The [Semantics provider bundle](../chancery/provider.json) lists all supported
+CLI capabilities for repository exploration, project operation, and development.
+Use `chancery show ID` for the full contract. Use `chancery resolve ID` for the
+contract, sources, and declared gaps. The installed Semantics CLI remains usable
+when the Chancery catalog is unavailable.

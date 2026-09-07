@@ -11,11 +11,10 @@ Always begin with:
 /Users/joey/.local/bin/nucleus manual
 ```
 
-The manual selects the current guarded playbook. The broad change classes are
-routine Nucleus patches, exact Codex upgrades, public protocol or client
-changes, execution-capacity changes, database-schema changes, requester
-schema/toolset/invocation changes, and authentication or service-ownership
-changes.
+The manual selects the procedure for the change: a routine patch, exact Codex
+upgrade, protocol or client change, execution-capacity change, database-schema
+change, requester schema/toolset/invocation change, or authentication or
+service-ownership change.
 
 ## Development sequence
 
@@ -73,14 +72,15 @@ the operational record or executing another attempt; do not add outgoing
 requests or stored result projections to repair missing correlation.
 
 For authentication or service ownership, prevent new credential consumers and
-let active users settle before attended login. Preserve private modes and one
-authoritative managed credential, allow account reads to overlap jobs,
-serialize canonical refresh, exclude attended login while active job or account
-sessions remain, stage every Codex credential-writing operation away from the
-authoritative file, atomically promote the validated generation, let elected
-refresh and account reconciliation survive requester cancellation, and keep
-credential recovery forward-only. Binary or database
-rollback must not silently replace a newer credential.
+let active users finish before attended login. Keep private modes and one
+authoritative managed credential. Allow account reads to overlap jobs, serialize
+canonical refresh, and exclude attended login while job or account sessions
+remain active.
+
+Stage every Codex credential write away from the authoritative file. Atomically
+promote the validated generation. Let elected refresh and account reconciliation
+finish after requester cancellation. Credential recovery moves only forward;
+binary or database rollback must not replace a newer credential.
 
 ## Deployment
 

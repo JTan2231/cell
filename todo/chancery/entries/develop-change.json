@@ -14,7 +14,7 @@
     "The change belongs to Nucleus shared execution rather than Todo domain behavior.",
     "Release publication or deployment has not been separately authorized."
   ],
-  "outcome": "A minimal tested Todo change that preserves durable provenance and the separation between research proposals, explicit decisions, desired design, and implementation execution.",
+  "outcome": "A minimal tested Todo change that preserves provenance and keeps research proposals, explicit decisions, desired designs and implementation separate.",
   "effects": [
     "Modifies Todo source, tests, migrations, documentation, or packaging.",
     "May change requester toolsets, prompts, state schema, email disclosure, or installed service behavior with corresponding compatibility and recovery obligations.",
@@ -32,7 +32,7 @@
   "failure_and_recovery": [
     "Preserve a committed Todo domain result when a later Nucleus error occurs.",
     "Version immutable Nucleus schemas and toolsets rather than editing historical registrations.",
-    "Use backup-bearing migrations and deployment rollback rather than ad hoc database repair."
+    "Use migrations with backups and deployment rollback. Do not repair database rows by hand."
   ],
   "privacy": [
     "Todo fixtures, databases, backups, decision sources, Nucleus output, email content, API configuration, and logs may contain private directions and system state.",
@@ -52,7 +52,7 @@
   ],
   "checkpoints": [
     "Model text remains non-authoritative and explicit accept/reject commands remain outside liaison tools.",
-    "Todo does not become an implementation workflow, project graph, or evidence that work ran.",
+    "Todo retains concern, assessment, design, note and lifecycle records; execution workflows remain separate.",
     "Persistent changes have migration, backup, rollback, and historical compatibility proof.",
     "Release or deployment has not occurred without separate authorization."
   ],
@@ -112,7 +112,7 @@
       {"status": "declared", "statement": "A Todo domain commit can outlive a later Nucleus error and must remain recoverable rather than being rolled back or duplicated from runtime state."}
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "The operation is limited to the smallest Todo-owned change and its proportional tests and documentation; it stops at another owner's unresolved boundary or unauthorized external effect."},
+      {"status": "declared", "statement": "Limit the change, tests and documentation to the requested Todo work. Stop if another owner's boundary is unresolved or an external effect lacks authorization."},
       {"status": "unspecified", "statement": "No development duration, review turnaround, release cadence, or deployment schedule is promised."}
     ],
     "compatibility_and_evolution": [

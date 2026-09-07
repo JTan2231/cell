@@ -7,7 +7,7 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Email owns construction and synchronous submission of one caller-provided plain-text message with optional local file attachments from its fixed sender to its fixed personal recipient, including bounded request retry and command reporting.",
+      "Email constructs and submits one caller-provided plain-text message with optional local attachments. It uses fixed addresses and owns bounded retries and command reporting.",
       "Email owns use of a generated or caller-supplied idempotency key for the frozen Resend request and reports the message identifier returned on Resend acceptance."
     ],
     "not_authoritative_for": [
@@ -37,7 +37,7 @@
     ],
     "operational_limits": [
       "Email supports one synchronous immediate plain-text submission to fixed addresses per invocation and has no daemon, draft store, scheduler, queue, or final-delivery observer.",
-      "Submission remains subject to a valid credential, local network access, and Resend availability and policy; any later final delivery remains subject to Gmail's independent behavior and is outside Email success."
+      "Submission requires a valid credential, network access, and Resend availability and policy acceptance. Gmail controls final delivery, which is outside Email success."
     ]
   },
   "entries": [

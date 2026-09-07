@@ -5,7 +5,7 @@
   "mode": "operate",
   "support": "supported",
   "title": "Register and operate scheduled activations",
-  "summary": "Register one strict immutable activation definition, select it through a stable current-user binding and generated LaunchAgent, run it manually, or inspect Clockwork-owned runtime history.",
+  "summary": "Register an immutable activation definition. Select it through a stable current-user binding and generated LaunchAgent, run it manually, or inspect runtime history.",
   "use_when": [
     "A product-owned non-agent runner should be invoked on a supported interval or daily local-calendar schedule through a centralized current-user broker.",
     "An exact immutable definition should be registered before cutover, a stable binding should switch or disable transactionally, or one selected activation should be run manually.",
@@ -31,7 +31,7 @@
   "success": [
     "Registration succeeds only after the complete strict manifest, release root and ID, top-level launch images, hashes, permissions, literal process context, schedule, and supported policies validate without a partial write.",
     "A binding transition succeeds only when the database selection, atomically installed plist, and launchd loaded state agree; on failure Clockwork restores the prior coherent state or, while the projection remains attributable, durably attempts a disabled state. An unattributable projection is retained and recovery-gated without mutation.",
-    "An activation report truthfully records whether the direct child failed to start, ran and exited, was signaled, timed out, was skipped for overlap, or was proven lost.",
+    "An activation report records whether the direct child failed to start, ran and exited, was signaled, timed out, was skipped for overlap, or was proven lost.",
     "Every overlap records `skipped_overlap` without starting a child; a scheduled overlap returns success to launchd, while a manual overlap reports `activation_busy` and returns 1.",
     "Once a child starts and Clockwork durably records `exited`, `signaled`, or `timed_out`, the broker returns a successful Clockwork envelope and process exit even when the child's exit code is nonzero; that remains runtime evidence only."
   ],
@@ -77,7 +77,7 @@
       {"status": "unsupported", "statement": "PATH lookup, relative or symbolic launch paths, mutable release selectors, shell strings, `-c`, globbing, interpolation, inherited environment, implicit shebang selection, secret-looking environment names, and caller-supplied runtime argv are rejected."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Registration and binding mutations retain definition/binding receipts; run retains one direct-child runtime outcome. Definition/binding lists and history return output-version-two items/has_more pages defaulting to 20 with positive --limit for more. History selects activation ID/key, trigger, timestamps, state, exit/signal and failure detail; --details includes definition digest and process IDs. Definition/binding show remain full selected metadata reads."},
+      {"status": "declared", "statement": "Registration and binding changes return definition or binding receipts. Run returns one direct-child runtime outcome. Definition lists, binding lists, and history use output version 2 with items and has_more. They return up to 20 rows by default. To read more, set --limit to a larger positive integer. History returns activation ID, key, trigger, timestamps, state, exit code, signal, and failure detail. --details adds the definition digest and process IDs. Definition and binding show return the full selected metadata."},
       {"status": "unsupported", "statement": "Clockwork returns no captured output body, product-domain result, retry plan, timer-delivery receipt, or transitive executable attestation."}
     ],
     "data_semantics": [

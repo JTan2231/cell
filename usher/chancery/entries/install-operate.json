@@ -5,7 +5,7 @@
   "mode": "operate",
   "support": "supported",
   "title": "Install or recover Usher",
-  "summary": "Install, verify, or recover the stateless Usher commands and matching Chancery selector through the Rust installer without changing semantic registration or any product runtime.",
+  "summary": "Use the Rust installer to install, verify, or recover Usher commands and their Chancery selector. Semantic registration and product runtimes remain unchanged.",
   "use_when": [
     "Usher should be installed, updated, inspected, verified, or recovered for the current macOS user."
   ],
@@ -15,7 +15,7 @@
   ],
   "outcome": "A version-matched immutable release with coherent Usher CLI and provider selectors.",
   "effects": [
-    "Stages an immutable Usher release containing the recognition command, exact Rust installer and recovery executable, and matching provider bundle; holds product and catalog writer locks and advances owned command and provider selectors through one current release.",
+    "Stages an immutable release with the recognition command, exact Rust installer and recovery executable, and matching provider bundle. Holds product and catalog writer locks, then advances owned command and provider selectors through one current release.",
     "Inspection and verification are read-only. Installation and recovery change only Usher-owned local release artifacts and selectors; no service state or semantic registration is touched."
   ],
   "authority": [
@@ -112,7 +112,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Product and provider versions, the cell-install-v1 manifest format, content-addressed release identity, adapter protocol version, capability contract version and recognition JSON schemas are separate axes."
+        "statement": "Product and provider versions, manifest format cell-install-v1, content-addressed release identity, adapter protocol version, capability contract version, and recognition JSON schemas are independent."
       }
     ],
     "completeness_and_freshness": [

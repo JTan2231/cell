@@ -10,7 +10,7 @@
       "Platter owns its canonical SQLite library: captured inputs, preparation runs, immutable content artifacts, explicit job eligibility, frozen editions, recorded delivery outcomes, settings and maintenance holds. Editions share one model; retained-material selection is an operation."
     ],
     "not_authoritative_for": [
-      "Cast owns discovery evidence; CRM owns career entries; external employers own hiring facts; Nucleus owns execution; Email and Resend own submission acceptance; Gmail owns final receipt."
+      "Cast owns discovery records. CRM owns career entries. Employer endpoints supply posting text. Nucleus owns execution. Email and Resend own submission acceptance. Gmail owns final receipt."
     ],
     "inventory": {
       "covers": [
@@ -31,7 +31,7 @@
       "Release 0.2.0 uses preparation contract 3, installation contract 2 and private schema 2. Explicit one-way import preserves predecessor IDs, exact requests and frozen deliveries. Old binaries cannot read schema two. Historical brief schemas remain supported."
     ],
     "operational_limits": [
-      "Up to three new ready packets per edition; no candidate or token budget. Model is gpt-5.6-sol at max effort. Stored 09:00 America/Chicago setting does not install or enable a schedule. External source, runtime and rendering readiness must be checked separately."
+      "Each edition contains up to three new ready packets. There is no candidate or token budget. Jobs use gpt-5.6-sol at max effort. The stored 09:00 America/Chicago setting does not install or enable a schedule. Check source, runtime and rendering readiness separately."
     ]
   },
   "entries": [

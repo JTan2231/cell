@@ -1,9 +1,9 @@
 # Change Semantics safely
 
-Read `semantics/AGENTS.md`, architecture, data model, the affected Annals
-decision-account and Conversations contracts, both Nucleus requester and operator manuals, and the
-Clockwork schedule contract before
-changing persistent state, the toolset, service lifecycle, or packaging.
+Before changing persistent state, the toolset, service lifecycle, or packaging,
+read `semantics/AGENTS.md`, architecture, and data model. Also read the affected
+Annals and Conversations contracts, Nucleus requester and operator manuals, and
+Clockwork schedule contract.
 
 ## Invariants
 
@@ -13,8 +13,8 @@ changing persistent state, the toolset, service lifecycle, or packaging.
 - Repository state is replayed from contiguous immutable revisions and typed
   effects. Version one has no mutable concept projection.
 - Each new account-derived revision grounds its exact Annals library, event,
-  and account identity without confidence or review behavior. Legacy
-  admission/review effects remain decodable and append-only.
+  and account identity. Legacy admission/review effects remain decodable and
+  append-only.
 - Active normalized canonical labels are unique, new concept IDs are strictly
   sequential, and an entire revision validates before any effect commits.
 - Nucleus uses a neutral cwd, workspace `none`, no shell, no web, exactly one
@@ -27,18 +27,19 @@ changing persistent state, the toolset, service lifecycle, or packaging.
 
 ## Testing
 
-Use synthetic Annals accepted-account pages and Conversations cwd values. Nucleus integration
-tests use the fake local server and immutable schemas; never connect CI to the
-live service. Packaging tests use fake candidate binaries, fake Clockwork, and fake launchctl in
-an isolated home. Fixtures contain no real user content, credentials, or
-personal paths.
+Use synthetic Annals accepted-account pages and Conversations cwd values.
+Nucleus integration tests use the fake local server and immutable schemas.
+Never connect CI to the live service. Packaging tests use fake candidate
+binaries, Clockwork, and launchctl in an isolated home. Fixtures contain no real
+user content, credentials, or personal paths.
 
 ```sh
 semantics/ci.sh
 ```
 
-The complete gate is offline. It validates the compiled Rust installer against synthetic packaging and recovery fixtures, static runtime shell behavior and Clockwork template contents,
-release-local runner/frontend behavior, content-addressed deployment,
+The complete gate is offline. It checks the compiled Rust installer with
+synthetic packaging and recovery fixtures. It also checks static runtime shell
+behavior, Clockwork templates, release-local runner and frontend behavior, content-addressed deployment,
 database quiescence and rollback, retained-state uninstall, Chancery provider
 and dependency contracts, rustfmt, clippy, tests, rustdoc, and a release build.
 

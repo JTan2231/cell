@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Prepare and preview private job application packets",
-  "summary": "Prepare eligible Cast jobs as private briefs and Jackson-only resumes in SQLite, freeze editions, and explicitly send retained attachment bytes.",
+  "summary": "Prepare private briefs and Jackson-only resumes for eligible Cast jobs. Store them in SQLite, freeze editions, and send retained attachment bytes when authorized.",
   "use_when": [
     "The user wants to prepare or preview eligible Cast opportunities with a concise brief and a constrained resume.",
     "The user wants an explicitly authorized send or another edition composed from retained materials.",
@@ -15,7 +15,7 @@
     "The request is job discovery, CRM editing, employer outreach or application submission.",
     "The caller expects an installed automatic 09:00 delivery service or a change to any fixed resume content."
   ],
-  "outcome": "Accepted brief and Jackson bullets are retained with source evidence and a rendered resume; a preview freezes one through three ready packets, and an explicit authorized send records provider acceptance separately.",
+  "outcome": "Stored accepted brief, Jackson bullets, source references and rendered resume. Preview freezes one through three ready packets. An authorized send separately records provider acceptance.",
   "interfaces": [
     {
       "label": "Initialize from original resume",
@@ -65,9 +65,9 @@
   "effects": [
     "Initialization imports the original template and configuration into the canonical SQLite library.",
     "Preparation captures Cast posting and CRM career inputs, runs constrained Nucleus stages and retains accepted content and rendered bytes as artifacts referencing the preparation run.",
-    "Ordinary preview refreshes source evidence, freezes subject/body and ordered artifact references, and explicitly sets selected jobs ineligible in the same transaction.",
+    "Ordinary preview fetches the posting again. It freezes subject, body and ordered artifact references, and sets selected jobs ineligible in the same transaction.",
     "Retained-material preview creates the same edition records without changing eligibility or calling Cast, CRM, employer sources, Nucleus or the renderer.",
-    "Send pipes body and attachment bytes to Email, retaining uncertainty before transport and acceptance afterward. Eligibility is independently mutable through the supported CLI. Export creates a new caller-selected file."
+    "Send pipes body and attachment bytes to Email. It records uncertainty before transport and acceptance afterward. Eligibility changes separately through the CLI. Export creates a new caller-selected file."
   ],
   "authority": [
     "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
@@ -125,7 +125,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Initialized schema-two Platter state, complete supported employer evidence, readable Cast/CRM interfaces, strict authenticated Nucleus and supported renderer prerequisites are required for new preparation. Sending requires authorization and Email with --payload-stdin."
+        "statement": "Preparation requires initialized schema-two state, the supported resume template, readable Cast and CRM interfaces, and full posting text from a supported adapter. It also requires strict authenticated Nucleus readiness and supported rendering tools. Sending requires authorization and Email with --payload-stdin."
       },
       {
         "status": "declared",
@@ -159,11 +159,11 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "New briefs contain at most 90 words across sections. Why it works gives one or two direct, confident, evidence-grounded sentences of at most 45 words. Role states stack, responsibilities and process expectations in one or two short lines of at most 30 words. Optional Culture states working norms in one or two short lines of at most 25 words. Role and Culture make no comparison with the user's experience. Displayed briefs omit caveats, downsides and hedging; pursuit criteria remain private. Career references establish provenance, not verified truth. The resume model cannot author fixed sections, dates, identity, employers, projects, skills or layout."
+        "statement": "New briefs contain at most 90 words across sections. Why it works gives one or two direct, confident, evidence-grounded sentences of at most 45 words. Role states stack, responsibilities and process expectations in one or two short lines of at most 30 words. Optional Culture states working norms in one or two short lines of at most 25 words. Role and Culture make no comparison with the user's experience. Displayed briefs omit caveats, downsides and hedging; pursuit criteria remain private. Career references identify the captured entries used by each stage. The resume model cannot author fixed sections, dates, identity, employers, projects, skills or layout."
       },
       {
         "status": "declared",
-        "statement": "Eligibility answers whether Platter may consider a job. Ordinary preview explicitly sets selected jobs ineligible; retained-material preview and send leave the field alone. Eligibility can be changed without rewriting delivery evidence. All editions share one representation and ordinary subject format; imported frozen subjects remain unchanged."
+        "statement": "Eligibility determines whether Platter may consider a job. Ordinary preview sets selected jobs ineligible. Retained-material preview and send leave eligibility unchanged. Eligibility changes preserve delivery records. All editions share one representation and ordinary subject format. Imported frozen subjects remain unchanged."
       }
     ],
     "identity_and_units": [
@@ -179,15 +179,15 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Both stages use the same retained posting and captured CRM library. Culture appears only when supported by the posting or existing captured material; otherwise it is omitted without extra research or an uncertainty note. CRM separate list/read calls are not a transactional snapshot; capture checks entry timestamps and refuses incomplete list results. Cast excerpts alone do not satisfy full posting input. A new preview rechecks full posting evidence and defers changed or unavailable sources; reopening an already frozen edition does not refresh it."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No guarantee covers all employers, application requirements behind forms, perfect duplicate detection, current vacancy truth, or complete career evidence."
+        "statement": "Both stages use the same stored posting and captured CRM library. Culture appears only when the posting or captured material supports it. Otherwise it is omitted without extra research or an uncertainty note. Separate CRM list and read calls do not share a transaction. Capture checks entry timestamps and rejects incomplete lists. Preparation requires full posting text beyond Cast's excerpt. A new preview fetches the posting again and defers changed or unavailable inputs. Reopening a frozen edition returns stored contents."
       },
       {
         "status": "declared",
-        "statement": "Ad hoc preview does no freshness recheck, discovery export, profile retrieval, model invocation or rendering. It reads existing accepted artifacts only and consumes no Cast API budget."
+        "statement": "Posting fetches use the documented ATS and JobPosting JSON-LD adapters. Forms and authenticated pages are outside these fetch interfaces."
+      },
+      {
+        "status": "declared",
+        "statement": "Ad hoc preview reads existing accepted artifacts, consuming no Cast API budget and making no source-fetch, discovery-export, profile, model or rendering calls."
       }
     ],
     "access": [
@@ -199,7 +199,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Successful stage outputs are immutable by producing run and kind. Repeated successful calls resolve to the same content; conflicts are refused. Exact Nucleus requests are retained before ambiguous admission; execution history remains Nucleus-owned."
+        "statement": "Successful stage outputs are immutable by producing run and kind. Repeated successful calls return the same content; conflicts are refused. Platter stores exact Nucleus requests before submission. Nucleus owns execution history."
       },
       {
         "status": "declared",

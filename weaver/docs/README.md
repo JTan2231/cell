@@ -10,13 +10,13 @@
   with detailed manuals. It is discovery documentation, not a runtime
   dependency or an expansion of Weaver's authority.
 
-Discover candidates with `chancery list` and inspect every plausible contract
-with `chancery show`. Once one exact entry is selected, run `chancery resolve
-<ENTRY_ID>` to assemble its provider scope, normalized boundary claims,
-documentation dependency closure, exact basis, and explicit gaps. Keep that
-documentary result separate from readiness, authorization, and domain success.
+Use `chancery list` to find capabilities and `chancery show` to read each
+applicable contract. Select one entry, then run `chancery resolve <ENTRY_ID>`
+to read its provider scope, boundary claims, documentation dependencies, basis,
+and gaps. This result does not establish readiness, authorization, or domain
+success.
 
 The narrative repository defines the editorial vocabulary and authored input
-contract. Weaver implements its complete build request; these documents cover
-the independent execution application rather than restating a project's
-career-fact or disclosure rules.
+contract. Weaver implements its complete build request. These documents cover
+Weaver's operation. The narrative project owns its career-fact and disclosure
+rules.

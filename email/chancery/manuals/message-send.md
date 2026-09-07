@@ -1,10 +1,9 @@
 # Send a personal email now
 
-Email sends one immediate plain-text message from its product-fixed sender to
-its fixed personal recipient, with optional local file attachments. Use it
-after the user explicitly asks to send the supplied or approved message, or
-from an installed product whose contract
-already grants standing authority for the exact kind of notification.
+Email immediately sends one plain-text message with optional local attachments.
+The sender and recipient are fixed. Use Email when the user explicitly asks to
+send the supplied or approved message. An installed product can also use Email
+if its contract grants standing authority for that exact kind of notification.
 
 ## Send
 
@@ -20,8 +19,8 @@ For a multiline body, pass `-` and provide standard input:
 /Users/joey/.local/bin/email 'Subject' - < /absolute/path/to/body.txt
 ```
 
-An authorized product that owns a particular occurrence and freezes its exact
-payload can supply its stable idempotency key:
+An authorized product can supply a stable idempotency key for an occurrence
+that it owns. The key must identify an unchanged payload:
 
 ```sh
 /Users/joey/.local/bin/email \
@@ -62,10 +61,10 @@ caller environment variables, supplies a minimal runtime environment, and
 preserves standard input for the payload. Do not place the API key in the
 command arguments, message text, product files, or Chancery contract.
 
-## Authority and proof
+## Authority and result
 
-Email accepts the caller-provided subject, body, and attachments, fixes both
-addresses, and submits the message immediately to Resend. A product caller, not Email,
+Email accepts the caller's subject, body, and attachments. It fixes both
+addresses and submits the message immediately to Resend. The calling product
 owns standing authority, scheduling, occurrence state, rendering, and stable
 key selection. Email has no draft, preview, scheduler, daemon, local send
 history, or background retry queue.
@@ -96,7 +95,10 @@ the send.
 
 ## Output selection
 
-On Resend acceptance Email exits zero and prints Accepted followed by the message ID. This acknowledges transport acceptance, not final delivery. Errors remain bounded secret-safe diagnostics with nonzero exit; no output body or credential is echoed.
+When Resend accepts the message, Email exits zero and prints `Accepted` followed
+by the message ID. This confirms submission acceptance. Check Gmail separately
+for delivery. On failure, Email exits nonzero and reports a bounded error
+without the response body or credential.
 
 ## Byte payloads on stdin
 
@@ -114,14 +116,15 @@ Standard input is one JSON object:
 ```
 
 `content` is standard base64 of the exact attachment bytes. Attachment order,
-filenames, subject and body are part of the idempotent payload. The example
-bytes only illustrate encoding; they are not a real resume. `--payload-stdin`
+filenames, subject, and body are part of the idempotent payload. The example
+bytes illustrate encoding and do not contain a real resume. `--payload-stdin`
 requires body `-` and conflicts with `--attach`. Unknown fields, malformed JSON,
-invalid base64 and unsafe filenames fail before any network request. The
-payload stays in memory and is not written to disk. The wrapper preserves
-stdin and its existing credential loading; no credential belongs in the JSON.
-This extension preserves the fixed addresses, bounded transport retries,
-acceptance output and requirement for applicable send authorization. Email
+invalid base64, and unsafe filenames fail before any network request.
+
+The payload stays in memory and is not written to disk. The wrapper preserves
+stdin and uses its existing credential loading. Do not include credentials in
+the JSON. This extension preserves the fixed addresses, bounded transport
+retries, acceptance output, and requirement for send authorization. Email
 retains no local attachment copy or send history after exit.
 
 The flag is additive in Email 0.5.1 under attachment contract 4. A caller that

@@ -5,7 +5,7 @@
   "mode": "operate",
   "support": "supported",
   "title": "Install or operate Krisis",
-  "summary": "Deploy, inspect, maintenance-hold, recover, or uninstall the user-owned krisis command, schema-4 state, exact Stop hook, explicit Codex and Annals pins, and krisis/observer service while retiring Decisions schedules.",
+  "summary": "Deploy, inspect, hold for maintenance, recover, or uninstall Krisis. Operate schema-4 state, the Stop hook, Codex and Annals pins, and krisis/observer while retiring Decisions schedules.",
   "use_when": [
     "Krisis should be installed or updated for the current macOS user.",
     "The observer binding, hook, baseline, logs, database, Annals configuration, release selector, or recovery state should be inspected.",
@@ -260,7 +260,7 @@
       },
       {
         "status": "declared",
-        "statement": "Preparation validates and registers the candidate with one explicit Codex reader while retaining maintenance; final cutover revalidates closed release trees, private database files, definitions, and the target-bound ownership receipt, disables only proven-owned enabled schedules, suspends public commands and the exact hook for its timeout, backs up quiescent SQLite state, migrates and proves doctor with the prepared payload, activates the baseline once, publishes command/providers/hook, verifies krisis/observer, commits, and clears the authenticated gate. Failed publication compensates to a suspended public view; original commands are restored only after product database rollback is proved."
+        "statement": "Preparation validates and registers the candidate with one explicit Codex reader while retaining maintenance. Final cutover revalidates closed release trees, private database files, definitions, and the ownership receipt bound to the target. It disables enabled schedules only after verifying ownership, then suspends public commands and the exact hook for its timeout. It backs up idle SQLite state, migrates and runs doctor with the prepared payload, activates the baseline once, and publishes the command, providers, and hook. It then verifies krisis/observer, commits, and clears the authenticated gate. If publication fails, public commands remain suspended. Original commands return only after verified product database rollback."
       },
       {
         "status": "declared",

@@ -128,7 +128,7 @@ async fn hn(http: &HttpClient, query: &DiscoveryQuery) -> Result<DiscoveryResult
         ))
         .await?;
     if item.is_null() {
-        return Err("HN item unavailable; monthly thread coverage remains incomplete".into());
+        return Err("HN item unavailable; monthly thread collection stopped".into());
     }
     if stage == "thread" {
         if item.get("by").and_then(Value::as_str) == Some("whoishiring")
@@ -345,11 +345,11 @@ async fn brave(http: &HttpClient, query: &DiscoveryQuery) -> Result<DiscoveryRes
     let capped = more == Some(true) && offset + 1 >= max_pages;
     if capped {
         warnings.push(format!(
-            "Brave query page cap reached: {term}; remaining indexed results are unobserved"
+            "Brave query page cap reached: {term}"
         ));
     }
     if more.is_none() {
-        warnings.push("Brave omitted pagination completeness signal".into());
+        warnings.push("Brave response omitted its pagination flag".into());
     }
     let (next_term, next_offset) = if more == Some(true) && offset + 1 < max_pages {
         (term_index, offset + 1)
@@ -415,7 +415,7 @@ fn brave_company(row: &Value, term: &str) -> Option<CompanyDraft> {
             ),
         )],
         relevance_reasons: vec![format!(
-            "Unverified candidate from fixed search; employer careers evidence required: {term}"
+            "Company collected from search term: {term}"
         )],
         ..Default::default()
     })
@@ -459,7 +459,7 @@ fn employer_search_surface(url: &Url, title: &str) -> bool {
         return false;
     }
     let host = url.host_str().unwrap_or_default();
-    // A topical article is not evidence that its publisher is the employer.
+    // Article URLs are excluded from this employer-search adapter.
     // Unknown surfaces remain outside this deterministic adapter until qualified.
     host.split('.')
         .any(|part| matches!(part, "jobs" | "careers") || part.ends_with("careers"))
@@ -533,7 +533,7 @@ async fn theirstack(http: &HttpClient, query: &DiscoveryQuery) -> Result<Discove
     let complete = exhausted && !truncated && !unresolved;
     let warnings = if capped || truncated || unresolved {
         vec![
-            "TheirStack bounded search is incomplete; unobserved results do not mean absence"
+            "TheirStack search recorded a page cap, provider truncation, or an unmatched result"
                 .into(),
         ]
     } else {
@@ -658,7 +658,7 @@ fn theirstack_company(row: &Value) -> Option<CompanyDraft> {
                 &source_url,
                 "aggregator_job",
                 format!(
-                    "TheirStack job {job_id}; source publication date is provider-reported; current availability requires employer verification"
+                    "TheirStack job {job_id}; source publication date is provider-reported; recorded status: unknown"
                 ),
             )],
             ..Default::default()

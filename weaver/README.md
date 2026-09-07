@@ -1,11 +1,10 @@
 # Weaver
 
-Weaver is an independent Rust CLI that runs the five-stage public-facing
-narrative workflow through a separately installed Nucleus service. A submission
-is durable before the command returns, and a detached Weaver child continues
-the work after the submitting process exits. That child reads the exact inputs
-for each stage, embeds their contents in an immutable Nucleus request, and alone
-writes the returned Markdown into the repository.
+Weaver is an independent Rust CLI that builds public narratives in five stages
+through a separately installed Nucleus service. Weaver stores each submission
+before the command returns. A detached Weaver child continues after the
+submitting process exits. It reads each stage's inputs, includes them in an
+immutable Nucleus request, and writes the returned Markdown into the repository.
 
 The narrative repository remains the authority for its basis, active output
 brief, source material, workflow prompts, and current generated outputs. Weaver
@@ -17,12 +16,11 @@ publishes, sends, uploads, or edits a public profile.
 The product-owned [`chancery/`](chancery/) bundle publishes Weaver's supported
 use, operation, and development capabilities for global discovery. It is
 versioned with Weaver and installed with each release, but it is documentation:
-the Weaver runtime never invokes Chancery. Use `chancery list`, then read every
-plausible entry with `chancery show`. After selecting one exact entry, use
-`chancery resolve <ENTRY_ID>` for its complete outward promise, documentation
-dependency closure, exact basis, and explicit gaps. Resolution does not check
-runtime readiness or authorize an effect, and an unsupported, unspecified, or
-uncontracted result remains a gap.
+the Weaver runtime never invokes Chancery. Use `chancery list`, then read each
+applicable entry with `chancery show`. Select one entry and use
+`chancery resolve <ENTRY_ID>` to read its contract, documentation dependencies,
+basis, and gaps. Resolution does not check runtime readiness or authorize an
+action. Unsupported, unspecified, and uncontracted results remain gaps.
 
 ## Requirements
 
@@ -45,14 +43,13 @@ Weaver's repository access belongs to the interactive process lineage. A
 launchd-owned process may lack access to protected repositories, and Nucleus
 must not use the protected repository as its invocation working directory.
 
-Weaver performs all repository reads and writes in the detached child
-of the interactive CLI. For each stage it snapshots only the inputs selected by
-that stage's authored contract and includes their labeled contents directly in
-the durable job prompt. The Nucleus request names Weaver's private state root as
-its read-only working directory, with local execution and web search disabled,
-no launch context, and no dynamic toolset. Codex returns Markdown through the
-agent protocol and has no repository filesystem to inspect or output path to
-mutate.
+The interactive CLI's detached child performs all repository reads and writes.
+For each stage, it snapshots the inputs selected by that stage's authored
+contract. It includes their labeled contents in the durable job prompt.
+The Nucleus request uses Weaver's private state root as a read-only working
+directory. Local execution and web search are disabled. The request has no
+launch context or dynamic toolset. Codex returns Markdown through the agent
+protocol. It cannot inspect repository files or write output files.
 
 This boundary moves private input bytes into operational state. While a stage
 is active, `current.json` contains its exact persisted request. Nucleus retains
@@ -90,8 +87,8 @@ narratives/NAME/
 ```
 
 The review verdict is `PASS`, `REVISE`, or `BLOCKED`. A blocked result is a
-diagnostic and contains no publishable narrative. Generated files are current
-working artifacts, not retained run history or factual authority.
+diagnostic and contains no publishable narrative. Generated files are the
+current working artifacts for the five editorial stages.
 
 ## Build and use
 
@@ -113,13 +110,13 @@ cargo build --manifest-path ../Cargo.toml --package weaver --release
 CI builds and uses the Chancery candidate from the Cell workspace to validate
 Weaver's provider bundle. Weaver has no runtime dependency on Chancery.
 
-`submit` prints the run ID after atomically recording the request, wakes the
-detached worker, and exits. A nonterminal `wait` periodically ensures a worker
-is active, so it is also the explicit recovery command after a logout or
-restart. `status`, `wait`, and `cancel` accept an optional run ID; supplying it
-prevents the command from accidentally observing or cancelling a later
-replacement. Without an ID they select the sole current run. A new submission
-may replace only a terminal current run.
+`submit` atomically records the request, prints the run ID, starts the detached
+worker, and exits. For a nonterminal run, `wait` periodically starts a worker
+if necessary. Use it to recover after a logout or restart.
+`status`, `wait`, and `cancel` accept an optional run ID. Supply it to prevent
+the command from selecting a later replacement run. Without an ID, these
+commands select the sole current run. A new submission can replace only a
+terminal current run.
 
 Use `--repo PATH` or `WEAVER_REPO` to select the narrative repository. The
 default is the current directory. Use `--state-dir PATH` or
@@ -158,15 +155,17 @@ After a release build, deploy without administrator privileges:
 
 Use the `weaver-install` executable from the same sealed tested candidate as
 `weaver`; its version must match the provider bundle. The Rust installer uses
-the shared `cell-install` crate for exact artifacts, locks, selectors and
-compensation. This installs `~/.local/bin/weaver`, `~/.local/bin/weaver-install`, private operational state, complete
-content-addressed releases, and Weaver's one global Chancery provider selector.
-It deliberately installs no LaunchAgent: repository I/O must stay in the
-interactive caller's process lineage. An update establishes Weaver maintenance,
-lets an active workflow finish, atomically switches the installed release and
-provider documentation, and validates them. It also transactionally removes the
-exact `org.weaver.worker` service and plist from that prototype, restoring them
-if a pre-commit migration fails. It does not stop or replace Nucleus.
+the shared `cell-install` crate for exact artifacts, locks, selectors, and
+compensation. It installs `~/.local/bin/weaver`, `~/.local/bin/weaver-install`,
+private operational state, complete content-addressed releases, and Weaver's
+global Chancery provider selector. It installs no LaunchAgent. Repository I/O
+must stay in the interactive caller's process lineage.
+
+An update starts Weaver maintenance and lets an active workflow finish. It
+then atomically switches and validates the installed release and provider
+documentation. It also removes the prototype `org.weaver.worker` service and
+plist in the same transaction. A pre-commit migration failure restores them.
+The update does not stop or replace Nucleus.
 
 See [the macOS installation guide](docs/system-installation.md) for the exact
 layout and maintenance behavior.

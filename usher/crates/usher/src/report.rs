@@ -240,7 +240,7 @@ impl Report {
         )?;
         writeln!(
             output,
-            "Registration, installation, quality, readiness, and other relationships are outside this report."
+            "This report describes product identity, Semantics participation, and Chancery presence in repository files."
         )
     }
 }

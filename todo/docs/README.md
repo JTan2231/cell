@@ -36,7 +36,7 @@ work items, or implementation execution records. Nucleus runtime records for
 the research liaisons are provenance, not evidence that a design was
 implemented.
 
-The implemented contracts are:
+Read the applicable contract:
 
 - [CLI](cli.md): commands, authorization provenance, selectors, migration,
   email configuration, and output behavior;
@@ -50,12 +50,11 @@ The implemented contracts are:
   migration rollback, the daily email LaunchAgent, and recovery.
 
 The product-owned [Chancery provider](../chancery/provider.json) indexes these
-public use, operation, and development promises. Discover semantically with
-`chancery list` and `chancery show`; once one exact entry is selected, run
-`chancery resolve <ENTRY_ID>` to assemble its provider scope, normalized
-boundary claims, documentation dependency closure, exact basis, and explicit
-gaps. Keep documentary resolution separate from live readiness, authorization,
-and domain success.
+public use, operation and development contracts. Use `chancery list` to find
+relevant entries and `chancery show` to read them. After selecting one, run
+`chancery resolve <ENTRY_ID>` for its scope, boundary, documentation dependencies,
+exact basis and explicit gaps. Resolution does not check runtime readiness,
+authorize operations or determine domain success.
 
 - [Rust interface](rust-api.md): provider-owned request and response types,
   boundary decoding, and the local CLI client.

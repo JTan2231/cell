@@ -1,8 +1,8 @@
 # Inspect Annals model consumption
 
-Annals Usage calculates model consumption caused by Annals examinations. It is
-a separate companion CLI and projection version, not a database or runtime
-authority.
+Annals Usage calculates model consumption caused by Annals examinations.
+It is a separate companion CLI with a versioned live projection. It owns no
+database or runtime state.
 
 ```sh
 /Users/joey/.local/bin/annals-usage report
@@ -71,4 +71,10 @@ than inferred public data surfaces.
 
 ## Output selection
 
-Report output version 2 defaults to delivery totals, attempt counts, coverage and calculable credit-equivalent, plus unattributed run identity/status/totals/coverage/errors. --details includes full attempt and response projections in text or JSON. Positive --limit defaults to 20; hasMore and unattributedHasMore declare further records. All projections remain live and fail when an authority is unavailable. Budget remains an account-global live allowance view.
+Report output version 2 shows delivery totals, attempt counts, coverage, and
+any calculable credit-equivalent by default. It also shows unattributed run
+identity, status, totals, coverage, and errors. `--details` includes full
+attempt and response projections in text or JSON. Positive `--limit` defaults
+to 20. `hasMore` and `unattributedHasMore` indicate further records. Projections
+are live and fail when an authority is unavailable. Budget shows the live
+account-global allowance.

@@ -1,8 +1,8 @@
 # Todo Rust interface
 
-The `todo` crate owns its supported Rust boundary in `todo::api`. Import
-these values and its client at a product boundary, then convert into local
-application values when needed. Consumers must not copy its response envelope,
+The `todo` crate defines its supported Rust interface in `todo::api`. Import
+its types and client, then convert results to local application types as needed.
+Consumers must not copy its response envelope,
 wire records, or decoder. The structs and enums are the interface definition;
 there is no separate registration layer.
 

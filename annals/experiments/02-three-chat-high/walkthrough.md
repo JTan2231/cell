@@ -5,9 +5,9 @@
 How would the liaison handle the identical three-work corpus after switching
 from the medium-grade configuration to the higher-grade model?
 
-The higher-grade liaison investigated more, cited more evidence, and integrated
-later material into a deeper structure. It also took much longer and expressed
-more uncertainty, so human review contributed more to the final corpus.
+The high preset made more tool calls, selected more quotations, and integrated
+later material into a deeper structure. It took longer and populated
+`uncertainties` on more proposals, so more proposals went through human review.
 
 ## Controlled setup
 
@@ -20,8 +20,8 @@ retained input was 79,038 bytes.
 | Medium baseline | `gpt-5.6-terra` | `medium` |
 | High rerun | `gpt-5.6-sol` | `max` |
 
-Both model family and reasoning effort changed, so this was a quality-preset
-comparison—not an effort-only test.
+Both model family and reasoning effort changed. The experiment therefore
+compared quality presets, not reasoning effort alone.
 
 ## Cost and investigation
 
@@ -46,7 +46,7 @@ evidence covered both representation and downstream counting: one canonical
 message tree, separately classified branch views, reusable shared-prefix
 summaries, and family-level aggregation to prevent fork-counting bias.
 
-Both were certain and applied directly.
+Both had empty `uncertainties` arrays and were applied directly.
 
 ### Interpreting a year
 
@@ -56,19 +56,19 @@ usage-map-versus-biography boundary.
 High proposed `Usage-centered conversation archive analysis` with three
 quotations. It retained a broader method:
 
-- study what the user asks the model to do, not only the subject matter;
-- corroborate shifts across several archive signals;
-- limit conclusions to archive use rather than biography.
+- study what the user asks the model to do alongside the subject matter;
+- compare shifts across several signals recorded in the archive;
+- describe the uses recorded in those conversations.
 
-High also surfaced limits on generalizability, fork-inflated activity counts,
-and unresolved images. Review retained its root and all three quotations, then
-promoted the concrete measurement limitation into an evidenced child,
-`Archive measurement caveats`.
+High also represented the source's discussion of generalizability,
+fork-inflated activity counts, and images. Review retained its root and all
+three quotations, then represented the measurement discussion in an evidenced
+child, `Archive measurement caveats`.
 
 ### Frame construction
 
-Medium had treated the final work as a new root and left feedback-loop risk in
-uncertainty metadata until human review promoted it into a child.
+Medium had treated the final work as a new root and placed feedback-loop risk
+in the `uncertainties` field until human review represented it in a child.
 
 High instead related both findings to the existing archive-analysis tree:
 
@@ -79,29 +79,28 @@ Usage-centered conversation archive analysis
 └── AI-assisted frame construction
 ```
 
-It distinguished the positive finding—conversation externalizes latent
-structure and produces reusable frames—from the warning that repeated language
-may reflect reuse-driven convergence rather than independent confirmation.
+It represented conversation as a way to externalize latent structure and
+produce reusable frames, alongside the role of language reuse in recurring
+vocabulary.
 
-The model submitted one epistemic uncertainty. Human review treated that as
-the scope of the claim rather than a reason to block it. The replacement kept
-both model-proposed operations, paths, and quotations unchanged.
+The model recorded one entry in `uncertainties`. Human review expressed that
+entry in the concept scope. The replacement kept both model-proposed
+operations, paths, and quotations unchanged.
 
 ## Human review
 
 | Metric | Medium | High |
 | --- | ---: | ---: |
 | Model proposals | 3 | 3 |
-| Uncertain model proposals | 1 | 2 |
+| Model proposals with `uncertainties` entries | 1 | 2 |
 | Human replacement proposals | 1 | 2 |
 | Model-authored commits | 2 | 1 |
 | Human-authored commits | 1 | 2 |
 | Total stored proposals | 4 | 5 |
 
-The higher-grade final tree was therefore co-produced. In particular, its
-excellent third-work placement depended on `Archive measurement caveats`,
-which human review had added after work 2. Raw model proposals and the final
-reviewed corpus should not be conflated.
+Human edits contributed to the final high-preset tree. Its third-work placement
+depended on `Archive measurement caveats`, which review added after work 2.
+The raw model proposals therefore differ from the final reviewed corpus.
 
 ## Final reviewed corpus
 
@@ -129,28 +128,26 @@ interpreting a longitudinal archive. It then encoded method, measurement
 limits, frame construction, and reuse-induced convergence inside one archive
 analysis hierarchy. Medium left the three works mostly as separate roots.
 
-Only two final quotations were exact matches across the corpora: the
-usage-versus-biography conclusion and the feedback-loop warning. Different
-quotation selection did not always mean conceptual disagreement; the two
-models sometimes selected adjacent sentences from the same central passage.
+Only two final quotations matched exactly across the corpora: the
+usage-versus-biography conclusion and the feedback-loop warning. The models
+sometimes selected adjacent sentences from the same passage. Different
+quotation selection therefore did not always indicate conceptual disagreement.
 
 ## Interpretation
 
-Medium behaved like a selective summarizer. High behaved more like a corpus
-editor: it searched harder, preserved more of each work's reasoning,
-distinguished findings from limitations, and used prior concepts when placing
-new material.
+Medium selected a small set of concepts from each work. High made more
+searches, preserved more of each work's reasoning, distinguished findings from
+limitations, and used prior concepts when placing new material.
 
-The deeper hierarchy was useful but not indisputably correct. Nesting
-`Reuse-induced interactional convergence` under `Archive measurement caveats`
-connects it to methodological risk, while medium's direct
-`Frame construction → Feedback-loop risk` relationship may express the local
-causal connection more clearly.
+The two runs encoded different relationships. High nested
+`Reuse-induced interactional convergence` under `Archive measurement caveats`,
+connecting it to methodological risk. Medium used the direct
+`Frame construction → Feedback-loop risk` relationship.
 
-High's uncertainties were intellectually valuable, but the workflow initially
-treated scope qualifications as blockers even when they could be represented
-as concept scope or caveat nodes. This became a central question for the larger
-experiment.
+High's `uncertainties` entries described source qualifications. The workflow
+withheld those proposals under its application policy. Review subsequently
+represented the qualifications in concept scope and caveat nodes; the larger
+experiment examined this interaction between recorded fields and application.
 
 ## Validation and limits
 
@@ -158,8 +155,7 @@ Before removal, the high database validated cleanly, occupied 450,560 bytes,
 and had SHA-256
 `814284b8a4d12dacf97f9ce988aaf7f1aaf656a207c309a713aa767689bea7ee`.
 
-This was a three-work exploratory comparison with no replication. Ingestion was
-sequential, so later runs saw reviewed earlier state. Much of the evidence was
-assistant-authored, and evidence proves what the retained conversation said,
-not external correctness. The database file and private rendered transcripts
-are intentionally not retained.
+This was a three-work exploratory comparison with no replication. Ingestion
+was sequential, so later runs saw reviewed earlier state. Much of the selected
+source text was assistant-authored. The database file and private rendered
+transcripts are intentionally not retained.

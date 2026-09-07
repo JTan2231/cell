@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Read the retired Decisions lifecycle stream",
-  "summary": "Preserve the version-one opaque-cursor read surface for existing consumers of retained Decisions admissions and reviews; Krisis does not append new lifecycle events.",
+  "summary": "Read retained Decisions admissions and reviews through the version-one opaque-cursor interface. Only existing consumers are supported. Krisis appends no new lifecycle events.",
   "use_when": [
     "An existing local consumer must resume reading already-retained Decisions lifecycle events.",
     "A compatibility consumer needs its current legacy watermark during migration."
@@ -30,7 +30,7 @@
   ],
   "failure_and_recovery": [
     "Persist an event and its item cursor atomically, then resume strictly after the last durably copied cursor.",
-    "Malformed, noncanonical, checksum-invalid, ahead-of-stream cursors and limits outside 1 through 1000 fail closed.",
+    "Reads fail for malformed or noncanonical cursors, invalid checksums, cursors beyond the stream end, or limits outside 1 through 1000.",
     "No new lifecycle events will repair a lost consumer cursor; consumers must preserve their own activation and progress state."
   ],
   "privacy": [
@@ -66,7 +66,7 @@
     ],
     "data_semantics": [
       {"status": "declared", "statement": "decision_admitted and decision_reviewed retain the Decisions meanings they had when originally committed."},
-      {"status": "declared", "statement": "A cursor is a legacy transport position, not decision identity, authority, or current-force evidence."}
+      {"status": "declared", "statement": "A cursor identifies a position in the retained legacy lifecycle stream."}
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "event_id, legacy decision_id, review_id, and cursor identify distinct retained records; append position defines order."},

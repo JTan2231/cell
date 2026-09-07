@@ -8,9 +8,9 @@ annals search QUERY [--at REVISION] [--within cN]
   [--limit N] [--cursor TOKEN]
 ```
 
-The query must be nonempty after normalization, contain at most 512 UTF-8
-bytes and 16 normalized terms, and the limit must be positive.
-Search reads HEAD by default; `--at` selects an immutable historical revision.
+The query must be nonempty after normalization. It can contain at most 512
+UTF-8 bytes and 16 normalized terms. The limit must be positive.
+Search reads HEAD by default. `--at` selects an immutable historical revision.
 `--within cN` narrows candidates to the graph below one concept at that
 revision.
 
@@ -20,9 +20,9 @@ Concept labels may repeat, so a result is identified by its durable public
 `cN` ID. A shared concept is one result even when several parent routes reach
 it. Search never constructs or returns a preferred root-to-concept path.
 
-For retrieval, each concept receives one context made from the deduplicated
-labels of all of its ancestors. Thus a query can find a narrowly named concept
-through any broader scope above it. Ancestor context is a search aid, not an
+For retrieval, each concept receives the labels of all its ancestors, with
+duplicates removed. A query can therefore find a narrowly named concept through
+any broader scope above it. Ancestor context is a search aid, not an
 additional parent edge or identity rule. Use `concept show`, `concept parents`,
 or `graph` to inspect the actual relationships behind a match.
 
@@ -40,8 +40,7 @@ normalized ancestor context. Exact label matches rank first, followed by label
 prefix matches, then broader label-term coverage. Public ID is the final
 deterministic tie breaker.
 
-This is a compact lexical lookup, not a semantic-similarity or truth claim. The
-liaison uses the same graph concepts through its revision-scoped,
+The liaison uses this same compact lexical lookup through its revision-scoped,
 independently paginated `corpus_search` tool.
 
 ## Results and pagination
@@ -78,7 +77,7 @@ JSON has the language-level shape:
 }
 ```
 
-No matches is successful and returns an empty `items` array. Human output shows
+If nothing matches, search succeeds with an empty `items` array. Human output shows
 the public ID and label plus compact graph/evidence counts. Two equal labels
 remain two results when their IDs differ.
 

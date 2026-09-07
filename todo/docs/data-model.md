@@ -1,9 +1,8 @@
 # Data model
 
-SQLite schema version 2 stores the domain as typed relational records. There
-are no JSON or JSONB columns. Structured assessments and designs are normalized
-so IDs, references, decisions, and bases can be validated with ordinary keys
-and constraints.
+SQLite schema version 2 stores typed relational records without JSON or JSONB
+columns. Assessments and designs use normalized tables. Keys and constraints
+validate their IDs, references, decisions and bases.
 
 ## Public identities
 
@@ -35,10 +34,9 @@ todo; dismissal is terminal. Deferral records why routing cannot yet be
 decided without inventing an umbrella identity.
 
 One concern attaches directly to at most one umbrella. Several concerns may
-attach to the same `tN`. After unification, historical links remain physically
-on their original umbrellas; the survivor's read projection derives inherited
-effective concerns through the supersession relationship. It does not rewrite
-one `cN` onto several `tN` rows.
+attach to the same `tN`. After unification, historical links remain on their
+original umbrellas. The survivor's read view includes inherited concerns
+through the supersession relationship. Todo does not copy a `cN` onto several `tN` rows.
 
 ## Todo umbrellas and direction revisions
 
@@ -61,8 +59,7 @@ it explicitly selects one of two umbrellas as the survivor, retains both
 identifiers and all their provenance, and prevents the superseded identity from
 becoming a second current result.
 
-`done` and `reopen` remain idempotent umbrella transitions. They do not create
-an execution record or prove that a particular design was implemented.
+`done` and `reopen` record idempotent umbrella status transitions.
 
 ## Routing proposals and decisions
 
@@ -117,13 +114,12 @@ whose source prefix has no persisted base, so the historical `aN` retains the
 mapping from a citation to the frozen source it denotes. The frozen Todo
 projection is persisted separately with `source_ref` `todo-snapshot`.
 
-Assessments are immutable descriptions. A later concern attachment, note,
-direction revision, accepted design, or authoritative external-state change
-does not edit the row. The read projection compares stored bases to current
-state and reports stale reasons. The existence of a newer `aN` for the same
-umbrella is itself a stale reason for every older assessment, even if its other
-bases still match: only the newest observation can be current. Staleness is
-derived; it is not a replacement for the original disposition.
+Assessments are immutable descriptions of selected inputs. A later concern
+attachment, note, direction revision, accepted design or change to a recorded
+source basis leaves the original row intact. The read projection compares
+stored bases to the current selected inputs and reports differences. A newer
+`aN` makes every older assessment non-current, even when their other bases
+still match. These comparisons are derived separately from the stored disposition.
 
 ## Designs
 
@@ -205,8 +201,8 @@ separate from design identity and state. It stores the exact `aN`, reason,
 producer tool-call identity, creation time, and ordered structured
 missing-or-stale references. It optionally links an abandoned `dN`.
 
-Returning before the first valid submission creates no design. Returning after
-an open draft atomically marks that draft `abandoned` and links it to the return.
+An assessment return before the first valid submission creates no design. If
+an open draft exists, the return atomically marks it `abandoned` and links it.
 A ready or terminal design cannot be returned. The return is terminal for the
 liaison run, so retries resolve to the same outcome rather than later creating
 a draft from that run.
@@ -234,18 +230,16 @@ Migration is explicit and preserves legacy meaning conservatively:
 2. Its title and pointer become direction revision 1, marked as legacy-derived.
 3. Its pointer and source path produce one captured concern attached to that
    same umbrella.
-4. Its original researched note is retained byte-for-byte as a
-   `legacy_unreviewed` design. It is not accepted and is not silently split
-   into an assessment, accepted design, or implementation plan.
+4. Its original researched note is stored byte-for-byte as a
+   `legacy_unreviewed` design.
 5. Existing working notes are preserved in order and receive `nN` identities.
-6. Migration infers no relationship or unification between legacy todos and no
-   implementation or closure evidence from a `done` marker.
+6. Each legacy todo remains a separate umbrella with its recorded lifecycle.
 
 `todo migrate --backup ABSOLUTE_PATH` requires an absent absolute backup path
 for a version-1 database. It writes a complete SQLite backup before applying
 the version-2 transaction. Failure leaves the original usable; success retains
 the caller's backup. Running the command against an already-current database is
-a true no-op and does not touch the supplied backup path.
+a no-op and does not touch the supplied backup path.
 
 Constraints and triggers prevent mutation of immutable provenance, sealed
 proposals, assessments, decided designs, and existing working notes. Foreign

@@ -22,9 +22,9 @@ The installed database defaults to
 `--state-root` override exists only for controlled tests and isolation. No
 command falls back to state in the current directory.
 
-`KEY` is `owner/name`; both components are at most 63 bytes, begin with a
-lowercase ASCII letter, and then contain only lowercase letters, digits, or hyphens. Its collision-free
-LaunchAgent label is `org.clockwork.owner.name`.
+`KEY` is `owner/name`. Each component has at most 63 bytes and starts with a
+lowercase ASCII letter. The remaining characters are lowercase letters, digits,
+or hyphens. Its unique LaunchAgent label is `org.clockwork.owner.name`.
 
 Every successful command emits a JSON `{"ok":true,"data":...}` envelope;
 `--json` selects its compact form. With `--json`, coded failures emit
@@ -34,9 +34,10 @@ machine protocol.
 
 ## Definition manifest
 
-`definition register` accepts a current-user-owned, non-group/world-writable
-regular non-symbolic UTF-8 TOML file of at most 1 MiB. Unknown fields are
-rejected. The version-one shape is:
+`definition register` accepts a regular UTF-8 TOML file of at most 1 MiB.
+The file must belong to the current user and must not be a symbolic link.
+Group and other users must not have write permission. Clockwork rejects unknown
+fields. The version-one shape is:
 
 ```toml
 schema_version = 1
@@ -196,9 +197,9 @@ pre-start failure after admission is retained as `start_failed` when that
 terminal write succeeds. A supervision failure after spawn records the child's
 observed terminal state when cleanup is proved; if termination or persistence
 cannot be proved, the running row is deliberately left for conservative lost
-recovery. These are runtime observations. They do not claim that a digest was
-sent, an inbox was drained, a semantic change was correct, or any other product
-goal succeeded.
+recovery. These records describe the supervised process. The product records
+its own result, such as a sent digest, a processed inbox item, or an accepted
+semantic revision.
 
 ## Inspection
 
