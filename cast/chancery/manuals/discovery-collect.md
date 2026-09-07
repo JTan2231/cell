@@ -25,6 +25,17 @@ Cast searches configured TheirStack, Brave and Hacker News query families,
 extracts company leads and public careers sources, then collects from supported
 employer/ATS sources. It stores companies, jobs and the outcome of each selected
 collection step, including failed, partial, unsupported and deferred steps.
+
+After external collection and before job inserts or updates, Cast requires the
+incoming title to contain `engineer`. Matching ignores ASCII case and uses a
+substring: `Software Engineer` and `Engineering Manager` qualify. A match in
+the description alone does not qualify. The filter applies to discovery and
+careers collection. Company and source records, pagination, collection outcomes
+and request charges are retained even when every job on a page is excluded.
+The filter does not delete existing jobs. An excluded observation that matches
+an existing job identity counts as present for that source scan, but does not
+update the job's fields, revision or observation times, or add job aliases.
+
 Supported ATS boards use separate provider/tenant company identities. Generic
 JSON-LD collection requires the hiring organization's root homepage URL. The
 URL must have no query or fragment. Its host must match the page or job host,
@@ -71,8 +82,10 @@ A later employer-source observation restores `listed`.
 These values are stored in each job's availability field.
 Each job includes its recorded status and source collection timestamps.
 
-A run result records the rows stored and each selected step's completed,
-failed or deferred outcome. Read `cast export --json` and source coverage for the
+A run result records each selected step's completed, failed or deferred outcome.
+Its `company_observations` counts company drafts returned by discovery,
+including companies whose jobs were excluded. The `jobs` count in status counts
+stored jobs. Read `cast export --json` and source coverage for the
 actual handoff. Downstream products decide job selection and retain their own
 application and notification histories.
 

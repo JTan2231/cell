@@ -14,10 +14,13 @@ cast export --json
 ```
 
 Collection uses configured TheirStack, Brave and Hacker News searches, followed
-by supported public careers sources. Cast stores companies and jobs alongside
-collection timestamps, query limits, failures and budget deferrals. Collection
-does not call models, use computer controls, update CRM, prepare applications or
-send email.
+by supported public careers sources. After collection, Cast stores incoming job
+fields only when the title contains `engineer`, ignoring case. This includes
+`Engineering Manager`. Company and source records, collection progress and
+request charges are retained. Existing jobs are not removed by this filter.
+Cast stores collection timestamps, query limits, failures and budget deferrals.
+Collection does not call models, use computer controls, update CRM, prepare
+applications or send email.
 
 The installed frontend reads only `THEIRSTACK_API_KEY` and
 `BRAVE_SEARCH_API_KEY` from `~/.zshrc`. It removes unrelated environment variables

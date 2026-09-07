@@ -358,8 +358,9 @@ impl Store {
             }
             if source.cursor.is_none() { tx.execute("DELETE FROM source_scan_seen WHERE source_id=?1",[&source.id])?; }
             for draft in &result.jobs {
-                let job=job_inner(tx,&source.company_id,&source.id,draft)?;
-                tx.execute("INSERT OR IGNORE INTO source_scan_seen VALUES(?1,?2)",params![source.id,job.id])?;
+                if let Some(job_id)=collect_job_inner(tx,&source.company_id,&source.id,draft)? {
+                    tx.execute("INSERT OR IGNORE INTO source_scan_seen VALUES(?1,?2)",params![source.id,job_id])?;
+                }
             }
             for url in &result.careers_urls {
                 if let Ok(url)=normalize_url(url) {
@@ -912,7 +913,7 @@ fn ingest_inner(
     }
     for job in &draft.jobs {
         if !job.url.is_empty() {
-            job_inner(tx, &company.id, discovery_source, job)?;
+            collect_job_inner(tx, &company.id, discovery_source, job)?;
         }
     }
     Ok(company)
@@ -986,6 +987,34 @@ fn source_inner(tx: &Transaction<'_>, company_id: &str, url: &str) -> Result<Sou
     };
     put(tx, "sources", &id, &source)?;
     Ok(source)
+}
+
+fn collect_job_inner(
+    tx: &Transaction<'_>,
+    company_id: &str,
+    source_id: &str,
+    draft: &JobDraft,
+) -> Result<Option<String>> {
+    if draft.title.to_ascii_lowercase().contains("engineer") {
+        return Ok(Some(job_inner(tx, company_id, source_id, draft)?.id));
+    }
+
+    // Preserve scan presence for an existing job without storing excluded fields
+    // or new aliases. A title change must not become a missing observation.
+    if !draft.source_key.is_empty()
+        && let Some(id) = alias(
+            tx,
+            "job_aliases",
+            "job_id",
+            &format!("key:{}", draft.source_key),
+        )?
+    {
+        return Ok(Some(id));
+    }
+    let Ok(url) = normalize_url(&draft.url) else {
+        return Ok(None);
+    };
+    alias(tx, "job_aliases", "job_id", &format!("url:{url}"))
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1323,6 +1352,7 @@ mod tests {
             name: "Bad".into(),
             domain: Some("bad.example".into()),
             jobs: vec![JobDraft {
+                title: "Engineer".into(),
                 url: "not a URL".into(),
                 ..Default::default()
             }],

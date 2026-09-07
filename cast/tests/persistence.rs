@@ -1,7 +1,7 @@
 use cast::{
     Result,
     adapters::prepare_query,
-    models::{Budgets, Config, JobDraft, Snapshot, VerificationResult},
+    models::{Budgets, CompanyDraft, Config, JobDraft, Snapshot, VerificationResult},
     store::Store,
 };
 use serde_json::{Value, json};
@@ -246,6 +246,185 @@ fn job(number: u8) -> JobDraft {
         is_listed: true,
         ..JobDraft::default()
     }
+}
+
+fn collected_jobs() -> Vec<JobDraft> {
+    [
+        "Software Engineer",
+        "PLATFORM ENGINEER",
+        "eNgInEeR",
+        "Engineering Manager",
+        "Developer",
+        "Designer",
+        "",
+        "   ",
+    ]
+    .into_iter()
+    .zip(1..)
+    .map(|(title, number)| JobDraft {
+        title: title.into(),
+        description: Some("Work with engineers".into()),
+        ..job(number)
+    })
+    .collect()
+}
+
+#[test]
+fn discovery_filters_job_titles_before_storage_and_keeps_collection_progress() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let store = Store::init(directory.path())?;
+    let config = Config::default();
+    let query = config
+        .queries
+        .iter()
+        .find(|query| query.provider == "theirstack")
+        .ok_or("default configuration should include TheirStack")?;
+    let mut coverage = store.coverage(query)?;
+    coverage.status = "partial".into();
+    coverage.cursor = Some(json!({"page": 1}));
+    let company = CompanyDraft {
+        name: "Employer".into(),
+        domain: Some("employer.example".into()),
+        careers_urls: vec!["https://employer.example/careers".into()],
+        jobs: collected_jobs(),
+        ..CompanyDraft::default()
+    };
+    let run = store.start_run()?;
+    let request = store.reserve_request(&run, "theirstack", 8, &config.budgets)?;
+    store.settle_request(&request, Some(8))?;
+    store.record_discovery(&[company], "discovery:fixture", &coverage)?;
+
+    let excluded = CompanyDraft {
+        name: "Another employer".into(),
+        domain: Some("another.example".into()),
+        jobs: vec![JobDraft {
+            title: "Designer".into(),
+            url: "not a URL".into(),
+            ..job(9)
+        }],
+        ..CompanyDraft::default()
+    };
+    store.ingest_company(&excluded, "discovery:fixture")?;
+    coverage.status = "complete".into();
+    coverage.cursor = None;
+    coverage.last_complete_at = Some(cast::now());
+    store.record_discovery(&[excluded], "discovery:fixture", &coverage)?;
+    drop(store);
+
+    let store = Store::open(directory.path())?;
+    let snapshot = store.snapshot()?;
+    assert_eq!(snapshot.companies.len(), 2);
+    assert_eq!(snapshot.source_health.len(), 1);
+    assert_eq!(snapshot.jobs.len(), 4);
+    for expected in collected_jobs().iter().take(4) {
+        assert!(snapshot.jobs.iter().any(|job| {
+            job.title == expected.title
+                && job.source_key == expected.source_key
+                && job.availability == "unknown"
+        }));
+    }
+    assert_eq!(store.coverage(query)?.status, "complete");
+    assert!(store.coverage(query)?.cursor.is_none());
+    assert_eq!(
+        store.coverage(query)?.last_complete_at,
+        coverage.last_complete_at
+    );
+    assert_eq!(store.status()?["usage"]["theirstack"]["total_units"], 8);
+    Ok(())
+}
+
+#[test]
+fn careers_collection_filters_job_titles_before_storage() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let store = Store::init(directory.path())?;
+    let source = store.add_manual_source("https://employer.example/careers", None)?;
+    store.record_verification(
+        &source,
+        &VerificationResult {
+            jobs: collected_jobs(),
+            complete: true,
+            outcome: "complete".into(),
+            ..VerificationResult::default()
+        },
+        86400,
+    )?;
+    drop(store);
+
+    let snapshot = Store::open(directory.path())?.snapshot()?;
+    assert_eq!(snapshot.jobs.len(), 4);
+    for expected in collected_jobs().iter().take(4) {
+        assert!(snapshot.jobs.iter().any(|job| {
+            job.title == expected.title
+                && job.source_key == expected.source_key
+                && job.availability == "listed"
+        }));
+    }
+    assert_eq!(snapshot.source_health[0].status, "complete");
+    assert!(snapshot.source_health[0].last_success_at.is_some());
+    Ok(())
+}
+
+#[test]
+fn excluded_title_changes_preserve_jobs_and_scan_presence_across_restart() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let store = Store::init(directory.path())?;
+    let source = store.add_manual_source("https://employer.example/careers", None)?;
+    store.record_verification(
+        &source,
+        &VerificationResult {
+            jobs: vec![job(1), job(2)],
+            complete: true,
+            outcome: "complete".into(),
+            ..VerificationResult::default()
+        },
+        86400,
+    )?;
+    let before = store.snapshot()?.jobs;
+    store.record_verification(
+        &store.source(&source.id)?,
+        &VerificationResult {
+            jobs: vec![
+                JobDraft {
+                    title: "Developer".into(),
+                    url: "https://employer.example/jobs/new-url".into(),
+                    ..job(1)
+                },
+                JobDraft {
+                    title: "Designer".into(),
+                    source_key: "fixture:new-key".into(),
+                    url: "https://employer.example/jobs/2?utm_source=fixture".into(),
+                    ..job(2)
+                },
+            ],
+            next_cursor: Some(json!({"offset": 2})),
+            outcome: "partial".into(),
+            ..VerificationResult::default()
+        },
+        86400,
+    )?;
+    drop(store);
+
+    let store = Store::open(directory.path())?;
+    store.record_verification(
+        &store.source(&source.id)?,
+        &VerificationResult {
+            jobs: vec![JobDraft {
+                title: "Product Manager".into(),
+                ..job(3)
+            }],
+            complete: true,
+            outcome: "complete".into(),
+            ..VerificationResult::default()
+        },
+        86400,
+    )?;
+    assert_eq!(
+        serde_json::to_value(store.snapshot()?.jobs)?,
+        serde_json::to_value(before)?
+    );
+    assert_eq!(store.source(&source.id)?.status, "complete");
+    assert!(store.source(&source.id)?.cursor.is_none());
+    Ok(())
 }
 
 #[test]

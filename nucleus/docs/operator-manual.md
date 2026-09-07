@@ -183,7 +183,12 @@ action. CRM has no scheduler and no direct-Codex fallback.
 Cast stores companies and jobs in its private SQLite database. Its ordinary
 Rust and HTTP collection commands search configured providers and read public
 careers sources. Each collection records request outcomes, observation times,
-and local budget accounting alongside company and job updates. Downstream
+and local budget accounting alongside company and job updates. After external
+collection, Cast admits incoming job fields only when the title contains
+`engineer`, ignoring ASCII case. The substring rule includes
+`Engineering Manager`. It preserves company/source records, pagination and request charges.
+It does not prune existing jobs; excluded observations of known jobs preserve
+scan presence without updating job fields or observation times. Downstream
 products consume its supported snapshot and retain their own selection,
 application and notification state. Failed or partial collections retain their
 request diagnostics. Only completed employer/ATS scans advance missing-scan

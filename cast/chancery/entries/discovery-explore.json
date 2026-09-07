@@ -107,6 +107,10 @@
     "data_semantics": [
       {
         "status": "declared",
+        "statement": "Collection stores incoming job fields only when the title contains engineer as an ASCII case-insensitive substring. Reads and exports include all retained jobs, including older records that the filter does not remove. Job counts describe retained records rather than all externally returned postings. Excluded observations of existing jobs preserve source-scan presence without updating job fields or observation times."
+      },
+      {
+        "status": "declared",
         "statement": "Revisions track retained record changes; observation dates, source-provided dates, job availability and collection health remain separate. Stored relevance reasons describe discovery signals rather than personal recommendations."
       },
       {

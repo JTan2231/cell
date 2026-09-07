@@ -7,7 +7,7 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Cast owns company and job identities, extracted fields, source metadata, and collection outcomes and timestamps. It also owns query configuration, local budgets, source retry state, consistent JSON exports and program packaging."
+      "Cast owns company and job identities, incoming job title admission, extracted fields, source metadata, and collection outcomes and timestamps. It also owns query configuration, local budgets, source retry state, consistent JSON exports and program packaging."
     ],
     "not_authoritative_for": [
       "Downstream products own personal selection, CRM cases, application packets, application submission and email delivery."

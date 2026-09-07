@@ -1,11 +1,11 @@
 {
   "id": "cast.discovery.collect",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Discover companies and collect current jobs",
-  "summary": "Discover companies and collect public job postings within configured limits. Store companies, jobs, source metadata, collection outcomes and budget usage.",
+  "summary": "Discover companies and collect public job postings within configured limits. Retain incoming jobs whose titles contain engineer, ignoring case, plus companies, source metadata, collection outcomes and budget usage.",
   "use_when": [
     "New employers and postings should be found through configured recurring query families.",
     "Previously discovered employer careers sources should be refreshed with ordinary HTTP."
@@ -82,10 +82,14 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Collection emits a run result and retains normalized companies, jobs, source health, query coverage and conservative budget usage."
+        "statement": "Collection emits a run result and retains normalized companies, admitted jobs, source health, query coverage and conservative budget usage. The run's company_observations counts company drafts returned by discovery, including companies whose jobs were excluded; status.jobs counts retained job records."
       }
     ],
     "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "After external collection and before job inserts or updates, discovery and careers ingestion require the incoming title to contain engineer as an ASCII case-insensitive substring. Engineering Manager qualifies; a description-only match does not. Excluded observations do not write job fields or new job aliases. Existing jobs are not deleted, and excluded observations of known job identities still count as present for source scans without updating job revisions or observation times."
+      },
       {
         "status": "declared",
         "statement": "First and last seen are Cast observation times. Provider publication and update dates use separate fields. Failed and partial fetches do not add missing observations. The employer_jsonld_owned adapter requires the hiring organization's root homepage URL, with no query or fragment. Its host must match the page or job host, or that host's parent employer domain. Shared recruiting hosts such as join.com and curriculo.me require a separate adapter. Search and directory results use their own attribution kinds."
@@ -104,7 +108,7 @@
       },
       {
         "status": "declared",
-        "statement": "Collection stores returned company and job fields, source metadata and per-request outcomes."
+        "statement": "Collection stores returned company fields, admitted job fields, source metadata and per-request outcomes. Title filtering preserves company and source records, pagination, collection outcomes and request charges, including pages where all jobs are excluded."
       }
     ],
     "access": [
@@ -132,7 +136,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Capability version 1 publishes Cast 0.1 collection behavior; configuration and export schema versions remain separate."
+        "statement": "Capability version 2 adds the engineer title requirement before job persistence. Configuration and export schema versions remain unchanged and separate. Existing jobs are not pruned."
       },
       {
         "status": "unspecified",
