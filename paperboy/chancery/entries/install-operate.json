@@ -1,0 +1,211 @@
+{
+  "id": "paperboy.install.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install and schedule Paperboy",
+  "summary": "Deploy Paperboy under requester maintenance, inspect readiness, and enable or disable its exact installed daily local 09:00 runner.",
+  "use_when": [
+    "Deploy Paperboy under requester maintenance, inspect readiness, and enable or disable its exact installed daily local 09:00 runner."
+  ],
+  "do_not_use_when": [
+    "The request is to mutate source tasks, contact another recipient, certify STE compliance, or infer final inbox delivery."
+  ],
+  "outcome": "Deploy Paperboy under requester maintenance, inspect readiness, and enable or disable its exact installed daily local 09:00 runner.",
+  "interfaces": [
+    {
+      "label": "Initialize private state",
+      "invocation": "paperboy init"
+    },
+    {
+      "label": "Deploy committed main",
+      "invocation": "./deploy.sh paperboy"
+    },
+    {
+      "label": "Enable the current release daily",
+      "invocation": "paperboy schedule enable"
+    },
+    {
+      "label": "Disable the daily binding",
+      "invocation": "paperboy schedule disable"
+    },
+    {
+      "label": "Read selected schedule",
+      "invocation": "paperboy schedule status"
+    },
+    {
+      "label": "Read readiness",
+      "invocation": "paperboy doctor"
+    },
+    {
+      "label": "Inspect maintained installation",
+      "invocation": "paperboy-install inspect"
+    },
+    {
+      "label": "Take deployment backup",
+      "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER paperboy migrate --backup ABSENT_ABSOLUTE_PATH"
+    },
+    {
+      "label": "Maintain admission",
+      "invocation": "paperboy --json maintenance hold|drain|status|release [OWNER]"
+    }
+  ],
+  "effects": [
+    "Installation selects exact product and provider artifacts under maintenance; explicit schedule enable/disable changes only paperboy/daily. Initialization creates empty schema-one state; backup preserves existing records."
+  ],
+  "authority": [
+    "Paperboy owns summary and occurrence success; providers retain their source, execution, activation, credential and transport authority."
+  ],
+  "success": [
+    "A report is generated when its summary is committed. A send succeeds when provider acceptance is retained. Installation succeeds after exact candidate readiness and release of run-owned holds. Schedule enable succeeds when Clockwork commits its binding."
+  ],
+  "failure_and_recovery": [
+    "Retain failed or uncertain operation state. Resume the same brief and exact request; use a new job only for explicit retry after terminal failure. Inspect Resend before reconciling an uncertain email. Preserve maintenance holds when recovery cannot prove safety."
+  ],
+  "privacy": [
+    "Source text can enter private tool replies and Nucleus records; final email text leaves for Resend and the personal inbox provider. Secrets never enter prompts, product records or Clockwork definitions."
+  ],
+  "dependencies": [
+    {
+      "id": "conversations.history.explore",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "email.message.send",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
+  ],
+  "does_not_authorize": [
+    "Catalog presence does not authorize an ad hoc send, enabling the schedule, changing providers, deleting private records, or treating uncertain acceptance as absence."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user and authorized installed local Paperboy runner."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Cell coordinated deployment uses committed local main, compatible candidate and Nucleus requester maintenance closure. Schedule enable requires the selected installed Paperboy executable. Explicit installation and schedule authority are separate from discovery."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Brief identity or occurrence, absolute requested timeframe, source pointers, and versioned fixed agent instructions. The initial task contains no preloaded conversation content."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "JSON envelopes expose requested brief/attempt selections and acceptance receipts. Preview exposes the exact stored subject/body. Errors describe the failed operation; process success is not inbox receipt."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A brief owns one requested interval and accepted immutable summary. An agent attempt owns one exact job request and durable tool replies. An email attempt represents one Email invocation. Source retrieval remains agent-directed."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Brief, agent-attempt and email-attempt IDs are stable UUID identities. Daily occurrence identity is the local 09:00 cutoff instant; ad hoc IDs are independent. All record and tool filter timestamps use Unix seconds. Window start is inclusive, end exclusive; length is 86400 seconds."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "History is read live on demand. Provider page failures remain errors. Tool pagination reports selected_count, offset, next_offset and has_more for the filtered metadata or message collection. Brief list limits only brief metadata. No snapshot, machine-wide event completeness or independent generated-text accuracy is asserted."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No maximum source age, launch delay, model start/completion time or inbox receipt time is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The typed Nucleus client and Conversations library perform agent execution and on-demand reads. Clockwork uses its provider-owned typed CLI client. Email uses its installed credential-loading CLI. Agent workspace, local execution and web access are disabled."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Run-owned holds block admissions and drain counts all nonterminal Paperboy jobs. The shared installer takes a supported database backup, selects immutable program/provider bytes, checks held readiness, then releases maintenance. Existing Clockwork selections remain unchanged until explicit schedule enable; disabled selections remain preserved."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "One active product runner, 1200-second active agent timeout, 1800-second total agent wait, 2100-second Clockwork timeout, and 180-second Email invocation observation. History pages contain up to 100 records; final body is at most 64000 UTF-8 bytes."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No throughput, future history-retention, automatic language certification, unlimited retry or unlimited deduplication guarantee."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Private schema 1 and paperboy/daily-report toolset 1. Exact retained requests preserve invocation meaning. No legacy database migration or direct incompatible rollback exists."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general future compatibility window or deprecation period."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Conversations supplies normalized local history and stable source identities.",
+        "target": "conversations",
+        "kind": "data",
+        "contract": "conversations.history.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus supplies constrained execution, mailbox durability and managed authentication.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Email supplies fixed personal-recipient submission and provider acceptance.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "Clockwork supplies exact release activation, schedule selection and runtime history.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Cell release preparation, coordinated installation and shared file transactions own build, hold ordering and artifact compensation.",
+        "target": "cell-deployment",
+        "kind": "control"
+      }
+    ]
+  },
+  "manual": "manuals/install-operate.md"
+}

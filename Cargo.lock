@@ -1620,6 +1620,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperboy"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "cell-install",
+ "cell-maintenance",
+ "chrono",
+ "clap",
+ "clockwork",
+ "conversations",
+ "fs2",
+ "nucleus-client",
+ "nucleus-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml",
+ "uuid",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

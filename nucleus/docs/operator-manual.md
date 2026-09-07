@@ -1130,6 +1130,27 @@ separate, explicit decision after meeting its recovery and retention requirement
 
 ## Add a new requester
 
+Paperboy is the daily conversation-report requester. Its private schema-one
+database owns briefs, exact Nucleus agent attempts and email attempts. The
+initial agent input contains source pointers and a fixed timeframe only. Narrow
+dynamic tools let the agent discover and read normal-user Conversations history
+on demand and commit a final ASD-STE100 Issue 9 summary with no process commentary.
+The job uses `gpt-5.6-sol`, medium reasoning, workspace `none`, no local execution,
+no web, and a 1,200-second active timeout. Paperboy waits at most 1,800 seconds
+including capacity and owns retries; it has no direct-Codex fallback. Durable
+tool replies and Nucleus records can retain retrieved private source text.
+
+Paperboy sends the frozen summary through Email under its standing personal
+digest authority. Provider acceptance and an uncertain send remain distinct.
+`paperboy run --ad-hoc` sends an independent report without consuming the daily
+occurrence. `paperboy/daily` is an explicit Clockwork local-calendar 09:00 binding
+with no run-at-load. Program installation preserves existing schedule pins;
+`paperboy schedule enable` selects the current installed release after deployment.
+The coordinator includes Paperboy in the Nucleus requester maintenance closure.
+Its gate observes live admissions and all nonterminal Paperboy Nucleus jobs.
+Database backups, release integrity, and held readiness precede admission release.
+See [Paperboy](../../paperboy/README.md) for records, disclosure and recovery.
+
 ### Provider-owned Rust interfaces
 
 Each system owns the Rust types and operations for its exported interfaces.

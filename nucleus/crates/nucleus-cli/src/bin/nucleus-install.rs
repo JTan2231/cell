@@ -540,7 +540,7 @@ fn adapter(operation: Operation) -> Result<Value> {
             Ok(reply(
                 "ready",
                 "owned Nucleus installation and configured harness inspected",
-                json!({"current":selection(&snapshot),"installed":snapshot,"runtime":status,"harness_executable":harness(&health)?,"maintenance_products":["annals","krisis","semantics","crm","todo","weaver","platter"],"after":[]}),
+                json!({"current":selection(&snapshot),"installed":snapshot,"runtime":status,"harness_executable":harness(&health)?,"maintenance_products":["annals","krisis","semantics","crm","todo","weaver","platter","paperboy"],"after":[]}),
             ))
         }
         Operation::Hold => {

@@ -24,6 +24,7 @@ members = [
     "usher/crates/usher",
     "cast",
     "platter",
+    "paperboy",
 ]
 resolver = "3"
 

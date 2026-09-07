@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "product": "paperboy",
+  "application": "Paperboy",
+  "dependencies": ["conversations", "email", "nucleus", "clockwork"],
+  "maintenance_products": ["nucleus"],
+  "description": "Install Paperboy under requester maintenance; preserve reports and explicitly managed schedule pins.",
+  "adapter_binary": "paperboy-install"
+}

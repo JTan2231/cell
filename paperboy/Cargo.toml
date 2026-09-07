@@ -1,0 +1,27 @@
+[package]
+name = "paperboy"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = "1"
+cell-install.workspace = true
+cell-maintenance.workspace = true
+chrono = "0.4"
+clap.workspace = true
+clockwork = { path = "../clockwork/crates/clockwork" }
+conversations = { path = "../conversations/crates/conversations" }
+fs2.workspace = true
+nucleus-client.workspace = true
+nucleus-core.workspace = true
+rusqlite = { workspace = true, features = ["backup"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+toml.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true
