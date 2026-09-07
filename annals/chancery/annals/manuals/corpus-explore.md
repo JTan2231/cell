@@ -1,8 +1,8 @@
 # Explore the Annals corpus
 
-Annals reads are local and bounded. HEAD is the default; supported commands
-that accept `--at <REVISION>` can instead read one immutable historical corpus
-state. Reads invoke no model and make no network request.
+Annals reads are local and bounded. HEAD is the default. Commands that accept
+`--at <REVISION>` can read an immutable historical corpus state. Reads invoke
+no model and make no network request.
 
 ## Find and inspect ideas
 
@@ -25,9 +25,9 @@ sibling position.
 derived ancestor-label context. `--within <cN>` limits the search to concepts
 below one selected concept.
 
-Graph expansion is bounded by direction, depth, and maximum nodes. A reported
-frontier identifies where those limits stopped expansion; it must not be
-described as the complete graph or as corpus leaves.
+Graph expansion is bounded by direction, depth, and maximum nodes. A frontier
+identifies where those limits stopped expansion. It does not identify corpus
+leaves or contain the complete graph.
 
 Evidence output pairs a concept with exact quotation occurrences from retained
 works. Evidence supports the concept across its parent relationships and

@@ -16,7 +16,7 @@
     "A requester-owned domain result or retry decision is the actual authority being sought.",
     "The goal is to create a project registry or workflow graph."
   ],
-  "outcome": "A clearly observed or deliberately changed Nucleus runtime condition, identified through Nucleus job, account, service, or health state rather than requester domain inference.",
+  "outcome": "An observed or deliberately changed Nucleus runtime condition, reported through its job, account, service, or health state.",
   "effects": [
     "Read commands expose daemon, execution-capacity, account, job, request, and exact harness-output state.",
     "Job submission creates one durable Nucleus job and may invoke Codex and consume account allowance; an accepted job remains queued with a pending attempt while all eight global execution slots are occupied.",
@@ -136,7 +136,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Existing health, account, submission, job show, log, mailbox, cancellation and service results retain protocol-one meaning. jobs status returns runtime/requester identity, current attempt state/ID, pending call IDs/names, final-output availability and terminal reason/message. jobs wait --timeout 60 returns one terminal or timeout observation and never cancels on timeout. Status uses successive mailbox/job reads rather than an atomic snapshot; initial read errors remain errors. jobs list defaults to 20 with its existing continuation."
+        "statement": "Health, account, submission, job show, log, mailbox, cancellation, and service results retain protocol-one meaning. jobs status returns runtime and requester identity, current attempt state and ID, pending call IDs and names, final-output availability, and terminal reason and message. jobs wait --timeout 60 returns one terminal or timeout observation. A timeout does not cancel the job. Status reads mailbox and job state in sequence, without an atomic snapshot. Initial read errors remain errors. jobs list defaults to 20 and retains its continuation behavior."
       },
       {
         "status": "unsupported",
@@ -154,7 +154,7 @@
       },
       {
         "status": "declared",
-        "statement": "Strict health reports whether the exact installed daemon, adapter, harness, credential, and admission conditions currently permit work and snapshots the scheduler's maxActiveJobs, activeJobs, and availableSlots counts, with maxActiveJobs fixed at eight in this release; a degraded document is still diagnostic output and exits nonzero."
+        "statement": "Strict health reports whether the installed daemon, adapter, harness, credential, and admission conditions currently permit work. It returns the scheduler's maxActiveJobs, activeJobs, and availableSlots counts; maxActiveJobs is eight in this release. Degraded health still returns diagnostics but exits nonzero."
       }
     ],
     "identity_and_units": [

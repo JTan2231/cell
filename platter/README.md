@@ -1,10 +1,10 @@
 # Platter
 
 Platter prepares up to three previously unsent opportunities from Cast.
-Each packet contains a short, sectioned brief and a tailored resume PDF. Two Nucleus
-jobs use `gpt-5.6-sol` with `max` reasoning: one assesses and briefs the role,
-and the second writes only the Jackson work-experience bullets when the role
-is worth pursuing. Both can investigate the same captured CRM career library.
+Each packet contains a short brief with sections and a tailored resume PDF.
+Two Nucleus jobs use `gpt-5.6-sol` with `max` reasoning. The first assesses and
+briefs the role. If it recommends pursuit, the second writes only the Jackson
+work-experience bullets. Both can read the same captured CRM career library.
 
 New briefs give a direct, evidence-grounded **Why it works**, a flat **Role**
 summary of stack, responsibilities and process, and an optional **Culture**
@@ -22,8 +22,8 @@ escaped before insertion. Generated PDFs must fit the original one-page
 layout. The original template and generated materials stay in private state.
 
 **The stored delivery setting is 09:00 in America/Chicago; no recurring
-schedule is installed or enabled.** There is no
-candidate or token budget. External account limits, execution timeouts and
+schedule is installed or enabled.** There is no candidate or token budget.
+External account limits, execution timeouts and
 source/rendering constraints still apply.
 
 After installation, use `platter`; a source build can use
@@ -80,7 +80,8 @@ send history. No direct CRM or Cast database access is used. Similar roles
 without a shared canonical identifier are not guaranteed to deduplicate.
 
 The full [CLI and recovery contract](chancery/manuals/packet-prepare.md)
-describes private state, source limitations and recovery. The [installation contract](docs/system-installation.md) describes the
+describes private state, source limits and recovery. The
+[installation contract](docs/system-installation.md) describes the
 `platter-install` executable, coordinated maintenance and release recovery.
 Building this source does not install its command or Chancery selector. Until a
 separate semantic repository is registered, this product uses Cell terminology.

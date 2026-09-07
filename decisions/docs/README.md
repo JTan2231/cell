@@ -8,4 +8,4 @@
 - [System installation](system-installation.md): public identities, paths,
   observer packaging, migration, and recovery.
 
-Installed Chancery contracts are the public operational summary.
+Installed Chancery contracts summarize supported operations.

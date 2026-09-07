@@ -6,7 +6,7 @@ the behavior being changed. Keep version 0.1 small: immutable strict
 definitions, stable bindings, generated current-user LaunchAgents, per-key
 admission, one directly supervised child, and runtime history.
 
-The executable boundary is the central invariant. Runtime callers and the
+Preserve the executable contract. Runtime callers and the
 private launchd entry supply one stable `owner/name` key and no process
 context. Registration alone accepts the exact release, top-level program or
 interpreter/script hashes, literal arguments, exact scrubbed environment,
@@ -17,7 +17,7 @@ hashed, root-owned `/bin/sh` as an interpreter. Every launch image is canonical,
 non-writable by group or world, and reverified before spawn. Never add PATH lookup, mutable selectors, shell strings,
 interpolation, implicit shebang choice, inherited environment, or runtime argv.
 
-Keep the attestation claim narrow. Clockwork verifies the registered top-level
+Clockwork verifies the registered top-level
 launch images at the documented times. It does not attest transitive libraries,
 configuration opened later, subprocesses, network peers, same-user tampering
 after verification, or product meaning.
@@ -33,15 +33,15 @@ Preserve authority:
 - launchd owns timer delivery in the current user's GUI session. Clockwork
   publishes the reliance and no delivery SLA.
 
-Each activation remains at most one direct child, not a container of attempts.
+Each activation has at most one direct child and no retries.
 Exercise start failure, exit, signal, timeout, scheduled and manual overlap,
 termination forwarding, and lost-process proof independently. Never turn exit
 zero into `succeeded`, store output bodies, or retry automatically.
 
 Binding transitions use an exclusive stable-key gate while activations use its
 shared side plus an exclusive admission lock. They treat database selection,
-atomic plist bytes and digest, and launchd loaded state as one operational consistency
-unit. Tests should cover first enable, idempotence, update, active refusal,
+atomic plist bytes and digest, and launchd loaded state as values that must
+agree. Tests should cover first enable, idempotence, update, active refusal,
 bootout/bootstrap failures, compensation, and fail-disabled behavior. They
 must prove that no recovery leaves old and new schedules intentionally loaded
 together.

@@ -36,8 +36,8 @@ One immutable dated assessment includes:
 
 `ready` means the selected inputs support design reconciliation with no
 unresolved items. `needs_user_choice` records a material value or authority
-decision. `inconclusive` records missing material needed for the assessment. Runtime or tool failure is infrastructure failure and
-must not be relabeled as an inconclusive domain finding.
+decision. `inconclusive` records missing assessment material. Runtime or tool
+failure is infrastructure failure; do not relabel it as an inconclusive finding.
 
 ## Currentness and recovery
 
@@ -46,8 +46,8 @@ bases make it stale without rewriting it. Any newer assessment for the same
 umbrella makes every older one non-current. When facts or bases change, create
 a new assessment rather than editing the old one.
 
-Todo's committed assessment is authoritative; Nucleus job completion and model
-prose are not. Nucleus raw output may retain source content read by the
+The committed Todo assessment is the result. Nucleus job completion and model
+prose do not create an assessment. Nucleus raw output may retain source content read by the
 liaison, while Todo retains exact source references and frozen provenance.
 
 ## Rust callers

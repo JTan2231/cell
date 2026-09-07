@@ -15,7 +15,7 @@
     "The requested artifact is a task list, sequence, estimate, file edit, command, deployment, or implementation record.",
     "The owning umbrella is completed, superseded, or otherwise not open and canonical."
   ],
-  "outcome": "One basis-complete `dN` proposal or durable return for more assessment, followed only when explicitly requested by a deterministic provenance-bearing accept or reject decision.",
+  "outcome": "One `dN` proposal with all required bases, or a durable return for further assessment. An explicit request can then accept or reject a design with recorded provenance.",
   "effects": [
     "Propose and correct submit constrained Nucleus jobs and may consume Codex allowance.",
     "A proposal records desired ownership, boundaries, state, interfaces, lifecycle, failure, compatibility, acceptance, non-goals, and jurisdiction transitions against one exact assessment.",
@@ -61,7 +61,7 @@
       {"status": "unsupported", "statement": "Implementation planners, task runners, deployment systems, and callers seeking current-state research are outside this capability."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "Proposal requires an open canonical tN whose newest assessment is current and ready; correction requires an eligible ready, rejected, or abandoned dN bound to an assessment that remains current and ready."},
+      {"status": "declared", "statement": "Proposal requires an open canonical tN whose newest assessment is current and ready. Correction requires an eligible ready, rejected or abandoned dN whose assessment remains current and ready."},
       {"status": "declared", "statement": "Accept or reject requires a readable UTF-8 authorization source, and acceptance additionally requires the exact design and all recorded umbrella bases to remain current."}
     ],
     "inputs": [
@@ -74,7 +74,7 @@
       {"status": "declared", "statement": "When the assessment cannot support design, the run records a separate immutable assessment return with exact aN, reason, and missing-or-stale references, allocating no dN before initial submission."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Design is normative desired state rather than observed state or implementation; ready is structural readiness for a user decision, and accepted records authorization without planning or performing work."},
+      {"status": "declared", "statement": "A design describes desired state. It does not describe observations or implementation. Ready means structurally ready for a user decision. Accepted records authorization without planning or performing work."},
       {"status": "declared", "statement": "Jurisdiction actions are keep, move, add, or retire, and active clauses cover ownership, boundary, state, interface, lifecycle, failure, compatibility, acceptance, and non-goal."}
     ],
     "identity_and_units": [

@@ -2,10 +2,10 @@
 
 [`crates/annals/schema.sql`](../crates/annals/schema.sql) is the authoritative
 SQLite schema. The current schema is version 5. Schema version 3 remains the
-deliberate fresh-state boundary: older libraries are rejected, while `migrate`
-upgrades version 3 through the additive version-4 retry provenance and
-version-5 library profile and decision-account acceptance tables. Existing
-version-3 and version-4 libraries migrate as general libraries.
+fresh-state boundary. Annals rejects older libraries. `migrate` upgrades
+version 3 by adding version-4 retry provenance, then version-5 library profiles
+and decision-account acceptance tables. Existing version-3 and version-4
+libraries migrate as general libraries.
 
 The library stores eight kinds of facts:
 
@@ -47,11 +47,11 @@ reads do not advance it.
 
 `decision_account_acceptances` stores one immutable row for each
 `(producer, producer_key)` accepted by a dedicated decisions library. Version
-one constrains the producer to `krisis`. The row binds exact source SHA-256,
-original job ID and acceptance time to one event ID, account schema version,
-statement/context/action/result projection, occurrence time and precision, and
-one host/thread/turn/item/span authority anchor. Update and delete triggers make
-the row append-only.
+one constrains the producer to `krisis`. The row binds the exact source SHA-256,
+original job ID, and acceptance time to the account's event ID and schema
+version. It also stores the statement/context/action/result projection,
+occurrence time and precision, and one host/thread/turn/item/span authority
+anchor. Triggers prevent updates and deletion.
 
 Its integer `sequence` orders the accepted-account feed. Watermark and item
 cursors encode this position together with the persistent library identity,
@@ -104,8 +104,8 @@ of its job ID, sequence, completion time, error, and retained work. Selection
 rejects pre-retention failures because they have no durable material digest.
 The item also carries the nullable fresh child job and child delivery created
 for the retry. Its ordinal is the contiguous zero-based position in resolved
-delivery-failure order, not the original job sequence; priority dispatch may
-have made those orders differ. The original delivery and envelope remain
+delivery-failure order. Priority dispatch can make this order differ from the
+original job sequence. The original delivery and envelope remain
 terminal and are never updated to describe the retry. An original delivery is
 unique across all retry items, enforcing one direct child; if that child fails,
 a later event selects the failed child and forms a linear retry chain.
@@ -204,8 +204,8 @@ state is `recorded` and has no commit. A pending reconciliation is applied only
 while HEAD still equals its base revision.
 
 Pending-reconciliation validation, display, and application reconstruct the
-typed request and resolve it again against its original base `CorpusState`. No
-stored resolved operation list or projected state is trusted.
+typed request and resolve it against its original base `CorpusState`.
+Annals does not use a stored resolved operation list or projected state.
 
 ## Examination audit
 

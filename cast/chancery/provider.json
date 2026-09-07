@@ -7,7 +7,7 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Cast owns stored company and job identities, extracted fields and source metadata, collection outcomes and timestamps, local query configuration, conservative request-budget accounting, source retry state, consistent JSON exports, and its program packaging."
+      "Cast owns company and job identities, extracted fields, source metadata, and collection outcomes and timestamps. It also owns query configuration, local budgets, source retry state, consistent JSON exports and program packaging."
     ],
     "not_authoritative_for": [
       "Downstream products own personal selection, CRM cases, application packets, application submission and email delivery."
@@ -22,7 +22,7 @@
       ]
     },
     "shared_access_and_trust": [
-      "Cast is a current-user local CLI. Its database belongs to the selected private state directory; provider credentials arrive through the process environment. The installed wrapper sources ~/.zshrc and passes only the two provider keys and its documented environment."
+      "Cast is a local CLI for the current user. It stores its database in the selected private state directory and reads provider credentials from the environment. The installed wrapper sources ~/.zshrc and passes only the two provider keys and the documented environment variables."
     ],
     "shared_privacy_and_retention": [
       "Retained state and exports include private search interests, company/job evidence, extracted posting text, source locators and collection history. Ordinary response bodies are transient. API keys do not belong in config, database, command arguments or logs."

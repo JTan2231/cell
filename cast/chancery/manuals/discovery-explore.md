@@ -1,6 +1,6 @@
 # Inspect the discovery library
 
-Use Cast's local read interfaces to inspect what collection actually observed:
+Use Cast's local read interfaces to inspect stored records:
 
 ```sh
 cast companies list
@@ -21,10 +21,10 @@ They require supported initialized Cast state.
 
 The schema-one JSON snapshot contains `schema_version`, `snapshot_revision`,
 `captured_at`, `companies`, `jobs`, `source_health` and query `coverage`.
-Export uses one database transaction so the consumer receives one consistent
-view. Separate list/show calls may observe different committed states. `snapshot` is
-an alias for `export`; JSON is the normal output form, and accepted `--json`
-flags make the caller intent explicit. `--output` writes a private temporary
+Export uses one database transaction to return a consistent view. Separate
+list/show calls may observe different committed states. `snapshot` is an alias
+for `export`. Output uses JSON; the commands also accept an explicit `--json`
+flag. `--output` writes a private temporary
 file, syncs it, atomically replaces the destination and syncs its directory.
 It rejects the selected Cast database, its SQLite sidecars and its mutation lock
 as destinations, including aliases to those paths.
@@ -53,9 +53,9 @@ Relevance reasons record discovery matches. Posting descriptions are excerpts
 limited to 1,200 characters, with a fingerprint for comparing descriptions.
 The source locator supports a separate fetch when a consumer needs posting text.
 
-`search` performs case-insensitive substring matching on company name/domain
-and job title/description. `unresolved`
-shows companies lacking domains and sources whose status is not a successful
+`search` matches substrings in company names, domains, job titles and
+descriptions. Matching ignores case. `unresolved` shows companies without
+domains and sources whose status is not a successful
 collection/resolution outcome. `status` reports counters, usage and the last run.
 
 A consumer should use stable IDs and record revisions to compare snapshots.
@@ -71,4 +71,14 @@ return stored records without making network requests.
 
 ## Output selection
 
-List/search return schema-two pages with snapshot_revision, compact items and has_more; positive --limit defaults to 20. Job rows expose stable ID/revision, company, title, location/remote eligibility, recorded availability and last_seen_at. Search adds matched_field and a marked excerpt of at most 240 Unicode characters. Status schema 2 returns counts, budgets/usage, last run and source/query collection summaries. Show/export preserve full records, source metadata and collection outcomes; exported snapshot schema remains 1.
+List and search return schema-two pages with `snapshot_revision`, compact
+items and `has_more`. The default limit is 20 items. Use `--limit` with a
+positive integer to change it.
+
+Job rows contain stable ID and revision, company, title, location, remote
+eligibility, recorded availability and `last_seen_at`. Search adds
+`matched_field` and a marked excerpt of at most 240 Unicode characters.
+
+Status schema 2 returns counts, budgets, usage, the last run and collection
+summaries for sources and queries. Show and export return full records, source
+metadata and collection outcomes. The export snapshot still uses schema 1.

@@ -1,8 +1,8 @@
 # Operate Weaver workflows
 
 Weaver keeps one current workflow record. It has no resident daemon or
-LaunchAgent: supported commands start detached one-shot workers in the
-interactive caller's process lineage when work or recovery requires one.
+LaunchAgent. Supported commands start detached one-shot workers in the
+interactive caller's process lineage when execution or recovery requires one.
 
 ## Inspect, wait, cancel, and validate
 
@@ -62,19 +62,20 @@ cd /Users/joey/rust/cell/weaver
   --bundle /Users/joey/rust/cell/weaver/chancery
 ```
 
-The Rust `weaver-install` executable is sealed with the exact tested Weaver
-candidate and requires a version-matched provider bundle. Shared `cell-install`
-code verifies complete immutable inventories and owns selector compensation;
+The Rust `weaver-install` executable is sealed with the tested Weaver candidate
+and requires a version-matched provider bundle. Shared `cell-install` code
+verifies complete immutable inventories and owns selector compensation.
 Weaver owns maintenance and prototype retirement. The predecessor format-3
-release remains verifiable. The deployer stages a complete content-addressed release containing Weaver, its
-deployer, manifest, and version-matched Chancery provider bundle. It begins
-Weaver maintenance and lets an active workflow settle before changing
-selectors. It then removes only the exact superseded
-`org.weaver.worker` prototype service and plist when present, switches the
-installed release and command, publishes only Chancery's `providers/weaver`
-selector, validates the installed CLI, and releases only the deployment-owned maintenance it established. Weaver runtime
-code never calls Chancery, and installation remains useful when the Chancery
-reader is absent.
+release remains verifiable.
+
+The deployer stages a complete content-addressed release with Weaver, its
+deployer, manifest, and version-matched Chancery bundle. It begins maintenance
+and lets an active workflow settle before it changes selectors. It then
+removes the `org.weaver.worker` prototype service and plist if present, and
+switches the installed release and command. It publishes only Chancery's
+`providers/weaver` selector, validates the installed CLI, and releases only
+its own maintenance. Weaver runtime code never calls Chancery. Installation
+works without the Chancery reader.
 
 A failure before commit restores the prior release, command, provider selector,
 prototype plist, loaded-service state, and maintenance state. If the new release
@@ -100,13 +101,12 @@ weaver maintenance ready RUN_ID
 weaver maintenance release RUN_ID
 ```
 
-The selected private state root owns `deployment-maintenance/`. These durable
+The selected private state root contains `deployment-maintenance/`. Its durable
 run-owned holds are independent of legacy operator `.maintenance`. They block
-new submit admission, while the already admitted current workflow may finish
-or recover through wait, worker run, or maintenance drain using its exact
-persisted requests. Recovery owns a shared activity guard. Legacy operator
-maintenance continues to block claims; deployment never clears it to force
-progress.
+new submissions. The admitted current workflow can finish or recover through
+`wait`, `worker run`, or `maintenance drain` with its exact persisted requests.
+Recovery holds a shared activity guard. Legacy operator maintenance continues
+to block claims. Deployment never clears it to force progress.
 
 These commands emit JSON with `protocol_version: 1`, `holds`, `drained`,
 `nonterminal_run`, `worker_active`, and `operator_maintenance`. Drain requires

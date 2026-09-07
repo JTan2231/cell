@@ -1,8 +1,7 @@
 # Maintain a CRM case
 
-Use this capability to create one employment-oriented case, add exact new
-information to it, and inspect or explicitly recover the resulting bounded
-steward update. Use `crm.library.explore` when the task is read-only search or
+Use this capability to create an employment-related case, add information, and
+inspect or recover its steward update. Use `crm.library.explore` for search or
 case inspection, and `crm.steward.operate` for installation, initialization,
 readiness, or operator recovery.
 
@@ -31,8 +30,8 @@ They are stored CRM classifications that summarize the case's lifecycle.
   --title "Example hiring lead" notes.md --stage research
 ```
 
-The optional input is a regular non-symbolic UTF-8 Markdown file or `-` for
-standard input, at most 1,048,576 bytes. With no input, CRM uses the title plus
+The optional input is a regular UTF-8 Markdown file or `-` for standard input.
+Files must not be symbolic links. Input is limited to 1,048,576 bytes. With no input, CRM uses the title plus
 suggested `Current picture`, `People`, `Chronicle`, and `Open threads`
 headings. The headings are editorial guidance only: supplied and stewarded
 Markdown remains free-form, and CRM does not parse or require them. With no
@@ -57,9 +56,8 @@ launches the private hidden worker and returns the queued update without waiting
 for AI completion; machine output includes both the update and delivery
 identities.
 
-The durable tell transaction is the command's success condition. A worker
-launch or Nucleus readiness failure after that point cannot erase intake or
-turn a successful tell into an absent delivery.
+The committed tell transaction is command success. A later worker launch or
+Nucleus readiness failure leaves the delivery and queued update intact.
 
 ## Inspect progress
 
@@ -69,10 +67,9 @@ turn a successful tell into an absent delivery.
 /Users/joey/.local/bin/crm update wait UPDATE_ID [--timeout SECONDS]
 ```
 
-`show` distinguishes queued work, an attempt and its Nucleus job, runtime
-terminality, accepted tool delivery, and a committed CRM revision. Do not infer
-domain success from a completed Nucleus job or final model prose. CRM success
-requires the update's committed revision.
+`show` reports queued work, the attempt and its Nucleus job, terminal runtime
+state, accepted tool delivery and any committed CRM revision. Domain success
+requires the committed revision; a completed Nucleus job or model prose is insufficient.
 
 `wait` observes until failed/lost work is final or an applied update also has a
 retained terminal Nucleus observation; `--timeout SECONDS` defaults to 1,200.
@@ -173,4 +170,7 @@ enums define the interface without a separate declaration layer.
 
 ## Output selection
 
-Case creation returns a receipt with case ID, revision, stage, summary, complete advisory/attention and recorded time, without repeating Markdown. Tell durably returns its queued update and any activation warning. Exact case show retains full Markdown; runtime and domain settlement remain distinct.
+Case creation returns a receipt with case ID, revision, stage, summary,
+complete advisory and attention, and recorded time. It does not repeat Markdown.
+Tell returns the stored queued update and any activation warning. Case show
+returns full Markdown. Runtime and domain settlement remain separate.

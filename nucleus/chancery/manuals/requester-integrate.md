@@ -1,9 +1,9 @@
 # Integrate a Nucleus requester
 
-A Nucleus requester is an application integration, not a registered project.
-The application owns the durable result that motivated model work; Nucleus
-owns only the shared execution substrate. Begin every integration or shared
-boundary change by reading the installed, version-matched manual:
+A Nucleus requester integrates an application with shared execution. It is not
+a registered project. The application owns its durable result; Nucleus owns
+execution. Before each integration or shared contract change, read the installed
+manual for that version:
 
 ```sh
 /Users/joey/.local/bin/nucleus manual
@@ -64,8 +64,7 @@ The normal lifecycle is:
 
 1. Verify strict Nucleus readiness and any domain admission prerequisites.
 2. Register immutable schemas and toolsets idempotently.
-3. Persist correlation and the exact typed request before ambiguous transport
-   can occur.
+3. Persist correlation and the exact typed request before submission.
 4. Submit the request.
 5. Tolerate an accepted/pending interval, then long-poll the durable
    requester-tool mailbox while the job is nonterminal.
@@ -86,18 +85,20 @@ canonical credential refresh, and attended login is excluded until all active
 job and account sessions have ended; requesters never read, refresh, or copy
 the canonical credential themselves.
 
-## Required proof
+## Required checks
 
-Test strict health and capacity reporting, eight simultaneous active attempts
-with later work remaining accepted/pending, successful admission and domain
-completion, identical and conflicting job submissions, identical and
-conflicting tool results, requester restart with a pending call, daemon loss,
-queued and active cancellation, timeout beginning after slot acquisition,
-waiting-on-requester slot retention, concurrent account reads, serialized
-refresh and login exclusion, unsupported invocation combinations, domain
-success followed by runtime failure, absence of a hidden execution path, and
-proof that requester-owned work-packet, write-conflict, and retry semantics stay
-outside Nucleus.
+Test these behaviors:
+
+- Strict health, capacity reporting, eight active attempts, and accepted/pending
+  waiting for later work.
+- Admission, domain completion, identical and conflicting job submissions, and
+  identical and conflicting tool results.
+- Requester restart with a pending call, daemon loss, queued and active
+  cancellation, and domain success followed by runtime failure.
+- Timeout after slot acquisition and slot retention while waiting on a requester.
+- Concurrent account reads, serialized refresh, and login exclusion.
+- Unsupported invocation combinations and the absence of a hidden execution path.
+- Requester ownership of work packets, write conflicts, and retries.
 
 Add requester observability, private-state handling, backup coverage, release
 ordering, rollback boundaries, operator documentation, and service readiness

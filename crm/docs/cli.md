@@ -54,8 +54,8 @@ crm profile show PROFILE_ID
 crm profile update PROFILE_ID --title TITLE INPUT
 ```
 
-`INPUT` is required for new and update: a regular non-symbolic UTF-8 Markdown
-file or `-` for standard input, at most 1,048,576 bytes. Empty bodies are
+New and update require `INPUT`: a regular UTF-8 Markdown file or `-` for standard
+input. Files must not be symbolic links. Input is limited to 1,048,576 bytes. Empty bodies are
 allowed. CRM preserves the body exactly. Titles are trimmed and must contain
 1 through 1,000 UTF-8 bytes after trimming. Titles need not be unique. File
 paths are transient; CRM does not retain, move, delete, or synchronize them.
@@ -89,8 +89,8 @@ crm case show CASE_ID [--revision N]
 crm case history CASE_ID [--limit N]
 ```
 
-`INPUT` is a regular non-symbolic UTF-8 Markdown file or `-` for standard
-input, at most 1,048,576 bytes. The input path is transient and is not stored.
+`INPUT` is a regular UTF-8 Markdown file or `-` for standard input. Files must
+not be symbolic links. Input is limited to 1,048,576 bytes. CRM does not store the input path.
 Omitting it generates this small suggested outline:
 
 ```markdown
@@ -111,8 +111,8 @@ defaults to `research`; the supported values are `research`, `warranted`,
 `contacted`, `connected`, `helped`, and `closed`.
 
 `new` commits the case and immutable revision one together. `list` returns
-current case heads with deterministic ordering; list limits default to 20 and
-must be positive; `has_more` indicates whether increasing `--limit` returns more.
+current case revisions in deterministic order. The default limit is 20 and
+must be positive. `has_more` indicates whether increasing `--limit` returns more.
 `show` returns the current revision unless `--revision` names a positive exact
 revision. `history` returns newest-first revision summaries: case ID, revision,
 stage, summary, advisory/attention and recorded time. It defaults to 20 with
@@ -144,8 +144,8 @@ must be positive; `has_more` indicates whether increasing `--limit` returns more
 crm tell CASE_ID INPUT [--name LABEL] [--source REF]
 ```
 
-`INPUT` is required and is a regular non-symbolic UTF-8 free-form text file or
-`-` for standard input, at most 1,048,576 bytes. CRM bounds and validates it
+`INPUT` is required: a regular UTF-8 text file or `-` for standard input. Files
+must not be symbolic links. Input is limited to 1,048,576 bytes. CRM validates it
 before storage, stores the exact text and digest in SQLite, and retains
 optional `LABEL` and opaque
 source reference `REF`. It does not retain the path, fetch `REF`, create a
@@ -239,13 +239,13 @@ crm --json maintenance drain
 crm --json maintenance release RUN_ID
 ```
 
-The selected database parent owns `deployment-maintenance/`; the standard
+The selected database's parent directory contains `deployment-maintenance/`. The standard
 location is `~/Library/Application Support/CRM/deployment-maintenance/`.
 Databases in the same parent share this gate. This directory stores only
 operational hold/lock metadata, never retained case or profile text.
 
-Holds are durable and independently owned. New case/profile mutations, tell,
-retry, and ordinary initialization/migration are rejected while held.
+Each hold is durable and has its own owner. While held, CRM rejects case and
+profile mutations, tell, retry, ordinary initialization and migration.
 Existing queued updates and running or applied-but-runtime-unsettled updates
 remain recoverable through the original hidden worker, wait, resume, or
 `maintenance drain`. Recovery holds a shared activity guard, so an installation
@@ -258,7 +258,7 @@ admitted operation. Schema-one maintenance observation is supported before
 its explicit migration. An unavailable or ambiguous worker is not assumed
 settled. Release removes only its exact owner's hold.
 
-The coordinator composes the existing program installer and separate
+The coordinator uses the program installer and the separate
 `migrate --backup` command. Its backup destination is
 `~/Library/Application Support/CRM/crm-pre-migration-RUN_ID.sqlite`, outside
 the temporary deployment workspace. The migration creates this private
@@ -266,8 +266,8 @@ backup only when schema migration is needed; current-schema deployment
 creates no backup. A created backup survives deployment cleanup, including
 an interrupted or failed migration, for explicit database recovery.
 Migration with `CELL_DEPLOYMENT_RUN_ID` acquires
-exclusive activity only under its sole matching hold; an arbitrary environment
-value never bypasses another owner or active work. The program installer still
+exclusive activity only when the run owns the sole matching hold. An arbitrary
+environment value cannot bypass another owner or active work. The program installer still
 never opens or migrates CRM data. `doctor` can validate held Nucleus readiness
 for that exact deployment owner; normal steward admission remains strict.
 

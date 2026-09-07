@@ -20,8 +20,8 @@ retained input was 79,038 bytes.
 | Medium baseline | `gpt-5.6-terra` | `medium` |
 | High rerun | `gpt-5.6-sol` | `max` |
 
-Both model family and reasoning effort changed, so this was a quality-preset
-comparison—not an effort-only test.
+Both model family and reasoning effort changed. The experiment therefore
+compared quality presets, not reasoning effort alone.
 
 ## Cost and investigation
 
@@ -98,10 +98,9 @@ operations, paths, and quotations unchanged.
 | Human-authored commits | 1 | 2 |
 | Total stored proposals | 4 | 5 |
 
-The higher-grade final tree was therefore co-produced. In particular, its
-excellent third-work placement depended on `Archive measurement caveats`,
-which human review had added after work 2. Raw model proposals and the final
-reviewed corpus should not be conflated.
+Human edits contributed to the final high-preset tree. Its third-work placement
+depended on `Archive measurement caveats`, which review added after work 2.
+The raw model proposals therefore differ from the final reviewed corpus.
 
 ## Final reviewed corpus
 
@@ -129,17 +128,16 @@ interpreting a longitudinal archive. It then encoded method, measurement
 limits, frame construction, and reuse-induced convergence inside one archive
 analysis hierarchy. Medium left the three works mostly as separate roots.
 
-Only two final quotations were exact matches across the corpora: the
-usage-versus-biography conclusion and the feedback-loop warning. Different
-quotation selection did not always mean conceptual disagreement; the two
-models sometimes selected adjacent sentences from the same central passage.
+Only two final quotations matched exactly across the corpora: the
+usage-versus-biography conclusion and the feedback-loop warning. The models
+sometimes selected adjacent sentences from the same passage. Different
+quotation selection therefore did not always indicate conceptual disagreement.
 
 ## Interpretation
 
-Medium behaved like a selective summarizer. High behaved more like a corpus
-editor: it searched harder, preserved more of each work's reasoning,
-distinguished findings from limitations, and used prior concepts when placing
-new material.
+Medium selected a small set of concepts from each work. High made more
+searches, preserved more of each work's reasoning, distinguished findings from
+limitations, and used prior concepts when placing new material.
 
 The two runs encoded different relationships. High nested
 `Reuse-induced interactional convergence` under `Archive measurement caveats`,

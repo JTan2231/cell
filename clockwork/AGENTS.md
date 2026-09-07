@@ -2,9 +2,9 @@
 
 Semantics-Project: clockwork
 
-- Keep Clockwork a short-lived current-user scheduled-activation broker. It is
-  not a daemon, arbitrary command runner, workflow engine, retry engine, secret
-  store, or product-domain scheduler.
+- Keep Clockwork a short-lived broker for scheduled activation under the current
+  user. It has no daemon, arbitrary command runner, workflow engine, retry
+  engine, secret store, or product-domain scheduler.
 - Until the `clockwork` Semantics project is explicitly registered and seeded,
   use the Cell semantic repository for shared terminology. After registration,
   the Clockwork project's Semantics repository becomes authoritative for

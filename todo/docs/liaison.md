@@ -1,7 +1,7 @@
 # Research liaisons
 
-Todo uses three narrowly different model stages. They share a runtime but not
-a prompt, toolset, or authority:
+Todo uses three model stages. They share a runtime. Each has its own prompt,
+toolset and authority:
 
 | Stage | Input question | Durable result | Cannot do |
 | --- | --- | --- | --- |
@@ -20,11 +20,9 @@ is terminal. Nucleus owns job state, raw protocol, Codex compatibility,
 authentication, and its single-use launch context. Todo owns every domain
 record created through a validated tool call.
 
-The version-2 stages have no shell, filesystem workspace, inherited process
-environment, or web search. They can inspect only the frozen material exposed
-through their stage tools or prompt. This makes the evidence boundary a
-durable part of the record rather than whatever happened to be visible to a
-broad research process.
+Version-2 stages have no shell, filesystem workspace, inherited process
+environment or web search. They can inspect only frozen material supplied
+through their tools or prompt. The record identifies this material.
 
 Source, candidate, and evidence text is untrusted input, not runtime
 instruction. Every material routing, assessment, and design claim carries
@@ -91,9 +89,9 @@ observation time. Submitted source evidence must resolve through that persisted
 mapping. The host's frozen Todo projection is persisted separately as the
 `todo-snapshot` base.
 
-Each assessed jurisdiction names all relevant parties, assigns each exactly one
-role of `owner`, `participant`, or `consumer`, describes each responsibility,
-and has exactly one owner.
+Each assessed jurisdiction names its parties and their responsibilities.
+Each party has one role: `owner`, `participant` or `consumer`. Each
+jurisdiction has exactly one owner.
 
 The prompt asks the assessor to describe the selected material's distinctions
 between committed, pushed, deployed, configured, in-progress, reverted and
@@ -148,12 +146,11 @@ invent an alias or cite another assessment, predecessor, or correction.
 The liaison proposes desired ownership and boundaries through named,
 basis-linked records:
 
-- jurisdiction changes use `keep`, `move`, `add`, or `retire` with exact
-  expected and proposed multi-party assignments: `keep` preserves the owner,
-  `move` changes it, `add` has no expected set, and `retire` has no proposed
-  set; every nonempty set has exactly one owner and may retain participants and
-  consumers, and a jurisdiction that continues is represented explicitly with
-  `keep`;
+- jurisdiction changes use `keep`, `move`, `add` or `retire` with exact expected
+  and proposed party assignments. `keep` preserves the owner; `move` changes it.
+  `add` has no expected set; `retire` has no proposed set. Each nonempty set
+  has exactly one owner and may include participants and consumers. A continuing
+  jurisdiction must use `keep`;
 - clauses cover ownership, boundary, state, interface, lifecycle, failure,
   compatibility, acceptance, and non-goals; and
 - unresolved choices identify material questions the supplied user direction
@@ -174,10 +171,10 @@ discard_design_reconciliation
 return_for_assessment
 ```
 
-The first submission is atomic. The host validates the complete jurisdiction
-map, clauses, choices, references, and assembled design before allocating a
-`dN`; if any part is invalid, it records none of the submission and the liaison
-must correct and resubmit the complete draft. A successful initial submission
+The first submission is atomic. The host validates the jurisdiction map,
+clauses, choices, references and assembled design before it allocates a `dN`.
+If any part is invalid, it records none of the submission. The liaison must
+correct and resubmit the complete draft. A successful initial submission
 creates one `dN` and assigns stable operation IDs. It remains `open` while
 active choices exist; a complete zero-choice submission can seal as `ready` in
 the same transaction.

@@ -1,7 +1,7 @@
 # Runtime characteristics
 
-No latency, throughput, percentile, or database-size benchmark is claimed for
-this implementation.
+This document states runtime limits and costs. It provides no latency,
+throughput, percentile, or database-size benchmark.
 
 ## Repository quality gate
 
@@ -37,8 +37,8 @@ and reject temporary sorts on those local selectors.
 - model-facing evidence excerpts contain at most 2,000 characters and report
   when the exact quotation is truncated.
 
-For a scheduled inbox job, reaching the unchanged 60-minute timeout without
-durable success is the job's terminal processing failure. Annals archives the
+If a scheduled inbox job reaches the 60-minute timeout without durable success,
+its processing fails terminally. Annals archives the
 job, exits the current activation nonzero, leaves successors for the next
 activation, and does not start a second liaison for the timed-out job.
 
@@ -51,14 +51,13 @@ returns every delivery in the requested UTC interval. Its work join includes
 only labels and content digests; it never loads retained source text or corpus
 snapshots.
 
-## Cost shape
+## Processing and storage costs
 
 The selected revision's `CorpusState` is held in memory while resolving or
 validating a reconciliation, browsing, diffing, reverting, or planning a shake.
-It contains concepts, explicit edges, and evidence, so state size and
-whole-state invariant checks grow with all three. Reaching revision N also
-reduces the typed effects from revisions 1 through N; there is intentionally no
-trusted snapshot cache.
+It contains concepts, explicit edges, and evidence. State size and whole-state
+invariant checks grow with all three. Reaching revision N also reduces the
+typed effects from revisions 1 through N. Annals uses no snapshot cache.
 
 Applying a pending transition or confirmed shake validates the complete
 projected state, then stores only canonical typed differences. Mutation work

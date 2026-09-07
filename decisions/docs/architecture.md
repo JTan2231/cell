@@ -1,14 +1,14 @@
 # Krisis architecture
 
-Krisis is a scoped feed into Annals. It decides only whether an eligible user
-message contains a decision and, when it does, constructs one or more immutable
-accounts of what was settled and what was observed by capture time.
+Krisis feeds decision accounts into Annals. It determines whether an eligible
+user message contains a decision. If it does, Krisis constructs immutable
+accounts of the settlement and observations available at capture time.
 
 ## Authority and eligibility
 
-An eligible source is a completed default root interactive turn, active or
-archived, whose completion is after the write-once Krisis activation baseline
-and which contains at least one nonblank user message.
+An eligible source is a completed default root interactive turn from the active
+or archived store. It must complete after the write-once Krisis activation
+baseline and contain at least one nonblank user message.
 
 A decision is an attributable user transition from practical openness to an
 explicit settlement constraining intended future behavior or state. Only an
@@ -42,12 +42,12 @@ the single-tool set `krisis/decision-account-classification/1`. The only tool is
 `krisis.tool.submit-decision-account-classification.input.v1` and result schema
 `krisis.tool.decision-account-classification.result.v1`.
 
-The terminal result supplies one verdict per authority and the account fields
-described below. Each decision account proposal contains an exact authority quote of at
-most 500 bytes, a 1–1,000-byte statement, nullable 1–1,000-byte context/action/
-result fields, and unique supporting aliases. At most 100 accounts may be
-returned. Krisis validates the whole result and derives stable IDs from the real
-host, authority item, and exact UTF-8 span outside the model boundary.
+The terminal result supplies one verdict per authority and at most 100 accounts.
+Each account proposal contains an exact authority quote of at most 500 bytes,
+a 1–1,000-byte statement, and unique supporting aliases. Context, action, and
+result fields are nullable; each nonnull value contains 1–1,000 bytes.
+Krisis validates the whole result. Outside the model, it derives stable IDs from
+the real host, authority item, and exact UTF-8 span.
 
 ## Durable commit and delivery
 
@@ -88,11 +88,11 @@ retrieval, libraries, and later interpretation belong to Annals.
 
 ## Recovery and compatibility
 
-Observation is serial. Ambiguous Nucleus admission resumes the same request and
-job. Only a positively terminal failure permits a successor; a scope has one
-initial attempt plus two successors. Level-one expansion is a new scope, not a
-retry. A committed domain result remains authoritative despite later harness or
-transport failure.
+Observation is serial. If Nucleus admission is uncertain, Krisis resumes the
+same request and job. Only a confirmed terminal failure permits a successor.
+Each scope has one initial attempt and at most two successors. Level-one
+expansion creates a new scope. A committed domain result remains authoritative
+despite later harness or transport failure.
 
 SQLite schema 4 is additive over Decisions history. Legacy classifier receipts,
 candidates, reviews, digests, deliveries, and lifecycle events remain decodable.

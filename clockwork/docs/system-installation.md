@@ -15,13 +15,13 @@ Build and validate first, then deploy under separate authority:
   --chancery /absolute/path/to/chancery
 ```
 
-Deployment stages the binary, Rust installer, and complete provider bundle
-under one content-addressed release and atomically selects it for the stable
-command and provider paths. Before either selector can change, the explicitly
-supplied candidate Chancery reader must validate the exact provider copy inside
-that staged release. Before commit, the same reader must discover all three
-Clockwork entries through the installed providers registry and selected
-provider path. It retains the prior valid selector for rollback.
+Deployment stages the binary, Rust installer, and complete provider bundle in
+one content-addressed release. It atomically selects that release for the stable
+command and provider paths. Before either selector changes, the supplied
+candidate Chancery reader must validate the provider copy in that staged release.
+Before commit, the same reader must find all three Clockwork entries through
+the installed provider registry and selected provider path. Deployment retains
+the prior valid selector for rollback.
 It neither calls `clockwork binding switch` nor scans another product for jobs.
 Missing current-user `.local/bin` and Chancery parent directories may be
 created; existing shared parents are validated without changing their modes.
@@ -82,10 +82,10 @@ Use a trusted tested Rust installer to verify and select that retained release:
 ```
 
 Do not execute an unverified installer from the retained release.
-Program rollback changes the stable Clockwork binary/provider selector. It
-does not rewrite a binding or its generated plist. Because a generated plist
-pins an exact content-addressed installed Clockwork binary, do not prune a release while a
-plist or running activation refers to it.
+Program rollback changes the stable Clockwork binary and provider selector.
+It does not change a binding or its generated plist. Each plist pins an exact
+installed Clockwork binary in a content-addressed release. Do not prune a release
+while a plist or running activation refers to it.
 
 ## Uninstall selector
 

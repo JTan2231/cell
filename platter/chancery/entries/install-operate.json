@@ -5,7 +5,7 @@
   "mode": "operate",
   "support": "supported",
   "title": "Install and maintain Platter",
-  "summary": "Prepare and verify a Platter installation, coordinate requester maintenance and schema-compatible cutover, preserve predecessor packet history, or inspect local readiness without preparing jobs or sending email.",
+  "summary": "Prepare or check a Platter installation, coordinate maintenance and a compatible installation switch, or inspect local readiness. Preserve packet history without preparing jobs or sending email.",
   "use_when": [
     "The user wants Platter installed, replaced, inspected or maintained.",
     "The caller needs prerequisite readiness, admission holds, draining or supported installed-release verification."
@@ -14,7 +14,7 @@
     "The requested outcome is packet preparation, a test email, job discovery, profile editing or scheduled delivery.",
     "The caller expects arbitrary direct rollback, a schema reset or implicit installation of dependencies."
   ],
-  "outcome": "A verified coherent Platter command and provider installation, supported maintenance state or read-only readiness result, with retained domain history preserved.",
+  "outcome": "A verified installation with matching Platter command and provider, supported maintenance state, or a local readiness result. Stored domain history remains intact.",
   "interfaces": [
     {
       "label": "Plan coordinated installation",
@@ -149,7 +149,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Installed identity is an exact byte-and-mode proof. A readiness result describes local prerequisites at observation time; it is not a domain success or external delivery result. A database backup is not a complete packet-artifact backup."
+        "statement": "Installation checks exact file bytes and modes. Readiness describes local prerequisites at observation time, separately from domain success or delivery. A database backup does not contain all packet artifacts."
       }
     ],
     "identity_and_units": [
@@ -197,7 +197,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only verified cell-install-v2 Platter releases are supported. The predecessor compatibility preserves private schema-1 runtime state in place and does not invent an older Platter installation. Direct mutating installer commands are refused; coordinated cutover and verified recovery share the product lifecycle boundary."
+        "statement": "Only verified cell-install-v2 Platter releases are supported. Compatibility with the predecessor preserves private schema-1 runtime state in place; it covers no older installation format. Direct installer mutations are refused. Coordinated installation and verified recovery use the same product lifecycle rules."
       }
     ],
     "reliances": [

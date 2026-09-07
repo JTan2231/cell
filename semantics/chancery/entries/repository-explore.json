@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Explore a project's authoritative semantic repository",
-  "summary": "Read, search, replay, or compare one registered project's append-only terminology and grounding history without inspecting Semantics SQLite directly.",
+  "summary": "Read, search, replay, or compare one registered project's append-only terminology and grounding history through the Semantics interface.",
   "use_when": [
     "A participating project's maintained meaning of a term is needed before analysis, review, documentation, or implementation.",
     "A concept's stable identity, current meaning, distinctions, groundings, or retirement state must be inspected.",
@@ -65,7 +65,7 @@
       {"status": "declared", "statement": "Inputs are a stable project ID plus an optional search query, historical revision, or from/to revision range."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Project lists return ID, canonical path, status and HEAD. Repository show/search return schema version 2, project ID, selected revision and all selected concepts with ID, complete label/meaning, active state, replacement and distinctions. show --provenance returns the full replayed repository with grounds, withdrawals and revision bookkeeping. Log and diff retain complete immutable revision records."}
+      {"status": "declared", "statement": "Project lists return ID, canonical path, status, and HEAD. Repository show and search use schema 2. They return project ID, selected revision, and selected concepts with ID, full label and meaning, active state, replacement, and distinctions. show --provenance returns the full replayed repository with grounds, withdrawals, and revision bookkeeping. Log and diff return complete immutable revision records."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Concept identity is stable across wording and path changes; active or retired state, distinctions, groundings, and withdrawals are replayed from immutable typed effects rather than a mutable projection."},

@@ -1,7 +1,7 @@
 # macOS system installation
 
-Build and test the independently versioned package and its Rust installer
-through the Cell product gate, then install the exact tested artifacts:
+Build and test the package and Rust installer through the Cell product gate.
+Then install those exact tested artifacts:
 
 ```sh
 ./ci.sh conversations
@@ -31,10 +31,10 @@ reuse, and any selected current or previous release must have an exact
 content-addressed selector plus a self-consistent manifest and component
 hashes. A PID-aware product lock serializes Conversations updates, and a shared
 Chancery catalog-writer lock serializes provider publication with the other
-shared Rust installers. Locks are taken product first and catalog
-second; stale owners are recovered. The `current` selector is published
-atomically, and a failed post-switch version or help smoke restores the prior
-selector view or detaches it if restoration cannot be proved. The installer
+shared Rust installers. The installer takes the product lock before the catalog
+lock and recovers stale owners. It publishes `current` atomically. If a version
+or help check fails after the switch, it restores the previous selectors. If
+it cannot verify restoration, it detaches them. The installer
 refuses to replace a foreign selector, trust a malformed or tampered selected
 release, or accept a provider selector without a current release.
 

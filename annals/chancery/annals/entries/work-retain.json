@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Preserve a source document in Annals",
-  "summary": "Store one unchanged text source in the knowledge library without interpreting it or changing the idea map.",
+  "summary": "Store one unchanged text source in the library without interpreting it or changing the corpus.",
   "use_when": [
     "Immutable source bytes should enter the Annals library while interpretation is intentionally deferred.",
     "A retained work must be listed or inspected by its work label."
@@ -56,7 +56,7 @@
       {"status": "unsupported", "statement": "This is not a note, summary, action-backlog or model-assisted interpretation surface."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The caller selects a configured readable Annals library whose immutable role is general; retention requires it to be writable and requires nonblank UTF-8 bytes plus an explicit label when reading standard input."},
+      {"status": "declared", "statement": "The caller selects a configured readable Annals library with the immutable general role. Retention requires a writable library and nonblank UTF-8 bytes. Standard input requires an explicit label."},
       {"status": "declared", "statement": "A requested work label must not already identify different retained bytes."}
     ],
     "inputs": [
@@ -64,7 +64,7 @@
       {"status": "unsupported", "statement": "Binary, blank, multi-work, reconciliation, replacement, deletion, and model instructions are not accepted by this capability."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Retention returns its durable work/delivery receipt. Work list defaults to 20 and returns a schema-two items/has_more page with positive --limit for more; work show retains complete selected work content and structure."}
+      {"status": "declared", "statement": "Retention returns its durable work/delivery receipt. Work list returns a schema-two items/has_more page with a default limit of 20. Increase positive --limit to read more. Work show returns the selected work's complete content and structure."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Retention stores previously unseen exact bytes or recognizes an existing byte-identical work; recognition does not create the requested alternate label."},

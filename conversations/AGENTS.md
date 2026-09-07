@@ -2,11 +2,11 @@
 
 Semantics-Project: conversations
 
-- Keep changes simple; Conversations is a short-lived local CLI and library,
-  not a daemon, index, database, or model workflow.
+- Keep changes simple. Conversations is a short-lived local CLI and library.
+  It has no daemon, index, database, or model workflow.
 - This folder participates in the installed Semantics service. Its registered
-  semantic repository is authoritative for project terminology and semantic
-  history. Before project analysis or changes, use Chancery to read
+  semantic repository defines project terminology and records its history.
+  Before project analysis or changes, use Chancery to read
   `semantics.repository.explore` and query Semantics for this folder. Code,
   tests, and project documentation remain authoritative for actual behavior.
   Do not edit Semantics state directly; report an unresolved repository rather

@@ -5,7 +5,7 @@
   "mode": "operate",
   "support": "supported",
   "title": "Maintain an Annals knowledge library",
-  "summary": "Initialize, migrate, inspect, or back up the library, and explicitly apply, simplify, or revert its versioned idea map.",
+  "summary": "Initialize, migrate, inspect, or back up the library. Apply corpus changes, simplify the graph, or revert a commit when explicitly requested.",
   "use_when": [
     "Library schema, backup, statistics, explicit reconciliation application, graph normalization, history, or reversion must be operated.",
     "Strict reconciliation JSON should be submitted without a model run."
@@ -17,7 +17,7 @@
   ],
   "outcome": "A deterministic library read or atomic state transition whose revision, provenance, compatibility, and recovery consequences are explicit.",
   "effects": [
-    "Initialization creates revision zero with one immutable general or decisions role; migration upgrades only supported prior schemas as general; backup creates a consistent SQLite copy without replacing its destination.",
+    "Initialization creates revision zero with one immutable general or decisions role. Migration upgrades only supported prior schemas as general. Backup creates a consistent SQLite copy without replacing its destination.",
     "Applying, shaking, or reverting creates an append-only commit and advances the corpus revision when it changes state.",
     "Direct reconciliation submission validates a projected state but does not apply it."
   ],
@@ -72,7 +72,7 @@
       {"status": "declared", "statement": "The selected command reports the exact initialized or migrated library, statistics, backup result, reconciliation validation, shake plan or commit, revert commit, and resulting revision as applicable."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Initialization creates revision zero with an immutable general or decisions role; migration assigns prior version-3 and version-4 libraries the general role; application, confirmed nonempty shake, and successful revert append a commit and advance the corpus rather than rewriting prior history."},
+      {"status": "declared", "statement": "Initialization creates revision zero with an immutable general or decisions role. Migration assigns version-3 and version-4 libraries the general role. Application, confirmed nonempty shake, and successful revert append a commit and advance the corpus. They do not rewrite history."},
       {"status": "declared", "statement": "Direct reconciliation submission resolves and validates a complete projected corpus state but does not apply it."},
       {"status": "declared", "statement": "Shake removes only direct parent edges already implied by longer paths, preserving reachability but not every direct-neighbor count or hop distance."}
     ],
@@ -95,7 +95,7 @@
       {"status": "declared", "statement": "Initialization and backup refuse replacement, and migration rejects unsupported older or newer schemas without partial reinterpretation."}
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "Migration accepts only documented prior schemas; backup and initialization never overwrite; stale reconciliation has no force path; destructive installed fresh state is outside this operation."},
+      {"status": "declared", "statement": "Migration accepts only documented prior schemas. Backup and initialization never overwrite. Stale reconciliation has no force path. Destructive installed fresh state is outside this operation."},
       {"status": "unspecified", "statement": "No maximum library, reconciliation, backup, or commit size, throughput, or wall-clock latency is promised here."}
     ],
     "compatibility_and_evolution": [

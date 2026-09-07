@@ -1,9 +1,9 @@
 # macOS user installation
 
-CRM installs one short-lived CLI and one product-owned Chancery provider. It
-has no daemon, LaunchAgent, scheduler, source crawler, contact sender, or direct
-Codex runner. A hidden child worker is launched only for explicitly queued or
-resumed update work and uses the separately installed Nucleus service.
+CRM installs a short-lived CLI and its Chancery provider. It has no daemon,
+LaunchAgent, scheduler, crawler, contact sender or direct Codex runner. CRM
+launches a hidden worker only for queued or resumed updates. The worker uses
+the separately installed Nucleus service.
 
 Build and validate first:
 
@@ -123,13 +123,13 @@ crm --json maintenance drain
 crm --json maintenance release RUN_ID
 ```
 
-The selected database parent owns `deployment-maintenance/`; the standard
+The selected database's parent directory contains `deployment-maintenance/`. The standard
 location is `~/Library/Application Support/CRM/deployment-maintenance/`.
 Databases in the same parent share this gate. This directory stores only
 operational hold/lock metadata, never retained case or profile text.
 
-Holds are durable and independently owned. New case/profile mutations, tell,
-retry, and ordinary initialization/migration are rejected while held.
+Each hold is durable and has its own owner. While held, CRM rejects case and
+profile mutations, tell, retry, ordinary initialization and migration.
 Existing queued updates and running or applied-but-runtime-unsettled updates
 remain recoverable through the original hidden worker, wait, resume, or
 `maintenance drain`. Recovery holds a shared activity guard, so an installation
@@ -142,7 +142,7 @@ admitted operation. Schema-one maintenance observation is supported before
 its explicit migration. An unavailable or ambiguous worker is not assumed
 settled. Release removes only its exact owner's hold.
 
-The coordinator composes the existing program installer and separate
+The coordinator uses the program installer and the separate
 `migrate --backup` command. Its backup destination is
 `~/Library/Application Support/CRM/crm-pre-migration-RUN_ID.sqlite`, outside
 the temporary deployment workspace. The migration creates this private
@@ -150,8 +150,8 @@ backup only when schema migration is needed; current-schema deployment
 creates no backup. A created backup survives deployment cleanup, including
 an interrupted or failed migration, for explicit database recovery.
 Migration with `CELL_DEPLOYMENT_RUN_ID` acquires
-exclusive activity only under its sole matching hold; an arbitrary environment
-value never bypasses another owner or active work. The program installer still
+exclusive activity only when the run owns the sole matching hold. An arbitrary
+environment value cannot bypass another owner or active work. The program installer still
 never opens or migrates CRM data. `doctor` can validate held Nucleus readiness
 for that exact deployment owner; normal steward admission remains strict.
 

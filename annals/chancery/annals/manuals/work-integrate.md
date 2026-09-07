@@ -31,7 +31,7 @@ reading only when that is intended:
 
 ## Pending versus applied
 
-The safe default does not apply a material proposal:
+By default, integration does not apply a projected corpus change:
 
 ```sh
 /Users/joey/.local/bin/annals integrate --work <LABEL>
@@ -70,4 +70,9 @@ resulting model consumption.
 
 ## Output selection
 
-Applied and recorded/no-change mutation results return work, base/result revision, status, summary and operation count, plus recorded time where applicable. Pending proposals retain full review content. change show retains complete selected reconciliation or accepted change; change list returns a schema-two items/has_more page defaulting to 20 with positive --limit for more. Domain results survive later runtime failure.
+Applied and recorded/no-change mutation results return work, base/result
+revision, status, summary, operation count, and recorded time where applicable.
+Pending proposals retain full review content. `change show` returns the complete
+selected reconciliation or accepted change. `change list` returns a schema-two
+`items`/`has_more` page with a default limit of 20. Increase positive `--limit`
+to read more. Domain results survive later runtime failure.

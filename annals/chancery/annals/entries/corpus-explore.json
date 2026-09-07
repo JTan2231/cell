@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Search and read the Annals knowledge library",
-  "summary": "Search the evidence-backed map of ideas, read supporting quotations or retained documents, and inspect source activity and revision history.",
+  "summary": "Search the corpus, read supporting quotations or retained documents, and inspect source activity and revision history.",
   "use_when": [
     "Concept labels, ancestor context, graph neighborhoods, exact supporting quotations, corpus revisions, or delivery metadata should be inspected.",
     "A retained work's complete unchanged text should be retrieved by known label."
@@ -76,11 +76,11 @@
       {"status": "declared", "statement": "A graph frontier marks where configured depth or node limits stopped expansion and is not necessarily a leaf or the complete graph."}
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Durable lowercase cN IDs select concepts, normalized-unique labels select works, and integer revisions select immutable corpus states; concept labels and paths are not identities."},
+      {"status": "declared", "statement": "Durable lowercase cN IDs select concepts. Normalized-unique labels select works. Integer revisions select immutable corpus states. Concept labels and paths are not identities."},
       {"status": "declared", "statement": "Graph depth is measured in explicit parent-edge hops, maximum nodes and page limits are record counts, and lately windows use the selected delivery timestamp basis."}
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "A command resolves HEAD once by default or reads one selected immutable historical revision; its output reports pagination and any graph frontier needed to qualify completeness."},
+      {"status": "declared", "statement": "A command resolves HEAD once by default or reads one selected immutable historical revision. Its output reports pagination and any graph frontier that marks an expansion limit."},
       {"status": "declared", "statement": "Work show returns the complete selected retained source, while paged results are complete only for the reported page and fixed cursor context."},
       {"status": "unspecified", "statement": "No wall-clock read latency, unlimited graph expansion, or indefinite cursor validity across changed command context is promised."}
     ],

@@ -1,12 +1,11 @@
 # Semantics
 
-Semantics maintains one authoritative, append-only vocabulary for each
-participating project folder. It consumes durable accepted-account events from
-one dedicated Annals decisions library, uses Conversations only to resolve an
-account's exact authority-thread working directory, and asks Nucleus to propose
-one typed reconciliation. Semantics—not Annals, the model, or Nucleus—validates
-and commits the result. Legacy Decisions intake remains preserved for replay
-and recovery but is no longer the future feed.
+Semantics maintains an authoritative, append-only vocabulary for each
+participating project folder. It reads durable accepted-account events from one
+dedicated Annals decisions library. Conversations resolves each account's exact
+authority-thread working directory. Nucleus proposes a typed reconciliation;
+Semantics validates and commits it. Legacy Decisions intake remains available
+for replay and recovery. New intake comes from Annals.
 
 On macOS, Clockwork owns the recurring process activation for the immutable
 `semantics/worker` definition. Semantics still owns worker serialization,
@@ -27,7 +26,7 @@ Start with [the documentation map](docs/README.md), then see the
 [CLI reference](docs/cli.md), [user installation guide](docs/system-installation.md),
 or [Semantics provider bundle](chancery/provider.json). After selecting an exact
 Semantics entry, use `chancery resolve semantics.repository.explore` (or the
-selected ID) to inspect its normalized outward boundary and explicit gaps.
+selected ID) to read its contract and declared gaps.
 
 ```sh
 ./ci.sh

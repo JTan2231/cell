@@ -31,7 +31,7 @@
     "After login, account access and strict Nucleus health are verified before resuming paused dispatch."
   ],
   "failure_and_recovery": [
-    "Authentication busy is reported nonblockingly; wait for the current canonical account, refresh, or login operation rather than replacing credentials.",
+    "An authentication-busy result returns without waiting. Let the current canonical account, refresh, or login operation finish. Do not replace credentials.",
     "If login is needed, quiesce requesters, perform attended device authentication, and verify account and strict Nucleus health before resuming dispatch.",
     "A missing allowance denominator or per-delivery share is an upstream limit, not a value to estimate."
   ],
@@ -59,7 +59,7 @@
       {"status": "unsupported", "statement": "This is not exact per-delivery consumption reporting, Annals reconciliation diagnosis, general Nucleus administration, invoicing, or subscription allocation."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "Budget and doctor require a valid Annals Usage configuration and a compatible reachable Nucleus account interface; doctor also requires the configured Annals library and spool paths to be inspectable."},
+      {"status": "declared", "statement": "Budget and doctor require a valid Annals Usage configuration and a compatible reachable Nucleus account interface. Doctor also requires access to inspect the configured Annals library and spool paths."},
       {"status": "declared", "statement": "Attended login requires authentication recovery authority, quiesced requesters, and later account, strict-health, and deliberate Annals requester verification before any paused dispatch resumes."}
     ],
     "inputs": [
@@ -74,7 +74,7 @@
     "data_semantics": [
       {"status": "declared", "statement": "Allowance is a live account-global rate-limit snapshot shared with other Codex activity; percent used and reset fields do not identify Annals delivery consumption."},
       {"status": "declared", "statement": "Lifetime, peak-day, and latest-day token activity are contextual cross-checks rather than allowance units or subscription denominators."},
-      {"status": "declared", "statement": "Authentication busy means a canonical Nucleus account, refresh, or login operation owns the credential boundary; an active job alone neither makes the read busy nor establishes invalid credentials."}
+      {"status": "declared", "statement": "Authentication busy means a canonical Nucleus account, refresh, or login operation owns the credential boundary. An active job alone does not make the read busy or indicate invalid credentials."}
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "Observation time identifies one live account response, allowance windows carry percent-used and reset-time fields, and plan and credit fields retain their upstream account-global identity."},

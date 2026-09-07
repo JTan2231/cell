@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Research a Todo's current situation",
-  "summary": "Create a dated account of the selected source material, responsibility assignments, constraints and open items for one todo, with a disposition for desired-state design.",
+  "summary": "Assess one todo from selected source material. Record dated findings, responsibilities, constraints, open items and a disposition for design work.",
   "use_when": [
     "An open canonical `tN` needs a dated evidence-grounded description of current state before design reconciliation.",
     "Each relevant jurisdiction should identify exactly one owner plus any participants and consumers."
@@ -70,8 +70,8 @@
       {"status": "declared", "statement": "Historical reads expose the persisted source-ref mapping and derived current or stale reasons without editing the assessment."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "ready means the selected inputs support design reconciliation with no unresolved items; needs_user_choice records a material authority or value choice; inconclusive records missing material needed for the assessment."},
-      {"status": "declared", "statement": "Each jurisdiction assigns concrete responsibilities to parties as owner, participant, or consumer with exactly one owner; infrastructure failure is not an inconclusive domain finding."}
+      {"status": "declared", "statement": "ready means the inputs support design reconciliation with no unresolved items. needs_user_choice records a material authority or value choice. inconclusive records missing assessment material."},
+      {"status": "declared", "statement": "Each jurisdiction assigns responsibilities to parties as owner, participant or consumer, with exactly one owner. Infrastructure failure does not produce an inconclusive domain finding."}
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "aN identifies one immutable dated assessment of one tN; stable s-... source IDs map to persisted source:<id> bases and exact evidence locations."},

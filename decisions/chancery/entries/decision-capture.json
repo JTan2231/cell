@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Capture decision accounts into Annals",
-  "summary": "Observe eligible completed root user turns, classify every authority as decision or no-decision, and deliver deterministic immutable decision accounts to the dedicated Annals decisions library.",
+  "summary": "Observe eligible completed root user turns and classify each authority as decision or no-decision. Deliver deterministic immutable accounts to the dedicated Annals decisions library.",
   "use_when": [
     "Post-activation decisions in completed local Codex root turns should be captured automatically.",
     "Krisis observer coverage, pending Annals delivery, or a diagnosed failed observation should be inspected or recovered.",
@@ -77,7 +77,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Activation, hook, process and Annals acceptance receipts retain their documented identity and domain meaning. Observer status retains complete counts and at most 20 failure IDs/codes by default, with failures_has_more and positive --limit for more. Full source-account and legacy lifecycle reads preserve their existing schemas and authority."
+        "statement": "Activation, hook, process, and Annals acceptance receipts retain their documented identities and meanings. Observer status returns all counts and, by default, at most 20 failure IDs and codes. It includes failures_has_more. To see more failures, set --limit to a larger positive integer. Full source-account and legacy lifecycle reads preserve their schemas and authority."
       },
       {
         "status": "declared",

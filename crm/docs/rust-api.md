@@ -1,8 +1,8 @@
 # CRM Rust interface
 
-The `crm` crate owns its supported Rust boundary in `crm::api`. Import
-these values and its client at a product boundary, then convert into local
-application values when needed. Consumers must not copy its response envelope,
+The `crm` crate defines its supported Rust interface in `crm::api`. Import
+its types and client, then convert results to local application types as needed.
+Consumers must not copy its response envelope,
 wire records, or decoder. The structs and enums are the interface definition;
 there is no separate registration layer.
 
@@ -17,9 +17,9 @@ from process I/O, malformed JSON, or invalid envelopes.
 
 `Request` covers case creation, intake, case/search reads, update reads, wait,
 resume, retry, initialization, explicit migration, doctor, and profile
-creation/list/show/replacement. Profile bodies are exact Markdown; profile
-updates have the same mutable replacement semantics as the CLI. `Data` distinguishes every supported
-success payload. `CaseRevision`, `CaseListItem`, `SearchResult`, `UpdateView`,
+creation/list/show/replacement. Profile bodies are exact Markdown. Profile
+updates replace content in the same way as the CLI. `Data` distinguishes each
+supported success payload. `CaseRevision`, `CaseListItem`, `SearchResult`, `UpdateView`,
 and `Failure::context` retain advisory text and attention; a local conversion
 must preserve their non-blocking visibility. `RevisionProposal` is the exact
 managed-tool submission shape. The hidden worker is not a public command.

@@ -1,13 +1,14 @@
 # Install and operate Krisis
 
-The public binary/provider is `krisis`; the compatibility provider is
-`decisions`; the active Clockwork key is `krisis/observer`; schema is 4.
-Existing Decisions application-support and log paths are intentionally retained
-for persistent-history compatibility.
+The public binary and provider are `krisis`. The compatibility provider is
+`decisions`, the active Clockwork key is `krisis/observer`, and the schema is 4.
+Existing Decisions application-support and log paths are retained for
+compatibility with persistent history.
 
-`krisis-install install` requires explicit absolute Krisis, Clockwork, Codex, Annals, and
-dedicated Annals-config paths plus the exact lowercase 32-hex decisions-library
-ID. The selected Codex path is recorded in the immutable Clockwork definition
+`krisis-install install` requires absolute paths for Krisis, Clockwork, Codex,
+Annals, and the dedicated Annals config. The decisions-library ID must contain
+exactly 32 lowercase hexadecimal characters. The selected Codex path is recorded
+in the immutable Clockwork definition
 and used unchanged for final-cutover doctor and scheduled Conversations reads;
 the observer does not discover another Codex installation at runtime.
 Interactive source-reading commands must receive that same path through
@@ -45,8 +46,8 @@ The private sibling `<database>.cell-maintenance` is separate from the
 installer's `.clockwork-maintenance` marker and receipt. These commands never
 open, initialize, or migrate SQLite; status leaves an absent gate absent.
 Their JSON has `protocol_version: 1`, `contract_version: 1`, `holds`, and
-`drained`. Drain describes participating live commands; durable observations
-and dependency jobs need separate product-owned quiescence proof.
+`drained`. Drain describes participating live commands. The product must
+separately verify that durable observations and dependency jobs have stopped.
 
 Any hold fences every other public CLI and typed client command before
 database access, including status and doctor, since opening state can migrate

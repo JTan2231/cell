@@ -1,9 +1,9 @@
 # Data model
 
-CRM schema version 2 stores the entire private library in SQLite. Every intake,
-delivery, profile body, complete case body, summary, advisory, exact requester request, and
-tool result that CRM retains is database `TEXT` with a digest where identity
-or replay requires it. CRM creates no product-owned Markdown or intake files.
+CRM schema version 2 stores the private library in SQLite. Intake, deliveries,
+profile and case bodies, summaries, advisories, requester requests and tool
+results use `TEXT`. CRM adds digests where identity or replay requires them.
+It creates no product-owned Markdown or intake files.
 
 ## Durable records
 
@@ -51,8 +51,8 @@ independently. The only fields are:
 | `updated_at` | CRM write time, as an RFC 3339 UTC string |
 
 Creation commits one row. Update atomically replaces the title and complete
-body and sets the write timestamp; it has no revision precondition and the
-last committed replacement wins. Identity survives title changes. No history,
+body and sets the write timestamp. It has no revision precondition; the last
+committed replacement wins. Identity survives title changes. No history,
 source-path column, structured entry kind, tag, fact field, case relation, or
 model-generated content is implied. Lists order by `updated_at` descending,
 then `id`; JSON list entries and show return entire current rows. Human list
@@ -98,9 +98,9 @@ whether the post-commit worker launch succeeds, the requester is offline, or a
 later attempt fails. Neither command stores its input path or creates a content
 file.
 
-The worker claims an update and freezes the exact current base revision/digest
-before building and persisting its immutable request ahead of ambiguous
-Nucleus transport. One `steward_updates` row is one attempt. Explicit retry
+The worker claims an update and freezes the current base revision and digest.
+It builds and stores the immutable request before submission to Nucleus, whose
+transport outcome can be ambiguous. One `steward_updates` row is one attempt. Explicit retry
 reuses the same immutable delivery row/text in a successor update with
 `retry_of`, a new requester identity, and a new job identity. At most one update
 may source a case revision.
@@ -137,9 +137,9 @@ attempt base. In one transaction it writes the next immutable revision, stores
 the receipt and exact result, advances the case head, marks the update applied,
 and records the attempt's domain success.
 
-Nucleus completion without that commit is not domain success. Conversely, the
-commit remains successful if the harness later fails while receiving the tool
-result or finishing. CRM retains whether the successful result was acknowledged
+That commit is domain success. Nucleus completion alone does not commit a
+revision. The commit remains successful if the harness later fails while it
+receives the tool result or finishes. CRM retains whether the successful result was acknowledged
 and the later terminal runtime state/detail separately. An applied update is
 runtime-settled only after that terminal observation is durable. A stale base or
 malformed call never partially advances the case.
@@ -161,8 +161,8 @@ changes retry eligibility.
 
 ## Initialization, integrity, and migration
 
-`init` is the only command that creates a new CRM database, using schema two. Repeating it against an
-existing supported CRM schema is idempotent. New Unix database bytes are mode
+Only `init` creates a new CRM database, using schema two. Repeating it against
+an existing supported CRM schema is idempotent. New Unix database bytes are mode
 0600 before SQLite opens them; an existing symbolic link or non-regular target
 is rejected before open, and opening a regular database also tightens database
 and existing sidecar permissions. The Rust installer creates its default

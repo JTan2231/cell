@@ -2,14 +2,12 @@
 
 Semantics-Project: nucleus
 
-- Keep changes simple; do not overcomplicate or overarchitect.
-- This folder participates in the installed Semantics service. Its registered
-  semantic repository is authoritative for project terminology and semantic
-  history. Before project analysis or changes, use Chancery to read
-  `semantics.repository.explore` and query Semantics for this folder. Code,
-  tests, and project documentation remain authoritative for actual behavior.
-  Do not edit Semantics state directly; report an unresolved repository rather
-  than guessing.
+- Keep changes simple.
+- The installed Semantics service maintains this project's terminology and
+  history. Before analysis or changes, read `semantics.repository.explore`
+  through Chancery and query this project's repository. Code, tests, and product
+  documentation define behavior. Do not edit Semantics state directly. If the
+  repository cannot be resolved, report the problem.
 - Before changing the public contract, harness compatibility, persistent state,
   authentication or service lifecycle, deployment, or a requester integration,
   read `docs/operator-manual.md`.

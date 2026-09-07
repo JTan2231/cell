@@ -57,7 +57,7 @@
     ],
     "preconditions": [
       {"status": "declared", "statement": "Preview requires a selected Todo database and complete installed sender and recipient configuration."},
-      {"status": "declared", "statement": "Send additionally requires explicit external-disclosure authority, a nonblank whitespace-clean RESEND_API_KEY in the process environment, and a Resend-verified sender domain."}
+      {"status": "declared", "statement": "Send also requires authority for external disclosure, RESEND_API_KEY in the process environment, and a Resend-verified sender domain. The key must be nonblank with no surrounding whitespace."}
     ],
     "inputs": [
       {"status": "declared", "statement": "The projection reads current unresolved concerns, open canonical todos, and configured sender and recipient; send accepts only the optional scheduled-mode selector."},
@@ -85,7 +85,7 @@
     ],
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "One send invocation freezes its body and idempotency key and uses them for at most three total attempts on transport, rate-limit, or server failure."},
-      {"status": "declared", "statement": "Manual and scheduled invocations use distinct key spaces, no digest state is committed to Todo SQLite, and a failed command has no Todo-owned later retry lifecycle."}
+      {"status": "declared", "statement": "Manual and scheduled invocations use distinct key spaces. Todo stores no digest state in SQLite and schedules no later retry after command failure."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "Retries are bounded to three total attempts, sending is immediate, and the user-owned daily schedule is one machine-local 09:00 LaunchAgent occurrence without RunAtLoad."},

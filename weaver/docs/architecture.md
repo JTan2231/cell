@@ -1,7 +1,7 @@
 # Architecture
 
-Weaver is a durable requester around five independent Nucleus invocations. It
-is not part of Cell and Nucleus is not its workflow engine.
+Weaver stores and coordinates a workflow of five independent Nucleus
+invocations. It is not part of Cell. Nucleus does not coordinate its workflow.
 
 ## Authority boundaries
 
@@ -19,13 +19,12 @@ text remains in the selected narrative repository.
 
 ## Capability publication
 
-The product-owned `chancery/` bundle catalogs the outcomes Weaver can actually
-serve: building the five-stage narrative, operating its durable workflow, and
-changing the implementation under the repository's development contracts. Its
-titles and summaries support semantic selection; its manuals name effects,
-authorities, recovery paths, dependencies, and explicit non-capabilities. In
-particular, they do not turn narrative generation into job search, application
-submission, publication, upload, or public-profile editing.
+The product-owned `chancery/` bundle describes three capabilities: build a
+narrative, operate a durable workflow, and change Weaver under its development
+contracts. Titles and summaries help callers select a capability. Manuals
+describe effects, authority, recovery, dependencies, and unsupported actions.
+Weaver does not search for jobs, submit applications, publish, upload, or edit
+public profiles.
 
 The macOS release contains an immutable copy of this bundle and publishes it
 through Weaver's provider selector. Chancery can validate and discover those
@@ -49,11 +48,10 @@ sequentially:
 4. editorial review; and
 5. finalization.
 
-Every stage is a fresh Nucleus job using Codex, `gpt-5.6-sol`, max reasoning,
-Weaver's absolute private state root as its read-only working directory, local
-execution disabled, web disabled, no launch context, no dynamic toolset, and a
-one-hour timeout. The Nucleus-launched process receives no repository working
-directory and no tool with which to inspect one.
+Each stage starts a new Nucleus job with Codex, `gpt-5.6-sol`, max reasoning,
+and a one-hour timeout. Its read-only working directory is Weaver's absolute
+private state root. Local execution and web access are disabled. The job has no
+launch context or dynamic toolset. The process cannot inspect the repository.
 
 Before constructing a stage request, Weaver reads the exact selected files in
 its own process and embeds their labeled contents in the prompt. Every request
@@ -65,10 +63,10 @@ outputs. Stage 5 contains only the work stories, draft, and review in addition
 to the governing files. These bytes are the immutable input snapshot for that
 Nucleus job; the model does not discover or re-read repository paths.
 
-A run ID groups all five jobs; the deterministic stage job ID is the Nucleus
+A run ID groups all five jobs. The deterministic stage job ID is the Nucleus
 idempotency key. Weaver persists the exact active typed job request before
-admission and reuses those bytes on recovery. Workflow order remains entirely
-in Weaver rather than being inferred from Nucleus provenance.
+admission and reuses those bytes during recovery. Weaver owns workflow order;
+it does not derive the order from Nucleus provenance.
 
 The model returns Markdown in its structured final message. Weaver validates a
 nonempty response and atomically installs it as that stage's `output.md`; the
@@ -114,11 +112,10 @@ a new workflow run and new job IDs.
 Weaver fails clearly when Nucleus is unavailable or incompatible. It has no
 direct-Codex execution fallback.
 
-A Nucleus daemon restart is different: an unfinished attempt becomes `lost`
-and cannot be resumed. Weaver reports that workflow as failed and does not
-invent an automatic second model attempt. A timeout, cancellation, conflicting
-job identity, malformed output, or failed mechanical check is likewise
-terminal for the current run.
+After a Nucleus daemon restart, an unfinished attempt becomes `lost` and cannot
+resume. Weaver reports the workflow as failed and does not automatically start
+another model attempt. A timeout, cancellation, conflicting job identity,
+malformed output, or failed mechanical check also ends the current run.
 
 `cancel [RUN_ID]` durably records cancellation intent before requesting
 cancellation of the current Nucleus job. Supplying the observed run ID prevents
@@ -164,4 +161,8 @@ migration, it also boots out and removes the exact `org.weaver.worker` prototype
 service and plist. A pre-commit failure restores that service together with the
 old release and provider resolution. Nucleus stays running throughout.
 
-Deployment admission uses product-owned durable run holds in `deployment-maintenance/`, independent of operator pauses. The product augments activity-lock status with its durable workflow/runtime settlement evidence. See the deployment maintenance section in `cli.md`; the coordinator never edits domain state directly.
+Deployment admission uses product-owned durable run holds in
+`deployment-maintenance/`. These holds are independent of operator pauses.
+The product reports activity-lock status and durable workflow and runtime
+settlement records. See the deployment maintenance section in `cli.md`.
+The coordinator never edits domain state directly.

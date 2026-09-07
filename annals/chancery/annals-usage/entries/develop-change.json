@@ -22,7 +22,7 @@
   ],
   "authority": [
     "Annals Usage owns projection interpretation only.",
-    "Annals owns delivery and model-run attribution; Nucleus owns jobs, attempts, exact output atoms, account access, and credentials."
+    "Annals owns delivery and model-run attribution. Nucleus owns jobs, attempts, exact output records, account access, and credentials."
   ],
   "success": [
     "Coverage, overlapping token categories, unattributed runs, rate-card limits, and account-global allowance scope remain explicit and tested.",
@@ -92,7 +92,7 @@
       {"status": "unsupported", "statement": "Development completion does not itself publish, deploy, mutate live account state, or prove account readiness."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Annals Usage owns disposable live interpretation only; Annals retains source-delivery and model-run attribution, and Nucleus retains jobs, attempts, output, account, and credential authority."},
+      {"status": "declared", "statement": "Annals Usage owns the live interpretation. Annals owns source-delivery and model-run attribution. Nucleus owns jobs, attempts, output, accounts, and credentials."},
       {"status": "declared", "statement": "Exact, cumulative, gap, no-model, pending, and reused coverage remain distinct, and overlapping token categories are not additive."},
       {"status": "declared", "statement": "Rate-card equivalent is a comparison rather than an invoice, and allowance remains account-global rather than a per-delivery denominator."}
     ],
@@ -119,7 +119,7 @@
       {"status": "unspecified", "statement": "No maximum change size, completion time, account availability, or external rate-card service level is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Derived interpretation changes advance projectionVersion and preserve the atomic records required for historical recalculation; upstream changes are coordinated through the owning Annals or Nucleus contract."},
+      {"status": "declared", "statement": "Interpretation changes advance projectionVersion and preserve the records required for historical recalculation. Coordinate upstream changes through the owning Annals or Nucleus contract."},
       {"status": "declared", "statement": "Package release, provider release, entry contract version, projectionVersion, Annals schema, and Nucleus protocol are evaluated independently."},
       {"status": "unspecified", "statement": "No release cadence, rate-card stability, cross-release compatibility window, or deprecation period is promised."}
     ],

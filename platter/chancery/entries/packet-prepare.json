@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Prepare and preview private job application packets",
-  "summary": "Prepare unsent Cast jobs as a concise sectioned brief and Jackson-only tailored resume, preview up to three packets, and explicitly send a normal edition or an isolated test from retained material.",
+  "summary": "Prepare briefs and tailored Jackson resume bullets for unsent Cast jobs. Preview up to three packets, or send an authorized edition or independent test.",
   "use_when": [
     "The user wants a private brief and a constrained tailored resume for a retained Cast job.",
     "The user wants to prepare or preview an edition of up to three previously unsent opportunities, inspect retained status, or explicitly send a frozen edition.",
@@ -15,7 +15,7 @@
     "The request is job discovery, CRM editing, employer outreach or application submission.",
     "The caller expects an installed automatic 09:00 delivery service or a change to any fixed resume content."
   ],
-  "outcome": "Accepted brief and Jackson bullets are retained with source evidence and a rendered resume; a preview freezes one through three ready packets, and an explicit authorized send records provider acceptance separately.",
+  "outcome": "Stored accepted brief, Jackson bullets, source references and rendered resume. Preview freezes one through three ready packets. An authorized send separately records provider acceptance.",
   "interfaces": [
     {
       "label": "Initialize from original resume",
@@ -118,7 +118,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Preparation requires initialized private Platter state, the original supported LaTeX resume template, readable supported Cast and CRM interfaces, posting text accepted by a supported adapter, strict compatible authenticated Nucleus readiness and local resume rendering tools. Send additionally requires an authorized frozen edition and Email attachment support."
+        "statement": "Preparation requires initialized private state, the original supported LaTeX resume template, readable Cast and CRM interfaces, and posting text from a supported adapter. It also requires compatible authenticated Nucleus readiness and local rendering tools. Send requires an authorized frozen edition and Email attachment support."
       },
       {
         "status": "declared",
@@ -172,7 +172,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Both stages use the same retained posting and captured CRM library. Culture appears only when supported by the posting or existing captured material; otherwise it is omitted without extra research or an uncertainty note. CRM separate list/read calls are not a transactional snapshot; capture checks entry timestamps and refuses incomplete list results. Cast excerpts alone do not satisfy full posting input. A new preview fetches the posting again and defers changed or unavailable inputs; reopening a frozen edition returns its stored contents."
+        "statement": "Both stages use the same stored posting and captured CRM library. Culture appears only when the posting or captured material supports it. Otherwise it is omitted without extra research or an uncertainty note. Separate CRM list and read calls do not share a transaction. Capture checks entry timestamps and rejects incomplete lists. Preparation requires full posting text beyond Cast's excerpt. A new preview fetches the posting again and defers changed or unavailable inputs. Reopening a frozen edition returns stored contents."
       },
       {
         "status": "declared",
@@ -196,7 +196,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Exact stage requests and tool responses are retained before ambiguous transport and replayed by identity. Accepted brief survives resume failure. Preview reserves ready opportunities and copies attachments. Confirmed acceptance marks selected opportunities sent; ambiguous send stays held."
+        "statement": "Platter stores exact stage requests and tool responses before transport and replays them by identity. Accepted briefs survive resume failure. Preview reserves ready opportunities and copies attachments. Confirmed acceptance marks the opportunities sent. An ambiguous send remains held."
       },
       {
         "status": "declared",

@@ -1,11 +1,10 @@
 # User-owned macOS installation
 
-Todo is synchronous and owns no daemon, root-owned files, or log service. Its
-user installation includes a LaunchAgent that runs the synchronous email
-command once per day. Routing, assessment, design, and `todo new` research use
-the same user's separately installed Nucleus service, which owns Codex
-execution and authentication; deterministic reads, decisions, migration, and
-email delivery do not use Nucleus.
+Todo runs synchronously. It owns no daemon, root-owned files or log service.
+Its user installation includes a LaunchAgent that runs the email command daily.
+Routing, assessment, design and `todo new` research use the user's separately
+installed Nucleus service for Codex execution and authentication. Reads,
+decisions, migration and email delivery do not use Nucleus.
 
 ## Deploy
 
@@ -75,8 +74,8 @@ schedule recovery. The former format-1 package remains verifiable during
 migration. `todo-install inspect` and `verify-release ABSOLUTE_PATH` are
 read-only and never send email or execute a retained release.
 
-The installed Rust `~/.local/bin/todo` frontend selects `config.toml` when no explicit database or config
-selector is present. The config points at `todo.db` and selects high liaison
+If no database or config selector is explicit, the installed Rust frontend at
+`~/.local/bin/todo` selects `config.toml`. The config points at `todo.db` and selects high liaison
 quality. Its `[email]` section contains the deployment-specific `from` and `to`
 values. Nucleus is resolved through `NUCLEUS_SOCKET` when set, or its standard
 per-user socket otherwise.
@@ -212,8 +211,8 @@ todo --json maintenance ready RUN_ID
 todo --json maintenance release RUN_ID
 ```
 
-Normal database/config selection applies. The selected database parent owns
-`deployment-maintenance/`; databases sharing a parent share the same gate.
+Normal database and config selection applies. The selected database's parent
+directory contains `deployment-maintenance/`. Databases in that directory share the gate.
 New research and ordinary mutations, including scheduled email send, retain a
 shared admission guard through completion. Holds prevent new admissions
 before input is retained, and do not interrupt already admitted research or
@@ -239,7 +238,7 @@ It creates no concern, routing proposal, or model job and sends no email.
 Ordinary Todo success remains its committed domain result after a later
 runtime failure.
 
-`maintenance ready RUN_ID` requires the sole drained hold and proves that this
-binary can read the actual configured database: current version, every required
-table/index/trigger definition, SQLite integrity, and foreign keys. This is the
-production storage compatibility proof after an interrupted migration.
+`maintenance ready RUN_ID` requires the sole drained hold. It checks whether
+this binary can read the configured database: version, required table, index
+and trigger definitions, SQLite integrity, and foreign keys. Use it to check
+storage compatibility after an interrupted migration.

@@ -15,12 +15,11 @@ cN concern --rN decision--> tN umbrella --assessment--> aN --reconciliation--> d
  immutable         explicit     revisioned      dated       proposed / accepted
 ```
 
-The arrows do not mean automatic progression. A concern and an umbrella remain
-useful without an assessment; an assessment can remain inconclusive; a design
-can remain proposed or rejected. Plans, work items, implementation execution,
-and deployment are outside this model. Nucleus execution of a research liaison
-is runtime provenance for producing one Todo record, not execution of the
-accepted design.
+These steps do not run automatically. Concerns and umbrellas can exist without
+assessments. An assessment can remain inconclusive; a design can remain
+proposed or rejected. Todo does not model plans, work items, implementation or
+deployment. A Nucleus research job produces a Todo record; it does not
+implement an accepted design.
 
 ## Ownership boundaries
 
@@ -37,8 +36,8 @@ Todo SQLite is authoritative for:
 Nucleus is authoritative for job admission, runtime state, authentication,
 Codex compatibility, tool-mailbox delivery, and raw protocol history. It does
 not own `cN`, `rN`, `tN`, `aN`, or `dN`, and Nucleus completion is not Todo
-success. Git, component documentation, deployed binaries and other systems can supply
-assessment inputs. Todo records the selected references and its interpretation
+success. Git, component documentation, deployed binaries and other systems can
+supply assessment inputs. Todo records the selected references and its interpretation
 of those inputs.
 
 Conversation or file paths are provenance references. Todo retains paths and
@@ -99,8 +98,8 @@ reads emit location-bearing evidence references under
 `source:<source-id>@...`; for every document used, the committed assessment
 persists the matching
 `source:<source-id>` base with its locator, revision, and observation time.
-This makes the citation-to-source mapping part of the immutable `aN`, rather
-than relying on a later reconstruction of the research run. The frozen Todo
+The immutable `aN` therefore retains the mapping from citation to source.
+The frozen Todo
 projection has its own persisted `todo-snapshot` base.
 
 The managed assessment tool can commit one immutable `aN` with a disposition
@@ -142,9 +141,9 @@ from active operations in the exact predecessor, and the correction entry only
 from the current correction job. Every submitted or revised operation is
 checked against this catalog.
 
-Draft construction is recoverable within one liaison turn. Independently valid
-parts are not staged piecemeal on the first submission: Todo validates the
-complete initial design atomically, and an invalid submission creates no `dN`.
+The liaison can recover draft construction within one turn. Todo validates the
+entire initial design atomically. An invalid submission creates no `dN` and
+stores no partial draft.
 A successful submission creates a `dN` with stable operation IDs. It remains
 open while active choices exist; a complete zero-choice submission can seal as
 ready in that same transaction. Later revision can replace, add, or explicitly
@@ -209,8 +208,8 @@ database directly and use immediate transactions, so stale-basis validation,
 the decision, and the authorized state change either all commit or none do.
 
 SQLite uses foreign keys, a busy timeout, WAL journaling, read-only connections
-for reads, and immediate transactions for writes. Migration is separately
-explicit and backup-bearing; ordinary opens never migrate implicitly.
+for reads and immediate transactions for writes. Migration is an explicit
+operation with a backup. Ordinary opens never migrate storage.
 
 ## Read projections
 
@@ -244,11 +243,10 @@ The body groups items under **Needs your decision**, **Needs follow-up**, and
 followed by a plain-language status, secondary typed references, and safe
 inspection commands. Stored state tokens are translated rather than exposed.
 The decision section covers routing proposals, situation choices, and
-desired-state designs awaiting an explicit user decision. Follow-up covers unresolved concerns without a pending routing decision and
-open todos awaiting assessment, named assessment inputs, reassessment after
-changed bases, or desired-state design work. Other
-open todos have no immediate
-research or decision request; an accepted desired state leaves the umbrella open.
+desired-state designs awaiting an explicit user decision. Follow-up covers
+unresolved concerns without a pending routing decision and open todos awaiting
+assessment, named inputs, reassessment or design work. Other open todos have no
+immediate research or decision request. An accepted design leaves the umbrella open.
 
 The digest discloses only aggregate counts, current todo titles, generic
 plain-language stage labels, typed references, and inspection commands. It
@@ -269,4 +267,7 @@ those exported values into their local structs; they do not implement another
 Todo wire decoder. Storage and execution internals remain outside this API.
 See [Rust interface](rust-api.md).
 
-Deployment admission uses product-owned durable run holds in `deployment-maintenance/`, independent of operator pauses. The product augments activity-lock status with its durable workflow/runtime settlement evidence. See the deployment maintenance section in `cli.md`; the coordinator never edits domain state directly.
+Todo stores durable deployment holds in `deployment-maintenance/`, separately
+from operator pauses. Admission checks activity locks and stored workflow and
+runtime settlement. See the deployment maintenance section in `cli.md`.
+The coordinator never edits domain state directly.

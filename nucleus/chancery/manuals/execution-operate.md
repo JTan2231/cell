@@ -1,12 +1,11 @@
 # Operate Nucleus agent execution
 
-Nucleus is the per-user execution coordinator for local applications that need
-constrained Codex work. It owns admission, one supervised harness attempt per
-job, a global eight-slot execution scheduler, cancellation, single-authority
-managed authentication, isolated static API-key job credentials, exact
-harness-output records, and the durable requester-tool mailbox. It is not a
-project registry or a workflow engine, and its terminal job state is never a
-substitute for an application's domain result.
+Nucleus coordinates constrained Codex execution for local applications under
+one user. It owns admission, one supervised harness attempt per job, the global
+eight-slot scheduler, cancellation, managed authentication, isolated static
+API-key job credentials, exact harness output, and the durable requester-tool
+mailbox. Managed authentication uses one authoritative credential. Nucleus has
+no project registry or workflow engine. Applications own their domain results.
 
 ## Choose this capability
 
@@ -58,9 +57,9 @@ One exact request is submitted from a file or standard input:
 /Users/joey/.local/bin/nucleus jobs cancel <JOB_ID>
 ```
 
-The job ID is the idempotency key. Retry an ambiguous submission only with the
-byte-equivalent typed request and the same ID. A genuinely new attempt needs a
-new ID and the requester must decide that it is safe.
+The job ID is the idempotency key. If submission is uncertain, resend only the
+byte-equivalent typed request with the same ID. A new attempt needs a new ID and
+the requester's decision that it is safe.
 
 Completed structured output is reconstructed from the retained attempt's
 supported API-key or managed-authentication startup sequence and its correlated
@@ -107,11 +106,11 @@ login:
 /Users/joey/.local/bin/nucleus health
 ```
 
-Quiesce requesters before login or service work when active-attempt continuity
-matters. Nucleus provides run-owned durable deployment admission holds and explicit drain observation. A service restart terminates the
-daemon; startup marks unfinished attempts `lost`. Service uninstall removes
-the user service and installed binaries but deliberately retains state and
-logs.
+Quiesce requesters before login or service work when active attempts must remain
+uninterrupted. Nucleus provides durable deployment admission holds owned by run
+IDs and reports drain status. A service restart terminates the daemon; startup
+marks unfinished attempts `lost`. Service uninstall removes the user service and
+installed binaries and retains state and logs.
 
 ## Success and recovery
 
@@ -201,4 +200,12 @@ and shared schemas remain unchanged. This is not a general pruning API.
 
 ## Output selection
 
-Existing health, account, submission, job show, log, mailbox, cancellation and service results retain protocol-one meaning. jobs status returns runtime/requester identity, current attempt state/ID, pending call IDs/names, final-output availability and terminal reason/message. jobs wait --timeout 60 returns one terminal or timeout observation and never cancels on timeout. Status uses successive mailbox/job reads rather than an atomic snapshot; initial read errors remain errors. jobs list defaults to 20 with its existing continuation.
+Health, account, submission, job show, log, mailbox, cancellation, and service
+results retain protocol-one meaning. `jobs status` returns runtime and requester
+identity, current attempt state and ID, pending call IDs and names, final-output
+availability, and terminal reason and message.
+
+`jobs wait --timeout 60` returns one terminal or timeout observation. A timeout
+does not cancel the job. Status reads mailbox and job state in sequence, without
+an atomic snapshot. Initial read errors remain errors. `jobs list` defaults to
+20 and retains its continuation behavior.

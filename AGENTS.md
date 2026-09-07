@@ -2,35 +2,35 @@
 
 Semantics-Project: cell
 
-- Keep changes simple; do not overcomplicate or overarchitect.
-- Describe each product's records, their supported interpretation, and the
-  operations performed on them. Tie collection counts, timestamps, and failures
-  to the specific operation or selected records they describe.
-- This root participates in the installed Semantics service. The `cell`
-  semantic repository is authoritative for cross-product terminology and its
-  history when work is rooted here; a deeper registered product repository is
-  authoritative for that product's terminology. Before analysis, review, or
-  change work, read `semantics.repository.explore` through Chancery and query
-  the applicable Semantics repository. Code, tests, and product documentation
-  remain authoritative for behavior. Do not edit Semantics state directly.
-- When a user request may map to an installed local capability or adaptive
-  operation and the relevant contract is not already established in the
-  current session, run `/Users/joey/.local/bin/chancery list`, compare the
-  request semantically with the catalog's titles and summaries, and read every
-  plausible entry with `chancery show <ENTRY_ID>` before choosing or invoking
-  its separately documented interface. Chancery is read-only discovery: catalog
-  presence does not establish live readiness, authorize an effect, execute the
-  capability, or determine domain success.
-- After selecting an exact entry, run `chancery resolve <ENTRY_ID>` when the
-  request concerns the system's complete outward promise or a design reliance.
-  Preserve unsupported, unspecified, not-applicable, undeclared, dependency,
-  and readiness outcomes as reported; never fill a gap from schemas or
-  implementation code.
+- Keep changes simple.
+- Use a concise house style based on ASD-STE100 Issue 9. Preserve meaning over
+  strict language rules. Keep required technical terms, commands, and field
+  names. Add explanation only when it helps the reader.
+- Describe each product's records, their supported interpretation, and their
+  operations. State which operation or selected records each collection count,
+  timestamp, or failure describes.
+- The installed Semantics service maintains terminology and its history.
+  For work at this root, use the `cell` semantic repository. For a deeper
+  registered product, use that product's semantic repository. Before analysis,
+  review, or changes, read `semantics.repository.explore` through Chancery and
+  query the applicable repository. Code, tests, and product documentation
+  define behavior. Do not edit Semantics state directly.
+- If a request can use an installed capability or adaptive operation, first
+  establish its contract. If the contract is not established in this session,
+  run `/Users/joey/.local/bin/chancery list`. Compare the intended outcome with
+  the catalog's titles and summaries. Read each plausible entry with
+  `chancery show <ENTRY_ID>` before selecting or using its documented interface.
+  Chancery reads documentation. A catalog entry does not establish readiness,
+  authorize or execute an action, or determine domain success.
+- For a system's complete outward promise or a design reliance, select an exact
+  entry and run `chancery resolve <ENTRY_ID>`. Preserve its reported unsupported,
+  unspecified, not-applicable, undeclared, dependency, and readiness outcomes.
+  Do not fill gaps with assumptions from schemas or implementation code.
 - Before changing the public contract, harness compatibility, persistent state,
   authentication or service lifecycle, deployment, or a requester integration,
   run `/Users/joey/.local/bin/nucleus manual`. If it is unavailable, read
   `nucleus/docs/operator-manual.md`.
-- Update `nucleus/docs/operator-manual.md` in the same change when shared
-  operational facts, boundaries, or procedures change.
-- Preserve product-scoped instructions in nested `AGENTS.md` files.
+- If shared operational facts, boundaries, or procedures change, update
+  `nucleus/docs/operator-manual.md` in the same change.
+- Preserve the product instructions in nested `AGENTS.md` files.
 - Every code change must leave `./ci.sh` green.

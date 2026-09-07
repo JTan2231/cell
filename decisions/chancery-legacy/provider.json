@@ -18,10 +18,10 @@
       "excludes": ["Retired digest, review, email, scheduling, mutation, and all active Krisis operations are excluded."]
     },
     "shared_access_and_trust": [
-      "The compatibility interface is a local-current-user read surface through the krisis executable."
+      "The current user reads compatibility records locally through the krisis executable."
     ],
     "shared_privacy_and_retention": [
-      "Retained lifecycle events contain sensitive normalized legacy decision state and machine-local anchors; no retention horizon is promised."
+      "Retained lifecycle events contain sensitive normalized legacy decision state and machine-local anchors. No retention period is promised."
     ],
     "compatibility_and_retirement": [
       "Provider release 0.4.0 preserves contract-version-one reads while Krisis appends no new events."

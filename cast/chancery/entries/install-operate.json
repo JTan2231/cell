@@ -5,7 +5,7 @@
   "mode": "operate",
   "support": "supported",
   "title": "Install or configure Cast discovery",
-  "summary": "Install the Cast CLI and matching provider bundle, initialize private state, inspect readiness and budgets, change collection configuration, or reconcile retained employer ownership.",
+  "summary": "Install Cast and its matching provider bundle. Initialize private state, inspect readiness and budgets, change collection configuration, or reconcile stored employer ownership.",
   "use_when": [
     "Cast should be installed, initialized, diagnosed or explicitly reconfigured.",
     "The caller needs to inspect local budgets or determine why configured sources are unavailable.",
@@ -62,8 +62,8 @@
     "The caller chooses collection policy and provider accounts; provider balances are managed by each provider."
   ],
   "success": [
-    "Installation switches command and matching documentation coherently and passes version/help checks.",
-    "Initialization, configuration or diagnosis returns its documented outcome without claiming that an external collection succeeded.",
+    "Installation selects matching commands and documentation and passes version and help checks.",
+    "Initialization, configuration or diagnosis returns its documented local outcome.",
     "Ownership repair returns moved_sources, moved_jobs, quarantined_jobs, renamed_candidates and cleared_shared_identities counts after one committed transaction; changed jobs/companies retain identity and gain material revisions."
   ],
   "failure_and_recovery": [
@@ -107,7 +107,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Deployment readiness is program integrity, not provider authentication or collection success. Local budgets are conservative Cast counters, not authoritative provider invoices."
+        "statement": "Deployment checks program integrity. Provider authentication and collection have separate outcomes. Cast maintains conservative local budget counters; providers manage billing."
       }
     ],
     "identity_and_units": [
@@ -135,7 +135,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Deployment uses product/catalog locks and atomic current selection with coherent program/provider rollback. Initialization, collection and ownership reconciliation are separate explicit operations. Reconciliation holds one mutation lock and transaction; repeated repair is materially idempotent, while every invocation advances the snapshot revision."
+        "statement": "Deployment uses product and catalog locks. It switches current atomically and restores the matching program and provider after a failed switch. Initialization, collection and ownership reconciliation are separate operations. Reconciliation holds one mutation lock and uses one transaction. Repeated repair leaves material records unchanged, but each invocation advances the snapshot revision."
       }
     ],
     "operational_limits": [

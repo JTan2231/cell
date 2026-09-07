@@ -7,10 +7,9 @@
   idempotency, and migration boundary.
 - [macOS user installation](system-installation.md): content-addressed
   deployment, private state paths, verification and rollback.
-- [Chancery provider bundle](../chancery/provider.json): the complete supported
-  CRM promise inventory for this release. Use `chancery show ID` for the full
-  contract and `chancery resolve ID` for its normalized outward boundary,
-  exact basis, dependencies, and explicit gaps.
+- [Chancery provider bundle](../chancery/provider.json): all supported CRM
+  contracts for this release. Use `chancery show ID` for the full contract.
+  Use `chancery resolve ID` for its boundary, basis, dependencies and explicit gaps.
 
 - [Rust interface](rust-api.md): provider-owned request and response types,
   boundary decoding, and the local CLI client.

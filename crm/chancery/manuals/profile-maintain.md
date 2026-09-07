@@ -22,8 +22,8 @@ these commands never initialize or migrate it. Schema migration belongs to
 /Users/joey/.local/bin/crm profile update PROFILE_ID --title TITLE INPUT
 ```
 
-`INPUT` is required and is either a regular non-symbolic UTF-8 file or `-` for
-standard input. The complete body may be empty and must not exceed 1,048,576
+`INPUT` is required: a regular UTF-8 file or `-` for standard input. Files must
+not be symbolic links. The body may be empty and must not exceed 1,048,576
 UTF-8 bytes. CRM preserves it exactly as SQLite `TEXT`, including line breaks,
 headings, caveats, and disclosure guidance. It neither parses nor rewrites the
 Markdown. The title is trimmed and must then contain 1 through 1,000 UTF-8
@@ -31,7 +31,8 @@ bytes. Titles need not be unique.
 
 New commits one row with a generated identity. Update atomically replaces the
 complete title and body of the selected row, keeps its identity, and updates
-`updated_at`. The timestamp is CRM write time as an RFC 3339 UTC string. There is no partial edit,
+`updated_at`. This timestamp records CRM write time as an RFC 3339 UTC string.
+There is no partial edit,
 revision precondition, merge, or history. The last committed replacement wins.
 Keep any desired prior content before replacing it.
 
@@ -68,7 +69,10 @@ to cases, or enforce rules found in Markdown. The caller owns corrections,
 interpretation, and any decision to supply selected text to another task.
 
 Input files are transient transport. CRM does not retain their paths, move or
-delete them, synchronize them, or create a parallel content tree. Storing an entry leaves the source file and other workflows unchanged. Source material and disclosure guidance are stored as supplied Markdown. The database, backups, terminal display, and redirected output may
+delete them, synchronize them, or create a parallel content tree. Storing an
+entry leaves the source file and other workflows unchanged. CRM stores source
+material and disclosure guidance as supplied Markdown. The database, backups,
+terminal display and redirected output may
 contain private identity, contact, employment, eligibility, or preference
 information. Opening the database can enforce private database/sidecar
 permissions and WAL mode; list and show make no domain mutation.
@@ -80,4 +84,7 @@ window.
 
 ## Output selection
 
-Profile new/update return profile_receipt with ID, title and updated_at. List returns the same compact entries with has_more; show returns exact Markdown. Positive --limit defaults to 20 and may be increased. The ok/data envelope and stored schema-two profile content retain their meanings.
+Profile new and update return `profile_receipt` with ID, title and `updated_at`.
+List returns these compact entries with `has_more`; show returns exact Markdown.
+The default limit is 20. Use `--limit` with a positive integer to change it.
+The `ok`/`data` envelope and schema-two profile content retain their meanings.

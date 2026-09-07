@@ -14,7 +14,7 @@
     "The task requires a Semantics registration, Chancery installation or full bundle validation, or a runtime service probe.",
     "The task concerns relationships beyond Cell membership."
   ],
-  "outcome": "A deterministic, evidence-bearing membership report for all inventoried products or one selected product, and a check exit status based solely on required declarations.",
+  "outcome": "A deterministic membership report with evidence for all inventoried products or one selected product. The check exit status depends only on required declarations.",
   "effects": [
     "Reads the selected checkout inventory, root participation markers, provider manifests, indexed entry identity fields, and indexed manuals.",
     "Prints the report and exits; writes no file, state, registry, or service record and invokes no shell, agent, service, or network."
@@ -77,7 +77,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "check returns schema-two counts and every incomplete identity/Semantics/Chancery finding, omitting successful evidence. report retains the complete schema-one product report. Exit 1 still means an incomplete check; fatal command/inventory errors exit 2. Both views describe repository declarations, never runtime readiness or actual registration."
+        "statement": "check uses schema 2. It returns counts and each incomplete identity, Semantics, or Chancery finding, and omits successful evidence. report returns the full product report in schema 1. An incomplete check exits 1. Fatal command or inventory errors exit 2. Both outputs describe repository declarations; they do not test runtime readiness or registration."
       }
     ],
     "data_semantics": [

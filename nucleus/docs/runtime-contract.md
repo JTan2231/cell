@@ -1,6 +1,6 @@
 # Runtime contract
 
-## What a requester says
+## Job requests
 
 One v1 job request contains only runtime information:
 
@@ -31,21 +31,21 @@ One v1 job request contains only runtime information:
 }
 ```
 
-`id` is chosen by the requester and is the idempotency key. Resubmitting the
-same ID and byte-equivalent typed request returns the existing job. Reusing the
-ID with a different request digest is a conflict. `(requester.program,
-requester.id)` is indexed so a reporting surface can find every job for one
-domain run without Nucleus knowing that domain's schema. `parent` is an optional
-job ID for invocation provenance; it does not create workflow semantics.
+The requester chooses `id`, which is the idempotency key. Resubmitting the same
+ID and byte-equivalent typed request returns the existing job. Reusing the ID
+with a different request digest causes a conflict. The `(requester.program,
+requester.id)` index lets reports find every job for one domain run. Nucleus
+does not need the domain schema. Optional `parent` names a job for invocation
+provenance. It does not define workflow behavior.
 
-`instructions` carries the requester's base contract and optional
-`developerInstructions` carries its distinct developer contract; `prompt` is
-the input for this particular job. The Codex adapter forwards the three values
+`instructions` carries the requester's base contract. Optional
+`developerInstructions` carries its distinct developer contract. `prompt`
+contains this job's input. The Codex adapter forwards the three values
 separately as `baseInstructions`, `developerInstructions`, and the turn's user
-text. It clears bundled model messages. Existing Annals and Todo instruction
-priority is therefore preserved rather than flattened into one message.
+text. It clears bundled model messages and preserves Annals and Todo
+instruction priority.
 
-The configurable invocation domain is deliberately closed:
+The invocation accepts only these settings:
 
 - exact harness and model
 - optional reasoning effort (`low`, `medium`, `high`, or `max`)
@@ -62,27 +62,27 @@ telemetry, and uses `approvalPolicy=never`. There is one attempt and no
 automatic retry. There is no request field for a command, argv, Codex config,
 approval behavior, isolation mode, or output format.
 
-The daemon admits requests durably and owns eight execution slots. At most
-eight attempts may hold live Codex app-server processes at once. An admitted
-job beyond that limit remains `accepted` with its attempt `pending` until a
-slot opens; its invocation timeout starts only after it owns a slot. A
+The daemon stores admitted requests and owns eight execution slots. At most
+eight attempts can hold live Codex app-server processes at once. Further
+admitted jobs remain `accepted` with their attempts `pending` until a slot
+opens. Invocation timeout starts only after an attempt owns a slot. A
 requester-tool wait keeps the slot because the app-server process is still
 live. Cancellation while queued makes the pending attempt `cancelled` without
 starting Codex. Admission remains available while all slots are occupied, and
 version one does not impose a queue-depth bound or schedule workflow
 dependencies.
 
-A requester that must preserve caller-environment behavior can use
+A requester that must preserve the caller's environment can use
 `POST /v1/launch-contexts`. The body contains the requester identity and a
-complete environment snapshot; the response contains a 120-second, single-use
-ID. Nucleus retains the values only in daemon memory. A fresh job with that ID
+complete environment snapshot. The response contains a single-use ID valid
+for 120 seconds. Nucleus retains the values only in daemon memory. A new job with that ID
 starts Codex with an empty environment, applies the snapshot, removes
 `CODEX_EXEC_SERVER_URL`, and replaces `CODEX_HOME` with the Nucleus-owned
 isolated home. The stored job contains only the opaque ID. An identical
 resubmission finds the existing job before checking or consuming the one-shot
 context. Todo's current stages deliberately do not register a launch context.
 
-## How harness differences are handled
+## Harness adapters
 
 An adapter translates the stable domain to one harness. Before accepting a job,
 the Codex adapter inspects the exact executable, reads its version and bundled
@@ -91,17 +91,15 @@ requested semantic. For example, it rejects a model missing from that installed
 catalog, an unsupported reasoning effort, a missing working directory, or a
 harness other than `codex`.
 
-The v1 adapter is explicitly bound to Codex `0.146.0`. It rejects any other
-version and verifies the generated schema still contains every protocol method,
-field, and enum value Nucleus consumes before it creates a job row. Supporting a
-new Codex release is therefore an adapter change with tests, not an optimistic
-version-range match.
+The v1 adapter requires Codex `0.146.0` and rejects other versions. Before it
+creates a job row, it checks the generated schema for every protocol method,
+field, and enum value Nucleus consumes. Supporting a new Codex release requires
+an adapter change and tests. A version-range match is not sufficient.
 
-The job records both harness and adapter versions. Adding another harness means
-adding another adapter that proves it can implement the same v1 meanings; it
-does not mean adding that harness's settings to the public request. A genuinely
-new portable semantic requires a new version of the Nucleus invocation
-contract.
+The job records both harness and adapter versions. A new harness requires an
+adapter that implements the same v1 meanings. It does not add harness-specific
+settings to the public request. New portable semantics require a new Nucleus
+invocation contract version.
 
 `workspaceAccess=none` gives Codex an empty temporary working directory under a
 read-only sandbox and explicitly sends `environments: []` on both thread and
@@ -216,14 +214,14 @@ originating request:
 }
 ```
 
-Nucleus verifies that the requester identity matches the job, accepts exactly
-one result, records it in the operational mailbox, and returns it to the blocked
-app-server call. The exact stdout `item/tool/call` record and its pending
-mailbox projection are committed in one SQLite transaction, and
-`requestSequence` names that output atom. The requester result is not copied
-into reporting storage. Its mailbox update is committed before Codex is woken,
-and that transaction rejects a new answer once either the owning job or attempt
-is terminal. If the requester disappears, the job remains visibly
+Nucleus checks that the requester identity matches the job. It accepts exactly
+one result, records it in the operational mailbox, and returns it to the
+blocked app-server call. One SQLite transaction commits the exact stdout
+`item/tool/call` record and its pending mailbox projection. `requestSequence`
+names that output atom. The requester result is not copied into reporting
+storage. Nucleus commits the mailbox update before waking Codex. That
+transaction rejects a new answer if the owning job or attempt is terminal.
+If the requester disappears, the job remains visibly
 `waiting_on_requester` until it is cancelled or times out. Nucleus never runs
 domain tools itself.
 
@@ -289,21 +287,22 @@ public digest always covers the public payload bytes. Sequence is per attempt.
 Version one admits exactly one attempt per job, so the existing numeric job-log
 cursor is unambiguous.
 
-The schema registry still retains the exact generated Codex JSON Schema bundle
-for decoder discovery and immutable request/tool registrations, but no schema
-identity is duplicated on each output row. All interpretations—methods,
-messages, usage observations, totals, coverage, and prices—belong to read-time
-or requester-owned pipelines.
+The schema registry retains the exact generated Codex JSON Schema bundle for
+decoder discovery and immutable request/tool registrations. Output rows do not
+duplicate schema identity. Read-time or requester-owned pipelines interpret
+methods, messages, usage observations, totals, coverage, and prices.
 
-Job and attempt state, timestamps, cancellation, and terminal fields record
-the execution lifecycle. A daemon restart marks unfinished attempts `lost` without
-adding a reporting row. Stderr is never persisted as chunks; a run retains only
-a bounded in-memory tail and adds its sanitized text to `terminalMessage` on
-failure. The complete stored `terminalMessage`, including the underlying
-failure, is control-sanitized and capped at 16 KiB. Cancellation remains durable
-at admission boundaries: the daemon
-seeds each new invocation's watch from `cancellation_requested_at` after
-publishing its sender, so a request overlapping startup cannot be lost.
+Job and attempt state, timestamps, cancellation, and terminal fields record the
+execution lifecycle. A daemon restart marks unfinished attempts `lost` without
+adding a reporting row. Nucleus never stores stderr chunks. It retains a
+bounded tail in memory and adds sanitized text to `terminalMessage` on failure.
+The complete stored message includes the underlying failure, has control
+characters sanitized, and is capped at 16 KiB.
+
+Cancellation remains durable during admission. The daemon publishes each new
+invocation's sender, then initializes its watch from
+`cancellation_requested_at`. A cancellation request that overlaps startup
+therefore cannot be lost.
 
 Reporting reads:
 
@@ -352,15 +351,17 @@ results of Codex's `account/rateLimits/read` and `account/usage/read` methods.
 ## Authentication ownership
 
 The macOS service has one authoritative home at
-`~/Library/Application Support/Nucleus/codex-home` (directory mode `0700`). Its
-`config.toml` is a private regular file no larger than 64 KiB and may contain
-only `cli_auth_credentials_store = "file"`; `auth.json` is a private regular
-file with mode `0600`. `nucleus service install --codex-home SOURCE` imports the
-currently signed-in `auth.json` after the old daemon has been stopped, so the
-import cannot race an in-flight refresh. Credential state is forward-only and
-is deliberately excluded from installation rollback: restoring binaries and
-the LaunchAgent must never replace a token refreshed by either the old or the
-replacement daemon with an earlier, already-consumed credential.
+`~/Library/Application Support/Nucleus/codex-home`, with directory mode `0700`.
+Its `config.toml` must be a private regular file of at most 64 KiB. It can
+contain only `cli_auth_credentials_store = "file"`. `auth.json` must be a
+private regular file with mode `0600`.
+
+`nucleus service install --codex-home SOURCE` imports the currently signed-in
+`auth.json` after the old daemon stops. The import therefore cannot overlap
+an in-flight refresh. Credential state moves only forward and is excluded
+from installation rollback. Restoring binaries and the LaunchAgent must not
+replace a refreshed token with an earlier consumed credential. This applies
+to tokens refreshed by either the old or replacement daemon.
 
 Every job still uses an isolated temporary Codex home. With a static API key,
 Nucleus writes only that key into the isolated home and never copies job state
@@ -370,37 +371,38 @@ token and account ID through Codex's host-managed in-memory authentication
 request, together with optional plan metadata when present. The refresh token
 never enters a job home or a harness-output record.
 
-Managed 401 requests return through Codex's host refresh callback. Nucleus
-compares the rejected access-token generation under the canonical credential
-lease: if another job already advanced it, the current generation is reused;
-otherwise one managed app-server against a private staging copy performs
-`account/read` with proactive refresh enabled. Nucleus validates that the
-access token advanced without changing accounts, then fsyncs and atomically
-promotes the complete new document into the authoritative home before replying.
-The supervised refresh outlives cancellation of the worker that requested it.
-This makes a burst of concurrent 401s one refresh rather than competing
-`auth.json` writers or cancellable writes to the authoritative file.
+Managed 401 requests use Codex's host refresh callback. Under the canonical
+credential lease, Nucleus checks the rejected access-token generation. If
+another job already advanced it, Nucleus reuses the current generation.
+Otherwise, one managed app-server runs `account/read` against a private staging
+copy with proactive refresh enabled. Nucleus checks that the token advanced
+without changing accounts. It then fsyncs and atomically promotes the complete
+document into the authoritative home before replying.
+
+The supervised refresh continues if its requesting worker is cancelled.
+Concurrent 401s therefore share one refresh. They do not create competing
+`auth.json` writers or interrupt a write to the authoritative file.
 
 Jobs and account reads hold a shared authentication-session barrier. Attended
 `nucleus auth login --device-auth` holds that barrier exclusively, so it waits
 for live jobs and account reads before it can replace or revoke the account.
 Canonical account reads and refreshes also take the short exclusive credential
 mutation lease, but running jobs do not hold that lease for their full turns.
-Account reads run against a private staging home because Codex may proactively
-refresh near-expiry credentials. Once started, the supervised account operation
-finishes staged reconciliation after requester cancellation or an account
-deadline: a valid same-account generation is atomically promoted even when the
-account request fails, while an incomplete staging write cannot damage the
-authoritative file. Attended login likewise writes only a private staging home
-and promotes a validated document after successful process completion.
+Account reads use a private staging home because Codex can proactively refresh
+credentials near expiry. A supervised account operation finishes staged
+reconciliation even after requester cancellation or an account deadline.
+It atomically promotes a valid same-account generation even if the account
+request fails. An incomplete staging write cannot damage the authoritative
+file. Attended login also writes only to a private staging home. It promotes
+a validated document after successful process completion.
 Credential state remains forward-only and only Nucleus's validated atomic
 promotion writes the authoritative document. Once imported, Annals and Todo do
 not read, write, refresh, or lock Codex credentials themselves.
 
-Graceful shutdown closes admission to new supervised account and refresh
-operations after HTTP handlers drain, repeats job cancellation for work admitted
-during that drain, then waits for already-started authentication operations to
-settle before the daemon exits.
+After HTTP handlers drain, graceful shutdown closes admission to new supervised
+account and refresh operations. It repeats cancellation for jobs admitted
+during the drain, then waits for started authentication operations to settle
+before the daemon exits.
 
 The standard service installer secures its state directory as mode `0700`; the
 daemon secures the database and socket as mode `0600`. There is no TCP listener
@@ -443,9 +445,10 @@ waiting job, and no terminal cleanup still supervised by the daemon. Releasing
 one run ID leaves all other holds intact. No expiry silently reopens admission.
 
 Ordinary health remains strict and reports `acceptingJobs: false` while held.
-`maintenance health RUN_ID` proves the sole matching owner, zero unfinished
-jobs and active slots, drained admission guards, authenticated credentials, supported protocol, and a
-ready exact harness. The health document is returned unchanged. The typed
+`maintenance health RUN_ID` checks for the sole matching owner, zero unfinished
+jobs and active slots, drained admission guards, authenticated credentials,
+supported protocol, and a ready exact harness. It returns the health document
+unchanged. The typed
 client provides `health_for_deployment`; this exception is solely for
 installation readiness, never ordinary requester admission. Only the service
 installer holding its own exclusive activity guard may account for that guard

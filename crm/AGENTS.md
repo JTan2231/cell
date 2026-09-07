@@ -2,10 +2,9 @@
 
 Semantics-Project: crm
 
-- Keep CRM simple: it is one private local SQLite library, a short-lived CLI,
-  and a hidden per-update worker. It is not a daemon, scheduler, contact
-  sender, source crawler, general automation system, or filesystem content
-  repository.
+- Keep CRM simple: one private SQLite library, a short-lived CLI and a hidden
+  worker for each update. Do not add a daemon, scheduler, contact sender,
+  source crawler, general automation system or filesystem content repository.
 - Until the `crm` Semantics project is explicitly registered and seeded, use
   the Cell semantic repository for shared terminology. After registration,
   the CRM project repository is authoritative for maintained CRM terminology.
@@ -18,8 +17,8 @@ Semantics-Project: crm
   deliveries, update state, requester attempts, and tool receipts. Source
   references are retained with deliveries. Nucleus owns agent execution and
   mailbox transport.
-- An advisory must remain conspicuous on every surface that consumes its
-  revision, but it must never authorize, refuse, or block an operation. CRM
+- Display an advisory prominently on every surface that consumes its revision.
+  An advisory must never authorize, refuse or block an operation. CRM
   stores the case narrative, stage and supporting material; contact actions
   belong to the caller.
 - `tell` must durably record the delivery and queued update before returning.

@@ -24,7 +24,7 @@
       ]
     },
     "shared_access_and_trust": [
-      "Krisis interfaces are local-current-user surfaces; each entry declares its reads, writes, and cross-product invocations.",
+      "Krisis interfaces run locally for the current user. Each entry declares its reads, writes, and calls to other products.",
       "Catalog presence does not authorize deployment, live state changes, direct database access, or interpretation of model output as decision authority."
     ],
     "shared_privacy_and_retention": [
@@ -32,7 +32,7 @@
       "After Annals acceptance Krisis retains minimal correlation, coverage, anchor, digest, and receipt records; Nucleus and Annals own their separately documented retention."
     ],
     "compatibility_and_retirement": [
-      "Provider release identifies these exact bundle bytes, while entry contracts, SQLite schema 4, classifier schemas, and downstream contracts are separate compatibility axes.",
+      "Provider release identifies the bundle bytes. Entry contracts, SQLite schema 4, classifier schemas, and downstream contracts have independent compatibility rules.",
       "Retired Decisions state remains migration-decodable and its lifecycle stream remains read-only for existing consumers; digest, review, email, and daily scheduling are disabled."
     ],
     "operational_limits": [

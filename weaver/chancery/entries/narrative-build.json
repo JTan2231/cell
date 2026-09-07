@@ -7,7 +7,7 @@
   "title": "Build a five-stage public-facing narrative",
   "summary": "Use Weaver to replace and validate the five generated narrative files from the authored inputs in a selected narrative repository.",
   "use_when": [
-    "A selected narrative repository has Weaver's complete authored basis, brief, source, and five-stage prompt contract and its current generated outputs should be replaced.",
+    "The selected narrative repository meets Weaver's basis, brief, source, and five-stage prompt contract. Its current generated outputs need replacement.",
     "The user wants the durable Weaver workflow rather than an ad hoc narrative written only in the current conversation."
   ],
   "do_not_use_when": [
@@ -19,7 +19,7 @@
   "effects": [
     "Records one current Weaver run and starts a detached one-shot worker in the interactive caller's process lineage.",
     "After strict Nucleus readiness, removes the prior five generated outputs and writes each new stage output atomically as its job succeeds.",
-    "Submits five independent Nucleus jobs using Codex and may consume account allowance; a failed later stage leaves earlier outputs from the new run in place.",
+    "Submits five independent Nucleus jobs using Codex and may consume account allowance. If a later stage fails, earlier outputs from the new run remain.",
     "Does not publish, upload, send, apply for a job, or edit a public profile."
   ],
   "authority": [
@@ -35,7 +35,7 @@
   "failure_and_recovery": [
     "Use `weaver status RUN_ID` and the correlated Nucleus job to identify the failed stage without inferring success from model prose.",
     "A nonterminal `weaver wait RUN_ID` starts a replacement one-shot worker and rediscovers the exact persisted Nucleus request after a worker crash, logout, or machine restart.",
-    "A lost Nucleus attempt, timeout, cancellation, malformed output, or failed mechanical check is terminal for the run; Weaver does not invent another model attempt."
+    "A lost Nucleus attempt, timeout, cancellation, malformed output, or failed mechanical check ends the run. Weaver does not start another model attempt."
   ],
   "privacy": [
     "Weaver current state and Nucleus state can retain complete private basis, brief, source, prompt, and generated-input bytes while a stage is active or in raw protocol history.",
@@ -68,7 +68,7 @@
       {"status": "unsupported", "statement": "Arbitrary paths, symlinked authority inputs, hidden repository discovery, local execution, web search, launch context, dynamic tools, and model-side repository access are unsupported."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Submission returns one durable Weaver run ID; successful completion leaves five nonempty Markdown output.md files for stories, themes, draft, review, and finalization, each atomically replaced when its stage succeeds."},
+      {"status": "declared", "statement": "Submission returns one durable Weaver run ID. A successful run leaves five nonempty Markdown output.md files: stories, themes, draft, review, and finalization. Weaver atomically replaces each file when its stage succeeds."},
       {"status": "declared", "statement": "Status and wait expose exact stage and terminal state, while deterministic check returns PASS or REVISE as successful validity outcomes and BLOCKED as a nonpublishable diagnostic."}
     ],
     "data_semantics": [
@@ -90,7 +90,7 @@
     ],
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "Submit atomically records the sole current request before starting a detached one-shot worker, which holds the run lock and executes five stages sequentially."},
-      {"status": "declared", "statement": "The exact active stage request is persisted before ambiguous submission; recovery resubmits only those same bytes under the same deterministic job ID, while loss or terminal failure never creates a new attempt."}
+      {"status": "declared", "statement": "Weaver persists the exact active stage request before submission, whose outcome can be ambiguous. Recovery resubmits only those bytes with the same deterministic job ID. Loss or terminal failure never creates a new attempt."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "Only one current workflow may be active, stages run sequentially, each stage has one attempt, and Weaver owns no daemon, LaunchAgent, completed-run archive, or automatic terminal-run retry."},

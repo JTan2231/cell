@@ -1,8 +1,10 @@
 # Experiment 3: Twenty-chat medium versus high
 
-## Result in one sentence
+## Result
 
-Medium built a flat glossary in less model time. High consolidated, nested, enriched, and retired concepts, and populated `uncertainties` on nine proposals. The experiment's application policy left those nine proposals pending.
+Medium built a flat glossary in less model time. High consolidated, nested,
+enriched, and retired concepts. It populated `uncertainties` on nine proposals,
+which the experiment's application policy left pending.
 
 ## Controlled setup
 
@@ -20,11 +22,10 @@ left its proposal pending; subsequent runs saw their arm's accumulated corpus.
 
 ## Cohort
 
-The cohort retained the three conversations used in experiments 1 and 2, two
-safe agent-interface conversations, and fifteen Annals conception, design, and
-implementation conversations. It is intentionally coherent but strongly
-project-weighted; it is not a random sample of 20 conversations from the
-original self-analysis directory.
+The cohort retained the three conversations from experiments 1 and 2, two safe
+agent-interface conversations, and fifteen Annals conception, design, and
+implementation conversations. This deliberately coherent selection emphasizes
+one project. It was not a random sample from the original self-analysis directory.
 
 Two otherwise eligible sessions were excluded because they contained login,
 one-time-code, private-repository, or token-related material. The renderer kept
@@ -49,11 +50,14 @@ counts.
 | Successful / attempted tool calls | 134 / 143 | 266 / 285 |
 | Successfully executed query strings | 213 | 1,237 |
 
-High used 5.03 times the model time, 1.99 times the tool calls, 5.81 times the successful query strings, and 2.09 times the read regions.
+High used 5.03 times the model time, 1.99 times the tool calls, 5.81 times the
+successful query strings, and 2.09 times the read regions.
 
 ## What medium built
 
-Medium's 21 final concepts are all roots. Every one of its 22 proposed operations was `create_concept`; it never placed a concept beneath another concept, added evidence to an existing concept, or retired superseded material.
+Medium's 21 final concepts are all roots. All 22 proposed operations were
+`create_concept`. It never placed a concept beneath another, added evidence to
+an existing concept, or retired superseded material.
 
 The complete live corpus was:
 
@@ -121,7 +125,12 @@ Liaison-mediated corpus reconciliation
 Across all proposals high used 25 creates, two retirements, and one evidence
 addition.
 
-Work 18 is the clearest contrast. Medium created `Single write boundary for model liaisons` as one new root with one quotation. High made five coordinated operations with ten quotations: it enriched the existing semantic interface, created three placed refinements, and retired an obsolete whole-file-ingestion concept introduced four works earlier. That is genuine corpus reconciliation rather than per-document extraction.
+Work 18 shows the difference. Medium created `Single write boundary for model
+liaisons` as one new root with one quotation. High made five coordinated
+operations with ten quotations. It enriched the existing semantic interface,
+created three placed refinements, and retired a whole-file-ingestion concept
+introduced four works earlier. These operations changed earlier corpus
+structure as well as adding concepts from the current work.
 
 ## Why high's final corpus is smaller
 
@@ -167,9 +176,8 @@ summaries, `uncertainties` entries, and frozen base revisions.
 Each arm contained all 20 immutable rendered works, 20 model-run records, 20
 model proposals, the liaison tool-call transcript for each examination, and a
 revision history for every accepted transition. The live concept tree was only
-the current projection of the applied proposals. Thus a concept absent from
-the tree could still be present—and fully evidence-grounded—in the proposal
-history.
+the current projection of applied proposals. A concept absent from the tree
+could still appear with its evidence in proposal history.
 
 ## Agreement and provenance
 
@@ -179,9 +187,13 @@ Final evidence is overwhelmingly assistant-authored: medium has 26 assistant spa
 
 ## Practical conclusion
 
-Under this experiment's unattended policy, medium applied 95% of works at one-fifth the model time. High used more consolidation and historical-correction operations, while the runner left its proposals with `uncertainties` entries pending.
+Under this experiment's unattended policy, medium applied 95% of works at
+one-fifth the model time. High used more consolidation and historical-correction
+operations. The runner left its proposals with `uncertainties` entries pending.
 
-A subsequent comparison could hold the corpus revision fixed for each work and replicate trials. That would allow the reported operation choices and runtime to be compared independently of the accumulated corpus trajectories and application policy.
+A subsequent comparison could hold the corpus revision fixed for each work and
+repeat trials. This would separate operation choices and runtime from the
+accumulated corpus trajectories and application policy.
 
 Both databases validate cleanly, their SQLite integrity and foreign keys are sound, and all locked input hashes match.
 

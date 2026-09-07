@@ -15,7 +15,7 @@
     "The proposed design requires Nucleus to understand requester domain rows or workflow state.",
     "Only ordinary application code unrelated to the requester boundary is changing."
   ],
-  "outcome": "A requester with a defined external domain authority, one closed versioned invocation per job, durable correlation, capacity-aware admission, idempotent tool handling, explicit failure policy, and proven operational recovery.",
+  "outcome": "A requester with defined domain authority, one closed versioned invocation per job, durable correlation, capacity-aware admission, idempotent tool handling, explicit failure policy, and verified recovery.",
   "effects": [
     "Changes requester implementation, contracts, tests, and operator documentation.",
     "May register new immutable decoder schemas or requester-owned toolset versions.",
@@ -32,7 +32,7 @@
   ],
   "failure_and_recovery": [
     "Ambiguous admission retries only the byte-equivalent request under the same job ID.",
-    "A genuinely new attempt uses a new job ID and is allowed only by requester policy.",
+    "A new attempt requires a new job ID and permission under requester policy.",
     "A requester restart may recover a durable pending call; a Nucleus restart cannot resume the Codex process and marks the attempt lost.",
     "An accepted job may wait with a pending attempt when eight attempts are active; its timeout begins only after it acquires a slot, and waiting on the requester continues to consume that slot."
   ],
@@ -116,7 +116,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The operation produces synchronized requester code and contracts with durable bidirectional correlation, capacity-aware accepted/pending handling, replay-safe mailbox handling, explicit invocation and retry policy, historical decoders, tests, observability, backup and recovery procedures, deployment ordering, and service readiness checks without synthetic records."
+        "statement": "The operation produces consistent requester code and contracts. These cover durable correlation in both directions, accepted/pending waiting, replay-safe mailbox handling, explicit invocation and retry policy, and historical decoders. They also cover tests, observability, backup, recovery, deployment order, and service readiness checks that create no synthetic records."
       },
       {
         "status": "unsupported",
@@ -174,7 +174,7 @@
       },
       {
         "status": "declared",
-        "statement": "An ambiguous admission repeats only byte-equivalent content under the same job ID; a genuinely new attempt uses a new ID only under requester policy, and a requester restart recovers mailbox state while a Nucleus restart cannot resume the harness process."
+        "statement": "If admission is uncertain, resend only byte-equivalent content with the same job ID. A new attempt requires a new ID and permission under requester policy. A requester restart can recover mailbox state. A Nucleus restart cannot resume the harness process."
       },
       {
         "status": "declared",

@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Discover companies and collect current jobs",
-  "summary": "Run bounded company discovery and public careers collection, storing companies, jobs, source metadata, collection outcomes and request-budget usage.",
+  "summary": "Discover companies and collect public job postings within configured limits. Store companies, jobs, source metadata, collection outcomes and budget usage.",
   "use_when": [
     "New employers and postings should be found through configured recurring query families.",
     "Previously discovered employer careers sources should be refreshed with ordinary HTTP."
@@ -46,7 +46,7 @@
     "External sources supply response fields and posting records; providers handle billing."
   ],
   "success": [
-    "The bounded run settles its admitted work and retains both discoveries and explicit coverage/error outcomes.",
+    "The run finishes its admitted work and stores discoveries, collection coverage and errors.",
     "The run result records each selected source outcome and the resulting snapshot revision."
   ],
   "failure_and_recovery": [
@@ -70,7 +70,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "The caller selects initialized Cast state, valid configuration, network access, and credentials for enabled paid providers; local request budgets admit each request."
+        "statement": "Collection requires initialized Cast state, valid configuration, network access and credentials for enabled paid providers. Each request must fit within local budgets."
       }
     ],
     "inputs": [
@@ -88,7 +88,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "First/last seen are Cast observation times. Provider publication/update dates are separate fields. Failed and partial fetches do not add missing observations. The employer_jsonld_owned adapter rule requires a hiring-organization root homepage URL without query/fragment whose host matches the page/job host or its parent employer domain. Shared recruiting hosts such as join.com and curriculo.me require a separate adapter; search and directory results use their own attribution kinds."
+        "statement": "First and last seen are Cast observation times. Provider publication and update dates use separate fields. Failed and partial fetches do not add missing observations. The employer_jsonld_owned adapter requires the hiring organization's root homepage URL, with no query or fragment. Its host must match the page or job host, or that host's parent employer domain. Shared recruiting hosts such as join.com and curriculo.me require a separate adapter. Search and directory results use their own attribution kinds."
       }
     ],
     "identity_and_units": [
@@ -116,7 +116,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Collection serializes writers for one state directory, persists checkpoint and budget state, and leaves incomplete work inspectable for subsequent runs."
+        "statement": "Only one writer can collect into a state directory at a time. Cast stores checkpoints, budget state and unfinished work for later runs."
       }
     ],
     "operational_limits": [

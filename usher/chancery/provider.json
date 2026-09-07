@@ -7,7 +7,7 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Usher owns the deterministic interpretation of declared Cell membership and the report/check outcome over a selected checkout.",
+      "Usher interprets declared Cell membership and owns the deterministic report/check result for a selected checkout.",
       "The separate usher-install executable owns Usher installation policy, immutable releases, command and provider selectors, integrity verification, and supported retained-release recovery using the shared cell-install library."
     ],
     "not_authoritative_for": [
@@ -24,7 +24,7 @@
     },
     "shared_access_and_trust": [
       "Recognition reads explicitly selected local checkout files. Repository descriptors are parsed as literal data and never executed.",
-      "Installation uses the separate local usher-install executable, exact candidate artifacts, and current-user product-owned paths. It refuses foreign selectors and requires a coherent supported prior release before cutover or recovery."
+      "Installation uses the separate local usher-install executable, exact candidate artifacts, and product-owned paths under the current user. It refuses foreign selectors. A supported prior release must pass consistency checks before installation switches selectors or recovery begins."
     ],
     "shared_privacy_and_retention": [
       "Recognition reports expose product IDs, aliases, semantic project IDs, provider IDs, relative paths, and bounded diagnostics, never document bodies. Recognition retains no state or report and makes no network or model call.",

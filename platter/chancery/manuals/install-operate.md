@@ -2,7 +2,7 @@
 
 Platter's Rust installer packages the `platter` command, `platter-install`
 recovery executable and matching Chancery provider as one immutable release.
-Its supported mutation route is the Cell deployment coordinator. Direct
+Use the Cell deployment coordinator to change the installation. Direct
 `platter-install install` and `recover` are refused because replacing this
 requester must preserve admission, pending Nucleus work and domain state.
 
@@ -30,9 +30,8 @@ When installation has been authorized and the changes are committed on local
 
 `plan` is read-only. A deployment selects its exact local `main` commit; it
 ignores uncommitted changes and does not publish a release, commit, tag or
-push. Platter orders selected Cast, CRM, Email and Nucleus installations before its
-own cutover. The conservative
-maintenance closure includes Nucleus and its registered requesters, whose
+push. When selected together, Cast, CRM, Email and Nucleus install before
+Platter. Maintenance includes Nucleus and its registered requesters, whose
 installed maintenance interfaces must already be compatible. Unselected
 products are not upgraded to satisfy a missing prerequisite.
 
@@ -44,7 +43,8 @@ Owned installation files are beneath
 file modes, digests and public entry mappings. `package/install` retains the
 installer. The owned `current` selector publishes the matching
 `~/.local/bin/platter`, `~/.local/bin/platter-install` and Chancery
-`providers/platter` selector together. The installer retains prior releases for verified recovery. Cell coordinated
+`providers/platter` selector together. The installer retains prior releases for
+verified recovery. Cell coordinated
 cleanup follows its separate rules for removing unreferenced release history.
 Foreign selectors, altered retained files and mismatched candidate/provider
 versions stop publication. Product and catalog writer locks protect the
@@ -117,15 +117,15 @@ PATH. Preparation uses the same resolver. Nucleus must have compatible authentic
 readiness; during deployment its exact run-owned hold is checked.
 These probes do not call Cast collection, consume Cast API-key budgets, submit
 model jobs, render a document, send email or read a provider account balance.
-`doctor --state-only` proves retained schema and template compatibility without
+`doctor --state-only` checks retained schema and template compatibility without
 execution, rendering or delivery prerequisites. Recovery of an unchanged prior
 Platter installation, and verification of an affected-only prior installation,
 use this check under the existing quiescence proof. Selected candidate
 verification still requires full readiness.
 Cast and CRM probes inspect executable identity only; they do not read
-exports, profile contents or prove those libraries initialized. These checks
-establish local readiness at observation time, not future source availability,
-model success, final PDF fidelity or inbox receipt.
+exports or profile contents, or check whether those libraries are initialized.
+The results describe local readiness at observation time. They do not establish
+future source availability, model success, final PDF fidelity or inbox receipt.
 
 ## Inspection and recovery
 
@@ -141,9 +141,8 @@ platter-install verify-release /absolute/owned/release
 `inspect` and `verify` accept an explicit `--home ABSOLUTE_PATH`. `verify`
 compares the installed release with the supplied candidate and executing
 installer. `verify-release` checks retained release integrity without changing
-selectors. No prior installed Platter release format is supported; the
-predecessor compatibility is runtime state compatibility, not an invented
-legacy installation format.
+selectors. No prior installed Platter release format is supported.
+Compatibility with the predecessor applies to runtime state only.
 
 The coordinator invokes the sealed `platter-install adapter OP` with its
 version-one JSON request for `inspect`, `hold`, `drain`, `apply`, `verify`,

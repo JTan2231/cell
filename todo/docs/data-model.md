@@ -1,9 +1,8 @@
 # Data model
 
-SQLite schema version 2 stores the domain as typed relational records. There
-are no JSON or JSONB columns. Structured assessments and designs are normalized
-so IDs, references, decisions, and bases can be validated with ordinary keys
-and constraints.
+SQLite schema version 2 stores typed relational records without JSON or JSONB
+columns. Assessments and designs use normalized tables. Keys and constraints
+validate their IDs, references, decisions and bases.
 
 ## Public identities
 
@@ -35,10 +34,9 @@ todo; dismissal is terminal. Deferral records why routing cannot yet be
 decided without inventing an umbrella identity.
 
 One concern attaches directly to at most one umbrella. Several concerns may
-attach to the same `tN`. After unification, historical links remain physically
-on their original umbrellas; the survivor's read projection derives inherited
-effective concerns through the supersession relationship. It does not rewrite
-one `cN` onto several `tN` rows.
+attach to the same `tN`. After unification, historical links remain on their
+original umbrellas. The survivor's read view includes inherited concerns
+through the supersession relationship. Todo does not copy a `cN` onto several `tN` rows.
 
 ## Todo umbrellas and direction revisions
 
@@ -203,8 +201,8 @@ separate from design identity and state. It stores the exact `aN`, reason,
 producer tool-call identity, creation time, and ordered structured
 missing-or-stale references. It optionally links an abandoned `dN`.
 
-Returning before the first valid submission creates no design. Returning after
-an open draft atomically marks that draft `abandoned` and links it to the return.
+An assessment return before the first valid submission creates no design. If
+an open draft exists, the return atomically marks it `abandoned` and links it.
 A ready or terminal design cannot be returned. The return is terminal for the
 liaison run, so retries resolve to the same outcome rather than later creating
 a draft from that run.
@@ -241,7 +239,7 @@ Migration is explicit and preserves legacy meaning conservatively:
 for a version-1 database. It writes a complete SQLite backup before applying
 the version-2 transaction. Failure leaves the original usable; success retains
 the caller's backup. Running the command against an already-current database is
-a true no-op and does not touch the supplied backup path.
+a no-op and does not touch the supplied backup path.
 
 Constraints and triggers prevent mutation of immutable provenance, sealed
 proposals, assessments, decided designs, and existing working notes. Foreign

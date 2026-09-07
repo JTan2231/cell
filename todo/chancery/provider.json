@@ -11,7 +11,7 @@
       "Each Todo entry states the supported boundary for one public use, operation, or development outcome; Todo SQLite and the installed release remain the runtime authorities for actual records and behavior."
     ],
     "not_authoritative_for": [
-      "Nucleus owns model execution, authentication, job state, and raw protocol history; Resend and the recipient provider own external email submission and receipt.",
+      "Nucleus owns model execution, authentication, job state and raw protocol history. Resend and the recipient provider own external email submission and receipt.",
       "Source artifacts and independently stewarded systems supply the selected assessment inputs."
     ],
     "inventory": {
@@ -24,7 +24,7 @@
       ]
     },
     "shared_access_and_trust": [
-      "Todo is a local current-user CLI over its selected SQLite database; model-assisted stages use only frozen bounded inputs through the separately installed Nucleus service.",
+      "Todo is a local CLI for the current user and uses a selected SQLite database. Model stages use frozen bounded inputs through the separately installed Nucleus service.",
       "Mutation, decision, deployment, migration, and external email effects require the exact authority and preconditions stated by the selected entry; catalog presence grants none of them."
     ],
     "shared_privacy_and_retention": [
@@ -32,7 +32,7 @@
       "Nucleus may retain source and prompt content read during research, while Resend and the recipient provider retain the explicitly sent digest under their own policies."
     ],
     "compatibility_and_retirement": [
-      "Provider release identifies the Todo release, entry contract version identifies public semantic compatibility, and SQLite schema version is a separate persistent-state contract.",
+      "Provider release identifies the Todo release. Entry contract version describes public compatibility. SQLite schema version separately describes persistent-state compatibility.",
       "Incompatible contract or persistent-state changes require versioning, migration or dependency updates, retained historical meaning, and documented rollback before older behavior is retired."
     ],
     "operational_limits": [

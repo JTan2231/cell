@@ -1,7 +1,8 @@
 # User-owned macOS installation
 
-Email is synchronous. It owns no daemon, configuration, delivery database, or
-state beyond immutable install releases and their selectors.
+Email sends during each invocation. Its only retained state is immutable
+install releases and their selectors. It has no daemon, configuration, or
+delivery database.
 
 An upstream product may own scheduling, occurrence state, message rendering,
 and standing send authority. It can invoke Email with
@@ -17,7 +18,7 @@ key in the installed user's `~/.zshrc`:
 export RESEND_API_KEY='re_replace_with_the_real_key'
 ```
 
-Run the product gate, then install its exact tested binary and Rust installer:
+Run the product gate. Then install the exact binary and Rust installer that it tested:
 
 ```sh
 cd /Users/joey/rust/cell/email
@@ -77,8 +78,8 @@ deployment, Chancery discovery can be checked separately:
 /Users/joey/.local/bin/chancery resolve email.message.send
 ```
 
-`resolve` reads the release-matched provider scope, normalized send promise,
-substantive external reliances, exact documentation basis, and explicit gaps.
+`resolve` reads the provider scope, send contract, external dependencies,
+sources, and declared gaps for the installed release.
 It does not source the Email credential, probe Resend or Gmail, or authorize or
 perform a send.
 
@@ -97,6 +98,6 @@ payload:
 email --idempotency-key 'product/event/2026-09-01' 'Subject' - < body.txt
 ```
 
-Command success proves Resend acceptance. Gmail receipt must be observed
-separately. Sending discloses the exact subject, body, and attached filenames and bytes to Resend and Gmail;
-a caller key is also disclosed to Resend. Email retains none of them locally.
+Command success confirms Resend acceptance. Check Gmail separately for receipt.
+Sending discloses the subject, body, and attachment names and bytes to Resend
+and Gmail. It also discloses a caller key to Resend. Email retains none of them locally.

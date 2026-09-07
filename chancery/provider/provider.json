@@ -8,11 +8,11 @@
   "promise_scope": {
     "authoritative_for": [
       "Chancery owns structural validation of installed provider bundles, complete installed catalog presentation, exact-ID promise resolution, and documentation-contract compatibility reporting.",
-      "Each Chancery invocation canonicalizes each encountered provider selector once to build one in-memory registry view and identifies the exact provider, entry, and manual bytes used as its basis."
+      "Each invocation canonicalizes provider selectors once and builds one registry view in memory. It identifies the exact provider, entry, and manual bytes used."
     ],
     "not_authoritative_for": [
       "Owning products remain authoritative for capability semantics, effects, current runtime behavior, live readiness, authorization, and domain success.",
-      "The interactive agent, not Chancery, interprets a user's natural-language request and selects plausible entries."
+      "The interactive agent interprets the user's request and selects plausible entries."
     ],
     "inventory": {
       "covers": [
@@ -28,11 +28,11 @@
       "Catalog presence and resolution do not grant access to or authorize any represented interface."
     ],
     "shared_privacy_and_retention": [
-      "Provider documentation is processed locally in memory and Chancery retains no registry, query, dossier, or runtime state.",
+      "Chancery processes documentation locally in memory. It retains no registry, query, dossier, or runtime state.",
       "Provider bundles must not contain credentials, secrets, private source material, or transient runtime output."
     ],
     "compatibility_and_retirement": [
-      "Provider schema version identifies bundle shape, provider release identifies the owning release, and entry contract version identifies documented semantic compatibility.",
+      "Provider schema version identifies bundle shape. Provider release identifies the owning release. Entry contract version identifies documented semantic compatibility.",
       "Schema changes deploy reader-first; dependency ranges describe documentation-contract compatibility only."
     ],
     "operational_limits": [

@@ -48,8 +48,9 @@ From: Codex <codex@joeytan.dev>
 To:   j.tan2231@gmail.com
 ```
 
-The command requires a nonblank, whitespace-clean `RESEND_API_KEY` environment
-variable. Unless the caller supplies a key, one invocation creates one
+The command requires `RESEND_API_KEY` in the environment. Its value must be
+nonblank and whitespace-clean. Unless the caller supplies an
+idempotency key, each invocation creates one
 `email/<UUIDv7>` key. The selected key and request are frozen for at most three
 attempts. Transport errors, HTTP 429, and server errors are retried after two
 short bounded delays. Other Resend rejections fail immediately.
@@ -60,6 +61,6 @@ On acceptance, stdout is:
 Accepted <resend-message-id>
 ```
 
-and the process exits zero. Errors use the `email: ` prefix on stderr, omit the
-API key and response body, and exit nonzero. Acceptance is not proof of final
-Gmail delivery.
+The process then exits zero. On failure, Email exits nonzero and writes an
+error with the `email: ` prefix to stderr. Errors omit the API key and response
+body. Resend acceptance does not confirm Gmail delivery.

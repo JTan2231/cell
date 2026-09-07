@@ -20,9 +20,9 @@ The selected database must also carry the immutable `decisions` role; an exact
 expected ID cannot turn a `general` database into a decisions library.
 For this config, direct work add or integration, generic `inbox enqueue`,
 `inbox register`, and backlog import are rejected. Scheduled `inbox run` binds
-an empty fresh spool or verifies its existing binding and does not register `incoming/`; it
-dispatches committed accepted originals and their explicit Annals retry
-children only. A generic config cannot admit to or run the bound spool or the
+a fresh empty spool or verifies its existing binding. It does not register
+`incoming/` files. It dispatches only committed accepted originals and their
+explicit Annals retry children. A generic config cannot admit to or run the bound spool or the
 decisions database through an alternate spool or direct library selector.
 
 ## Accept one account
@@ -39,8 +39,8 @@ and derives label `Krisis decision DECISION_ID`. A first call reports
 original job and time. Different bytes conflict. Keep the Krisis outbox copy
 until its caller has durably recorded that exact receipt.
 
-Acceptance means ownership, not processing. It creates no delivery row or
-model attempt and can succeed while dispatch is paused. The separately operated
+Acceptance transfers ownership to Annals. It creates no delivery row or model
+attempt and can succeed while dispatch is paused. The separately operated
 `inbox run` later integrates and immediately applies this decisions library's
 jobs under that command's Nucleus contract. Never resubmit an account because
 its job failed.
@@ -71,9 +71,9 @@ library.
 
 On an ambiguous acceptance, retry only the same key and bytes. Annals recovers
 a published envelope whose database commit was interrupted. Identity, digest,
-or envelope mismatch is a stop: inspect supported status and restore the exact
-library/spool pair rather than editing SQLite or producer receipts. Low storage
-is also a stop, never cleanup authority.
+or envelope mismatch stops acceptance. Inspect supported status and restore the
+exact library/spool pair. Do not edit SQLite or producer receipts. Low storage
+also stops acceptance and does not authorize cleanup.
 
 ## Rust access
 

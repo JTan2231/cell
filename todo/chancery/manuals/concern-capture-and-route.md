@@ -1,8 +1,7 @@
 # Capture and research a concern for later
 
-Use Todo when an actionable concern or follow-up should be retained for later.
-Do not use it merely because work is actionable: work requested for immediate
-completion should normally be done now.
+Use Todo to retain an actionable concern or follow-up for later. Normally
+complete work now when the user requests immediate completion.
 
 Todo preserves the place where the concern arose, then separately researches
 which durable todo identity, if any, it belongs to. The standard command is:
@@ -53,10 +52,9 @@ revise a `tN`, even when the proposal recommends it. Inspect the records with:
 
 ## Failure and authority
 
-The `cN` commit happens before Nucleus submission and survives Nucleus,
-authentication, model, or later liaison failure. If research fails, preserve
-and inspect that concern rather than blindly running `todo new` again. Research
-can be retried for the existing concern through `concern assess`.
+Todo commits `cN` before Nucleus submission. It survives Nucleus, authentication,
+model and later liaison failures. If research fails, inspect the retained
+concern. Use `concern assess` to retry research without capturing it again.
 
 Todo's validated tool result is the domain result. Nucleus owns runtime and raw
 protocol state; model prose cannot accept routing. A person must later invoke
@@ -78,4 +76,8 @@ enums define the interface without a separate declaration layer.
 
 ## Output selection
 
-Capture and routing retain immutable concern/proposal and explicit-decision semantics. Concern list defaults to 20 rows of ID, status, recorded time and a marked excerpt capped at 240 characters, with has_more and positive --limit for more. concern show retains full provenance and routing history.
+Capture and routing preserve immutable concerns, sealed proposals and explicit
+decisions. Concern list defaults to 20 rows with ID, status, recorded time and
+a marked excerpt of at most 240 characters. Results include `has_more`; use
+`--limit` with a positive integer for more. Concern show returns full provenance
+and routing history.

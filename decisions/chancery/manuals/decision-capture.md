@@ -1,9 +1,9 @@
 # Capture decision accounts
 
-Use `krisis observe status`, `process`, and `reconcile` for the automatic capture
-pipeline. Every eligible completed root-turn user authority receives a durable
-binary verdict. Decisions become deterministic Markdown accounts delivered to
-the explicitly configured dedicated Annals library.
+Use `krisis observe status`, `process`, and `reconcile` to operate automatic
+capture. Each eligible user authority in a completed root turn receives a
+durable binary verdict. Krisis delivers deterministic Markdown decision accounts
+to the configured dedicated Annals library.
 
 Krisis exposes observation status and account delivery. Pending Annals delivery
 retries exact bytes before new classification. Search accepted accounts through
@@ -25,4 +25,8 @@ requirements. Retired digest/review commands are not available in this client.
 
 ## Output selection
 
-Activation, hook, process and Annals acceptance receipts retain their documented identity and domain meaning. Observer status retains complete counts and at most 20 failure IDs/codes by default, with failures_has_more and positive --limit for more. Full source-account and legacy lifecycle reads preserve their existing schemas and authority.
+Activation, hook, process, and Annals acceptance receipts retain their documented
+identities and meanings. Observer status returns all counts and, by default,
+at most 20 failure IDs and codes. It includes `failures_has_more`. To see more
+failures, set `--limit` to a larger positive integer. Full source-account and
+legacy lifecycle reads preserve their schemas and authority.

@@ -5,7 +5,7 @@
   "mode": "develop",
   "support": "supported",
   "title": "Change Krisis safely",
-  "summary": "Develop Krisis while preserving user authority, bounded binary classification, atomic durable acknowledgement, Annals delivery idempotency, legacy Decisions decoding, and the product CI gate.",
+  "summary": "Develop Krisis while preserving user authority, classification limits, atomic commit before acknowledgement, idempotent Annals delivery, legacy Decisions decoding, and product CI.",
   "use_when": ["Krisis code, schemas, prompts, classifier tools, persistence, Annals exchange, packaging, lifecycle, or documentation should change."],
   "do_not_use_when": ["The installed Krisis capability should only be used or operated."],
   "outcome": "A reviewed product change whose standalone CI is green and whose affected contracts and recovery paths agree.",
@@ -82,7 +82,7 @@
       {"status": "not_applicable", "statement": "This operation defines no usage or billing unit."}
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "Completeness requires every affected authority, source, classification, transaction, delivery, compatibility, privacy, packaging, and recovery boundary to agree with focused proof and standalone CI."},
+      {"status": "declared", "statement": "Complete the change with focused checks and standalone CI. The affected authority, source, classification, transaction, delivery, compatibility, privacy, packaging, and recovery contracts must agree."},
       {"status": "unspecified", "statement": "No development duration, review turnaround, release cadence, or consumer upgrade window is promised."}
     ],
     "access": [

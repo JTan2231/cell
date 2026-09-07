@@ -1,9 +1,9 @@
 # Change Weaver
 
-Weaver is a five-stage durable narrative requester. It is not a live job-search,
-application-submission, browser, publication, or public-profile system. Changes
-must preserve that product boundary unless a separately authorized product
-decision changes it explicitly; this contract does not make that decision.
+Weaver is a five-stage durable narrative requester. It does not search for jobs,
+submit applications, operate a browser, publish, or edit public profiles.
+Preserve that scope unless a separately authorized product decision changes it.
+This contract does not authorize that decision.
 
 ## Start from the owning contract
 
@@ -37,10 +37,10 @@ Nucleus-launched Codex process uses Weaver private state as a read-only working
 directory and receives only embedded contents, with local execution, web
 search, launch context, and dynamic tools disabled.
 
-One current run may be active. The exact active typed request is durable before
-ambiguous submission and uses a deterministic stage job ID. Worker recovery
-may resubmit only those same bytes. A different model attempt requires a new
-run; daemon loss is not an automatic retry signal.
+Only one current run can be active. Weaver persists the exact active typed
+request before submission and uses a deterministic stage job ID. If submission
+has an ambiguous result, recovery can resubmit only those bytes. A different
+model attempt requires a new run. Daemon loss does not trigger an automatic retry.
 
 Weaver must atomically persist each stage output and pass repository validation
 before recording a successful build. Earlier successful stage outputs remain

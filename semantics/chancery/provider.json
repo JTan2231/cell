@@ -22,13 +22,13 @@
       ]
     },
     "shared_access_and_trust": [
-      "Repository reads and administrative writes use local-user interfaces; the worker receives only published upstream data and never grants Nucleus project workspace, shell, or web access. Clockwork receives only an exact release-local runner definition and retains no semantic bodies."
+      "Repository reads and administrative writes use local-user interfaces. The worker receives only published upstream data. It grants Nucleus no project workspace, shell, or web access. Clockwork receives an exact release-local runner definition and retains no semantic bodies."
     ],
     "shared_privacy_and_retention": [
       "Semantics retains private normalized meanings and provenance but no raw transcript, diff, command, prompt, credential, or project-file body."
     ],
     "compatibility_and_retirement": [
-      "Provider release identifies these exact bundle bytes; entry contracts, SQLite schema, immutable toolsets, and semantic revision numbers remain separate version axes."
+      "Provider release identifies the bundle bytes. Entry contracts, SQLite schema, immutable toolsets, and semantic revisions have independent versions."
     ],
     "operational_limits": [
       "Semantics is a local project registry with one serial bounded worker; per-entry contracts define replay, project, page, and reconciliation bounds."

@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Explore local Codex conversation history",
-  "summary": "List, show, search, export, resolve exact persisted task metadata, or inspect content-free completed-turn activity for local Codex tasks through the documented App Server interface.",
+  "summary": "Read local Codex history through App Server. List, show, search, or export tasks; retrieve exact task metadata; or inspect completed-turn activity without content.",
   "use_when": [
     "The user wants to inspect, query, search, or export Codex tasks stored on this machine.",
     "Another local product needs typed user/assistant conversation history with stable source references.",
@@ -79,7 +79,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "CLI list/search return schema-two selections with has_more and a positive --limit default of 20. List rows contain reference, title, archive/update/source/runtime-status metadata. Search emits one thread hit per title match and separate message hits with stable reference, title, role and at most 240 Unicode characters of marked matching excerpt; it declares the optional thread_limit scope. Show and export retain complete normalized user/assistant transcripts; --json changes encoding only. Activity remains content-free and refresh returns metadata counts. Rust metadata methods retain complete ThreadSummary values."
+        "statement": "CLI list and search use output schema 2 and include has_more. The default --limit is 20; supply a positive integer to change it. List rows contain a reference, title, archive flag, update time, source, and runtime status. Search returns one thread hit per title match and separate message hits. Each message hit has a stable reference, title, role, and marked excerpt of at most 240 Unicode characters. Search also reports the optional thread_limit scope. Show and export return complete normalized user and assistant transcripts; --json changes only the encoding. Activity returns metadata without content; refresh returns metadata counts. Rust metadata methods return complete ThreadSummary values."
       }
     ],
     "data_semantics": [

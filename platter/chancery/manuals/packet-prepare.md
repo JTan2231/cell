@@ -1,9 +1,8 @@
 # Prepare private job packets
 
-Use Platter when the user wants a short brief and constrained tailored
-resume for a Cast opportunity, a preview of a dated edition, or an explicitly
-authorized send of that retained edition. Platter owns
-preparation and delivery state. It does not discover jobs, edit career facts,
+Use Platter to prepare a short brief and tailored resume for a Cast opportunity,
+preview a dated edition, or send an authorized edition. Platter owns preparation
+and delivery state. It does not discover jobs, edit career facts,
 apply to employers, contact them or install recurring delivery.
 
 ## Commands and prerequisites
@@ -40,7 +39,7 @@ Nucleus readiness and local resume rendering tools. Rendering requires
 Absolute `PLATTER_TECTONIC` and `PLATTER_PYTHON` overrides are supported; default
 resolution searches `~/.local/bin`, `/usr/local/bin`, `/opt/homebrew/bin` and
 `/usr/bin`, independently of the caller PATH.
-Availability of source code or this bundle proves none of that readiness.
+Source code and this bundle do not check these prerequisites.
 
 The agreed settings are a maximum of three ready packets, delivery at 09:00
 America/Chicago, and `gpt-5.6-sol` with `max` effort. **The 09:00 setting is
@@ -63,8 +62,9 @@ deduplication is not promised.
 Cast exports include stored posting excerpts. The runner fetches posting text
 through a supported adapter before writing. Supported
 sources include Greenhouse, Ashby, Lever and supported JobPosting JSON-LD;
-pages requiring interactive forms, login, unsupported representations or
-missing full text may fail preparation. Fetch failures defer the packet without changing its stored job status.
+Preparation can fail when pages require interactive forms or login, use
+unsupported formats, or omit full text. A fetch failure defers the packet
+without changing its stored job status.
 
 The runner captures CRM profile entries through list/read operations. It
 rejects incomplete lists and detected timestamp changes during capture.
@@ -107,23 +107,25 @@ career details come from the captured entries.
 The renderer replaces only the permitted Jackson bullet span in the captured
 original source. Every byte outside it stays fixed. Model text is escaped as
 content, not executed as LaTeX. A packet becomes ready only after accepted
-content is retained and a one-page PDF passes the rendering checks. Each resume bullet retains references to the captured career entries used by
-the model. The renderer checks the permitted edit span and one-page PDF output.
+content is retained and a one-page PDF passes the rendering checks. Each resume
+bullet retains references to the captured career entries used by the model.
+The renderer checks the permitted edit span and one-page PDF output.
 
 ## Editions and sending
 
 `prepare-daily` works toward three ready packets; three is a ceiling, not a
 quota. It resumes retained preparing packets and rechecks readiness before
 counting completed packets. Temporary fetch failures are deferred and checked
-again on the next invocation. A changed fetched posting marks the prepared packet stale and requires
-regeneration. Preparation can continue with other opportunities.
+again on the next invocation. If fetched posting text changed, Platter marks
+the packet stale and requires regeneration. Preparation can continue with other opportunities.
 `preview DATE` fetches the posting again and defers the packet when the fetch
-fails or the fetched input differs from preparation. It selects one through three ready packets, freezes the
-exact subject and brief text, copies and hashes their PDFs and reserves the selected
+fails or differs from preparation. It selects one through three ready packets,
+freezes the exact subject and brief text, copies and hashes their PDFs, and reserves the selected
 opportunities. New editions separate each opportunity header from its brief
 with a blank line and omit the packet-count footer. Existing frozen editions
 remain stable. A preview does not send.
-When none are ready, no edition is created. Existing frozen editions return their stored posting, brief and resume artifacts.
+If none are ready, Platter creates no edition. Existing frozen editions return
+their stored posting, brief and resume artifacts.
 
 When sending that specific edition is already authorized:
 
@@ -156,7 +158,8 @@ including records already sent or reserved in the normal pipeline. `RUN_ID`
 contains 1 through 80 ASCII letters, digits, underscores or hyphens. This path
 reads the existing packet database without opening it for writes and reads
 retained accepted stages and artifacts. It makes no Cast, CRM, source HTTP,
-Nucleus or rendering call, so it consumes no Cast discovery/API budget. The posting text comes from the stored packet. The normal preview path fetches
+Nucleus or rendering call, so it consumes no Cast discovery or API budget.
+Posting text comes from the stored packet. The normal preview path fetches
 the posting again; `--ad-hoc` creates a test from stored packet inputs.
 
 The occurrence lives under `ad-hoc/RUN_ID/` in private Platter state. It
@@ -227,5 +230,6 @@ grants additional authority.
 
 Installation, maintained replacement and retained-release verification are
 described by the separate [installation contract](install-operate.md). It does
-not activate a schedule or change schema 1 domain records. No completion-time guarantee or final delivery observer is promised. Code, tests and the source bundle move together; installed selectors
-remain a separate deployment action.
+not activate a schedule or change schema 1 domain records. No completion-time
+guarantee or final delivery observer is promised. Code, tests and the source
+bundle change together. Installed selectors require a separate deployment.

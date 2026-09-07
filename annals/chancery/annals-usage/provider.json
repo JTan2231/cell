@@ -11,7 +11,7 @@
       "It owns no telemetry database, token aggregate, response projection, account snapshot, credential, source delivery, job, attempt, or raw model-output record."
     ],
     "not_authoritative_for": [
-      "Annals owns source deliveries, model-run attribution, library state, and inbox receipts; Nucleus owns job and attempt state, exact model-output records, account reads, authentication, and credentials."
+      "Annals owns source deliveries, model-run attribution, library state, and inbox receipts. Nucleus owns job and attempt state, exact model-output records, account reads, authentication, and credentials."
     ],
     "inventory": {
       "covers": [
@@ -31,7 +31,7 @@
       "It never reads, copies, or stores Nucleus credential files; per-entry effects govern any attended login delegation."
     ],
     "compatibility_and_retirement": [
-      "Provider release identifies these exact bundle bytes, projectionVersion identifies reporting interpretation, and entry contract versions identify documented semantic compatibility.",
+      "Provider release identifies the exact bundle bytes. projectionVersion identifies reporting interpretation. Entry contract versions identify documented semantic compatibility.",
       "No additional cross-release support, rate-card stability, migration window, or deprecation period is promised unless an entry declares it."
     ],
     "operational_limits": [

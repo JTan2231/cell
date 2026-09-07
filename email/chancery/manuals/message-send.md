@@ -1,10 +1,9 @@
 # Send a personal email now
 
-Email sends one immediate plain-text message from its product-fixed sender to
-its fixed personal recipient, with optional local file attachments. Use it
-after the user explicitly asks to send the supplied or approved message, or
-from an installed product whose contract
-already grants standing authority for the exact kind of notification.
+Email immediately sends one plain-text message with optional local attachments.
+The sender and recipient are fixed. Use Email when the user explicitly asks to
+send the supplied or approved message. An installed product can also use Email
+if its contract grants standing authority for that exact kind of notification.
 
 ## Send
 
@@ -20,8 +19,8 @@ For a multiline body, pass `-` and provide standard input:
 /Users/joey/.local/bin/email 'Subject' - < /absolute/path/to/body.txt
 ```
 
-An authorized product that owns a particular occurrence and freezes its exact
-payload can supply its stable idempotency key:
+An authorized product can supply a stable idempotency key for an occurrence
+that it owns. The key must identify an unchanged payload:
 
 ```sh
 /Users/joey/.local/bin/email \
@@ -62,10 +61,10 @@ caller environment variables, supplies a minimal runtime environment, and
 preserves standard input for the payload. Do not place the API key in the
 command arguments, message text, product files, or Chancery contract.
 
-## Authority and proof
+## Authority and result
 
-Email accepts the caller-provided subject, body, and attachments, fixes both
-addresses, and submits the message immediately to Resend. A product caller, not Email,
+Email accepts the caller's subject, body, and attachments. It fixes both
+addresses and submits the message immediately to Resend. The calling product
 owns standing authority, scheduling, occurrence state, rendering, and stable
 key selection. Email has no draft, preview, scheduler, daemon, local send
 history, or background retry queue.
@@ -96,4 +95,7 @@ the send.
 
 ## Output selection
 
-On Resend acceptance Email exits zero and prints Accepted followed by the message ID. This acknowledges transport acceptance, not final delivery. Errors remain bounded secret-safe diagnostics with nonzero exit; no output body or credential is echoed.
+When Resend accepts the message, Email exits zero and prints `Accepted` followed
+by the message ID. This confirms submission acceptance. Check Gmail separately
+for delivery. On failure, Email exits nonzero and reports a bounded error
+without the response body or credential.

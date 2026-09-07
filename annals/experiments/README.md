@@ -14,12 +14,11 @@ limitations.
 
 ## Preservation policy
 
-The repository intentionally does not retain SQLite databases, WAL/SHM
-sidecars, rendered private transcripts, model logs, setup output, or
-snapshotted binaries. Those artifacts were inspected before removal; the
-walkthroughs preserve the important corpus structures, metrics, provenance,
-interpretations, and caveats. The local ignore file prevents experiment
-databases from being added accidentally.
+The repository does not retain SQLite databases, WAL/SHM sidecars, rendered
+private transcripts, model logs, setup output, or snapshotted binaries.
+Those artifacts were inspected before removal. The walkthroughs preserve
+corpus structures, metrics, provenance, interpretations, and limitations.
+The local ignore file prevents accidental inclusion of experiment databases.
 
 The 20-chat experiments keep two manifests:
 
@@ -31,7 +30,7 @@ Paths beginning with `~/.codex/sessions` refer to the local Codex session
 archive. No source transcript is copied into this repository.
 
 Experiments 3 and 4 intentionally use the same source and locked manifests.
-That makes their input cohort identical, but not the rest of their treatment.
+Their input cohort is identical. Other experiment conditions differ.
 
 ## Historical runners
 

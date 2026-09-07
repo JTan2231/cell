@@ -8,7 +8,7 @@ defines both technical and conversational terms:
 /Users/joey/.local/bin/semantics repository show annals
 ```
 
-Read the repository before analyzing or changing Annals code, tests,
+Read the repository before you analyze or change Annals code, tests,
 documentation, or interfaces. Code, tests, and component documentation remain
 authoritative for actual behavior. Semantics repository output is contributor
 guidance and must never be added to the constrained liaison's prompt or runtime
@@ -56,10 +56,10 @@ historical. Conversely, do not revive historical terms in current contracts.
 
 ## Compatibility and recovery
 
-The Annals release, library schema, Nucleus public protocol, Clockwork
-definition/binding identity, immutable tool/schema registrations, and installed
-packaging are separate compatibility axes. Define migration and rollback
-whenever persistent meaning changes.
+Track compatibility separately for the Annals release, library schema,
+Nucleus public protocol, Clockwork definition/binding identity, immutable
+tool/schema registrations, and installed packaging. Define migration and
+rollback whenever persistent meaning changes.
 Preserve exact domain results after later runtime failure and retain historical
 decoders where Nucleus records require them.
 
@@ -71,6 +71,6 @@ hoc migration.
 `annals/release.sh` commits, tags, and pushes; it is a publication command, not
 a test command. Development completion does not authorize it or installation.
 
-Source fixtures, experiment archives, libraries, spools, Nucleus output,
-backups can contain private source and model context. Treat
-each according to the strongest content it may retain.
+Source fixtures, experiment archives, libraries, spools, Nucleus output, and
+backups can contain private source and model context. Protect each according
+to the most sensitive content it can retain.

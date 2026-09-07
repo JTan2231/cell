@@ -42,13 +42,11 @@ use `CONVERSATIONS_HOST_ID` only when an explicit stable override is required.
 If macOS cannot read its platform identity, Conversations fails rather than
 silently changing the host component.
 
-Show, search, and export expose only user and assistant text; they still expose
-private transcript content. Never send or publish that output without separate
-authority. A failed page or unsupported full-history record is an incomplete
-operation, not an all-clear or partial-success corpus.
+Show, search, and export expose user and assistant text, which can be private.
+Never send or publish that output without separate authority. A failed page or
+unsupported full-history record fails the operation.
 
-Activity is an explicit exception to the transcript-only output shape, but not
-to the payload privacy boundary. It emits only turn timing/status, message
+Activity returns metadata without transcript content. It emits only turn timing/status, message
 counts, stable references, and counts of structurally validated completed file
 changes. It never emits transcript bodies, file paths, diffs, commands, tool
 output, approvals, or reasoning. Session hints are exact-thread-first; lineage
@@ -56,4 +54,15 @@ fallback must find exactly one thread containing the requested turn.
 
 ## Output selection
 
-CLI list/search return schema-two selections with has_more and a positive --limit default of 20. List rows contain reference, title, archive/update/source/runtime-status metadata. Search emits one thread hit per title match and separate message hits with stable reference, title, role and at most 240 Unicode characters of marked matching excerpt; it declares the optional thread_limit scope. Show and export retain complete normalized user/assistant transcripts; --json changes encoding only. Activity remains content-free and refresh returns metadata counts. Rust metadata methods retain complete ThreadSummary values.
+CLI list and search use output schema 2 and include `has_more`. The default
+`--limit` is 20; supply a positive integer to change it. List rows contain a
+reference, title, archive flag, update time, source, and runtime status.
+
+Search returns one thread hit per title match and separate message hits. Each
+message hit has a stable reference, title, role, and marked excerpt of at most
+240 Unicode characters. Search also reports the optional `thread_limit` scope.
+
+Show and export return complete normalized user and assistant transcripts.
+`--json` changes only the encoding. Activity returns metadata without content;
+refresh returns metadata counts. Rust metadata methods return complete
+`ThreadSummary` values.

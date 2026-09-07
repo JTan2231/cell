@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Store and read career profile entries",
-  "summary": "Create, list, read, or replace reusable career vignettes, statements, preferences, and other profile material as exact Markdown in CRM’s private SQLite library, without running the steward.",
+  "summary": "Store, list, read or replace career vignettes, statements, preferences and other profile material as exact Markdown in CRM. These operations do not run the steward.",
   "use_when": [
     "Reusable information about the caller’s career or application preferences should be stored as one independently editable Markdown entry.",
     "Current profile entries should be listed or read by stable identity.",
@@ -83,13 +83,13 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "New and update take a trimmed nonempty title of at most 1,000 UTF-8 bytes and exact body of at most 1,048,576 bytes, including an empty body, from a regular nonsymbolic file or stdin via -; show/update select one opaque ID; list accepts a bounded limit."
+        "statement": "New and update require a title of 1 through 1,000 UTF-8 bytes after trimming and a body of at most 1,048,576 bytes. The body may be empty. Supply a regular file that is not a symbolic link, or use - for standard input. Show and update select one opaque ID. List accepts a bounded limit."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Profile new/update return profile_receipt with ID, title and updated_at. List returns the same compact entries with has_more; show returns exact Markdown. Positive --limit defaults to 20 and may be increased. The ok/data envelope and stored schema-two profile content retain their meanings."
+        "statement": "Profile new and update return profile_receipt with ID, title and updated_at. List returns these compact entries with has_more; show returns exact Markdown. The default limit is 20; --limit accepts a positive integer. The ok/data envelope and schema-two profile content retain their meanings."
       }
     ],
     "data_semantics": [

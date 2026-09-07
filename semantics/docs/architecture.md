@@ -12,9 +12,8 @@ proposal is never authoritative until Semantics validates and commits it.
 Legacy Decisions lifecycle state remains preserved and decodable, but is not
 scanned for future intake.
 
-Project source, tests, and existing product documentation remain authoritative
-for runtime behavior. The semantic repository is authoritative for maintained
-terminology and its revision history.
+Project source, tests, and product documentation define runtime behavior.
+The semantic repository defines maintained terminology and records its history.
 
 ## Flow
 
@@ -34,7 +33,7 @@ terminology and its revision history.
    is used only during that routing call and is never copied into intake state
    or output; Semantics retains only the selected project and a fixed routing
    outcome.
-4. Every valid accepted account is immediately reconciliation-eligible.
+4. Every valid accepted account is immediately eligible for reconciliation.
    Preserved legacy admissions, reviews, and their states retain their original
    meanings.
 5. Semantics persists one stable Nucleus job correlation, supplies only the
@@ -60,17 +59,15 @@ seconds, without run-at-load or an activation timeout. Its immutable definition
 records the exact release ID and root and pins `/bin/sh` plus the release-local
 runner by SHA-256. Semantics' release manifest and retention rules own the
 sibling payload and full release integrity. The definition uses a scrubbed
-environment and skips overlap. A
-cross-process Semantics lock remains the authoritative serialization boundary;
-an independently started overlapping invocation is a harmless no-op. Each run
-resumes one processing item first, scans bounded accepted-account pages, and applies
-at most one reconciliation. Pausing a project prevents a late proposal from
-committing.
+environment and skips overlap. A cross-process Semantics lock serializes work;
+an independently started overlapping invocation does nothing. Each run resumes
+one processing item first, scans bounded accepted-account pages, and applies
+at most one reconciliation. Pausing a project prevents late proposals from committing.
 
-A release-independent, current-user-owned, mode-`0600`, non-hard-linked
-maintenance marker prevents any release-pinned runner from entering domain
-work during deployment, uninstall, or fail-closed recovery. Lifecycle tooling
-never truncates an existing marker and refuses any other shape. A successful
+A maintenance marker outside the release prevents runners from starting domain
+work during deployment, uninstall, or recovery after failure. The marker must
+belong to the current user, have mode `0600`, and have no hard links.
+Lifecycle tools refuse any other shape and never truncate an existing marker. A successful
 deployment may retain an authenticated marker/receipt pair for an outer
 cutover; a later successful same-release invocation releases only that pair.
 An unrelated unreceipted marker is preserved. Uninstall and an unprovable

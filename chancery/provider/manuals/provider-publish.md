@@ -1,17 +1,14 @@
 # Publish a product capability to Chancery
 
-This is the canonical cross-system operation for making a current product
-capability globally discoverable. It is a semantic operation manual, not an
-executable workflow. The interactive agent adapts it to the owning product's
-release machinery while preserving the checkpoints and authority boundaries
-below.
+Use this operation to publish a current product capability in the installed
+catalog. The interactive agent follows this manual through the owning product's
+release process. Preserve the checkpoints and authority boundaries below.
+The manual does not execute a workflow.
 
 ## 1. Establish ownership and supported behavior
 
-Start with the user's durable outcome, not a command name or internal tool.
-Select `use`, `operate`, or `develop` according to the audience. A capability
-that users should request is distinct from an administrative action or a guide
-for changing the product.
+Start with the user's intended durable outcome. Select `use`, `operate`, or
+`develop` for ordinary work, administration, or product changes.
 
 Read the product's current public contracts. Do not infer supported behavior
 from implementation details, old conversations, backlog items, or a prototype.
@@ -25,12 +22,11 @@ documentation dependency closure, facet and gap classification, and display.
 
 ## 2. Author a self-contained bundle
 
-For provider schema 3, declare what the product is and is not authoritative
-for, a meaningful class of public outcomes covered by the inventory, whether
-that class is complete or partial, shared access and privacy boundaries,
-compatibility and retirement policy, and material system-wide limits. The
-inventory scope must not be circular: “everything indexed here” does not say
-what absence means.
+For provider schema 3, declare product authority and its limits. Name the class
+of public outcomes covered by the inventory and whether coverage is complete
+or partial within that class. State shared access, privacy, compatibility,
+retirement, and operating limits. Define the inventory class independently of
+the index.
 
 Add or revise an explicitly indexed entry and its detailed manual under the
 product's owned provider source. Normalize consumers, preconditions, inputs,
@@ -50,16 +46,17 @@ not runtime calls or data lineage. Publish substantive data, control,
 authority, readiness, and external reliances separately. A declared reliance
 without a dedicated installed contract remains an intentional resolver gap.
 
-Give every entry a short, discriminative title and a summary that states the
-user-visible result clearly enough for an agent to form a semantic shortlist.
-Put the detailed positive and negative semantic boundary in `use_when` and
-`do_not_use_when`. The manual is the complete ordinary `show` view: write applicability, exact
-interfaces, effects, authority, success, failure/recovery, privacy, exclusions
-and operation checkpoints together in one operating explanation. It must make
-correct use possible without the source tree or structured authoring fields.
-Keep normalized claims synchronized for the full `resolve` dossier; ordinary
-`show` does not repeat them. `show --full` exposes all authoring fields. Review
-both views before publication; structural validation cannot prove prose completeness.
+Give each entry a distinct title and a summary of its user-visible result.
+An agent must be able to select plausible entries from that text. Use
+`use_when` and `do_not_use_when` to define the detailed selection boundaries.
+
+The manual is the complete ordinary `show` view. Include applicability,
+interfaces, effects, authority, success, recovery, privacy, exclusions, and
+operation checkpoints. Readers must be able to use the interface without the
+source tree or structured authoring fields. Keep normalized claims aligned
+with the manual for `resolve`. Ordinary `show` does not repeat those claims;
+`show --full` includes all authoring fields. Review both views before
+publication. Structural validation cannot establish that the prose is complete.
 
 For a cross-capability or UI-dependent procedure, publish an `operation`.
 Describe goals, participant capabilities, semantic UI actions, checkpoints,
@@ -75,11 +72,10 @@ Run the candidate reader against the source bundle:
 /absolute/path/to/chancery validate /absolute/path/to/provider-bundle
 ```
 
-Dependencies within the bundle are checked for contract-version compatibility
-and cycles. External dependencies are structurally checked but remain
-unchecked in standalone validation. Fix every schema, path, and content issue
-before packaging. Unindexed drafts have no effect and should not be used as
-evidence that installed discovery works.
+Validation checks internal dependencies for version compatibility and cycles.
+For external dependencies, standalone validation checks structure only. Fix
+schema, path, and content errors before packaging. Unindexed drafts do not
+participate in installed discovery.
 
 ## 4. Couple documentation to the product release
 
@@ -115,9 +111,8 @@ After product deployment:
 /Users/joey/.local/bin/chancery resolve ENTRY_ID
 ```
 
-Confirm that the entry's title and summary are distinguishable in the complete
-catalog, that semantic request boundaries and the complete manual render in
-`show`, that provider scope, normalized facet coverage, reliance gaps, exact
-basis, and dependency closure render in `resolve`, and that no documented
-command runs during any Chancery query. The represented product's own readiness
-and domain proof still govern an actual invocation.
+Confirm that the title and summary distinguish the entry in the catalog.
+`show` must render the request boundaries and complete manual. `resolve` must
+render provider scope, normalized facets, reliance gaps, exact basis, and
+dependency closure. No Chancery query may execute a documented command.
+Actual invocation still uses the product's readiness and domain-success rules.

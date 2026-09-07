@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Send a personal email now",
-  "summary": "Send a caller-provided subject and plain-text body with optional local file attachments immediately to the fixed personal recipient through Resend.",
+  "summary": "Immediately send the caller's subject, plain-text body, and optional local attachments through Resend to the fixed personal recipient.",
   "use_when": [
     "The user explicitly asks to send an email now to their fixed personal inbox and supplies or approves the subject, body, and any attachment filenames and bytes.",
     "A previously drafted message should now be sent exactly as approved.",
@@ -94,7 +94,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "The supported CLI takes one required UTF-8 subject and one required UTF-8 plain-text body, with a body value of '-' selecting complete standard input, plus an optional caller-owned idempotency key. Repeatable --attach PATH captures each regular local file once; transmitted names are UTF-8 basenames without control characters or path separators. Remote URLs are unsupported."
+        "statement": "The CLI requires a UTF-8 subject and plain-text body. A body value of '-' reads all standard input. The caller can supply an idempotency key. Repeat --attach PATH to capture each regular local file once. Transmitted names are UTF-8 basenames without control characters or path separators. Remote URLs are unsupported."
       },
       {
         "status": "unsupported",
@@ -104,7 +104,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "On Resend acceptance Email exits zero and prints Accepted followed by the message ID. This acknowledges transport acceptance, not final delivery. Errors remain bounded secret-safe diagnostics with nonzero exit; no output body or credential is echoed."
+        "statement": "When Resend accepts the message, Email exits zero and prints Accepted followed by the message ID. This confirms submission acceptance. Check Gmail separately for delivery. On failure, Email exits nonzero and reports a bounded error without the response body or credential."
       },
       {
         "status": "unsupported",
@@ -142,7 +142,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Each invocation freezes and submits the complete provided subject, body, and any attachment filenames and bytes immediately, preserves standard input, and reports the acceptance or final bounded failure observed during that command."
+        "statement": "Each invocation captures the subject, body, and attachment names and bytes, then immediately submits that unchanged request. It preserves standard input and reports acceptance or the final failure after bounded retries."
       },
       {
         "status": "declared",

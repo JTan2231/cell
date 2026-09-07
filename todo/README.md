@@ -1,9 +1,8 @@
 # Todo
 
-Todo is a local Rust CLI for retaining an actionable concern from the place
-where it arose, deciding which durable todo it belongs to, assessing the
-current situation, and reconciling a design. It is designed for Codex and
-people with terminal access.
+Todo is a local Rust CLI for Codex and people with terminal access. It records
+an actionable concern and where it arose. It supports routing decisions,
+situation assessments and design reconciliation.
 
 Todo keeps its durable layers separate:
 
@@ -16,11 +15,10 @@ Todo keeps its durable layers separate:
   while a `dN` design describes a proposed or explicitly accepted desired
   state.
 
-Those layers are deliberately not an implementation workflow. Todo does not
-model plans, work items, implementation execution, or a general project graph.
-Nucleus jobs used to research routing, assessments, and designs are runtime
-provenance, not execution of the todo. Existing `done` and `reopen` commands
-continue to maintain an umbrella's small `open`/`done` lifecycle.
+Todo does not model plans, work items, implementation execution or a general
+project graph. Its Nucleus jobs research routing, assessments and designs.
+They do not implement a todo. `done` and `reopen` maintain the umbrella's
+`open`/`done` lifecycle.
 
 `todo new` is a convenience for `concern add` followed by `concern assess`.
 The concern is committed before research begins. The routing liaison reads the
@@ -37,9 +35,9 @@ citation. A newer assessment makes every older `aN` non-current.
 `todo design propose tN` resolves and rechecks the latest current ready
 assessment, then records a draft bound to that exact `aN`. The draft explicitly
 keeps, moves, adds, or retires each jurisdiction and may cite only its closed
-direction, assessment, predecessor, and correction basis catalog. Ready means
-all nine desired-state clause kinds and the full direction and predecessor are
-covered, not merely that no choices remain. Correction feedback is immutable;
+direction, assessment, predecessor, and correction basis catalog. Ready requires
+all nine clause kinds, references covering the full direction and predecessor,
+and no remaining choices. Correction feedback is immutable;
 correction leaves the named design unchanged and produces a successor. A
 liaison that stops with an open draft leaves an inspectable `abandoned` draft
 that can be corrected. Only `design accept --source PATH` can authorize a ready
@@ -101,8 +99,8 @@ data, and installation contracts.
 Todo's product-owned [`chancery/`](chancery/) bundle is the public capability
 index. Use `chancery list`, then read every plausible entry with `chancery
 show`. After selecting one exact entry, use `chancery resolve <ENTRY_ID>` for
-its complete outward promise, documentation dependency closure, exact basis,
-and explicit gaps. Resolution does not check runtime readiness or authorize an
+its complete contract, documentation dependencies, exact basis and explicit gaps.
+Resolution does not check runtime readiness or authorize an
 effect, and an unsupported, unspecified, or uncontracted result remains a gap.
 
 ## Release

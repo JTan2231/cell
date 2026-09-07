@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Search and inspect the CRM case library",
-  "summary": "List cases, search their current text lexically, or inspect an exact immutable current or historical revision with stage, summary, advisory, and its source-update correlation visible.",
+  "summary": "List cases, search their current text or read an exact current or historical revision. Results include stage, summary, advisory and source-update correlation.",
   "use_when": [
     "Existing employment-oriented cases should be found before starting or updating work.",
     "The current state or one exact historical revision of a known case should be inspected.",
@@ -63,10 +63,10 @@
       {"status": "declared", "statement": "Inputs are an optional positive result limit, a lexical query, or one case identity with an optional exact positive revision."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Case list/search and newest-first history default to 20 with has_more and positive --limit for more. History returns case ID, revision, stage, summary, complete advisory/attention and created_at. Search returns current identity/revision/stage/summary/advisory plus matched_field and an explicitly marked excerpt of at most 240 Unicode characters around the match. Case show retains exact full revisions."}
+      {"status": "declared", "statement": "Case list, search and history default to 20 results with has_more; --limit accepts a positive integer. History returns newest revisions first, with case ID, revision, stage, summary, complete advisory and attention, and created_at. Search returns current identity, revision, stage, summary, advisory and matched_field. It adds a marked excerpt of at most 240 Unicode characters around the match. Case show returns the exact full revision."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Search is case-insensitive literal-substring matching over stored title, current Markdown, and current advisory; revisions are complete CRM snapshots, source-update IDs are stored correlations, and advisories are visible warnings rather than gates."}
+      {"status": "declared", "statement": "Search matches literal substrings in stored titles, current Markdown and current advisories. Matching ignores case. Revisions are complete CRM snapshots. Source-update IDs record correlations. Advisories are visible warnings and do not block operations."}
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "Case ID identifies one lineage, a positive case-local revision selects one immutable complete snapshot, and search ordering uses the recorded update time and identity."},

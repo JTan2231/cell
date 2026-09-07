@@ -35,12 +35,12 @@ not an Annals corpus-success diagnosis.
 
 Budget and doctor use a nonblocking canonical-credential request. An
 authentication-busy result means a canonical account, refresh, or login
-operation owns that boundary and should be allowed to finish; an active job
-alone does not make the request busy or prove invalid credentials.
+operation owns that boundary. Let it finish. An active job alone does not make
+the request busy or indicate invalid credentials.
 
 ## Attended login
 
-When authentication recovery is actually required:
+When authentication needs recovery:
 
 1. Prevent new requester work and let active attempts settle.
 2. If scheduled Annals dispatch is active, pause it and wait for the current

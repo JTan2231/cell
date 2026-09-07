@@ -25,8 +25,8 @@ Each database has a private durable sibling gate,
 `<canonical-database>.cell-maintenance`. These commands do not open, initialize, or
 migrate SQLite. Status does not create an absent gate and returns
 `protocol_version: 1`, `contract_version: 1`, `holds`, and `drained`. Drain
-describes live command admission; deployment must also account for durable
-intake and unfinished dependency jobs before claiming domain quiescence.
+describes live command admission. Before deployment, the product must also
+verify that durable intake and dependency jobs have stopped.
 
 Any hold prevents every other public CLI command, including typed clients,
 repository reads, project operations, and doctor, before database access;
@@ -154,10 +154,10 @@ symlink alias), or the canonical existing ancestor for a new database.
 Hardlinked databases are rejected before admission. Maintenance status still
 does not open or initialize the database.
 
-Project lists select stable ID, canonical current path, status and HEAD.
-Ordinary repository show/search select schema version 2, project identity,
-revision and concepts with ID, label, complete meaning, active state,
-replacement and complete distinctions. `show --provenance` retains the full
-original full replay representation. Rust callers use `RepositoryView` for the
-ordinary read and `Client::repository_provenance` for the full replay.
-These are output projections, with no persistent schema or replay change.
+Project lists return stable ID, canonical current path, status, and HEAD.
+Ordinary repository show and search use schema 2. They return project identity,
+revision, and concepts with ID, label, full meaning, active state, replacement,
+and full distinctions. `show --provenance` returns the full replay representation.
+Rust callers use `RepositoryView` for ordinary reads and
+`Client::repository_provenance` for full replay. These output selections do not
+change the persistent schema or replay behavior.

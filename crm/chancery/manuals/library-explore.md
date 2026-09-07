@@ -1,6 +1,6 @@
 # Explore the CRM library
 
-Use this capability to find an existing employment-oriented case or inspect an
+Use this capability to find an employment-related case or inspect an
 exact immutable revision and its history. These commands read only the selected
 CRM database. They launch no worker or model, call no source or network, and
 create no Nucleus job.
@@ -27,7 +27,7 @@ or Nucleus/toolset readiness is uncertain.
 /Users/joey/.local/bin/crm case list --limit 50
 ```
 
-List returns deterministic current-head summaries. Each result identifies its
+List returns summaries of current revisions in deterministic order. Each result identifies its
 case and current revision and includes title, stage, summary, and nullable
 advisory. A non-null advisory is rendered prominently. Limits bound output and
 do not alter the stored library.
@@ -51,9 +51,10 @@ limits.
 /Users/joey/.local/bin/crm case history CASE_ID
 ```
 
-Omitting `--revision` selects the current committed head. Supplying a positive
-revision selects that exact immutable snapshot. History returns newest-first
-revision summaries, defaulting to 20 with `has_more`; increase `--limit` for more.
+If you omit `--revision`, CRM returns the current committed revision. If you
+supply a positive revision number, CRM returns that exact immutable revision.
+History returns the newest revisions first. It defaults to 20 summaries with
+`has_more`; increase `--limit` for more.
 Use `case show --revision N` for the complete snapshot behind a history row.
 
 Each revision is a full snapshot containing:
@@ -80,7 +81,8 @@ reading, telling, stage changes, or any caller-owned action.
 
 CRM owns the existence, ordering, content digest, stage, summary, advisory and
 stored correlations of its revisions. Each revision contains the case narrative
-produced from its supplied delivery and previous revision. Deliveries retain their supplied source references.
+produced from its supplied delivery and previous revision. Deliveries retain
+their supplied source references.
 
 ## Machine output and privacy
 
@@ -109,4 +111,9 @@ enums define the interface without a separate declaration layer.
 
 ## Output selection
 
-Case list/search and newest-first history default to 20 with has_more and positive --limit for more. History returns case ID, revision, stage, summary, complete advisory/attention and created_at. Search returns current identity/revision/stage/summary/advisory plus matched_field and an explicitly marked excerpt of at most 240 Unicode characters around the match. Case show retains exact full revisions.
+Case list, search and history default to 20 results with `has_more`. Use
+`--limit` with a positive integer for more. History returns case ID, revision,
+stage, summary, complete advisory and attention, and `created_at`.
+Search returns current identity, revision, stage, summary, advisory and
+`matched_field`. It adds a marked excerpt of at most 240 Unicode characters
+around the match. Case show returns the exact full revision.

@@ -1,8 +1,8 @@
 # Install or operate CRM and its steward
 
-This operation covers user-owned installation, explicit database
-initialization, migration, and diagnosis, and evidence-based recovery of hidden steward
-work. It does not authorize release publication, production data mutation,
+Use this operation to install CRM, initialize, migrate or diagnose its database,
+and recover hidden steward work from retained records. It does not authorize
+release publication, production data mutation,
 Nucleus changes, or an otherwise ineligible retry.
 
 ## Build before deployment
@@ -15,7 +15,7 @@ Nucleus changes, or an otherwise ineligible retry.
 ```
 
 The Rust installer requires a regular executable and complete provider bundle
-at absolute paths, matching its own tested version. It proves that
+at absolute paths, matching its own tested version. It checks that
 the candidate version matches the packaged provider release, validates the
 exact bundle/tree and component hashes, stages one immutable content-addressed
 release, then publishes command and provider views through one current-release
@@ -65,8 +65,8 @@ against the current working directory.
 
 Doctor checks schema identity and the seven required tables, SQLite integrity,
 foreign keys, secure database/sidecar permissions, strict Nucleus readiness,
-and idempotent registration of immutable
-`crm/case-steward/1` registration. Storage integrity belongs to CRM; execution
+and idempotent registration of the immutable `crm/case-steward/1` toolset.
+Storage integrity belongs to CRM; execution
 readiness belongs to Nucleus. A Nucleus failure does not make existing cases
 unreadable, but hidden steward work cannot progress through a second path.
 
@@ -143,7 +143,7 @@ update, JSON failure output includes a contextual update view with its
 attention/advisory; human stderr prints the fixed nonblocking advisory banner
 before the error.
 
-For a positively terminal unsuccessful attempt with no committed revision:
+For a failed or lost attempt with no committed revision:
 
 ```sh
 /Users/joey/.local/bin/crm update retry UPDATE_ID
@@ -223,13 +223,13 @@ crm --json maintenance drain
 crm --json maintenance release RUN_ID
 ```
 
-The selected database parent owns `deployment-maintenance/`; the standard
+The selected database's parent directory contains `deployment-maintenance/`. The standard
 location is `~/Library/Application Support/CRM/deployment-maintenance/`.
 Databases in the same parent share this gate. This directory stores only
 operational hold/lock metadata, never retained case or profile text.
 
-Holds are durable and independently owned. New case/profile mutations, tell,
-retry, and ordinary initialization/migration are rejected while held.
+Each hold is durable and has its own owner. While held, CRM rejects case and
+profile mutations, tell, retry, ordinary initialization and migration.
 Existing queued updates and running or applied-but-runtime-unsettled updates
 remain recoverable through the original hidden worker, wait, resume, or
 `maintenance drain`. Recovery holds a shared activity guard, so an installation
@@ -242,7 +242,7 @@ admitted operation. Schema-one maintenance observation is supported before
 its explicit migration. An unavailable or ambiguous worker is not assumed
 settled. Release removes only its exact owner's hold.
 
-The coordinator composes the existing program installer and separate
+The coordinator uses the program installer and the separate
 `migrate --backup` command. Its backup destination is
 `~/Library/Application Support/CRM/crm-pre-migration-RUN_ID.sqlite`, outside
 the temporary deployment workspace. The migration creates this private
@@ -250,8 +250,8 @@ backup only when schema migration is needed; current-schema deployment
 creates no backup. A created backup survives deployment cleanup, including
 an interrupted or failed migration, for explicit database recovery.
 Migration with `CELL_DEPLOYMENT_RUN_ID` acquires
-exclusive activity only under its sole matching hold; an arbitrary environment
-value never bypasses another owner or active work. The program installer still
+exclusive activity only when the run owns the sole matching hold. An arbitrary
+environment value cannot bypass another owner or active work. The program installer still
 never opens or migrates CRM data. `doctor` can validate held Nucleus readiness
 for that exact deployment owner; normal steward admission remains strict.
 
@@ -269,4 +269,7 @@ caller-selected backup path.
 
 ## Output selection
 
-Update views preserve domain state, Nucleus correlation and runtime settlement, result-post status, failures and complete advisory/attention. Update list defaults to 20 with has_more and positive --limit for more; show/wait/resume/retry retain the complete selected operational view.
+Update views include domain state, Nucleus correlation, runtime settlement,
+result-post status, failures, and complete advisory and attention. Update list
+defaults to 20 results with `has_more`; use `--limit` with a positive integer
+for more. Show, wait, resume and retry return the complete selected update view.

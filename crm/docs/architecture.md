@@ -1,10 +1,9 @@
 # Architecture
 
 CRM is a private local library of employment-related cases. A case can begin
-with a company, location, person, posting, introduction, or any other useful
-lead because version 0.3 does not force those inputs into a universal entity
-model. It retains raw UTF-8 Markdown and lets a bounded steward turn new
-information into a complete next case revision.
+with a company, location, person, posting, introduction or another useful lead.
+Version 0.3 retains these inputs as UTF-8 Markdown. A bounded steward uses new
+information to produce the next complete case revision.
 
 The product consists of a short-lived CLI, one local SQLite database, and a
 hidden worker launched for explicitly queued or resumed work. It installs no
@@ -31,12 +30,13 @@ share one `profile_entries` table with `id`, `title`, `body_md`, and
 Headings, facts, uncertainties, and disclosure guidance remain in the body;
 CRM does not parse them into a career ontology or assign entry kinds.
 
-`profile new` creates a row. `profile update` atomically replaces its complete
-title and body, retaining its identity and updating its timestamp. There is no
+`profile new` creates a row. `profile update` atomically replaces its title and
+body, preserves its identity and updates its timestamp. There is no
 profile revision history, automatic duplicate detection, or merge. `profile
 list` returns bounded current entries (metadata in human output) and `profile
-show` returns one complete current entry. Profile operations invoke no steward, Nucleus job, source fetch, or
-network. They do not link entries to cases or change case content. A caller
+show` returns one complete current entry. Profile operations do not invoke the
+steward, Nucleus, source fetches or network requests. They do not link entries
+to cases or change case content. A caller
 must explicitly supply profile text to a case when that is desired.
 
 Input files are transient transport. CRM does not retain their paths, move or
@@ -72,15 +72,15 @@ waiting for agent execution; machine output includes both the update and
 delivery identities. Failure to launch cannot erase the queued update. The
 explicit recovery surface is `update resume`.
 
-Hidden drainers serialize through a database-resident lease. A drainer launched
-behind a live owner waits for at most two seconds. This bound is safe because
-a drain owner atomically either claims the next eligible queued row or releases
-its lease, while a resume owner atomically releases and requests one replacement
-drainer if eligible work is waiting. Already-committed intake therefore stays
-with a drain owner or receives a post-resume worker; intake after release has a
-free lease for its own child. A drain attempts each pre-existing unsettled item
-once and continues into eligible queued work before surfacing an unresolved
-per-item diagnostic.
+Hidden drainers share a database lease, so only one owns the work at a time.
+A drainer waits at most two seconds for a live owner. A drain owner atomically
+claims the next eligible row or releases the lease. A resume owner atomically
+releases the lease and requests a replacement drainer if eligible work is waiting.
+
+Committed intake therefore remains with a drain owner or gets a replacement
+worker after resume. Intake after release can acquire the free lease. A drain
+attempts each previously unsettled item once. It processes eligible queued
+work before it reports an unresolved item diagnostic.
 
 `--source` is an opaque caller-supplied reference. CRM neither opens nor
 refreshes it. This lets ordinary web or CLI research, a job posting, a meeting
@@ -122,8 +122,8 @@ the frozen base revision. The new immutable revision, exact tool receipt, and
 update's committed-revision reference become durable atomically. After posting
 that byte-identical result, the worker continues through Nucleus terminal
 observation and retains both the post acknowledgment and runtime outcome. That
-guarded database commit—not Nucleus completion or model prose—is domain
-success. A later transport, daemon, or harness failure becomes a visible
+guarded database commit is domain success. Nucleus completion and model prose
+do not commit a revision. A later transport, daemon or harness failure becomes a visible
 diagnostic and does not undo an already committed revision. A stale base or
 invalid call commits no revision and remains inspectable as failed work.
 
@@ -150,7 +150,7 @@ job is still nonterminal. A Nucleus restart may make an active harness attempt
 `lost` and does not authorize a new one. If the revision committed first, it
 remains successful and the runtime loss is retained separately.
 
-## Advisory and proof boundary
+## Advisories and retained material
 
 A non-null advisory is displayed conspicuously by every surface that consumes
 the relevant revision: case list, search, history and show, plus tell
@@ -181,4 +181,7 @@ those exported values into their local structs; they do not implement another
 CRM wire decoder. Storage and execution internals remain outside this API.
 See [Rust interface](rust-api.md).
 
-Deployment admission uses product-owned durable run holds in `deployment-maintenance/`, independent of operator pauses. The product augments activity-lock status with its durable workflow/runtime settlement evidence. See the deployment maintenance section in `cli.md`; the coordinator never edits domain state directly.
+CRM stores durable deployment holds in `deployment-maintenance/`, separately
+from operator pauses. Admission checks activity locks and stored workflow and
+runtime settlement. See the deployment maintenance section in `cli.md`.
+The coordinator never edits domain state directly.

@@ -6,8 +6,8 @@ root-owned file, administrator credential, log service, or Codex credential.
 The separately installed Nucleus service owns Codex execution and
 authentication.
 
-The direct child boundary is required for local repository access. A live
-prototype demonstrated that `org.weaver.worker` under launchd received
+The detached child retains the caller's local repository access. In a live
+prototype, `org.weaver.worker` under launchd received
 `EPERM` when unlinking an output under `~/Documents`, while the interactive
 process had the required repository file-access authorization. Installing
 another scheduler would reintroduce that privacy-authority mismatch.
@@ -91,14 +91,14 @@ finish. The default update wait is 21,600 seconds; set
 `WEAVER_UPDATE_WAIT_SECONDS` or pass `--wait-seconds` to choose another
 nonnegative bound.
 
-After quiescence, the deployer disables and boots out exactly
-`gui/UID/org.weaver.worker` if the prototype service is loaded, captures and
-removes exactly `~/Library/LaunchAgents/org.weaver.worker.plist` if present,
-and clears the label's disabled override. It atomically switches `current`,
-`previous`, `~/.local/bin/weaver`, and Weaver's Chancery provider selector,
-validates the installed binary and Nucleus readiness, and proves a worker exits
-cleanly under maintenance. It then commits the release and releases only the deployment-owned maintenance it established.
-Nothing is registered with launchd.
+After the active workflow finishes, the deployer disables and boots out
+`gui/UID/org.weaver.worker` if that prototype service is loaded. It captures
+and removes `~/Library/LaunchAgents/org.weaver.worker.plist` if present, then
+clears the label's disabled override. It atomically switches `current`,
+`previous`, `~/.local/bin/weaver`, and Weaver's Chancery provider selector.
+It validates the installed binary and Nucleus readiness, and checks that a
+worker exits cleanly under maintenance. It then commits the release and
+releases only the maintenance it established. It registers nothing with launchd.
 
 The deployer owns only
 `~/Library/Application Support/Chancery/providers/weaver`; it preserves every
@@ -128,11 +128,11 @@ weaver wait RUN_ID
 
 The child runs `--state-dir ABSOLUTE_PATH worker run` from the private state
 root with null standard streams and a new process group. It retains the
-interactive caller's macOS file-access attribution, performs all repository I/O,
-and exits after the current workflow becomes terminal or encounters a
-recoverable boundary. For each stage it sends Nucleus an immutable request that
-contains the selected inputs rather than asking the service-launched Codex
-process to enter the repository. No scheduler restarts it at login.
+interactive caller's macOS file access and performs all repository I/O.
+It exits when the current workflow becomes terminal or reaches a recoverable
+boundary. Each stage's immutable Nucleus request contains the selected inputs.
+The service-launched Codex process does not enter the repository. No scheduler
+restarts the child at login.
 
 A nonterminal `wait` activates a worker immediately and every 30 seconds, so it
 is the explicit recovery command after a crash, logout, or restart. `cancel`
@@ -186,13 +186,12 @@ weaver maintenance ready RUN_ID
 weaver maintenance release RUN_ID
 ```
 
-The selected private state root owns `deployment-maintenance/`. These durable
+The selected private state root contains `deployment-maintenance/`. Its durable
 run-owned holds are independent of legacy operator `.maintenance`. They block
-new submit admission, while the already admitted current workflow may finish
-or recover through wait, worker run, or maintenance drain using its exact
-persisted requests. Recovery owns a shared activity guard. Legacy operator
-maintenance continues to block claims; deployment never clears it to force
-progress.
+new submissions. The admitted current workflow can finish or recover through
+`wait`, `worker run`, or `maintenance drain` with its exact persisted requests.
+Recovery holds a shared activity guard. Legacy operator maintenance continues
+to block claims. Deployment never clears it to force progress.
 
 These commands emit JSON with `protocol_version: 1`, `holds`, `drained`,
 `nonterminal_run`, `worker_active`, and `operator_maintenance`. Drain requires

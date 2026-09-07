@@ -16,9 +16,9 @@ were selected to form a progression:
 2. What can responsibly be inferred from a year of conversations.
 3. What conceptual function the 2026 conversations appeared to serve.
 
-Only human-visible user and assistant messages were rendered into Markdown.
-System prompts, hidden reasoning, tool traces, and subagent records were
-excluded; human-visible assistant commentary was retained.
+The Markdown contained only human-visible user and assistant messages,
+including assistant commentary. It excluded system prompts, hidden reasoning,
+tool traces, and subagent records.
 
 | Work | Visible messages | UTF-8 bytes | SHA-256 |
 | --- | ---: | ---: | --- |
@@ -29,11 +29,11 @@ excluded; human-visible assistant commentary was retained.
 
 ## Procedure
 
-- Begin with a fresh revision-zero Annals library.
-- Integrate the three works sequentially in the order above.
-- Use `gpt-5.6-terra`, medium reasoning, and `liaison-v1`.
-- Review each proposal before applying it.
-- Preserve model proposals with entries in `uncertainties` for explicit review.
+- The experiment began with a fresh revision-zero Annals library.
+- The three works were integrated sequentially in the order above.
+- The liaison used `gpt-5.6-terra`, medium reasoning, and `liaison-v1`.
+- Each proposal was reviewed before application.
+- Proposals with `uncertainties` entries were preserved for explicit review.
 
 This configuration later became the `medium` quality preset.
 
@@ -121,8 +121,8 @@ parent and child, while the evidence phrase `interactional convergence` did
 not match a label or path. Label vocabulary therefore determined these lexical
 lookup results.
 
-The recorded graph included the `Frame construction → Feedback-loop risk`
-relationship; its three roots had no explicit relationships among them.
+The graph included the `Frame construction → Feedback-loop risk` relationship.
+Its three roots had no explicit relationships among them.
 
 ## Validation and limits
 
@@ -130,7 +130,6 @@ Before removal, the database validated cleanly, had a current search index and
 no pending changes, occupied 319,488 bytes, and had SHA-256
 `6f6d690d1efe5ac94270f12278608477680cae86dda9e49ff923dd0ed227d368`.
 
-This was one deliberately selected three-work trajectory, not a replicated
-benchmark. Later works inherited earlier accepted structure, and substantive
-human judgment shaped one of the three commits. The database file and private
-rendered transcripts are intentionally not retained.
+This was one selected three-work trajectory. It was not replicated. Later works
+inherited earlier accepted structure, and human judgment shaped one of the
+three commits. The database file and private rendered transcripts are not retained.

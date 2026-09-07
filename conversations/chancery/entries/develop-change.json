@@ -13,7 +13,7 @@
     "The request is ordinary use of the installed Conversations CLI.",
     "Release publication or installed deployment has not been separately authorized."
   ],
-  "outcome": "A minimal tested Conversations change that preserves the App Server-only storage boundary and whose public and operational contracts match the implementation.",
+  "outcome": "A minimal tested Conversations change with matching public and operational documentation. Storage access remains limited to App Server.",
   "effects": [
     "Modifies Conversations source, tests, documentation, packaging, or authored contracts.",
     "A public-schema or compatibility change can affect local consumers of the Conversations Rust library and JSON output.",
@@ -25,7 +25,7 @@
     "No implementation shortcut may create raw JSONL or SQLite coupling."
   ],
   "success": [
-    "The smallest owning code and exact documents agree.",
+    "The changed code and affected documents agree.",
     "Fake App Server tests cover every affected protocol and normalization boundary.",
     "Process-lifecycle tests prove descendant cleanup remains scoped to the private launch group when that boundary changes.",
     "`./ci.sh` completes green."
@@ -89,7 +89,7 @@
       {"status": "unsupported", "statement": "Real transcript fixtures, raw JSONL or SQLite inspection, inferred private storage formats, task mutation, and arbitrary unsupported App Server fields are not acceptable inputs."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "The output is the smallest coherent source and documentation change with synthetic protocol, normalization, lifecycle, compatibility, packaging, and rollback tests proportional to the boundary changed and a passing product CI gate."},
+      {"status": "declared", "statement": "The output is a minimal source and documentation change that passes product CI. Synthetic tests cover the affected protocol, normalization, lifecycle, compatibility, packaging, and rollback behavior."},
       {"status": "unsupported", "statement": "This operation does not itself publish, tag, push, deploy, refresh metadata, retrieve a private corpus, or mutate a Codex task."}
     ],
     "data_semantics": [

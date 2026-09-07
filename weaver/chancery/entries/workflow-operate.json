@@ -39,7 +39,7 @@
     "A Nucleus daemon restart makes an unfinished attempt lost; do not restart Nucleus to recover a Weaver worker.",
     "If deployment fails before commit, the prior Weaver release, command, provider selector, prototype plist, and loaded-service state are restored.",
     "If deployment commits but cannot end maintenance, keep the new release authoritative and end that exact gate through the installed Weaver CLI.",
-    "An incomplete drain, foreign hold, or unavailable runtime never becomes success; retain the named holds and durable job/domain evidence and follow the owning recovery contract."
+    "An incomplete drain, foreign hold, or unavailable runtime prevents success. Retain the named holds and durable job and domain records. Follow the owning recovery contract."
   ],
   "privacy": [
     "Weaver private state can contain a complete active stage request and every embedded private input byte; Nucleus retains complete requests and raw protocol output.",
@@ -143,7 +143,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "current.json is the sole current workflow record; status is observation, wait is observation plus explicit worker recovery, cancel is durable intent plus one current-stage cancellation request, and check reports the persisted files' mechanical validity."
+        "statement": "current.json is the sole current workflow record. status reads it. wait reads it and supports worker recovery. cancel records durable intent and requests current-stage cancellation. check reports the persisted files' mechanical validity."
       },
       {
         "status": "declared",
@@ -195,7 +195,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment maintenance protocol version 1 durably owns each hold by run ID, prevents new admission atomically, permits already-admitted work to settle, reports product-owned durable work in drain status, and releases only the named owner; independent operator pauses remain intact."
+        "statement": "Deployment maintenance protocol version 1 records each hold's run ID and atomically prevents new admission. Admitted work can settle. Drain status reports product-owned durable work. Release removes only the named owner's hold. Independent operator pauses remain intact."
       }
     ],
     "operational_limits": [

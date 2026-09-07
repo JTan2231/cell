@@ -10,7 +10,7 @@
       "Clockwork owns immutable scheduled-activation definitions, stable binding selection, generated Clockwork LaunchAgents, overlap admission, direct-child supervision, and runtime activation history."
     ],
     "not_authoritative_for": [
-      "Each product owns artifact publication, durable work, locks, retries, idempotency, secrets, logs, recovery, and domain success; launchd owns timer delivery under the current macOS user session."
+      "Each product owns artifact publication, durable work, locks, retries, idempotency, secrets, logs, recovery, and domain success. launchd owns timer delivery under the current macOS user session."
     ],
     "inventory": {
       "covers": [
@@ -28,7 +28,7 @@
       "Private Clockwork state retains paths, digests, schedules, scrubbed environment, and runtime metadata but no product secret or output body; product output and retention remain product-owned."
     ],
     "compatibility_and_retirement": [
-      "Provider release, entry contract versions, definition-manifest schema, database schema, and product definition identities are separate compatibility axes."
+      "Provider release, entry contracts, definition-manifest schema, database schema, and product definition identities have independent compatibility rules."
     ],
     "operational_limits": [
       "Clockwork v0.1 is a short-lived current-user scheduled-activation broker with interval and daily local-calendar triggers; it has no daemon, HTTP surface, workflow graph, retry engine, shell language, secret store, or domain-success rule."

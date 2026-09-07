@@ -7,7 +7,7 @@ source bytes. The corpus owns durable concepts, explicit broader-to-narrower
 edges, and concept evidence. Model runs own examinations and draft provenance,
 never corpus facts.
 
-The SQLite boundary is intentionally asymmetric:
+Annals stores and derives different kinds of data:
 
 - normalized requests and append-only typed effects are durable;
 - `CorpusState` is reduced in memory; and
@@ -39,8 +39,8 @@ Every behavior that needs corpus facts goes through this reducer:
 - shake planning;
 - revert planning.
 
-This keeps historical and current behavior identical by construction. There
-is no cache whose agreement must be trusted.
+Historical and current reads use the same reducer. No separate cache needs
+synchronization.
 
 ### Query boundary
 
@@ -56,14 +56,14 @@ A source delivery is distinct from its content-addressed work. Manual commands
 and dispatched inbox jobs create ingestion receipts with captured source
 metadata and lifecycle status. Several deliveries can select the same work.
 
-Producer acceptance is an earlier, distinct boundary. In a dedicated decisions
+Producer acceptance occurs before source delivery. In a dedicated decisions
 library, `inbox accept` binds `(library ID, krisis, decision ID)` to one exact
-SHA-256 digest. Annals publishes a complete envelope containing unchanged
-account bytes plus producer identity before it commits the immutable acceptance
-row. Acceptance starts no delivery or model. Exact replay returns the original
-job; different bytes conflict. If publication wins but the database commit is
-uncertain, the next identical call reconstructs the acceptance from the
-envelope rather than publishing another job.
+SHA-256 digest. Annals publishes a complete envelope with unchanged account
+bytes and producer identity, then commits the immutable acceptance row.
+Acceptance starts no delivery or model. Exact replay returns the original job;
+different bytes conflict. If the envelope exists but the database commit is
+uncertain, the next identical call reconstructs the acceptance from that
+envelope. It does not publish another job.
 
 The decisions-library config contains the expected persistent library ID, and
 its spool contains the same durable binding. Acceptance and feed reads require
@@ -79,11 +79,11 @@ integration, inbox admission, backlog import, and generic dispatch require the
 general kind, including when the database is selected directly. A config or
 alternate spool therefore cannot reclassify the physical library.
 
-A run using that config verifies the database identity and binds or verifies
-the spool before recovery or dispatch; first binding requires an empty spool
-and fresh queue index. It never registers `incoming/` files,
-and every non-retry envelope must carry a valid Krisis producer receipt whose
-digest and job metadata match its already committed acceptance. Direct work
+A run with that config checks the database identity and binds or verifies the
+spool before recovery or dispatch. First binding requires an empty spool and
+fresh queue index. The run never registers `incoming/` files. Each non-retry
+envelope must carry a valid Krisis producer receipt. Its digest and job metadata
+must match the committed acceptance. Direct work
 add or integration and generic register, enqueue, or backlog-import commands
 reject the decisions config; generic inbox admission also rejects any spool
 that already carries the decision-library binding. These local role and
@@ -168,26 +168,25 @@ cannot adopt merely similar history. Its version-6 job receipt carries the
 event, event ordinal, original job, and original delivery together, plus the
 exact original reconciliation when one is eligible for validation and reuse.
 
-Retry execution uses the normal run and control locks but requires the
-operator pause to be set, closing the dispatch gate, the spool to have no
-processing job, and deployment maintenance to be absent. It processes children
-sequentially in the frozen failure order while ordinary dispatch remains
-paused. `resume` refuses an unfinished retry event, which keeps ordinary queued
-arrivals from interleaving with its corpus transitions. Start and continue
-perform one authenticated account preflight before their first zero-attempt
-child claim. A failed preflight halts the event without incrementing a child
-attempt or starting a child delivery or model run.
+Retry execution uses the normal run and control locks. It requires an operator
+pause, no processing job in the spool, and no deployment maintenance. Children
+run sequentially in frozen failure order while ordinary dispatch stays paused.
+`resume` refuses an unfinished retry event, so ordinary queued arrivals cannot
+interleave with its corpus transitions. Start and continue perform one
+authenticated account preflight before their first zero-attempt child claim.
+A failed preflight halts the event. It does not increment a child attempt or
+start a child delivery or model run.
 The same storage gate is checked before each queued retry child claim. A closed
 gate halts the attended event with `insufficient_storage`; an unreadable gate
 halts it with `storage_probe_failed`. In either case the child remains queued
 and unattempted, and the operator uses `retry continue` after correcting the
 condition.
 
-SQLite owns event identity and frozen membership while the spool owns child
-envelopes, so their publication cannot be one atomic transaction. A
-`preparing` event is the durable recovery marker for that interval. Publication
-is idempotent: recovery recognizes an already published child or publishes its
-one missing child, but never changes membership or creates a second attempt.
+SQLite owns event identity and frozen membership. The spool owns child
+envelopes. These cannot be published in one atomic transaction. A `preparing`
+event is the durable recovery marker for that interval. Publication is
+idempotent: recovery recognizes an existing child or publishes the one missing
+child. It never changes membership or creates a second attempt.
 The event becomes `running` during child processing and `completed` after all
 items are terminal. A known item-local failure remains one item outcome and
 processing advances. An unexpected model, runner, or runtime failure instead
@@ -203,10 +202,9 @@ each original failed and what its bounded recovery attempt did.
 
 ## Liaison boundary
 
-The liaison runs as a Nucleus job backed by an isolated Codex app-server
-session. Its pointer prompt
-contains the work label and frozen base revision, not the complete work or
-repository instructions. Session-scoped tools provide bounded work reading,
+The liaison runs as a Nucleus job in an isolated Codex app-server session.
+Its pointer prompt contains the work label and frozen base revision. It omits
+the complete work and repository instructions. Session-scoped tools provide bounded work reading,
 corpus browsing, and reconciliation-draft operations. No shell, web, planning,
 user-input, or multi-agent tools are exposed.
 
@@ -328,11 +326,11 @@ commit and never removes the original.
 
 ## Fresh-state deployment boundary
 
-Normal user deployments quiesce the inbox, back up the supported library,
-apply the candidate's additive migration through version 5 when needed, switch the
-complete release, check its commands, library statistics, and inbox state, and
-restore the prior operator pause state. A
-failed cutover restores the pre-migration backup with the prior release.
+Normal user deployments stop inbox activity between jobs and back up the
+supported library. They apply the candidate's additive migration through
+version 5 when needed, then switch the complete release. They check commands,
+library statistics, and inbox state, then restore the prior operator pause.
+A failed cutover restores the pre-migration backup and prior release.
 
 The version-3 boundary uses `deploy-user.sh --fresh-state`. The deployer stages
 an initialized empty library and verifies its paused spool before touching live

@@ -12,26 +12,24 @@ The default registry is
 `~/Library/Application Support/Chancery/providers`. `--registry` takes
 precedence over `CHANCERY_REGISTRY`.
 
-Every command is read-only. Chancery does not probe runtime readiness, execute
-a documented interface, call a model, or access the network. Usage errors exit
-2. Unreadable state, a missing requested entry, or an invalid doctor or
-validation report exits 1. An unresolved dossier also exits 1 while retaining
-its complete inspectable result. JSON output is one versioned envelope.
+Every command is read-only. Chancery does not test runtime readiness, execute
+a documented interface, call a model, or access the network. Usage errors return
+exit code 2. Unreadable state, a missing entry, or an invalid doctor or validation
+report returns 1. An unresolved dossier also returns 1 and preserves its full
+result for inspection. JSON output uses one versioned envelope.
 
-The output excerpts below are schematic. Provider releases, installed entries,
-and aggregate counts come from the selected registry and are not a maintained
-inventory in this document.
+The output below shows example formats. The selected registry supplies provider
+releases, installed entries, and counts.
 
 ## `list`
 
-`list` is the discovery surface. With no filters it reports every entry from
-every structurally valid installed provider, including deprecated entries and
-entries whose contract dependencies are unavailable. Registry problems are
-shown under `ISSUES` and in the JSON `issues` collection; they are never hidden
-because some providers remain usable.
+Use `list` for discovery. Without filters, it reports every entry from each
+structurally valid installed provider. This includes deprecated entries and
+entries with unavailable contract dependencies. Registry problems appear under
+`ISSUES` and in the JSON `issues` collection, even when other providers remain
+usable.
 
-Human output is grouped by audience so ordinary work, administration, and
-development are visibly distinct:
+Human output groups entries by ordinary work, administration, and development:
 
 ```text
 Installed Chancery catalog
@@ -48,17 +46,17 @@ nucleus.execution.operate — Manage Nucleus agent jobs and service
   Check readiness and account access, submit or inspect agent jobs, read their output, cancel work, or operate the per-user Nucleus service.
 ```
 
-Each card contains the stable ID, title and summary. Kind and mode remain
-available in JSON and grouping/filtering. Common support, availability,
-compatibility and readiness appear once under `defaults`; cards carry only
-exceptions. Provider release and contract version belong to `show`.
+Each card contains the stable ID, title, and summary. JSON, groups, and filters
+also expose kind and mode. Shared support, availability, compatibility, and
+readiness appear once under `defaults`. Cards show exceptions. Use `show` for
+the provider release and contract version.
 `availability=installed` means valid indexed documentation, and
 `compatibility=unavailable` means a missing, incompatible or cyclic dependency.
 Readiness is never probed. Operation readiness remains `session_dependent`.
 
-Use `--mode use|operate|develop` or `--kind capability|operation` only when a
-caller deliberately wants a narrower view. Plain `list` is always the complete
-registered inventory; there is no separate `--all` mode.
+To narrow the result, use `--mode use|operate|develop` or
+`--kind capability|operation`. Plain `list` returns the complete registered
+inventory. There is no separate `--all` mode.
 
 The interactive agent uses the titles and summaries to form a semantic
 shortlist. Chancery does not receive the user's request and does not choose an
@@ -72,12 +70,11 @@ After identifying one or more plausible entries, read each complete contract:
 /Users/joey/.local/bin/chancery show todo.concern.capture-and-route
 ```
 
-`show` prints identity, release, support, availability, compatibility,
-readiness, dependency statuses, and the complete authored operating manual
-once. JSON carries the same selected identity and manual. The manual must
-contain applicability, exact interfaces, effects, authority, success, recovery,
-privacy, exclusions, and any operation checkpoints needed to act correctly.
-It does not prove readiness or execute an interface.
+`show` prints identity, release, support, availability, compatibility, readiness,
+dependency statuses, and the complete operating manual once. JSON contains the
+same identity and manual. The manual must state applicability, exact interfaces,
+effects, authority, success, recovery, privacy, exclusions, and required
+operation checkpoints. `show` neither tests readiness nor executes an interface.
 
 `show ID --full` includes the original structured authoring fields and
 normalized claims as well as the manual. Use it to inspect authoring or compare
@@ -92,9 +89,9 @@ outward-promise dossier:
 /Users/joey/.local/bin/chancery resolve decisions.lifecycle.consume
 ```
 
-`resolve` accepts exactly one stable installed ID. It does not accept a user
-request, keywords, provider guess, or ranking criteria. Candidate selection
-remains with the interactive agent; extra positional text is a usage error.
+`resolve` accepts one stable installed ID. The interactive agent selects that
+ID. User requests, keywords, provider guesses, and ranking criteria are not
+accepted. Extra positional text causes a usage error.
 
 Outcome and gaps precede the contract bodies in human output.
 `resolve ID --summary` returns only outcome, requirements, declaration and
@@ -113,13 +110,12 @@ The full dossier contains:
 - optional contract-bound and required-positive-facet results; and
 - registry issues and explicit gaps.
 
-Provider scope and a complete normalized entry declaration are required for a
-fully resolved dossier. Schema-1, schema-2, and partially onboarded entries
-still resolve their existing full contracts, but absent scope and normalized
-facets are `undeclared`. Claim status remains `declared`, `unsupported`,
-`unspecified`, or `not_applicable`; a facet with several statuses is `mixed`.
-Silence is never converted into support from manual prose, a database schema,
-tests, or implementation code.
+Full resolution requires provider scope and a complete normalized entry
+declaration. For schema-1, schema-2, and partially onboarded entries, resolution
+still returns the existing contracts. Missing scope and normalized facets are
+`undeclared`. Claims retain `declared`, `unsupported`, `unspecified`, or
+`not_applicable` status. A facet with several statuses is `mixed`. The resolver
+does not infer support from manual prose, database schemas, tests, or code.
 
 Use optional bounds when a consumer needs a particular root contract family:
 
@@ -154,16 +150,15 @@ Resolution status is:
 | `dependency_unavailable` | A documentation dependency is missing, out of range, cyclic, or transitively unavailable. |
 | `contract_incompatible` | The root entry falls outside caller-supplied contract bounds. |
 
-Explicit `unsupported` and `not_applicable` claims are boundaries rather than
-gaps. Explicit `unspecified` claims are listed as gaps without making the
-authored document structurally incomplete. A substantive declared reliance
-without a dedicated versioned contract is an `uncontracted_reliance`; ordinary
-`dependencies` never acquire runtime or data-flow meaning by inference.
+`unsupported` and `not_applicable` claims define boundaries. `unspecified`
+claims appear as gaps but do not make the document structurally incomplete.
+A declared substantive reliance without a dedicated versioned contract is an
+`uncontracted_reliance`. Ordinary `dependencies` describe contract compatibility;
+the resolver does not infer runtime calls or data flow from them.
 
-`resolved_not_ready` exits 0. The other resolution statuses return the full
-dossier on stdout and exit 1 so automation cannot silently treat them as a
-complete promise. Resolution never probes readiness, executes an interface,
-or grants authorization.
+`resolved_not_ready` returns exit code 0. Other resolution statuses return the
+full dossier on stdout and exit code 1. Resolution does not test readiness,
+execute an interface, or grant authorization.
 
 ## `doctor`
 
@@ -230,11 +225,11 @@ Invalid doctor or validate reports retain the complete data report with
 {"schema_version":3,"ok":false,"error":{"code":"entry_not_found","message":"installed entry not found: missing.entry"}}
 ```
 
-Output schema 3 versions the compact list and ordinary show projections.
-`FullShowResult` retains the complete entry through `--full`; `ResolveResult`
-retains the full dossier, and `ResolveSummary` carries outcome and gaps only.
-Use the provider-owned Rust client and named fields. `--json` changes encoding,
-not the selected content. Provider schemas remain independent and unchanged.
+Output schema 3 defines compact list and ordinary show results.
+`FullShowResult` contains the complete entry for `--full`. `ResolveResult`
+contains the full dossier; `ResolveSummary` contains its outcome and gaps.
+Use the provider-owned Rust client and named fields. `--json` changes encoding
+only. Provider schemas are separate.
 
 ## Exit status
 

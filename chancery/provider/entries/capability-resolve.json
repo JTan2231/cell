@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Resolve an installed outward promise",
-  "summary": "Assemble one exact installed capability or operation with its provider scope, normalized boundary claims, transitive documentation-contract dependencies, exact basis, and explicit gaps.",
+  "summary": "Resolve one installed entry into its provider scope, boundary claims, transitive dependency contracts, exact source references, and gaps.",
   "use_when": [
     "List and show have identified one exact installed entry and the caller needs the owning system's complete outward promise for design or reliance analysis.",
     "A caller must distinguish declared support, explicit unsupported behavior, unspecified guarantees, non-applicable facets, documentation compatibility, and unverified readiness without inspecting implementation code."
@@ -15,10 +15,10 @@
     "The caller wants to execute an interface, probe live readiness, infer authorization, or prove domain success.",
     "The desired behavior is absent from the installed catalog and no exact entry ID has been selected."
   ],
-  "outcome": "The caller receives one deterministic, provenance-bearing outward-promise dossier for an exact installed entry, including its provider scope, complete contract and manual, normalized facet coverage, transitive dependency contracts, requested version and facet results, and explicit resolution gaps.",
+  "outcome": "The caller receives one deterministic dossier for the selected entry. It includes provider scope, the complete contract and manual, normalized facets, transitive dependency contracts, exact provenance, requested version and facet results, and gaps.",
   "effects": [
     "Reads the same fixed, explicitly indexed local provider bundle view used by list, show, and doctor.",
-    "Calculates the dossier and SHA-256 basis digests in memory, writes no state, performs no network or model request, and invokes no represented interface."
+    "Calculates the dossier and SHA-256 digests in memory. Writes no state, makes no network or model request, and invokes no represented interface."
   ],
   "authority": [
     "Each owning provider bundle is authoritative for its scope and entry claims; Chancery is authoritative only for structural validation, exact-byte basis identification, deterministic assembly, facet classification, and dependency compatibility.",
@@ -84,13 +84,13 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Resolve retains the complete root and transitive dependency dossiers, exact bases, requirements, declaration/closure status, readiness, gaps and issues. Human output puts outcome and gaps first. --summary selects only outcome, requirements, status, readiness, gaps and issues with identical exit semantics; JSON output schema is 3."
+        "statement": "Resolve returns the root and transitive dependency dossiers, exact bases, requirements, declaration and closure status, readiness, gaps, and issues. Human output puts outcome and gaps first. --summary returns outcome, requirements, status, readiness, gaps, and issues with the same exit semantics. JSON output uses schema 3."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Facet claims are classified as declared, unsupported, unspecified, or not_applicable; an entry without a normalized declaration is reported as undeclared, and mixed claim statuses remain mixed."
+        "statement": "Facet claims retain declared, unsupported, unspecified, or not_applicable status. Missing normalized declarations are undeclared. Mixed claim statuses remain mixed."
       },
       {
         "status": "declared",
@@ -146,11 +146,11 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "One invocation builds one registry view by canonicalizing each encountered provider selector once, calculates dependency status and closure in memory, emits one dossier, and exits without persistence."
+        "statement": "Each invocation canonicalizes provider selectors once to build one registry view. It calculates dependency status and closure in memory, emits one dossier, and exits without retaining state."
       },
       {
         "status": "declared",
-        "statement": "Dependency closure is deterministic by stable entry ID, excludes the root from its own closure, includes incompatible installed contracts for inspection, and terminates on cycles."
+        "statement": "Dependency closure uses stable entry-ID order and excludes the root. It includes incompatible installed contracts for inspection and terminates on cycles."
       }
     ],
     "operational_limits": [

@@ -1,8 +1,8 @@
 # Data model
 
-Semantics uses SQLite schema version 2. The database is the sole writable
-authority; registered project folders contain only their participation marker
-and ordinary project-owned material.
+Semantics uses SQLite schema version 2. Its database is the sole writable
+authority. Registered folders contain their participation marker and ordinary
+project-owned material.
 
 ## Project registry
 
@@ -37,9 +37,8 @@ Effects are:
 
 Active canonical labels are unique after trimming, collapsing whitespace, and
 Unicode lowercase conversion.
-Revision application is all-or-nothing: effects are first replayed against a
-candidate copy, and the database transaction commits only a valid complete
-revision.
+Semantics first replays effects against a candidate copy. The transaction
+commits only if the whole revision is valid.
 
 ## Intake and reconciliation
 
@@ -72,9 +71,9 @@ transaction before the result is acknowledged to Nucleus.
 
 The deployment boundary registers the candidate Clockwork definition without
 selecting it, disables the prior binding and any owned legacy LaunchAgent,
-suspends the public command, proves the exact worker flock is exclusively held,
-proves the database is not open,
-and privately copies the database plus any `-wal`, `-shm`, or `-journal`
+suspends the public command, verifies exclusive ownership of the exact worker
+flock, verifies that the database is closed, and privately copies the database
+plus any `-wal`, `-shm`, or `-journal`
 sidecars before candidate doctor can initialize or migrate it. A failed
 deployment restores those bytes and all public selectors before restarting the
 prior scheduler state. Rollback restores the exact prior immutable definition

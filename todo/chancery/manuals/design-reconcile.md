@@ -1,8 +1,8 @@
 # Reconcile a Todo desired-state design
 
 Design reconciliation starts from the latest **current ready** situation
-assessment for one open canonical todo. It specifies normative desired state;
-it is deliberately not an implementation plan or execution record.
+assessment for one open canonical todo. It specifies desired state. It does
+not plan or record implementation.
 
 ```sh
 /Users/joey/.local/bin/todo design propose <TODO_ID>
@@ -39,8 +39,8 @@ operations are addressed. It cannot contain implementation tasks, file edits,
 commands, sequencing, estimates, deployment actions, or execution claims.
 
 If the selected assessment has missing inputs or changed bases, the liaison
-records a durable assessment return naming those references. If a run ends with an
-open draft, Todo marks it abandoned; it remains inspectable and may be
+records a durable assessment return with those references. If a run ends with
+an open draft, Todo marks it abandoned. The draft remains inspectable and may be
 corrected but is not ready.
 
 ## Correction and decision

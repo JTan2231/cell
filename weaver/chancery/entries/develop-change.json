@@ -14,7 +14,7 @@
     "The proposed feature is live job search, browser automation, application submission, publication, public-profile editing, or another workflow Weaver does not currently implement.",
     "Release publication or installed deployment has not been separately authorized."
   ],
-  "outcome": "A minimal tested Weaver change whose product and operational documentation match the implementation and whose repository, Nucleus, recovery, privacy, and installation authorities remain explicit.",
+  "outcome": "A minimal tested Weaver change with matching product and operational documentation. Repository, Nucleus, recovery, privacy, and installation authority remain explicit.",
   "effects": [
     "Modifies Weaver source, tests, authored contracts, documentation, or packaging.",
     "Requester-boundary changes may alter retained prompt content, permissions, correlations, compatibility, recovery, or deployment ordering and require corresponding Nucleus contract work.",
@@ -91,11 +91,11 @@
       {"status": "unsupported", "statement": "A proposed shortcut cannot supply browser, public-service, repository access from Codex, direct-Codex fallback, or automatic model-retry authority."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "The output is the smallest coherent Weaver source and documentation change with proportional tests for requester, state, activation, cancellation, validation, maintenance, packaging, rollback, and privacy boundaries and a passing product CI gate."},
+      {"status": "declared", "statement": "The output is the smallest coherent Weaver source and documentation change. Tests cover the affected requester, state, activation, cancellation, validation, maintenance, packaging, rollback, and privacy boundaries. Product CI passes."},
       {"status": "unsupported", "statement": "This operation does not itself publish, tag, push, deploy, cancel an active run, generate a narrative, or interact with a public service."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Weaver remains a five-stage durable narrative requester: it owns workflow state and repository I/O, the narrative repository owns authored and current output meaning, and Nucleus owns model execution and raw job history."},
+      {"status": "declared", "statement": "Weaver remains a five-stage durable narrative requester. It owns workflow state and repository I/O. The narrative repository owns authored and current output meaning. Nucleus owns model execution and raw job history."},
       {"status": "declared", "statement": "Weaver records success after persisting and mechanically validating the stage outputs. A failed or lost terminal run retains its outcome until a new run is explicitly requested."}
     ],
     "identity_and_units": [

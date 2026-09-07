@@ -5,7 +5,7 @@
   "mode": "develop",
   "support": "supported",
   "title": "Change Nucleus software and contracts",
-  "summary": "Modify Nucleus code, protocol, storage, Codex compatibility, authentication, service lifecycle, or deployment using the required guarded procedure.",
+  "summary": "Change Nucleus code, protocol, storage, Codex compatibility, authentication, service lifecycle, or deployment through the required procedure.",
   "use_when": [
     "Nucleus implementation, public protocol, persistent state, harness compatibility, authentication, service lifecycle, or deployment behavior is being changed."
   ],
@@ -18,7 +18,7 @@
   "effects": [
     "Modifies Nucleus source, tests, contracts, or operator documentation.",
     "Depending on the selected playbook, may require coordinated requester changes, database migration, exact Codex inspection, or service cutover.",
-    "Release and deployment remain separate externally consequential actions."
+    "Release and deployment are separate actions that change published or installed state."
   ],
   "authority": [
     "Nucleus owns its protocol, store, adapter, global eight-slot scheduler, single-authority managed authentication broker, service packaging, and operator manual.",
@@ -158,7 +158,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The sequence is classify the change, name authorities and affected requesters, make the smallest owning edit, synchronize contracts and migrations, run Nucleus and affected requester gates, then separately authorize and perform any release or deployment."
+        "statement": "Classify the change and name the authorities and affected requesters. Make the smallest edit in the owning component and update contracts and migrations. Run Nucleus and affected requester gates. Obtain separate authority before release or deployment."
       },
       {
         "status": "declared",
@@ -166,7 +166,7 @@
       },
       {
         "status": "declared",
-        "statement": "The supported capacity contract permits at most eight active attempts globally, leaves admitted overflow accepted with a pending attempt, counts waiting-on-requester as active, and starts each invocation timeout only after slot acquisition; it adds no workflow or retry authority."
+        "statement": "At most eight attempts are active globally. Additional admitted jobs remain accepted with pending attempts. Waiting-on-requester counts as active. Each invocation timeout starts after slot acquisition. This capacity contract adds no workflow or retry authority."
       },
       {
         "status": "declared",

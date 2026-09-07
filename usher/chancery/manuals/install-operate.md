@@ -22,10 +22,10 @@ selector. No database, semantic project, worker, schedule, or other product is
 changed. No Chancery executable is required. The `usher` recognition library
 and CLI remain read-only and do not gain installation operations.
 
-Use `--expected-current absent|releases/HASH` to require an exact observed
-selection; omission snapshots the current selection before waiting for the
-product lock. `--home ABSOLUTE_PATH` selects an intentional isolated or
-alternate-user boundary. The default installation is under the current user's
+Use `--expected-current absent|releases/HASH` to require a specific prior
+selection. If you omit it, the installer records the current selection before
+waiting for the product lock. Use `--home ABSOLUTE_PATH` for an isolated home or
+another user's home. The default installation is under the current user's
 `Library/Application Support/Usher/install`. The public selectors are
 `.local/bin/usher`, `.local/bin/usher-install`, and
 `Library/Application Support/Chancery/providers/usher`.
@@ -58,10 +58,10 @@ versions and integrity metadata, not recognition document bodies.
 
 ## Failure and deliberate recovery
 
-A failed publication restores the captured prior selectors when that basis
-can be proved. Stop on foreign, tampered, stale or unprovable ownership; a
-plausible version or an existing directory is insufficient to resume. The
-installer retains releases for deliberate recovery and does not delete them.
+If publication fails, the installer restores the recorded prior selectors when
+it can verify them. Stop if ownership is foreign or unverified, bytes were
+changed, or the selection is stale. A matching version or existing directory
+does not permit recovery. The installer retains releases and does not delete them.
 
 For a new-format retained release, use its exact packaged recovery executable
 and the exact intended release directory:

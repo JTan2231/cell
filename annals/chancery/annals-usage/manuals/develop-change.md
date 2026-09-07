@@ -1,8 +1,8 @@
 # Change Annals Usage
 
-Annals Usage is a live projection over two authorities: Annals owns delivery
-and model-run attribution, while Nucleus owns jobs, attempts, exact model
-output, account access, and credentials. Annals Usage must not create a second
+Annals Usage projects records from two authorities. Annals owns delivery and
+model-run attribution. Nucleus owns jobs, attempts, exact model output, account
+access, and credentials. Annals Usage must not create a second
 telemetry authority.
 
 Before development, read the complete canonical Semantics repository and
@@ -41,9 +41,9 @@ execution boundary:
 - Account allowance remains global and is never presented as an Annals
   delivery denominator.
 
-When derived interpretation changes, update the projection version and exact
-tests while retaining the atomic records needed to recalculate history. If a
-needed atomic fact is absent, expose a gap rather than synthesizing authority.
+When interpretation changes, update the projection version and relevant tests.
+Retain the records needed to recalculate history. If a required record is
+absent, report a gap.
 
 ## Development workflow
 

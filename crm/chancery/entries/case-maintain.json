@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Maintain an employment relationship case",
-  "summary": "Create a private case, record free-form information as one durable queued update, inspect its progress, or explicitly resume or retry its bounded AI steward while preserving exact evidence and immutable revisions.",
+  "summary": "Create a private case or queue new information for its AI steward. Inspect, resume or retry the update while preserving exact input and immutable revisions.",
   "use_when": [
     "A person, company, role, posting, location, introduction, interaction, or outcome should begin or update one employment-oriented case.",
     "New information should be retained before a bounded steward proposes a complete next case revision.",
@@ -72,7 +72,7 @@
       {"status": "declared", "statement": "Case creation accepts a title, optional raw Markdown input, and optional fixed stage; tell accepts one case, required raw text delivery, optional label, and opaque source reference."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Case creation returns a receipt with case ID, revision, stage, summary, complete advisory/attention and recorded time, without repeating Markdown. Tell durably returns its queued update and any activation warning. Exact case show retains full Markdown; runtime and domain settlement remain distinct."}
+      {"status": "declared", "statement": "Case creation returns a receipt with case ID, revision, stage, summary, complete advisory and attention, and recorded time. It does not repeat Markdown. Tell returns the stored queued update and any activation warning. Case show returns full Markdown. Runtime and domain settlement remain separate."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "A revision is a complete immutable Markdown, stage, nullable advisory, and summary snapshot. A source reference is a caller-supplied locator stored with the delivery. A stage classifies the case within CRM."}
@@ -89,7 +89,7 @@
       {"status": "declared", "statement": "The supported boundary is the local CRM CLI against an explicitly selected private database; hidden steward work uses Codex model gpt-5.6-terra with medium reasoning and a 1,200-second timeout through Nucleus, with workspace, shell, web, and launch context disabled and one managed tool."}
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Tell commits delivery and queued work before launch; steward commit is atomic and base-guarded; exact duplicate admission/tool delivery is replay-safe; terminal runtime evidence remains distinct from domain success; only explicit retry creates a successor update."}
+      {"status": "declared", "statement": "Tell commits delivery and queued work before launch. Steward commit is atomic and checks the frozen base. Exact duplicate admission and tool delivery are replay-safe. Terminal runtime records remain separate from domain success. Only explicit retry creates a successor update."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "CRM has no crawler, sender, scheduler, daemon, direct-Codex path, automatic retry, or content file tree; tell returns without waiting for AI completion; revision Markdown is at most 1,048,576 UTF-8 bytes, advisory at most 4,000 bytes, and summary at most 1,000 bytes."},

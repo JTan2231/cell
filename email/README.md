@@ -1,6 +1,6 @@
 # Email
 
-Email is a deliberately single-purpose CLI. It sends one caller-provided
+Email is a CLI that sends one caller-provided
 subject and plain-text body immediately through Resend from
 `Codex <codex@joeytan.dev>` to `j.tan2231@gmail.com`.
 
@@ -12,8 +12,8 @@ email --idempotency-key 'packets/daily/2026-09-06' --attach resume.pdf 'Jobs' - 
 ```
 
 The second form reads the body from standard input. An authorized calling
-product can supply one stable idempotency key for one exact message; ordinary
-interactive calls receive a fresh `email/<UUIDv7>` key. Email still sends
+product can supply one stable idempotency key for one exact message.
+Interactive calls receive a new `email/<UUIDv7>` key. Email sends
 immediately. There is no recipient option, draft store, HTML mode, remote attachment URL
 support, scheduler, daemon, or delivery database. A successful command means
 Resend accepted the submission; it does not prove final Gmail delivery.
@@ -40,15 +40,14 @@ cd /Users/joey/rust/cell/email
 
 The installed command is `~/.local/bin/email`. Installation details and
 recovery boundaries are in [docs/system-installation.md](docs/system-installation.md).
-The [release-matched Chancery provider](chancery/provider.json) publishes
-Email's complete outward send inventory. After selecting
-`email.message.send`, use `chancery resolve email.message.send` to read its
-normalized promise, substantive external reliances, exact basis, and explicit
-gaps. Resolution does not load credentials, check Resend readiness, or send a
-message.
+The [Chancery provider for this release](chancery/provider.json) lists all
+supported send capabilities. Select `email.message.send`, then use
+`chancery resolve email.message.send` to read its contract, external dependencies,
+sources, and declared gaps. Resolution does not load credentials, check Resend,
+or send a message.
 
-Sending discloses the supplied subject, body, and attached filenames and bytes to Resend and Gmail. The
-runtime does not call Chancery; Chancery only reads the documentation staged
+Sending discloses the subject, body, and attachment names and bytes to Resend
+and Gmail. The runtime does not call Chancery. Chancery reads the documentation
 with the installed Email release.
 
 ## Rust interface

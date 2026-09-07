@@ -2,7 +2,7 @@
 
 ## Product boundary
 
-Conversations is a short-lived local adapter over the documented
+Conversations is a short-lived local adapter for the documented
 [Codex App Server](https://learn.chatgpt.com/docs/app-server). It owns stable
 query behavior and a normalized transcript schema. App Server owns discovery,
 storage compatibility, pagination, and stored task metadata. Conversations has
@@ -19,10 +19,10 @@ Each invocation starts `codex app-server --stdio`, sends one `initialize`
 request with `experimentalApi: true`, sends `initialized`, performs the bounded
 operation, and terminates the launch. On Unix, Conversations starts the command
 as the leader of a private process group and kills that group before reaping
-the direct child. This keeps a CLI wrapper's App Server descendants from
-surviving the invocation while leaving every unrelated Codex process outside
-that group untouched. The unreaped direct child pins the process-group identity
-until it has been signaled, preventing PID reuse from redirecting cleanup.
+the direct child. This stops a CLI wrapper's App Server descendants when the
+invocation ends. Unrelated Codex processes remain outside the group. The direct
+child is not reaped until the group receives the signal. This prevents PID reuse
+from redirecting cleanup to another process group.
 Requests use newline-delimited JSON-RPC messages with the wire shape documented
 by App Server.
 
@@ -36,11 +36,11 @@ this changes diagnostics only and never changes JSON-RPC completeness checks.
 Every `thread/list` request sends the complete documented source-kind set:
 `cli`, `vscode`, `exec`, `appServer`, `subAgent`, `subAgentReview`,
 `subAgentCompact`, `subAgentThreadSpawn`, `subAgentOther`, and `unknown`.
-Active and archived tasks require separate paginated calls. The default then
-filters out every `subAgent*` source kind and every record with a
-`parentThreadId`, including older records that lack a parent, and filters out
-the `exec` source. `--include-subagents` and `--include-exec` opt those sets in
-independently.
+Active and archived tasks require separate paginated calls. By default,
+Conversations excludes every `subAgent*` source kind, including older records
+that lack a parent. It also excludes records with a `parentThreadId` and records
+from the `exec` source. Use `--include-subagents` and `--include-exec` to include
+those sets independently.
 
 Ordinary commands send `useStateDbOnly: true`, so observation cannot trigger
 App Server's log scan-and-repair path. `refresh` is the single explicit
@@ -53,9 +53,8 @@ client's configured stable host identity. The lookup enumerates App Server's
 state-database-only active and archived metadata with every source kind enabled,
 then requires the thread ID to occur exactly once. It returns the existing
 `ThreadSummary`, including App Server's persisted `cwd` and the owning archive,
-without loading turns or changing the CLI's output surface. A foreign host,
-missing thread, duplicate thread, or incomplete page is an error rather than an
-attribution guess.
+without loading turns or changing the CLI's output. A foreign host, missing
+thread, duplicate thread, or incomplete page causes an error.
 
 Full history prefers experimental `thread/turns/list`, ascending, with
 `itemsView: full` and cursor pagination. If the installed App Server reports
@@ -107,9 +106,8 @@ and a `completedAt` timestamp. Each file-change item and each documented
 `{path, diff, kind}` change entry is structurally validated, but only the
 stable item reference and number of changes are retained. Paths, diffs, move
 destinations, commands, tool output, approvals, and reasoning are discarded.
-Failed, declined, in-progress, and empty file changes do not become completed
-file-change evidence. Unknown statuses or malformed entries fail the activity
-read instead of becoming a false negative or false positive.
+Failed, declined, in-progress, and empty file changes are excluded from completed
+file-change evidence. Unknown statuses or malformed entries fail the activity read.
 
 `read_completed_turn_activities` is the reconciliation path for a caller that
 missed an event. It fully paginates one selected task and returns every
@@ -148,8 +146,8 @@ List metadata can reveal titles and working directories. Show, search, and
 export can reveal complete normalized user and assistant transcript text.
 Output goes only to the caller's standard streams; redirected output is the
 caller's file and security responsibility. A protocol error, unreadable page,
-timeout, or unsupported full-history format stops the operation rather than
-returning a silently incomplete corpus.
+timeout, or unsupported full-history format stops the operation. Conversations
+does not return a partial corpus as success.
 
 By default, App Server diagnostics also inherit the caller's stderr and can
 contain paths or other operational context. Use the explicit suppression policy

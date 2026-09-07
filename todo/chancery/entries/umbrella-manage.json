@@ -15,7 +15,7 @@
     "The task is to implement, plan, or prove completion of the underlying work.",
     "A routing proposal's frozen basis is stale or authorization provenance is unavailable."
   ],
-  "outcome": "An exact Todo read or deterministic provenance-bearing identity, note, or lifecycle transition, without model authority or implementation claims.",
+  "outcome": "An exact Todo read or a deterministic identity, note or lifecycle change with provenance. Models do not authorize these operations or record implementation.",
   "effects": [
     "List, search, and show commands read Todo state without invoking Nucleus.",
     "Routing accept/reject records an explicit decision using a readable UTF-8 source as authorization provenance.",
@@ -70,7 +70,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Todo list/search retain compact ID/title/lifecycle rows, default to 20, and include has_more with positive --limit for more. Exact show retains the complete selected umbrella with concerns, notes and current assessment/design summaries. Lifecycle and note mutations retain durable receipts and no implementation-success inference."
+        "statement": "Todo list and search return compact ID, title and lifecycle rows. They default to 20 results with has_more; --limit accepts a positive integer. Show returns the complete selected umbrella, concerns, notes and current assessment and design summaries. Lifecycle and note changes return durable receipts without recording implementation success."
       }
     ],
     "data_semantics": [
@@ -92,7 +92,7 @@
     ],
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "Routing acceptance revalidates and applies its action in one immediate transaction; rejection records a terminal reason without applying it."},
-      {"status": "declared", "statement": "Notes are append-only, done and reopen are idempotent, direction revisions preserve umbrella identity, and unification retains one canonical survivor plus superseded history."}
+      {"status": "declared", "statement": "Notes are append-only. Done and reopen are idempotent. Direction revisions preserve umbrella identity. Unification retains one canonical survivor and superseded history."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "List and search are bounded by documented limits, all mutation commands target one explicit Todo identity or proposal, and no delete or stale-force interface is provided."},

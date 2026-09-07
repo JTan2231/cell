@@ -5,7 +5,7 @@
   "mode": "develop",
   "support": "supported",
   "title": "Change the Semantics product safely",
-  "summary": "Develop Semantics while preserving project-scoped authority, append-only replay, exact upstream adapters, restricted Nucleus reconciliation, crash recovery, packaging rollback, privacy, and the offline CI gate.",
+  "summary": "Develop Semantics while preserving project authority, append-only replay, upstream adapters, restricted Nucleus reconciliation, crash recovery, packaging rollback, privacy, and offline CI.",
   "use_when": ["Semantics source, schema, effects, worker policy, toolset, prompts, CLI, packaging, service lifecycle, or documentation should change."],
   "do_not_use_when": ["The installed repository should only be explored or operated."],
   "outcome": "A synchronized product change whose standalone offline CI is green and whose persistent, requester, service, and published discovery contracts remain valid.",
@@ -93,7 +93,7 @@
       {"status": "declared", "statement": "Development uses the local repository filesystem and shell; tests use synthetic upstreams and fakes rather than live services or private data."}
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Persistent changes require explicit versioned migration and database-plus-sidecars rollback proof; immutable tool meaning changes require successor schema or toolset identities."}
+      {"status": "declared", "statement": "Persistent changes require a versioned migration and verified rollback of the database and sidecars. Changes to immutable tool meaning require successor schema or toolset identities."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "The standalone gate is offline, bounded to Semantics, and must complete within its documented 60-second deadline without contacting live upstream services."}

@@ -10,11 +10,10 @@ manuals/
   ENTRY.md
 ```
 
-`provider.json` explicitly indexes every entry. Chancery never discovers
-unlisted drafts, source-tree documentation, or arbitrary files. Registry-level
-provider symbolic links are allowed. Symbolic links in an indexed path are
-rejected, and every indexed path must remain beneath that fixed bundle root.
-Product packaging applies a stricter whole-tree check before publication.
+`provider.json` indexes every entry. Chancery reads indexed files only.
+Provider selectors in the registry can be symbolic links. Indexed paths cannot
+contain symbolic links and must stay beneath the fixed bundle root. Product
+packaging checks the entire bundle tree before publication.
 
 Schema version, provider release, and each entry contract version are
 independent. Dependencies name stable entry IDs and integer contract-version
@@ -58,17 +57,16 @@ in the installed registry. `release` identifies the product release containing
 these exact bytes. Every indexed path is unique, relative, and remains inside
 the bundle. The reader ignores every unindexed file.
 
-`promise_scope` is the provider's outward-facing jurisdiction and inventory
-boundary. Every collection is nonempty. `inventory.covers` names a meaningful
-class of supported surfaces; it must not define the class circularly as
-“whatever is indexed.” `completeness` is `complete` or `partial` within that
-named class. `inventory.excludes` makes clear what absence cannot decide.
+`promise_scope` defines the provider's jurisdiction and inventory scope. Every
+collection must be nonempty. `inventory.covers` names a class of supported
+surfaces independently of the index. `completeness` is `complete` or `partial`
+within that class. `inventory.excludes` states which outcomes fall outside it.
 
-The remaining fields state what the provider is and is not authoritative for
-and the common access/trust, privacy/retention, compatibility/retirement, and
-operational-limit qualifiers shared by its entries. Entry-specific facts still
-belong in the entry and manual. Provider scope describes the published
-inventory; runtime checks and authorization use the represented interface.
+The other fields define authority, access, trust, privacy, retention,
+compatibility, retirement, and operational limits shared by the provider's
+entries. Put entry-specific facts in the entry and manual. Provider scope
+describes the published inventory. Runtime checks and authorization use the
+documented interface.
 
 ## Capability entry
 
@@ -169,10 +167,10 @@ Common field meanings:
 | `promise` | Optional schema-3 normalized outward-boundary declaration; complete when present |
 | `manual` | Indexed, nonempty, UTF-8 detailed Markdown beneath the bundle |
 
-Titles and summaries are part of the functional discovery contract. They must
-distinguish the entry by intended result, not merely repeat an internal command
-name or a generic noun. Chancery lists them verbatim; semantic comparison with
-the user's request belongs to the interactive agent.
+Titles and summaries support discovery. They must distinguish entries by their
+intended results. An internal command name or generic noun is insufficient.
+Chancery displays them verbatim. The interactive agent compares their meaning
+with the user's request.
 
 Collections required by the selected entry kind must not be empty. Values in
 any collection must be nonblank and unique. IDs, indexed paths, and dependency
@@ -199,12 +197,11 @@ these collections contains at least one explicit claim:
 | `reliances` | What substantive external data, control, authority, readiness, or external source does the outcome rely on? |
 
 A normal claim has `status` and `statement`. Status is `declared`,
-`unsupported`, `unspecified`, or `not_applicable`. Multiple claims may give a
-facet mixed status. `unsupported` is an explicit negative boundary;
-`unspecified` says the owner makes no guarantee; `not_applicable` says the
-question does not fit the capability. If the entire `promise` object is absent,
-resolution reports these facets as `undeclared` instead of searching the
-manual, schema, tests, or implementation for an inferred answer.
+`unsupported`, `unspecified`, or `not_applicable`. A facet can have mixed
+statuses. `unsupported` defines an exclusion. `unspecified` leaves the behavior
+unpromised. `not_applicable` means the question does not apply. If `promise` is
+absent, the resolver reports these facets as `undeclared`. It does not infer
+answers from the manual, schema, tests, or code.
 
 A `reliances` claim with status `declared` additionally requires a lowercase
 `target` provider/system ID and a `kind` of `data`, `control`, `authority`,
@@ -214,10 +211,9 @@ reliance without a contract is valid but resolves as an
 `uncontracted_reliance` gap. Non-declared reliance claims do not carry target,
 kind, or contract metadata.
 
-This distinction is deliberate. `dependencies` always mean installed
-documentation-contract compatibility. Chancery never mechanically treats an
-existing dependency as proof of a runtime call, private data surface, authority
-transfer, or readiness relationship.
+`dependencies` describe installed documentation-contract compatibility. They
+do not establish runtime calls, private data access, authority transfer, or
+readiness relationships.
 
 The exact entry and manual remain the detailed promise. Resolution cites the
 raw UTF-8 `provider.json`, entry, and manual bytes by bundle-relative path and
@@ -241,11 +237,10 @@ An operation uses the common field set, requires a nonempty
 }
 ```
 
-These operation-only fields describe an adaptive operational manual. They do
-not create a workflow engine, grant computer access, or imply that named
-session surfaces are installed or ready. The detailed manual should organize
-the same operation around goals, participants, semantic actions, proof,
-recovery, and authority checkpoints instead of volatile selectors or pixel
+These fields describe an adaptive operation. They do not execute a workflow,
+grant computer access, or establish that session surfaces are installed or
+ready. Organize the manual by goals, participants, semantic actions, proof,
+recovery, and authority checkpoints. Avoid volatile selectors and pixel
 coordinates.
 
 Capability entries must not populate operation-only fields and must declare at
@@ -274,16 +269,16 @@ scope or promise objects are invalid.
 
 ## Validation and security
 
-Registry-level provider selectors may be symbolic links so they can follow a
-product's current content-addressed release. Chancery canonicalizes each once
-per invocation. CLI validation reads only `provider.json` and the entry and
-manual paths it indexes. Every indexed path component must remain beneath the
-resolved root and may not be a symbolic link; indexed devices, sockets, other
-non-files, invalid UTF-8, oversized inputs, unsupported schemas, duplicate
-entry IDs, dependency cycles, and impossible version ranges are rejected.
-Unindexed objects do not affect CLI validation. Product packaging and
-deployment checks additionally require the entire published bundle tree to
-contain only regular files and directories before hashing and staging it.
+Registry provider selectors can be symbolic links to a product's current
+content-addressed release. Chancery canonicalizes each once per invocation.
+CLI validation reads `provider.json` and its indexed entries and manuals.
+Indexed paths must stay beneath the resolved root and contain no symbolic links.
+Validation rejects indexed non-files, invalid UTF-8, oversized inputs,
+unsupported schemas, duplicate entry IDs, dependency cycles, and impossible
+version ranges. Unindexed objects do not affect CLI validation.
+
+Before hashing and staging, product packaging and deployment require the entire
+published bundle tree to contain only regular files and directories.
 
 Validation treats every invocation string as inert text. A bundle cannot cause
 Chancery to run a command, probe a service, open a network connection, or call

@@ -1,9 +1,10 @@
 # macOS user installation
 
-Semantics installs one content-addressed release for the current user, the `semantics` and `semantics-install` CLI
-selectors, one Chancery provider selector, and one immutable Clockwork
-definition bound as `semantics/worker`. The SQLite database, releases, and
-body-free product logs are retained by uninstall.
+Semantics installs one content-addressed release for the current user. It also
+installs the `semantics` and `semantics-install` command selectors, one Chancery
+provider selector, and an immutable Clockwork definition bound as
+`semantics/worker`. Uninstall retains the SQLite database, releases, and product
+logs without content bodies.
 
 ## Prerequisites
 
@@ -30,40 +31,42 @@ cargo build --release --locked --package semantics
   --clockwork "$HOME/.local/bin/clockwork"
 ```
 
-Deployment refuses foreign selectors, selected Clockwork definitions, or
-service files. Before it executes even the candidate version command, every
-existing database, WAL, shared-memory, or rollback-journal file must be a
-current-user-owned, mode-`0600`, regular non-symbolic-link file with exactly one
-hard link. The same preflight applies to an existing deployment-maintenance
-receipt, which is invalid without its matching gate. It validates the
-candidate/provider version, verifies reusable releases by a canonical content
-manifest, proves any selected `semantics/worker` definition is the exact
-current release-owned runner and schedule. That proof is point-in-time rather
-than a Clockwork compare-and-swap; the shared Semantics update lock serializes
-its own deploy and uninstall, while concurrent direct same-user mutation of
-the binding is unsupported and may force maintenance-gated recovery. The
-deployer registers the inactive exact-release Clockwork definition, disables
-the prior binding and quiesces any owned legacy LaunchAgent, removes the public
-CLI during the bounded cutover, proves SQLite quiescence, and backs up the
-database plus sidecars.
+Deployment refuses foreign selectors, selected Clockwork definitions, or service
+files. Before running the candidate version command, it checks every existing
+database, WAL, shared-memory, and rollback-journal file. Each must be a regular
+file owned by the current user, with mode `0600`, no symbolic link, and exactly
+one hard link. An existing deployment-maintenance receipt must meet the same
+requirements and have its matching gate.
+
+The deployer checks candidate and provider versions and verifies reusable
+releases against a canonical content manifest. It verifies that the selected
+`semantics/worker` definition names the current release's exact runner and
+schedule. This check records the selection at that time; Clockwork does not
+perform a compare-and-swap. The Semantics update lock serializes deployment and
+uninstall. Direct concurrent changes to the binding are unsupported and can
+require recovery with maintenance held.
+
+The deployer registers the inactive Clockwork definition for the exact release.
+It disables the prior binding, stops any owned legacy LaunchAgent, and removes
+the public CLI during cutover. It then verifies SQLite is idle and backs up the
+database and sidecars.
 The content identity covers the unrendered Clockwork template and runner. Only
 after that release directory and identity exist does the deployer render its
 absolute release path and interpreter/runner hashes, avoiding a circular
 release hash; neither `current` nor the public CLI is execution identity.
-It also holds the same cross-process worker lock used by `intake run`, excluding
-a long-running manual reconciliation even while SQLite is momentarily closed.
-Only then does the exact candidate run `--json doctor` in a scrubbed
-environment while the private old release selector remains selected and all public entries are suspended.
+The deployer also holds the cross-process worker lock used by `intake run`.
+This excludes manual reconciliation even when SQLite is temporarily closed.
+It then runs the exact candidate's `--json doctor` in a scrubbed environment.
+The old private release selector remains selected, and all public entries remain suspended.
 Doctor captures one Annals watermark, walks bounded pages from every distinct
 installed cursor until an unchanged empty page, and reads every page twice at
 that fixed watermark. It rejects changed replay, identity duplication,
-nonadvancement, cycles, or more than 1,000 pages from one cursor. It also proves
-schema 2, Conversations, and preserved plus successor Nucleus/toolset
-boundaries. The
-doctor refuses to authorize the worker switch when any active or paused
-project lacks the selected Annals feed identity or cursor; a pending activation
-is accepted only when there is no such project. The
-deployer atomically publishes release, CLI, and provider selectors and switches
+nonadvancement, cycles, or more than 1,000 pages from one cursor. It also checks
+schema 2, Conversations, and both preserved and successor Nucleus/toolset
+contracts. Doctor refuses the worker switch if an active or paused project
+lacks the selected Annals feed identity or cursor. Pending activation is
+accepted only if there are no active or paused projects. The deployer atomically
+publishes release, CLI, and provider selectors and switches
 `semantics/worker` to the candidate definition digest. Any failure restores the
 prior database and selectors plus the exact prior Clockwork selection and
 enabled state, or the prior owned legacy LaunchAgent during first handoff, but

@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Inspect and export discovered companies and jobs",
-  "summary": "Read retained companies, jobs, collection outcomes and coverage, or export one consistent JSON snapshot for downstream selection without starting collection.",
+  "summary": "Read stored companies, jobs, collection outcomes and coverage. Export a consistent JSON snapshot for downstream selection. These reads do not start collection.",
   "use_when": [
     "A caller needs stored companies and jobs or the timestamps, limits and outcomes of collection work.",
     "A downstream product needs a consistent machine-readable discovery snapshot."
@@ -101,7 +101,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "List/search return schema-two pages with snapshot_revision, compact items and has_more; positive --limit defaults to 20. Job rows expose stable ID/revision, company, title, location/remote eligibility, recorded availability and last_seen_at. Search adds matched_field and a marked excerpt of at most 240 Unicode characters. Status returns counts, budgets/usage, last run and source/query collection summaries. Show/export preserve full records, source metadata and collection outcomes; exported snapshot schema remains 1."
+        "statement": "List and search return schema-two pages with snapshot_revision, compact items and has_more. The default limit is 20 items; --limit accepts a positive integer. Job rows contain stable ID and revision, company, title, location, remote eligibility, recorded availability and last_seen_at. Search adds matched_field and a marked excerpt of at most 240 Unicode characters. Status returns counts, budgets, usage, the last run and collection summaries for sources and queries. Show and export return full records, source metadata and collection outcomes. The export snapshot still uses schema 1."
       }
     ],
     "data_semantics": [
@@ -117,7 +117,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Company, job and source IDs are opaque Cast identities; a snapshot revision identifies retained state at export. ATS sources use canonical provider/tenant owners independently of linking website candidates. Ownership correction can change job company_id and revision while preserving job/source IDs; equal company names alone do not establish a merge."
+        "statement": "Company, job and source IDs are opaque Cast identities. A snapshot revision identifies stored state at export. ATS sources use canonical provider/tenant owners independently of linking website candidates. Ownership correction can change a job's company_id and revision while preserving job and source IDs. Matching company names alone do not cause a merge."
       },
       {
         "status": "not_applicable",

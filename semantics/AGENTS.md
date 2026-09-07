@@ -3,15 +3,15 @@
 Semantics-Project: semantics
 
 - This folder participates in the installed Semantics service. Its project
-  semantic repository is authoritative for project terminology and semantic
-  history. Before analyzing, reviewing, or changing code, tests,
+  semantic repository defines project terminology and records its history.
+  Before analyzing, reviewing, or changing code, tests,
   documentation, or interfaces, use Chancery to read
   `semantics.repository.explore` and query Semantics for this folder. Code,
   tests, and component documentation remain authoritative for actual behavior.
   Do not edit Semantics state directly; report an unresolved repository rather
   than guessing.
-- Keep the repository append-only: current meaning is replayed from immutable
-  revisions and typed effects; do not add mutable projections in v1.
+- Keep the repository append-only. Replay immutable revisions and typed effects
+  to obtain current meaning. Do not add mutable projections in v1.
 - Preserve stable project and concept identities across moves and wording
   changes.
 - Nucleus requests use a neutral temporary directory, workspace access `none`,

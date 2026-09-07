@@ -10,7 +10,7 @@
   including its limits and partial, failed or deferred steps.
 - **Freshness:** elapsed time since a successful collection, stored separately
   from the latest attempt.
-- **Local budget:** Cast's conservative admission counter, distinct from a
-  provider's billing or available balance.
+- **Local budget:** Cast's conservative counter for request admission. Each
+  provider manages its own billing and available balance.
 - **Snapshot:** one consistent view of stored companies, jobs, source metadata,
   revisions and collection records.
