@@ -48,6 +48,11 @@ caveats or hedging; the pursuit assessment remains private. The resume model
 can author only Jackson bullet text. Every other original source byte stays
 fixed, and PDFs must pass one-page rendering checks.
 
+Each new stage receives instructions to locate the CRM entries titled
+`Default job preferences` and `Source authority and disclosure rules` in its
+captured index and read them by ID before assessment or authoring. Each job
+assessment and resume stage uses a separate agent session.
+
 Fresh state uses `~/.local/share/platter/packets.sqlite3`. A sole predecessor
 `~/.local/share/job-packets` root remains in place. Two roots are ambiguous;
 independent custom live libraries are unsupported. Schema-one file-backed
