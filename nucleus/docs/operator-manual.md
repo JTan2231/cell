@@ -69,7 +69,6 @@ separately maintained discovery catalog.
 | Krisis | Attributable decisions in completed root user turns should be identified and delivered as immutable accounts to the dedicated Annals decisions library. | The observation baseline and coverage, bounded classification, source anchors, account projection, durable outbox, Annals acceptance receipts, and recovery. | Judging truth, importance, applicability, enactment, current force, review state, supersession, retaining the canonical account library, or sending a digest. |
 | Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from accepted accounts in the dedicated Annals decisions library. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, decision-feed intake, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, transcript storage, or interpreting Annals retention as semantic truth. |
 | Usher | A Cell checkout's declared membership should be reported or required in CI, or Usher's own installation should be verified or recovered. | Deterministic recognition of product identity, Semantics participation, and Chancery introduction evidence; a separate installer owns Usher release and selector operations. | Proving other products' actual registration or installation, relationship quality, readiness, or other inter-system affairs. |
-| Geste | A prior bounded work episode should be found by problem shape or manually recorded with its source basis. | Episode identity, immutable account revisions, authored interpretation, source anchors, coverage gaps, and read-time search, report, and graph projections. | Source-system truth, current policy, automatic episode ingestion, or deciding that a precedent applies. |
 | Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, eight-slot harness supervision, single-authority credential coordination, cancellation, exact harness-stdout observations, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, requester retry policy, or reporting materializations. |
 | Annals Usage | Annals-attributed model consumption, account allowance, login, or the Annals-to-Nucleus execution path must be inspected. | Live calculation over Annals attribution and Nucleus output atoms, plus Annals-facing budget and diagnostic commands. | Nucleus runtime authority, durable reporting projections, Codex credential storage, Annals corpus success, or general job orchestration. |
 | Codex | Nucleus needs an inspected harness and account protocol implementation. | Its executable and app-server behavior. | Requester domain policy or a second credential authority for Nucleus jobs. |
@@ -86,7 +85,6 @@ Typical routing examples:
 - “Email me this update” is Email work.
 - “What does this project mean by grounding?” is a Semantics query when that
   folder is registered.
-- “Have we already solved something shaped like this?” is a Geste query.
 - “What does Krisis promise an account consumer?” starts with Chancery
   discovery and exact-ID promise resolution.
 - “Could this new local project use an agent?” starts with the new-requester
@@ -114,7 +112,6 @@ email --version
 conversations --version
 krisis --version
 semantics --version
-geste --version
 chancery --version
 chancery doctor
 weaver --version
@@ -163,9 +160,6 @@ Krisis observer ----> Conversations
 Krisis observer ----> Annals decisions-library acceptance
 Annals decision feed -> Semantics --> Conversations exact cwd
 Semantics -----------> registered project semantic repositories
-
-interactive agent -- manual source anchors --> Geste SQLite episode revisions
-Geste CLI ----------------------------------> Geste SQLite read projections
 
 installed product releases -- publish --> Chancery provider bundles
 interactive agent ----------- reads ----> Chancery
@@ -345,18 +339,8 @@ closed, versioned invocation. Nucleus validates it, starts one harness attempt,
 retains exact harness stdout, and coordinates dynamic tool calls. The requester
 continues to own the work that motivated the job.
 
-Geste is a short-lived manual casebook CLI. The interactive agent independently
-consults source products through their installed contracts and gives Geste
-stable locators, optional revisions or digests, and an authored complete
-episode account. The Geste process calls no source product, Chancery, Nucleus,
-or model. A historically verified settlement may still cite a retained legacy
-Decisions lifecycle authority anchor; Geste has no automatic dependency on the
-new Annals decision feed. Geste search returns
-lexical precedent candidates; the agent checks applicability and current
-contracts before reuse.
-
 Nucleus, Annals, Annals Usage, Todo, Chancery, Weaver, Email, Conversations,
-Krisis, Semantics, Geste, Clockwork, CRM, Usher, Cast and Platter share the Cell source
+Krisis, Semantics, Clockwork, CRM, Usher, Cast and Platter share the Cell source
 repository, Cargo workspace, and lockfile. That source layout does not
 merge their release, installation, state, backup, recovery, or domain-success
 boundaries. Product runtimes do not call Chancery. Their installers only
@@ -385,10 +369,7 @@ The following distinctions are operationally important:
    Nucleus output atoms without retaining a second reporting database.
 6. **One Nucleus job has one attempt.** Nucleus does not automatically retry.
    A requester owns any new domain attempt and its provenance.
-7. **A Geste precedent is not policy.** An episode preserves one authored
-   account against one source cutoff. Similar shape does not establish current
-   applicability, authority, or procedure.
-8. **A CRM advisory is not a gate.** It remains conspicuous wherever the case
+7. **A CRM advisory is not a gate.** It remains conspicuous wherever the case
    is consumed, but it cannot block or authorize any operation.
 
 ### Shared CI, release, and deployment coordination
@@ -428,7 +409,7 @@ recognition check in the broker's heavy lane, including for selected-product
 runs. It passes the expected source key to that check and each independently
 scheduled product gate, and rejects the plan with exit 75 if the worktree
 changes. A complete run then rebuilds Chancery for that same candidate and
-validates the integrated sixteen-provider, 55-entry source graph.
+validates the integrated source graph.
 This aggregate evidence does not merge product release authority or turn one
 product gate into another's gate.
 Root CI suppresses child success summaries and reports the selected scope once.
@@ -468,7 +449,7 @@ commits them. A build receipt is not CI evidence.
 Deployment remains product-owned. Every deployer takes its existing product or
 update lock before the shared Chancery catalog-writer lock and holds the catalog
 lock through selector cutover, smoke, and rollback. Generated selector-only
-deployers for Conversations, Geste, and CRM stage immutable bytes
+deployers for Conversations and CRM stage immutable bytes
 before the short catalog critical section, publish command and provider through
 one atomic product `current` selector, and reject a changed observed or explicit
 `--expected-current absent|releases/HASH` precondition. Stateful deployers keep
@@ -620,7 +601,6 @@ CRM deployer still changes only program/provider selectors.
 ~/.local/bin/conversations
 ~/.local/bin/krisis
 ~/.local/bin/semantics
-~/.local/bin/geste
 ~/.local/bin/clockwork
 ~/.local/bin/crm
 ~/.local/bin/cast
@@ -675,10 +655,6 @@ Krisis/retained Decisions compatibility do.
 
 ~/Library/Application Support/Semantics/
   semantics.db
-  install/
-
-~/Library/Application Support/Geste/
-  geste.db
   install/
 
 ~/Library/Application Support/CRM/
@@ -828,17 +804,6 @@ the agent-execution dependency those products may call. Clockwork program
 deployment requires a separately supplied candidate Chancery reader to
 validate its exact staged provider before either public selector changes.
 
-Geste owns its content-addressed CLI installation, provider selector, and
-schema-version-1 database. Deployment switches only immutable program and
-provider selectors; `geste init` is a separate visible domain-state operation.
-There is no daemon, LaunchAgent, automatic migration, source adapter, model
-request, or runtime Chancery dependency. Each episode revision is sealed last
-in its capture transaction; doctor requires the complete schema object set and
-refuses committed unsealed history. The database is retained separately from
-releases and has no version-0.1 uninstaller. Recover installation failures through
-the supported deployer with the intended binary, rebuilding it if necessary;
-do not rewrite selectors or episode state by hand.
-
 CRM owns its content-addressed CLI installation, provider selector, and local
 SQLite library. All CRM-owned content is stored as database `TEXT`. Deployment
 switches immutable program and provider selectors without adding a daemon or
@@ -962,7 +927,6 @@ selects encoding, while explicit commands/flags select additional content.
 | Cast | Company/job/source selection and matching excerpts; status counts, budgets and failures | `company show`, `job show`, `export` with full evidence and coverage |
 | Conversations | Bounded metadata and title/message hits with matching excerpts | `show`, `export`; complete selected source reads still required for search |
 | Nucleus | `jobs status`; `jobs wait JOB --timeout 60` | `jobs show`, `jobs logs`, `tool-calls pending` |
-| Geste | Capture receipts and bounded selection | `episode show`, `report`, `graph` |
 | Annals | Committed reconciliation receipts and retry counts/halt | `change show`, `inbox retry status EVENT --details` |
 | Annals Usage | Live totals and coverage | `report --details` |
 | Todo | Bounded umbrella and concern triage | Exact concern/routing/situation/design/umbrella show commands |
@@ -1458,7 +1422,6 @@ provider registry or documentation storage.
 | Codex task enumeration, normalized transcript reads, App Server compatibility, or Conversations deployment | Conversations | Keep it read-only and separate from Nucleus's private Codex home; consumers must not treat persisted status as live-process proof. |
 | Decision identification, observation coverage, account projection, source anchors, Annals delivery, or Krisis deployment | Krisis | Preserve exact user authority, deterministic account identity, Annals acceptance receipts, and Nucleus correlation; no downstream consumer gains classification authority and Nucleus gains no decision fields. |
 | Project registration, semantic concepts, grounding, revision history, Annals decision-account intake, reconciliation policy, or Semantics deployment | Semantics | Preserve Annals library/event/account identities, exact Conversations cwd routing, both legacy and new cursor histories, and Nucleus correlation; no upstream gains Semantics state or success authority. |
-| Geste episode identity, revisions, settlement grounding, search, report, graph, database, or deployment | Geste | Preserve source-system authority and immutable locators; no source gains episode state, and Geste gains no automatic source read or policy authority. |
 | New portable invocation meaning or HTTP behavior | Nucleus core/client/daemon | Version the public contract, update examples/tests/docs, then update affected requesters in compatible order. |
 | Codex executable or app-server semantics | Nucleus Codex adapter | Prove the exact version, deploy Nucleus, and check installed readiness. |
 | Nucleus database schema or retention | Nucleus store | Quiesce, back up, migrate and validate, and define database-aware rollback before deployment. |
@@ -1467,7 +1430,7 @@ provider registry or documentation storage.
 | Managed-authentication, canonical-refresh, or attended-login behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and check account and service readiness. |
 | Nucleus service layout or installer | Nucleus CLI/packaging | Preserve state/log ownership, rollback, launchd behavior, and requester configuration. |
 | Chancery bundle schema, catalog, contract reader, exact-ID resolver, or directory installation | Chancery | Preserve read-only behavior, failure isolation, exact basis, explicit gaps, complete installed inventory, and provider-owned selectors; do not introduce semantic matching or a product runtime dependency. |
-| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the sixteen-provider source graph, and update only that product's Chancery selectors. |
+| A product's provider scope, normalized promise, capability, operation, or substantive reliance | Owning product | Stage the version-matched bundle with its release, scope inventory completeness meaningfully, keep reliance distinct from documentation dependencies, validate it in product CI, require the complete root CI to accept the source graph, and update only that product's Chancery selectors. |
 
 ## Guarded change playbooks
 
@@ -1667,9 +1630,6 @@ Use these placement rules to keep the manual current and small:
 - **Annals:** retained source material and evidence-grounded conceptual
   knowledge. It may retain released documentation, but it is not the sole
   editable runbook.
-- **Geste:** bounded historical work episodes, their authored interpretation,
-  applicability, source basis, and precedent relations. It is not current
-  procedure, source truth, or a decision authority.
 - **Component documentation:** exact Nucleus protocol, Todo creation behavior,
   Annals corpus and inbox behavior, or Annals Usage accounting.
 - **Chancery provider bundle:** current, version-matched provider promise
@@ -1786,14 +1746,6 @@ PID-aware file lock. Private packet state and database backups are retained.
 - [CLI contract](/Users/joey/rust/cell/semantics/docs/cli.md)
 - [Data model](/Users/joey/rust/cell/semantics/docs/data-model.md)
 - [User-owned installation](/Users/joey/rust/cell/semantics/docs/system-installation.md)
-
-### Geste
-
-- [Documentation index](/Users/joey/rust/cell/geste/docs/README.md)
-- [Architecture](/Users/joey/rust/cell/geste/docs/architecture.md)
-- [CLI contract](/Users/joey/rust/cell/geste/docs/cli.md)
-- [Data model](/Users/joey/rust/cell/geste/docs/data-model.md)
-- [User-owned installation](/Users/joey/rust/cell/geste/docs/system-installation.md)
 
 ### Chancery
 

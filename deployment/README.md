@@ -292,7 +292,7 @@ executable/provider versions, public entry mappings and a stable content identit
 The immutable tree retains `package/install` for supported recovery. Legacy
 formats are accepted only through the product's explicit complete byte proof.
 
-Conversations, CRM, Geste, Chancery, Email, Cast, Clockwork and Platter use the common
+Conversations, CRM, Chancery, Email, Cast, Clockwork and Platter use the common
 program-selection entry point. Their product specifications supply the layout,
 legacy proof and runtime frontend where needed. Clockwork additionally validates
 its provider with the supplied Chancery reader; its runtime recognizes its own

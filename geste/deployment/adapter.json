@@ -1,8 +1,0 @@
-{
-  "schema": 1,
-  "product": "geste",
-  "application": "Geste",
-  "dependencies": [],
-  "description": "Installation through the shared Rust transaction library.",
-  "adapter_binary": "geste-install"
-}

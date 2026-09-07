@@ -30,7 +30,7 @@ during execution. CI requires Python 3.10 or newer. See
 Repeated product CI and release mechanics are declared in checked-in
 [pipeline descriptors](pipeline/README.md). Usher uses a separate Rust
 `usher-install` executable backed by the shared `cell-install` library.
-Conversations, Geste, and CRM use generated selector-only installers;
+Conversations and CRM use generated selector-only installers;
 stateful products retain their own lifecycle logic. See
 [deployment](deployment/README.md) for their installation boundaries.
 

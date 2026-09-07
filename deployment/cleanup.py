@@ -20,7 +20,7 @@ PRODUCTS = {
     "annals": "Annals", "decisions": "Decisions", "semantics": "Semantics",
     "crm": "CRM", "todo": "Todo", "weaver": "Weaver", "nucleus": "Nucleus",
     "chancery": "Chancery", "clockwork": "Clockwork", "conversations": "Conversations",
-    "email": "Email", "geste": "Geste", "usher": "Usher", "cast": "Cast",
+    "email": "Email", "usher": "Usher", "cast": "Cast",
     "platter": "Platter",
 }
 HEX = re.compile(r"[0-9a-f]{64}")
@@ -188,7 +188,7 @@ def live_pins(home, installs, currents):
 def installer_locks(home, installs):
     # These are the existing product-deployer locks, not another lock scheme.
     held = []
-    file_locks = {"Clockwork", "Conversations", "CRM", "Geste", "Usher", "Platter"}
+    file_locks = {"Clockwork", "Conversations", "CRM", "Usher", "Platter"}
     try:
         for application, install in installs.items():
             if not install.exists() and not install.is_symlink():
