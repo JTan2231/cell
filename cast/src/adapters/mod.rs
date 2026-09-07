@@ -25,7 +25,7 @@ pub fn is_discovery_directory(input: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Filters freeform hiring-thread headers without validating employer identity.
+/// Filters freeform hiring-thread headers into candidate display names.
 #[must_use]
 pub fn plausible_company_name(name: &str) -> bool {
     let name = name.trim();

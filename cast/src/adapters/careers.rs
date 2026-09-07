@@ -27,7 +27,7 @@ pub async fn verify(
         return Ok(directory_result());
     }
     if cursor.is_some() {
-        return Err("HTML verification does not accept pagination cursor".into());
+        return Err("HTML collection does not accept a pagination cursor".into());
     }
     let response = http.get_text(input).await?;
     let final_url = public_url(&response.url)?;
@@ -72,7 +72,7 @@ async fn verify_board(
                 return Ok(VerificationResult {
                     outcome: "capped".into(),
                     warnings: vec![
-                        "Lever listing exceeded 10,000 postings; absence cannot be inferred".into(),
+                        "Lever listing exceeded 10,000 postings; missing-scan counters are not advanced".into(),
                     ],
                     ..Default::default()
                 });
@@ -137,7 +137,7 @@ fn parse_greenhouse(json: &Value, board: &Board) -> Result<VerificationResult, S
         warnings: if complete {
             vec![]
         } else {
-            vec!["Greenhouse total differs from returned jobs; absence cannot be inferred".into()]
+            vec!["Greenhouse total differs from returned jobs; missing-scan counters are not advanced".into()]
         },
         ..Default::default()
     })
@@ -266,7 +266,7 @@ fn parse_html(html: &str, url: &Url) -> VerificationResult {
             Ok(value) => jsonld_jobs(&value, url, &mut result),
             Err(_) => result
                 .warnings
-                .push("Invalid JSON-LD block; page coverage is unknown".into()),
+                .push("Invalid JSON-LD block skipped".into()),
         }
     }
     careers.extend(result.careers_urls.drain(..));
@@ -282,7 +282,7 @@ fn parse_html(html: &str, url: &Url) -> VerificationResult {
     if board_count > 1 {
         result.jobs.clear();
         result.company_name = None;
-        result.warnings.push("Multiple ATS tenants are independent discovery hints; this page does not establish a shared employer".into());
+        result.warnings.push("Multiple ATS tenant URLs found; each uses its own provider/tenant company identity".into());
     }
     result.outcome = if !result.careers_urls.is_empty() {
         "resolved"
@@ -293,7 +293,7 @@ fn parse_html(html: &str, url: &Url) -> VerificationResult {
     }
     .into();
     result.warnings.push(
-        "HTML/JSON-LD extraction is partial and never establishes complete company job coverage"
+        "HTML/JSON-LD adapter records extracted jobs without adding missing observations"
             .into(),
     );
     result
@@ -316,7 +316,7 @@ fn jsonld_jobs(value: &Value, page: &Url, result: &mut VerificationResult) {
                 .is_some_and(|kinds| kinds.iter().any(|kind| kind.as_str() == Some("JobPosting")))
     });
     if is_job && !owns_jsonld_job(value, page) {
-        result.warnings.push("JobPosting employer ownership is unproven or external to this page; job and company name withheld".into());
+        result.warnings.push("JobPosting does not match this page's employer URL rule; job and company name omitted".into());
     } else if is_job {
         let raw_url = string(value, "url").unwrap_or_else(|| page.as_str().into());
         let job_url = page
@@ -326,7 +326,7 @@ fn jsonld_jobs(value: &Value, page: &Url, result: &mut VerificationResult) {
             .filter(|url| {
                 if let Some(board) = Board::from_url(url) {
                     result.careers_urls.push(board.url());
-                    result.warnings.push("ATS job URL requires independent tenant verification; generic page ownership is not inherited".into());
+                    result.warnings.push("ATS job URL uses a separate tenant adapter; generic page identity is not copied".into());
                     false
                 } else { owns_jsonld_job(value, url) }
             });
@@ -366,7 +366,7 @@ fn jsonld_jobs(value: &Value, page: &Url, result: &mut VerificationResult) {
 }
 
 fn directory_result() -> VerificationResult {
-    VerificationResult { outcome:"needs_adapter".into(), warnings:vec!["Third-party directory is a discovery source, not an employer job source; tenant-aware adapter required".into()], ..Default::default() }
+    VerificationResult { outcome:"needs_adapter".into(), warnings:vec!["Third-party directory collected as discovery; a tenant adapter is required for jobs".into()], ..Default::default() }
 }
 
 fn owns_jsonld_job(value: &Value, page: &Url) -> bool {
@@ -526,7 +526,7 @@ mod tests {
             result
                 .warnings
                 .iter()
-                .any(|warning| warning.contains("independent discovery hints"))
+                .any(|warning| warning.contains("each uses its own provider/tenant company identity"))
         );
     }
     #[test]

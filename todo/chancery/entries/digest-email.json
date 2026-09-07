@@ -68,7 +68,7 @@
       {"status": "declared", "statement": "Send returns Resend submission acceptance for one frozen message and idempotency key; recipient receipt is a separate external outcome."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Needs your decision, Needs follow-up, and Other open todos are current derived attention groups; empty groups are omitted and accepted desired state does not imply implemented work."},
+      {"status": "declared", "statement": "Needs your decision, Needs follow-up, and Other open todos are current derived attention groups; empty groups are omitted and accepted desired state leaves the umbrella open."},
       {"status": "declared", "statement": "The digest includes aggregate counts, titles or plain-language labels, typed references, and read-only inspection commands while excluding concern bodies, directions, notes, paths, detailed assessments or designs, choices, and evidence."}
     ],
     "identity_and_units": [

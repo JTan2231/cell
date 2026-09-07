@@ -2,7 +2,7 @@
 
 ## Result in one sentence
 
-Medium behaved like a fast, reliable extractor that built a flat glossary; high behaved like a much slower corpus editor that consolidated, nested, enriched, and retired concepts, but overused `uncertainties` and therefore left many strong proposals outside the automatically applied corpus.
+Medium built a flat glossary in less model time. High consolidated, nested, enriched, and retired concepts, and populated `uncertainties` on nine proposals. The experiment's application policy left those nine proposals pending.
 
 ## Controlled setup
 
@@ -11,12 +11,12 @@ Medium behaved like a fast, reliable extractor that built a flat glossary; high 
 - Medium used `gpt-5.6-terra` with medium reasoning; high used `gpt-5.6-sol` with max reasoning.
 - Both used `liaison-v1` and the same snapshotted Annals binary.
 - Execution order alternated by work so each arm ran first ten times.
-- A change was applied only when the model returned no uncertainties. There were no human edits.
+- A change was applied only when its `uncertainties` array was empty. There were no human edits.
 
-This is an end-to-end trajectory comparison, not 20 isolated paired trials.
+This compares two sequential corpus trajectories across 20 works.
 The models chose different concepts from the start. Their revision trajectories
-first diverged at work 3, when high's uncertain proposal was withheld; every
-subsequent run then saw its arm's accumulated corpus.
+first diverged at work 3, when high populated `uncertainties` and the runner
+left its proposal pending; subsequent runs saw their arm's accumulated corpus.
 
 ## Cohort
 
@@ -30,8 +30,7 @@ Two otherwise eligible sessions were excluded because they contained login,
 one-time-code, private-repository, or token-related material. The renderer kept
 only human-visible user and assistant messages. Visible messages from rolled
 back turns remained present to match the earlier rendering method. Works 16–18
-also contain copied-forward context, so their recurrence is interactional reuse
-rather than independent corroboration.
+also contain copied-forward context from earlier conversations.
 
 The exact source selection is in `manifest.json`; `manifest.lock.json` records
 the completed run's rendered hashes, source hashes, byte counts, and message
@@ -80,7 +79,7 @@ The complete live corpus was:
 - `Ordered concept forest`
 - `Ordered multi-parent concept graph`
 
-These are individually sensible and exactly grounded, but the relationships among them remain implicit. Medium is best understood as an evidence-linked glossary generator.
+Each concept links to an exact source quotation. Their relationships remain implicit in this run, whose output forms an evidence-linked glossary.
 
 ## What high built
 
@@ -126,15 +125,15 @@ Work 18 is the clearest contrast. Medium created `Single write boundary for mode
 
 ## Why high's final corpus is smaller
 
-High proposed more operations and twice as many evidence selectors, but it recorded an uncertainty on nine works. Under the experiment policy, all nine remained pending.
+High proposed more operations and twice as many evidence selectors, and populated `uncertainties` on nine works. Under the experiment's application policy, all nine remained pending.
 
-Some uncertainties are useful, such as distinguishing Computer Use guidance from a verified platform guarantee. Others are poorly calibrated as application blockers:
+The entries described Computer Use guidance and several source or corpus conditions:
 
 - no existing parent path was found;
-- the source describes a recommended design rather than implemented behavior;
-- the source itself states an interpretive limitation.
+- the source described a recommended design;
+- the source stated a qualification on its interpretation.
 
-Those are often provenance or scope qualifications that could live with an applied concept. High therefore looks better at hierarchy and evidence, but worse at autonomous throughput under the current all-or-nothing uncertainty policy.
+These entries are retained in the proposal records. Under that application policy, their presence determined which proposed operations entered the corpus seen by subsequent runs.
 
 Seven of high's nine pending proposals are now stale relative to HEAD. The last two share base revision 11, so applying either would stale the other. Medium's one pending proposal is also stale. They must be re-examined or resubmitted rather than applied as a batch.
 
@@ -159,9 +158,9 @@ The nine retained high proposals that did not enter the live tree were:
 9. `Ordered multi-parent DAG with a designated primary placement`, beneath the
    canonical text forest.
 
-Medium's sole pending proposal was the single-controller Computer Use
-guidance. These records retained their operations, exact quotations, summaries,
-uncertainties, and frozen base revisions even though they were not applied.
+Medium's sole pending proposal concerned single-controller Computer Use
+guidance. Pending records retained their operations, exact quotations,
+summaries, `uncertainties` entries, and frozen base revisions.
 
 ## What each database retained
 
@@ -174,15 +173,15 @@ history.
 
 ## Agreement and provenance
 
-The final corpora share only one exact path, `Strict local CI gate`. They share four exact source spans out of 27 medium and 33 high spans (Jaccard 0.0714). Across all proposals, including pending ones, they share 12 source spans out of 29 and 59 (Jaccard 0.1579). The models agree more often about useful evidence than about naming, placement, and whether a proposal is safe to apply.
+The final corpora share only one exact path, `Strict local CI gate`. They share four exact source spans out of 27 medium and 33 high spans (Jaccard 0.0714). Across all proposals, including pending ones, they share 12 source spans out of 29 and 59 (Jaccard 0.1579). Source-span selection overlapped more often than naming, placement, and application outcomes.
 
-Final evidence is overwhelmingly assistant-authored: medium has 26 assistant spans and one user span; high has 31 assistant spans, one assistant-commentary span, and one user span. Evidence proves what the retained conversation said, not independent truth. Copied-forward context in works 16–18 is interactional reuse rather than independent corroboration.
+Final evidence is overwhelmingly assistant-authored: medium has 26 assistant spans and one user span; high has 31 assistant spans, one assistant-commentary span, and one user span. Each link identifies a selected quotation from the retained conversation. Works 16–18 include copied-forward context from earlier conversations.
 
 ## Practical conclusion
 
-For the current unattended policy, medium is the better default: it applied 95% of works at one-fifth the model time. For ontology quality, consolidation, and historical correction, high is clearly more capable—but should be used as a reviewed consolidation mode until liaison guidance reserves `uncertainties` for genuinely unresolved choices.
+Under this experiment's unattended policy, medium applied 95% of works at one-fifth the model time. High used more consolidation and historical-correction operations, while the runner left its proposals with `uncertainties` entries pending.
 
-A useful next experiment would hold the corpus revision fixed for every work, run replicated trials, and revise uncertainty guidance before measuring again. That would separate preset quality from the compounding effects of autonomous corpus trajectories.
+A subsequent comparison could hold the corpus revision fixed for each work and replicate trials. That would allow the reported operation choices and runtime to be compared independently of the accumulated corpus trajectories and application policy.
 
 Both databases validate cleanly, their SQLite integrity and foreign keys are sound, and all locked input hashes match.
 

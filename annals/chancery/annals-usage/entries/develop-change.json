@@ -103,7 +103,7 @@
     "completeness_and_freshness": [
       {"status": "declared", "statement": "Every affected coverage case, attribution gap, rate-card limit, account scope, and upstream decoding boundary is updated explicitly in tests and telemetry documentation."},
       {"status": "declared", "statement": "Completion requires the full Annals product gate with coverage for affected reporting, diagnostics, login delegation, and requester output interpretation."},
-      {"status": "unspecified", "statement": "No development duration, external rate-card freshness, or guarantee about unrelated projections is promised."}
+      {"status": "unspecified", "statement": "No development duration or guarantee about unrelated projections is promised."}
     ],
     "access": [
       {"status": "declared", "statement": "The operation uses the current local workspace, filesystem, and shell through an interactive agent session under Annals repository instructions."},

@@ -137,7 +137,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Migration preserves historical Todo identities and records conservatively and does not infer cross-todo relationships, assessments, accepted design, implementation, or closure evidence."
+        "statement": "Migration preserves historical Todo identities, lifecycle, source references, notes and researched text in their documented destination records."
       },
       {
         "status": "declared",

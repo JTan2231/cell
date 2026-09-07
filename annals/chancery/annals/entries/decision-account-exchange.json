@@ -25,7 +25,7 @@
   "authority": [
     "Krisis owns decision identification, producer key, account meaning, bounded content, and source anchors.",
     "Annals owns the configured library and spool identity, accepted bytes, producer idempotency, job identity, event order, and feed projection.",
-    "A feed event reports acceptance, not objective truth, semantic relevance, processing success, or current force."
+    "A feed event records acceptance of one producer account into the dedicated library."
   ],
   "success": [
     "A created or replayed receipt identifies contract version, exact library, producer, key, SHA-256, stable original job, and acceptance time without content or paths.",
@@ -70,7 +70,7 @@
       {"status": "declared", "statement": "Watermark JSON reports contract and library identity plus an opaque token; page JSON echoes library, watermark, request_cursor and next_cursor and returns bounded accepted-account events."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Producer acceptance means Annals durably owns one exact complete spool copy and the immutable producer tuple; it is not source-delivery, processing, reconciliation, corpus, truth, relevance, or current-force success."},
+      {"status": "declared", "statement": "Producer acceptance means Annals durably owns one exact complete spool copy and the immutable producer tuple. Source delivery, processing, reconciliation, and corpus application have separate records."},
       {"status": "declared", "statement": "Each feed event projects the account ID, schema, statement, context, action, result, Unix occurrence time and precision, and exactly one host/thread/turn/item/span authority anchor without returning raw account bytes."}
     ],
     "identity_and_units": [
@@ -79,7 +79,7 @@
     ],
     "completeness_and_freshness": [
       {"status": "declared", "statement": "A watermark freezes every committed acceptance through one sequence; pages return the ascending prefix strictly after the requested cursor and no later than that watermark."},
-      {"status": "unsupported", "statement": "No historical Decisions rows, negative decision coverage, raw account body, dispatch result, semantic interpretation, correction, retraction, or consumer acknowledgement appears in feed version one."}
+      {"status": "unsupported", "statement": "No historical Decisions rows, records of decisions not accepted through this feed, raw account body, dispatch result, semantic interpretation, correction, retraction, or consumer acknowledgement appears in feed version one."}
     ],
     "access": [
       {"status": "declared", "statement": "The supported boundary is the local Annals CLI with an explicit decisions config; acceptance permits only producer krisis and feed commands are read-only."},

@@ -26,7 +26,7 @@
   ],
   "authority": [
     "Semantics owns project identity, routing, cursor persistence, intake transitions, stable concept IDs, typed-effect validation, and the SQLite commit.",
-    "Annals owns decisions-library identity, acceptance event order, immutable account projection, and feed cursors; Conversations owns exact thread cwd metadata; Nucleus owns model execution and mailbox transport; Clockwork owns scheduled activation metadata and process lifecycle; none owns semantic truth.",
+    "Annals owns decisions-library identity, acceptance event order, immutable account projection, and feed cursors; Conversations owns exact thread cwd metadata; Nucleus owns model execution and mailbox transport; Clockwork owns scheduled activation metadata and process lifecycle; Semantics owns the semantic revision commit.",
     "A participating project's source and tests remain runtime authority; its root AGENTS.md owns participation instructions."
   ],
   "success": [
@@ -39,7 +39,7 @@
     "Pause the affected project before semantic maintenance; paused state prevents a late Nucleus proposal from committing.",
     "A failed deployment restores prior selectors and the quiescent database plus sidecars. It restores the exact prior non-null Clockwork selection and enabled state, or restores the prior owned legacy LaunchAgent, never both. A previously absent or disabled-null binding becomes a disabled tombstone that may retain the candidate digest because Clockwork has no clear-selection operation; a previously disabled selected definition is restored without transient activation. Semantics retains exact release bytes for every registered immutable definition. Before releasing the worker flock, an unprovable rollback retains the release-independent maintenance gate, exact private current-release selector, authenticated hold, and recovery backup while attempting both scheduler cleanups and removing public selectors.",
     "Clockwork definition ownership is a point-in-time inspection rather than a compare-and-swap; Semantics serializes its own deploy and uninstall, while concurrent direct same-user mutation of `semantics/worker` is unsupported and may require maintenance-gated recovery.",
-    "New missing-route intake and preserved legacy unassigned or awaiting-review intake remain explicit. New accepted accounts never enter a confidence or review gate. Retry refuses an active or ambiguous prior Nucleus job and creates a new attempt only after positive terminal evidence.",
+    "New missing-route intake and preserved legacy unassigned or awaiting-review intake remain explicit. New accepted accounts are immediately eligible for reconciliation. Retry refuses an active or ambiguous prior Nucleus job and creates a new attempt only after positive terminal evidence.",
     "Never manufacture Annals or legacy Decisions cursors, edit SQLite, or clear a Nucleus correlation to force replay."
   ],
   "privacy": [

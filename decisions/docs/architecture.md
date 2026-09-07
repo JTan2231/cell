@@ -8,8 +8,7 @@ accounts of what was settled and what was observed by capture time.
 
 An eligible source is a completed default root interactive turn, active or
 archived, whose completion is after the write-once Krisis activation baseline
-and which contains at least one nonblank user message. There is no file-change,
-materiality, effect, enactment, current-force, or relevance gate.
+and which contains at least one nonblank user message.
 
 A decision is an attributable user transition from practical openness to an
 explicit settlement constraining intended future behavior or state. Only an
@@ -18,7 +17,8 @@ resolve a referential acceptance or describe context, action, or result; it
 cannot create a decision.
 
 Every admitted user authority receives exactly one durable `decision` or
-`no_decision` verdict. `no_decision` is negative coverage, not a quality claim.
+`no_decision` verdict. `no_decision` records that the examined message contains
+no user settlement in the selected classification scope.
 
 ## Source scopes
 
@@ -42,9 +42,8 @@ the single-tool set `krisis/decision-account-classification/1`. The only tool is
 `krisis.tool.submit-decision-account-classification.input.v1` and result schema
 `krisis.tool.decision-account-classification.result.v1`.
 
-The terminal result covers every authority and contains no confidence,
-disposition, review, supersession, importance, truth, enactment, or current-force
-field. Each decision account proposal contains an exact authority quote of at
+The terminal result supplies one verdict per authority and the account fields
+described below. Each decision account proposal contains an exact authority quote of at
 most 500 bytes, a 1–1,000-byte statement, nullable 1–1,000-byte context/action/
 result fields, and unique supporting aliases. At most 100 accounts may be
 returned. Krisis validates the whole result and derives stable IDs from the real

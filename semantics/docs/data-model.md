@@ -51,8 +51,8 @@ Markdown, authority quotation, transcript, path, diff, command, tool output,
 or project content. Account event insertion or an irrelevance decision and the
 scanner project's Annals cursor advance are one transaction.
 `account_intake_assignments` appends manual routing history. Every new account
-uses exact current cwd transiently for deepest-root ownership; it has no
-confidence or review state.
+uses exact current cwd transiently for deepest-root ownership and retains the
+selected project and routing outcome.
 
 The schema-one `intake_events`, `intake_assignments`, lifecycle envelope bytes,
 statuses, Decisions cursors, and review behavior remain intact for historical

@@ -22,7 +22,7 @@
     "Direct reconciliation submission validates a projected state but does not apply it."
   ],
   "authority": [
-    "The Annals library and canonical reducer own all corpus state, reconciliation, commit, revision, and provenance truth.",
+    "The Annals library and canonical reducer own all corpus state, reconciliation, commit, revision, and provenance records.",
     "No model or Nucleus job is required for deterministic library operations."
   ],
   "success": [

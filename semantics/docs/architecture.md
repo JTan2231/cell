@@ -34,10 +34,9 @@ terminology and its revision history.
    is used only during that routing call and is never copied into intake state
    or output; Semantics retains only the selected project and a fixed routing
    outcome.
-4. Every valid accepted account is immediately reconciliation-eligible. The
-   new path has no confidence, review, disposition, supersession, or
-   current-force gate. Preserved legacy admissions, reviews, and their states
-   are neither promoted nor reinterpreted.
+4. Every valid accepted account is immediately reconciliation-eligible.
+   Preserved legacy admissions, reviews, and their states retain their original
+   meanings.
 5. Semantics persists one stable Nucleus job correlation, supplies only the
    normalized statement/context/action/result and occurrence projection plus
    the complete selected repository snapshot, and exposes one successor

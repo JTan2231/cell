@@ -773,8 +773,8 @@ async fn register_cancellation_watch(
         .insert(job_id.to_owned(), sender.clone());
 
     // A cancellation can commit after attempt admission but before the sender
-    // is visible. Once the sender is installed, reread the durable source of
-    // truth. A later cancellation sees the sender; an earlier one is observed
+    // is visible. Once the sender is installed, reread the durable cancellation
+    // record. A later cancellation sees the sender; an earlier one is observed
     // here, so the run cannot start with a fresh false receiver.
     let cancellation_requested = state
         .store

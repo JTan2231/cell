@@ -295,8 +295,8 @@ identity is duplicated on each output row. All interpretations—methods,
 messages, usage observations, totals, coverage, and prices—belong to read-time
 or requester-owned pipelines.
 
-Lifecycle truth comes from job and attempt state, timestamps, cancellation, and
-terminal fields. A daemon restart marks unfinished attempts `lost` without
+Job and attempt state, timestamps, cancellation, and terminal fields record
+the execution lifecycle. A daemon restart marks unfinished attempts `lost` without
 adding a reporting row. Stderr is never persisted as chunks; a run retains only
 a bounded in-memory tail and adds its sanitized text to `terminalMessage` on
 failure. The complete stored `terminalMessage`, including the underlying

@@ -31,8 +31,7 @@ bytes. Titles need not be unique.
 
 New commits one row with a generated identity. Update atomically replaces the
 complete title and body of the selected row, keeps its identity, and updates
-`updated_at`. The timestamp is CRM write time as an RFC 3339 UTC string; it
-is not an experience date or a verification claim. There is no partial edit,
+`updated_at`. The timestamp is CRM write time as an RFC 3339 UTC string. There is no partial edit,
 revision precondition, merge, or history. The last committed replacement wins.
 Keep any desired prior content before replacing it.
 
@@ -69,18 +68,15 @@ to cases, or enforce rules found in Markdown. The caller owns corrections,
 interpretation, and any decision to supply selected text to another task.
 
 Input files are transient transport. CRM does not retain their paths, move or
-delete them, synchronize them, or create a parallel content tree. Storing an
-entry does not change another workflow's source of truth. Source facts and
-disclosure guidance remain attributable content rather than verified CRM
-claims. The database, backups, terminal display, and redirected output may
+delete them, synchronize them, or create a parallel content tree. Storing an entry leaves the source file and other workflows unchanged. Source material and disclosure guidance are stored as supplied Markdown. The database, backups, terminal display, and redirected output may
 contain private identity, contact, employment, eligibility, or preference
 information. Opening the database can enforce private database/sidecar
 permissions and WAL mode; list and show make no domain mutation.
 
 This capability grants no deployment, initialization, migration, source-file
 deletion, case change, external disclosure, or contact authority. It promises
-no external factual completeness, source freshness, database-size service
-level, execution latency, or future retention/deprecation window.
+no database-size service level, execution latency or future retention/deprecation
+window.
 
 ## Output selection
 

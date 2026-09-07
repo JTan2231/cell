@@ -14,8 +14,7 @@ large entity model. It stores accepted text in its private SQLite database. An
 input path is transport only: CRM does not retain it or create a Markdown file.
 
 CRM does not fetch a source, find an email address, send a message, or contact
-anyone. `--source` is an opaque caller-supplied reference. Resolve current
-facts through the referenced source before acting on them.
+anyone. `--source` is an opaque caller-supplied reference. CRM retains the reference with the delivery.
 
 The six case stages are:
 
@@ -23,8 +22,7 @@ The six case stages are:
 research | warranted | contacted | connected | helped | closed
 ```
 
-They are durable CRM classifications. `warranted` does not authorize contact,
-and `connected` or `helped` does not independently prove an external event.
+They are stored CRM classifications that summarize the case's lifecycle.
 
 ## Create a case
 

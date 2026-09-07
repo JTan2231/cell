@@ -10,7 +10,7 @@
       "CRM owns mutable profile entry identity, exact profile Markdown, private case identity, exact retained intake, immutable case revisions, stage and advisory state, queued update and retry lifecycle, requester correlation and replay-safe tool receipts, deterministic library reads, and its product packaging."
     ],
     "not_authoritative_for": [
-      "Callers and cited sources remain authoritative for supplied real-world facts, while Nucleus owns agent execution; CRM does not authorize contact, send a message, or independently prove an external connection or employment outcome."
+      "Callers supply library material and handle contact actions. Nucleus owns agent execution."
     ],
     "inventory": {
       "covers": [

@@ -63,9 +63,9 @@ and have stable IDs, so replay is safe. Continue from `next_cursor`; when a page
 is empty it is byte-for-byte the submitted `--after` value. Annals records no
 consumer acknowledgement.
 
-Do not decode cursor contents or fetch the authority anchor. The feed omits raw
-Markdown and general-library content. It does not express confidence, review,
-disposition, supersession, relevance, relationships, truth, or current force.
+Do not decode cursor contents or fetch the authority anchor.
+The feed returns accepted-account metadata from the dedicated decisions
+library.
 
 ## Recover safely
 

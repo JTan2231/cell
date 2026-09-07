@@ -31,9 +31,8 @@ reliance with no dedicated versioned contract is reported as a gap.
 
 Each provider scope says what the provider is authoritative for, what it is
 not authoritative for, and the meaningful surface class within which its
-inventory is complete or partial. Completeness does not mean “whatever this
-bundle happened to index,” nor does it mean every behavior of every installed
-product is published.
+inventory is complete or partial. The provider names that surface class
+independently of the entry index.
 
 Existing entry fields provide applicability, outcome, supported interfaces,
 effects, authority, success evidence, failure and recovery, privacy,
@@ -43,7 +42,7 @@ normalized boundary facets that were previously only prose:
 - consumers and preconditions;
 - inputs, outputs, and data semantics;
 - identity and units;
-- completeness and freshness;
+- selected-record coverage and observation times (`completeness_and_freshness`);
 - access;
 - lifecycle and consistency;
 - operational limits;

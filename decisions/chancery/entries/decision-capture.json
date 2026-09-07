@@ -13,7 +13,7 @@
   ],
   "do_not_use_when": [
     "Decision accounts should be searched or read after acceptance; use Annals.",
-    "A daily digest, review judgment, supersession graph, truth assessment, or current-force projection is wanted.",
+    "A daily digest, candidate-review workflow, or supersession graph is wanted.",
     "Raw transcripts, files, commands, tools, reasoning, or assistant-only proposals are intended as decision authority."
   ],
   "outcome": "Complete durable decision or no-decision coverage for one eligible completed turn and, for each decision, an idempotently accepted immutable account in the configured Annals decisions library.",
@@ -57,7 +57,7 @@
   ],
   "does_not_authorize": [
     "Deploying or changing live schedules, Annals libraries, Nucleus registrations, authentication, or existing state.",
-    "Treating Nucleus output, assistant prose, observed action/result, or Annals acceptance as decision authority or truth.",
+    "Using a source other than the cited user message to authorize a decision.",
     "Reading or mutating either product's SQLite database directly, widening classifier scope, or restoring retired digest/review behavior."
   ],
   "promise": {
@@ -80,13 +80,13 @@
         "statement": "Activation, hook, process and Annals acceptance receipts retain their documented identity and domain meaning. Observer status retains complete counts and at most 20 failure IDs/codes by default, with failures_has_more and positive --limit for more. Full source-account and legacy lifecycle reads preserve their existing schemas and authority."
       },
       {
-        "status": "unsupported",
-        "statement": "Krisis publishes no confidence, disposition, review, supersession, importance, current-force, enactment, truth, or longitudinal result field."
+        "status": "declared",
+        "statement": "Account outputs contain the statement, captured context/action/result, exact authority span, and supporting source aliases."
       }
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Decision means an attributable user settlement constraining intended future behavior or state; no-decision is durable negative coverage for one authority."},
-      {"status": "declared", "statement": "Context, action, and result are observations available at capture time and do not affect eligibility; Unknown means not observed, not false or pending."},
+      {"status": "declared", "statement": "Context, action, and result record observations available at capture time; Unknown means no observation was captured for that field."},
       {"status": "declared", "statement": "Annals created and replayed both mean the exact producer key and digest were accepted by the configured dedicated library."}
     ],
     "identity_and_units": [

@@ -52,7 +52,6 @@
   ],
   "does_not_authorize": [
     "Publication, upload, public-profile editing, job search, or job-application submission.",
-    "Treating generated narrative text as factual authority.",
     "Automatically retrying a terminal Weaver run or lost Nucleus attempt."
   ],
   "promise": {
@@ -73,7 +72,7 @@
       {"status": "declared", "statement": "Status and wait expose exact stage and terminal state, while deterministic check returns PASS or REVISE as successful validity outcomes and BLOCKED as a nonpublishable diagnostic."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Generated files are current working artifacts rather than factual authority or retained run history; Nucleus job completion alone is not Weaver domain success."},
+      {"status": "declared", "statement": "Generated files are current working artifacts for the editorial stages. Weaver records success after persisting and mechanically validating the required outputs."},
       {"status": "declared", "statement": "Review verdict PASS, REVISE, or BLOCKED is mechanically validated, and BLOCKED contains no publishable narrative."}
     ],
     "identity_and_units": [
@@ -83,7 +82,7 @@
     "completeness_and_freshness": [
       {"status": "declared", "statement": "Successful wait requires all five current nonempty outputs plus passing mechanical anchors, links, verdict, and final-consistency validation against the selected repository."},
       {"status": "declared", "statement": "Each stage snapshots its selected inputs immediately before request construction; completed earlier outputs remain if a later stage fails and later unfinished outputs remain absent."},
-      {"status": "unsupported", "statement": "Mechanical validity does not establish factual truth, editorial freshness after later authored changes, publication readiness, or external acceptance."}
+      {"status": "unsupported", "statement": "Re-running editorial stages after authored changes and publishing output are outside mechanical checking."}
     ],
     "access": [
       {"status": "declared", "statement": "Only the detached child of the interactive Weaver CLI reads and writes the selected repository; the Nucleus invocation uses Weaver private state as a read-only working directory and receives embedded content."},
@@ -95,7 +94,7 @@
     ],
     "operational_limits": [
       {"status": "declared", "statement": "Only one current workflow may be active, stages run sequentially, each stage has one attempt, and Weaver owns no daemon, LaunchAgent, completed-run archive, or automatic terminal-run retry."},
-      {"status": "unspecified", "statement": "No total workflow duration, model-quality, maximum input size beyond repository validation, or publication service-level objective is promised."}
+      {"status": "unspecified", "statement": "No total workflow duration, maximum input size beyond repository validation, or publication service-level objective is promised."}
     ],
     "compatibility_and_evolution": [
       {"status": "declared", "statement": "Capability contract version 1 uses Weaver's documented repository tree, five-stage order, typed current-state format, and Nucleus invocation protocol 1 without requiring lockstep Nucleus product versions."},

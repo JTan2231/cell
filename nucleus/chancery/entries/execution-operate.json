@@ -146,7 +146,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "A job is Nucleus's durable record for one admitted typed request and exactly one version-one attempt; terminal job or attempt state describes runtime execution rather than requester-domain truth."
+        "statement": "A job is Nucleus's durable record for one admitted typed request and exactly one version-one attempt; terminal job or attempt state records the outcome of that runtime execution."
       },
       {
         "status": "declared",

@@ -35,8 +35,8 @@ index is disposable and derived; provider bundles remain authoritative.
 | Cross-capability choreography | The installed operation manual; each participant keeps its own domain authority |
 | Product implementation and release | Owning product |
 
-This prevents Chancery from becoming a second copy of product truth. It also
-prevents a syntactically valid document from being mistaken for runtime proof.
+Chancery presents the product-owned contracts. Runtime readiness is reported
+through the represented product's operating interface.
 
 ## One-way intersystem dependencies
 
@@ -81,8 +81,10 @@ applicability, outcome, interface, effects, authority, success, failure and
 recovery, privacy, dependencies, and exclusions. An optional schema-3
 declaration normalizes the facets that otherwise tend to remain prose:
 consumers, preconditions, inputs, outputs, data semantics, identity and units,
-completeness and freshness, access, lifecycle and consistency, operational
-limits, compatibility and evolution, and substantive reliances.
+selected-record coverage and observation times, access, lifecycle and
+consistency, operational limits, compatibility and evolution, and substantive
+reliances. The `completeness_and_freshness` facet names the selected records or
+operation whose scope and timestamps it describes.
 
 Every normalized claim is explicitly `declared`, `unsupported`, `unspecified`,
 or `not_applicable`. Omission is resolver-generated `undeclared`, never a

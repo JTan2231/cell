@@ -11,7 +11,7 @@
     "A ready, rejected, or abandoned design needs provenance-bearing correction or explicit decision."
   ],
   "do_not_use_when": [
-    "The current situation is unknown, stale, inconclusive, or still needs a material user choice.",
+    "The todo has no current ready assessment, or the selected assessment still records an unresolved user choice.",
     "The requested artifact is a task list, sequence, estimate, file edit, command, deployment, or implementation record.",
     "The owning umbrella is completed, superseded, or otherwise not open and canonical."
   ],
@@ -32,7 +32,7 @@
     "Acceptance succeeds only while the exact assessment and umbrella bases remain current and stores the decision-source path."
   ],
   "failure_and_recovery": [
-    "When evidence is insufficient or stale, the liaison records a durable assessment return instead of inventing desired state.",
+    "When the selected assessment has missing inputs or changed bases, the liaison records a durable assessment return naming those references.",
     "A run ending with an open draft marks it abandoned; inspect and correct it explicitly rather than treating it as ready.",
     "A newer assessment blocks acceptance and correction against the older basis; reassess and reconcile again."
   ],
@@ -84,7 +84,7 @@
     "completeness_and_freshness": [
       {"status": "declared", "statement": "A ready design has no active choices, includes all nine clause kinds, and collectively covers the direction body, every structured direction boundary, and every active predecessor operation."},
       {"status": "declared", "statement": "Proposal, correction, and acceptance bind and recheck one exact current assessment and exact umbrella bases; a newer assessment blocks correction and acceptance against the older basis."},
-      {"status": "unsupported", "statement": "Design completeness does not establish current external facts, implementation completeness, deployment readiness, or execution success."}
+      {"status": "declared", "statement": "Design records contain proposed responsibility assignments, clauses, bases and user decisions."}
     ],
     "access": [
       {"status": "declared", "statement": "The current-user Todo CLI uses a constrained Nucleus liaison for propose or correct and deterministic direct Todo writes for accept or reject."},

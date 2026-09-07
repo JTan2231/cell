@@ -13,10 +13,9 @@ is not part of Cell and Nucleus is not its workflow engine.
 | Nucleus | Content-only invocation admission, Codex supervision, authentication, cancellation, job state, structured final output, and raw prompt/protocol history |
 | Interactive caller | Starts a detached Weaver worker with the file-access context needed for every selected repository read and write |
 
-Nucleus completion alone is not a successful narrative build. Weaver must
-persist every required stage output and pass the repository's mechanical
-validation. Conversely, Weaver never treats its generated text as a factual
-source and never publishes it.
+Weaver records a successful narrative build after persisting every required
+stage output and passing the repository's mechanical validation. The generated
+text remains in the selected narrative repository.
 
 ## Capability publication
 

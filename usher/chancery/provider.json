@@ -11,8 +11,7 @@
       "The separate usher-install executable owns Usher installation policy, immutable releases, command and provider selectors, integrity verification, and supported retained-release recovery using the shared cell-install library."
     ],
     "not_authoritative_for": [
-      "Products own their identity and provider declarations; Semantics owns actual project registration and vocabulary, and Chancery owns complete bundle validation and installed discovery.",
-      "Each system owns its affairs with other systems. Recognition has no authority over agreement coverage, relationship quality, implementation conformance, actual installation, or readiness; the installer operates only Usher-owned release artifacts and selectors."
+      "Products own their identity and provider declarations; Semantics owns actual project registration and vocabulary, and Chancery owns complete bundle validation and installed discovery."
     ],
     "inventory": {
       "covers": [

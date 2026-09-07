@@ -2,16 +2,16 @@
 
 ## Result in one sentence
 
-The new reconciliation contract let both presets apply all 20 works, but medium
-built a readable 142-concept synthesis while high spent 4.76 times as long to
-build a much more exhaustive 463-concept, depth-eight historical graph; neither
-preset ever revised or removed existing corpus material.
+The new reconciliation contract let both presets apply all 20 works. Medium
+built a 142-concept synthesis; high spent 4.76 times as long to build a
+463-concept, depth-eight historical graph. Neither preset revised or removed
+existing corpus material.
 
 ## Question and controlled setup
 
 This experiment reran the exact 20 rendered conversations from experiment 3
 against commit `59bf8658e97e886c8881396ac37383c054c3ce17`, which introduced
-the `liaison-v2` best-current-reconciliation prompt and contract.
+the `liaison-v2` reconciliation prompt and contract.
 
 - The locked inputs are byte-for-byte identical to experiment 3: 20 works,
   418,410 UTF-8 bytes, 69 user messages, and 232 assistant messages.
@@ -103,13 +103,12 @@ depths one through eight. The largest root alone contained 58.3% of all high
 concepts. High averaged 2.52 evidence links per concept, reflecting a much
 finer-grained decomposition rather than weaker total coverage.
 
-High was substantially better at preserving successive proposals, reported
-implementation states, limitations, and source stance. Its 18 annotations
-explicitly distinguished such things as superseded segmentation proposals,
-current versus proposed topology, earlier versus later release policies, and
-time-bound implementation reports. Because annotations are inert under v2,
-this nuance no longer blocked application as `uncertainties` did in experiment
-3.
+High separately represented more successive proposals, reported implementation
+states, limitations, and source stance. Its 18 annotations distinguished
+superseded segmentation proposals, current versus proposed topology, earlier
+versus later release policies, and time-bound implementation reports. Under
+v2, annotations are inert. Experiment 3 instead withheld proposals whose
+`uncertainties` array contained entries.
 
 The cost is an unwieldy historical knowledge graph. High placed most liaison
 and Annals implementation material beneath the retrieval root, producing paths
@@ -137,14 +136,14 @@ Other useful paired contrasts were:
   ontology, ingestion, classification, storage, analysis, and delivery state.
 - Work 3: both used exactly 39 evidence selectors, but medium created seven
   concepts while high created 20. High separated month-specific claims and
-  epistemic cautions that medium grouped together.
+  source qualifications that medium grouped together.
 - Work 14: medium performed nine evidence additions and created nothing. High
   performed 19 additions and created 11 narrow retrieval and segmentation
   concepts.
 - Works 16 through 18: medium used 39 operations and 71 evidence selectors;
-  high used 160 operations and 282 selectors to preserve successive drafts and
-  alternatives. Those works contain copied-forward context, so this recurrence
-  is interactional reuse, not independent corroboration.
+  high used 160 operations and 282 selectors to retain successive drafts and
+  alternatives. Those works include copied-forward context from earlier
+  conversations.
 
 ## Pure accretion rather than editorial reconciliation
 
@@ -153,11 +152,10 @@ Both arms used only `create_concept` and `add_evidence`. Neither arm ever used
 equal no-op reconciliation. Every initially chosen label and placement
 therefore survived through revision 20.
 
-This is the most important weakness exposed by the run. The v2 prompt achieved
-high autonomous throughput and much broader representation, but it did not
-induce either preset to reorganize or prune a growing corpus. High's
-exhaustiveness will compound unless a later work or dedicated consolidation
-mode reliably exercises the corrective operations.
+Both presets applied every work and added concepts and evidence, but neither
+reorganized or pruned the growing corpus in this run. High's larger graph
+records more separate concepts. A later experiment could examine which inputs
+lead each preset to use revision and removal operations.
 
 ## Agreement
 
@@ -188,8 +186,8 @@ Final evidence roles were:
 | User | 21 | 73 |
 | Synthetic renderer preamble | 0 | 9 |
 
-Evidence establishes what the retained conversation said, not independent
-truth. The high arm also interpreted the runner-injected sentence
+Evidence links identify selected quotations from the retained conversations.
+The high arm also interpreted the runner-injected sentence
 `Recovered from a local Codex session. This transcript includes only
 human-visible user and assistant messages.` as semantic content. Nine links
 across nine works grounded three artifact concepts:
@@ -227,10 +225,10 @@ efforts, ordering, and independent trajectory design are the same, but three
 things changed together:
 
 1. the liaison prompt changed from `liaison-v1` to `liaison-v2`;
-2. the proposal/outcome/uncertainty contract became the reconciliation and
+2. the proposal/outcome/`uncertainties` contract became the reconciliation and
    inert-annotation contract;
-3. the application policy changed from withholding uncertain proposals to
-   mechanically applying every changing projection.
+3. the application policy changed from withholding proposals with entries in
+   `uncertainties` to mechanically applying every changing projection.
 
 The observed differences are nevertheless large. Experiment 3 ended with 21
 medium and 13 high concepts, 27 and 33 evidence links, and nine unapplied high
@@ -245,10 +243,10 @@ Medium is the better default corpus builder when latency, balance, and
 browsability matter. It produced a coherent 142-concept map in about 33
 minutes while covering one quarter of the source bytes.
 
-High is preferable when the goal is near-exhaustive recall of atomic facts,
-reported states, and qualifications. It covered more than half the source and
-retained far more epistemic nuance, but required about 2 hours 37 minutes and
-produced a 463-concept tree that needs consolidation.
+High selected quotations covering more than half the retained source bytes
+and represented more reported states and source qualifications separately. It
+required about 2 hours 37 minutes and produced a 463-concept tree without
+using consolidation operations in this run.
 
 A practical policy is medium by default, with high reserved for unusually
 dense or high-value works. The next experiment should remove the renderer
@@ -264,9 +262,9 @@ snapshot-to-live-state comparison. Both indexes were current. Every work,
 input snapshot, runner snapshot, and binary hash matched its lock/configuration.
 All 40 process logs exited successfully.
 
-The run used Codex CLI `0.146.0`. No random seed, temperature, or backend
-sampling state was controlled, and there was one trial per work and arm. There
-was no external judge or semantic correctness score.
+The run used Codex CLI `0.146.0`. There was one trial per work and arm, without
+controlling random seed, temperature, or backend sampling state.
+The comparison reports recorded operations, source selections, and runtime.
 
 The exact historical runner is preserved rather than retroactively hardened.
 Its standalone `report` command does not independently require a complete

@@ -2,9 +2,8 @@
 
 This manual is the starting point for operating Nucleus, changing a boundary
 shared by Nucleus and its requesters, or adding a new requester. It describes
-current operational truth and safe change ordering. It is not a backlog,
-changelog, protocol specification, global capability directory, or substitute
-for a requester's domain documentation.
+current operations and safe change ordering. Product documentation describes
+each requester's domain records and interfaces.
 
 The checked-in file is canonical. An installed, version-matched Nucleus CLI
 prints the same Markdown without contacting the daemon:
@@ -59,16 +58,16 @@ separately maintained discovery catalog.
 | System | Use it when | It owns | Do not use it for |
 | --- | --- | --- | --- |
 | Todo | An actionable concern or follow-up should be researched and retained for later. | Concern provenance, routing and its explicit decisions, stable todo identities, dated situation assessments, proposed or accepted designs, open/done state, and working notes. | Work requested for immediate completion, general knowledge, implementation execution, or shared runtime policy. |
-| CRM | Employment-relevant people, opportunities, and contemplated contact should be retained as evidence-grounded cases, or reusable career profile material should be stored. | Its local SQLite library, mutable Markdown profile entries, queued steward runs, immutable case revisions, evidence, and advisory review notes. | Sending or authorizing outreach, scheduled intake, treating an advisory as a gate, or storing CRM domain state in Nucleus. |
-| Cast | Previously unknown employers and job postings should be discovered and monitored through ordinary HTTP. | Private discovery records, company/job identities, extracted evidence, source coverage and freshness, local request budgets, query configuration and consistent exports. | Personal selection, CRM stewardship, application packets, email, application submission or agent execution. |
+| CRM | Employment-relevant people, opportunities, and contemplated contact should be stored as cases, or reusable career profile material should be stored. | Its local SQLite library, mutable Markdown profile entries, queued steward runs, immutable case revisions, evidence, and advisory review notes. | Sending or authorizing outreach, scheduled intake, treating an advisory as a gate, or storing CRM domain state in Nucleus. |
+| Cast | Previously unknown employers and job postings should be discovered and monitored through ordinary HTTP. | Companies and jobs with stable identities, posting inputs, collection request outcomes and observation times, local request budgets, query configuration and consistent exports. | Personal selection, CRM stewardship, application packets, email, application submission or agent execution. |
 | Platter | A retained Cast opportunity needs a private paragraph brief and resume with only Jackson bullets tailored, or a dated edition should be previewed and explicitly sent. | Captured posting/career/template inputs, accepted Nucleus stages, fixed-template rendering, opportunity exclusion, frozen editions and recorded send outcomes. | Discovery, CRM editing, changes to fixed resume content, employer contact, applications, or an installed recurring delivery service. |
-| Annals | Immutable source material should be retained or reconciled with an evidence-grounded conceptual corpus, or that corpus should be searched or explored. | Each selected physical library's retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, cross-library federation, or account telemetry. |
-| Weaver | Authored repository inputs should become the current five-stage public-facing narrative outputs. | Current-run admission, stage order and input snapshots, repository output writes, validation, cancellation intent, and recovery. | Publishing, editing a public profile, treating generated text as factual authority, or general job orchestration. |
+| Annals | Immutable source material should be retained or reconciled with a conceptual corpus, or that corpus should be searched or explored. | Each selected physical library's retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, cross-library federation, or account telemetry. |
+| Weaver | Authored repository inputs should become the current five-stage public-facing narrative outputs. | Current-run admission, stage order, authored input snapshots, generated repository outputs, validation, cancellation intent, and recovery. | Publishing, editing a public profile, or general job orchestration. |
 | Email | A plain-text email, optionally with authorized local file attachments, should be sent to the single fixed recipient. | The synchronous frozen Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, remote attachment URLs, or agent execution. |
 | Conversations | Codex tasks on this Mac should be listed, inspected, or searched. | A read-only normalized view over the normal user's Codex App Server. | Decision classification, durable projections, live-process supervision, or Nucleus's isolated job history. |
-| Krisis | Attributable decisions in completed root user turns should be identified and delivered as immutable accounts to the dedicated Annals decisions library. | The observation baseline and coverage, bounded classification, source anchors, account projection, durable outbox, Annals acceptance receipts, and recovery. | Judging truth, importance, applicability, enactment, current force, review state, supersession, retaining the canonical account library, or sending a digest. |
-| Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from accepted accounts in the dedicated Annals decisions library. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, decision-feed intake, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, transcript storage, or interpreting Annals retention as semantic truth. |
-| Usher | A Cell checkout's declared membership should be reported or required in CI, or Usher's own installation should be verified or recovered. | Deterministic recognition of product identity, Semantics participation, and Chancery introduction evidence; a separate installer owns Usher release and selector operations. | Proving other products' actual registration or installation, relationship quality, readiness, or other inter-system affairs. |
+| Krisis | Attributable decisions in completed root user turns should be identified and delivered as immutable accounts to the dedicated Annals decisions library. | The observation baseline and coverage, bounded classification, source anchors, account projection, durable outbox, Annals acceptance receipts, and recovery. | Retaining the canonical account library, running the legacy candidate-review workflow, or sending a digest. |
+| Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from accepted accounts in the dedicated Annals decisions library. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, decision-feed intake, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, or transcript storage. |
+| Usher | A Cell checkout's declared membership should be reported or required in CI, or Usher's own installation should be verified or recovered. | Deterministic recognition of product identity, Semantics participation, and Chancery introduction evidence; a separate installer owns Usher release and selector operations. | Operating other products' registrations, installations, or services. |
 | Nucleus | A local application needs constrained agent execution, or shared execution, authentication, compatibility, job history, deployment, or requester integration must change. | Admission, the portable invocation contract, eight-slot harness supervision, single-authority credential coordination, cancellation, exact harness-stdout observations, and the durable dynamic-tool mailbox. | Domain success, project registration, workflow graphs, requester retry policy, or reporting materializations. |
 | Annals Usage | Annals-attributed model consumption, account allowance, login, or the Annals-to-Nucleus execution path must be inspected. | Live calculation over Annals attribution and Nucleus output atoms, plus Annals-facing budget and diagnostic commands. | Nucleus runtime authority, durable reporting projections, Codex credential storage, Annals corpus success, or general job orchestration. |
 | Codex | Nucleus needs an inspected harness and account protocol implementation. | Its executable and app-server behavior. | Requester domain policy or a second credential authority for Nucleus jobs. |
@@ -166,7 +165,8 @@ interactive agent ----------- reads ----> Chancery
 ```
 
 Todo's concern-routing, situation-assessment, and design-reconciliation
-research follows the Todo-to-Nucleus arrow. Deterministic concern capture,
+stages use Nucleus to examine their selected inputs and record proposals,
+assessments, and designs. Deterministic concern capture,
 reads, lifecycle changes, routing/design authorization, and email commands use
 Todo's SQLite database directly. In particular, an authorization command
 cannot be invoked by a model, and the optional daily email path calls Resend
@@ -189,14 +189,15 @@ the sole authority for that result. Advisory review notes are prominent on
 every CRM consumption surface but never block capture, revision, or later
 action. CRM has no scheduler and no direct-Codex fallback.
 
-Cast is an ordinary Rust discovery CLI with its own private SQLite state. It
-searches configured providers, follows public careers sources, and retains
-distilled employer/posting evidence, coverage, freshness and conservative local
-budget accounting. It invokes no Nucleus job, CRM steward, browser, packet
-builder or email sender. Downstream products consume its supported snapshot
-and retain their own selection, application and notification state. Collection
-success is the committed evidence and explicit coverage outcome; provider
-failure or partial collection cannot establish that a job closed.
+Cast stores companies and jobs in its private SQLite database. Its ordinary
+Rust and HTTP collection commands search configured providers and read public
+careers sources. Each collection records request outcomes, observation times,
+and local budget accounting alongside company and job updates. Downstream
+products consume its supported snapshot and retain their own selection,
+application and notification state. Failed or partial collections retain their
+request diagnostics. Only completed employer/ATS scans advance missing-scan
+counters. Cast invokes no
+Nucleus job, CRM steward, browser, packet builder or email sender.
 
 Platter is a requester CLI with a maintained installation route and no
 automatically activated delivery service. Unchanged prior-installation recovery proves retained state compatibility
@@ -206,7 +207,7 @@ verification requires full readiness. New work uses requester program
 identity and bytes. One packet ID
 correlates a brief job followed by a resume job, both using exact model
 `gpt-5.6-sol` at `max` effort. The runner consumes Cast's supported export,
-fetches full employer posting evidence, and captures CRM profile entries
+fetches full posting text, and captures CRM profile entries
 through supported list/read operations. Each model independently chooses
 which entries to inspect through `list_career_entries` and
 `read_career_entry`, served from the same retained career snapshot. Separate
@@ -215,14 +216,14 @@ and refuses an incomplete list. CRM retains editing authority.
 
 New brief jobs use `platter/brief/2` and
 `platter.submit-brief.arguments.v2` to submit `why_it_works`, `role`, optional
-`culture` and private `pursue`. Why it works gives one or two direct, confident,
-evidence-grounded sentences of at most 45 words. Role states stack,
+`culture` and private `pursue`. Why it works gives one or two direct sentences based on captured inputs,
+of at most 45 words. Role states stack,
 responsibilities and process in one or two short lines of at most 30 words;
 Culture states working norms in one or two short lines of at most 25 words.
 Role and Culture do not compare the opportunity with the user's experience.
-Culture is omitted when the posting or existing captured material does not
-support it, with no extra research or uncertainty note. Displayed section
-content totals at most 90 words and contains no caveats, downsides or hedging.
+Culture uses working norms described in the posting or other captured material;
+otherwise the section is omitted. Displayed section content totals at most 90
+words and contains no caveats, downsides or hedging.
 The pursuit criteria remain private. Platter renders labeled blocks into the
 existing brief `paragraph` string; retained v1 requests and accepted outputs
 remain supported without rewriting them.
@@ -240,7 +241,8 @@ Platter freezes at most three previously unsent ready packets in one dated
 edition, including exact briefs, copied PDFs and attachment digests. New
 editions separate headers and brief blocks with whitespace and omit the
 packet-count footer; existing frozen editions remain unchanged. It
-rechecks posting evidence before creating a new edition and reserves selected
+fetches posting inputs again before creating a new edition, defers packets
+whose inputs changed or could not be fetched, and reserves selected
 opportunities against later editions. Explicit `send` validates retained
 attachment digests and invokes Email with a stable edition key; only an
 `Accepted ID` receipt records submission acceptance. Uncertain sends remain
@@ -255,8 +257,7 @@ Cast, CRM, posting HTTP, Nucleus or rendering call. The `[TEST]` payload,
 copied PDFs, hashes, stable key and receipt live under private
 `ad-hoc/RUN_ID/`; normal packet reservations, editions and sent flags remain
 unchanged. A repeated accepted test is a no-op, and uncertainty stays held.
-Retained posting evidence is not refreshed, so this path supplies no new
-vacancy-freshness proof and consumes no Cast API budget.
+This path uses retained posting inputs and makes no Cast or posting request.
 Optional reviewed paragraph overrides are frozen only in the test occurrence
 beside the original accepted brief and source-state hashes; ordinary brief
 and resume artifacts remain unchanged. Packet selection may include previously
@@ -316,16 +317,15 @@ is deferred or failed closed rather than recorded as no decision.
 For each identified decision, Krisis records enough operational state to retry
 one deterministic Markdown account containing context, decision statement,
 observed action, observed result, and one exact user-authority source span.
-Unobserved context, action, or result is represented explicitly; it is not
-inferred. Krisis retains observation coverage, classifier correlation, its
+Context, action, or result fields with no captured observation are recorded as
+Unknown. Krisis retains observation coverage, classifier correlation, its
 outbox, and Annals acceptance receipts, but the dedicated Annals decisions
 library is the durable account collection. Once the receipt commits, Krisis
 retires its local account prose, quotation, and non-authority support anchors;
 only the delivery ledger, digest, binary coverage, job correlation, and exact
 authority anchor remain. Idempotent Annals acceptance is the delivery boundary.
-Krisis does not retain an active candidate-review lifecycle,
-send a digest, or judge confidence, disposition, truth, relevance, importance,
-applicability, supersession, enactment, or current force. Its one-shot runner is
+Krisis records one verdict per user authority and delivers the resulting
+accounts to Annals. Its one-shot runner is
 activated by the independent `krisis/observer` Clockwork binding only after a
 separately authorized cutover; legacy Decisions schedules and lifecycle history
 remain disabled, readable compatibility state.
@@ -338,8 +338,7 @@ registered root's `AGENTS.md` still establishes participation. The worker
 resolves each accepted account's authority task through Conversations and routes
 its exact cwd to the deepest registered root. A known cwd outside every root is
 irrelevant; missing or non-unique authority and routing data remains explicit
-unassigned intake. Every valid accepted account is eligible without confidence
-or review gates. Semantics submits only its minimized account projection and the
+unassigned intake. Every valid accepted account is immediately eligible for reconciliation. Semantics submits only its minimized account projection and the
 selected repository snapshot to Nucleus, with workspace access `none`, no shell,
 and no web. Its SQLite commit, not Annals retention, Nucleus completion, or
 generated prose, is semantic authority. Legacy Decisions cursors, intake,
@@ -434,10 +433,8 @@ does not invoke Cargo.
 Usher reads every `pipeline/products/*.sh` descriptor as literal data and
 requires an unambiguous product identity/root, an exact root Semantics marker,
 and recognizable product-owned Chancery introduction material. Its report
-keeps missing, invalid, and unassessed evidence visible. A declaration does not
-prove Semantics registration, vocabulary quality, Chancery installation, full
-bundle validity, capability completeness, or runtime readiness. Other systems'
-relationships are outside Usher's jurisdiction. Root CI's source check is
+keeps missing, invalid, and unassessed declarations visible. Each finding names
+the checked repository inputs and the applicable recognition rule. Root CI's source check is
 read-only; it never queries or registers live services. See
 [`usher/README.md`](../../usher/README.md) for exact evidence rules and exit codes.
 
@@ -695,7 +692,7 @@ separately authorized Clockwork and product deployment. This source change does
 not install Clockwork or perform that cutover. Until then, the existing
 Annals inbox scheduler plus `org.decisions.daily-email`,
 `org.decisions.observer`, and `org.semantics.worker` LaunchAgents remain the
-installed runtime truth. Never load a legacy product scheduler and its
+installed schedulers. Never load a legacy product scheduler and its
 Clockwork successor together.
 
 The complete Nucleus state directory is sensitive. The database can contain
@@ -757,7 +754,7 @@ templates. It creates or migrates only the dedicated config, database, spool,
 logs, and `annals/decisions-inbox` binding. Use its `--keep-maintenance`
 handoff while the outer Krisis/Semantics cutover establishes the feed watermark
 and consumer activation. The pre-cutover primary Annals scheduler remains
-installed truth until a separately authorized handoff. Pause each active Annals
+installed until a separately authorized handoff. Pause each active Annals
 config independently when its domain admission must stop. Todo's optional
 `~/Library/LaunchAgents/org.todo.daily-email.plist` is a separate user service:
 launchd invokes Todo at 09:00 machine-local time, its zsh runner sources
@@ -842,10 +839,10 @@ The two keys do not enter Cast configuration, its database or command arguments.
 Discovery state defaults to `~/.local/share/cast`; `--state-dir` selects another
 private directory. Program rollback and discovery-state recovery remain separate.
 The explicit `cast state reconcile-ownership` repair takes the Cast mutation lock
-and transactionally corrects ATS tenant ownership and uncertain older JSON-LD
-observations. It preserves source/job IDs, paid usage, run history and query
-checkpoints; it performs no remote request. Re-export afterward and refresh
-uncertain observations through bounded collection. Do not erase state to reset
+and transactionally updates ATS tenant associations and older JSON-LD source
+classifications. It preserves source/job IDs, paid usage, run history and query
+checkpoints; it performs no remote request. Re-export afterward and collect
+updated source inputs through bounded collection. Do not erase state to reset
 its budget accounting.
 Cast needs no pause to establish Nucleus quiescence because it never calls it.
 
@@ -938,7 +935,7 @@ selects encoding, while explicit commands/flags select additional content.
 | Chancery | All cards with shared defaults; one operating manual; resolution gaps first | `show ID --full`, full `resolve ID`; `resolve --summary` selects gaps only |
 | Semantics | Project identity/path/status/HEAD; complete meanings, status and distinctions | `repository show PROJECT --provenance` |
 | CRM | Profile/case selection, newest-first revision summaries, matching excerpts, write receipts | `profile show`, `case show --revision`; full advisories in every consuming view |
-| Cast | Company/job/source selection and matching excerpts; status counts, budgets and failures | `company show`, `job show`, `export` with full evidence and coverage |
+| Cast | Company/job/source selection and matching excerpts; status counts, budgets and failures | `company show`, `job show`, `export` with full records and collection diagnostics |
 | Conversations | Bounded metadata and title/message hits with matching excerpts | `show`, `export`; complete selected source reads still required for search |
 | Nucleus | `jobs status`; `jobs wait JOB --timeout 60` | `jobs show`, `jobs logs`, `tool-calls pending` |
 | Annals | Committed reconciliation receipts and retry counts/halt | `change show`, `inbox retry status EVENT --details` |
@@ -1405,7 +1402,8 @@ summary, then state when it does and does not apply, its effects, authority,
 success, recovery, privacy, interfaces, and dependencies.
 
 Normalize the consumers, preconditions, inputs, outputs, data semantics,
-identity and units, completeness and freshness, access, lifecycle and
+identity and units, completeness of selected records or operations, observation
+times, access, lifecycle and
 consistency, limits, compatibility and evolution, and substantive reliances.
 Mark each claim declared, unsupported, unspecified, or not applicable. Keep
 documentation-contract dependencies distinct from runtime, data, authority,
@@ -1427,7 +1425,7 @@ provider registry or documentation storage.
 | --- | --- | --- |
 | Todo concerns, routing and explicit decisions, identities, assessments, designs, lifecycle, provenance, database, email delivery, or deployment | Todo | Preserve its Nucleus adapter contract when affected; the direct Resend path does not become a Nucleus job, and Nucleus does not gain Todo fields. |
 | CRM profile entries, intake, cases, evidence, revisions, advisories, queued steward runs, database, or deployment | CRM | Preserve its bounded Nucleus adapter and prominent nonblocking advisories; Nucleus gains no CRM fields, domain success, scheduling, or retry authority. |
-| Cast company/job identity, source adapters, observations, freshness, local budgets, configuration, exports or deployment | Cast | Keep ordinary HTTP collection separate from Nucleus, CRM stewardship and downstream selection/application/email state; preserve evidence and explicit coverage. |
+| Cast company/job identity, source adapters, observations, collection requests, local budgets, configuration, exports or deployment | Cast | Keep ordinary HTTP collection separate from Nucleus, CRM stewardship and downstream selection/application/email state; preserve company/job records and explicit collection diagnostics. |
 | Platter source capture, constrained resume authoring, stages, editions or send history | Platter | Keep career editing in CRM, discovery in Cast, execution in Nucleus and acceptance transport in Email. Preserve fixed resume content and held uncertain sends; source defaults do not activate a schedule. |
 | Annals works, physical-library identity, concepts, evidence, reconciliation, inbox, producer acceptance, decision feed, retry, or corpus migration | Annals | Keep primary and decisions libraries isolated; preserve job correlation and adapter behavior when affected; Nucleus does not gain Annals workflow state. |
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
@@ -1572,8 +1570,8 @@ For version 3 or any later change:
   context changes as invocation behavior changes owned by the requester.
 - Use a new job ID for a new attempt. An existing job ID can only rediscover the
   byte-equivalent request.
-- Re-run relevant domain acceptance tests. Nucleus health proves capability,
-  not that the requester's domain rule is correct.
+- Re-run relevant domain acceptance tests for the requester rules and check
+  Nucleus health for runtime capabilities.
 
 ### Authentication or service-ownership change
 
@@ -1630,20 +1628,20 @@ Use these placement rules to keep the manual current and small:
 - **Operator manual:** current shared topology, authority boundaries,
   compatibility axes, safe ordering, backup, recovery and deployment procedures.
 - **Todo:** an unimplemented actionable outcome or researched follow-up.
-  “Implement pruning” may be a todo; “Nucleus currently does not prune” is
-  current operator truth.
+  “Implement pruning” may be a todo; “Nucleus currently does not prune” describes
+  a current operation for this manual.
 - **CRM:** reusable Markdown profile entries, employment-relationship cases,
   supplied content, case revisions, evidence, steward-run state, and conspicuous nonblocking advisories. It is
   not outreach authority or a scheduler.
-- **Cast:** company/job discovery evidence, source coverage and freshness,
-  collection configuration, local budgets and the read handoff. Downstream
+- **Cast:** company and job records, observation times, collection request
+  outcomes, configuration, local budgets and the read handoff. Downstream
   selection, application packets and email state remain separate.
 - **Platter:** private captured career/posting/template inputs, accepted
   brief and Jackson-bullet stages, rendered resumes, dated editions and send
   outcomes. Production scheduling and installation are not yet implemented.
-- **Annals:** retained source material and evidence-grounded conceptual
-  knowledge. It may retain released documentation, but it is not the sole
-  editable runbook.
+- **Annals:** retained source material, concepts, supporting quotations, and
+  recorded reconciliations. It may retain released documentation; the operator
+  manual remains the editable runbook.
 - **Component documentation:** exact Nucleus protocol, Todo creation behavior,
   Annals corpus and inbox behavior, or Annals Usage accounting.
 - **Chancery provider bundle:** current, version-matched provider promise

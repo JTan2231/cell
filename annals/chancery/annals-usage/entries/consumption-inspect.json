@@ -170,7 +170,7 @@
       },
       {
         "status": "unsupported",
-        "statement": "A gap cannot be estimated, rate-card output cannot be promoted to invoice or subscription truth, and report output cannot be used to pair original and retry-child domain outcomes."
+        "statement": "Estimating tokens for an unreported segment, invoicing, subscription allocation, and pairing original/retry-child domain outcomes are outside this reporting surface."
       },
       {
         "status": "unspecified",
@@ -188,7 +188,7 @@
       },
       {
         "status": "unspecified",
-        "statement": "The external supported-model rate card has no installed contract ID, pinned digest, version, or freshness guarantee in this capability."
+        "statement": "Rate-card comparisons use the external supported-model rate card; this capability does not pin its version, digest, or installed contract ID."
       }
     ],
     "reliances": [

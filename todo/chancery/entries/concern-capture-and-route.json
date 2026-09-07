@@ -75,7 +75,7 @@
     ],
     "data_semantics": [
       {"status": "declared", "statement": "A concern preserves originating direction and provenance; a routing proposal is model-produced research that cannot apply or authorize its proposed disposition."},
-      {"status": "declared", "statement": "Attach preserves umbrella direction, revise preserves identity, unify preserves both histories under one survivor, dismiss requires positive no-action evidence, and defer preserves an unresolved concern."}
+      {"status": "declared", "statement": "Attach preserves umbrella direction, revise preserves identity, unify preserves both histories under one survivor, dismiss records a supplied basis for retaining no action, and defer preserves an unresolved concern."}
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "cN identifies one immutable concern and rN identifies one sealed routing proposal; neither identifier is a tN todo identity."},
@@ -83,7 +83,7 @@
     ],
     "completeness_and_freshness": [
       {"status": "declared", "statement": "Research uses the exact concern plus one frozen bounded candidate snapshot and records the basis needed to detect a later stale proposal."},
-      {"status": "unsupported", "statement": "The candidate snapshot is not a global proof that no other concern or external work is related, and a pending proposal is not guaranteed current after later Todo changes."}
+      {"status": "declared", "statement": "The candidate snapshot contains the host-selected Todo records for this run. Later Todo changes can make a pending proposal's recorded bases stale."}
     ],
     "access": [
       {"status": "declared", "statement": "The supported interface is the current-user local Todo CLI over its selected database, with selected source reads exposed to a constrained Nucleus stage."},

@@ -12,7 +12,7 @@
   ],
   "do_not_use_when": [
     "Only unchanged source retention is wanted.",
-    "The requested result is a summary, truth judgment, action backlog, or generic semantic search.",
+    "The requested result is a summary, action backlog, or generic semantic search.",
     "The user has not authorized immediate application of a material proposed corpus change."
   ],
   "outcome": "A durable examination and reconciliation for one work at one frozen base revision, left pending, applied by explicit request, or recorded with no corpus change.",
@@ -52,13 +52,12 @@
   ],
   "does_not_authorize": [
     "Applying a material reconciliation unless `--apply` or a separate explicit apply request is authorized.",
-    "Treating the provisional concept decomposition as uniquely correct or objectively true.",
     "Publishing or disclosing the source or corpus."
   ],
   "promise": {
     "consumers": [
       {"status": "declared", "statement": "A local user or agent may request an evidence-grounded examination of one immutable work against one frozen Annals corpus revision."},
-      {"status": "unsupported", "statement": "This capability is not a summary, truth judgment, action backlog, generic semantic search, or silent corpus-application surface."}
+      {"status": "unsupported", "statement": "This capability is not a summary, action backlog, generic semantic search, or silent corpus-application surface."}
     ],
     "preconditions": [
       {"status": "declared", "statement": "A configured Annals library whose immutable role is general contains or can retain the selected nonblank UTF-8 work, and the configured Nucleus execution path is compatible, authenticated, and accepting work."},
@@ -75,7 +74,7 @@
       }
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "A reconciliation is a provisional evidence-grounded interpretation, not objective truth or a uniquely correct concept decomposition."},
+      {"status": "declared", "statement": "A reconciliation records an interpretation of one retained work at one base corpus revision through semantic operations and exact source quotations."},
       {"status": "declared", "statement": "Nucleus completion and liaison prose are execution evidence only; Annals records decide whether the domain reconciliation or application succeeded."}
     ],
     "identity_and_units": [
@@ -86,7 +85,7 @@
     "completeness_and_freshness": [
       {"status": "declared", "statement": "Each examination uses the complete selected immutable work and one frozen base corpus state; a selected reusable result matches the complete documented context."},
       {"status": "declared", "statement": "Application verifies current HEAD against the frozen base at apply time, so a pending result becomes stale rather than being silently rebased."},
-      {"status": "unspecified", "statement": "No model-completion latency, queue-time, or universal interpretation-quality service level is promised."}
+      {"status": "unspecified", "statement": "No model-completion latency or queue-time service level is promised."}
     ],
     "access": [
       {"status": "declared", "statement": "The supported surface is the local Annals CLI using its selected private library and configured local Nucleus requester boundary."},

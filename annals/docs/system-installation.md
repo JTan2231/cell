@@ -15,7 +15,7 @@ Annals library or corpus.
 
 ## Operational model
 
-The Annals library is the corpus source of truth. The spool is a visible
+The Annals library retains corpus state and history. The spool is a visible
 delivery queue with a small Annals-owned ordering index:
 
 ```text

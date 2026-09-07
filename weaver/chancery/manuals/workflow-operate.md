@@ -30,8 +30,8 @@ from following or affecting a later replacement. Without an ID, the command
 selects the sole current record. A terminal record remains current until the
 next explicit submission replaces it.
 
-`check` validates persisted files without invoking Nucleus. It proves mechanical
-shape and consistency, not freshness or a repeated editorial review.
+`check` reads persisted files and validates their required shape, links, review
+verdict, and final-output consistency. Rebuild to run the editorial stages again.
 
 ## Diagnose and recover
 

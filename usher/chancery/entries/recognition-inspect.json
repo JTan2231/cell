@@ -11,7 +11,7 @@
     "CI should require valid identity, Semantics, and Chancery introduction evidence in the candidate checkout."
   ],
   "do_not_use_when": [
-    "Actual registration, installation, vocabulary quality, capability coverage, implementation conformance, or runtime readiness must be established.",
+    "The task requires a Semantics registration, Chancery installation or full bundle validation, or a runtime service probe.",
     "The task concerns relationships beyond Cell membership."
   ],
   "outcome": "A deterministic, evidence-bearing membership report for all inventoried products or one selected product, and a check exit status based solely on required declarations.",
@@ -52,7 +52,7 @@
   ],
   "does_not_authorize": [
     "Registration, deployment, automatic repairs, vocabulary changes, or other product operations.",
-    "Interpreting a complete report as runtime readiness, installation, complete outward promises, or verified relationship quality."
+    "Using recognition to operate registrations, installations, or runtime services."
   ],
   "manual": "manuals/recognition-inspect.md",
   "promise": {
@@ -98,8 +98,8 @@
         "statement": "Every descriptor is examined in filename order, including broken descriptors. Global root, alias, semantic-project, and provider collisions are checked before filtering. The same unchanged inputs and Usher version produce the same report."
       },
       {
-        "status": "unsupported",
-        "statement": "The report does not prove actual registration, installation, freshness, vocabulary quality, full Chancery schema validity, exhaustive capabilities, or other relationships."
+        "status": "declared",
+        "statement": "Recognition reads product descriptors, Semantics markers, and Chancery introduction files from the selected checkout."
       }
     ],
     "access": [

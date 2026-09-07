@@ -68,10 +68,8 @@ one action:
   changing its identity;
 - `unify`: preserve several historical identities while selecting one
   canonical umbrella;
-- `dismiss`: retain the concern but record that positive evidence leaves no
-  actionable outcome;
-- `defer`: retain the unresolved choice because evidence or user direction is
-  insufficient.
+- `dismiss`: retain the concern and its supplied basis for retaining no action;
+- `defer`: retain the missing routing input or unresolved user choice.
 
 Research never performs the action. `routing show rN` displays the proposed
 action, exact frozen bases, rationale, evidence, limitations, and decision
@@ -109,10 +107,8 @@ includes completed or superseded history where applicable. Results use a
 stable deterministic order and are bounded by `--limit`. Search matches the
 umbrella read model rather than exposing revision tables as separate results.
 
-`note add` appends one immutable `nN` working note. `done` and `reopen` remain
-idempotent status transitions on the umbrella. They do not imply that a
-particular implementation plan ran, and no new execution or closure-evidence
-model is introduced by this version.
+`note add` appends one immutable `nN` working note. `done` and `reopen` are
+idempotent status transitions on the umbrella.
 
 ## Situation assessment
 
@@ -121,13 +117,13 @@ observed state. It freezes the current direction revision, attached-concern
 set, note cursor, accepted design (if any), and the evidence sources made
 available to the assessor. The result is one immutable, dated `aN` with:
 
-- subject identity and stable identity references;
-- grounded current-state, constraint, dependency, and gap findings;
+- subject identity and stable input references;
+- findings, constraints, dependencies and open items from the selected material;
 - jurisdiction findings that assign each system or actor a concrete
   `owner`, `participant`, or `consumer` responsibility, with exactly one owner
   per jurisdiction;
 - a mapping from every direction boundary to those findings;
-- material user choices, evidence gaps, or jurisdiction conflicts; and
+- unresolved user choices, missing assessment inputs or jurisdiction conflicts;
 - a disposition of `ready`, `needs_user_choice`, or `inconclusive`.
 
 The source catalog gives each concrete document a stable `s-...` ID. Reads
@@ -253,11 +249,9 @@ then performs the version-2 migration transactionally. It never overwrites a
 backup. When the database is already version 2, the command is a no-op and
 does not create, inspect, or otherwise touch the backup path.
 
-Migration preserves every `tN`, status transition, source, and working note.
+Migration preserves every `tN`, status transition, source and working note.
 It derives an initial direction revision and captured concern from each legacy
-todo, and retains the old researched note as a `legacy_unreviewed` design. That
-design is not accepted, and migration does not infer cross-todo identity,
-relationships, assessment facts, or completion evidence.
+todo, and stores the original researched note as a `legacy_unreviewed` design.
 
 The installed deployer supplies a transaction-local backup path, runs
 migration before its smoke test, and restores both the prior database and

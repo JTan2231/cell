@@ -11,8 +11,7 @@
       "The installed Weaver release and selected narrative output tree remain authoritative for actual operational state and current generated artifacts."
     ],
     "not_authoritative_for": [
-      "Each narrative repository owns its authored basis, brief, sources, prompts, editorial vocabulary, current output validity, and disclosure rules; Nucleus owns execution, authentication, and raw job history.",
-      "Weaver does not own job search, application submission, publication, upload, browser automation, public-profile editing, or the factual truth of generated text."
+      "Each narrative repository owns its authored basis, brief, sources, prompts, editorial vocabulary, current output validity, and disclosure rules; Nucleus owns execution, authentication, and raw job history."
     ],
     "inventory": {
       "covers": [
@@ -37,7 +36,7 @@
     ],
     "operational_limits": [
       "Weaver admits one current workflow, runs five sequential one-attempt stages, owns no resident daemon or LaunchAgent, and exposes no automatic terminal-run retry.",
-      "No workflow-duration, model-latency, repository-size, publication, factual-correctness, or external-service service-level objective is promised across this provider."
+      "No workflow-duration, model-latency, repository-size, publication or external-service service-level objective is promised across this provider."
     ]
   },
   "entries": [

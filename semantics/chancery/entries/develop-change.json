@@ -46,7 +46,7 @@
   "checkpoints": [
     "Repository meaning is always derived by replaying immutable contiguous revisions and typed effects; v1 has no mutable concept projection.",
     "Project moves preserve stable ID and separate Annals and legacy Decisions activation/scan cursors; exact root markers and deepest-root routing remain mandatory.",
-    "Every new account-derived revision grounds its exact Annals library, event, and account identity without confidence or review behavior; legacy admission/review effects remain decodable.",
+    "Every new account-derived revision grounds its exact Annals library, event, and account identity; legacy admission/review effects remain decodable.",
     "Nucleus has a neutral cwd, workspace none, no shell/web, one immutable managed tool, and no authority outside Semantics validation and transaction.",
     "Mailbox commit/receipt is atomic, redelivery is idempotent, conflicting replay is rejected, and unsafe retry is refused.",
     "CI and packaging tests are offline, use fakes, and produce body-free logs."

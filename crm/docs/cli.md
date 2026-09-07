@@ -132,11 +132,11 @@ crm search QUERY [--limit N]
 
 Search performs one case-insensitive literal-substring match over stored case
 titles, current Markdown, and current advisory, ordered by most recently
-updated case and then case identity. It is not semantic matching, source
-verification, or a claim that a result warrants contact. Results identify the
-exact current revision and include stage, summary, attention, advisory, and a
-marked excerpt of at most 240 Unicode characters around the match, with
-`matched_field` (`title`, `advisory` or `markdown`) and `excerpt: true`. Limits default to 20 and must be positive; `has_more` indicates whether increasing `--limit` returns more.
+updated case and then case identity. Results identify the exact current
+revision and include stage, summary, attention, advisory, and a marked excerpt
+of at most 240 Unicode characters around the match, with `matched_field`
+(`title`, `advisory` or `markdown`) and `excerpt: true`. Limits default to 20 and
+must be positive; `has_more` indicates whether increasing `--limit` returns more.
 
 ## Tell
 

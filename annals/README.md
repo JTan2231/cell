@@ -94,8 +94,8 @@ annals --library ./annals.db lately
 ```
 
 `integrate` content-addresses the immutable work by its exact SHA-256 digest
-before model examination. It records a provisional, best-current
-reconciliation. Independently valid operations remain staged across correction
+before model examination. It records a
+reconciliation of that work with the frozen corpus revision. Independently valid operations remain staged across correction
 calls, while plain-language source hints identify only the operations needing
 attention. Annals records the complete server-assembled request automatically
 when every operation works together. With `--apply`, a projected state

@@ -25,7 +25,7 @@
   "authority": [
     "Semantics SQLite is authoritative for maintained project terminology, stable concept identity, grounding history, and semantic revision order.",
     "The participating project's source, tests, and product documentation remain authoritative for runtime behavior and implementation facts.",
-    "Annals decision-account, legacy Decision, and seed groundings are provenance, not permission to ignore newer project evidence."
+    "Annals decision-account, legacy Decision, and seed groundings identify sources recorded in semantic revisions."
   ],
   "success": [
     "The command selects one registered project and returns the requested HEAD or existing revision.",
@@ -51,7 +51,7 @@
   ],
   "does_not_authorize": [
     "Registering or changing a project, seeding or committing a revision, assigning or retrying intake, or invoking the worker.",
-    "Reading Semantics SQLite directly or treating a current snapshot as runtime implementation authority.",
+    "Reading Semantics SQLite directly.",
     "Disclosing repository output outside the local project boundary."
   ],
   "promise": {
@@ -69,7 +69,7 @@
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Concept identity is stable across wording and path changes; active or retired state, distinctions, groundings, and withdrawals are replayed from immutable typed effects rather than a mutable projection."},
-      {"status": "unsupported", "statement": "Repository meaning is not runtime implementation truth and a grounding is not permission to ignore newer product evidence."}
+      {"status": "declared", "statement": "Repository meanings describe maintained terminology; groundings record the sources of semantic revisions."}
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "Project ID identifies one registered semantic repository, concept ID identifies one stable concept, and positive revision number identifies one contiguous committed effect set."},
@@ -77,7 +77,7 @@
     ],
     "completeness_and_freshness": [
       {"status": "declared", "statement": "A snapshot replays every committed revision through the selected head; a historical snapshot stops exactly at its selected revision and preserves retirement and withdrawal history."},
-      {"status": "unsupported", "statement": "A repository read does not inspect current code, tests, project files, or runtime state for fresher behavioral truth."}
+      {"status": "declared", "statement": "Repository reads select stored semantic revisions and their provenance."}
     ],
     "access": [
       {"status": "declared", "statement": "The supported read boundary is the local Semantics repository CLI; direct SQLite access and disclosure outside the local project boundary are unsupported."}

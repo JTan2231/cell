@@ -45,12 +45,11 @@ synthetic textual diff.
 
 Use the repository as authority for maintained terminology and its history.
 Use project source, tests, and current product documentation for actual runtime
-behavior. A grounding says why meaning entered or left the repository; it does
-not prove that all implementation details remain current.
+behavior. A grounding records why meaning entered or left the repository.
 
-Groundings may cite an Annals decisions-library/event/account triple, a
-preserved legacy Decisions event/decision pair, or a hashed seed. These are
-provenance rather than current-force claims.
+Groundings cite an Annals decisions-library/event/account triple, a
+preserved legacy Decisions event/decision pair, or a hashed seed, recording the
+source attached to a semantic revision.
 
 All commands here are local and read-only. They do not invoke Annals, Decisions,
 Conversations, Nucleus, Chancery, or a network service. Keep normalized

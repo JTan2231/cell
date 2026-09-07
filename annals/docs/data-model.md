@@ -18,10 +18,9 @@ The library stores eight kinds of facts:
 7. immutable commit provenance; and
 8. append-only typed corpus effects.
 
-It does not store a current concept graph, a materialized HEAD, revision
-snapshots, or JSON used as operational truth. `CorpusState` is an immutable
-in-memory value reduced from revision zero through the typed effects. Every
-current and historical corpus read uses that same reducer.
+`CorpusState` is an immutable in-memory value reduced from revision zero
+through the typed effects. Every current and historical corpus read uses that
+same reducer; persisted rows retain the effects and their provenance.
 
 `annals-usage` stores no companion schema. It calculates a disposable report
 from Nucleus model output, this library's attribution records, and inbox job

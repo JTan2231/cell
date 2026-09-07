@@ -38,8 +38,8 @@ present, all direction boundaries are covered, and all active predecessor
 operations are addressed. It cannot contain implementation tasks, file edits,
 commands, sequencing, estimates, deployment actions, or execution claims.
 
-If the assessment is insufficient or stale, the liaison records a durable
-return for assessment rather than inventing a design. If a run ends with an
+If the selected assessment has missing inputs or changed bases, the liaison
+records a durable assessment return naming those references. If a run ends with an
 open draft, Todo marks it abandoned; it remains inspectable and may be
 corrected but is not ready.
 

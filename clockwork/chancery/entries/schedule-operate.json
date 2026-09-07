@@ -31,7 +31,7 @@
   "success": [
     "Registration succeeds only after the complete strict manifest, release root and ID, top-level launch images, hashes, permissions, literal process context, schedule, and supported policies validate without a partial write.",
     "A binding transition succeeds only when the database selection, atomically installed plist, and launchd loaded state agree; on failure Clockwork restores the prior coherent state or, while the projection remains attributable, durably attempts a disabled state. An unattributable projection is retained and recovery-gated without mutation.",
-    "An activation report truthfully records whether the direct child failed to start, ran and exited, was signaled, timed out, was skipped for overlap, or was proven lost.",
+    "An activation report records whether the direct child failed to start, ran and exited, was signaled, timed out, was skipped for overlap, or was proven lost.",
     "Every overlap records `skipped_overlap` without starting a child; a scheduled overlap returns success to launchd, while a manual overlap reports `activation_busy` and returns 1.",
     "Once a child starts and Clockwork durably records `exited`, `signaled`, or `timed_out`, the broker returns a successful Clockwork envelope and process exit even when the child's exit code is nonzero; that remains runtime evidence only."
   ],

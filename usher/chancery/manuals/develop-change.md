@@ -7,9 +7,9 @@ until `usher` is registered, report that gap and use Cell for shared terms.
 Usher recognizes declared membership using only identity, Semantics
 participation, and Chancery presence. Read the exact evidence contract before
 changing the literal descriptor reader, identity mapping, participation marker,
-or provider introduction projection. Keep other relationships, vocabulary
-quality, full Chancery validation, installation and runtime readiness outside
-the report. Never source descriptors, invoke services, query databases, or add
+or provider introduction projection. Keep recognition scoped to those
+repository files. Chancery owns full bundle validation. Never source
+descriptors, invoke services, query databases, or add
 an agent call to recognition.
 
 Use synthetic fixtures for missing declarations, malformed or unreadable

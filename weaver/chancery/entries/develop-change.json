@@ -96,7 +96,7 @@
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Weaver remains a five-stage durable narrative requester: it owns workflow state and repository I/O, the narrative repository owns authored and current output meaning, and Nucleus owns model execution and raw job history."},
-      {"status": "declared", "statement": "Nucleus completion is not Weaver success, generated text is not factual authority, and a failed or lost terminal run never implies another model attempt."}
+      {"status": "declared", "statement": "Weaver records success after persisting and mechanically validating the stage outputs. A failed or lost terminal run retains its outcome until a new run is explicitly requested."}
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "Weaver package and provider release, entry contract version, private-state format, run and stage job IDs, repository contract, and Nucleus protocol or schema versions evolve as distinct identities."},

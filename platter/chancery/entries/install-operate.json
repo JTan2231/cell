@@ -78,7 +78,7 @@
   ],
   "success": [
     "Installation succeeds only after exact candidate selection, state and local prerequisites are verified while held and run-owned maintenance is released.",
-    "Inspection and doctor report their observed boundary; no report establishes employer freshness, future model success, Resend acceptance or inbox receipt."
+    "Inspection and doctor report the installation, configuration and dependency readiness checks they perform."
   ],
   "failure_and_recovery": [
     "Foreign selectors, altered files, incompatible schemas, conflicting holds, ambiguous state roots and changed selection stop the operation.",
@@ -164,8 +164,8 @@
         "statement": "Maintenance checks live admissions and every page of matching nonterminal Nucleus jobs for both requester identities. Doctor validates existing local state, Cast/CRM/Email executable identity, Email attachment flag, renderer tools and compatible Nucleus health without exercising domain operations. It does not prove initialized Cast or CRM libraries or read their domain contents."
       },
       {
-        "status": "unsupported",
-        "statement": "Installation checks do not prove remote provider account balances, source freshness, complete resume rendering, future runtime capacity or final inbox delivery."
+        "status": "declared",
+        "statement": "Installation inspection reports selected releases and stored configuration; strict doctor checks the documented runtime dependencies."
       }
     ],
     "access": [

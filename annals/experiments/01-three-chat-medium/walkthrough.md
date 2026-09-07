@@ -2,12 +2,9 @@
 
 ## Question
 
-Could Annals turn a small, conceptually coherent set of reflective
-conversations into a useful evidence-linked corpus?
-
-The answer was yes, but sparsely. The result was a compact thesis index with
-strong provenance, one useful human refinement, and limited discovery through
-lexical concept names.
+This experiment integrated three reflective conversations into an
+evidence-linked corpus. The result was a compact thesis index with exact
+source quotations, one human refinement, and lexical concept-name lookup.
 
 ## Inputs
 
@@ -36,7 +33,7 @@ excluded; human-visible assistant commentary was retained.
 - Integrate the three works sequentially in the order above.
 - Use `gpt-5.6-terra`, medium reasoning, and `liaison-v1`.
 - Review each proposal before applying it.
-- Preserve uncertain model proposals rather than silently rewriting them.
+- Preserve model proposals with entries in `uncertainties` for explicit review.
 
 This configuration later became the `medium` quality preset.
 
@@ -53,16 +50,15 @@ the liaison recovered and submitted normally.
 ## Human intervention
 
 The first two model proposals were applied unchanged. For the third work, the
-model proposed only a root named `Frame construction` and recorded two
-uncertainties:
+model proposed only a root named `Frame construction` and recorded two entries
+in `uncertainties`:
 
 - no related parent was found;
-- recurring vocabulary might reflect interactional convergence rather than
-  independent correctness.
+- recurring vocabulary could arise through interactional reuse.
 
-Review kept the root placement but promoted the substantive epistemic warning
-into an evidenced child, `Feedback-loop risk`. The model proposal remains in
-history as superseded; its human replacement produced revision 3.
+Review kept the root placement and represented the source's discussion of
+feedback loops in an evidenced child, `Feedback-loop risk`. The model proposal
+remains in history as superseded; its human replacement produced revision 3.
 
 The final history therefore contained three model runs, four proposals, and
 three commits: two model-authored commits and one human-authored commit.
@@ -99,12 +95,11 @@ The four concepts form a compact argument:
 
 1. A forked conversation is one shared message family with separately
    readable and classifiable root-to-leaf views.
-2. A conversation archive supports claims about how it was used, not an
-   unrestricted biography of its author.
-3. One important use was frame construction: conversation helped stabilize
-   reusable ways of interpreting problems.
-4. Reused assistant language can itself produce recurrence, so convergence of
-   vocabulary is not independent proof that the vocabulary describes reality.
+2. The conversation archive records how its author used it.
+3. One use was frame construction: conversation helped stabilize reusable ways
+   of interpreting problems.
+4. Reuse of assistant language can produce recurring vocabulary in later
+   conversations.
 
 The evidence excerpts preserved the essential claims: messages shared across
 forks should be stored once; each leaf view should be classified; archive
@@ -112,24 +107,22 @@ review should remain a usage map rather than biography; the archive became a
 frame-construction environment; and assistant-summary reuse creates a
 feedback-loop risk.
 
-All five selected passages were assistant-authored. They establish what these
-conversations claimed, not that the claims were independently verified against
-the underlying archive.
+All five selected passages were assistant-authored. Each quotation retains
+the wording of the selected conversation and its source coordinates.
 
 ## What it revealed about Annals
 
-Annals behaved more like a sparse, evidence-linked thesis index than an
-exhaustive summarizer: 79,038 bytes of dialogue became four concepts. It
-preserved exact sources, revisions, superseded proposals, and human authorship
-well.
+The run represented 79,038 bytes of dialogue with four concepts linked to
+exact source quotations. It retained revisions, superseded proposals, and
+human authorship records.
 
-Discovery was weaker. Search operated over current concept labels and paths,
-not evidence or retained work text. `frame` found the parent and child, while
-literal evidence phrases such as `interactional convergence` did not. Corpus
-quality therefore depended heavily on the vocabulary chosen for labels.
+Search operated over current concept labels and paths. `frame` found the
+parent and child, while the evidence phrase `interactional convergence` did
+not match a label or path. Label vocabulary therefore determined these lexical
+lookup results.
 
-The three roots are also conceptually related, but only the
-`Frame construction → Feedback-loop risk` relationship was encoded.
+The recorded graph included the `Frame construction → Feedback-loop risk`
+relationship; its three roots had no explicit relationships among them.
 
 ## Validation and limits
 

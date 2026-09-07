@@ -40,17 +40,15 @@ two providers; Krisis retains the `decisions` descriptor ID and declared aliases
    versions, and readable nonempty indexed manuals. Provider IDs cannot have
    multiple claimants. Usher supports provider schemas 1 through 3.
 
-These are **introduction projections**, not a replacement Chancery validator.
-Usher does not validate the remaining contract fields, promise scope, dependency
-graph, release alignment, or completeness of the published capabilities.
-Chancery's existing gates retain full bundle validation. Usher checks no
-Nucleus, Clockwork, or other relationship. Those affairs belong to the
-concerned systems.
+These **introduction projections** select provider identity, indexed entry
+identity and version, and indexed manual presence. Chancery validates bundle
+declarations and dependencies; product packaging checks release alignment.
+Usher applies the membership, path, read-limit, and collision rules described
+here.
 
-A marker declares participation; it does not prove registration, an existing
-vocabulary, or current vocabulary quality. A source bundle declares Chancery
-presence; it does not prove installation or runtime readiness. No installed
-service, database, environment-selected registry, or historical record is read.
+A marker records the declared Semantics project ID. A source bundle records
+the declared Chancery provider and indexed introductions. Recognition reads
+these repository files directly, using the rules above.
 
 ## Results and failures
 

@@ -40,8 +40,8 @@ The proposed action is one of:
 - create a new durable `tN`;
 - revise the direction of one enduring `tN`;
 - unify exactly two historical identities under one survivor;
-- dismiss when positive evidence establishes no actionable outcome; or
-- defer because evidence or a material user choice is insufficient.
+- dismiss with a supplied basis for retaining no actionable outcome; or
+- defer with the missing routing input or unresolved user choice.
 
 Research never applies the action. `todo new` therefore does **not** create or
 revise a `tN`, even when the proposal recommends it. Inspect the records with:

@@ -8,8 +8,8 @@ Semantics-Project: usher
   the declared `usher` project is registered, report that gap and use Cell's
   registered vocabulary for cross-product terms. Source, tests, and these
   contracts remain authoritative for behavior.
-- Do not inspect service databases, run agents, execute repository descriptors,
-  evaluate relationship quality, or inventory other inter-system affairs.
+- Read repository declarations as files; keep service databases, agent calls,
+  descriptor execution, and other inter-system operations outside recognition.
 - Maintain the documented evidence boundary and JSON compatibility when
   changing recognition rules. No registration or installation is implied by
   a source declaration.

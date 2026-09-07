@@ -22,17 +22,16 @@ and are never selectors. Concepts have no canonical path, primary parent, or
 sibling position.
 
 `search` performs word-based matching over normalized concept labels and
-derived ancestor-label context. It is not semantic similarity, full-text
-source search, evidence retrieval, or a truth query. `--within <cN>` limits the
-search to concepts below one selected concept.
+derived ancestor-label context. `--within <cN>` limits the search to concepts
+below one selected concept.
 
 Graph expansion is bounded by direction, depth, and maximum nodes. A reported
 frontier identifies where those limits stopped expansion; it must not be
 described as the complete graph or as corpus leaves.
 
 Evidence output pairs a concept with exact quotation occurrences from retained
-works. Evidence supports the concept across its parent relationships; it does
-not attach to one edge or prove the concept objectively true.
+works. Evidence supports the concept across its parent relationships and
+belongs to the concept rather than one edge.
 
 ## Works, deliveries, and history
 

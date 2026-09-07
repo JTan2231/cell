@@ -23,7 +23,7 @@ and explicit gaps without executing the represented application, operation,
 readiness check, or model.
 
 Chancery has no daemon, database, network access, Nucleus integration, or
-domain authority. Provider products own their capability truth and installed
+domain authority. Provider products own their capability contracts and installed
 provider selectors. Chancery owns bundle validation, catalog discovery,
 deterministic dossier assembly, exact-basis identification, dependency
 closure, facet and gap classification, and presentation. The interactive agent

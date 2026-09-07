@@ -58,8 +58,8 @@ Every immutable case revision has exactly:
 A non-null advisory is conspicuous on case list/search/show/history, tell
 acknowledgment, and update list/show/wait/resume/retry, and never blocks an
 otherwise valid operation. Human output uses the fixed non-blocking attention
-banner; JSON carries attention plus text. Stages and advisories are CRM state,
-not external truth, contact permission, or guaranteed outcomes.
+banner; JSON carries attention plus text. Stages and advisories are fields of
+the stored case revision.
 
 The hidden worker uses Codex model `gpt-5.6-terra`, medium reasoning, a
 1,200-second timeout, and immutable toolset `crm/case-steward/1`, with frozen

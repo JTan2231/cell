@@ -10,7 +10,7 @@
       "Semantics owns project registration and routing, stable concept identity, append-only semantic revisions and typed effects, intake policy and cursors, reconciliation validation, and semantic commit success."
     ],
     "not_authoritative_for": [
-      "Participating products own runtime behavior; Annals owns accepted decision-account feed facts, Conversations owns task metadata, Nucleus owns bounded model execution, and Clockwork owns scheduled process activation rather than semantic truth. Legacy Decisions facts remain preserved local provenance."
+      "Participating products own runtime behavior; Annals owns accepted decision-account feed records, Conversations owns task metadata, Nucleus owns bounded model execution, and Clockwork owns scheduled process activation. Legacy Decisions records remain preserved local provenance."
     ],
     "inventory": {
       "covers": [

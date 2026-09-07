@@ -337,7 +337,7 @@ async fn fetch(url: &url::Url) -> Result<Vec<u8>> {
     let mut response = client.get(url.clone()).send().await?.error_for_status()?;
     ensure!(
         response.status().is_success(),
-        "posting redirects require a new verified source URL"
+        "posting redirects require a new supported source URL"
     );
     ensure!(
         response
@@ -387,7 +387,7 @@ fn validate_description(description: &str) -> Result<()> {
     let visible = document.root_element().text().collect::<Vec<_>>().join(" ");
     ensure!(
         visible.trim().len() >= 200,
-        "full posting description is absent or too short to establish requirements"
+        "posting description is absent or below the adapter's minimum length"
     );
     Ok(())
 }

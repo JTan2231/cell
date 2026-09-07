@@ -42,16 +42,15 @@ ambiguous submission and uses a deterministic stage job ID. Worker recovery
 may resubmit only those same bytes. A different model attempt requires a new
 run; daemon loss is not an automatic retry signal.
 
-Nucleus completion is not Weaver success. Weaver must atomically persist each
-stage output and pass repository validation. Earlier successful stage outputs
-remain after later failure. Generated text is not factual authority and Weaver
-never publishes it.
+Weaver must atomically persist each stage output and pass repository validation
+before recording a successful build. Earlier successful stage outputs remain
+after later failure. Generated text stays in the narrative repository.
 
 ## Development and proof
 
 1. Change the smallest owning component.
 2. Update operator-facing documentation in the same change whenever the
-   requester, state, activation, recovery, compatibility, or deployment truth
+   requester, state, activation, recovery, compatibility, or deployment behavior
    changes.
 3. Extend tests for the exact affected authority and failure boundary.
 4. Run:

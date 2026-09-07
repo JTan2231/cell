@@ -38,14 +38,10 @@ do not alter the stored library.
 /Users/joey/.local/bin/crm search "voice AI hiring manager" --limit 20
 ```
 
-Search is deterministic lexical retrieval over stored titles and current
-revision material. It is not an embedding or model search. Rank is retrieval
-behavior, not confidence, source freshness, contact worthiness, or proof that a
-case applies to the present request.
-
-A no-match result says only that retained current heads did not satisfy the
-query and limit. It does not establish that no useful person, company, posting,
-location, or relationship exists.
+Search matches literal substrings in stored titles and current revision
+material and orders results by case update time and identity. A no-match
+result contains no current case head matching the query within the selected
+limits.
 
 ## Inspect a current or historical revision
 
@@ -71,8 +67,8 @@ Each revision is a full snapshot containing:
 The revision's `source_update_id` can be passed to `crm update show` to inspect
 its update/delivery and Nucleus identities. Version 0.3 has no supported
 raw-delivery, persisted-request, or mailbox-receipt show/export command; direct
-SQLite reads are unsupported. Historical output does not imply current external
-truth.
+SQLite reads are unsupported. Historical output returns the selected stored
+revision.
 
 ## Advisory and authority
 
@@ -82,11 +78,9 @@ and the advisory text so a downstream consumer can render it visibly. The
 advisory is part of the evidence and must not be hidden, but it never blocks
 reading, telling, stage changes, or any caller-owned action.
 
-CRM owns the existence, ordering, content digest, stage, summary, advisory, and
-stored correlations of its revisions. It does not own the truth or freshness
-of a caller-supplied source and does not independently observe contact,
-connection, or help. Before relying on mutable evidence, reopen it through its
-source.
+CRM owns the existence, ordering, content digest, stage, summary, advisory and
+stored correlations of its revisions. Each revision contains the case narrative
+produced from its supplied delivery and previous revision. Deliveries retain their supplied source references.
 
 ## Machine output and privacy
 
@@ -96,10 +90,9 @@ Use global `--json` for the machine envelope:
 {"ok":true,"data":{"type":"..."}}
 ```
 
-Identifiers are opaque. An exact revision is complete for that stored snapshot;
-list and search cover only current heads up to the chosen limits. No wall-clock
-latency, semantic recall, external source coverage, or database-size service
-level is promised.
+Identifiers are opaque. Exact reads return every field of the selected stored
+revision; list and search return current heads up to the chosen limits. No
+wall-clock latency or database-size service level is promised.
 
 CRM output can expose private contact, employment, interaction, source,
 summary, advisory, and Nucleus-correlation data. Terminal display and redirected

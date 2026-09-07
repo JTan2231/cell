@@ -72,8 +72,8 @@ stage output.
 ### `check NARRATIVE`
 
 Mechanically validate all five persisted stage files, story anchors and links,
-the exact review verdict, and final-output consistency. It invokes no model,
-does not establish freshness, and does not repeat editorial review.
+the exact review verdict, and final-output consistency. Rebuild to run the
+editorial stages again.
 
 ### `worker run`
 

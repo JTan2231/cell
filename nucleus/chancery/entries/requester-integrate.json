@@ -126,7 +126,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Nucleus job and output state is execution evidence; the requester's own durable record is domain truth, including when a committed domain result outlives a later runtime failure."
+        "statement": "Nucleus job and output state records execution; the requester's durable record stores its domain result and survives a later runtime failure."
       },
       {
         "status": "declared",

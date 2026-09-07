@@ -6,10 +6,10 @@ concerns and open canonical todos. It groups items by the attention they need:
 - **Needs your decision** includes a routing proposal, situation choice, or
   desired-state design awaiting an explicit user decision.
 - **Needs follow-up** includes an unresolved concern without a pending routing
-  decision, or an open todo that needs assessment, reassessment, more evidence,
-  or desired-state design work.
-- **Other open todos** includes the remaining open todos. An accepted desired
-  state still leaves its todo open and does not claim implementation.
+  decision, or an open todo awaiting assessment, named assessment inputs,
+  reassessment after changed bases, or desired-state design work.
+- **Other open todos** includes the remaining open todos. Accepting a desired
+  state preserves the umbrella's open lifecycle.
 
 Empty sections are omitted. Every item leads with a current title or
 plain-language label and a plain-language status. A secondary `Reference:`

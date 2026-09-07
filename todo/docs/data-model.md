@@ -61,8 +61,7 @@ it explicitly selects one of two umbrellas as the survivor, retains both
 identifiers and all their provenance, and prevents the superseded identity from
 becoming a second current result.
 
-`done` and `reopen` remain idempotent umbrella transitions. They do not create
-an execution record or prove that a particular design was implemented.
+`done` and `reopen` record idempotent umbrella status transitions.
 
 ## Routing proposals and decisions
 
@@ -117,13 +116,12 @@ whose source prefix has no persisted base, so the historical `aN` retains the
 mapping from a citation to the frozen source it denotes. The frozen Todo
 projection is persisted separately with `source_ref` `todo-snapshot`.
 
-Assessments are immutable descriptions. A later concern attachment, note,
-direction revision, accepted design, or authoritative external-state change
-does not edit the row. The read projection compares stored bases to current
-state and reports stale reasons. The existence of a newer `aN` for the same
-umbrella is itself a stale reason for every older assessment, even if its other
-bases still match: only the newest observation can be current. Staleness is
-derived; it is not a replacement for the original disposition.
+Assessments are immutable descriptions of selected inputs. A later concern
+attachment, note, direction revision, accepted design or change to a recorded
+source basis leaves the original row intact. The read projection compares
+stored bases to the current selected inputs and reports differences. A newer
+`aN` makes every older assessment non-current, even when their other bases
+still match. These comparisons are derived separately from the stored disposition.
 
 ## Designs
 
@@ -234,12 +232,10 @@ Migration is explicit and preserves legacy meaning conservatively:
 2. Its title and pointer become direction revision 1, marked as legacy-derived.
 3. Its pointer and source path produce one captured concern attached to that
    same umbrella.
-4. Its original researched note is retained byte-for-byte as a
-   `legacy_unreviewed` design. It is not accepted and is not silently split
-   into an assessment, accepted design, or implementation plan.
+4. Its original researched note is stored byte-for-byte as a
+   `legacy_unreviewed` design.
 5. Existing working notes are preserved in order and receive `nN` identities.
-6. Migration infers no relationship or unification between legacy todos and no
-   implementation or closure evidence from a `done` marker.
+6. Each legacy todo remains a separate umbrella with its recorded lifecycle.
 
 `todo migrate --backup ABSOLUTE_PATH` requires an absent absolute backup path
 for a version-1 database. It writes a complete SQLite backup before applying

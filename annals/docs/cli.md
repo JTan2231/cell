@@ -234,9 +234,9 @@ canonical credential refresh, and eight-slot scheduling. Annals asks Nucleus
 for an authenticated account preflight before a queued dispatch; it may wait
 up to 30 seconds, and failure leaves the envelope queued with attempts zero.
 
-The liaison submits a provisional, best-current interpretation. It does not
-filter source material by estimated novelty or salience and does not claim an
-objective final decomposition into atomic concepts.
+The liaison submits an interpretation of the retained work at the frozen base
+revision. It preserves source material regardless of estimated novelty or
+salience and chooses concept granularity relative to the work and corpus.
 
 Without `--apply`, a reconciliation whose projected corpus state differs from
 its base remains pending. `--apply` immediately commits that pending
@@ -766,9 +766,8 @@ free-form annotations:
 Every object rejects unknown fields. Summaries, annotations, labels, handles,
 and quotations must be nonempty when present. Labels and handles have no outer
 whitespace or control characters. `annotations` may be omitted and defaults to
-an empty list. Annotations are retained as meta-level context only; they are
-not evidence, confidence levels, or review flags and do not affect projected
-corpus state, corpus validation, or application.
+an empty list. Annotations are retained as descriptive context alongside the reconciliation.
+Corpus projection, validation and application use its operations and evidence.
 
 ### Concept selectors
 

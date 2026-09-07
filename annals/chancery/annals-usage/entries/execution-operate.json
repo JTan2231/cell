@@ -56,7 +56,7 @@
   "promise": {
     "consumers": [
       {"status": "declared", "statement": "A local Annals operator may inspect current account-global Codex allowance, diagnose the Annals Usage path, or deliberately delegate attended login to Nucleus."},
-      {"status": "unsupported", "statement": "This is not exact per-delivery consumption reporting, Annals reconciliation diagnosis, general Nucleus administration, invoice truth, or subscription allocation."}
+      {"status": "unsupported", "statement": "This is not exact per-delivery consumption reporting, Annals reconciliation diagnosis, general Nucleus administration, invoicing, or subscription allocation."}
     ],
     "preconditions": [
       {"status": "declared", "statement": "Budget and doctor require a valid Annals Usage configuration and a compatible reachable Nucleus account interface; doctor also requires the configured Annals library and spool paths to be inspectable."},

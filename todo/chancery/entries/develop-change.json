@@ -52,7 +52,7 @@
   ],
   "checkpoints": [
     "Model text remains non-authoritative and explicit accept/reject commands remain outside liaison tools.",
-    "Todo does not become an implementation workflow, project graph, or evidence that work ran.",
+    "Todo retains concern, assessment, design, note and lifecycle records; execution workflows remain separate.",
     "Persistent changes have migration, backup, rollback, and historical compatibility proof.",
     "Release or deployment has not occurred without separate authorization."
   ],

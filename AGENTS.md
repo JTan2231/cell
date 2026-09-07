@@ -3,6 +3,9 @@
 Semantics-Project: cell
 
 - Keep changes simple; do not overcomplicate or overarchitect.
+- Describe each product's records, their supported interpretation, and the
+  operations performed on them. Tie collection counts, timestamps, and failures
+  to the specific operation or selected records they describe.
 - This root participates in the installed Semantics service. The `cell`
   semantic repository is authoritative for cross-product terminology and its
   history when work is rooted here; a deeper registered product repository is

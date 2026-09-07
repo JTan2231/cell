@@ -17,8 +17,8 @@ service.
 | Authority | Owns | Does not own |
 | --- | --- | --- |
 | Caller | The text it supplies, source labels, choice to create or tell a case, and any real-world contact action | The steward's generated revision or Nucleus execution state |
-| CRM | Mutable profile entries; case, delivery, immutable revision, and steward-update/attempt identities; stage; advisory retention and display; validation; atomic commits; retry admission; and deterministic reads | Truth of cited sources, permission to contact someone, or proof that contact occurred outside CRM |
-| Cited source | The external fact or record referenced by the caller | CRM's retained interpretation or update history |
+| CRM | Mutable profile entries; case, delivery, immutable revision, and steward-update/attempt identities; stage; advisory retention and display; validation; atomic commits; retry admission; and deterministic reads | Caller contact actions and Nucleus execution |
+| Cited source | The locator or label supplied with a delivery | CRM's stored revision and update history |
 | Nucleus | Agent admission, authentication, supervised execution, job/output records, and durable managed-tool transport | CRM case state, domain success, update retry policy, or the meaning of a stage |
 | Steward agent | One bounded proposed full replacement revision | Authority to bypass CRM validation, contact anyone, or make final prose a domain result |
 | Chancery | Installed contract discovery and exact promise resolution | CRM runtime execution or case data |
@@ -58,11 +58,10 @@ requiring or parsing any heading. The case's initial stage defaults to
 research | warranted | contacted | connected | helped | closed
 ```
 
-The stages are compact claims in the case ledger. In particular, `warranted`
-means the retained current revision considers contact worthwhile; it is not an
-authorization or blocking gate. `connected` and `helped` are likewise CRM
-claims based on supplied information, not independent observation of another
-person.
+Stages classify the case ledger. `warranted` records that the current revision
+considers contact worthwhile. `connected` and `helped` summarize the interactions
+recorded in the case. Stage changes retain their supporting revision material;
+contact authorization remains with the caller.
 
 `tell CASE_ID INPUT` accepts one new free-form UTF-8 delivery. In one database
 transaction CRM retains its exact text as SQLite `TEXT`, records its digest and
@@ -163,12 +162,10 @@ both `attention: true` and the advisory text. It is durable evidence about the
 steward's caution, but it never blocks case intake, inspection, stage changes,
 worker recovery, or any caller-owned real-world action.
 
-CRM can substantiate that particular input bytes were retained, a particular
-bounded AI run proposed a revision, and CRM accepted it under a specific base
-and tool receipt. It cannot by itself substantiate that a source was true, a
-message was sent, another person replied, or employment help occurred. Those
-facts must arrive through a caller-supplied delivery with an appropriate source
-reference and remain attributable to that source.
+CRM retains supplied input, the steward's proposed revision, and the base and
+tool receipt under which the revision was accepted. Caller deliveries add
+material about messages, replies, meetings and employment help to that case
+history, with their supplied source references.
 
 The supported version-0.3 reads expose current profile entries, immutable case
 revisions, `source_update_id`, update/delivery identity, and Nucleus requester/job

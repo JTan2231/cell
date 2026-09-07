@@ -105,7 +105,7 @@
       },
       {
         "status": "unsupported",
-        "statement": "Catalog completeness does not mean every possible product behavior has been published or that represented runtimes are currently ready."
+        "statement": "Starting represented capabilities or probing their runtime readiness is outside catalog discovery."
       }
     ],
     "access": [

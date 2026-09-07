@@ -196,9 +196,9 @@ pre-start failure after admission is retained as `start_failed` when that
 terminal write succeeds. A supervision failure after spawn records the child's
 observed terminal state when cleanup is proved; if termination or persistence
 cannot be proved, the running row is deliberately left for conservative lost
-recovery. These are runtime observations. They do not claim that a digest was
-sent, an inbox was drained, a semantic change was correct, or any other product
-goal succeeded.
+recovery. These records describe the supervised process. The product records
+its own result, such as a sent digest, a processed inbox item, or an accepted
+semantic revision.
 
 ## Inspection
 

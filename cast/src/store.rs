@@ -378,7 +378,7 @@ impl Store {
             }
             if let Some(mut company)=get::<Company>(tx,"companies",&source.company_id)? {
                 let mut changed=false;
-                if let Some(name)=&result.company_name && !name.is_empty() && (company.name==company.domain.clone().unwrap_or_default() || company.name=="Unknown employer" || company.name.starts_with("ats:")) { company.name.clone_from(name); merge_evidence(&mut company.evidence,&[Evidence {source_url:source.url.clone(),kind:"employer_name".into(),note:"Employer name supplied by ownership-qualified verification".into(),..Default::default()}]); changed=true; }
+                if let Some(name)=&result.company_name && !name.is_empty() && (company.name==company.domain.clone().unwrap_or_default() || company.name=="Unknown employer" || company.name.starts_with("ats:")) { company.name.clone_from(name); merge_evidence(&mut company.evidence,&[Evidence {source_url:source.url.clone(),kind:"employer_name".into(),note:"Employer name supplied by the matching careers adapter".into(),..Default::default()}]); changed=true; }
                 if changed { company.revision+=1; put_revision(tx,"company",&company.id,company.revision,&company)?; put(tx,"companies",&company.id,&company)?; }
             }
             if result.complete && result.outcome=="complete" {
@@ -403,7 +403,7 @@ impl Store {
         })
     }
 
-    /// Splits ATS tenant ownership and quarantines observations from older HTML parsers.
+    /// Applies current ATS tenant and HTML adapter rules to stored associations.
     pub fn reconcile_ownership(&self) -> Result<Value> {
         self.write(|tx| {
             let mut moved_sources=0_u64;
@@ -429,7 +429,7 @@ impl Store {
                 if let Some(source)=board_source {
                     if job.company_id!=source.company_id {
                         job.company_id.clone_from(&source.company_id);
-                        merge_evidence(&mut job.evidence,&[Evidence {source_url:source.url.clone(),kind:"identity_reconciliation".into(),note:"Employer ownership corrected to the independently identified ATS tenant".into(),..Default::default()}]);
+                        merge_evidence(&mut job.evidence,&[Evidence {source_url:source.url.clone(),kind:"identity_reconciliation".into(),note:"Employer association updated to the ATS provider/tenant identity".into(),..Default::default()}]);
                         moved_jobs+=1;
                         changed=true;
                     }
@@ -438,13 +438,13 @@ impl Store {
                         job.availability="unknown".into();
                         job.missing_complete_snapshots=0;
                         job.first_missing_at=None;
-                        merge_evidence(&mut job.evidence,&[Evidence {source_url:job.url.clone(),kind:"identity_unresolved".into(),note:"JSON-LD observation did not establish employer ownership under current source rules; verification is required".into(),..Default::default()}]);
+                        merge_evidence(&mut job.evidence,&[Evidence {source_url:job.url.clone(),kind:"identity_unresolved".into(),note:"JSON-LD observation does not match current adapter rules; recorded status set to unknown".into(),..Default::default()}]);
                         quarantined_jobs+=1;
                         changed=true;
                     }
                     if let Some(mut source)=source {
                         source.status="needs_identity_review".into();
-                        source.note=Some("JSON-LD employer ownership is unproven under current source rules".into());
+                        source.note=Some("JSON-LD does not match the current employer URL rule".into());
                         source.next_due_at=0;
                         put(tx,"sources",&source.id,&source)?;
                     }
@@ -459,7 +459,7 @@ impl Store {
                 let mut changed=false;
                 if let Some(domain)=company.domain.clone() && company.name!=domain && !company.evidence.is_empty() && company.evidence.iter().all(|e| matches!(e.kind.as_str(),"search_result_unverified"|"identity_unresolved")) {
                     company.name=domain;
-                    merge_evidence(&mut company.evidence,&[Evidence {source_url:company.website_url.clone().unwrap_or_default(),kind:"identity_unresolved".into(),note:"Search-only candidate name reset because a linked job did not establish employer identity".into(),..Default::default()}]);
+                    merge_evidence(&mut company.evidence,&[Evidence {source_url:company.website_url.clone().unwrap_or_default(),kind:"identity_unresolved".into(),note:"Search candidate name reset to its domain by the current adapter rules".into(),..Default::default()}]);
                     renamed_candidates+=1;
                     changed=true;
                 }
@@ -658,7 +658,7 @@ fn repair_hn_display_name(tx: &Transaction<'_>, company: &mut Company) -> Result
             source_url,
             kind: "identity_reconciliation".into(),
             note: format!(
-                "Unreliable HN display name replaced with an exact source identity; previous display: {prior}"
+                "HN display name updated to its source identity; previous display: {prior}"
             ),
             ..Default::default()
         }],
@@ -704,7 +704,7 @@ fn clear_shared_identity(tx: &Transaction<'_>, company: &mut Company) -> Result<
         }
     }
     for url in removed {
-        merge_evidence(&mut company.evidence,&[Evidence {source_url:url,kind:"identity_unresolved".into(),note:"Shared third-party hosting does not establish an employer domain or website; original source evidence is retained".into(),..Default::default()}]);
+        merge_evidence(&mut company.evidence,&[Evidence {source_url:url,kind:"identity_unresolved".into(),note:"Shared-host company domain and website fields cleared by adapter rules; source data retained".into(),..Default::default()}]);
     }
     Ok(true)
 }
@@ -939,7 +939,7 @@ fn ats_company_inner(tx: &Transaction<'_>, url: &str, origin: Option<&str>) -> R
     let evidence = Evidence {
         source_url: origin.unwrap_or(&canonical).into(),
         kind: "ats_tenant_identity".into(),
-        note: format!("ATS tenant {board}; linking page identity is not inherited"),
+        note: format!("ATS tenant {board}; stored under its provider/tenant company identity"),
         ..Default::default()
     };
     let before = company.evidence.len();

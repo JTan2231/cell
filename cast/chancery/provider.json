@@ -7,10 +7,10 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Cast owns retained company and job identities, extracted discovery evidence, collection coverage and freshness, local query configuration, conservative request-budget accounting, source retry state, consistent JSON exports, and its program packaging."
+      "Cast owns stored company and job identities, extracted fields and source metadata, collection outcomes and timestamps, local query configuration, conservative request-budget accounting, source retry state, consistent JSON exports, and its program packaging."
     ],
     "not_authoritative_for": [
-      "Publishers and providers own external facts and coverage. Downstream products own personal selection, CRM cases, application packets, application submission and email delivery."
+      "Downstream products own personal selection, CRM cases, application packets, application submission and email delivery."
     ],
     "inventory": {
       "covers": [
@@ -31,7 +31,7 @@
       "Cast provider release, capability contract version, database schema and export schema are distinct. Installed bundles change only through a matching product release."
     ],
     "operational_limits": [
-      "Cast uses ordinary Rust and HTTP with explicit local budgets. It invokes no model, Nucleus, CRM steward, computer-use tool or email sender and installs no schedule. External catalog and job coverage is incomplete."
+      "Cast uses ordinary Rust and HTTP with explicit local budgets. It invokes no model, Nucleus, CRM steward, computer-use tool or email sender and installs no schedule."
     ]
   },
   "entries": [

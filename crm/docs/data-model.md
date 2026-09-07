@@ -59,10 +59,8 @@ then `id`; JSON list entries and show return entire current rows. Human list
 output shows ID, title, and timestamp.
 
 Profile Markdown is retained verbatim, including caveats and disclosure notes.
-CRM does not validate those claims or automatically apply rules found in one
-entry to another. `updated_at` describes storage freshness, not the date an
-experience occurred or the truth of its claims. Profile operations do not
-queue steward work or alter existing cases.
+Each entry is stored independently. `updated_at` records the latest CRM write.
+Profile operations invoke no steward work and leave cases unchanged.
 
 ## Case revisions
 
@@ -79,9 +77,7 @@ content fields:
 There is no field-level patch or inherited omission. Revision numbers are
 contiguous within a case, old revisions are immutable, and the case's current
 pointer advances only in the transaction that inserts the new revision.
-The stage is authoritative CRM state only because CRM validates and commits it;
-it remains an advisory classification rather than real-world authorization or
-independent verification.
+The stage is a stored CRM classification validated and committed with its revision.
 
 A non-null advisory is preserved verbatim as part of the revision. Storage
 does not turn it into a policy gate. Every read projection must carry it so the

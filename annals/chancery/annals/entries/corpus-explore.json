@@ -12,7 +12,7 @@
   ],
   "do_not_use_when": [
     "New material should be retained or reconciled.",
-    "Semantic similarity, web research, truth adjudication, or source-content topic search is expected.",
+    "Semantic similarity, web research, or source-content topic search is expected.",
     "The request concerns account usage rather than corpus knowledge."
   ],
   "outcome": "A bounded local read from an explicitly resolved immutable corpus revision or from Annals delivery and work history, with the query's limits made visible.",
@@ -23,7 +23,7 @@
   ],
   "authority": [
     "The Annals library is authoritative for retained works, concepts, parent edges, evidence links, reconciliations, commits, revisions, and delivery records.",
-    "An evidence link proves exact source support for a concept; it does not establish objective truth."
+    "An evidence link associates a concept with one exact quotation occurrence in a retained work."
   ],
   "success": [
     "The response identifies the resolved revision, selected concept IDs or works, evidence, pagination, and any graph frontier required to interpret the result.",
@@ -52,28 +52,27 @@
   ],
   "does_not_authorize": [
     "Any corpus mutation or reconciliation application.",
-    "A truth claim beyond the exact retained evidence.",
     "External disclosure of private library content."
   ],
   "promise": {
     "consumers": [
       {"status": "declared", "statement": "A local reader may inspect retained works, evidence-backed concepts, graph neighborhoods, source-delivery metadata, or corpus revision history."},
-      {"status": "unsupported", "statement": "This surface is not semantic similarity, source-content topic search, web research, truth adjudication, account reporting, or corpus mutation."}
+      {"status": "unsupported", "statement": "This surface is not semantic similarity, source-content topic search, web research, account reporting, or corpus mutation."}
     ],
     "preconditions": [
       {"status": "declared", "statement": "The caller selects a readable compatible Annals library and uses public concept IDs, work labels, revisions, filters, or opaque cursors accepted by the chosen command."}
     ],
     "inputs": [
       {"status": "declared", "statement": "Supported reads accept lexical query words, public cN concept IDs, work labels, revision selectors, bounded graph options, source-activity filters, or a context-bound opaque page cursor as applicable."},
-      {"status": "unsupported", "statement": "Labels and concept paths cannot select concepts, and source text, semantic vectors, objective-truth predicates, or arbitrary SQL are not search inputs."}
+      {"status": "unsupported", "statement": "Labels and concept paths cannot select concepts, and source text, semantic vectors, or arbitrary SQL are not search inputs."}
     ],
     "outputs": [
       {"status": "declared", "statement": "Outputs identify the resolved revision and return bounded concept, graph, evidence, work, delivery, commit, or revision-difference records with pagination and any truncation frontier visible."},
       {"status": "declared", "statement": "Work show returns complete retained text; lately returns delivery metadata and never searches or emits source content or document-internal dates."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Lexical search matches normalized concept labels and derived ancestor-label context; it is not semantic similarity, evidence retrieval, or a truth claim."},
-      {"status": "declared", "statement": "Evidence is an exact retained quotation supporting a concept across its parent relationships, not proof of objective truth or evidence attached to one edge."},
+      {"status": "declared", "statement": "Lexical search matches normalized concept labels and derived ancestor-label context."},
+      {"status": "declared", "statement": "Evidence associates an exact retained quotation occurrence with a concept across its parent relationships; it belongs to the concept rather than an edge."},
       {"status": "declared", "statement": "A graph frontier marks where configured depth or node limits stopped expansion and is not necessarily a leaf or the complete graph."}
     ],
     "identity_and_units": [

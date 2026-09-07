@@ -90,8 +90,8 @@ narratives/NAME/
 ```
 
 The review verdict is `PASS`, `REVISE`, or `BLOCKED`. A blocked result is a
-diagnostic and contains no publishable narrative. Generated files are current
-working artifacts, not retained run history or factual authority.
+diagnostic and contains no publishable narrative. Generated files are the
+current working artifacts for the five editorial stages.
 
 ## Build and use
 

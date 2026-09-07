@@ -114,7 +114,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Nucleus changes preserve the distinction between operational execution records and requester-owned domain truth, between public protocol and store schema, and between harness evidence and portable invocation semantics."
+        "statement": "Nucleus changes preserve the distinction between operational execution records and requester-owned domain records, between public protocol and store schema, and between harness output and portable invocation semantics."
       },
       {
         "status": "declared",

@@ -66,7 +66,7 @@
     ],
     "data_semantics": [
       {"status": "declared", "statement": "decision_admitted and decision_reviewed retain the Decisions meanings they had when originally committed."},
-      {"status": "declared", "statement": "A cursor is a legacy transport position, not decision identity, authority, or current-force evidence."}
+      {"status": "declared", "statement": "A cursor identifies a position in the retained legacy lifecycle stream."}
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "event_id, legacy decision_id, review_id, and cursor identify distinct retained records; append position defines order."},

@@ -11,7 +11,7 @@
       "The migration-compatible Krisis SQLite projection is authoritative for those operational records and retains retired Decisions history without making Krisis a decision library."
     ],
     "not_authoritative_for": [
-      "Only the cited user message supplies decision authority; Krisis does not judge correctness, importance, enactment, current force, relevance, or materiality.",
+      "The cited user message supplies decision authority.",
       "Conversations owns normalized conversation resolution, Nucleus owns bounded execution evidence, and Annals owns the accepted decision library and its search and retrieval behavior."
     ],
     "inventory": {

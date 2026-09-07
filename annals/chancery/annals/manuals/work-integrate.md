@@ -1,10 +1,8 @@
 # Integrate a source with the Annals corpus
 
 Integration asks Annals' constrained AI reader to examine one immutable work
-against one frozen corpus revision and propose how its ideas and exact
-supporting quotations fit the current map. The proposed interpretation is
-provisional and evidence-grounded; Annals does not decide truth or claim a
-uniquely correct decomposition.
+against one frozen corpus revision. It records an interpretation as semantic
+operations that associate ideas with exact source quotations in the corpus.
 
 ## Start an examination
 

@@ -12,7 +12,7 @@
     ],
     "not_authoritative_for": [
       "Each requester remains authoritative for the domain state, domain success, idempotent mutation, duplicate handling, and whether a new attempt is safe.",
-      "Codex owns harness and account behavior, and Nucleus output or terminal state does not make model prose, a tool result, or a requester outcome domain truth."
+      "Codex owns harness and account behavior. Requesters own their domain records and the operations that commit them."
     ],
     "inventory": {
       "covers": [

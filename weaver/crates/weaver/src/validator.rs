@@ -309,7 +309,7 @@ mod tests {
             Verdict::Pass => b"Verdict: PASS\n\nNo changes.".as_slice(),
             Verdict::Revise => b"Verdict: REVISE\n\nChange the opening.".as_slice(),
             Verdict::Blocked => {
-                b"Verdict: BLOCKED\n\nBlocked explanation: The factual record is incomplete."
+                b"Verdict: BLOCKED\n\nBlocked explanation: The authored brief requests a different narrative focus."
                     .as_slice()
             }
         };
@@ -319,7 +319,7 @@ mod tests {
                 b"# Better draft\n\n[Read more](../01-stories/output.md#one-story)".as_slice()
             }
             Verdict::Blocked => {
-                b"# No publishable narrative\n\nThe factual record is incomplete.".as_slice()
+                b"# No publishable narrative\n\nThe authored brief requests a different narrative focus.".as_slice()
             }
         };
         for (stage, output) in STAGES.into_iter().zip([

@@ -117,7 +117,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Provider scope declares jurisdiction and a non-circular inventory boundary; entry claims distinguish declared support, explicit unsupported behavior, unspecified guarantees, and non-applicable facets."
+        "statement": "Provider scope declares jurisdiction and a non-circular inventory boundary; entry claims describe product records and operations and distinguish declared support, explicit unsupported behavior, unspecified guarantees, and non-applicable facets. The completeness_and_freshness facet names selected records or an operation and explains its counts and timestamps, using not_applicable when those measurements do not apply."
       },
       {
         "status": "declared",
@@ -137,11 +137,11 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "The provider's inventory claim must name a meaningful class of public outcomes and say whether coverage is complete or partial; it must not define completeness as merely whatever was indexed."
+        "statement": "The provider's inventory claim must name a bounded class of public outcomes and identify which of its capabilities are published or omitted."
       },
       {
         "status": "declared",
-        "statement": "The provider release identifies the exact published bundle bytes; installed freshness changes only when the product advances its owned selector."
+        "statement": "The provider release identifies the exact published bundle bytes; the selected bundle changes when the product advances its owned selector."
       }
     ],
     "access": [

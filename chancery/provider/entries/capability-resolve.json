@@ -130,7 +130,7 @@
       },
       {
         "status": "unsupported",
-        "statement": "Resolution does not establish global ecosystem completeness, currently supported behavior outside published scopes, or live runtime freshness."
+        "statement": "Runtime probing and capability execution are outside the resolver's read surface."
       }
     ],
     "access": [

@@ -86,9 +86,7 @@ destructive action requiring explicit authority.
 ```
 
 Doctor checks schema identity/table presence, foreign keys, SQLite integrity,
-secure database/sidecar permissions, and strict Nucleus/toolset readiness. It
-does not
-prove a source, case claim, contact decision, connection, or employment result.
+secure database/sidecar permissions, and strict Nucleus/toolset readiness.
 
 ## Rollback
 

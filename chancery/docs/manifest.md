@@ -67,8 +67,8 @@ named class. `inventory.excludes` makes clear what absence cannot decide.
 The remaining fields state what the provider is and is not authoritative for
 and the common access/trust, privacy/retention, compatibility/retirement, and
 operational-limit qualifiers shared by its entries. Entry-specific facts still
-belong in the entry and manual. Provider scope is not runtime proof, global
-ecosystem completeness, or an authorization grant.
+belong in the entry and manual. Provider scope describes the published
+inventory; runtime checks and authorization use the represented interface.
 
 ## Capability entry
 
@@ -187,11 +187,11 @@ these collections contains at least one explicit claim:
 | Facet | Question answered |
 | --- | --- |
 | `consumers` | Who can rely on this promise? |
-| `preconditions` | What must already be true? |
+| `preconditions` | What inputs and operating conditions are required? |
 | `inputs` / `outputs` | What crosses the supported surface? |
 | `data_semantics` | What do values and states mean? |
 | `identity_and_units` | What identifies records, and what is measured? |
-| `completeness_and_freshness` | What coverage and currentness are promised? |
+| `completeness_and_freshness` | Which selected records or operation does the result cover, and what do its timestamps mean? |
 | `access` | Through what trust and access boundary is it available? |
 | `lifecycle_and_consistency` | What ordering, atomicity, replay, and recovery model applies? |
 | `operational_limits` | What material bounds or absent bounds qualify it? |
@@ -221,7 +221,8 @@ transfer, or readiness relationship.
 
 The exact entry and manual remain the detailed promise. Resolution cites the
 raw UTF-8 `provider.json`, entry, and manual bytes by bundle-relative path and
-lowercase SHA-256 digest; normalized fields do not create a second truth store.
+lowercase SHA-256 digest. Normalized fields describe those same product-owned
+contracts.
 
 ## Operation additions
 

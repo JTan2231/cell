@@ -56,8 +56,8 @@
   ],
   "effects": [
     "Initialization captures a private original resume template and creates local configuration/state.",
-    "Preparation reads Cast export and CRM profile list/read interfaces, fetches full supported employer posting evidence, submits two sequential constrained Nucleus jobs when pursuit is appropriate, and renders local resume artifacts.",
-    "Preview rechecks supported full posting evidence before freezing, retains exact brief text and copied PDF attachments, and reserves selected opportunities. Explicit send invokes fixed-recipient Email with the retained payload and occurrence key.",
+    "Preparation reads Cast export and CRM profile list/read interfaces, fetches posting text through a supported adapter, submits two sequential constrained Nucleus jobs when pursuit is appropriate, and renders local resume artifacts.",
+    "Preview fetches the supported posting again, compares it with the prepared input, then freezes brief text and copied PDF attachments and reserves selected opportunities. Explicit send invokes fixed-recipient Email with the stored payload and occurrence key.",
     "Ad hoc preview reads retained packet rows/stages/artifacts and creates only an isolated test occurrence with copied PDFs. It makes no Cast, CRM, source HTTP, Nucleus or rendering call. Ad hoc send updates only that occurrence and invokes the selected fixed-recipient Email implementation."
   ],
   "authority": [
@@ -118,7 +118,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Preparation requires initialized private Platter state, the original supported LaTeX resume template, readable supported Cast and CRM interfaces, full supported employer posting evidence, strict compatible authenticated Nucleus readiness and local resume rendering tools. Send additionally requires an authorized frozen edition and Email attachment support."
+        "statement": "Preparation requires initialized private Platter state, the original supported LaTeX resume template, readable supported Cast and CRM interfaces, posting text accepted by a supported adapter, strict compatible authenticated Nucleus readiness and local resume rendering tools. Send additionally requires an authorized frozen edition and Email attachment support."
       },
       {
         "status": "declared",
@@ -152,11 +152,11 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "New briefs contain at most 90 words across sections. Why it works gives one or two direct, confident, evidence-grounded sentences of at most 45 words. Role states stack, responsibilities and process expectations in one or two short lines of at most 30 words. Optional Culture states working norms in one or two short lines of at most 25 words. Role and Culture make no comparison with the user's experience. Displayed briefs omit caveats, downsides and hedging; pursuit criteria remain private. Career references establish provenance, not verified truth. The resume model cannot author fixed sections, dates, identity, employers, projects, skills or layout."
+        "statement": "New briefs contain at most 90 words across sections. Why it works gives one or two direct, confident, evidence-grounded sentences of at most 45 words. Role states stack, responsibilities and process expectations in one or two short lines of at most 30 words. Optional Culture states working norms in one or two short lines of at most 25 words. Role and Culture make no comparison with the user's experience. Displayed briefs omit caveats, downsides and hedging; pursuit criteria remain private. Career references identify the captured entries used by each stage. The resume model cannot author fixed sections, dates, identity, employers, projects, skills or layout."
       },
       {
         "status": "declared",
-        "statement": "A test occurrence uses retained material only and does not establish current posting availability. Its acceptance is independent of ordinary daily sent history. Reviewed paragraph overrides affect only the test occurrence; it retains the original accepted brief and source-state hashes without editing original artifacts."
+        "statement": "A test occurrence uses stored material. Its acceptance is independent of ordinary daily sent history. Reviewed paragraph overrides affect only the test occurrence; it retains the original accepted brief and source-state hashes without editing original artifacts."
       }
     ],
     "identity_and_units": [
@@ -172,15 +172,15 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Both stages use the same retained posting and captured CRM library. Culture appears only when supported by the posting or existing captured material; otherwise it is omitted without extra research or an uncertainty note. CRM separate list/read calls are not a transactional snapshot; capture checks entry timestamps and refuses incomplete list results. Cast excerpts alone do not satisfy full posting input. A new preview rechecks full posting evidence and defers changed or unavailable sources; reopening an already frozen edition does not refresh it."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No guarantee covers all employers, application requirements behind forms, perfect duplicate detection, current vacancy truth, or complete career evidence."
+        "statement": "Both stages use the same retained posting and captured CRM library. Culture appears only when supported by the posting or existing captured material; otherwise it is omitted without extra research or an uncertainty note. CRM separate list/read calls are not a transactional snapshot; capture checks entry timestamps and refuses incomplete list results. Cast excerpts alone do not satisfy full posting input. A new preview fetches the posting again and defers changed or unavailable inputs; reopening a frozen edition returns its stored contents."
       },
       {
         "status": "declared",
-        "statement": "Ad hoc preview does no freshness recheck, discovery export, profile retrieval, model invocation or rendering. It reads existing accepted artifacts only and consumes no Cast API budget."
+        "statement": "Posting fetches use the documented ATS and JobPosting JSON-LD adapters. Forms and authenticated pages are outside these fetch interfaces."
+      },
+      {
+        "status": "declared",
+        "statement": "Ad hoc preview reads existing accepted artifacts, consuming no Cast API budget and making no source-fetch, discovery-export, profile, model or rendering calls."
       }
     ],
     "access": [

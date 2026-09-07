@@ -19,7 +19,7 @@
   ],
   "outcome": "The selected Weaver run, output tree, readiness condition, or user-owned installation is observed or changed through its supported interface with the exact current record preserved.",
   "effects": [
-    "`status` and `check` are read-only; `check` invokes no model and does not establish editorial freshness.",
+    "`status` and `check` are read-only; `check` examines the persisted stage files mechanically.",
     "`wait` may start a detached replacement worker for a nonterminal run, and `cancel` durably records intent before asking Nucleus to cancel the current stage.",
     "`doctor` may initialize Weaver's private state directory and locks while changing no narrative or current workflow record.",
     "Deployment stages a content-addressed release, coordinates maintenance, changes Weaver's current command and release selectors, and removes only the superseded prototype LaunchAgent when present.",
@@ -143,7 +143,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "current.json is the sole current workflow record; status is observation, wait is observation plus explicit worker recovery, cancel is durable intent plus one current-stage cancellation request, and check is mechanical validity rather than freshness."
+        "statement": "current.json is the sole current workflow record; status is observation, wait is observation plus explicit worker recovery, cancel is durable intent plus one current-stage cancellation request, and check reports the persisted files' mechanical validity."
       },
       {
         "status": "declared",
@@ -170,8 +170,8 @@
         "statement": "Check validates all five persisted outputs and required cross-file invariants; deployment manifests and validates all packaged bytes and installed selectors before commit."
       },
       {
-        "status": "unsupported",
-        "statement": "Status is not machine-wide process liveness, check is not repeated editorial review, and deployment does not establish future Nucleus readiness or narrative freshness."
+        "status": "declared",
+        "statement": "Status reads the current workflow record, check validates persisted files, and deployment observes Nucleus readiness during the selected operation."
       }
     ],
     "access": [

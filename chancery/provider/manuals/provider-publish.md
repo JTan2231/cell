@@ -6,7 +6,7 @@ executable workflow. The interactive agent adapts it to the owning product's
 release machinery while preserving the checkpoints and authority boundaries
 below.
 
-## 1. Establish ownership and current truth
+## 1. Establish ownership and supported behavior
 
 Start with the user's durable outcome, not a command name or internal tool.
 Select `use`, `operate`, or `develop` according to the audience. A capability
@@ -34,9 +34,12 @@ what absence means.
 
 Add or revise an explicitly indexed entry and its detailed manual under the
 product's owned provider source. Normalize consumers, preconditions, inputs,
-outputs, data semantics, identity and units, completeness and freshness,
-access, lifecycle and consistency, limits, evolution, and substantive
-reliances. Each claim must say `declared`, `unsupported`, `unspecified`, or
+outputs, data semantics, identity and units, selected-record coverage and
+observation times, access, lifecycle and consistency, limits, evolution, and
+substantive reliances. For `completeness_and_freshness`, name the selected
+records or operation and explain its counts and timestamps. Use
+`not_applicable` when those measurements do not apply. Each claim must say
+`declared`, `unsupported`, `unspecified`, or
 `not_applicable`; do not infer a positive promise from silence. Keep stable IDs
 when semantics and authority remain compatible; increment the contract version
 for incompatible semantic changes.

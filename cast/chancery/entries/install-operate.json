@@ -55,11 +55,11 @@
     "Init creates private local state. Explicit configuration changes affect subsequent collection; diagnostic reads do not start paid searches.",
     "The installed wrapper sources ~/.zshrc with output suppressed and starts the Rust payload with only the documented environment and two provider keys.",
     "Source add retains an explicit source. Ordinary websites may use an existing company ID or a hostname candidate; supported ATS URLs use their canonical provider/tenant owner and reject --company-id. Source disable preserves evidence but removes that source from ordinary collection.",
-    "Ownership reconciliation locally corrects ATS source/job associations, quarantines unproven or shared-host JSON-LD jobs as unknown, restores affected search-candidate names and clears misleading shared-host company domains, website URLs and aliases. It preserves source/job IDs, evidence, paid request accounting, run history and query checkpoints."
+    "Ownership reconciliation applies current adapter rules to stored ATS source/job associations, sets older or shared-host JSON-LD jobs to unknown, restores affected search-candidate names and clears shared-host company domains, website URLs and aliases. It preserves source/job IDs, source metadata, paid request accounting, run history and query checkpoints."
   ],
   "authority": [
     "Cast owns its installation, state schema, configuration validation and local allowance accounting.",
-    "The caller owns chosen collection policy and provider accounts; provider balances are separate external facts."
+    "The caller chooses collection policy and provider accounts; provider balances are managed by each provider."
   ],
   "success": [
     "Installation switches command and matching documentation coherently and passes version/help checks.",

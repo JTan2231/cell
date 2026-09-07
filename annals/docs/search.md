@@ -40,8 +40,7 @@ normalized ancestor context. Exact label matches rank first, followed by label
 prefix matches, then broader label-term coverage. Public ID is the final
 deterministic tie breaker.
 
-This is a compact lexical lookup, not a semantic-similarity or truth claim. The
-liaison uses the same graph concepts through its revision-scoped,
+The liaison uses this same compact lexical lookup through its revision-scoped,
 independently paginated `corpus_search` tool.
 
 ## Results and pagination

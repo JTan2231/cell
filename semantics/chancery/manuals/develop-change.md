@@ -13,8 +13,8 @@ changing persistent state, the toolset, service lifecycle, or packaging.
 - Repository state is replayed from contiguous immutable revisions and typed
   effects. Version one has no mutable concept projection.
 - Each new account-derived revision grounds its exact Annals library, event,
-  and account identity without confidence or review behavior. Legacy
-  admission/review effects remain decodable and append-only.
+  and account identity. Legacy admission/review effects remain decodable and
+  append-only.
 - Active normalized canonical labels are unique, new concept IDs are strictly
   sequential, and an entire revision validates before any effect commits.
 - Nucleus uses a neutral cwd, workspace `none`, no shell, no web, exactly one

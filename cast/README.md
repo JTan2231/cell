@@ -14,8 +14,8 @@ cast export --json
 ```
 
 Collection uses configured TheirStack, Brave and Hacker News searches, followed
-by supported public careers sources. Query/source coverage, freshness, failures
-and budget deferrals remain visible. There are no routine model calls,
+by supported public careers sources. Cast stores companies and jobs alongside
+collection timestamps, query limits, failures and budget deferrals. There are no routine model calls,
 computer-use calls, CRM updates, application packets or email sends.
 
 The installed frontend reads only `THEIRSTACK_API_KEY` and

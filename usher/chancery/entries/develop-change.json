@@ -42,14 +42,14 @@
   ],
   "checkpoints": [
     "Recognition remains a read-only deterministic declaration check.",
-    "Global collisions and incomplete inventory evidence remain visible; other relationships and quality remain outside Usher.",
+    "Global collisions and missing or unreadable inventory declarations remain visible in the report.",
     "The separate Rust installer and version-one deployment adapter preserve product-owned installation and supported legacy recovery; both executable candidates are built and sealed by the product gate."
   ],
   "adaptation": [
     "Add a universal membership condition only through an explicit Cell policy change, not by discovering an implementation dependency."
   ],
   "stop_when": [
-    "The change would silently claim actual registration, installation, quality, conformance, or another system relationship."
+    "The change would add registration, installation, service probing, or another system operation to recognition."
   ],
   "does_not_authorize": [
     "Release publication, deployment, or operations on other systems."
@@ -90,7 +90,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Recognition validity describes explicit repository declarations; domain quality and other relationships remain outside the result."
+        "statement": "Recognition findings describe the selected repository declarations and the rule applied to each."
       }
     ],
     "identity_and_units": [

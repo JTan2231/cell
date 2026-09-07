@@ -7,11 +7,11 @@ and exact execution correlations behind each AI-assisted update. Supported
 reads expose the case lineage and CRM/Nucleus identities; version 0.3 does not
 provide a raw-delivery or mailbox-receipt export command.
 
-CRM does not fetch sources, send messages, or certify that an external event
-happened. A `warranted`, `connected`, or `helped` stage is durable CRM state
-grounded in the retained case history; it is not permission, independent
-verification, or a substitute for the cited source. Any revision advisory is
-shown prominently and never acts as a gate.
+CRM stores case narratives, stages and supporting material. A `warranted`,
+`connected`, or `helped` stage is part of the stored case history. Source
+references remain attached to their deliveries. Any revision advisory is
+shown prominently and never acts as a gate. CRM performs local library reads
+and writes; the caller handles messages and other contact actions.
 
 ## Build and check
 

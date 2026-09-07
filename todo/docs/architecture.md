@@ -37,9 +37,9 @@ Todo SQLite is authoritative for:
 Nucleus is authoritative for job admission, runtime state, authentication,
 Codex compatibility, tool-mailbox delivery, and raw protocol history. It does
 not own `cN`, `rN`, `tN`, `aN`, or `dN`, and Nucleus completion is not Todo
-success. Git, component documentation, deployed binaries, and other external
-systems remain authoritative for facts in their own jurisdictions; an
-assessment cites those authorities rather than copying ownership into Todo.
+success. Git, component documentation, deployed binaries and other systems can supply
+assessment inputs. Todo records the selected references and its interpretation
+of those inputs.
 
 Conversation or file paths are provenance references. Todo retains paths and
 evidence references, not source bytes. Codex may read source material during a
@@ -227,8 +227,8 @@ current view:
 - `design show dN` combines clauses, corrections, decision provenance, and
   staleness.
 
-Staleness is derived comparison data, not another mutable status vocabulary.
-The underlying accepted or rejected decision remains historical truth.
+Staleness is derived from comparisons with recorded bases. The accepted or
+rejected decision remains in the immutable history.
 
 ## Daily attention digest
 
@@ -244,12 +244,11 @@ The body groups items under **Needs your decision**, **Needs follow-up**, and
 followed by a plain-language status, secondary typed references, and safe
 inspection commands. Stored state tokens are translated rather than exposed.
 The decision section covers routing proposals, situation choices, and
-desired-state designs awaiting an explicit user decision. Follow-up covers
-unresolved concerns without a pending routing decision and open todos that need
-assessment, reassessment, more evidence, or desired-state design work. Other
+desired-state designs awaiting an explicit user decision. Follow-up covers unresolved concerns without a pending routing decision and
+open todos awaiting assessment, named assessment inputs, reassessment after
+changed bases, or desired-state design work. Other
 open todos have no immediate
-research or decision request; an accepted desired state does not imply that
-implementation ran or that the todo is complete.
+research or decision request; an accepted desired state leaves the umbrella open.
 
 The digest discloses only aggregate counts, current todo titles, generic
 plain-language stage labels, typed references, and inspection commands. It

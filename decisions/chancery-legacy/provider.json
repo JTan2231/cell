@@ -10,7 +10,7 @@
       "The Decisions compatibility provider documents read-only access to retained version-one lifecycle events."
     ],
     "not_authoritative_for": [
-      "It is not authoritative for new Krisis capture, Annals accounts, current decision force, or consumer policy."
+      "Krisis owns new capture, Annals owns accepted accounts, and each consumer owns its processing policy."
     ],
     "inventory": {
       "covers": ["The sole supported retained Decisions lifecycle read surface."],

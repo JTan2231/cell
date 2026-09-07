@@ -24,9 +24,8 @@ Todo creates and retains a complete SQLite backup before the version-two
 transaction. Failure leaves the original usable. Against a current database,
 migrate is a true no-op and does not touch the supplied backup path.
 
-Migration preserves identities, lifecycle, sources, notes, and historical
-direction. It does not infer cross-todo relationships, assessment facts,
-accepted design, implementation, or closure evidence.
+Migration preserves identities, lifecycle, sources, notes and historical
+direction in their documented destination records.
 
 ## Deploy or update on macOS
 

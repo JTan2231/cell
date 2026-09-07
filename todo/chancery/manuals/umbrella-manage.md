@@ -51,9 +51,8 @@ identifiers while choosing one canonical survivor.
 ```
 
 Notes are immutable working annotations. Done and reopen are idempotent status
-transitions on the umbrella. They do not prove that an implementation plan ran
-or that external work is complete. Todo deliberately does not model execution,
-work items, or a general project graph.
+transitions on the umbrella. Todo stores concerns, direction, assessments,
+designs, notes and this open/done lifecycle.
 
 These reads and deterministic writes use Todo SQLite directly and do not
 invoke Nucleus. They can expose private directions, paths, notes, assessment
@@ -71,4 +70,4 @@ enums define the interface without a separate declaration layer.
 
 ## Output selection
 
-Todo list/search retain compact ID/title/lifecycle rows, default to 20, and include has_more with positive --limit for more. Exact show retains the complete selected umbrella with concerns, notes and current assessment/design summaries. Lifecycle and note mutations retain durable receipts and no implementation-success inference.
+Todo list/search retain compact ID/title/lifecycle rows, default to 20, and include has_more with positive --limit for more. Exact show retains the selected umbrella with concerns, notes and current assessment/design summaries. Lifecycle and note mutations retain durable receipts.

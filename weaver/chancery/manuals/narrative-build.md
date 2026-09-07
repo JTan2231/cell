@@ -57,9 +57,9 @@ story anchors and links, the exact review verdict, and final-output consistency.
 `PASS` and `REVISE` are mechanically valid and exit zero. `BLOCKED` is a valid
 diagnostic but not publishable narrative and exits 3.
 
-Nucleus completion alone does not prove a build. Weaver must persist every
-required output and the repository must pass mechanical validation. Generated
-text remains current working material rather than factual authority.
+A completed build has every required output persisted and passes the
+repository's mechanical validation. Generated text is current working material
+for the editorial workflow.
 
 ## Recovery and privacy
 

@@ -1,9 +1,9 @@
 # Assess a Todo's current situation
 
-A situation assessment describes what is true now for one established open
-canonical `tN`. It maps accepted direction boundaries to current evidence,
-constraints, dependencies, gaps, and jurisdiction. It cannot revise the todo,
-choose a desired design, or authorize work.
+A situation assessment describes the selected source material for one open
+canonical `tN`. It maps accepted direction boundaries to findings, constraints,
+dependencies, open items and jurisdiction. It records an assessment for later
+design work.
 
 ```sh
 /Users/joey/.local/bin/todo assess <TODO_ID>
@@ -31,13 +31,12 @@ One immutable dated assessment includes:
 - coverage of every direction boundary;
 - jurisdiction findings assigning every relevant party exactly one role of
   owner, participant, or consumer, with exactly one owner per jurisdiction;
-- material user choices, evidence gaps, and jurisdiction conflicts; and
+- unresolved user choices, missing assessment inputs, and jurisdiction conflicts; and
 - one disposition: `ready`, `needs_user_choice`, or `inconclusive`.
 
-`ready` means the evidence is sufficient for design reconciliation. It does
-not mean implementation is approved. `needs_user_choice` records a material
-value or authority decision that cannot be inferred. `inconclusive` records a
-material evidence gap. Runtime or tool failure is infrastructure failure and
+`ready` means the selected inputs support design reconciliation with no
+unresolved items. `needs_user_choice` records a material value or authority
+decision. `inconclusive` records missing material needed for the assessment. Runtime or tool failure is infrastructure failure and
 must not be relabeled as an inconclusive domain finding.
 
 ## Currentness and recovery

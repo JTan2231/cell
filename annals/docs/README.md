@@ -1,7 +1,7 @@
 # Annals documentation
 
-Annals reconciles one immutable work with one frozen view of a conceptual
-corpus through a provisional, evidence-grounded interpretation.
+Annals records an interpretation of one immutable work in one frozen view of a
+conceptual corpus, using concepts, relationships, and exact source quotations.
 
 ```text
 immutable work + corpus revision
@@ -9,7 +9,7 @@ immutable work + corpus revision
        bounded inspection
               |
               v
-    best-current reconciliation
+    reconciliation request
               |
        stage / correct
               |

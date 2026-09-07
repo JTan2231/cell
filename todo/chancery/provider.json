@@ -12,7 +12,7 @@
     ],
     "not_authoritative_for": [
       "Nucleus owns model execution, authentication, job state, and raw protocol history; Resend and the recipient provider own external email submission and receipt.",
-      "Source artifacts and independently stewarded systems remain authoritative for their own contents and current state, and Todo lifecycle markers do not prove implementation execution."
+      "Source artifacts and independently stewarded systems supply the selected assessment inputs."
     ],
     "inventory": {
       "covers": [
@@ -37,7 +37,7 @@
     ],
     "operational_limits": [
       "Todo has no daemon, workflow engine, implementation executor, or general project graph; model work is bounded research and external email is an explicit synchronous action.",
-      "No global latency, capacity, delivery-time, implementation-completion, or external-state freshness service-level objective is promised across this provider."
+      "No global latency, capacity or delivery-time service-level objective is promised across this provider."
     ]
   },
   "entries": [

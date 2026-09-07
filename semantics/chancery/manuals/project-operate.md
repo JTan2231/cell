@@ -178,8 +178,7 @@ semantics --json intake run
 
 Use `intake assign EVENT PROJECT` only to correct unassigned account intake
 after verifying the exact project. Assignment history is audited. Every valid
-accepted account is immediately eligible for reconciliation; there is no
-confidence, disposition, review, or supersession gate. Exact authority-thread
+accepted account is immediately eligible for reconciliation. Exact authority-thread
 cwd and the deepest current registered root determine ownership. Preserved
 legacy Decisions intake remains visible in a separate status collection and
 retains its old states and grounding meaning.

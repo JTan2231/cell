@@ -53,8 +53,8 @@
     {"label": "Select another database", "invocation": "/Users/joey/.local/bin/crm --database PATH case new --title TITLE [INPUT]"}
   ],
   "does_not_authorize": [
-    "Fetching or accepting the truth of an external source, sending or publishing content, or contacting a person.",
-    "Treating a CRM stage, summary, or advisory as permission, independent verification, or a guaranteed employment result.",
+    "Fetching a source, sending or publishing content, or contacting a person.",
+    "Using a CRM stage, summary, or advisory to authorize an action.",
     "Automatic retry, direct Codex execution, changing Nucleus, or replacing a terminal attempt by hand."
   ],
   "dependencies": [
@@ -75,15 +75,15 @@
       {"status": "declared", "statement": "Case creation returns a receipt with case ID, revision, stage, summary, complete advisory/attention and recorded time, without repeating Markdown. Tell durably returns its queued update and any activation warning. Exact case show retains full Markdown; runtime and domain settlement remain distinct."}
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "A revision is a complete immutable Markdown, stage, nullable advisory, and summary snapshot; a source reference is an unverified caller-supplied locator, and a stage is CRM state rather than real-world permission or proof."}
+      {"status": "declared", "statement": "A revision is a complete immutable Markdown, stage, nullable advisory, and summary snapshot. A source reference is a caller-supplied locator stored with the delivery. A stage classifies the case within CRM."}
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "Case ID identifies one lineage, positive revision numbers identify complete snapshots, update ID identifies one steward attempt/domain run, requester identity is case-steward:UPDATE_ID, and Nucleus job ID is one request idempotency key."},
-      {"status": "not_applicable", "statement": "The capability defines no pricing, ranking confidence, contact score, or physical unit."}
+      {"status": "not_applicable", "statement": "The capability defines no pricing or physical unit."}
     ],
     "completeness_and_freshness": [
       {"status": "declared", "statement": "A successful case or tell transaction retains the complete validated input accepted at that time; a successful steward commit retains all four revision fields and exact attempt/tool correlation."},
-      {"status": "unsupported", "statement": "CRM does not refresh, resolve, or prove the current truth of caller-supplied sources."}
+      {"status": "declared", "statement": "CRM stores source references as supplied and does not fetch their contents."}
     ],
     "access": [
       {"status": "declared", "statement": "The supported boundary is the local CRM CLI against an explicitly selected private database; hidden steward work uses Codex model gpt-5.6-terra with medium reasoning and a 1,200-second timeout through Nucleus, with workspace, shell, web, and launch context disabled and one managed tool."}

@@ -34,7 +34,7 @@ Configuration retains the original template path and executable paths for
 Cast, CRM and Email. Use absolute paths and keep private files outside Git.
 
 Preparation requires initialized Cast and CRM libraries, their supported CLI
-interfaces, accessible complete employer posting evidence, compatible strict
+interfaces, posting text accepted by a supported adapter, compatible strict
 Nucleus readiness and local resume rendering tools. Rendering requires
 `tectonic`, Python 3 with `pypdf`, and the original template's packages/fonts.
 Absolute `PLATTER_TECTONIC` and `PLATTER_PYTHON` overrides are supported; default
@@ -60,11 +60,11 @@ posting URLs. A changed discovery URL need not create a new opportunity when
 the canonical ATS identity agrees. Perfect cross-provider or reposting
 deduplication is not promised.
 
-Cast exports supply retained evidence rather than full posting text. The
-runner obtains complete supported employer evidence before writing. Supported
+Cast exports include stored posting excerpts. The runner fetches posting text
+through a supported adapter before writing. Supported
 sources include Greenhouse, Ashby, Lever and supported JobPosting JSON-LD;
 pages requiring interactive forms, login, unsupported representations or
-missing full text may fail preparation. A fetch failure does not prove closure.
+missing full text may fail preparation. Fetch failures defer the packet without changing its stored job status.
 
 The runner captures CRM profile entries through list/read operations. It
 rejects incomplete lists and detected timestamp changes during capture.
@@ -100,32 +100,30 @@ A declined v2 submission uses `pursue=false`, empty `why_it_works` and `role`
 strings, and absent or `null` `culture`. Platter retains an empty display
 string and skips resume preparation without generating an affirmative
 recommendation.
-The second job independently reads the career library and submits only plain
-Jackson bullet text with private supporting entry references. It may use the
-brief for positioning, but the brief cannot establish a new career fact.
+The second job reads the captured career library and submits plain Jackson
+bullet text with supporting entry references. The brief guides positioning;
+career details come from the captured entries.
 
 The renderer replaces only the permitted Jackson bullet span in the captured
 original source. Every byte outside it stays fixed. Model text is escaped as
 content, not executed as LaTeX. A packet becomes ready only after accepted
-content is retained and a one-page PDF passes the rendering checks. References
-and mechanical checks do not prove that every paraphrase is factually faithful;
-inspect real brief and resume artifacts before relying on recurring use.
+content is retained and a one-page PDF passes the rendering checks. Each resume bullet retains references to the captured career entries used by
+the model. The renderer checks the permitted edit span and one-page PDF output.
 
 ## Editions and sending
 
 `prepare-daily` works toward three ready packets; three is a ceiling, not a
 quota. It resumes retained preparing packets and rechecks readiness before
 counting completed packets. Temporary fetch failures are deferred and checked
-again on the next invocation. Changed postings become stale and need reviewed
-regeneration; they no longer block preparation of other opportunities.
-`preview DATE` rechecks the full posting and defers unavailable or
-changed evidence. It selects one through three ready packets, freezes the
+again on the next invocation. A changed fetched posting marks the prepared packet stale and requires
+regeneration. Preparation can continue with other opportunities.
+`preview DATE` fetches the posting again and defers the packet when the fetch
+fails or the fetched input differs from preparation. It selects one through three ready packets, freezes the
 exact subject and brief text, copies and hashes their PDFs and reserves the selected
 opportunities. New editions separate each opportunity header from its brief
 with a blank line and omit the packet-count footer. Existing frozen editions
 remain stable. A preview does not send.
-When none are ready, no edition is created. Existing frozen editions are
-returned as retained; reopening one does not refresh its evidence.
+When none are ready, no edition is created. Existing frozen editions return their stored posting, brief and resume artifacts.
 
 When sending that specific edition is already authorized:
 
@@ -158,10 +156,8 @@ including records already sent or reserved in the normal pipeline. `RUN_ID`
 contains 1 through 80 ASCII letters, digits, underscores or hyphens. This path
 reads the existing packet database without opening it for writes and reads
 retained accepted stages and artifacts. It makes no Cast, CRM, source HTTP,
-Nucleus or rendering call, so it consumes no Cast discovery/API budget. The
-posting is the retained evidence and receives no freshness check. The normal
-preview path still refreshes posting evidence; use `--ad-hoc` when the intended
-operation is a test from retained data.
+Nucleus or rendering call, so it consumes no Cast discovery/API budget. The posting text comes from the stored packet. The normal preview path fetches
+the posting again; `--ad-hoc` creates a test from stored packet inputs.
 
 The occurrence lives under `ad-hoc/RUN_ID/` in private Platter state. It
 contains its own exact `[TEST]` subject, briefs, ordered copied PDF files,
@@ -231,7 +227,5 @@ grants additional authority.
 
 Installation, maintained replacement and retained-release verification are
 described by the separate [installation contract](install-operate.md). It does
-not activate a schedule or change schema 1 domain records. No completion-time
-guarantee, comprehensive source coverage or final delivery observer is
-promised. Code, tests and the source bundle move together; installed selectors
+not activate a schedule or change schema 1 domain records. No completion-time guarantee or final delivery observer is promised. Code, tests and the source bundle move together; installed selectors
 remain a separate deployment action.

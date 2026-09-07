@@ -53,7 +53,7 @@
   "promise": {
     "consumers": [
       {"status": "declared", "statement": "A local user or agent that needs to preserve one immutable source while deliberately deferring interpretation may use this capability."},
-      {"status": "unsupported", "statement": "This is not a note, summary, action-backlog, truth-adjudication, or model-assisted interpretation surface."}
+      {"status": "unsupported", "statement": "This is not a note, summary, action-backlog or model-assisted interpretation surface."}
     ],
     "preconditions": [
       {"status": "declared", "statement": "The caller selects a configured readable Annals library whose immutable role is general; retention requires it to be writable and requires nonblank UTF-8 bytes plus an explicit label when reading standard input."},

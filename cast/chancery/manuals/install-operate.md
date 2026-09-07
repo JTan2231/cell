@@ -81,13 +81,11 @@ schedules, billing and downstream workflows remain separate operations.
 
 `source add URL --company-id COMPANY_ID` associates an ordinary website source
 with an existing company. For a supported ATS URL, omit `--company-id`: Cast
-assigns the canonical provider/tenant identity as its owner and rejects an
-explicit company override. A website linking to a board does not establish
-that it is the board's employer. Without `--company-id`, an ordinary website URL
-creates or reuses a company candidate from its hostname.
-`source disable SOURCE_ID` retains the source
-and its evidence while removing it from ordinary collection. It does not
-delete jobs, dismiss them or imply the employer stopped hiring.
+assigns its canonical provider/tenant company identity and rejects an explicit
+company override. Without `--company-id`, an ordinary website URL creates or
+reuses a company candidate from its hostname.
+`source disable SOURCE_ID` removes the source from ordinary collection while
+retaining the source, its jobs and its collected data.
 
 ## Recovery
 
@@ -106,18 +104,17 @@ cast status --json
 ```
 
 The repair holds the mutation lock and commits one transaction. It assigns ATS
-sources and their jobs to the provider/tenant owner, changes unproven older
-JSON-LD jobs to `unknown`, marks those sources for identity review, and restores
-unverified search candidates' names to their domains when appropriate. It also
-quarantines JSON-LD on shared recruiting hosts even when an older parser marked
-it owned, and clears misleading shared-host company domains, website URLs and
-their identity aliases. JSON
+sources and their jobs to the provider/tenant company, sets older JSON-LD jobs
+to `unknown`, marks their sources for the next collection, and restores affected
+search-candidate names to their domains. It also applies current adapter rules
+to shared recruiting hosts and clears their company domains, website URLs and
+identity aliases. JSON
 output reports `moved_sources`, `moved_jobs`, `quarantined_jobs` and
 `renamed_candidates`, plus `cleared_shared_identities`. Source and job IDs, paid request accounting, run history,
 query coverage and cursors remain intact; changed jobs/companies gain revisions.
-It makes no network request. Repeating it after repair leaves material records
-unchanged, while each invocation advances the snapshot revision. Re-export after
-repair and perform a new bounded collection to refresh uncertain observations.
+The repair uses stored records. Repeating it leaves material records unchanged,
+while each invocation advances the snapshot revision. A later collection uses
+the updated associations.
 
 Before state recovery, stop all callers using the selected state directory and
 make a private consistent SQLite backup, including live sidecars when relevant.
