@@ -323,3 +323,7 @@ its history. Every live-reference, receipt, transaction-marker and release proof
 completes before deletion; current releases and selected schedule pins, including
 disabled bindings, remain protected. Retained release executables are never
 chosen as cleanup's authority.
+
+Platter participates in this release-history cleanup through its sealed
+installer and PID-aware file lock. Its private packet state and database
+backups remain outside the installation tree and are retained.

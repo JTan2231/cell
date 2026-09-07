@@ -324,6 +324,46 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertTrue(self.history.exists())
         self.assertTrue((self.base / "Annals/install/previous").is_symlink())
 
+    def test_platter_sealed_verifier_prunes_history_under_its_file_lock(self):
+        current = self.release("Platter", self.current)
+        old = self.release("Platter", self.old)
+        install = current.parent.parent
+        (install / "current").symlink_to("releases/" + self.current)
+        (install / "previous").symlink_to("releases/" + self.old)
+        private_state = self.home / ".local/share/job-packets/packets.sqlite3"
+        private_state.parent.mkdir(parents=True)
+        private_state.write_bytes(b"existing packet and delivery state")
+        verifier = self.home / "sealed-candidates/platter/bin/platter-install"
+        verifier.parent.mkdir(parents=True)
+        verifier.write_text("admitted candidate fixture")
+        verifier.chmod(0o555)
+        lock = install / ".update-lock"
+        verified = []
+        locked = []
+
+        def inspect(argv):
+            if argv[0] == verifier:
+                self.assertEqual(argv[1], "verify-release")
+                self.assertTrue(lock.is_file())
+                self.assertEqual(lock.read_text().strip(), str(os.getpid()))
+                verified.append(argv[2])
+                return json.dumps({"ok": True, "data": {"release_id": argv[2].name}})
+            if argv[0] == "/usr/bin/shlock" and argv[-1] == lock:
+                locked.append(lock)
+            return self.inspect(argv)
+
+        installers = cleanup.parse_installers(["platter=" + str(verifier)])
+        result = self.run_cleanup(inspect=inspect, installers={**self.verifiers, **installers})
+        self.assertEqual(locked, [lock])
+        self.assertEqual(set(verified), {current, old})
+        self.assertEqual(result["product_history"]["platter"], "verified")
+        self.assertEqual((install / "current").resolve(), current)
+        self.assertEqual((current / "program").read_text(), "fixture program")
+        self.assertFalse(old.exists())
+        self.assertFalse((install / "previous").is_symlink())
+        self.assertFalse(lock.exists())
+        self.assertEqual(private_state.read_bytes(), b"existing packet and delivery state")
+
     def test_one_product_verification_failure_prevents_every_deletion(self):
         def inspect(argv):
             if argv[0] == self.verifiers["clockwork"] and argv[2].name == self.old:

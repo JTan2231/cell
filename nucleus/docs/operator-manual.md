@@ -1744,6 +1744,9 @@ directory.
 
 ### Platter
 
+Coordinated release-history cleanup recognizes Platter's installation and its
+PID-aware file lock. Private packet state and database backups are retained.
+
 - [README](/Users/joey/rust/cell/platter/README.md)
 - [Preparation, preview, send and recovery contract](/Users/joey/rust/cell/platter/chancery/manuals/packet-prepare.md)
 - [Installation and maintenance contract](/Users/joey/rust/cell/platter/chancery/manuals/install-operate.md)
