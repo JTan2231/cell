@@ -98,7 +98,8 @@ impl BriefSubmission {
         validate_brief_sections(why, role, culture)?;
         let mut paragraph = format!("Why it works: {why}\n\nRole: {role}");
         if let Some(culture) = culture {
-            paragraph.push_str(&format!("\n\nCulture: {culture}"));
+            paragraph.push_str("\n\nCulture: ");
+            paragraph.push_str(culture);
         }
         Ok(Brief {
             paragraph,
@@ -208,8 +209,8 @@ async fn run_stage_impl(
     }
 }
 
-pub fn retained_request(store: &Store, run: &str, stage: Stage) -> Result<Option<JobRequestV1>> {
-    let Some(value) = store.execution(run, stage.name())? else {
+pub fn retained_request(store: &Store, run: &str, selected: Stage) -> Result<Option<JobRequestV1>> {
+    let Some(value) = store.execution(run, selected.name())? else {
         return Ok(None);
     };
     let state: StageState = serde_json::from_value(value)?;
@@ -713,15 +714,13 @@ fn bind_tool_result_validated(
     };
     // Content records themselves make successful submissions idempotent. Nucleus
     // owns the mailbox response, including diagnostics and read-only calls.
-    if !is_error {
-        if let Some(result) = &state.accepted {
-            match result {
-                StageResult::Brief(brief) => {
-                    store.put_content(&state.inputs.packet_id, "brief", brief)?;
-                }
-                StageResult::Resume(resume) => {
-                    store.put_content(&state.inputs.packet_id, "resume-content", resume)?;
-                }
+    if !is_error && let Some(result) = &state.accepted {
+        match result {
+            StageResult::Brief(brief) => {
+                store.put_content(&state.inputs.packet_id, "brief", brief)?;
+            }
+            StageResult::Resume(resume) => {
+                store.put_content(&state.inputs.packet_id, "resume-content", resume)?;
             }
         }
     }
@@ -1119,7 +1118,11 @@ mod tests {
             "submit_brief",
             &json!({"why_it_works":"","role":"","culture":null,"pursue":false}),
         );
-        assert!(bind_tool_result(&path, &mut restarted, &conflicting).is_err());
+        assert!(
+            bind_tool_result(&path, &mut restarted, &conflicting)
+                .unwrap()
+                .is_error
+        );
         let replacement = call(
             &restarted,
             "call-2",

@@ -1,4 +1,4 @@
-//! Exercise retained-material migration, SQLite preview and authorized Email
+//! Exercise retained-material migration, `SQLite` preview and authorized Email
 //! delivery without changing the installed library or its eligibility fields.
 use anyhow::{Context, Result, ensure};
 use platter::{ad_hoc, migration, store::Store};

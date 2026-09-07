@@ -1,11 +1,11 @@
 //! Offline delivery acceptance and recovery checks against a fake Email CLI.
 use anyhow::{Context, Result};
+use base64::Engine as _;
 use platter::{
     Config,
     store::{Edition, PacketRecord, Store},
     workflow,
 };
-use sha2::{Digest, Sha256};
 use std::{
     fs,
     os::unix::fs::PermissionsExt as _,
@@ -15,7 +15,7 @@ use std::{
 struct Fixture {
     directory: tempfile::TempDir,
     email: PathBuf,
-    attachment: PathBuf,
+    attachment: platter::store::Artifact,
     packet: PacketRecord,
     edition: Edition,
 }
@@ -44,9 +44,8 @@ impl Fixture {
             email_executable: email.clone(),
             original_resume: root.join("unused-original-resume.json"),
         };
-        platter::write_json(&root.join("config.json"), &config)?;
-        let attachment = root.join("resume.pdf");
-        fs::write(&attachment, b"%PDF-1.4\nfrozen private resume fixture\n")?;
+        let mut store = Store::open(root)?;
+        store.set_setting("config", &config)?;
         let packet = PacketRecord {
             id: "packet-one".into(),
             opportunity: "ashby:example:role-one".into(),
@@ -56,19 +55,25 @@ impl Fixture {
             status: "ready".into(),
             directory: root.join("packet-one").to_string_lossy().into_owned(),
         };
+        store.insert(&packet)?;
+        let attachment = store.put_artifact(
+            Some(&packet.id),
+            "resume-pdf",
+            "resume.pdf",
+            "application/pdf",
+            b"%PDF-1.4\nfrozen private resume fixture\n",
+        )?;
         let edition = Edition {
             day: "2026-09-06".into(),
             status: "frozen".into(),
             subject: "Your jobs — 2026-09-06".into(),
             body: "Example Engineer is a credible fit, with compensation still unknown.\n".into(),
             packet_ids: vec![packet.id.clone()],
-            attachments: vec![attachment.to_string_lossy().into_owned()],
-            attachment_sha256: vec![format!("{:x}", Sha256::digest(fs::read(&attachment)?))],
+            attachments: vec![attachment.id.clone()],
+            attachment_sha256: vec![attachment.sha256.clone()],
             idempotency_key: "platter/2026-09-06/test-occurrence".into(),
             receipt: None,
         };
-        let mut store = Store::open(root)?;
-        store.insert(&packet)?;
         store.freeze(&edition)?;
         Ok(Self {
             directory,
@@ -111,37 +116,72 @@ fn accepted_frozen_edition_sends_once_and_reuses_exact_receipt() -> Result<()> {
     assert_eq!(second.receipt, first.receipt);
     assert_eq!(second.idempotency_key, fixture.edition.idempotency_key);
     assert_eq!(fixture.current_edition()?.status, "sent");
-    assert_eq!(fixture.packet_status()?, "sent");
+    assert_eq!(fixture.packet_status()?, "ready");
+    assert!(!Store::open(fixture.root())?.is_eligible(&fixture.packet.opportunity)?);
     assert_eq!(
         fs::read_to_string(fixture.email_output("calls"))?,
         "invoked\n"
     );
+    let payload: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture.email_output("body"))?)?;
+    assert_eq!(payload["body"], fixture.edition.body);
     assert_eq!(
-        fs::read_to_string(fixture.email_output("body"))?,
-        fixture.edition.body
+        payload["attachments"][0]["filename"],
+        fixture.attachment.filename
+    );
+    let content = payload["attachments"][0]["content"]
+        .as_str()
+        .context("missing attachment bytes")?;
+    assert_eq!(
+        base64::engine::general_purpose::STANDARD.decode(content)?,
+        fixture.attachment.content
     );
     let arguments = fs::read_to_string(fixture.email_output("arguments"))?;
     let expected = format!(
-        "--idempotency-key\n{}\n--attach\n{}\n{}\n-\n",
-        fixture.edition.idempotency_key,
-        fixture.attachment.display(),
-        fixture.edition.subject,
+        "--payload-stdin\n--idempotency-key\n{}\n{}\n-\n",
+        fixture.edition.idempotency_key, fixture.edition.subject,
     );
     assert_eq!(arguments, expected);
     Ok(())
 }
 
 #[test]
-fn attachment_change_is_rejected_before_external_invocation() -> Result<()> {
+fn retained_attachment_corruption_is_rejected_before_external_invocation() -> Result<()> {
     let fixture = Fixture::new("Accepted receipt-1")?;
-    fs::write(&fixture.attachment, b"a later changed resume")?;
+    let connection = rusqlite::Connection::open(fixture.root().join(platter::store::DATABASE))?;
+    assert!(
+        connection
+            .execute(
+                "UPDATE artifacts SET content=?1 WHERE id=?2",
+                rusqlite::params![b"changed".as_slice(), fixture.attachment.id]
+            )
+            .is_err()
+    );
+    // Simulate damaged storage after proving normal writes cannot change an artifact.
+    connection.execute_batch("DROP TRIGGER immutable_artifact")?;
+    connection.execute(
+        "UPDATE artifacts SET content=?1 WHERE id=?2",
+        rusqlite::params![b"changed".as_slice(), fixture.attachment.id],
+    )?;
+    drop(connection);
     let error = workflow::send(fixture.root(), &fixture.edition.day)
         .err()
         .context("changed attachment unexpectedly submitted")?;
-    assert!(error.to_string().contains("frozen attachment changed"));
+    assert!(
+        error
+            .to_string()
+            .contains("retained artifact integrity mismatch")
+    );
     assert!(!fixture.email_output("calls").exists());
-    assert_eq!(fixture.current_edition()?.status, "frozen");
-    assert_eq!(fixture.packet_status()?, "reserved");
+    let connection = rusqlite::Connection::open(fixture.root().join(platter::store::DATABASE))?;
+    let status: String = connection.query_row(
+        "SELECT status FROM editions WHERE id=?1",
+        [&fixture.edition.day],
+        |r| r.get(0),
+    )?;
+    assert_eq!(status, "frozen");
+    assert_eq!(fixture.packet_status()?, "ready");
+    assert!(!Store::open(fixture.root())?.is_eligible(&fixture.packet.opportunity)?);
     Ok(())
 }
 
@@ -160,14 +200,15 @@ fn ambiguous_receipt_remains_unresolved_and_cannot_send_again() -> Result<()> {
     assert_eq!(unresolved.status, "sending");
     assert!(unresolved.receipt.is_none());
     assert_eq!(unresolved.idempotency_key, fixture.edition.idempotency_key);
-    assert_eq!(fixture.packet_status()?, "reserved");
+    assert_eq!(fixture.packet_status()?, "ready");
+    assert!(!Store::open(fixture.root())?.is_eligible(&fixture.packet.opportunity)?);
     let retry_error = workflow::send(fixture.root(), &fixture.edition.day)
         .err()
         .context("ambiguous occurrence unexpectedly retried")?;
     assert!(
         retry_error
             .to_string()
-            .contains("send outcome is ambiguous")
+            .contains("send outcome is unresolved")
     );
     assert_eq!(
         fs::read_to_string(fixture.email_output("calls"))?,

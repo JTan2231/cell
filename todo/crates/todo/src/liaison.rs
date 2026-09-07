@@ -116,7 +116,9 @@ mod tests {
             "need to provide token consumption stats",
             Path::new("/tmp/project"),
         )?;
-        assert!(prompt.contains("provenance and first research lead"));
+        assert!(
+            prompt.contains("Read the source and references relevant to the supplied direction")
+        );
         assert!(prompt.contains(r#""/tmp/source transcript.md""#));
         assert!(prompt.contains(r#""/tmp/project""#));
         assert!(prompt.contains(r#""need to provide token consumption stats""#));

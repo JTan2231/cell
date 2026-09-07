@@ -198,7 +198,7 @@ mod tests {
     #[test]
     fn legacy_prompt_retains_historical_research_contract() {
         let prompt = instructions();
-        assert!(prompt.contains("source is the beginning of the investigation"));
+        assert!(prompt.contains("Begin with the source."));
         assert!(prompt.contains("history_base"));
         assert!(prompt.contains("call create_todo exactly once"));
     }

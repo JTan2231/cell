@@ -68,6 +68,7 @@ fn optional(path: &Path, owned: &mut BTreeMap<PathBuf, String>) -> Result<Option
     }
 }
 
+#[allow(clippy::too_many_lines)] // Keep the ordered import and its transaction together.
 fn import(store: &Store) -> Result<()> {
     let root = store.root();
     let mut owned = BTreeMap::new();

@@ -344,9 +344,7 @@ async fn brave(http: &HttpClient, query: &DiscoveryQuery) -> Result<DiscoveryRes
     let mut warnings = vec![];
     let capped = more == Some(true) && offset + 1 >= max_pages;
     if capped {
-        warnings.push(format!(
-            "Brave query page cap reached: {term}"
-        ));
+        warnings.push(format!("Brave query page cap reached: {term}"));
     }
     if more.is_none() {
         warnings.push("Brave response omitted its pagination flag".into());
@@ -414,9 +412,7 @@ fn brave_company(row: &Value, term: &str) -> Option<CompanyDraft> {
                 string(row, "description").unwrap_or_default()
             ),
         )],
-        relevance_reasons: vec![format!(
-            "Company collected from search term: {term}"
-        )],
+        relevance_reasons: vec![format!("Company collected from search term: {term}")],
         ..Default::default()
     })
 }

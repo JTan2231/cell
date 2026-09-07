@@ -118,7 +118,7 @@ migrate)
   [ "$(/bin/cat "$HOME/hold")" = "$CELL_DEPLOYMENT_RUN_ID" ] || exit 8
   [ ! -f "$HOME/busy" ] || exit 8
   [ "${{2-}}" = '--backup' ] || exit 7
-  case "${{3-}}" in "$HOME/Library/Application Support/Platter/platter-pre-migration-"*.sqlite) ;; *) exit 7;; esac
+  case "${{3-}}" in "$HOME/.local/share/platter/backups/migration-"*.sqlite|"$HOME/.local/share/job-packets/backups/migration-"*.sqlite) ;; *) exit 7;; esac
   printf '{{"ok":true,"data":{{"compatible":true}}}}\n';;
 doctor)
   [ ! -f "$HOME/incompatible" ] || exit 9

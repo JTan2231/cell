@@ -57,7 +57,7 @@ case "$catalog" in
         ;;
 esac
 case "$catalog" in
-    *'"summary":"Save one actionable concern with its source, then research a pending proposal to attach it, create or revise a todo, unify duplicates, defer it, or dismiss it."'*) ;;
+    *'"summary":"Save a concern and its source. Research a pending proposal to attach it, create or revise a todo, unify duplicates, defer or dismiss it."'*) ;;
     *)
         catalog_fail 'Todo catalog omits the concern-capture summary' summary "$catalog"
         ;;

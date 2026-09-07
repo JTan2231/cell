@@ -1,19 +1,47 @@
-//! Offline debug sends must not consume discovery budgets or ordinary jobs.
+//! Retained-material sends preserve jobs, accepted artifacts and earlier editions.
 use anyhow::{Context, Result};
 use platter::{
     Config, ad_hoc,
     store::{Edition, PacketRecord, Store},
 };
 use std::{
+    fmt::Write as _,
     fs,
     os::unix::fs::PermissionsExt as _,
     path::{Path, PathBuf},
 };
 
+fn retained_snapshot(root: &Path) -> Result<String> {
+    let connection = rusqlite::Connection::open_with_flags(
+        root.join(platter::store::DATABASE),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    let mut snapshot = String::new();
+    for query in [
+        "SELECT * FROM jobs ORDER BY opportunity",
+        "SELECT * FROM runs ORDER BY id",
+        "SELECT * FROM artifacts ORDER BY id",
+        "SELECT * FROM editions WHERE id IN ('2026-09-01','2026-09-02') ORDER BY id",
+        "SELECT * FROM edition_attachments WHERE edition_id IN ('2026-09-01','2026-09-02') ORDER BY edition_id,position",
+    ] {
+        let mut statement = connection.prepare(query)?;
+        let columns = statement.column_count();
+        let rows = statement
+            .query_map([], |row| {
+                (0..columns)
+                    .map(|i| row.get::<_, rusqlite::types::Value>(i))
+                    .collect::<rusqlite::Result<Vec<_>>>()
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        writeln!(snapshot, "{rows:?}")?;
+    }
+    Ok(snapshot)
+}
+
 struct Fixture {
     directory: tempfile::TempDir,
     email: PathBuf,
-    baseline: Vec<u8>,
+    baseline: String,
     ids: Vec<String>,
 }
 impl Fixture {
@@ -44,46 +72,46 @@ impl Fixture {
             email_executable: forbidden,
             original_resume: root.join("original.json"),
         };
-        platter::write_json(&root.join("config.json"), &config)?;
         let mut store = Store::open(root)?;
+        store.set_setting("config", &config)?;
         let mut ids = Vec::new();
+        let mut pdfs = Vec::new();
         for index in 1..=3 {
             let id = format!("packet-{index}");
-            let packet = root.join("packets").join(&id);
-            platter::private_dir(&packet)?;
-            let resume = packet.join("resume.pdf");
-            fs::write(&resume, b"%PDF-1.4\naccepted test resume\n")?;
-            platter::write_json(
-                &packet.join("inputs.json"),
-                &serde_json::json!({
-                    "company":"synthetic-source-label","job":{"title":format!("Engineer {index}"),"url":"https://example.invalid/retained-role"},
-                    "posting":{"url":"https://example.invalid/retained-role","retrieved_at":"2026-09-06T21:00:00Z","text":serde_json::json!({"company_name":format!("Employer {index}")}).to_string()}
-                }),
-            )?;
-            platter::write_json(
-                &packet.join("brief-stage.json"),
-                &serde_json::json!({"accepted":{"stage":"brief","result":{"paragraph":format!("Original brief {index} grounded in retained evidence."),"pursue":true}}}),
-            )?;
-            platter::write_json(
-                &packet.join("resume-stage.json"),
-                &serde_json::json!({"accepted":{"stage":"resume","result":{"jackson_bullets":["Supported Jackson work"],"evidence":[{"bullet_index":0,"career_entry_ids":["career-1"]}]}}}),
-            )?;
-            platter::write_json(
-                &packet.join("artifacts.json"),
-                &serde_json::json!({"resume_pdf":resume,"pages":1}),
-            )?;
-            store.insert(&PacketRecord {
+            let record = PacketRecord {
                 id: id.clone(),
                 opportunity: format!("role-{index}"),
                 job_id: format!("cast-{index}"),
                 company: "synthetic-source-label".into(),
                 title: format!("Engineer {index}"),
                 status: "ready".into(),
-                directory: packet.to_string_lossy().into_owned(),
-            })?;
+                directory: String::new(),
+            };
+            let inputs = serde_json::json!({
+                "company":"synthetic-source-label", "career":[], "template_artifact":"fixture-template",
+                "job":{
+                    "id":format!("cast-{index}"), "revision":1, "company_id":"fixture-company",
+                    "source_id":"fixture-source", "source_key":format!("role-{index}"),
+                    "title":format!("Engineer {index}"), "url":"https://example.invalid/retained-role",
+                    "first_seen_at":"2026-09-06T21:00:00Z", "last_seen_at":"2026-09-06T21:00:00Z",
+                    "availability":"listed", "missing_complete_snapshots":0,
+                    "evidence":[], "compensation":[], "geographic_eligibility":[], "parser_version":"fixture"
+                },
+                "posting":{"url":"https://example.invalid/retained-role","retrieved_at":"2026-09-06T21:00:00Z","text":serde_json::json!({"company_name":format!("Employer {index}")}).to_string()}
+            });
+            store.insert_run(&record, &inputs)?;
+            store.put_content(&id, "brief", &serde_json::json!({"paragraph":format!("Original brief {index} grounded in retained evidence."),"pursue":true}))?;
+            store.put_content(&id, "resume-content", &serde_json::json!({"jackson_bullets":["Supported Jackson work"],"evidence":[{"bullet_index":0,"career_entry_ids":["career-1"]}]}))?;
+            pdfs.push(store.put_artifact(
+                Some(&id),
+                "resume-pdf",
+                &format!("Employer-{index}-resume.pdf"),
+                "application/pdf",
+                b"%PDF-1.4\naccepted test resume\n",
+            )?);
             ids.push(id);
         }
-        // Retain real ordinary sent and reserved occurrences before the debug run.
+        // Preserve sent and frozen ordinary editions and their eligibility policy.
         for (index, status) in [(0, "sent"), (1, "frozen")] {
             let mut edition = Edition {
                 day: format!("2026-09-0{}", index + 1),
@@ -91,20 +119,21 @@ impl Fixture {
                 subject: "Ordinary edition".into(),
                 body: "Original ordinary body".into(),
                 packet_ids: vec![ids[index].clone()],
-                attachments: vec![],
-                attachment_sha256: vec![],
+                attachments: vec![pdfs[index].id.clone()],
+                attachment_sha256: vec![pdfs[index].sha256.clone()],
                 idempotency_key: format!("ordinary-{index}"),
                 receipt: None,
             };
             store.freeze(&edition)?;
             if status == "sent" {
+                store.begin_send(&edition.idempotency_key)?;
                 edition.status = "sent".into();
                 edition.receipt = Some("Accepted ordinary".into());
                 store.save_edition(&edition)?;
             }
         }
         drop(store);
-        let baseline = fs::read(root.join("packets.sqlite3"))?;
+        let baseline = retained_snapshot(root)?;
         Ok(Self {
             directory,
             email,
@@ -116,10 +145,7 @@ impl Fixture {
         self.directory.path()
     }
     fn assert_ordinary_unchanged(&self) -> Result<()> {
-        assert_eq!(
-            fs::read(self.root().join("packets.sqlite3"))?,
-            self.baseline
-        );
+        assert_eq!(retained_snapshot(self.root())?, self.baseline);
         assert!(
             !self.root().join("forbidden-source.called").exists(),
             "source/API budget capability was invoked"
@@ -132,10 +158,12 @@ impl Fixture {
 }
 
 #[test]
-fn three_packet_debug_preview_and_repeated_send_leave_ordinary_state_byte_identical() -> Result<()>
-{
+fn retained_preview_and_repeated_send_preserve_existing_records() -> Result<()> {
     let fixture = Fixture::new("Accepted receipt-1")?;
-    let original_brief = fs::read(fixture.root().join("packets/packet-1/brief-stage.json"))?;
+    let original_brief = Store::open(fixture.root())?
+        .run_artifact("packet-1", "brief")?
+        .context("missing brief")?
+        .content;
     let overrides = fixture.root().join("reviewed-briefs.json");
     platter::write_json(
         &overrides,
@@ -150,7 +178,7 @@ fn three_packet_debug_preview_and_repeated_send_leave_ordinary_state_byte_identi
     )?;
     assert_eq!(edition.packet_ids, fixture.ids);
     assert_eq!(edition.attachments.len(), 3);
-    assert!(edition.subject.starts_with("[TEST]"));
+    assert_eq!(edition.subject, "Your jobs — 2026-09-06");
     assert!(edition.body.contains("1. Employer 1 — Engineer 1"));
     assert!(
         edition
@@ -158,7 +186,12 @@ fn three_packet_debug_preview_and_repeated_send_leave_ordinary_state_byte_identi
             .contains("Reviewed brief with the corrected compensation wording.")
     );
     assert!(!edition.body.contains("synthetic-source-label"));
-    assert!(edition.attachments[0].ends_with("1-Employer-1-resume.pdf"));
+    assert_eq!(
+        Store::open(fixture.root())?
+            .artifact(&edition.attachments[0])?
+            .filename,
+        "Employer-1-resume.pdf"
+    );
     fixture.assert_ordinary_unchanged()?;
     let repeat = ad_hoc::preview(
         fixture.root(),
@@ -185,7 +218,10 @@ fn three_packet_debug_preview_and_repeated_send_leave_ordinary_state_byte_identi
     assert_eq!(fixture.calls()?, "invoked\n");
     fixture.assert_ordinary_unchanged()?;
     assert_eq!(
-        fs::read(fixture.root().join("packets/packet-1/brief-stage.json"))?,
+        Store::open(fixture.root())?
+            .run_artifact("packet-1", "brief")?
+            .context("missing brief")?
+            .content,
         original_brief
     );
     let another = ad_hoc::preview(
@@ -233,7 +269,7 @@ fn uncertain_debug_delivery_cannot_retry_and_never_reserves_jobs() -> Result<()>
     )
     .err()
     .context("uncertain occurrence was retried")?;
-    assert!(error.to_string().contains("outcome is ambiguous"));
+    assert!(error.to_string().contains("outcome is unresolved"));
     assert_eq!(fixture.calls()?, "invoked\n");
     fixture.assert_ordinary_unchanged()
 }
@@ -252,22 +288,30 @@ fn changed_frozen_attachment_or_selection_is_rejected_before_email() -> Result<(
         )
         .is_err()
     );
-    fs::write(&edition.attachments[0], b"tampered")?;
-    assert!(ad_hoc::send(fixture.root(), "2026-09-06", "frozen", Some(&fixture.email)).is_err());
-    assert!(!fixture.root().join("fake-email.calls").exists());
-    ad_hoc::preview(fixture.root(), "2026-09-06", "payload", &fixture.ids, None)?;
-    let occurrence_path = fixture.root().join("ad-hoc/payload/occurrence.json");
-    let mut occurrence: serde_json::Value = serde_json::from_slice(&fs::read(&occurrence_path)?)?;
-    occurrence["edition"]["body"] = serde_json::json!("changed after freezing");
-    platter::write_json(&occurrence_path, &occurrence)?;
+    let connection = rusqlite::Connection::open(fixture.root().join(platter::store::DATABASE))?;
     assert!(
-        ad_hoc::send(
-            fixture.root(),
-            "2026-09-06",
-            "payload",
-            Some(&fixture.email)
-        )
-        .is_err()
+        connection
+            .execute(
+                "UPDATE artifacts SET content=?1 WHERE id=?2",
+                rusqlite::params![b"tampered".as_slice(), edition.attachments[0]]
+            )
+            .is_err()
+    );
+    assert!(
+        connection
+            .execute(
+                "UPDATE editions SET body='changed' WHERE id='ad-hoc/frozen'",
+                []
+            )
+            .is_err()
+    );
+    assert!(
+        connection
+            .execute(
+                "UPDATE edition_attachments SET position=4 WHERE edition_id='ad-hoc/frozen'",
+                []
+            )
+            .is_err()
     );
     assert!(!fixture.root().join("fake-email.calls").exists());
     assert!(

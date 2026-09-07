@@ -377,7 +377,8 @@ pub(crate) fn authority_gate(
         Some("confirm") => {
             if has_active_grounding(store, intake)? {
                 Ok(AuthorityGate::Ignore(
-                    "Decisions confirmation preserves the already-active semantic grounding".to_owned(),
+                    "Decisions confirmation preserves the already-active semantic grounding"
+                        .to_owned(),
                 ))
             } else {
                 Ok(AuthorityGate::Reconcile)

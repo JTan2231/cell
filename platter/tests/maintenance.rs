@@ -112,7 +112,6 @@ fn frozen_state(root: &Path, home: &Path) -> Result<()> {
         "Fixed heading\n{Jackson National Life}\n\\resumeItemListStart\n\\resumeItem{Supported work}\n\\resumeItemListEnd\nFixed footer\n".into(),
     )?;
     let original = root.join("original-resume.json");
-    platter::write_json(&original, &template)?;
     let settings = Config {
         daily_count: 3,
         delivery_hour: 9,
@@ -123,8 +122,7 @@ fn frozen_state(root: &Path, home: &Path) -> Result<()> {
         email_executable: home.join(".local/bin/email"),
         original_resume: original,
     };
-    platter::write_json(&root.join("config.json"), &settings)?;
-    Store::open(root)?;
+    Store::open(root)?.initialize(&settings, &template)?;
     Ok(())
 }
 
@@ -146,7 +144,7 @@ fn state_bytes(root: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>> {
 fn global_hold_prevents_mutation_in_every_state_directory() -> Result<()> {
     let fixture = tempfile::tempdir()?;
     let home = fixture.path().join("home");
-    let custom = fixture.path().join("custom-state");
+    let custom = home.join(".local/share/platter");
     maintenance::gate(&home).hold("deploy-one")?;
     for arguments in [
         vec!["init", "--resume", "/fixture/never-read.tex"],
@@ -162,7 +160,7 @@ fn global_hold_prevents_mutation_in_every_state_directory() -> Result<()> {
             .output()?;
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("prevents new work"));
-        assert!(!custom.exists());
+        assert!(Store::open_read_only(&custom)?.list()?.is_empty());
     }
     assert_eq!(maintenance::gate(&home).status()?.holds, ["deploy-one"]);
     Ok(())
@@ -172,14 +170,14 @@ fn global_hold_prevents_mutation_in_every_state_directory() -> Result<()> {
 fn drain_cancels_only_orphaned_platter_namespaces_across_pages() -> Result<()> {
     let fixture = tempfile::tempdir()?;
     let home = fixture.path().join("home");
-    let root = fixture.path().join("retained-state");
+    let root = home.join(".local/share/platter");
     fs::create_dir_all(&root)?;
     fs::write(
         root.join("accepted-stage.json"),
         b"retained acceptance and receipt",
     )?;
-    let before = state_bytes(&root)?;
     maintenance::gate(&home).hold("deploy-one")?;
+    let before = state_bytes(&root)?;
     let socket = fixture.path().join("n.sock");
     let server = mailbox(
         &socket,
@@ -234,7 +232,7 @@ fn drain_cancels_only_orphaned_platter_namespaces_across_pages() -> Result<()> {
 fn active_admission_prevents_cancelling_a_running_stage() -> Result<()> {
     let fixture = tempfile::tempdir()?;
     let home = fixture.path().join("home");
-    let root = fixture.path().join("custom-state");
+    let root = home.join(".local/share/platter");
     let gate = maintenance::gate(&home);
     let _activity = gate.enter()?;
     gate.hold("deploy-one")?;
@@ -263,7 +261,7 @@ fn active_admission_prevents_cancelling_a_running_stage() -> Result<()> {
             .iter()
             .all(|route| route.starts_with("GET "))
     );
-    assert!(!root.exists());
+    assert!(Store::open_read_only(&root)?.list()?.is_empty());
     Ok(())
 }
 
@@ -291,7 +289,7 @@ fn default_state_preserves_legacy_paths_and_rejects_ambiguity() -> Result<()> {
 fn status_and_local_state_are_read_only_and_backup_preserves_schema() -> Result<()> {
     let fixture = tempfile::tempdir()?;
     let home = fixture.path().join("home");
-    let root = fixture.path().join("state");
+    let root = home.join(".local/share/platter");
     assert!(!readiness::local_state(&root)?);
     assert!(!root.exists());
     frozen_state(&root, &home)?;
@@ -329,7 +327,7 @@ fn status_and_local_state_are_read_only_and_backup_preserves_schema() -> Result<
     assert!(Store::open_read_only(&root)?.backup(&backup).is_err());
     assert_eq!(fs::read(&backup)?, retained_backup);
     let connection = rusqlite::Connection::open(root.join("packets.sqlite3"))?;
-    connection.pragma_update(None, "user_version", 2)?;
+    connection.pragma_update(None, "user_version", platter::store::SCHEMA_VERSION + 1)?;
     drop(connection);
     let unsupported = state_bytes(&root)?;
     assert!(readiness::local_state(&root).is_err());
@@ -343,7 +341,7 @@ fn fake_prerequisites(home: &Path) -> Result<(PathBuf, PathBuf)> {
     for name in ["cast", "crm", "email", "tectonic", "python3"] {
         let path = bin.join(name);
         let body = match name {
-            "email" => "case \"$1\" in --version) echo 'email 0.4.0';; --help) echo '--attach';; *) exit 93;; esac".to_owned(),
+            "email" => "case \"$1\" in --version) echo 'email 0.5.2';; --help) echo '--payload-stdin';; *) exit 93;; esac".to_owned(),
             "python3" => "test \"$1\" = '-c' || exit 94; echo 'pypdf ready'".to_owned(),
             _ => format!("test \"$1\" = '--version' || exit 95; echo '{name} 0.1.0'"),
         };
@@ -357,7 +355,7 @@ fn fake_prerequisites(home: &Path) -> Result<(PathBuf, PathBuf)> {
 fn doctor_checks_fake_prerequisites_without_creating_private_state() -> Result<()> {
     let fixture = tempfile::tempdir()?;
     let home = fixture.path().join("home");
-    let root = fixture.path().join("fresh-state");
+    let root = home.join(".local/share/platter");
     let (tectonic, python) = fake_prerequisites(&home)?;
     let socket = fixture.path().join("n.sock");
     let server = mailbox(

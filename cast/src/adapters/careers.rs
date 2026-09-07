@@ -264,9 +264,7 @@ fn parse_html(html: &str, url: &Url) -> VerificationResult {
     for script in document.select(&script_selector) {
         match serde_json::from_str::<Value>(&script.inner_html()) {
             Ok(value) => jsonld_jobs(&value, url, &mut result),
-            Err(_) => result
-                .warnings
-                .push("Invalid JSON-LD block skipped".into()),
+            Err(_) => result.warnings.push("Invalid JSON-LD block skipped".into()),
         }
     }
     careers.extend(result.careers_urls.drain(..));
@@ -282,7 +280,10 @@ fn parse_html(html: &str, url: &Url) -> VerificationResult {
     if board_count > 1 {
         result.jobs.clear();
         result.company_name = None;
-        result.warnings.push("Multiple ATS tenant URLs found; each uses its own provider/tenant company identity".into());
+        result.warnings.push(
+            "Multiple ATS tenant URLs found; each uses its own provider/tenant company identity"
+                .into(),
+        );
     }
     result.outcome = if !result.careers_urls.is_empty() {
         "resolved"
@@ -293,8 +294,7 @@ fn parse_html(html: &str, url: &Url) -> VerificationResult {
     }
     .into();
     result.warnings.push(
-        "HTML/JSON-LD adapter records extracted jobs without adding missing observations"
-            .into(),
+        "HTML/JSON-LD adapter records extracted jobs without adding missing observations".into(),
     );
     result
 }
@@ -316,7 +316,10 @@ fn jsonld_jobs(value: &Value, page: &Url, result: &mut VerificationResult) {
                 .is_some_and(|kinds| kinds.iter().any(|kind| kind.as_str() == Some("JobPosting")))
     });
     if is_job && !owns_jsonld_job(value, page) {
-        result.warnings.push("JobPosting does not match this page's employer URL rule; job and company name omitted".into());
+        result.warnings.push(
+            "JobPosting does not match this page's employer URL rule; job and company name omitted"
+                .into(),
+        );
     } else if is_job {
         let raw_url = string(value, "url").unwrap_or_else(|| page.as_str().into());
         let job_url = page
@@ -366,7 +369,14 @@ fn jsonld_jobs(value: &Value, page: &Url, result: &mut VerificationResult) {
 }
 
 fn directory_result() -> VerificationResult {
-    VerificationResult { outcome:"needs_adapter".into(), warnings:vec!["Third-party directory collected as discovery; a tenant adapter is required for jobs".into()], ..Default::default() }
+    VerificationResult {
+        outcome: "needs_adapter".into(),
+        warnings: vec![
+            "Third-party directory collected as discovery; a tenant adapter is required for jobs"
+                .into(),
+        ],
+        ..Default::default()
+    }
 }
 
 fn owns_jsonld_job(value: &Value, page: &Url) -> bool {
@@ -526,7 +536,8 @@ mod tests {
             result
                 .warnings
                 .iter()
-                .any(|warning| warning.contains("each uses its own provider/tenant company identity"))
+                .any(|warning| warning
+                    .contains("each uses its own provider/tenant company identity"))
         );
     }
     #[test]

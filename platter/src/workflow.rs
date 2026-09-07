@@ -51,6 +51,7 @@ pub async fn prepare(root: &Path, job_id: &str, deadline: Option<Instant>) -> Re
     prepare_job(&settings, &store, job, company, deadline).await
 }
 
+#[allow(clippy::too_many_lines)] // Keep the ordered preparation stages together.
 async fn prepare_job(
     settings: &Config,
     store: &Store,
@@ -232,7 +233,7 @@ async fn refresh_ready(store: &Store) -> Result<()> {
         let captured: Captured = store.inputs(&record.id)?;
         match source::posting(&captured.job).await {
             Ok(current) if current.text == captured.posting.text => {
-                store.status(&record.id, "ready")?
+                store.status(&record.id, "ready")?;
             }
             Ok(_) => {
                 store.status(&record.id, "stale")?;

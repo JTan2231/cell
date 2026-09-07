@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ENTRY = {
     "id": "todo.concern.capture-and-route",
     "title": "Save and research a concern for later",
-    "summary": "Save one actionable concern with its source, then research a pending proposal to attach it, create or revise a todo, unify duplicates, defer it, or dismiss it.",
+    "summary": "Save a concern and its source. Research a pending proposal to attach it, create or revise a todo, unify duplicates, defer or dismiss it.",
 }
 
 
