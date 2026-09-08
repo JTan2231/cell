@@ -393,8 +393,10 @@ class ReleaseCleanupTests(unittest.TestCase):
                 marker.unlink()
 
     def test_product_verifier_arguments_are_explicit_and_unambiguous(self):
-        self.assertEqual(cleanup.parse_installers(["krisis=/sealed/krisis-install"]),
-                         {"decisions": Path("/sealed/krisis-install")})
+        self.assertEqual(cleanup.parse_installers([
+            "krisis=/sealed/krisis-install", "conatus=/sealed/conatus-install"]),
+            {"decisions": Path("/sealed/krisis-install"),
+             "conatus": Path("/sealed/conatus-install")})
         for arguments in (["unknown=/sealed/tool"], ["annals"],
                           ["krisis=/one", "decisions=/two"]):
             with self.subTest(arguments=arguments), self.assertRaises(cleanup.CleanupError):
