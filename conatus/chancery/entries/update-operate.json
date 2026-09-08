@@ -103,7 +103,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Product commands return JSON success data or error text. Init retains configuration, library identities, and initial cursor. Update reports intake, handoff, and Annals processing outcomes. A partial failure persists its update report before returning an error; status keeps that report available independently of Annals readiness. Retry and re-examination retain Annals domain receipts. Packaging commands report release/definition outcomes separately."
+        "statement": "Product commands return JSON success data or error text. First initialization retains configuration, library identities, and initial cursor. Repeating init can replace the Annals executable after verifying both pinned library identities; library selections, cursor, records, instructions, and pause state remain unchanged. Update reports intake, handoff, and Annals processing outcomes. A partial failure persists its update report before returning an error; status keeps that report available independently of Annals readiness. Retry and re-examination retain Annals domain receipts. Packaging commands report release/definition outcomes separately."
       }
     ],
     "data_semantics": [

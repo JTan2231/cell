@@ -20,6 +20,12 @@ identity and that of the decisions library, and stores the current feed
 watermark. It starts no model and installs no timer. The decisions configuration
 must explicitly select the existing dedicated decisions library.
 
+To select a replacement Annals executable, repeat `init` with the same library,
+decisions config, and Annals state root. Conatus verifies both pinned library
+identities before saving the new executable path. It preserves the cursor,
+records, instructions, and pause state. Update any Clockwork definition
+separately after selecting a new Conatus release.
+
 ## Capture and read
 
 ```sh

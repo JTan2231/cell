@@ -34,17 +34,28 @@ pub fn initialize(
     });
     let mut store = Store::create(root)?;
     if store.setting("config")?.is_some() {
-        let existing = store.config()?;
+        let mut existing = store.config()?;
         ensure!(
-            existing.annals == annals
-                && existing.decisions_config == decisions_config
+            existing.decisions_config == decisions_config
                 && existing.annals_state_dir == annals_state_dir
                 && existing.library == library_name,
-            "Conatus is already initialized with different library or command selections"
+            "Conatus is already initialized with different library selections"
         );
-        return Ok(
-            json!({"initialized":false,"config":existing,"cursor":store.setting("cursor")?}),
-        );
+        let rebound = existing.annals != annals;
+        if rebound {
+            existing.annals = annals;
+            let watermark = existing.feed().watermark()?;
+            ensure!(
+                watermark.library_id == existing.decisions_library_id,
+                "the decisions library does not match the configured library identity"
+            );
+            existing.library().current_instructions()?;
+            store.set("config", &serde_json::to_string(&existing)?)?;
+        }
+        return Ok(json!({
+            "initialized":false,"rebound":rebound,
+            "config":existing,"cursor":store.setting("cursor")?
+        }));
     }
     let feed = annals_api::Client::new(&annals, &decisions_config);
     let watermark = feed.watermark()?;

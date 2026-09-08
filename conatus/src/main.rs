@@ -24,7 +24,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Select a general Annals library and begin at the current decision-feed watermark.
+    /// Initialize library selections or rebind Annals while preserving existing intake.
     Init {
         #[arg(long)]
         annals: PathBuf,

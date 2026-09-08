@@ -90,6 +90,12 @@ Krisis 5, Annals 7, and Semantics 3; these migrations preserve accepted history
 and cursors. Krisis refuses the document cutover while old handoffs or
 classification jobs are in flight.
 
+Conatus pins its Annals executable and its Clockwork definition pins Conatus.
+After replacing these releases, repeat `conatus init` with the existing library
+selections to verify their identities and replace only the Annals executable
+pin. Then register and select a definition from the new Conatus release.
+Preserve the existing pause and schedule activation states during this cutover.
+
 Each product owns its data and success rules. Nucleus owns execution. A completed
 model turn does not establish a product result. A later runtime failure does
 not erase an already committed domain result.

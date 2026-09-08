@@ -1,7 +1,7 @@
 # Install and operate Krisis
 
 The public binary and provider are `krisis`. The compatibility provider is
-`decisions`, the active Clockwork key is `krisis/observer`, and the schema is 4.
+`decisions`, the active Clockwork key is `krisis/observer`, and the schema is 5.
 Existing Decisions application-support and log paths are retained for
 compatibility with persistent history.
 

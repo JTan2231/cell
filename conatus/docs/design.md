@@ -80,6 +80,10 @@ installs the bundled instructions, and takes the current decision-feed watermark
 as the baseline. It does not import earlier decisions, start a model, or enable
 a schedule. Each update consumes new events through a newly selected watermark.
 
+Repeating `init` can replace the Annals executable after both pinned library
+identities pass verification. It preserves the configured libraries, cursor,
+records, instructions, and pause state.
+
 Conatus invokes Annals through its public clients. Annals remains the Nucleus
 requester. Conatus introduces no separate model toolset, authentication
 authority, or agent runtime. Clockwork activation is separately enabled; Conatus

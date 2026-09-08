@@ -26,6 +26,13 @@ The bundled document is `conatus/librarian.md` in the product source.
 It starts no model and enables no schedule. There is no historical-import
 operation or implicit decisions-library selection.
 
+To replace the pinned Annals executable, repeat `init` with the same library,
+decisions config, and Annals state root. Conatus verifies both pinned library
+identities before saving the new executable path. The cursor, records,
+instructions, and pause state remain unchanged. The result reports
+`initialized: false` and whether the executable was `rebound`. Select a new
+Clockwork definition separately when replacing the Conatus release.
+
 An update consumes all new accepted events through its chosen watermark. Each
 event and cursor advancement commit in the same local transaction. The feed
 provides complete accepted document text, source filename, digest, acceptance
