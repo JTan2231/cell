@@ -1,7 +1,7 @@
 # Install and operate Krisis
 
 The public binary and provider are `krisis`. The compatibility provider is
-`decisions`, the active Clockwork key is `krisis/observer`, and the schema is 5.
+`decisions`, the active Clockwork key is `krisis/observer`, and the schema is 6.
 Existing Decisions application-support and log paths are retained for
 compatibility with persistent history.
 
@@ -113,3 +113,37 @@ proving the exact current command, providers, hook, receipt, enabled observer,
 and retired legacy schedules. `--home` selects an absolute operator home;
 `--expected-current absent|releases/HASH` optionally refuses a changed selector.
 The marker and receipt are distinct from the coordinator's named CLI hold.
+
+## Inspect worker operation
+
+Run `krisis health [--max-idle-seconds N] [--json]` for current worker health.
+The command uses local worker records and the serial processing lock, needs no
+Annals configuration, and obeys maintenance admission. It can migrate state.
+`working` means the lock has a live owner; `idle` means the last run finished
+within the selected limit. The default limit is 180 seconds for the installed
+60-second schedule. Empty polls preserve continuous idle time. This limit is a
+local diagnostic threshold, not a Clockwork delivery guarantee.
+
+`stale` means the last finished run exceeded the limit. `error` records an
+unhandled worker error. `interrupted` means a started run has no finish and no
+lock owner. `unobserved` means worker activity has not been recorded yet.
+The JSON fields are `ok`, `state`, `checked_at`, `state_since`,
+`state_duration_seconds`, `last_started_at`, `last_finished_at`,
+`max_idle_seconds`, and `error_code`. Times are Unix seconds and durations are
+seconds at the check. Unknown transition times and durations are null. Stale
+state starts at last finish plus the limit; an interrupted exit time is unknown.
+A working duration measures lock ownership, not classifier progress.
+Working and idle exit zero; all other states print the report and exit nonzero.
+Use `doctor` to check dependency readiness.
+
+The first processing error marks its observation failed. Recording that outcome
+is a successful worker run. Historical failures do not determine health and need
+no repeated alert. `observe status` reports their count for optional later review.
+`observe retry OBSERVATION_ID` is explicit recovery. It preserves prior failures,
+resumes uncertain saved jobs, and releases failed pending deliveries using their
+same document key and bytes. No failed observation is selected automatically.
+
+Schema 5-to-6 adds worker activity and failure history without requeuing work.
+The migration copies currently failed observations into history and cannot
+reconstruct older overwritten errors. Preserve the database and document runs
+in the quiescent backup; restore the compatible database and binary together.

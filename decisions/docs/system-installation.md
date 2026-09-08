@@ -71,7 +71,7 @@ Clockwork definition, observer ownership receipt bound to the target, and legacy
 plist. It disables enabled schedules only after verifying ownership. It then
 suspends the old hook command for its timeout, verifies SQLite is idle, and saves
 the database and sidecars. In a scrubbed environment, it runs the prepared
-payload through schema 5 migration and doctor before publishing the command and providers.
+payload through schema 6 migration and doctor before publishing the command and providers.
 
 Doctor uses the same explicitly selected Codex executable as the observer and
 checks Conversations, exact Nucleus capabilities and requester contract, and:
@@ -146,7 +146,8 @@ installation remains held.
 After a separately authorized final cutover:
 
 1. Run `krisis doctor` with the installed Annals configuration.
-2. Run `krisis observe status` and confirm schema 5 and the write-once baseline.
+2. Confirm schema 6 in doctor and the write-once baseline in `krisis observe status`.
+   Run `krisis health` after the observer has run to inspect activity and state age.
 3. Inspect `krisis/observer` definition, binding, runtime history, and body-free
    logs; confirm both retired Decisions keys are absent or disabled.
 4. Inspect and explicitly trust the exact `~/.codex/hooks.json` definition.
@@ -156,13 +157,12 @@ success on its own.
 
 ## Recovery and uninstall
 
-Pending Annals delivery is normal recoverable state. Repeated observer runs
-submit the exact same producer key, bytes, config path, and library identity
-until Annals returns `created` or `replayed`. Do not retry classification for
-delivery failure.
+A delivery error marks its observation failed on the first error and retains
+the pending document. Explicit `observe retry` releases the same producer key,
+bytes, config path, and library identity. It does not rerun classification.
 
 Use `observe reconcile` for a missed hook, `observe retry` only after diagnosing
-a terminal classification failure, and guarded `observe abandon` only after
+an observation failure, and guarded `observe abandon` only after
 proving one still-unbound source permanently unavailable. Never edit SQLite.
 
 If deployment cannot prove exact selector restoration (including Clockwork's

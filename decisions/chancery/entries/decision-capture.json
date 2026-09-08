@@ -1,6 +1,6 @@
 {
   "id": "krisis.decision.capture",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -9,7 +9,8 @@
   "use_when": [
     "Post-activation decisions in completed local Codex root turns should be captured automatically.",
     "Krisis observer coverage, pending Annals delivery, or a diagnosed failed observation should be inspected or recovered.",
-    "A missed Stop-hook correlation should be reconciled from normalized Conversations history."
+    "A missed Stop-hook correlation should be reconciled from normalized Conversations history.",
+    "Current worker activity, state duration, or stale operation should be inspected independently of retained observation failures."
   ],
   "do_not_use_when": [
     "Decision accounts should be searched or read after acceptance; use Annals.",
@@ -19,7 +20,7 @@
   "outcome": "One durable exchange verdict and, for a positive result, a target-bound immutable document accepted idempotently by Annals.",
   "effects": [
     "The Stop hook durably records only a turn correlation; reconciliation may independently enqueue missed eligible completed turns.",
-    "One serial worker saves a frozen conversation and exact Nucleus request/result, records coverage and a document outbox atomically, and delivers the oldest pending document before new classification.",
+    "One serial worker saves a frozen conversation and exact Nucleus request/result, records coverage and a document outbox atomically, and delivers the oldest pending document whose observation has not failed before new classification.",
     "After matching Annals acceptance, Krisis clears the outbox body and retains delivery identity and receipt. The private document run still retains source and classification for recovery."
   ],
   "authority": [
@@ -30,13 +31,14 @@
   "success": [
     "Each eligible completed exchange has one durable decision or no-decision outcome.",
     "A positive result has a summary heading, full normalized conversation through the selected exchange, a stable document key, exact Markdown bytes and digest, and a durable target-bound outbox.",
-    "Before classification, Krisis verifies and binds the exact Annals config path and expected library ID; delivery succeeds only when that target returns a matching created or replayed acceptance receipt."
+    "Before classification, Krisis verifies and binds the exact Annals config path and expected library ID; delivery succeeds only when that target returns a matching created or replayed acceptance receipt.",
+    "A failed observation is durably retained on its first processing error. That handled outcome permits worker success and does not determine worker health."
   ],
   "failure_and_recovery": [
     "The full frozen conversation must fit the prompt bound. Oversized sources fail without truncation; no context expansion or content-fitness check is imposed.",
-    "An ambiguous request or acknowledgement resumes the same frozen run and job; saved results remain valid after later runtime failure.",
-    "Annals outage leaves exact document bytes pending without reclassification. Source, target, digest, receipt, or dependency mismatch stops processing.",
-    "Terminal observation retry and proven-unavailable unbound source abandonment require their explicit guarded recovery commands."
+    "An observation fails on its first returned processing error. Explicit retry resumes an ambiguous request or acknowledgement with the same frozen run and job; saved results remain valid after later runtime failure.",
+    "An Annals delivery error marks its observation failed and retains exact pending bytes. Failed observations and their documents are excluded from automatic work until explicit retry; other work continues.",
+    "Observation retry and proven-unavailable unbound source abandonment require their explicit guarded recovery commands. Retry preserves failure history; repeated hooks and reconciliation never requeue failed observations."
   ],
   "privacy": [
     "Nucleus receives full normalized user/assistant conversation in a prompt bounded to 262144 UTF-8 bytes. Workspace, local execution and web access are disabled.",
@@ -66,6 +68,10 @@
     }
   ],
   "interfaces": [
+    {
+      "label": "Worker health",
+      "invocation": "/Users/joey/.local/bin/krisis health [--max-idle-seconds N] [--json]"
+    },
     {
       "label": "Observer status",
       "invocation": "/Users/joey/.local/bin/krisis observe status"
@@ -131,6 +137,10 @@
       {
         "status": "declared",
         "statement": "Positive output is an ordinary Markdown document with the escaped summary heading and all captured user/assistant messages. Negative output has no document."
+      },
+      {
+        "status": "declared",
+        "statement": "health reports ok, state, checked_at, state_since, state_duration_seconds, last_started_at, last_finished_at, max_idle_seconds, and error_code. Working and idle exit zero; other states print their report and exit nonzero. Client::health returns the report including ok:false."
       }
     ],
     "data_semantics": [
@@ -145,6 +155,10 @@
       {
         "status": "declared",
         "statement": "Annals created and replayed both mean the exact producer key and digest were accepted by the configured dedicated library."
+      },
+      {
+        "status": "declared",
+        "statement": "Failed observations are retained outcomes for optional later inspection, not active worker faults. Pending document counts include deliveries held by failed observations. Health uses live serial lock ownership and durable worker timing, independently of failure counts."
       }
     ],
     "identity_and_units": [
@@ -159,6 +173,10 @@
       {
         "status": "not_applicable",
         "statement": "Krisis publishes no pricing, usage, or accounting unit."
+      },
+      {
+        "status": "declared",
+        "statement": "Health timestamps are Unix seconds and state durations are seconds at checked_at. Unknown transition times and durations are null. Empty polls preserve continuous idle time; working duration measures ownership rather than classifier progress."
       }
     ],
     "completeness_and_freshness": [
@@ -173,6 +191,10 @@
       {
         "status": "unspecified",
         "statement": "No wall-clock bound from turn completion through classification or Annals acceptance is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Health reads lock ownership and durable worker state in succession. Without an active worker, a last finish older than max_idle_seconds (default 180) is stale. Stale state begins at last finish plus the limit. This diagnostic threshold does not promise Clockwork delivery. An interrupted run has an unknown exit time; unobserved means no worker record exists."
       }
     ],
     "access": [
@@ -192,11 +214,15 @@
       },
       {
         "status": "declared",
-        "statement": "Observation is serial; one pending Annals delivery is attempted before new classification, so an outage never causes reclassification or parallel ownership."
+        "statement": "Observation is serial. One pending document whose observation has not failed is attempted before new classification. Delivery failure retains the same bytes and requires explicit retry without reclassification."
       },
       {
         "status": "declared",
         "statement": "Annals acceptance clears only the pending outbox body; the private run remains available for recovery. Local document build/render commands use the same builder but do not enqueue or advance coverage. Retired paths cannot produce new accounts."
+      },
+      {
+        "status": "declared",
+        "statement": "Every returned observation processing error is recorded atomically with failure history and removes the observation from automatic work. Failed deliveries retain their exact document. Explicit retries preserve history and existing uncertain job or pending document identities. Database or command failures that prevent a durable outcome remain worker errors."
       }
     ],
     "operational_limits": [
@@ -206,7 +232,7 @@
       },
       {
         "status": "declared",
-        "statement": "One observation has one frozen full-history source per attempt. Ambiguous outcomes resume the same job. A new attempt requires explicit retry after a definitive terminal failure."
+        "statement": "One observation has one frozen full-history source per attempt. Explicit recovery of uncertain jobs or accepted classifications resumes the saved run. A new classification attempt requires no existing run or a terminal run without an accepted classification."
       },
       {
         "status": "unspecified",
@@ -216,7 +242,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Krisis schema 5 uses krisis/decision-document/1 with immutable submit-decision input/result schemas version 1 and Annals exchange 2. Migration refuses old pending account handoffs and in-flight observations/jobs until settled. Old codecs and receipts remain historical."
+        "statement": "Krisis schema 6 uses krisis/decision-document/1 with immutable submit-decision input/result schemas version 1 and Annals exchange 2. Migration refuses old pending account handoffs and in-flight observations/jobs until settled. Old codecs and receipts remain historical."
       },
       {
         "status": "declared",
@@ -225,6 +251,10 @@
       {
         "status": "unspecified",
         "statement": "No future compatibility window, retention horizon, or release cadence is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Schema 5-to-6 adds observer worker timing and append-only observation failure history and copies current failures without requeuing them. It cannot reconstruct old overwritten attempt errors. Older binaries reject schema 6."
       }
     ],
     "reliances": [

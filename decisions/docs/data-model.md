@@ -1,6 +1,6 @@
 # Krisis data model
 
-Krisis uses SQLite schema 5 at the migration-compatible Decisions path. The
+Krisis uses SQLite schema 6 at the migration-compatible Decisions path. The
 database and private document run directories together hold durable observer
 state. Krisis does not store the authoritative accepted library copy.
 
@@ -36,3 +36,19 @@ handoffs, processing observations, or planned/submitted old observation jobs
 with `legacy_account_cutover_required`. Settle those with the compatible old
 runtime before migration. No account contents are inferred, rewritten, or lost
 by the migration. Earlier migration guards remain in effect.
+
+`observer_worker` retains the latest run's start and finish, an unfinished-run
+marker, the start of continuous idle time, and the last worker error. `health`
+combines these records with the serial lock. Empty polls preserve idle time.
+
+`observation_failures` retains each failed attempt's observation identity, attempt
+epoch, time, code, and private diagnostic detail. Retry clears the observation's
+current failure but preserves these rows. Migration 5-to-6 adds these tables and
+copies currently failed observations into the failure history. It does not retry
+work or change the baseline. Earlier attempts already overwritten by older
+versions cannot be reconstructed.
+
+A delivery error marks its observation failed and keeps the document pending.
+Pending counts include these retained deliveries, even though automatic delivery
+excludes them. Explicit observation retry releases the same document for delivery;
+it does not create another classification or producer key.

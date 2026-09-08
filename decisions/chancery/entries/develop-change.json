@@ -34,7 +34,7 @@
     "Every admitted nonblank user authority receives one binary verdict; assistant text supplies only bounded context and no file-change gate or evidence exists.",
     "The classifier sees opaque aliases and at most 64 messages and 262144 bytes, with one context expansion and no shell, filesystem, web, direct Codex, or effect tool.",
     "A valid result commits Nucleus correlation and receipt, complete coverage, stable IDs, deterministic account bytes and digest, and outbox state before acknowledgement.",
-    "Annals acceptance uses explicit config, producer krisis, decision ID key, exact digest matching, and idempotent created/replayed receipts; outage retries delivery without classification.",
+    "Annals acceptance uses explicit config, producer krisis, decision ID key, exact digest matching, and idempotent created/replayed receipts; a failed delivery requires explicit retry of the same document without classification.",
     "After acceptance generated prose and body may be retired, while legacy Decisions receipts and history remain decodable and legacy lifecycle reads remain read-only.",
     "CI is green without release, deployment, live-state change, Annals acceptance, or Nucleus execution."
   ],

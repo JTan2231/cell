@@ -32,7 +32,7 @@
       "After matching Annals acceptance, Krisis clears its outbox body but keeps the private document run and delivery receipt. Nucleus and Annals own their separate retention."
     ],
     "compatibility_and_retirement": [
-      "Provider release identifies bundle bytes. Entry contracts, SQLite schema 5, document tool schemas and downstream exchange contracts have independent versions.",
+      "Provider release identifies bundle bytes. Entry contracts, SQLite schema 6, document tool schemas and downstream exchange contracts have independent versions.",
       "Retired Decisions state remains migration-decodable and its lifecycle stream remains read-only for existing consumers; digest, review, email, and daily scheduling are disabled."
     ],
     "operational_limits": [

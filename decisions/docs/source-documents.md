@@ -106,3 +106,10 @@ Rendering uses only saved state. It can restore a missing `decision.md`, but
 refuses to overwrite different existing bytes. It does not acknowledge pending
 Nucleus calls; resume the build command to settle those. The same source and
 summary always produce the same Markdown bytes.
+
+These local build/resume rules also protect saved observer work. The observer
+marks its observation failed on the first returned processing error and does
+not resume it automatically. Use `krisis observe retry OBSERVATION_ID` for later
+recovery. An uncertain job or saved accepted result reuses the same run; a pending
+Annals delivery reuses its existing document. Worker health is reported by
+`krisis health` independently of these retained observation failures.

@@ -44,3 +44,17 @@ a classification does not authorize an automatic successor.
 from saved state without external services; different existing bytes fail.
 Keep the full directory for recovery. The local commands do not deliver to Annals. Automatic observation processing
 records a target-bound outbox and supplies the sole active production path.
+
+## Observation outcomes and worker health
+
+The observer records the first returned processing error as a failed observation
+and continues with other work. Preserve error history across explicit retries.
+An uncertain saved job or accepted classification must reuse its run; a failed
+pending delivery must reuse its key, exact bytes, and target. A recorded
+observation failure is a successful worker run, not an operational alarm.
+
+Keep `health` independent of retained failures. It reports live lock ownership,
+last run timing, continuous idle time, and unhandled worker errors. Empty polls
+must not reset idle duration. A missing worker finish cannot prove an exit time.
+Exercise first-error queue progress, repeated-hook/reconciliation behavior,
+retry identity, migration, and health timing in synthetic fixtures.

@@ -44,7 +44,7 @@ case " $* " in
     printf '%s\n' 'candidate database' >"$database"
     chmod 600 "$database"
     [ ! -f "$HOME/fail-doctor" ] || exit 71
-    printf '%s\n' '{{"ok":true,"schema_version":5,"annals_library_id":"0123456789abcdef0123456789abcdef"}}';;
+    printf '%s\n' '{{"ok":true,"schema_version":6,"annals_library_id":"0123456789abcdef0123456789abcdef"}}';;
   *' observe activate '*) : >"$HOME/activated";;
 esac
 "#,

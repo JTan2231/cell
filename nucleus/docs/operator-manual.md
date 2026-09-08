@@ -76,7 +76,11 @@ accepts a yes/no verdict and summary, and renders the source into Markdown.
 The saved run protects request and result recovery; the observer commits
 coverage and a target-bound document outbox. Local `document build` and
 `document render` use the same builder without delivery or observer coverage.
-See [Krisis source documents](/Users/joey/rust/cell/decisions/docs/source-documents.md).
+Krisis marks an observation failed on its first processing error and continues
+with other work. Explicit observation retry preserves uncertain Nucleus request
+identity and pending Annals document identity. `krisis health` reports worker
+activity and its age; retained observation failures do not make the worker
+unhealthy. See [Krisis source documents](/Users/joey/rust/cell/decisions/docs/source-documents.md).
 
 Annals exchange contract 2 accepts the handed text without a decision schema
 or source lookup. It owns ordinary storage metadata and returns complete accepted
@@ -86,7 +90,7 @@ project's reconciliation agent. Its `semantic-document-reconciliation/1` toolset
 allows an empty result without creating a semantic revision. Interpretation and
 connections belong to the agents and their instructions. Historical account
 jobs retain their original immutable tool contracts. Persistent schemas are
-Krisis 5, Annals 7, and Semantics 3; these migrations preserve accepted history
+Krisis 6, Annals 7, and Semantics 3; these migrations preserve accepted history
 and cursors. Krisis refuses the document cutover while old handoffs or
 classification jobs are in flight.
 

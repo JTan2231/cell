@@ -6,6 +6,7 @@ mod digest;
 mod document_command;
 mod email;
 mod error;
+mod health;
 mod model;
 mod source;
 mod store;
@@ -19,7 +20,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use conversations::{AppServerClient, ClientConfig, StderrPolicy};
 use decisions::api::{
     AccountDelivery, ActivationReceipt, DoctorReport, HookReceipt, ObservationProcess,
-    ProcessResult, StopHookInput,
+    ProcessOutput, ProcessResult, StopHookInput,
 };
 use serde_json::json;
 use time::{Date, OffsetDateTime, PrimitiveDateTime, Time, UtcOffset};
@@ -72,6 +73,12 @@ enum Command {
     },
     /// Check the database, Codex source, Nucleus, and Annals prerequisites.
     Doctor,
+    /// Report current worker activity and the duration of its state.
+    Health {
+        /// Maximum seconds since the last finished worker run before it is stale.
+        #[arg(long, default_value_t = 180, value_parser = clap::value_parser!(i64).range(1..))]
+        max_idle_seconds: i64,
+    },
     /// Retired Decisions digest surface; retained only to give an explicit failure.
     #[command(hide = true)]
     Daily {
@@ -174,7 +181,7 @@ enum ObserveCommand {
     },
     /// Durably enqueue one Stop-hook correlation from JSON on standard input.
     Ingest,
-    /// Process at most one queued or resumable observation.
+    /// Process one observation or document; retain its first error as a failed observation.
     Process,
     /// Show observer readiness and durable queue counts.
     Status(ObserveStatusArgs),
@@ -263,11 +270,41 @@ fn run(cli: Cli) -> AppResult<()> {
     if let Command::Document { command } = cli.command {
         return document_command::run(command);
     }
-    let annals = annals_configuration(cli.annals_binary, cli.annals_config, cli.annals_library_id)?;
+    if let Command::Health { max_idle_seconds } = cli.command {
+        let store = Store::open(&database)?;
+        let health = store.worker_health(now_unix(), max_idle_seconds)?;
+        if cli.json {
+            print_json(&health)?;
+        } else {
+            let state = serde_json::to_value(health.state)
+                .map_err(|error| AppError::new("health_output_failed", error.to_string()))?;
+            let duration = health.state_duration_seconds.map_or_else(
+                || "duration unknown".to_owned(),
+                |seconds| format!("for {seconds}s"),
+            );
+            println!(
+                "Krisis: {} ({duration})",
+                state.as_str().unwrap_or("unknown")
+            );
+            if let Some(code) = &health.error_code {
+                println!("Worker error: {code}");
+            }
+        }
+        return if health.ok {
+            Ok(())
+        } else {
+            Err(AppError::new(
+                "worker_unhealthy",
+                "worker is not operating normally; inspect health and doctor",
+            ))
+        };
+    }
+    let annals = annals_configuration(cli.annals_binary, cli.annals_config, cli.annals_library_id);
     match cli.command {
         Command::Maintenance { .. } => unreachable!("maintenance returned before opening state"),
         Command::Document { .. } => unreachable!("document returned before opening observer state"),
-        Command::Doctor => doctor(&database, annals.as_ref(), cli.json),
+        Command::Health { .. } => unreachable!("health returned before dependency configuration"),
+        Command::Doctor => doctor(&database, annals?.as_ref(), cli.json),
         Command::Daily { command: _ } => Err(AppError::new(
             "legacy_surface_retired",
             "Krisis does not build or send Decisions digests",
@@ -291,21 +328,22 @@ fn run(cli: Cli) -> AppResult<()> {
                 }
                 ObserveCommand::Ingest => ingest_hook(&store),
                 ObserveCommand::Process => {
-                    let annals = annals.as_ref().ok_or_else(|| {
-                        AppError::new(
-                            "annals_configuration_required",
-                            "Krisis processing requires explicit Annals binary, config, and library ID",
-                        )
-                    })?;
-                    account::doctor(annals)?;
-                    let _processing_lock = store.lock_observation_processing()?;
-                    if let Some(pending) = store.pending_document()? {
-                        let receipt = account::accept(&pending, annals, store.state_directory())?;
-                        store.record_document_acceptance(&pending, &receipt)?;
-                        print_account_delivery(&pending.account_id, &receipt, cli.json)
+                    let output = process_worker(&mut store, annals)?;
+                    if cli.json {
+                        print_json(&output)
                     } else {
-                        let result = process_one_observation(&mut store, annals)?;
-                        print_process_result(result.as_ref(), cli.json)
+                        match output {
+                            ProcessOutput::Observation(result) => {
+                                print_process_result(result.observation.as_ref(), false)
+                            }
+                            ProcessOutput::Account(delivery) => {
+                                println!(
+                                    "Delivered {} to Annals job {}",
+                                    delivery.account_id, delivery.job_id
+                                );
+                                Ok(())
+                            }
+                        }
                     }
                 }
                 ObserveCommand::Status(args) => {
@@ -385,6 +423,7 @@ fn run(cli: Cli) -> AppResult<()> {
                     }
                 }
                 ObserveCommand::Retry { observation_id } => {
+                    let _processing_lock = store.lock_observation_processing()?;
                     let observation = store.retry_observation(&observation_id)?;
                     if cli.json {
                         print_json(&observation)
@@ -527,7 +566,80 @@ fn validate_hook_id(field: &str, value: &str) -> AppResult<()> {
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
+fn process_worker(
+    store: &mut Store,
+    annals: AppResult<Option<account::AnnalsConfig>>,
+) -> AppResult<ProcessOutput> {
+    let _lock = store.lock_observation_processing()?;
+    store.worker_started(now_unix())?;
+    let result: AppResult<ProcessOutput> = (|| {
+        let annals = annals?.ok_or_else(|| {
+            AppError::new(
+                "annals_configuration_required",
+                "Krisis processing requires explicit Annals binary, config, and library ID",
+            )
+        })?;
+        if let Some(pending) = store.pending_document()? {
+            let observation = store.document_observation(&pending.account_id)?;
+            let delivery: AppResult<ProcessOutput> = (|| {
+                account::doctor(&annals)?;
+                let receipt = account::accept(&pending, &annals, store.state_directory())?;
+                store.record_document_acceptance(&pending, &receipt)?;
+                Ok(ProcessOutput::Account(AccountDelivery {
+                    processed: true,
+                    kind: "annals_acceptance".to_owned(),
+                    account_id: pending.account_id.clone(),
+                    library_id: receipt.library_id,
+                    job_id: receipt.job_id,
+                    accepted_at: receipt.accepted_at,
+                }))
+            })();
+            match delivery {
+                Ok(output) => Ok(output),
+                Err(error) => Ok(observation_output(Some(record_observation_failure(
+                    store,
+                    &observation,
+                    &error,
+                )?))),
+            }
+        } else {
+            process_one_observation(store, &annals).map(observation_output)
+        }
+    })();
+    let worked = match &result {
+        Ok(ProcessOutput::Account(_)) => true,
+        Ok(ProcessOutput::Observation(output)) => output.processed,
+        Err(_) => false,
+    };
+    store.worker_finished(
+        now_unix(),
+        worked,
+        result.as_ref().err().map(|error| error.code),
+    )?;
+    result
+}
+
+fn observation_output(observation: Option<ProcessResult>) -> ProcessOutput {
+    ProcessOutput::Observation(ObservationProcess {
+        processed: observation.is_some(),
+        observation,
+    })
+}
+
+fn record_observation_failure(
+    store: &Store,
+    observation: &Observation,
+    error: &AppError,
+) -> AppResult<ProcessResult> {
+    store.fail_observation(&observation.id, error.code, &error.message)?;
+    Ok(ProcessResult {
+        observation_id: observation.id.clone(),
+        status: "failed".to_owned(),
+        scope_level: observation.scope_level,
+        outcome: observation.outcome.clone(),
+    })
+}
+
 fn process_one_observation(
     store: &mut Store,
     annals: &account::AnnalsConfig,
@@ -541,6 +653,20 @@ fn process_one_observation(
     let Some(observation) = store.next_observation_before(None)? else {
         return Ok(None);
     };
+    match process_selected_observation(store, annals, &observation, baseline) {
+        Ok(result) => Ok(Some(result)),
+        Err(error) => record_observation_failure(store, &observation, &error).map(Some),
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+fn process_selected_observation(
+    store: &mut Store,
+    annals: &account::AnnalsConfig,
+    observation: &Observation,
+    baseline: i64,
+) -> AppResult<ProcessResult> {
+    account::doctor(annals)?;
     store.bind_observation_annals_target(
         &observation.id,
         &annals.expected_library_id,
@@ -558,36 +684,9 @@ fn process_one_observation(
             ..ClientConfig::default()
         })
         .map_err(|error| AppError::new("document_source_unavailable", error.to_string()))?;
-        let activity =
-            match client.resolve_turn_activity(&observation.session_id, &observation.turn_id) {
-                Ok(activity) => activity,
-                Err(
-                    error @ (conversations::Error::TurnNotCompleted { .. }
-                    | conversations::Error::TurnNotFound { .. }),
-                ) => {
-                    let observed_at = now_unix();
-                    let not_completed_at =
-                        matches!(error, conversations::Error::TurnNotCompleted { .. })
-                            .then_some(observed_at);
-                    store.defer_observation(
-                        &observation.id,
-                        not_completed_at,
-                        observed_at.saturating_add(5),
-                    )?;
-                    return Ok(Some(ProcessResult {
-                        observation_id: observation.id,
-                        status: "queued".to_owned(),
-                        scope_level: 0,
-                        outcome: None,
-                    }));
-                }
-                Err(error) => {
-                    return Err(AppError::new(
-                        "document_source_unavailable",
-                        error.to_string(),
-                    ));
-                }
-            };
+        let activity = client
+            .resolve_turn_activity(&observation.session_id, &observation.turn_id)
+            .map_err(|error| AppError::new("document_source_unavailable", error.to_string()))?;
         activity.turn.reference.thread_id
     };
     let mut ineligible = None;
@@ -631,20 +730,12 @@ fn process_one_observation(
                     completed_at,
                     None,
                 )?;
-                return Ok(Some(ProcessResult {
-                    observation_id: observation.id,
+                return Ok(ProcessResult {
+                    observation_id: observation.id.clone(),
                     status: "complete".to_owned(),
                     scope_level: 0,
                     outcome: Some("not_eligible".to_owned()),
-                }));
-            }
-            if matches!(
-                error.code,
-                "document_classification_missing"
-                    | "document_source_invalid"
-                    | "document_prompt_invalid"
-            ) {
-                store.fail_observation(&observation.id, error.code, &error.message)?;
+                });
             }
             return Err(error);
         }
@@ -662,8 +753,8 @@ fn process_one_observation(
         .render(&output.classification)
         .map_err(|error| AppError::new("document_render_failed", error.to_string()))?;
     store.complete_document(&observation.id, &document_id, markdown.as_deref())?;
-    Ok(Some(ProcessResult {
-        observation_id: observation.id,
+    Ok(ProcessResult {
+        observation_id: observation.id.clone(),
         status: "complete".to_owned(),
         scope_level: 0,
         outcome: Some(
@@ -674,7 +765,7 @@ fn process_one_observation(
             }
             .to_owned(),
         ),
-    }))
+    })
 }
 
 #[allow(clippy::too_many_lines)]

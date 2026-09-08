@@ -1,6 +1,6 @@
 # Krisis CLI
 
-The public executable is `krisis` 0.4.0. Its default database remains
+The public executable is `krisis`. Its default database remains
 `~/Library/Application Support/Decisions/decisions.db` so existing Decisions
 history migrates in place. `--database` or `KRISIS_DATABASE` selects an explicit
 compatible database.
@@ -69,11 +69,17 @@ the next Unix second.
 `krisis observe ingest` reads one Codex Stop-hook JSON object from standard
 input and durably stores only its session/turn correlation.
 
-`krisis observe process` requires all Annals configuration values and first
-verifies `decision-feed watermark`. It then delivers the oldest pending document
-bound to that target. If none is pending, it resumes or classifies one
-observation bound to the target. A changed config path or library identity
-causes failure. Repeated calls are safe; processing remains serial.
+`krisis observe process` handles one observation or pending document under the
+serial worker lock. It verifies the Annals target for that work. The first
+processing error marks the observation `failed`, retains the error, and removes
+it from automatic selection. This includes missing or incomplete sources,
+classification errors, uncertain dependency calls, and delivery errors.
+A recorded observation failure returns exit zero with observation status `failed`.
+A worker error that prevents a durable outcome returns nonzero.
+
+Failed deliveries retain the exact pending document and target. Their observations
+remain failed until explicit retry. Other observations and deliveries can proceed.
+Repeated hooks and reconciliation never requeue a failed observation.
 
 `krisis observe status [--date YYYY-MM-DD]` reports baseline, queue states,
 failure summaries, and pending/accepted Annals document counts without invoking
@@ -82,12 +88,47 @@ dependencies.
 `krisis observe reconcile [--date YYYY-MM-DD]` discovers missed completed turns
 through Conversations and enqueues correlations without classifying them.
 
-`krisis observe retry OBSERVATION_ID` opens a new attempt epoch only for a
-terminal observation whose cause has been diagnosed and corrected.
+`krisis observe retry OBSERVATION_ID` explicitly releases a failed observation
+for another attempt after its cause has been inspected. Pending deliveries reuse
+the same document key, bytes, and target. Uncertain Nucleus work and accepted
+classifications reuse their saved run and request. A new classification attempt
+is created only when no run exists or its saved terminal result has no accepted
+classification. Previous failure records remain available in private state.
 
 `krisis observe abandon OBSERVATION_ID --source-unavailable` closes only one
 proven-permanently-unavailable, entirely unbound queued source. It is not a way
 to clear merely unfinished or failed work.
+
+## Worker health
+
+Run `krisis health [--max-idle-seconds N] [--json]` to inspect the worker.
+This command needs no Annals configuration and invokes no dependency. Like other
+state commands, it opens and can migrate Krisis state and obeys maintenance holds.
+
+`working` means the serial worker lock has a live owner. `idle` means no worker
+owns it and the last run finished within the selected interval. Empty polls
+update the last finish time without resetting how long the worker has been idle.
+A recorded observation failure counts as a handled run and does not harm health.
+
+The default idle limit is 180 seconds for the installed 60-second schedule.
+A longer interval produces `stale`. This is a local diagnostic threshold, not a
+Clockwork delivery guarantee. `error` reports the last unhandled worker error.
+`interrupted` means a started run has no recorded finish and no lock owner.
+`unobserved` means this database has no worker activity record yet.
+
+JSON contains `ok`, `state`, `checked_at`, `state_since`,
+`state_duration_seconds`, `last_started_at`, `last_finished_at`,
+`max_idle_seconds`, and `error_code`. Timestamps are Unix seconds; durations
+are seconds at `checked_at`. An unobserved transition has null timing, including
+an interrupted run whose exit time is unknown. For `stale`, `state_since` is
+when the last finished run exceeded the selected idle limit. A live run's
+duration measures ownership, not proof of classifier progress.
+
+Exit zero means `working` or `idle`; other states print their report and exit
+nonzero. The typed `Client::health` returns the report even when `ok` is false.
+Read `observe status` for record counts and `doctor` for dependency readiness.
+Failed observations are retained history for optional later investigation. Their
+count does not determine worker health or require repeated alerts.
 
 ## Legacy read-only compatibility
 

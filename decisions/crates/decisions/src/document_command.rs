@@ -211,6 +211,19 @@ pub(crate) struct DocumentOutput {
     pub run_path: PathBuf,
 }
 
+/// Uncertain jobs and accepted results must resume their exact saved request.
+pub(crate) fn retry_starts_new_attempt(directory: &Path) -> AppResult<bool> {
+    if !directory
+        .join("run.json")
+        .try_exists()
+        .context("document_run_unavailable", "cannot inspect saved run")?
+    {
+        return Ok(true);
+    }
+    let run = Run::read(directory)?;
+    Ok(run.terminal && run.classification().is_none())
+}
+
 pub(crate) fn run(command: Command) -> AppResult<()> {
     let output = build(command, |_| Ok(()))?;
     crate::print_json(&json!({

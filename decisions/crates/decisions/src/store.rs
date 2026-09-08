@@ -21,11 +21,12 @@ const MIGRATION_2: &str = include_str!("../migration_2.sql");
 const MIGRATION_3: &str = include_str!("../migration_3.sql");
 const MIGRATION_4: &str = include_str!("../migration_4.sql");
 const MIGRATION_5: &str = include_str!("../migration_5.sql");
-const SCHEMA_VERSION: i64 = 5;
+const MIGRATION_6: &str = include_str!("../migration_6.sql");
+const SCHEMA_VERSION: i64 = 6;
 use krisis_api::lifecycle::{ENVELOPE_VERSION as EVENT_ENVELOPE_VERSION, STREAM as EVENT_STREAM};
 
 pub(crate) struct Store {
-    connection: Connection,
+    pub(crate) connection: Connection,
     database_path: PathBuf,
 }
 
@@ -182,7 +183,7 @@ impl Store {
                 verify_legacy_observation_jobs_terminal(&connection)?;
                 migrate_v3_to_v4(&mut connection)?;
             }
-            4 | SCHEMA_VERSION => {}
+            4 | 5 | SCHEMA_VERSION => {}
             newer if newer > SCHEMA_VERSION => {
                 return Err(AppError::new(
                     "database_schema_too_new",
@@ -237,6 +238,31 @@ impl Store {
                 [now_unix()],
             )
             .context("database_schema_failed", "cannot record document schema")?;
+        let current: i64 = connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .context("database_schema_failed", "cannot read current schema")?;
+        if current == 5 {
+            let transaction = connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .context("database_schema_failed", "cannot begin worker migration")?;
+            transaction
+                .execute_batch(MIGRATION_6)
+                .context("database_schema_failed", "cannot migrate worker state")?;
+            transaction.execute(
+                "INSERT INTO observation_failures(observation_id, attempt_epoch, failed_at, code, detail)
+                 SELECT id, attempt_epoch, updated_at, failure_code, COALESCE(failure_detail, '')
+                 FROM observations WHERE status='failed' AND failure_code IS NOT NULL", [],
+            ).context("database_schema_failed", "cannot retain existing failures")?;
+            transaction
+                .execute(
+                    "INSERT INTO schema_migrations(version, applied_at) VALUES(6, ?1)",
+                    [now_unix()],
+                )
+                .context("database_schema_failed", "cannot record worker migration")?;
+            transaction
+                .commit()
+                .context("database_schema_failed", "cannot commit worker migration")?;
+        }
         connection
             .pragma_update(None, "journal_mode", "WAL")
             .context("database_config_failed", "unable to enable WAL")?;
@@ -301,9 +327,9 @@ impl Store {
         } else {
             fs2::FileExt::try_lock_exclusive(&file)
         };
-        lock_result.map_err(|_error| {
+        lock_result.map_err(|error| {
             AppError::new(
-                if wait {
+                if wait || error.kind() != std::io::ErrorKind::WouldBlock {
                     "observation_lock_failed"
                 } else {
                     "observation_busy"
@@ -857,14 +883,37 @@ impl Store {
     }
 
     pub(crate) fn retry_observation(&self, id: &str) -> AppResult<Observation> {
+        let observation = self.observation(id)?;
+        if observation.status != "failed" {
+            return Err(AppError::new(
+                "observation_not_failed",
+                "only failed observations can be retried",
+            ));
+        }
+        let delivery: bool = self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM decision_documents WHERE observation_id=?1 AND status='pending')",
+            [id], |row| row.get(0),
+        ).context("database_read_failed", "cannot inspect retained delivery")?;
+        let directory = self
+            .state_directory()
+            .join("document-runs")
+            .join(format!("{}-{}", observation.id, observation.attempt_epoch));
+        let new_attempt =
+            !delivery && crate::document_command::retry_starts_new_attempt(&directory)?;
         let changed = self
             .connection
             .execute(
-                "UPDATE observations SET status='queued', attempt_epoch=attempt_epoch+1,
-                    failure_code=NULL, failure_detail=NULL, completed_at=NULL,
+                "UPDATE observations SET status=?3, attempt_epoch=attempt_epoch+?4,
+                    failure_code=NULL, failure_detail=NULL,
+                    completed_at=CASE WHEN ?3='complete' THEN completed_at ELSE NULL END,
                     next_attempt_at=NULL, updated_at=?2
                  WHERE id=?1 AND status='failed'",
-                params![id, now_unix()],
+                params![
+                    id,
+                    now_unix(),
+                    if delivery { "complete" } else { "queued" },
+                    i64::from(new_attempt)
+                ],
             )
             .context(
                 "database_write_failed",
@@ -1234,18 +1283,37 @@ impl Store {
     }
 
     pub(crate) fn fail_observation(&self, id: &str, code: &str, detail: &str) -> AppResult<()> {
-        self.connection
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .context("database_write_failed", "cannot begin observation failure")?;
+        let changed = transaction
             .execute(
                 "UPDATE observations SET status='failed', failure_code=?2,
-                    failure_detail=?3, completed_at=?4, updated_at=?4
-                 WHERE id=?1 AND status IN ('queued', 'processing')",
+                    failure_detail=?3, completed_at=?4, updated_at=?4, next_attempt_at=NULL
+                 WHERE id=?1 AND (status IN ('queued', 'processing')
+                    OR (status='complete' AND EXISTS(SELECT 1 FROM decision_documents
+                        WHERE observation_id=?1 AND status='pending')))",
                 params![id, code, detail, now_unix()],
             )
             .context(
                 "database_write_failed",
                 "unable to record failed turn observation",
             )?;
-        Ok(())
+        if changed != 1 {
+            return Err(AppError::new(
+                "observation_state_conflict",
+                "observation no longer permits failure",
+            ));
+        }
+        transaction.execute(
+            "INSERT INTO observation_failures(observation_id, attempt_epoch, failed_at, code, detail)
+             SELECT id, attempt_epoch, updated_at, failure_code, failure_detail FROM observations WHERE id=?1",
+            [id],
+        ).context("database_write_failed", "cannot retain observation failure")?;
+        transaction
+            .commit()
+            .context("database_write_failed", "cannot commit observation failure")
     }
 
     pub(crate) fn defer_observation(
@@ -3609,12 +3677,37 @@ impl Store {
     }
 
     pub(crate) fn pending_document(&self) -> AppResult<Option<PendingAccount>> {
-        self.connection.query_row(
-            "SELECT document_id, markdown, source_sha256, target_library_id, target_config_path
-             FROM decision_documents WHERE status='pending' ORDER BY created_at, document_id LIMIT 1", [],
-            |row| Ok(PendingAccount { account_id: row.get(0)?, markdown: row.get(1)?,
-                source_sha256: row.get(2)?, target_library_id: row.get(3)?, target_config_path: row.get(4)? }),
-        ).optional().context("database_read_failed", "cannot read document outbox")
+        self.connection
+            .query_row(
+                "SELECT document_id, markdown, source_sha256, target_library_id, target_config_path
+             FROM decision_documents WHERE status='pending'
+               AND EXISTS(SELECT 1 FROM observations WHERE id=observation_id AND status='complete')
+             ORDER BY created_at, document_id LIMIT 1",
+                [],
+                |row| {
+                    Ok(PendingAccount {
+                        account_id: row.get(0)?,
+                        markdown: row.get(1)?,
+                        source_sha256: row.get(2)?,
+                        target_library_id: row.get(3)?,
+                        target_config_path: row.get(4)?,
+                    })
+                },
+            )
+            .optional()
+            .context("database_read_failed", "cannot read document outbox")
+    }
+
+    pub(crate) fn document_observation(&self, document_id: &str) -> AppResult<Observation> {
+        let id: String = self
+            .connection
+            .query_row(
+                "SELECT observation_id FROM decision_documents WHERE document_id=?1",
+                [document_id],
+                |row| row.get(0),
+            )
+            .context("database_read_failed", "cannot read document observation")?;
+        self.observation(&id)
     }
 
     pub(crate) fn record_document_acceptance(
@@ -5208,7 +5301,7 @@ mod tests {
         let state = directory.path().join("state");
         let database = state.join("decisions.db");
         let store = Store::open(&database)?;
-        assert_eq!(store.schema_version()?, 5);
+        assert_eq!(store.schema_version()?, 6);
         assert_eq!(fs::metadata(&state)?.permissions().mode() & 0o777, 0o700);
         assert_eq!(fs::metadata(&database)?.permissions().mode() & 0o777, 0o600);
         Ok(())
@@ -5402,7 +5495,7 @@ mod tests {
             assert_eq!(metadata_tables, 0);
         }
         let store = Store::open(&database)?;
-        assert_eq!(store.schema_version()?, 5);
+        assert_eq!(store.schema_version()?, 6);
         let legacy_kind: String = store.connection.query_row(
             "SELECT run_kind FROM runs WHERE id='legacy'",
             [],
@@ -5437,7 +5530,7 @@ mod tests {
         }
 
         let store = Store::open(&database)?;
-        assert_eq!(store.schema_version()?, 5);
+        assert_eq!(store.schema_version()?, 6);
         let page = store.read_events(&encode_event_cursor(0), 100)?;
         assert_eq!(page.events.len(), 3);
         assert!(!page.has_more);

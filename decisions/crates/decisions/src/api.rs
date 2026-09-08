@@ -44,6 +44,32 @@ pub struct ObservationFailure {
     pub failure_code: String,
 }
 
+/// Current worker activity, independent of retained observation failures.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthReport {
+    pub ok: bool,
+    pub state: WorkerState,
+    pub checked_at: i64,
+    /// Unix seconds; absent when the transition time was not observed.
+    pub state_since: Option<i64>,
+    pub state_duration_seconds: Option<i64>,
+    pub last_started_at: Option<i64>,
+    pub last_finished_at: Option<i64>,
+    pub max_idle_seconds: i64,
+    pub error_code: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerState {
+    Working,
+    Idle,
+    Error,
+    Interrupted,
+    Stale,
+    Unobserved,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredCandidate {
     pub id: String,
@@ -210,7 +236,10 @@ impl Client {
         } else {
             command.output()?
         };
-        if !output.status.success() {
+        // Health prints its typed report even when the worker is unhealthy.
+        let health_report =
+            arguments.first().is_some_and(|arg| arg == "health") && !output.stdout.is_empty();
+        if !output.status.success() && !health_report {
             return Err(ClientError::Failed(
                 String::from_utf8_lossy(&output.stderr).trim().to_owned(),
             ));
@@ -235,6 +264,15 @@ impl Client {
 
     pub fn process(&self) -> Result<ProcessOutput, ClientError> {
         self.json(&["observe".into(), "process".into()], None)
+    }
+
+    /// Read worker activity. An unhealthy report is a successful read with `ok: false`.
+    pub fn health(&self, max_idle_seconds: Option<i64>) -> Result<HealthReport, ClientError> {
+        let mut arguments = vec!["health".into()];
+        if let Some(seconds) = max_idle_seconds {
+            arguments.extend(["--max-idle-seconds".into(), seconds.to_string().into()]);
+        }
+        self.json(&arguments, None)
     }
 
     pub fn status(&self, date: Option<&str>) -> Result<ObservationStatus, ClientError> {

@@ -1,11 +1,11 @@
 {
   "id": "krisis.install.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install or operate Krisis",
-  "summary": "Deploy, inspect, hold for maintenance, recover, or uninstall Krisis. Operate schema-5 state, the Stop hook, Codex and Annals pins, and krisis/observer while retiring Decisions schedules.",
+  "summary": "Deploy, inspect worker health and state duration, hold for maintenance, recover, or uninstall Krisis. Operate schema-6 state, the Stop hook, Codex and Annals pins, and krisis/observer while retiring Decisions schedules.",
   "use_when": [
     "Krisis should be installed or updated for the current macOS user.",
     "The observer binding, hook, baseline, logs, database, Annals configuration, release selector, or recovery state should be inspected.",
@@ -20,7 +20,7 @@
     "The package builds and seals krisis and krisis-install; the latter is also retained as package/install and implements the schema-one coordinator adapter. Static runtime frontend and observer scripts remain exact release data.",
     "The Cell product adapter composes preparation and explicit final cutover under run-owned CLI admission, preserves the write-once baseline and prior schedule enabled booleans, and retains existing product-owned installer and recovery boundaries.",
     "Default preparation stages a content-addressed release and registers and verifies its Clockwork definition, including the explicit Codex reader path, while retaining maintenance without selecting or activating public surfaces.",
-    "Explicit final cutover migrates the database to schema 5, publishes the krisis command and providers, installs the exact hook and target-bound observer ownership receipt, selects krisis/observer, and disables only proven-owned enabled legacy schedules.",
+    "Explicit final cutover migrates the database to schema 6, publishes the krisis command and providers, installs the exact hook and target-bound observer ownership receipt, selects krisis/observer, and disables only proven-owned enabled legacy schedules.",
     "Uninstall removes exact owned public Krisis surfaces and disables its observer while retaining the database, releases, logs, legacy history, and Clockwork history unless separately authorized for deletion."
   ],
   "authority": [
@@ -29,7 +29,7 @@
   ],
   "success": [
     "Preparation reports the candidate release identity in JSON, retains its authenticated maintenance receipt, and leaves current/previous, hook, command, provider, and binding selectors unchanged.",
-    "Final cutover reports the selected Krisis release identity, provider releases match, doctor and the observer use the same explicit Codex executable, doctor proves schema 5 and exact Conversations, Nucleus, and Annals readiness, and selectors resolve inside one validated release.",
+    "Final cutover reports the selected Krisis release identity, provider releases match, doctor and the observer use the same explicit Codex executable, doctor proves schema 6 and exact Conversations, Nucleus, and Annals readiness, and selectors resolve inside one validated release.",
     "The write-once baseline exists before hook and krisis/observer publication, and old daily and observer schedules are disabled.",
     "Routine observer logs remain body-free and account delivery reaches only the configured dedicated Annals library."
   ],
@@ -85,7 +85,7 @@
     "Persistent database and log paths stay under Library/Application Support/Decisions and Library/Logs/Decisions for migration compatibility.",
     "The Codex, Annals, and Annals-config paths are absolute and explicit, the expected library ID is exact lowercase 32-hex, and doctor uses that Codex path while validating Conversations plus the decision-feed watermark contract and library identity.",
     "A private release-independent maintenance marker gates the runner during quiescence, migration, selector switching, hook replacement, and schedule handoff.",
-    "The prior database plus sidecars is backed up only after exact owned writers are stopped and quiescence is proven; migration is sequential through schema 5. The document cutover refuses pending legacy handoffs or classification jobs.",
+    "The prior database plus sidecars is backed up only after exact owned writers are stopped and quiescence is proven; migration is sequential through schema 6. The document cutover refuses pending legacy handoffs or classification jobs.",
     "No release, deploy, live account acceptance, trust change, or retained-state deletion occurs without separate authority."
   ],
   "adaptation": [
@@ -138,6 +138,10 @@
     {
       "label": "Verify retained release",
       "invocation": "krisis-install verify-release ABSOLUTE_RELEASE"
+    },
+    {
+      "label": "Worker health",
+      "invocation": "/Users/joey/.local/bin/krisis health [--max-idle-seconds N] [--json]"
     }
   ],
   "does_not_authorize": [
@@ -198,11 +202,15 @@
       },
       {
         "status": "declared",
-        "statement": "Successful explicit final cutover selects one validated content-addressed release for krisis and both providers, migrates schema 5, installs the exact Stop hook, and enables only krisis/observer."
+        "statement": "Successful explicit final cutover selects one validated content-addressed release for krisis and both providers, migrates schema 6, installs the exact Stop hook, and enables only krisis/observer."
       },
       {
         "status": "declared",
         "statement": "Uninstall removes exact public selectors and disables the owned observer while retaining migration-compatible state, releases, logs, and scheduler history."
+      },
+      {
+        "status": "declared",
+        "statement": "health reads current serial worker ownership and durable timing without dependency configuration. It reports working, idle, error, interrupted, stale, or unobserved with state timing, last start/finish, the selected idle limit, and bounded worker error code. Failed observation counts do not affect health."
       }
     ],
     "data_semantics": [
@@ -284,7 +292,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "New installations use cell-install-v2 complete artifact manifests. Retained legacy Decisions formats 2 and 3 and Krisis format 4 remain exact verified migration inputs. The archived shell deployer does not install the new format. State schema is 5."
+        "statement": "New installations use cell-install-v2 complete artifact manifests. Retained legacy Decisions formats 2 and 3 and Krisis format 4 remain exact verified migration inputs. The archived shell deployer does not install the new format. State schema is 6."
       },
       {
         "status": "declared",
@@ -292,7 +300,7 @@
       },
       {
         "status": "declared",
-        "statement": "Krisis and SQLite schema 5 preserve legacy Decisions rows and read decoding; public command/provider and active schedule move to Krisis identity."
+        "statement": "Krisis and SQLite schema 6 preserve legacy Decisions rows and read decoding; public command/provider and active schedule move to Krisis identity."
       },
       {
         "status": "unspecified",

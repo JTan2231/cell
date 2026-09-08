@@ -524,7 +524,7 @@ pub fn doctor(paths: &Paths, binary: &Path, pins: &Pins) -> Result<Value> {
     let value: Value = serde_json::from_slice(&bytes)?;
     require(
         value["ok"] == true
-            && value["schema_version"] == 5
+            && value["schema_version"] == 6
             && value["annals_library_id"] == pins.annals_library_id,
         "Krisis doctor did not prove schema and dedicated Annals target",
     )?;
