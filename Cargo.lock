@@ -578,7 +578,7 @@ dependencies = [
 
 [[package]]
 name = "decisions"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "annals-api",
  "cell-install",
@@ -1305,7 +1305,7 @@ dependencies = [
 
 [[package]]
 name = "krisis-api"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "serde",
  "serde_json",
