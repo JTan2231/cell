@@ -22,6 +22,7 @@ PRODUCTS = {
     "chancery": "Chancery", "clockwork": "Clockwork", "conversations": "Conversations",
     "email": "Email", "usher": "Usher", "cast": "Cast",
     "platter": "Platter", "paperboy": "Paperboy", "conatus": "Conatus",
+    "mentor": "MentorMail",
 }
 HEX = re.compile(r"[0-9a-f]{64}")
 

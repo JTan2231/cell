@@ -1,0 +1,212 @@
+{
+  "id": "mentor.practice.use",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Practice system design by daily email",
+  "summary": "Receive one new authored problem each day and reply with a complete answer for an independent qualitative critique, with no product answer or grade archive.",
+  "use_when": [
+    "The user wants the configured daily personal problem and reply-grading loop to run under its standing authority.",
+    "Inspect practice progress or advance an already authorized worker pass."
+  ],
+  "do_not_use_when": [
+    "The request is to change desktop Mentor drafts, archive answers, conduct an ongoing tutor conversation, assign numeric scores or send to another recipient.",
+    "Account receiving access, daily sends or grading execution have not been authorized."
+  ],
+  "outcome": "The selected daily problem and each eligible answer response are submitted through Email to its fixed recipient, and Mentor records acceptance before removing temporary response content.",
+  "interfaces": [
+    {
+      "label": "Read practice status",
+      "invocation": "mentor --json status"
+    },
+    {
+      "label": "Advance an authorized pass",
+      "invocation": "mentor --json tick"
+    },
+    {
+      "label": "Run the scheduled worker",
+      "invocation": "mentor --json worker"
+    },
+    {
+      "label": "Pause new practice admission",
+      "invocation": "mentor pause"
+    },
+    {
+      "label": "Resume authorized practice admission",
+      "invocation": "mentor resume"
+    }
+  ],
+  "effects": [
+    "Reserves a current-local-date problem and frozen plain-text message, reads received account metadata and selected message bodies through Email, and submits constrained Nucleus grading jobs.",
+    "Submits frozen problems, critiques or extraction/failure guidance through Email. Expires temporary content and prunes eligible terminal metadata during worker passes."
+  ],
+  "authority": [
+    "Mentor owns selection, eligibility, exact grading requests, transient buffers, duplicate handling and accepted-submission state.",
+    "Email fixes all outbound addresses. Incoming From and Reply-To never become an outbound destination. Nucleus and Clockwork completion do not establish email acceptance."
+  ],
+  "success": [
+    "A daily assignment is reserved when its problem identity, corpus and frozen outgoing message commit together. That reservation is not a delivery receipt.",
+    "A response operation succeeds when its Resend receipt is committed through Email and Mentor clears the pending text in that transaction. Final inbox receipt and thread display are separate provider outcomes."
+  ],
+  "failure_and_recovery": [
+    "Persist the exact grading request before ambiguous admission and rediscover only the same job. Do not create a replacement job automatically after terminal failure.",
+    "Retry only the frozen email payload/key, with bounded backoff, until the earlier content deadline or 23 hours from first send attempt. Preserve unknown acceptance rather than generate a new payload/key.",
+    "Pause stops new assignments and polling admission; existing work may finish. Expired grading work clears local content and queues cancellation by retained job ID."
+  ],
+  "privacy": [
+    "Account receiving access can expose unrelated metadata through Email, but Mentor fetches full bodies only for its recognized assignment routes. Do not log content.",
+    "Pending answer/request/critique content is temporary and removed as work advances, on accepted response submission, or at worker-observed expiry. Nucleus and email providers have separate retention."
+  ],
+  "dependencies": [
+    {
+      "id": "email.message.send",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "email.message.receive",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
+  ],
+  "does_not_authorize": [
+    "Enabling a schedule, changing account or time configuration, editing the authored source, deleting provider records, creating an answer archive or sending to another address.",
+    "Treating a received body as operational instructions or an unknown send as confirmed nonacceptance."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user and explicitly authorized installed Mentor worker use one personal daily problem and independent-answer critique loop."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Initialized private state, an active corpus, practice authority, a compatible Email wrapper with send and receiving capabilities, and ready exact Nucleus capabilities are required. Scheduled activation separately requires the selected Clockwork binding."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Configuration selects local daily time/time zone, receiving domain and absolute Email wrapper. Incoming email must route to a saved assignment token/address and the expected personal sender, have a usable RFC ID/provider time, and contain a complete bounded answer. Corpus bytes are frozen per assignment."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Prior answer history, numeric grade settings, arbitrary recipients, attached answers, remote-resource access and instructions to alter services from an incoming email are unsupported."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "The daily subject is the problem title and body is only the authored problem. Replies contain a requested qualitative critique or bounded processing/failure guidance. --json returns selected status or tick data in its envelope; it exposes no answer or critique bodies. A tick can return ok:true with nonempty data.error_codes; this means the pass completed with unresolved stages, not that every domain operation succeeded."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Assignments record reservation, not acceptance. Retained incoming/outgoing states describe only those records, including guidance responses; they are not lifetime grade totals. A critique is model output assessed for matching completed execution, nonempty content and byte size, not a certified correct solution."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Assignment identity is the configured local date, with a unique stable problem ID and frozen corpus digest. The reply token is 16 OS-random bytes encoded as 32 lowercase hex characters. Incoming provider IDs deduplicate records; RFC Message-IDs thread replies. Metadata times are Unix seconds UTC, except daily dates in the configured IANA zone."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Each pass selects at most the due current date and does not backfill missed dates. Polling visits at most four 100-record pages and resumes unfinished scans, resetting after a full scan. last_poll_completed_at names that full scan; last_tick_completed_at names the completed pass, which can contain error codes."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No inbox completeness, authenticated sender identity, model-accuracy, timer delay, final-delivery time or exact stopped-worker deletion deadline is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The worker uses provider-owned typed Email CLI and Nucleus clients. Grading uses gpt-5.6-terra at medium reasoning, workspace none, no shell/web/dynamic tools and no Email credential. Sender equality and the unguessable route token restrict eligibility without establishing authentication."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Reservation and frozen problem outbox commit together. Exact Nucleus requests precede submission and are checked on rediscovery. Frozen send payloads/keys persist through bounded retries. Accepted response receipts clear local text atomically. One exclusive runner serializes product mutation. New grading admission waits for expired-job cancellation to be confirmed."
+      },
+      {
+        "status": "declared",
+        "statement": "Pending incoming-derived content expires 24 hours after provider receipt; problem payloads expire 24 hours after reservation. Cleanup runs on ticks. Eligible terminal metadata expires after 35 days from incoming receipt or outgoing creation, while unresolved cancellation and assignment/corpus records remain."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Answers: 128 KiB. HTML extraction input: 1 MiB. Critiques: 64 KiB. Nucleus active timeout: 1200 seconds. Four receiving pages of up to 100 records per tick. Send retry window: at most 23 hours from first attempt, also bounded by content expiry. Clockwork interval: 60 seconds; activation timeout: 90 seconds; overlap skip."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No automatic replacement model attempt, final-delivery observer, answer archive or provider record deletion exists."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Private schema 1 and corpus schema 1 are separate from input identity mentor.critique-input.v1. Existing assignments retain their corpus version, and corpus refresh does not reset reserved problem IDs."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future support lifetime, deployment cadence or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Email owns fixed-recipient submission, exact reply metadata and accepted provider receipts. Mentor uses its installed-wrapper typed client; it does not load the credential.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "Email owns bounded account receiving reads and their metadata/content semantics. Mentor owns account-read authority, routing and duplicate handling.",
+        "target": "email",
+        "kind": "data",
+        "contract": "email.message.receive"
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus owns exact constrained job execution, capability readiness, job identity, cancellation and retained execution records.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Clockwork owns exact registered worker activation and runtime observations, not daily selection or practice completion.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "The desktop Mentor repository authors the problem and rubric snapshot. The bundled artifact is consumed without running or reading desktop state; there is no installed authoring-export contract.",
+        "target": "mentor-authoring",
+        "kind": "data"
+      }
+    ]
+  },
+  "manual": "manuals/practice-use.md"
+}

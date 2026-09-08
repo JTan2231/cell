@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "product": "mentor",
+  "application": "MentorMail",
+  "dependencies": ["email", "nucleus", "clockwork"],
+  "maintenance_products": ["nucleus"],
+  "description": "Install Mentor under requester maintenance with its worker disabled.",
+  "adapter_binary": "mentor-install"
+}

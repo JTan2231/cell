@@ -25,6 +25,7 @@ members = [
     "platter",
     "paperboy",
     "conatus",
+    "mentor",
 ]
 resolver = "3"
 

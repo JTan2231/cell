@@ -1,0 +1,191 @@
+{
+  "id": "mentor.development.change",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change Mentor email practice software",
+  "summary": "Change Mentor selection, reply processing, retention, grading integration, public commands or installation while preserving the small independent-answer email loop and provider authority.",
+  "use_when": [
+    "The requested work changes Mentor code, corpus format, state, invocation policy, CLI, installation, provider bundle or documentation."
+  ],
+  "do_not_use_when": [
+    "The request is an ordinary practice or installed administration operation.",
+    "The change would add an answer archive, ongoing tutoring, arbitrary recipients, direct Resend access or a direct-model fallback without an explicit new scope."
+  ],
+  "outcome": "A minimal owning source change with synchronized product and shared contracts; validation, publication and deployment remain separate operations governed by the task authority.",
+  "interfaces": [
+    {
+      "label": "Read the service boundary",
+      "invocation": "Read mentor/docs/service.md and mentor/docs/system-installation.md"
+    },
+    {
+      "label": "Read requester requirements",
+      "invocation": "nucleus manual"
+    },
+    {
+      "label": "Read terminology",
+      "invocation": "semantics repository show cell"
+    }
+  ],
+  "effects": [
+    "Modifies authorized Mentor source, data format, model policy, packaging and documentation. Shared Email/Nucleus/Clockwork changes require their selected owning interfaces and instructions.",
+    "A future deployment can change private state and scheduled operation; source editing does not install, schedule, submit a model job or send email."
+  ],
+  "authority": [
+    "Mentor owns exact temporary requests, answer eligibility, corpus identity, selection, retention and accepted-submission rules.",
+    "Email owns transport and addresses; Nucleus owns runtime/authentication/retention; Clockwork owns activation. Do not copy provider wire structs or use their private databases."
+  ],
+  "success": [
+    "Source, public CLI/types, corpus/state semantics, retention, provider dependencies and manuals describe the same scoped implementation.",
+    "Report which verification was performed or explicitly deferred by the task; do not present coding-only work as tested, installed or ready."
+  ],
+  "failure_and_recovery": [
+    "Keep the exact frozen request and send-key invariants, pending-content expiry, body-free diagnostics and explicit unknown outcomes.",
+    "State changes require a supported migration/backup and database-aware recovery policy before deployment; never repair private rows directly."
+  ],
+  "privacy": [
+    "Use authored corpus data and synthetic answers in source examples. Do not copy live inbox content, credentials, grading responses or Nucleus records into source/contracts."
+  ],
+  "dependencies": [
+    {
+      "id": "mentor.practice.use",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "mentor.installation.operate",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "semantics.repository.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "nucleus.requester.integrate",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
+  ],
+  "does_not_authorize": [
+    "Tests, builds, releases, commits, installs, live jobs, sends or configuration effects that the task forbids or has not authorized.",
+    "An automatic answer archive, zero-retention claim, provider record deletion, alternate model path or arbitrary send recipient."
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read product instructions and applicable maintained terminology, using Cell until Mentor has a registered semantic repository.",
+    "Read the affected practice/installation/Email/Nucleus/Clockwork contracts; read nucleus manual for state or requester changes.",
+    "Implement the smallest owning change and synchronize product contracts plus the shared operator manual when shared facts change.",
+    "Perform only the validation and later effects permitted by the task, and report any deferred evidence."
+  ],
+  "checkpoints": [
+    "No answer or critique archive; temporary content expiry and acceptance cleanup remain explicit.",
+    "Assignment/corpus identity survives late replies and content refresh without resetting used problem IDs.",
+    "Provider-owned typed clients preserve credentials, fixed addresses and exact invocation identity.",
+    "A source bundle is not presented as installed discovery or live readiness."
+  ],
+  "adaptation": [
+    "Publish a new input or corpus identity when a meaning changes incompatibly; retain old corpus data needed for assignments.",
+    "Changes to provider receiving, headers, model permissions, retention or schedule meaning belong to the owning product contract as well as Mentor."
+  ],
+  "stop_when": [
+    "The implementation uses a private provider database, hidden execution fallback, arbitrary sender-selected destination or undeclared archive.",
+    "The requested state or lifecycle change cannot preserve supported recovery, privacy and ownership."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "An authorized contributor changes the small Mentor service and its declared integration boundaries."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Read product instructions, registered Mentor terminology when available or Cell otherwise, affected installed contracts and the current Nucleus manual before requester/state/lifecycle changes."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Inputs are the requested change, current owning source and contracts, authored corpus artifact and synthetic development examples."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Output is synchronized source/documentation with the performed or deferred verification stated accurately. Development does not itself install, enable, send or grade."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Preserve assignment reservation versus acceptance, provider IDs versus RFC IDs, current local-date selection, independent answers, temporary work versus retained metadata and provider retention boundaries."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Keep stable problem IDs, frozen corpus digests, immutable Nucleus request IDs, exact send keys, byte bounds and explicit timestamp units. Incompatible meaning changes require new versioned identity."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "The change description must identify affected interfaces and evidence actually obtained. Source publication alone makes no claim about installed dependency availability."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No implementation duration, validation success, deployment readiness or future support lifetime is promised before its separate evidence exists."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Use provider-owned typed clients and supported commands. No private Email/Nucleus/Clockwork database edits, credential copying, direct-Codex or direct-Resend fallback."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "State changes require supported migration, drained content-free backup and compatible rollback semantics. Source and matching provider contract changes stay together; actual installation and activation remain separate effects."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Keep one small product runner and the defined input/output/expiry limits. Do not broaden into a history service, workflow engine or generic email platform."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Private state, corpus, grading input, provider contracts and installed release have separate versions. Preserve source compatibility at Email boundaries and exact historical assignment interpretation."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Semantics supplies maintained terms; Cell is the explicit fallback until Mentor is registered.",
+        "target": "semantics",
+        "kind": "data",
+        "contract": "semantics.repository.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus integration defines closed invocation and requester-owned success/recovery.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.requester.integrate"
+      }
+    ]
+  },
+  "manual": "manuals/development-change.md"
+}

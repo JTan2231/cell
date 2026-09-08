@@ -1,14 +1,17 @@
 //! Provider-owned plain-text Email submission.
 
 pub mod api;
+mod client;
+mod receiving;
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use base64::Engine as _;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -41,6 +44,51 @@ struct Cli {
     body: String,
 }
 
+#[derive(Debug, Parser)]
+#[command(
+    name = "email",
+    version,
+    about = "Send personal email or read received account email"
+)]
+struct SendCli {
+    #[command(flatten)]
+    message: Cli,
+    /// One caller-authorized reply mailbox. Does not change the fixed recipient.
+    #[arg(long, value_name = "ADDRESS")]
+    reply_to: Option<String>,
+    /// RFC Message-ID of the message being answered, including angle brackets.
+    #[arg(long, value_name = "MESSAGE_ID")]
+    in_reply_to: Option<String>,
+    /// One RFC Message-ID in the thread's References chain; repeat in order.
+    #[arg(long = "reference", value_name = "MESSAGE_ID")]
+    references: Vec<String>,
+}
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "email receive",
+    version,
+    about = "Read received Resend account email without retaining it"
+)]
+struct ReceiveCli {
+    #[command(subcommand)]
+    command: ReceiveCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum ReceiveCommand {
+    /// Read one metadata page, ordered from newer to older records.
+    List {
+        #[arg(long, default_value_t = 100, value_parser = clap::value_parser!(u16).range(1..=100))]
+        limit: u16,
+        /// Last provider email ID from the preceding page; excluded from this page.
+        #[arg(long, value_name = "ID")]
+        after: Option<String>,
+    },
+    /// Read one full received email, without fetching remote content or attachments.
+    Get { id: String },
+}
+
 #[derive(Serialize)]
 struct ResendRequest<'a> {
     from: &'static str,
@@ -49,6 +97,10 @@ struct ResendRequest<'a> {
     text: &'a str,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     attachments: Vec<ResendAttachment<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reply_to: Option<&'a str>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    headers: BTreeMap<&'static str, String>,
 }
 
 #[derive(Serialize)]
@@ -95,7 +147,40 @@ pub async fn main_entry() {
 }
 
 async fn run() -> AppResult<()> {
-    let cli = Cli::parse();
+    let arguments: Vec<_> = std::env::args_os().collect();
+    if arguments.get(1).is_some_and(|value| value == "receive")
+        && arguments.get(2).is_some_and(|value| {
+            matches!(
+                value.to_str(),
+                Some("list" | "get" | "--help" | "-h" | "--version" | "-V")
+            )
+        })
+    {
+        let receive = ReceiveCli::parse_from(
+            std::iter::once(arguments[0].clone()).chain(arguments.into_iter().skip(2)),
+        );
+        let output = match receive.command {
+            ReceiveCommand::List { limit, after } => {
+                let page = api::list_received(&api::ReceivedPageRequest { limit, after }).await?;
+                serde_json::to_string(&page)
+            }
+            ReceiveCommand::Get { id } => {
+                let message = api::get_received(&id).await?;
+                serde_json::to_string(&message)
+            }
+        }
+        .map_err(|_| AppError::new("unable to encode received email output"))?;
+        println!("{output}");
+        return Ok(());
+    }
+    let send = SendCli::parse_from(arguments);
+    let options = api::ReplyOptions {
+        reply_to: send.reply_to,
+        in_reply_to: send.in_reply_to,
+        references: send.references,
+    };
+    validate_reply_options(&options)?;
+    let cli = send.message;
     let (body, attachments) = if cli.payload_stdin {
         if cli.body != "-" {
             return Err(AppError::new("--payload-stdin requires body -"));
@@ -110,13 +195,14 @@ async fn run() -> AppResult<()> {
                 .collect::<AppResult<Vec<_>>>()?,
         )
     };
-    let receipt = api::send_with_attachments(
+    let receipt = api::send_with_options(
         &api::Message {
             subject: cli.subject,
             body,
             idempotency_key: cli.idempotency_key,
         },
         &attachments,
+        &options,
     )
     .await?;
     println!("{receipt}");
@@ -205,7 +291,7 @@ fn read_attachment(path: &Path) -> AppResult<api::Attachment> {
 
 fn resend_api_key() -> AppResult<String> {
     let api_key = std::env::var("RESEND_API_KEY")
-        .map_err(|_| AppError::new("RESEND_API_KEY must be set to send email"))?;
+        .map_err(|_| AppError::new("RESEND_API_KEY must be set to use Email transport"))?;
     validate_api_key(api_key)
 }
 
@@ -232,6 +318,77 @@ fn parse_idempotency_key(value: &str) -> Result<String, String> {
     Ok(value.to_owned())
 }
 
+fn validate_reply_options(options: &api::ReplyOptions) -> AppResult<()> {
+    if let Some(address) = &options.reply_to {
+        let valid = address.len() <= 254
+            && address.split_once('@').is_some_and(|(local, domain)| {
+                !local.is_empty()
+                    && local.len() <= 64
+                    && !local.starts_with('.')
+                    && !local.ends_with('.')
+                    && !local.contains("..")
+                    && local.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || b".!#$%&'*+-/=?^_`{|}~".contains(&byte)
+                    })
+                    && !domain.is_empty()
+                    && domain.split('.').all(|label| {
+                        !label.is_empty()
+                            && label.len() <= 63
+                            && !label.starts_with('-')
+                            && !label.ends_with('-')
+                            && label
+                                .bytes()
+                                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                    })
+            });
+        if !valid {
+            return Err(AppError::new(
+                "reply-to must be one ASCII mailbox without a display name",
+            ));
+        }
+    }
+    if let Some(id) = &options.in_reply_to {
+        validate_message_id(id)?;
+    }
+    if options.references.len() > 64
+        || options
+            .references
+            .iter()
+            .map(|id| id.len().saturating_add(1))
+            .sum::<usize>()
+            > 8192
+    {
+        return Err(AppError::new(
+            "references must contain at most 64 message IDs and 8192 bytes",
+        ));
+    }
+    for id in &options.references {
+        validate_message_id(id)?;
+    }
+    Ok(())
+}
+
+fn validate_message_id(id: &str) -> AppResult<()> {
+    let valid = id.len() <= 998
+        && id
+            .strip_prefix('<')
+            .and_then(|value| value.strip_suffix('>'))
+            .is_some_and(|value| {
+                value.split_once('@').is_some_and(|(left, right)| {
+                    !left.is_empty() && !right.is_empty() && !right.contains('@')
+                }) && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_graphic() && !b"<>\\\"".contains(&byte))
+            });
+    if !valid {
+        return Err(AppError::new(
+            "reply headers require one bracketed ASCII Message-ID without whitespace",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
 async fn send_to(
     endpoint: &str,
     api_key: &str,
@@ -240,6 +397,19 @@ async fn send_to(
     body: &str,
     attachments: &[api::Attachment],
 ) -> AppResult<String> {
+    send_to_with_options(
+        endpoint,
+        api_key,
+        idempotency_key,
+        subject,
+        body,
+        attachments,
+        &api::ReplyOptions::default(),
+    )
+    .await
+}
+
+fn resend_client(api_key: &str) -> AppResult<reqwest::Client> {
     let mut headers = HeaderMap::new();
     let mut authorization = HeaderValue::from_str(&format!("Bearer {api_key}")).map_err(|_| {
         AppError::new("RESEND_API_KEY contains characters that cannot be sent in an HTTP header")
@@ -251,11 +421,31 @@ async fn send_to(
         HeaderValue::from_static(concat!("email/", env!("CARGO_PKG_VERSION"))),
     );
 
-    let client = reqwest::Client::builder()
+    reqwest::Client::builder()
         .default_headers(headers)
         .timeout(REQUEST_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
         .build()
-        .map_err(|_| AppError::new("unable to initialize the Resend client"))?;
+        .map_err(|_| AppError::new("unable to initialize the Resend client"))
+}
+
+async fn send_to_with_options(
+    endpoint: &str,
+    api_key: &str,
+    idempotency_key: &str,
+    subject: &str,
+    body: &str,
+    attachments: &[api::Attachment],
+    options: &api::ReplyOptions,
+) -> AppResult<String> {
+    let client = resend_client(api_key)?;
+    let mut headers = BTreeMap::new();
+    if let Some(id) = &options.in_reply_to {
+        headers.insert("In-Reply-To", id.clone());
+    }
+    if !options.references.is_empty() {
+        headers.insert("References", options.references.join(" "));
+    }
     let request = ResendRequest {
         from: FROM,
         to: [TO],
@@ -268,6 +458,8 @@ async fn send_to(
                 content: base64::engine::general_purpose::STANDARD.encode(&attachment.content),
             })
             .collect(),
+        reply_to: options.reply_to.as_deref(),
+        headers,
     };
 
     for attempt in 0..=RETRY_DELAYS.len() {

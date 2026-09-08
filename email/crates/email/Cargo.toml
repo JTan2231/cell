@@ -10,7 +10,7 @@ license.workspace = true
 base64.workspace = true
 cell-install.workspace = true
 clap.workspace = true
-reqwest = { workspace = true, features = ["native-tls"] }
+reqwest = { workspace = true, features = ["native-tls", "query"] }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

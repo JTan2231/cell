@@ -1,9 +1,12 @@
 # CLI contract
 
-Email has one command shape:
+Email has these command shapes:
 
 ```text
-email [--idempotency-key KEY] [--attach PATH]... <SUBJECT> <BODY>
+email [--idempotency-key KEY] [--attach PATH]... [--reply-to ADDRESS]
+      [--in-reply-to MESSAGE_ID] [--reference MESSAGE_ID]... <SUBJECT> <BODY>
+email receive list --limit 100 [--after ID]
+email receive get ID
 ```
 
 `SUBJECT` and `BODY` are required positional UTF-8 strings. When `BODY` is
@@ -94,3 +97,36 @@ retains no local attachment copy or send history after exit.
 
 The flag is additive in Email 0.5.1 under attachment contract 4. A caller that
 needs byte input must select an executable that advertises `--payload-stdin`.
+
+## Reply routing and threads
+
+`--reply-to ADDRESS` accepts one ASCII mailbox without a display name. It
+selects where the recipient's email client directs a reply. It does not change
+Email's fixed sender or recipient. The caller must authorize that address.
+
+`--in-reply-to MESSAGE_ID` and repeated `--reference MESSAGE_ID` set only the
+`In-Reply-To` and `References` headers. Each ID must be a bracketed ASCII
+Message-ID, such as `<answer@example.com>`, with no whitespace, angle brackets
+inside the ID, backslash or double quote. Its maximum size is 998 bytes.
+References preserve caller order and accept at most 64 IDs and 8192 bytes,
+including the space budget. Arbitrary headers and configurable send addresses
+remain unsupported. A reply mailbox has at most 254 bytes, a dot-atom local
+part of at most 64 bytes, and DNS domain labels of at most 63 bytes.
+
+```sh
+email --payload-stdin --idempotency-key mentor/critique/answer-id \
+  --reply-to mentor-assignment@account.resend.app \
+  --in-reply-to '<answer@example.com>' \
+  --reference '<problem@example.com>' --reference '<answer@example.com>' \
+  'Re: Design a rate limiter' -
+```
+
+The body remains plain text. All reply fields are part of the exact frozen
+request and must remain unchanged with its idempotency key. Resend receives
+them, and Gmail uses the headers when deciding how to display a thread.
+Acceptance does not prove threading or final delivery.
+
+`receive list`, `receive get`, and `receive --help` select the receive parser.
+Use `--` before literal send positionals to avoid those reserved forms, such as
+`email -- receive list`. Receive commands use the same installed credential
+wrapper. See [receiving](receiving.md) for the JSON and access contract.

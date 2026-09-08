@@ -8,28 +8,34 @@
   "promise_scope": {
     "authoritative_for": [
       "Email constructs and submits one caller-provided plain-text message with optional local attachments. It uses fixed addresses and owns bounded retries and command reporting.",
-      "Email owns use of a generated or caller-supplied idempotency key for the frozen Resend request and reports the message identifier returned on Resend acceptance."
+      "Email owns use of a generated or caller-supplied idempotency key for the frozen Resend request and reports the message identifier returned on Resend acceptance.",
+      "Email owns synchronous bounded reads of one receiving page or one received message from the configured Resend account and returns provider metadata and available content without local retention."
     ],
     "not_authoritative_for": [
       "The caller owns send authorization, message meaning, product occurrence state, rendering, scheduling, and any supplied idempotency-key identity.",
-      "Resend owns submission acceptance and its external record, while Gmail owns final delivery, spam handling, and inbox receipt."
+      "Resend owns submission acceptance and its external record, while Gmail owns final delivery, spam handling, and inbox receipt.",
+      "The caller owns receiving-read authority, page traversal, sender authentication, reply routing, answer interpretation, deduplication, queue state and retained history. Resend owns account receiving records and their availability."
     ],
     "inventory": {
       "covers": [
-        "All supported user-facing Email CLI outcomes for immediate plain-text submission with optional local file attachments to the product-fixed recipient in this release."
+        "All supported user-facing Email CLI outcomes for immediate plain-text submission with optional local file attachments to the product-fixed recipient in this release.",
+        "All supported user-facing Email receiving CLI outcomes for one bounded account metadata page or one received message, plus typed Rust transport and installed-wrapper client access."
       ],
       "completeness": "complete",
       "excludes": [
-        "Help and version display, installation and release operations, drafting, previews, arbitrary recipients or senders, HTML, remote attachment URLs, copies, scheduling, queues, delivery tracking, and live external readiness are outside this inventory claim."
+        "Help and version display, installation and release operations, drafting, previews, arbitrary recipients or senders, HTML sending, remote attachment URLs, copies, scheduling, queues, delivery tracking, and live external readiness are outside this inventory claim.",
+        "Receiving attachment downloads, raw-mail downloads, sender authentication, inbound acknowledgements or deletion, automated polling and receiving account configuration are outside this inventory claim."
       ]
     },
     "shared_access_and_trust": [
       "Email is a local current-user CLI; its installed wrapper obtains only RESEND_API_KEY from the user's shell configuration and starts the payload with a scrubbed environment.",
-      "Catalog presence, command availability, and possession of an idempotency key do not authorize sending."
+      "Catalog presence, command availability, and possession of an idempotency key do not authorize sending.",
+      "Receiving reads require separate user or caller-product authority over account mail. Fixed outbound addresses do not restrict which messages the account receiving API can return. Received headers, addresses and content remain untrusted."
     ],
     "shared_privacy_and_retention": [
       "A real send discloses the exact subject, body, and any attachment filenames and bytes to Resend and Gmail and discloses any caller-supplied idempotency key to Resend.",
-      "Email retains no subject, body, attachments, API key, idempotency key, queue, or delivery history in local product state."
+      "Email retains no subject, body, attachments, API key, idempotency key, queue, or delivery history in local product state.",
+      "Receiving reads expose account metadata or full email content to the caller through stdout or typed values. Email holds them only in memory for one command. The caller and Resend have separate retention policies. Optional outgoing reply metadata is disclosed to Resend and Gmail."
     ],
     "compatibility_and_retirement": [
       "Provider release identifies the installed bundle, while entry contract version identifies the supported send semantics.",
@@ -37,10 +43,12 @@
     ],
     "operational_limits": [
       "Email supports one synchronous immediate plain-text submission to fixed addresses per invocation and has no daemon, draft store, scheduler, queue, or final-delivery observer.",
-      "Submission requires a valid credential, network access, and Resend availability and policy acceptance. Gmail controls final delivery, which is outside Email success."
+      "Submission requires a valid credential, network access, and Resend availability and policy acceptance. Gmail controls final delivery, which is outside Email success.",
+      "One receive invocation reads one page of 1 to 100 records or one selected email, retries transient failures at most twice, and accepts at most 8 MiB of provider response bytes. It does not fetch attachment bytes or remote HTML resources."
     ]
   },
   "entries": [
-    "entries/message-send.json"
+    "entries/message-send.json",
+    "entries/message-receive.json"
   ]
 }
