@@ -3,7 +3,7 @@
   "provider": {
     "id": "nucleus",
     "name": "Nucleus",
-    "release": "0.5.0"
+    "release": "0.5.1"
   },
   "promise_scope": {
     "authoritative_for": [
