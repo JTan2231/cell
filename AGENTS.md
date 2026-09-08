@@ -3,6 +3,10 @@
 Semantics-Project: cell
 
 - Keep changes simple.
+- Keep the root `README.md` slim: project introduction, basic CI examples, and
+  documentation pointers. Do not update it as part of documentation updates
+  unless the user explicitly requests a README change. Put operational details
+  in the relevant product or shared documentation.
 - Use a concise house style based on ASD-STE100 Issue 9. Preserve meaning over
   strict language rules. Keep required technical terms, commands, and field
   names. Add explanation only when it helps the reader.
