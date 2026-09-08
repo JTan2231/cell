@@ -466,7 +466,7 @@ pub(super) fn drained(payload: &Path, library: &Path, home: &Path, owner: &str) 
     }
 }
 
-fn wait_inbox(journal: &Journal, config: &Path) -> Result<()> {
+fn wait_inbox(journal: &Journal) -> Result<()> {
     let duration = std::env::var(if journal.key == "annals/inbox" {
         "ANNALS_UPDATE_WAIT_SECONDS"
     } else {
@@ -475,17 +475,23 @@ fn wait_inbox(journal: &Journal, config: &Path) -> Result<()> {
     .ok()
     .map_or(Ok(3900), |v| v.parse::<u64>())
     .map_err(|_| Error::new("Annals update wait must be an integer"))?;
-    let until = Instant::now() + Duration::from_secs(duration);
+    wait_inbox_lock(&journal.library(), Duration::from_secs(duration))
+}
+
+fn wait_inbox_lock(library: &Path, duration: Duration) -> Result<()> {
+    // Admission is held and the schedule is disabled. Check the spool directly:
+    // the candidate CLI cannot read the library until schema migration finishes.
+    let lock = library.join("spool/.run.lock");
+    if !optional_private(&lock)? {
+        return Ok(());
+    }
+    let file = fs::OpenOptions::new().read(true).write(true).open(lock)?;
+    let until = Instant::now() + duration;
     loop {
-        let status = annals(
-            &journal.payload(),
-            config,
-            &["inbox", "status"],
-            &journal.home,
-            Some(&journal.owner),
-        )?;
-        if status.get("locked") == Some(&json!(false)) {
-            return Ok(());
+        match fs2::FileExt::try_lock_exclusive(&file) {
+            Ok(()) => return Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(error) => return Err(error.into()),
         }
         if Instant::now() >= until {
             return Err(Error::new(
@@ -913,7 +919,7 @@ fn apply_library(
         )?
     };
     if journal.database_existed {
-        wait_inbox(journal, &library.join("config.toml"))?;
+        wait_inbox(journal)?;
     }
     if !journal.no_start
         && !handoff
@@ -1499,4 +1505,56 @@ pub(super) fn recover(home: &Path, path: &Path) -> Result<Value> {
         rollback(&mut journal, path, &mut tx)?;
     }
     Ok(json!({"ok":true,"data":{"recovered":true,"committed":journal.committed}}))
+}
+
+#[cfg(test)]
+mod inbox_wait_tests {
+    use super::{Duration, fs, wait_inbox_lock, write_private};
+
+    type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
+
+    #[test]
+    fn idle_wait_preserves_an_unmigrated_database() -> TestResult {
+        let root = tempfile::tempdir()?;
+        let database = root.path().join("annals.db");
+        let connection = rusqlite::Connection::open(&database)?;
+        connection.execute_batch(
+            "PRAGMA user_version=5;
+             CREATE TABLE retained_source(content TEXT NOT NULL);
+             INSERT INTO retained_source VALUES ('Exact retained source.');",
+        )?;
+        drop(connection);
+        let before = fs::read(&database)?;
+        wait_inbox_lock(root.path(), Duration::ZERO)?;
+        write_private(&root.path().join("spool/.run.lock"), b"", false)?;
+        wait_inbox_lock(root.path(), Duration::ZERO)?;
+        assert_eq!(fs::read(database)?, before);
+        Ok(())
+    }
+
+    #[test]
+    fn active_inbox_must_release_its_lock_before_migration() -> TestResult {
+        let root = tempfile::tempdir()?;
+        let lock = root.path().join("spool/.run.lock");
+        write_private(&lock, b"", false)?;
+        let running = fs::OpenOptions::new().read(true).write(true).open(lock)?;
+        fs2::FileExt::lock_exclusive(&running)?;
+        assert!(wait_inbox_lock(root.path(), Duration::ZERO).is_err());
+        drop(running);
+        wait_inbox_lock(root.path(), Duration::ZERO)?;
+        Ok(())
+    }
+
+    #[test]
+    fn unsafe_inbox_lock_is_not_treated_as_idle() -> TestResult {
+        let root = tempfile::tempdir()?;
+        write_private(&root.path().join("other-lock"), b"", false)?;
+        fs::create_dir(root.path().join("spool"))?;
+        std::os::unix::fs::symlink(
+            root.path().join("other-lock"),
+            root.path().join("spool/.run.lock"),
+        )?;
+        assert!(wait_inbox_lock(root.path(), Duration::ZERO).is_err());
+        Ok(())
+    }
 }

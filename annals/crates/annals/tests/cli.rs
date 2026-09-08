@@ -19,6 +19,83 @@ const SERIALIZABLE_LABEL: &str = "Serializable execution";
 const LOCKING_LABEL: &str = "Predicate locking";
 
 #[test]
+fn identity_pinned_backup_preserves_schema_five_and_rejects_another_identity() -> TestResult {
+    let library = Library::initialized()?;
+    let source = "Preserve this exact source before migration.\n";
+    library.add_work("Before migration", "before.txt", source)?;
+    let connection = Connection::open(&library.path)?;
+    let library_id: String = connection.query_row(
+        "SELECT library_id FROM library_identity WHERE singleton = 1",
+        [],
+        |row| row.get(0),
+    )?;
+    // Construct the supported predecessor format by removing schema-six
+    // additions, as the database migration fixtures do.
+    connection.execute_batch(
+        "DROP TRIGGER model_runs_instruction_context_immutable;
+         DROP TRIGGER reconciliation_requests_context_immutable;
+         DROP INDEX model_runs_one_active_context;
+         ALTER TABLE model_runs DROP COLUMN instruction_context_sha256;
+         ALTER TABLE model_runs DROP COLUMN instruction_revision;
+         ALTER TABLE reconciliation_requests DROP COLUMN instruction_revision;
+         CREATE UNIQUE INDEX model_runs_one_active_context
+             ON model_runs(work_id, base_revision, model, reasoning_effort, prompt_version)
+             WHERE status = 'running';
+         DROP TABLE library_instruction_selection;
+         DROP TABLE library_instruction_revisions;
+         PRAGMA user_version = 5;",
+    )?;
+    drop(connection);
+
+    let backup = library.directory.path().join("before-migration.db");
+    let output = command(&library.path)
+        .env_remove("ANNALS_CONFIG")
+        .args(["--expected-library-id", &library_id, "backup"])
+        .arg(&backup)
+        .output()?;
+    successful_json(&output)?;
+    for path in [&library.path, &backup] {
+        let connection = Connection::open(path)?;
+        assert_eq!(
+            connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))?,
+            5,
+        );
+        assert_eq!(
+            connection.query_row(
+                "SELECT library_id FROM library_identity WHERE singleton = 1",
+                [],
+                |row| row.get::<_, String>(0),
+            )?,
+            library_id,
+        );
+        assert_eq!(
+            connection.query_row("SELECT text FROM works", [], |row| row.get::<_, String>(0))?,
+            source,
+        );
+    }
+
+    let incorrect_id = format!(
+        "{}{}",
+        if library_id.starts_with('0') {
+            '1'
+        } else {
+            '0'
+        },
+        &library_id[1..],
+    );
+    let refused_backup = library.directory.path().join("wrong-library.db");
+    let output = command(&library.path)
+        .env_remove("ANNALS_CONFIG")
+        .args(["--expected-library-id", &incorrect_id, "backup"])
+        .arg(&refused_backup)
+        .output()?;
+    error_json(&output, "unexpected_library")?;
+    assert_eq!(output.status.code(), Some(4));
+    assert!(!refused_backup.exists());
+    Ok(())
+}
+
+#[test]
 fn public_reader_and_cli_share_corpus_and_retention_views() -> TestResult {
     use annals::api::{LibraryReader, RetentionResult, RootsResult, WorkContent};
     let library = Library::initialized()?;

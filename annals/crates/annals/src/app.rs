@@ -248,7 +248,7 @@ fn require_selected_identity(cli: &Cli, config: &Config, path: &Path) -> AppResu
         .as_ref()
         .or(config.expected_library_id.as_ref());
     if let Some(expected) = expected {
-        let connection = if matches!(cli.command, Command::Migrate) {
+        let connection = if matches!(cli.command, Command::Migrate | Command::Backup(_)) {
             db::open_backup_source(path)?
         } else {
             db::open_read(path)?
