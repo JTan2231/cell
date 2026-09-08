@@ -377,7 +377,6 @@ fn require_admission(health: &HealthResponseV1) -> Result<()> {
         HarnessCapability::DeveloperInstructions,
         HarnessCapability::ExplicitEmptyEnvironments,
         HarnessCapability::RawJsonlOutput,
-        HarnessCapability::TurnInterruption,
         HarnessCapability::PersistentFileAuthentication,
     ];
     let harness_ready = health.harness.as_ref().is_some_and(|identity| {
