@@ -683,7 +683,7 @@ checksum = "b2972feb8dffe7bc8c5463b1dacda1b0dfbed3710e50f977d965429692d74cd8"
 
 [[package]]
 name = "email"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "base64",
  "cell-install",
