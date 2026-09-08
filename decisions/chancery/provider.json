@@ -3,7 +3,7 @@
   "provider": {
     "id": "krisis",
     "name": "Krisis",
-    "release": "0.8.0"
+    "release": "0.9.0"
   },
   "promise_scope": {
     "authoritative_for": [
