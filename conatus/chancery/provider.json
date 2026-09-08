@@ -3,7 +3,7 @@
   "provider": {
     "id": "conatus",
     "name": "Conatus",
-    "release": "0.1.1"
+    "release": "0.2.0"
   },
   "promise_scope": {
     "authoritative_for": [
