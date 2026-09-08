@@ -1,57 +1,38 @@
 # Krisis data model
 
-Krisis uses SQLite schema version 4 at the migration-compatible Decisions path.
-Schema versions 1 through 3 are upgraded sequentially; their rows and decoders
-remain intact.
+Krisis uses SQLite schema 5 at the migration-compatible Decisions path. The
+database and private document run directories together hold durable observer
+state. Krisis does not store the authoritative accepted library copy.
 
-## Active schema-4 records
+`observations` stores hook correlation, canonical source identity, frozen-source
+digest, completion time, activation eligibility, processing state, attempt epoch,
+and target Annals config/library binding. Each eligible completed exchange has
+one `decision` or `no_decision` outcome. A negative result needs no document.
 
-`observations` owns one correlated completed-turn work item, level, retry epoch,
-source digest, exact Annals config-path/library target binding, status, and
-terminal `decision`/`no_decision` outcome.
-`observation_authority_items` is the admitted user authority set and
-`authority_verdicts` supplies exact binary coverage.
+`decision_documents` stores that outcome's stable document key and delivery
+state. A pending row contains exact Markdown, SHA-256, and target identity. An
+accepted row retains the digest and exact Annals receipt and clears its Markdown.
+A negative row has no body, digest, or receipt. Coverage and a positive outbox
+entry commit in one transaction. Receipt persistence verifies the same key,
+bytes, and target before clearing the body.
 
-`observation_jobs` and `observation_classification_receipts` retain Nucleus job
-and tool-call correlation, exact argument and request digests, accepted results,
-and retry and recovery correlation. After Annals acceptance, Krisis reduces new
-receipt bodies to a minimal marker. Legacy Decisions receipt decoding is unchanged.
+Private `document-runs/OBSERVATION-ATTEMPT/` directories contain the frozen
+normalized conversation, immutable Nucleus request, job identity, tool receipts,
+and optional `decision.md`. They allow classification and rendering to resume
+without rebuilding source or changing an ambiguous request. They remain after
+Annals acceptance and must be included in private state protection and backup.
 
-`decision_accounts` holds stable account identity, occurrence, precision,
-authority span, and—only before acceptance—generated statement/context/action/
-result and exact quote. `decision_account_sources` records authority and
-supporting anchors; non-authority support rows may be removed after acceptance.
-`observation_accounts` relates accounts to their producing coverage transaction.
+The document key is SHA-256 over the serialized host/thread/turn identity tuple
+with a `document_` prefix. The content digest is SHA-256 of the exact UTF-8
+Markdown bytes. Neither identity is a required field within the document.
 
-`decision_account_outbox` is the durable handoff ledger. Pending rows contain
-the deterministic Markdown, SHA-256, exact config path, and expected persistent
-library ID. Accepted rows contain no Markdown and
-retain contract/library/producer/key/digest/job/time/created-or-replayed receipt
-evidence. Conflicting account identity, bytes, anchor, or receipt fails closed.
+Historical `decision_accounts`, `decision_account_sources`,
+`decision_account_outbox`, authority verdicts, classifier receipts, and Decisions
+lifecycle tables retain their original records and interpretation. New observer
+processing does not write account projections or lifecycle events.
 
-## Stable identity
-
-Krisis derives decision ID from real host identity, canonical authority item
-identity, and the validated exact UTF-8 byte span. Model aliases and normalized
-wording cannot affect it. Occurrence is an `i64` Unix second and timestamp
-precision is retained separately.
-
-The account Source JSON schema version, classifier capture-rule version,
-decision ID, Nucleus job/call IDs, Annals library/job IDs, digest, observation
-ID, and legacy Decisions lifecycle IDs have independent compatibility rules.
-
-## Retained legacy records
-
-Runs, candidates, candidate sources, reviews, snapshots, email deliveries, and
-lifecycle events remain so schema migration, interrupted recovery, existing
-read-only `events`, and legacy `show` can decode prior state. Krisis creates no
-new digest, review, email, candidate, or lifecycle state through its public
-active path.
-
-The database records capture and delivery operations. After Annals accepts an
-account, Krisis cannot reconstruct its prose from retained state. Browse and
-search the account through Annals.
-
-Migration to schema 4 refuses any planned/submitted legacy
-`decisions-observe-*` correlation and any accepted legacy classification whose
-observation did not commit. Terminal legacy history remains readable.
+Migration 4-to-5 adds document delivery state. It refuses pending old account
+handoffs, processing observations, or planned/submitted old observation jobs
+with `legacy_account_cutover_required`. Settle those with the compatible old
+runtime before migration. No account contents are inferred, rewritten, or lost
+by the migration. Earlier migration guards remain in effect.

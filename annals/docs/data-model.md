@@ -60,29 +60,28 @@ revision. `recorded_at` describes that instruction selection only. It does not
 advance the corpus, rewrite history, or schedule reinterpretation. Instruction
 text is trusted library configuration and never evidence.
 
-## Decision-account acceptance
+## Decision document acceptance
 
-`decision_account_acceptances` stores one immutable row for each
-`(producer, producer_key)` accepted by a dedicated decisions library. Version
-one constrains the producer to `krisis`. The row binds the exact source SHA-256,
-original job ID, and acceptance time to the account's event ID and schema
-version. It also stores the statement/context/action/result projection,
-occurrence time and precision, and one host/thread/turn/item/span authority
-anchor. Triggers prevent updates and deletion.
+In library schema 7, `decision_account_acceptances` stores one immutable delivery
+row for each `(producer, producer_key)`. The producer is `krisis`. Each row binds
+exact source SHA-256, original job ID, acceptance time, and event ID. It stores
+no document layout, decision fields, or source anchor. Triggers prevent updates
+and deletion. Earlier projections remain in `legacy_decision_account_acceptances`
+on migrated libraries. Migration preserves every sequence and delivery identity.
 
-Its integer `sequence` orders the accepted-account feed. Watermark and item
-cursors encode this position together with the persistent library identity,
-but their representation is opaque to consumers. Account Markdown remains in
-the producer job envelope and, after dispatch, the immutable work. It is not
-returned through the feed. Acceptance itself inserts no `ingestions` row;
-dispatch begins the ordinary source-delivery lifecycle later.
+The integer `sequence` orders the feed. Watermark and item cursors are opaque
+positions bound to the persistent library identity. Document text remains in
+the original producer job envelope and, after retention, the immutable work.
+Exchange contract 2 returns the complete original text and filename from the
+Annals-owned envelope, with the ledger digest and acceptance time. Acceptance
+inserts no `ingestions` row; dispatch starts the ordinary delivery lifecycle later.
 
-The spool file `.decision-feed-library.json` binds a dedicated spool to the
-same persistent library ID. An original producer envelope also contains
-`producer.json`, which records producer, key, exact digest, job, acceptance
-time, and the Annals-derived work label. These files are operational receipts,
-not corpus state. General inbox jobs have neither file and retain their prior
-behavior.
+The spool file `.decision-feed-library.json` binds the spool to its library ID.
+An original envelope also has `producer.json` with producer, key, digest, job,
+and acceptance time. New envelopes use the ordinary filename-derived work label.
+An optional label in an old producer receipt retains its historical meaning.
+These files are operational receipts, not corpus state. General inbox jobs keep
+their existing behavior.
 
 ## Immutable works and deliveries
 

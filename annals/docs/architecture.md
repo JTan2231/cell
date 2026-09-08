@@ -88,9 +88,11 @@ current work finish. Deployment maintenance also blocks spool mutations.
 See [inbox operations and recovery](inbox.md) for the state transitions.
 
 A decisions library has an immutable kind, expected persistent ID, and bound
-spool. Only validated Krisis acceptance admits sources. Acceptance binds one
+spool. Only the dedicated Krisis producer inlet admits sources. Acceptance binds one
 producer key to exact bytes; an identical replay returns the original job.
-The accepted-account feed exposes a fixed committed prefix with opaque cursors.
+The accepted-document feed exposes complete unchanged text in a fixed committed
+prefix with opaque cursors. Intake requires accessible nonblank UTF-8 text and
+normal file, size, integrity, and storage checks; it imposes no decision schema.
 These checks isolate it from general libraries. They do not authenticate the
 operating user. See [account exchange](../chancery/annals/manuals/decision-account-exchange.md).
 
@@ -234,14 +236,14 @@ and scheduler state. Recovery restores compatible data before public commands.
 See [installation and recovery](system-installation.md) and
 [older-installation migration](migration.md).
 
-## Rust account interface
+## Rust document interface
 
-`annals-api` owns the acceptance receipt, success envelope, watermark, fixed
-page, accepted-account event, and the typed CLI client. Annals emits these same
-types. Krisis and Semantics import them, then retain only their own delivery
-policy, target binding, local projections, and durable progress. Annals decodes
-Krisis account content with `krisis_api::account`; its database and feed
-projection remain Annals-owned.
+`annals-api` owns exchange contract 2: the acceptance receipt, success envelope,
+watermark, fixed page, `AcceptedDocumentEvent`, and typed CLI client. Annals emits
+these same types. Each event includes complete accepted text, source filename,
+content digest, acceptance time, and transport identities. Krisis, Semantics,
+and Conatus use these types and retain their own delivery and processing policy.
+No account parser or mandatory source lookup governs document acceptance.
 
 ## Resource limits and cost
 

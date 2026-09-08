@@ -233,7 +233,7 @@ case " $* " in
             [ "$selected" = "$(cat "$activation_selector")" ] || exit 1
             rm -f "$activation_selector"
         fi
-        printf '%s\n' '{"checks":[{"detail":"schema 2 at synthetic","name":"database","ok":true},{"detail":"synthetic","name":"participation_markers","ok":true},{"detail":"synthetic","name":"annals_decision_feed","ok":true},{"detail":"synthetic","name":"conversations_exact_cwd","ok":true},{"detail":"synthetic","name":"nucleus_reconciliation","ok":true}],"ok":true}'
+        printf '%s\n' '{"checks":[{"detail":"schema 3 at synthetic","name":"database","ok":true},{"detail":"synthetic","name":"participation_markers","ok":true},{"detail":"synthetic","name":"annals_decision_feed","ok":true},{"detail":"synthetic","name":"nucleus_reconciliation","ok":true}],"ok":true}'
         ;;
     *) exit 1 ;;
 esac
@@ -494,7 +494,7 @@ for argument in "$@"; do
     if [ "$argument" = --database ]; then previous=database; fi
 done
 [ -n "$database" ] && printf '%s\n' 'bad candidate mutation' >"$database"
-printf '%s\n' '{"ok":true,"checks":[{"name":"database","ok":true,"detail":"schema 1 at synthetic"},{"name":"participation_markers","ok":true,"detail":"synthetic"},{"name":"annals_decision_feed","ok":true,"detail":"synthetic"},{"name":"conversations_exact_cwd","ok":true,"detail":"synthetic"},{"name":"nucleus_reconciliation","ok":true,"detail":"synthetic"}]}'
+printf '%s\n' '{"ok":true,"checks":[{"name":"database","ok":true,"detail":"schema 1 at synthetic"},{"name":"participation_markers","ok":true,"detail":"synthetic"},{"name":"annals_decision_feed","ok":true,"detail":"synthetic"},{"name":"nucleus_reconciliation","ok":true,"detail":"synthetic"}]}'
 EOF
 chmod 0755 "$bad_candidate"
 
@@ -502,7 +502,7 @@ bad_home="$temporary/BadHome"
 make_home "$bad_home"
 if HOME="$bad_home" "$package/deploy-user.sh" --binary "$bad_candidate" --clockwork "$clockwork" \
     --home "$bad_home" --launchctl "$launchctl" >/dev/null 2>&1; then
-    printf '%s\n' 'deployment accepted a candidate that did not prove schema 2' >&2
+    printf '%s\n' 'deployment accepted a candidate that did not prove schema 3' >&2
     exit 1
 fi
 [ ! -e "$bad_home/.local/bin/semantics" ]
@@ -637,7 +637,7 @@ for argument in "$@"; do
 done
 [ -n "$database" ] || exit 1
 printf '%s\n' 'candidate two mutation' >"$database"
-printf '%s\n' '{"ok":true,"checks":[{"name":"database","ok":true,"detail":"schema 2 at synthetic"},{"name":"participation_markers","ok":true,"detail":"synthetic"},{"name":"annals_decision_feed","ok":true,"detail":"synthetic"},{"name":"conversations_exact_cwd","ok":true,"detail":"synthetic"},{"name":"nucleus_reconciliation","ok":true,"detail":"synthetic"}]}'
+printf '%s\n' '{"ok":true,"checks":[{"name":"database","ok":true,"detail":"schema 3 at synthetic"},{"name":"participation_markers","ok":true,"detail":"synthetic"},{"name":"annals_decision_feed","ok":true,"detail":"synthetic"},{"name":"nucleus_reconciliation","ok":true,"detail":"synthetic"}]}'
 EOF
 chmod 0755 "$candidate_two"
 

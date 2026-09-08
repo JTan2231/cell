@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn annals_acceptance_fixture_is_strict_and_matches_delivery() {
-        let raw = r#"{"ok":true,"data":{"contract_version":1,"library_id":"0123456789abcdef0123456789abcdef","producer":"krisis","key":"d_0123456789abcdef0123","source_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","job_id":"job-1","accepted_at":"2026-09-03T12:00:00Z","acceptance":"replayed"}}"#;
+        let raw = r#"{"ok":true,"data":{"contract_version":2,"library_id":"0123456789abcdef0123456789abcdef","producer":"krisis","key":"d_0123456789abcdef0123","source_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","job_id":"job-1","accepted_at":"2026-09-03T12:00:00Z","acceptance":"replayed"}}"#;
         let envelope: AnnalsEnvelope<AnnalsReceipt> =
             serde_json::from_str(raw).unwrap_or_else(|error| panic!("{error}"));
         assert!(envelope.ok);
@@ -468,7 +468,7 @@ mod tests {
         let markdown = render(&account())?;
         let digest = sha256(&markdown);
         let script = format!(
-            "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" >'{}'\ncp \"${{10}}\" '{}'\nprintf '%s\\n' '{{\"ok\":true,\"data\":{{\"contract_version\":1,\"library_id\":\"0123456789abcdef0123456789abcdef\",\"producer\":\"krisis\",\"key\":\"d_0123456789abcdef0123\",\"source_sha256\":\"{}\",\"job_id\":\"annals-job-1\",\"accepted_at\":\"2026-09-03T12:00:00Z\",\"acceptance\":\"created\"}}}}'\n",
+            "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" >'{}'\ncp \"${{10}}\" '{}'\nprintf '%s\\n' '{{\"ok\":true,\"data\":{{\"contract_version\":2,\"library_id\":\"0123456789abcdef0123456789abcdef\",\"producer\":\"krisis\",\"key\":\"d_0123456789abcdef0123\",\"source_sha256\":\"{}\",\"job_id\":\"annals-job-1\",\"accepted_at\":\"2026-09-03T12:00:00Z\",\"acceptance\":\"created\"}}}}'\n",
             capture.display(),
             captured_account.display(),
             digest

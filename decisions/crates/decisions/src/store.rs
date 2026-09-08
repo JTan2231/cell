@@ -20,7 +20,8 @@ const SCHEMA: &str = include_str!("../schema.sql");
 const MIGRATION_2: &str = include_str!("../migration_2.sql");
 const MIGRATION_3: &str = include_str!("../migration_3.sql");
 const MIGRATION_4: &str = include_str!("../migration_4.sql");
-const SCHEMA_VERSION: i64 = 4;
+const MIGRATION_5: &str = include_str!("../migration_5.sql");
+const SCHEMA_VERSION: i64 = 5;
 use krisis_api::lifecycle::{ENVELOPE_VERSION as EVENT_ENVELOPE_VERSION, STREAM as EVENT_STREAM};
 
 pub(crate) struct Store {
@@ -181,7 +182,7 @@ impl Store {
                 verify_legacy_observation_jobs_terminal(&connection)?;
                 migrate_v3_to_v4(&mut connection)?;
             }
-            SCHEMA_VERSION => {}
+            4 | SCHEMA_VERSION => {}
             newer if newer > SCHEMA_VERSION => {
                 return Err(AppError::new(
                     "database_schema_too_new",
@@ -197,6 +198,45 @@ impl Store {
                 ));
             }
         }
+        let current: i64 = connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .context("database_schema_failed", "cannot read current schema")?;
+        if current == 4 {
+            let transaction = connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .context("database_schema_failed", "cannot begin document migration")?;
+            let unsettled: i64 = transaction.query_row(
+                "SELECT (SELECT COUNT(*) FROM decision_account_outbox WHERE status='pending')
+                      + (SELECT COUNT(*) FROM observations WHERE status='processing')
+                      + (SELECT COUNT(*) FROM observation_jobs WHERE status IN ('planned', 'submitted'))",
+                [], |row| row.get(0),
+            ).context("database_schema_failed", "cannot inspect old account handoffs")?;
+            if unsettled != 0 {
+                return Err(AppError::new(
+                    "legacy_account_cutover_required",
+                    "settle the old account outbox and in-flight observations before the document cutover",
+                ));
+            }
+            transaction.execute_batch(MIGRATION_5).context(
+                "database_schema_failed",
+                "cannot migrate document delivery state",
+            )?;
+            transaction
+                .execute(
+                    "INSERT INTO schema_migrations(version, applied_at) VALUES(5, ?1)",
+                    [now_unix()],
+                )
+                .context("database_schema_failed", "cannot record document migration")?;
+            transaction
+                .commit()
+                .context("database_schema_failed", "cannot commit document migration")?;
+        }
+        connection
+            .execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(5, ?1)",
+                [now_unix()],
+            )
+            .context("database_schema_failed", "cannot record document schema")?;
         connection
             .pragma_update(None, "journal_mode", "WAL")
             .context("database_config_failed", "unable to enable WAL")?;
@@ -564,7 +604,8 @@ impl Store {
             .connection
             .prepare(
                 "SELECT status, COUNT(*) FROM observations
-                 WHERE ?1 IS NULL OR EXISTS (
+                 WHERE ?1 IS NULL OR (source_completed_at>=?1 AND source_completed_at<?2
+                     AND NOT EXISTS (SELECT 1 FROM observation_authority_items items WHERE items.observation_id=observations.id)) OR EXISTS (
                      SELECT 1 FROM observation_authority_items items
                      WHERE items.observation_id=observations.id
                        AND items.occurred_at>=?1 AND items.occurred_at<?2
@@ -639,7 +680,7 @@ impl Store {
                 "SELECT
                     COALESCE(SUM(status='pending'), 0),
                     COALESCE(SUM(status='accepted'), 0)
-                 FROM decision_account_outbox",
+                 FROM decision_documents",
                 [],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
@@ -3498,6 +3539,126 @@ impl Store {
         }
     }
 
+    pub(crate) fn bind_document_source(
+        &mut self,
+        observation_id: &str,
+        snapshot: &decisions::document::Snapshot,
+    ) -> AppResult<()> {
+        let conversation = snapshot.conversation();
+        let turn = conversation
+            .turns
+            .last()
+            .ok_or_else(|| AppError::new("document_source_invalid", "missing selected turn"))?;
+        let bytes = serde_json::to_vec(snapshot)
+            .context("document_source_invalid", "cannot encode snapshot")?;
+        let digest = format!("{:x}", Sha256::digest(bytes));
+        let changed = self.connection.execute(
+            "UPDATE observations SET host_id=?2, thread_id=?3, source_completed_at=?4,
+                source_digest=?5, status='processing', updated_at=?6, failure_code=NULL, failure_detail=NULL,
+                source_not_completed_at=NULL, next_attempt_at=NULL
+             WHERE id=?1 AND status IN ('queued','processing')
+               AND (host_id IS NULL OR host_id=?2)
+               AND (thread_id IS NULL OR thread_id=?3)
+               AND (source_completed_at IS NULL OR source_completed_at=?4)
+               AND (source_digest IS NULL OR source_digest=?5)",
+            params![observation_id, conversation.thread.reference.host_id,
+                conversation.thread.reference.thread_id, turn.completed_at, digest, now_unix()],
+        ).context("document_source_conflict", "cannot bind frozen document source")?;
+        if changed != 1 {
+            return Err(AppError::new(
+                "document_source_conflict",
+                "observation differs from frozen document source",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn complete_document(
+        &mut self,
+        observation_id: &str,
+        document_id: &str,
+        markdown: Option<&str>,
+    ) -> AppResult<()> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .context("database_write_failed", "cannot begin document completion")?;
+        transaction.execute(
+            "INSERT INTO decision_documents(observation_id, document_id, status, markdown, source_sha256,
+                target_library_id, target_config_path, created_at)
+             SELECT id, ?2, ?3, ?4, ?5, annals_target_library_id, annals_target_config_path, ?6
+             FROM observations WHERE id=?1 AND status='processing'",
+            params![observation_id, document_id, if markdown.is_some() { "pending" } else { "no_decision" },
+                markdown, markdown.map(account::sha256), now_unix()],
+        ).context("database_write_failed", "cannot freeze document outbox")?;
+        let changed = transaction.execute(
+            "UPDATE observations SET status='complete', outcome=?2, completed_at=?3, updated_at=?3
+             WHERE id=?1 AND status='processing'",
+            params![observation_id, if markdown.is_some() { "decision" } else { "no_decision" }, now_unix()],
+        ).context("database_write_failed", "cannot complete document observation")?;
+        if changed != 1 {
+            return Err(AppError::new(
+                "document_observation_conflict",
+                "document observation is no longer processing",
+            ));
+        }
+        transaction.commit().context(
+            "database_write_failed",
+            "cannot commit document coverage and outbox",
+        )
+    }
+
+    pub(crate) fn pending_document(&self) -> AppResult<Option<PendingAccount>> {
+        self.connection.query_row(
+            "SELECT document_id, markdown, source_sha256, target_library_id, target_config_path
+             FROM decision_documents WHERE status='pending' ORDER BY created_at, document_id LIMIT 1", [],
+            |row| Ok(PendingAccount { account_id: row.get(0)?, markdown: row.get(1)?,
+                source_sha256: row.get(2)?, target_library_id: row.get(3)?, target_config_path: row.get(4)? }),
+        ).optional().context("database_read_failed", "cannot read document outbox")
+    }
+
+    pub(crate) fn record_document_acceptance(
+        &mut self,
+        pending: &PendingAccount,
+        receipt: &AnnalsReceipt,
+    ) -> AppResult<()> {
+        if receipt.validate().is_err()
+            || receipt.library_id != pending.target_library_id
+            || receipt.producer_key != pending.account_id
+            || receipt.source_sha256 != pending.source_sha256
+        {
+            return Err(AppError::new(
+                "annals_receipt_invalid",
+                "receipt differs from pending document",
+            ));
+        }
+        let receipt_json = serde_json::to_string(receipt)
+            .context("annals_receipt_invalid", "cannot encode receipt")?;
+        let changed = self
+            .connection
+            .execute(
+                "UPDATE decision_documents SET status='accepted', markdown=NULL, receipt_json=?2
+             WHERE document_id=?1 AND status='pending' AND source_sha256=?3 AND markdown=?4
+               AND target_library_id=?5 AND target_config_path=?6",
+                params![
+                    pending.account_id,
+                    receipt_json,
+                    pending.source_sha256,
+                    pending.markdown,
+                    pending.target_library_id,
+                    pending.target_config_path
+                ],
+            )
+            .context("database_write_failed", "cannot record document acceptance")?;
+        if changed != 1 {
+            return Err(AppError::new(
+                "document_outbox_conflict",
+                "pending document changed before receipt commit",
+            ));
+        }
+        Ok(())
+    }
+
     pub(crate) fn pending_account(&self) -> AppResult<Option<PendingAccount>> {
         self.connection
             .query_row(
@@ -5047,7 +5208,7 @@ mod tests {
         let state = directory.path().join("state");
         let database = state.join("decisions.db");
         let store = Store::open(&database)?;
-        assert_eq!(store.schema_version()?, 4);
+        assert_eq!(store.schema_version()?, 5);
         assert_eq!(fs::metadata(&state)?.permissions().mode() & 0o777, 0o700);
         assert_eq!(fs::metadata(&database)?.permissions().mode() & 0o777, 0o600);
         Ok(())
@@ -5103,7 +5264,7 @@ mod tests {
         store.record_annals_acceptance(
             &pending,
             &AnnalsReceipt {
-                contract_version: 1,
+                contract_version: annals_api::CONTRACT_VERSION,
                 library_id: "0123456789abcdef0123456789abcdef".to_owned(),
                 producer: "krisis".to_owned(),
                 producer_key: account.id.clone(),
@@ -5120,7 +5281,7 @@ mod tests {
             RetainedAnnalsReceipt {
                 status: "accepted".to_owned(),
                 account_markdown: None,
-                contract_version: 1,
+                contract_version: i64::from(annals_api::CONTRACT_VERSION),
                 library_id: "0123456789abcdef0123456789abcdef".to_owned(),
                 producer: "krisis".to_owned(),
                 producer_key: account.id.clone(),
@@ -5241,7 +5402,7 @@ mod tests {
             assert_eq!(metadata_tables, 0);
         }
         let store = Store::open(&database)?;
-        assert_eq!(store.schema_version()?, 4);
+        assert_eq!(store.schema_version()?, 5);
         let legacy_kind: String = store.connection.query_row(
             "SELECT run_kind FROM runs WHERE id='legacy'",
             [],
@@ -5276,7 +5437,7 @@ mod tests {
         }
 
         let store = Store::open(&database)?;
-        assert_eq!(store.schema_version()?, 4);
+        assert_eq!(store.schema_version()?, 5);
         let page = store.read_events(&encode_event_cursor(0), 100)?;
         assert_eq!(page.events.len(), 3);
         assert!(!page.has_more);

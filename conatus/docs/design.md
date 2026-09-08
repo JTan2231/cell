@@ -1,24 +1,24 @@
 # Product and data boundaries
 
 Conatus records wants with their exact source wording and source reference. It
-consumes newly accepted accounts from the selected Annals decisions library,
+consumes newly accepted documents from the selected Annals decisions library,
 then asks a separate general Annals library to organize them under Conatus'
 stored instructions.
 
 ## Records and authority
 
 Conatus intake stores a local identity, source kind, exact supplied want text or
-accepted account data, source reference, capture time, the frozen outgoing
+accepted document data, source reference, capture time, the frozen outgoing
 document, and handoff correlation. A captured want is an assertion supplied by
 the caller. Capture does not ask a model to extract conditions or invent wants.
 The source reference is opaque text; Conatus does not fetch or verify it.
 
-Decision intake preserves the source library, feed event and account identities,
-the supplied account fields, occurrence time and precision, and authority
-anchor. Its outgoing document is a deterministic rendering of these fields.
-The accepted-account feed supplies neither original account Markdown nor the
-underlying conversation quotation. Acceptance does not prove that a decision
-was enacted or remains in force.
+Decision intake preserves the source library, feed event, document key, source
+filename, content digest, acceptance time, and complete unchanged document.
+The outgoing source is exactly that text; Conatus does not reconstruct an
+account or require source metadata. Its library agent interprets connections
+under the stored instructions. Acceptance does not prove that a decision was
+enacted or remains in force.
 
 Conatus stores a feed event and the corresponding opaque cursor advancement in
 one local transaction. It forwards captured records afterward. The cursor marks
@@ -87,7 +87,7 @@ serializes its own update paths. Pause gates subsequent updates; an active
 update finishes, and explicit retry or re-examination remains available. It does
 not disable a Clockwork binding or cancel an already admitted Annals model job.
 
-Source wording, account fields, references, outgoing documents, and receipts are
+Source wording, full documents, references, outgoing documents, and receipts are
 private local product state. Integration can send a retained document and
 relevant corpus context through Annals to Nucleus and its configured model.
 These files and databases have no automatic pruning or remote sharing surface.

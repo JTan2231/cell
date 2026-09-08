@@ -63,7 +63,7 @@ run, changes no corpus revision, and rewrites no committed history.
 `init` creates revision zero with one immutable library kind and refuses to
 replace a path. It defaults to `general`; `--kind decisions` is only for a
 physically separate producer-accepted decisions library. `migrate` supports
-versions 3 through 5 to schema 6. It assigns version-3 and version-4 libraries
+versions 3 through 6 to schema 7. It assigns version-3 and version-4 libraries
 the `general` kind, preserves existing version-5 kinds, and seeds the default
 instructions at instruction revision 1 in one transaction. Historical
 examination provenance stays null; migration does not invent its instruction

@@ -61,7 +61,7 @@ semantics project retire ID
 IDs start with a lowercase letter and contain only lowercase ASCII letters,
 digits, and `-`. Register and move canonicalize a directory and require the
 exact root marker `Semantics-Project: ID` in a regular `AGENTS.md`. Registration
-captures the current accepted-account watermark from the exact configured
+captures the current accepted-document watermark from the exact configured
 Annals decisions library. Move preserves the stable project identity and both
 the Annals and legacy Decisions cursor histories.
 
@@ -76,7 +76,7 @@ candidate command requires that exact value, proves all non-retired legacy
 scan cursors match it, rejects pending/processing legacy work and active or
 ambiguous legacy Nucleus jobs, captures one Annals watermark, and commits all
 new cursors atomically. It has no default activation mode. Already activated
-schema-two updates omit the option and retain their identity and cursors.
+schema-two and later updates omit the option and retain their identity and cursors.
 The deployer requires `--keep-maintenance` with the one-time watermark so the
 local commit ends in an authenticated Semantics-owned hold; a later successful
 invocation of the same release without either option releases only that hold.
@@ -118,7 +118,7 @@ Statuses are `unassigned`, `pending`, `awaiting_review`, `paused`,
 manual routing correction and revalidates the target marker. Retry applies to
 failed intake and refuses an active or ambiguous prior Nucleus job.
 `intake status` returns separate `annals_decision_accounts` and
-`legacy_decisions` collections. New accounts never use `awaiting_review`;
+`legacy_decisions` collections. New documents never use `awaiting_review`;
 legacy rows retain all old states and decoding. New account rows expose a
 fixed `routing_outcome` and project assignment, never the transient resolved
 cwd or raw dependency diagnostics.
@@ -135,10 +135,10 @@ semantics doctor
 semantics --json doctor
 ```
 
-Doctor checks SQLite schema 2, every non-retired project's exact marker, the
-explicit Annals decisions config and feed/library identity, Conversations
-exact-cwd readiness, and Nucleus health, required capabilities, preserved
-legacy schemas, and the successor immutable account toolset. It captures one
+Doctor checks SQLite schema 3, every non-retired project's exact marker, the
+explicit Annals decisions config and exchange-2 feed/library identity, and
+Nucleus health, capabilities, historical schemas, and the document toolset.
+Conversation lookup is not a document-processing prerequisite. It captures one
 fixed Annals watermark and, from every distinct installed scan cursor, reads
 and identically replays each bounded page until an unchanged empty page. It
 rejects page cycles, nonadvancement, duplicate identities, changed replay, and
@@ -155,9 +155,16 @@ Hardlinked databases are rejected before admission. Maintenance status still
 does not open or initialize the database.
 
 Project lists return stable ID, canonical current path, status, and HEAD.
-Ordinary repository show and search use schema 2. They return project identity,
+Ordinary repository show and search use schema 3. They return project identity,
 revision, and concepts with ID, label, full meaning, active state, replacement,
 and full distinctions. `show --provenance` returns the full replay representation.
 Rust callers use `RepositoryView` for ordinary reads and
 `Client::repository_provenance` for full replay. These output selections do not
 change the persistent schema or replay behavior.
+
+New document intake uses a separate local ID per project. The embedded event
+retains Annals' original identity and full text. `annals_decision_accounts` is
+retained as the status collection name for compatibility. A document result
+with no effects ends as `ignored`, with no `applied_revision`; it creates no
+repository revision. Relevance is decided by the configured reconciliation
+instructions, not a required source lookup.

@@ -12,7 +12,8 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 const CONCEPT_LIMIT: usize = 200;
-const PREVIEW_LIMIT: usize = 100;
+// Annals concept previews allow at most 20 items per collection.
+const PREVIEW_LIMIT: usize = 20;
 
 pub struct Annals {
     client: CliClient,

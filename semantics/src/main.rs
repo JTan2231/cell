@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr as _;
 
 use clap::{Args, Parser, Subcommand};
-use conversations::{AppServerClient, ClientConfig, StderrPolicy};
 use serde::Serialize;
 use serde_json::json;
 
@@ -481,31 +480,6 @@ fn doctor(store: &Store, compact: bool) -> Result<()> {
         let mut annals = AnnalsDecisionFeedCli::for_current_user(expected.as_deref())?;
         prove_annals_feed_replay(store, &mut annals, expected.as_deref())
     }));
-    checks.push(check("conversations_exact_cwd", || {
-        let mut client = AppServerClient::spawn(ClientConfig {
-            stderr_policy: StderrPolicy::Suppress,
-            ..ClientConfig::default()
-        })
-        .map_err(|_| {
-            Error::domain(
-                "conversations_not_ready",
-                "Conversations exact-cwd readiness check did not start",
-            )
-        })?;
-        let report = client.doctor().map_err(|_| {
-            Error::domain(
-                "conversations_not_ready",
-                "Conversations exact-cwd readiness check did not complete",
-            )
-        })?;
-        if !report.ok {
-            return Err(Error::domain(
-                "conversations_not_ready",
-                "Conversations doctor reported not ready",
-            ));
-        }
-        Ok(format!("{} visible threads", report.visible_threads))
-    }));
     checks.push(check("nucleus_reconciliation", || {
         NucleusReconciler::for_current_user()
             .doctor()
@@ -766,21 +740,25 @@ mod tests {
             cursor: cursor.to_owned(),
             event_id: format!("event-{ordinal}"),
             account_id: format!("account-{ordinal}"),
-            account_schema_version: 1,
-            statement: "statement".to_owned(),
-            context: "context".to_owned(),
-            action: "action".to_owned(),
-            result: "result".to_owned(),
-            occurred_at: i64::from(ordinal),
-            occurred_at_precision: "second".to_owned(),
-            authority: DecisionAccountAnchor {
-                host_id: "host".to_owned(),
-                thread_id: "thread".to_owned(),
-                turn_id: format!("turn-{ordinal}"),
-                item_id: format!("item-{ordinal}"),
-                span_start: 0,
-                span_end: 1,
-            },
+            content: semantics::domain::DecisionContent::Legacy(
+                semantics::domain::LegacyAccountContent {
+                    account_schema_version: 1,
+                    statement: "statement".to_owned(),
+                    context: "context".to_owned(),
+                    action: "action".to_owned(),
+                    result: "result".to_owned(),
+                    occurred_at: i64::from(ordinal),
+                    occurred_at_precision: "second".to_owned(),
+                    authority: DecisionAccountAnchor {
+                        host_id: "host".to_owned(),
+                        thread_id: "thread".to_owned(),
+                        turn_id: format!("turn-{ordinal}"),
+                        item_id: format!("item-{ordinal}"),
+                        span_start: 0,
+                        span_end: 1,
+                    },
+                },
+            ),
         }
     }
 
@@ -920,7 +898,10 @@ mod tests {
         let first = page("a0", "a9", vec![account("a1", 1)]);
         let second = page("a1", "a9", vec![account("a2", 2)]);
         let mut changed = second.clone();
-        changed.events[0].statement = "changed replay".to_owned();
+        if let semantics::domain::DecisionContent::Legacy(content) = &mut changed.events[0].content
+        {
+            content.statement = "changed replay".to_owned();
+        }
         let mut feed = Feed {
             watermark: "a9".to_owned(),
             pages: VecDeque::from([first.clone(), first, second, changed]),

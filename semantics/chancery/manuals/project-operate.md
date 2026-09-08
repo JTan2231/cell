@@ -3,8 +3,7 @@
 ## Readiness
 
 Before installation or maintenance, verify Annals decision-account exchange
-contract 1, Conversations history contract 4 with exact cwd metadata, Nucleus
-execution contract 3, and Clockwork schedule contract 2. Chancery documents these
+contract 2 and Nucleus execution contract 3, and Clockwork schedule contract 2. Chancery documents these
 contracts. The Semantics worker does not call Chancery.
 
 Build and deploy only a green candidate:
@@ -73,8 +72,8 @@ Verify:
 ```
 
 Doctor must report `ok:true` and green `database`,
-`participation_markers`, `annals_decision_feed`,
-`conversations_exact_cwd`, and `nucleus_reconciliation` checks. This proves
+`participation_markers`, `annals_decision_feed`, and
+`nucleus_reconciliation` checks. The database schema is 3. This proves
 dependency readiness, not that a future semantic event will succeed. The
 Annals check fails whenever an active or paused project lacks the selected
 decisions-library identity or its activation and scan cursors; only a database
@@ -180,12 +179,21 @@ semantics intake status
 semantics --json intake run
 ```
 
-Use `intake assign EVENT PROJECT` only to correct unassigned account intake
-after verifying the exact project. Assignment history is audited. Every valid
-accepted account is immediately eligible for reconciliation. Exact authority-thread
-cwd and the deepest current registered root determine ownership. Preserved
-legacy Decisions intake remains visible in a separate status collection and
-retains its old states and grounding meaning.
+Each accepted document after a project's activation cursor becomes intake for
+that project. Semantics supplies the complete text and project repository to
+its reconciliation agent. No source metadata, conversation lookup, document
+layout, or mechanical relevance rule is required. The instructions in
+`document-reconciliation.md` govern relevance and interpretation. The agent
+can submit an empty effect list; this completes intake as `ignored` without
+adding a repository revision. Each document can require one call per project,
+while the worker remains serial and handles at most one reconciliation per run.
+
+New intake IDs are local per-project identities. Embedded Annals event and
+document IDs remain unchanged. Grounds, when supplied, name the original
+library/event/document. Historical account and Decisions intake retain their
+old projections, states, grounding kinds, and job decoders. Use `intake assign
+EVENT PROJECT` only to resolve historical unassigned intake after checking the
+project; assignment history is audited.
 
 Pause before maintenance:
 
@@ -206,12 +214,11 @@ be proven. Never clear the stored correlation or manufacture a cursor.
 
 ## Privacy and logs
 
-The worker sends Nucleus only a normalized statement/context/action/result and
-occurrence projection plus the selected repository snapshot. Exact cwd is a
-transient routing input and is not stored or exposed with account intake;
-anchors, cursor, project assignment, and a fixed routing outcome remain in
-Semantics SQLite. Nucleus runs in a neutral temporary cwd with workspace
-`none`, no shell, and no web. Logs may contain counters, opaque IDs, and bounded
+The worker sends Nucleus the full accepted document and selected repository
+snapshot. The document may contain private conversation text. Semantics stores
+it for durable replay. New intake requires no origin anchor or resolved cwd.
+Nucleus runs in a neutral temporary cwd with workspace `none`, no shell, and no
+web. Logs may contain counters, opaque IDs, and bounded
 product-owned failures. They must not contain raw dependency diagnostics,
 account statements, context, action, result, conversation or project content,
 anchors, paths, prompts, credentials, diffs, commands, or tool payloads.
@@ -245,3 +252,15 @@ and operational receipts return complete selected records. Ordinary repository
 show and search return compact terminology views. `show --provenance` returns
 the full replay. Project, intake, and maintenance operations retain their
 documented authority and recovery rules.
+
+## Document compatibility
+
+Annals exchange 2 returns complete text, filename, digest, acceptance time, and
+transport identities. Pages contain at most 200 events and 4 MiB of document
+bytes. A short nonempty page is not an end marker; continue until empty.
+Semantics schema 3 preserves prior intake and cursor state, makes origin fields
+optional, and supports per-project intake and no-change completion. Existing
+admitted jobs keep their immutable request and schema identities. New jobs use
+`semantics/semantic-document-reconciliation/1` with document-specific input and
+result schemas. No library contents or semantic history are reinterpreted by
+migration.

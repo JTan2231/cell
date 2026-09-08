@@ -396,28 +396,19 @@ fn normalize_legacy_event(item: krisis_api::lifecycle::DecisionEventItem) -> Res
 }
 
 fn normalize_account(
-    event: annals_api::AcceptedAccountEvent,
+    event: annals_api::AcceptedDocumentEvent,
     library_id: &str,
 ) -> DecisionAccountEvent {
     DecisionAccountEvent {
         library_id: library_id.to_owned(),
         cursor: event.cursor,
         event_id: event.event_id,
-        account_id: event.account_id,
-        account_schema_version: event.account_schema_version,
-        statement: event.statement,
-        context: event.context,
-        action: event.action,
-        result: event.result,
-        occurred_at: event.occurred_at,
-        occurred_at_precision: event.occurred_at_precision,
-        authority: DecisionAccountAnchor {
-            host_id: event.authority.host_id,
-            thread_id: event.authority.thread_id,
-            turn_id: event.authority.turn_id,
-            item_id: event.authority.item_id,
-            span_start: event.authority.span.start,
-            span_end: event.authority.span.end,
+        account_id: event.document_id,
+        content: crate::domain::DecisionContent::Document {
+            source_name: event.source_name,
+            source_sha256: event.source_sha256,
+            accepted_at: event.accepted_at,
+            document: event.document,
         },
     }
 }
@@ -461,13 +452,13 @@ set -eu
 [ "$3" = --json ]
 [ "$4" = decision-feed ]
 if [ "$5" = watermark ]; then
-  printf '%s\n' '{"ok":true,"data":{"contract_version":1,"library_id":"0123456789abcdef0123456789abcdef","watermark":"afe1_0000"}}'
+  printf '%s\n' '{"ok":true,"data":{"contract_version":2,"library_id":"0123456789abcdef0123456789abcdef","watermark":"afe1_0000"}}'
   exit 0
 fi
 [ "$5" = page ]
 case " $* " in
   *' --after afe1_0000 '*)
-    printf '%s\n' '{"ok":true,"data":{"contract_version":1,"library_id":"0123456789abcdef0123456789abcdef","watermark":"afe1_0001","request_cursor":"afe1_0000","next_cursor":"afe1_0001","events":[{"cursor":"afe1_0001","event_id":"event-1","account_id":"account-1","account_schema_version":1,"statement":"Use stable identities.","context":"A durable boundary is needed.","action":"Applied the boundary.","result":"The identity is stable.","occurred_at":1,"occurred_at_precision":"second","authority":{"host_id":"host","thread_id":"thread","turn_id":"turn","item_id":"item","span":{"start":0,"end":1}}}]}}'
+    printf '%s\n' '{"ok":true,"data":{"contract_version":2,"library_id":"0123456789abcdef0123456789abcdef","watermark":"afe1_0001","request_cursor":"afe1_0000","next_cursor":"afe1_0001","events":[{"cursor":"afe1_0001","event_id":"event-1","document_id":"account-1","source_name":"notes.txt","source_sha256":"4fb2f43b6d69b4bda9c712de1ccb78ce148cc69fa18616285ab9acd96ae3afe1","accepted_at":"2026-09-08T12:00:00Z","document":"Use stable identities."}]}}'
     ;;
   *)
     exit 2

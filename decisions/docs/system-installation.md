@@ -71,7 +71,7 @@ Clockwork definition, observer ownership receipt bound to the target, and legacy
 plist. It disables enabled schedules only after verifying ownership. It then
 suspends the old hook command for its timeout, verifies SQLite is idle, and saves
 the database and sidecars. In a scrubbed environment, it runs the prepared
-payload through schema 4 migration and doctor before publishing the command and providers.
+payload through schema 5 migration and doctor before publishing the command and providers.
 
 Doctor uses the same explicitly selected Codex executable as the observer and
 checks Conversations, exact Nucleus capabilities and requester contract, and:
@@ -146,7 +146,7 @@ installation remains held.
 After a separately authorized final cutover:
 
 1. Run `krisis doctor` with the installed Annals configuration.
-2. Run `krisis observe status` and confirm schema 4 and the write-once baseline.
+2. Run `krisis observe status` and confirm schema 5 and the write-once baseline.
 3. Inspect `krisis/observer` definition, binding, runtime history, and body-free
    logs; confirm both retired Decisions keys are absent or disabled.
 4. Inspect and explicitly trust the exact `~/.codex/hooks.json` definition.

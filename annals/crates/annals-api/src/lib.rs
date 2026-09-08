@@ -1,16 +1,18 @@
-//! Annals-owned typed interfaces for account acceptance and feed reads.
+//! Annals-owned typed interfaces for document acceptance and feed reads.
 //! The client invokes the configured Annals CLI and never reads library state.
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub use krisis_api::account::{AuthorityAnchor, AuthoritySpan};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use sha2::{Digest as _, Sha256};
 
 pub mod usage;
 
-pub const CONTRACT_VERSION: u32 = 1;
+pub const CONTRACT_VERSION: u32 = 2;
 pub const MAX_PAGE_SIZE: usize = 200;
+pub const MAX_DOCUMENT_BYTES: usize = 1_048_576;
+pub const MAX_PAGE_DOCUMENT_BYTES: usize = 4 * MAX_DOCUMENT_BYTES;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -49,23 +51,19 @@ pub struct Page {
     pub watermark: String,
     pub request_cursor: String,
     pub next_cursor: String,
-    pub events: Vec<AcceptedAccountEvent>,
+    pub events: Vec<AcceptedDocumentEvent>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct AcceptedAccountEvent {
+pub struct AcceptedDocumentEvent {
     pub cursor: String,
     pub event_id: String,
-    pub account_id: String,
-    pub account_schema_version: u32,
-    pub statement: String,
-    pub context: String,
-    pub action: String,
-    pub result: String,
-    pub occurred_at: i64,
-    pub occurred_at_precision: String,
-    pub authority: AuthorityAnchor,
+    pub document_id: String,
+    pub source_name: String,
+    pub source_sha256: String,
+    pub accepted_at: String,
+    pub document: String,
 }
 
 /// A bounded failure that never includes provider output, paths, or account text.
@@ -204,6 +202,25 @@ impl Client {
                 "Annals did not keep the page fixed to the requested watermark",
             ));
         }
+        if page.request_cursor != cursor
+            || page.events.len() > usize::from(limit)
+            || page
+                .events
+                .iter()
+                .map(|event| event.document.len())
+                .sum::<usize>()
+                > MAX_PAGE_DOCUMENT_BYTES
+            || page.next_cursor
+                != page
+                    .events
+                    .last()
+                    .map_or(cursor, |event| event.cursor.as_str())
+        {
+            return Err(failure(
+                "annals_page_invalid",
+                "Annals returned inconsistent page bounds or cursors",
+            ));
+        }
         for event in &page.events {
             event.validate()?;
         }
@@ -249,44 +266,34 @@ fn require_text(value: &str, maximum: usize) -> Result<(), Error> {
     Ok(())
 }
 
-impl AcceptedAccountEvent {
-    /// Validate the version-one bounded feed projection.
+impl AcceptedDocumentEvent {
+    /// Validate transport identity and accessible text, without a document schema.
     ///
     /// # Errors
-    /// Returns a bounded error for an incompatible schema, span, or field.
+    /// Returns a bounded error for missing text or inconsistent byte identity.
     pub fn validate(&self) -> Result<(), Error> {
-        if self.account_schema_version != krisis_api::account::ACCOUNT_SCHEMA_VERSION {
-            return Err(failure(
-                "decision_account_incompatible",
-                "Annals returned an unsupported decision account schema",
-            ));
-        }
-        if self.authority.span.end <= self.authority.span.start {
-            return Err(failure(
-                "decision_account_anchor_invalid",
-                "decision account authority span ends before it starts",
-            ));
-        }
         for value in [
             &self.cursor,
             &self.event_id,
-            &self.account_id,
-            &self.authority.host_id,
-            &self.authority.thread_id,
-            &self.authority.turn_id,
-            &self.authority.item_id,
+            &self.document_id,
+            &self.source_name,
+            &self.accepted_at,
         ] {
             require_text(value, 1_024)?;
         }
-        for value in [&self.statement, &self.context, &self.action, &self.result] {
-            require_text(value, 16_384)?;
+        require_text(&self.document, MAX_DOCUMENT_BYTES)?;
+        if self.source_sha256 != format!("{:x}", Sha256::digest(self.document.as_bytes())) {
+            return Err(failure(
+                "document_digest_mismatch",
+                "Annals returned different document bytes",
+            ));
         }
-        require_text(&self.occurred_at_precision, 128)
+        Ok(())
     }
 }
 
 impl AcceptanceReceipt {
-    /// Validate the version-one acceptance receipt independently of caller state.
+    /// Validate the current acceptance receipt independently of caller state.
     ///
     /// # Errors
     /// Returns a bounded error for invalid identity, version, or receipt fields.

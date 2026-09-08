@@ -1,6 +1,6 @@
 {
   "id": "conatus.update.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -69,7 +69,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Contract version 1 describes Conatus 0.1.0 public semantics independently of Annals, feed, library schema, or Clockwork versions."
+        "statement": "Operation contract 2 consumes Annals exchange 2 complete-document events. Existing intake and cursor state remain valid. Conatus, Annals library schema, and Clockwork versions are separate axes."
       },
       {
         "status": "unspecified",
@@ -109,7 +109,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Initialization starts from the current accepted-account feed watermark. Feed projections preserve account fields and source identities. Library instructions define service-to-want interpretation while Annals keeps immutable works and structural validation. Changing instructions runs no model and does not reinterpret history."
+        "statement": "Initialization starts at the current Annals watermark. Intake retains each complete document and original transport identities and forwards exact text unchanged. No account fields or source lookup are required. Library instructions govern connections and interpretation."
       }
     ],
     "identity_and_units": [
@@ -148,7 +148,7 @@
       },
       {
         "status": "declared",
-        "statement": "Accepted accounts and their bounded opaque-cursor feed supply decision intake.",
+        "statement": "Accepted documents and their bounded opaque-cursor feed supply decision intake. Consumers continue short nonempty pages until empty.",
         "target": "annals",
         "kind": "data",
         "contract": "annals.decision-account.exchange"
@@ -185,8 +185,8 @@
     },
     {
       "id": "annals.decision-account.exchange",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "annals.inbox.operate",

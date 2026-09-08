@@ -218,7 +218,7 @@ fn acceptance_replays_conflicts_and_pages_a_fixed_prefix() -> TestResult {
         .to_owned();
     let source = installation.file("account.md", &account("decision-1", "Initial context."))?;
     let created = installation.accept("decision-1", &source)?;
-    assert_eq!(created["contract_version"], 1);
+    assert_eq!(created["contract_version"], annals_api::CONTRACT_VERSION);
     assert_eq!(created["library_id"], installation.library_id);
     assert_eq!(created["acceptance"], "created");
     assert_eq!(created["producer"], "krisis");
@@ -282,10 +282,9 @@ fn acceptance_replays_conflicts_and_pages_a_fixed_prefix() -> TestResult {
     ])?;
     assert_eq!(page["request_cursor"], baseline_token);
     assert_eq!(page["events"].as_array().map(Vec::len), Some(1));
-    assert_eq!(page["events"][0]["account_id"], "decision-1");
-    assert_eq!(page["events"][0]["occurred_at"], 1_788_436_800_i64);
-    assert_eq!(page["events"][0]["authority"]["span"]["start"], 4);
-    assert!(page["events"][0].get("markdown").is_none());
+    assert_eq!(page["events"][0]["document_id"], "decision-1");
+    assert_eq!(page["events"][0]["document"], fs::read_to_string(&source)?);
+    assert!(page["events"][0].get("authority").is_none());
     let cursor = page["next_cursor"].as_str().ok_or("missing item cursor")?;
     let empty = installation.json_ok([
         "decision-feed",
@@ -584,7 +583,7 @@ fn acceptance_serializes_as_the_krisis_receipt_envelope() -> TestResult {
     assert!(output.status.success());
     let envelope: KrisisSuccessEnvelope = serde_json::from_slice(&output.stdout)?;
     assert!(envelope.ok);
-    assert_eq!(envelope.data.contract_version, 1);
+    assert_eq!(envelope.data.contract_version, annals_api::CONTRACT_VERSION);
     assert_eq!(envelope.data.library_id, installation.library_id);
     assert_eq!(envelope.data.producer, "krisis");
     assert_eq!(envelope.data.producer_key, "decision-5");
@@ -842,29 +841,23 @@ fn concurrent_identical_acceptance_converges() -> TestResult {
 }
 
 #[test]
-fn owning_clients_exchange_canonical_account_bytes() -> TestResult {
+fn owning_clients_exchange_unstructured_document_bytes() -> TestResult {
     let installation = Installation::new()?;
     let client = annals_api::Client::new(env!("CARGO_BIN_EXE_annals"), &installation.config);
     let activation = client.watermark()?;
-    let exported = krisis_api::account::parse(
-        include_str!("../../../../decisions/crates/krisis-api/tests/fixtures/account-v1.md"),
-        "d_0123456789abcdef0123",
-    )?;
-    let source = installation.file("typed-account.md", &krisis_api::account::render(&exported)?)?;
-    let first = client.accept(&exported.source.decision_id, &source)?;
-    let replay = client.accept(&exported.source.decision_id, &source)?;
+    let document = "This is ordinary text.\n\nNo required headings or metadata.\nUnicode: café.\n";
+    let source = installation.file("typed-document.txt", document)?;
+    let first = client.accept("document-1", &source)?;
+    let replay = client.accept("document-1", &source)?;
     assert_eq!(first.acceptance, "created");
     assert_eq!(replay.acceptance, "replayed");
     assert_eq!(first.job_id, replay.job_id);
     let watermark = client.watermark()?;
     let page = client.read_page(&activation.watermark, &watermark.watermark, 100)?;
     assert_eq!(page.events.len(), 1);
-    assert_eq!(page.events[0].account_id, exported.source.decision_id);
-    assert_eq!(page.events[0].statement, exported.statement);
-    assert_eq!(
-        page.events[0].authority.span.end,
-        exported.source.authority.span.end
-    );
+    assert_eq!(page.events[0].document_id, "document-1");
+    assert_eq!(page.events[0].source_name, "typed-document.txt");
+    assert_eq!(page.events[0].document, document);
     let empty = client.read_page(&page.next_cursor, &watermark.watermark, 100)?;
     assert!(empty.events.is_empty());
     assert_eq!(empty.next_cursor, page.next_cursor);

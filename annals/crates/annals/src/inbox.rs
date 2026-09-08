@@ -196,14 +196,16 @@ struct ProducerReceipt {
     source_sha256: String,
     job_id: String,
     accepted_at: String,
-    work_label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    work_label: Option<String>,
 }
 
 use annals_api::AcceptanceReceipt as AcceptanceSummary;
 
 struct AcceptedSource {
     source_sha256: String,
-    account: decision_feed::AccountProjection,
+    source_name: String,
+    document: String,
 }
 
 fn marker_requested(
@@ -1274,7 +1276,7 @@ pub(crate) fn accept(
     )
 }
 
-fn read_accepted_source(path: &Path, key: &str) -> Result<AcceptedSource, AppError> {
+fn read_accepted_source(path: &Path, _key: &str) -> Result<AcceptedSource, AppError> {
     let before = fs::symlink_metadata(path).map_err(|error| {
         if error.kind() == io::ErrorKind::NotFound {
             AppError::not_found(
@@ -1333,7 +1335,12 @@ fn read_accepted_source(path: &Path, key: &str) -> Result<AcceptedSource, AppErr
     }
     Ok(AcceptedSource {
         source_sha256: sha256_hex(&bytes),
-        account: decision_feed::parse_account(text, key)?,
+        source_name: path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned(),
+        document: text.to_owned(),
     })
 }
 
@@ -1371,7 +1378,7 @@ fn accept_staged_source(
         transaction.commit()?;
         return Ok((record, false));
     }
-    if let Some((receipt, recovered_account)) = find_published_acceptance(spool, producer, key)? {
+    if let Some((receipt, _)) = find_published_acceptance(spool, producer, key)? {
         ensure_same_accepted_bytes(&receipt.source_sha256, &source.source_sha256)?;
         decision_feed::insert_acceptance(
             &transaction,
@@ -1380,7 +1387,6 @@ fn accept_staged_source(
             &receipt.source_sha256,
             &receipt.job_id,
             &receipt.accepted_at,
-            &recovered_account,
         )?;
         transaction.commit()?;
         return Ok((
@@ -1418,7 +1424,7 @@ fn accept_staged_source(
         source_sha256: source.source_sha256.clone(),
         job_id: id.clone(),
         accepted_at: accepted_at.clone(),
-        work_label: format!("Krisis decision {key}"),
+        work_label: None,
     };
     write_receipt(&envelope)?;
     write_json_atomic(
@@ -1445,7 +1451,6 @@ fn accept_staged_source(
         &source.source_sha256,
         &id,
         &accepted_at,
-        &source.account,
     )?;
     transaction.commit()?;
     Ok((
@@ -1697,7 +1702,7 @@ fn find_published_acceptance(
     spool: &Spool,
     producer: &str,
     key: &str,
-) -> Result<Option<(ProducerReceipt, decision_feed::AccountProjection)>, AppError> {
+) -> Result<Option<(ProducerReceipt, AcceptedSource)>, AppError> {
     let mut matched = None;
     for parent in [
         &spool.queued,
@@ -1746,10 +1751,41 @@ fn find_published_acceptance(
             })?;
             let recovered = read_accepted_source(&source_path, key)?;
             ensure_same_accepted_bytes(&receipt.source_sha256, &recovered.source_sha256)?;
-            matched = Some((receipt, recovered.account));
+            matched = Some((receipt, recovered));
         }
     }
     Ok(matched)
+}
+
+/// Read accepted bytes in any queue/archive state, including before retention.
+/// The control lock keeps envelope movement out of this read.
+pub(crate) fn accepted_document(
+    config: &Config,
+    library_id: &str,
+    key: &str,
+    digest: &str,
+    job_id: &str,
+    accepted_at: &str,
+) -> Result<(String, String), AppError> {
+    let spool = Spool::new(&config.inbox()?.root);
+    let _control = spool.acquire_control_lock()?;
+    require_decision_library_binding(&spool, library_id)?;
+    let (receipt, source) = find_published_acceptance(&spool, "krisis", key)?.ok_or_else(|| {
+        AppError::unexpected(
+            "decision_document_missing",
+            "accepted document is unavailable",
+        )
+    })?;
+    if receipt.source_sha256 != digest
+        || receipt.job_id != job_id
+        || receipt.accepted_at != accepted_at
+    {
+        return Err(AppError::conflict(
+            "decision_document_conflict",
+            "accepted document and ledger differ",
+        ));
+    }
+    Ok((source.source_name, source.document))
 }
 
 fn validate_producer_receipt(receipt: &ProducerReceipt, job_id: &str) -> Result<(), AppError> {
@@ -1763,7 +1799,10 @@ fn validate_producer_receipt(receipt: &ProducerReceipt, job_id: &str) -> Result<
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
         || receipt.accepted_at.trim().is_empty()
-        || receipt.work_label != format!("Krisis decision {}", receipt.key)
+        || receipt
+            .work_label
+            .as_ref()
+            .is_some_and(|label| label != &format!("Krisis decision {}", receipt.key))
     {
         return Err(AppError::unexpected(
             "invalid_producer_receipt",
@@ -3510,7 +3549,7 @@ fn process_work(
     }
     let label = producer_receipt
         .as_ref()
-        .map(|receipt| receipt.work_label.clone())
+        .and_then(|receipt| receipt.work_label.clone())
         .or_else(|| work_label(&envelope.source, None).ok());
     let mut connection = db::open_write(library)?;
     let stored = store_ingested_work_with_optional_label(

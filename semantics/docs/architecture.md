@@ -2,55 +2,46 @@
 
 ## Authority
 
-Semantics owns project registration, account routing, intake transitions,
-concept identity, semantic validation, immutable revisions, and the final
-SQLite transaction. Annals owns the exact decisions-library identity, durable
-acceptance order, immutable account projection, and opaque feed cursors.
-Conversations owns exact thread metadata, including the recorded working
-directory. Nucleus owns bounded model execution and mailbox transport; its
-proposal is never authoritative until Semantics validates and commits it.
-Legacy Decisions lifecycle state remains preserved and decodable, but is not
-scanned for future intake.
-
-Project source, tests, and product documentation define runtime behavior.
-The semantic repository defines maintained terminology and records its history.
+Semantics owns project registration, intake transitions, concept identity,
+semantic effect validation, immutable revisions, and the final SQLite
+transaction. Annals owns accepted document bytes, library identity, acceptance
+order, and opaque cursors. Nucleus owns model execution and mailbox transport.
+Project source, tests, and product documentation define runtime behavior;
+Semantics maintains terminology and its history.
 
 ## Flow
 
-1. Registration canonicalizes an exact folder, verifies its root
-   `AGENTS.md` marker, and captures the current watermark from one explicitly
-   configured Annals decisions library. It intentionally does not import
-   earlier accounts. A schema-one database first requires the controlled
-   `project activate-annals` cutover so all existing non-retired projects share
-   one activation watermark.
-2. A serial one-shot worker first resumes an exact legacy or new in-flight
-   Nucleus correlation, then freezes the current Annals watermark and reads
-   bounded immutable pages after each project's separate Annals scan cursor.
-3. Conversations resolves the account's single user-authority thread to its
-   exact working directory. The deepest current non-retired registered root
-   containing it owns the account. A known cwd outside every root is ignored;
-   missing or failed cwd lookup remains visible as unassigned intake. The cwd
-   is used only during that routing call and is never copied into intake state
-   or output; Semantics retains only the selected project and a fixed routing
-   outcome.
-4. Every valid accepted account is immediately eligible for reconciliation.
-   Preserved legacy admissions, reviews, and their states retain their original
-   meanings.
-5. Semantics persists one stable Nucleus job correlation, supplies only the
-   normalized statement/context/action/result and occurrence projection plus
-   the complete selected repository snapshot, and exposes one successor
-   immutable managed tool. Anchors, cursor, project assignment, and the fixed
-   routing outcome remain in Semantics SQLite.
-6. The tool callback validates the base revision, sequential concept IDs,
-   effect invariants, exact Annals library/event/account grounding, active
-   project state, and replay safety before atomically appending a revision and
-   receipt.
+1. Registration verifies the exact project marker and captures the current
+   Annals decisions-library watermark. Earlier documents are outside that
+   project's automatic intake. Moves preserve identity and cursor history.
+2. A serial worker resumes existing in-flight work first, then reads a fixed
+   prefix after each active or paused project's own cursor. Each new document
+   becomes separate project intake. No conversation anchor, source lookup, cwd,
+   or document schema is required. The agent decides relevance to that project.
+3. Semantics saves the complete supplied document, original Annals identities,
+   and cursor with the local project intake in one transaction. Its intake ID
+   is local; the embedded event ID remains Annals' original ID.
+4. One Nucleus job receives the document and the complete selected repository
+   snapshot. `semantic-document-reconciliation/1` exposes one managed commit
+   tool. The instructions in `document-reconciliation.md` govern interpretation.
+   An empty effect list means no repository change is needed.
+5. Semantics checks project state, base revision, effect structure, concept
+   identities, and replay consistency. Any Annals document grounding must name
+   the supplied library/event/document. Grounding is not an intake prerequisite.
+   Accepted effects and the tool receipt commit together. An empty result saves
+   a receipt and completes intake as `ignored` without adding a revision.
 
-The Nucleus job runs in a deterministic neutral temporary directory with
-workspace access `none`, no shell, and no web. It cannot read a registered
-project folder. Ambiguous transport recovery reuses the same requester and job
-identity; an operator may create a new attempt only after the prior job is
-positively terminal.
+The worker performs at most one reconciliation per invocation. A document can
+therefore require separate agent calls for several projects. No mechanical
+origin-based filter silently discards it before those agents can interpret it.
+Paused projects retain intake but cannot commit until resumed.
+
+The job uses a neutral temporary directory, workspace `none`, no shell, and no
+web. It receives the supplied document rather than resolving a source thread.
+Ambiguous transport recovery reuses the same requester and job. Retry creates a
+new attempt only after positive terminal evidence. Historical account and
+Decisions jobs retain their original payloads, routing, tools, and replay rules;
+they are not alternative sources of newly produced decisions.
 
 ## Serial service
 
@@ -61,7 +52,7 @@ runner by SHA-256. Semantics' release manifest and retention rules own the
 sibling payload and full release integrity. The definition uses a scrubbed
 environment and skips overlap. A cross-process Semantics lock serializes work;
 an independently started overlapping invocation does nothing. Each run resumes
-one processing item first, scans bounded accepted-account pages, and applies
+one processing item first, scans bounded document pages, and applies
 at most one reconciliation. Pausing a project prevents late proposals from committing.
 
 A maintenance marker outside the release prevents runners from starting domain
@@ -83,14 +74,14 @@ commit outcomes.
 
 Service stdout contains only counters and opaque identifiers; stderr contains
 only bounded product-owned failure codes and messages. Raw dependency errors,
-account statements, context, actions, results, project content, conversation
+document text, project content, conversation
 text, anchors, paths, diffs, commands, tool output, credentials, and Nucleus
 prompts must not enter service logs.
 
 ## Failure boundaries
 
 Annals cursors advance in the same SQLite transaction that durably records an
-account or determines it irrelevant. Each page is fixed to one watermark;
+project document intake. Relevance is resolved by the agent afterward. Each page is fixed to one watermark;
 empty pages cannot advance and changed immutable identities fail closed.
 Repository revisions and typed effects are append-only. New failed or
 unassigned intake and all legacy states stay explicit. Separate legacy and
@@ -108,6 +99,6 @@ replace Semantics validation. A failed doctor still returns its typed check
 report. Consumers own their local projections and action policy.
 
 Upstream adapters use `annals-api` and `krisis_api::lifecycle` clients and
-exported response types, then convert them to Semantics-owned account and
-legacy intake records. They do not define upstream wire replicas. Existing
+exported response types, then convert them to Semantics-owned document and
+legacy intake records. Exchange contract 2 supplies the complete text. They do not define upstream wire replicas. Existing
 local source traits retain worker policy and synthetic-test substitution.

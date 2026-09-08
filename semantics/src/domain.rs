@@ -144,6 +144,11 @@ pub enum GroundingSource {
         event_id: String,
         decision_id: String,
     },
+    AnnalsDocument {
+        library_id: String,
+        event_id: String,
+        document_id: String,
+    },
     AnnalsDecisionAccount {
         library_id: String,
         event_id: String,
@@ -357,6 +362,7 @@ impl Repository {
                     source,
                     GroundingSource::Decision { .. }
                         | GroundingSource::AnnalsDecisionAccount { .. }
+                        | GroundingSource::AnnalsDocument { .. }
                 ) && self.concepts.values().any(|concept| {
                     concept
                         .grounds
@@ -602,6 +608,24 @@ pub struct DecisionAccountEvent {
     pub cursor: String,
     pub event_id: String,
     pub account_id: String,
+    #[serde(flatten)]
+    pub content: DecisionContent,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DecisionContent {
+    Document {
+        source_name: String,
+        source_sha256: String,
+        accepted_at: String,
+        document: String,
+    },
+    Legacy(LegacyAccountContent),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct LegacyAccountContent {
     pub account_schema_version: u32,
     pub statement: String,
     pub context: String,
@@ -610,6 +634,21 @@ pub struct DecisionAccountEvent {
     pub occurred_at: i64,
     pub occurred_at_precision: String,
     pub authority: DecisionAccountAnchor,
+}
+
+impl DecisionAccountEvent {
+    #[must_use]
+    pub const fn is_document(&self) -> bool {
+        matches!(self.content, DecisionContent::Document { .. })
+    }
+
+    #[must_use]
+    pub fn authority(&self) -> Option<&DecisionAccountAnchor> {
+        match &self.content {
+            DecisionContent::Legacy(account) => Some(&account.authority),
+            DecisionContent::Document { .. } => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
@@ -796,6 +835,15 @@ fn validate_grounding_source(source: &GroundingSource) -> Result<()> {
             validate_annals_library_id(library_id)?;
             validate_text("event_id", event_id)?;
             validate_text("account_id", account_id)
+        }
+        GroundingSource::AnnalsDocument {
+            library_id,
+            event_id,
+            document_id,
+        } => {
+            validate_annals_library_id(library_id)?;
+            validate_text("event_id", event_id)?;
+            validate_text("document_id", document_id)
         }
         GroundingSource::Seed {
             source_label,

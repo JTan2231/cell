@@ -28,10 +28,9 @@ operation or implicit decisions-library selection.
 
 An update consumes all new accepted events through its chosen watermark. Each
 event and cursor advancement commit in the same local transaction. The feed
-provides account fields and authority anchors, not original account Markdown or
-source-conversation quotations. Conatus preserves those fields and identities
-in a deterministic outgoing document, then enqueues pending frozen documents
-and runs the Annals inbox.
+provides complete accepted document text, source filename, digest, acceptance
+time, and transport identities. Conatus forwards the exact text and lets the
+configured library agent interpret it.
 
 New sources are enqueued before retention. Annals retains them and integrates
 them with automatic application of valid material changes. A fresh duplicate
@@ -140,7 +139,14 @@ maximum activation delay, queue-drain deadline, interpretation time, storage
 capacity, or cross-release compatibility window is promised.
 
 Conatus state, Annals spools and works, and Nucleus context can retain complete
-private wording, account fields and evidence. Model integration may consume the
+private wording, full documents and evidence. Model integration may consume the
 configured account allowance. No publication, cleanup of user data, direct
 database mutation, unrelated lifecycle action, or credential operation is
 authorized by these commands.
+
+Decision intake uses Annals exchange contract 2. It saves the original event,
+complete document, source filename, digest, acceptance time, and transport
+identities with its cursor, then forwards exactly that text to the Conatus
+library. No account fields or source lookup are required. Library instructions
+govern connections and interpretation. Feed pages may stop at 4 MiB of document
+bytes before reaching the requested count; update continues until an empty page.

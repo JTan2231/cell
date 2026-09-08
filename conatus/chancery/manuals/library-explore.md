@@ -49,11 +49,16 @@ capture and successful handoff; decision occurrence retains its supplied
 precision. Annals revision times describe corpus changes.
 
 Graph and history preserve the selected Annals interfaces' bounds and identity
-semantics. Local and Annals reads do not form one atomic snapshot. A recent
+semantics. Graph and association views return at most 200 concepts. Each concept
+preview includes at most 20 parents, 20 children, and 20 evidence entries. Check
+`concepts_complete`, `relationships_complete`, and `evidence_complete` before
+treating the returned view as complete for its Annals revision.
+
+Local and Annals reads do not form one atomic snapshot. A recent
 corpus revision need not include all queued inputs. Missing or unavailable
 Annals state does not erase local capture or prove that interpretation failed.
 
-Responses can contain complete private statements, account fields, source
+Responses can contain complete private statements, complete documents, source
 references and evidence. Keep them inside the local product boundary unless
 disclosure is separately requested. No remote sharing, storage-capacity,
 latency, or cross-release compatibility guarantee is provided.

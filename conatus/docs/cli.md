@@ -53,7 +53,7 @@ use `want-` plus UUIDv7. Decision IDs use `decision-` plus SHA-256 of source
 library ID, colon, and event ID. A record contains `id`, `kind`, `source`,
 `wording`, `source_data`, `work_name`, `captured_at`, `queued_at`, `receipt`, and
 `error`. The work name is the intake ID; the outgoing filename adds `.md`.
-`wording` is exact want text or the supplied decision statement; `source_data` preserves the
+`wording` is exact want text or the complete supplied decision document; `source_data` preserves the
 source-reference object or original typed feed event. A nullable handoff time
 or receipt describes enqueue, not successful model integration.
 
@@ -67,8 +67,13 @@ usable when Annals is unavailable and keeps the Annals inbox read separate from
 local intake counts, the cursor, pause, and last update report. A partially
 failed update retains that report before returning an error.
 
-Intake timestamps are UTC Unix seconds recording Conatus capture. Decision
-occurrence times retain the feed's separate precision. Annals revision and
+Graph and association views return at most 200 concepts. Each concept preview
+includes at most 20 parents, 20 children, and 20 evidence entries. Check
+`concepts_complete`, `relationships_complete`, and `evidence_complete` before
+treating the returned view as complete for its Annals revision.
+
+Intake timestamps are UTC Unix seconds recording Conatus capture. The feed's
+`accepted_at` records Annals acceptance, not when a decision occurred. Annals revision and
 delivery times describe those Annals operations. The feed cursor describes
 intake coverage; it does not describe graph freshness.
 

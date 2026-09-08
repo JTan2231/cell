@@ -14,7 +14,7 @@ use crate::domain::{
 use crate::error::io;
 use crate::{Error, Result};
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Clone)]
 pub struct Store {
@@ -596,13 +596,41 @@ impl Store {
                 format!("Annals scan cursor for project {scanner_project_id} changed concurrently"),
             ));
         }
+        let intake_id = if event.is_document() {
+            use sha2::{Digest as _, Sha256};
+            format!(
+                "document-intake-{:x}",
+                Sha256::digest(serde_json::to_vec(&(
+                    &event.library_id,
+                    &event.event_id,
+                    scanner_project_id
+                ))?)
+            )
+        } else {
+            event.event_id.clone()
+        };
+        // Already retained pre-cutover account events keep their original intake.
+        if event.is_document()
+            && transaction.query_row(
+                "SELECT EXISTS(SELECT 1 FROM account_intake_events WHERE event_id=?1)",
+                [&event.event_id],
+                |row| row.get::<_, bool>(0),
+            )?
+        {
+            transaction.execute(
+                "UPDATE annals_project_cursors SET scan_cursor=?2 WHERE project_id=?1",
+                params![scanner_project_id, event.cursor],
+            )?;
+            transaction.commit()?;
+            return Ok(false);
+        }
         let account_json = serde_json::to_string(event)?;
         let persisted = transaction
             .query_row(
                 "SELECT library_id, account_id, source_cursor, project_id, status,
                         routing_outcome, account_json
                  FROM account_intake_events WHERE event_id = ?1",
-                [&event.event_id],
+                [&intake_id],
                 |row| {
                     Ok((
                         row.get::<_, String>(0)?,
@@ -624,10 +652,7 @@ impl Store {
         {
             return Err(Error::domain(
                 "account_intake_replay_conflict",
-                format!(
-                    "Annals event {} was replayed with different immutable data",
-                    event.event_id
-                ),
+                format!("Annals event {intake_id} was replayed with different immutable data"),
             ));
         }
         let mut inserted = false;
@@ -671,7 +696,7 @@ impl Store {
                             "SELECT EXISTS(
                                 SELECT 1 FROM account_request_correlations WHERE event_id = ?1
                              )",
-                            [&event.event_id],
+                            [&intake_id],
                             |row| row.get(0),
                         )?;
                         if correlated {
@@ -693,7 +718,7 @@ impl Store {
                                  updated_at = ?4
                              WHERE event_id = ?1 AND status = 'unassigned'
                                AND project_id IS NULL",
-                            params![event.event_id, project_id, status.as_str(), now()],
+                            params![intake_id, project_id, status.as_str(), now()],
                         )?;
                         if changed != 1 {
                             return Err(Error::domain(
@@ -704,14 +729,14 @@ impl Store {
                         let ordinal: i64 = transaction.query_row(
                             "SELECT COALESCE(MAX(ordinal), 0) + 1
                              FROM account_intake_assignments WHERE event_id = ?1",
-                            [&event.event_id],
+                            [&intake_id],
                             |row| row.get(0),
                         )?;
                         transaction.execute(
                             "INSERT INTO account_intake_assignments
                                 (event_id, ordinal, previous_project_id, project_id, assigned_at)
                              VALUES (?1, ?2, NULL, ?3, ?4)",
-                            params![event.event_id, ordinal, project_id, now()],
+                            params![intake_id, ordinal, project_id, now()],
                         )?;
                     }
                 }
@@ -725,17 +750,17 @@ impl Store {
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0,
                          ?13, NULL, NULL, ?14, ?14)",
                     params![
-                        event.event_id,
+                        intake_id,
                         event.library_id,
                         event.account_id,
                         event.cursor,
                         effective_project,
                         status.as_str(),
                         routing_outcome.as_str(),
-                        event.authority.host_id,
-                        event.authority.thread_id,
-                        event.authority.turn_id,
-                        event.authority.item_id,
+                        event.authority().map(|anchor| anchor.host_id.as_str()),
+                        event.authority().map(|anchor| anchor.thread_id.as_str()),
+                        event.authority().map(|anchor| anchor.turn_id.as_str()),
+                        event.authority().map(|anchor| anchor.item_id.as_str()),
                         account_json,
                         routing_error,
                         now(),
@@ -2117,20 +2142,51 @@ impl Store {
                 )
             });
         }
+        let already_committed: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM account_mailbox_receipts WHERE job_id=?1 AND committed_revision IS NOT NULL)",
+            [job_id], |row| row.get(0),
+        )?;
+        if already_committed {
+            return Err(Error::domain(
+                "reconciliation_already_committed",
+                "this job already has an accepted reconciliation",
+            ));
+        }
         let account: DecisionAccountEvent = serde_json::from_str(&account_json)?;
         validate_account_proposal_provenance(&account, proposal)?;
-        let revision = commit_revision_tx(
-            &transaction,
-            project_id,
-            proposal.base_revision,
-            &proposal.summary,
-            Some(event_id),
-            &proposal.effects,
-        )?;
-        let result_json = serde_json::to_string(&serde_json::json!({
-            "accepted": true,
-            "revision": revision
-        }))?;
+        let no_change = account.is_document() && proposal.effects.is_empty();
+        let revision = if no_change {
+            let project = project_with_connection(&transaction, project_id)?;
+            if project.status != ProjectStatus::Active
+                || project.current_revision != proposal.base_revision
+            {
+                return Err(Error::domain(
+                    "base_revision_conflict",
+                    "project or repository changed during document examination",
+                ));
+            }
+            if proposal.summary.trim().is_empty() {
+                return Err(Error::domain(
+                    "revision_summary_empty",
+                    "summary must not be blank",
+                ));
+            }
+            proposal.base_revision
+        } else {
+            commit_revision_tx(
+                &transaction,
+                project_id,
+                proposal.base_revision,
+                &proposal.summary,
+                Some(&account.event_id),
+                &proposal.effects,
+            )?
+        };
+        let mut result = serde_json::json!({"accepted": true, "revision": revision});
+        if account.is_document() {
+            result["no_change"] = serde_json::json!(no_change);
+        }
+        let result_json = serde_json::to_string(&result)?;
         let revision_sql = sql_u64(revision, "semantic revision")?;
         transaction.execute(
             "INSERT INTO account_mailbox_receipts
@@ -2148,9 +2204,11 @@ impl Store {
         )?;
         let changed = transaction.execute(
             "UPDATE account_intake_events
-             SET applied_revision = ?2, last_error = NULL, updated_at = ?3
+             SET applied_revision = CASE WHEN ?5 THEN NULL ELSE ?2 END,
+                 no_change_revision = CASE WHEN ?5 THEN ?2 ELSE NULL END,
+                 last_error = NULL, updated_at = ?3
              WHERE event_id = ?1 AND status = 'processing' AND project_id = ?4",
-            params![event_id, revision_sql, now(), project_id],
+            params![event_id, revision_sql, now(), project_id, no_change],
         )?;
         if changed != 1 {
             return Err(Error::domain(
@@ -2170,7 +2228,7 @@ impl Store {
         let connection = self.connection()?;
         connection
             .query_row(
-                "SELECT i.applied_revision
+                "SELECT COALESCE(i.applied_revision, i.no_change_revision)
                  FROM account_intake_events i
                  JOIN account_request_correlations c ON c.event_id = i.event_id
                  WHERE i.event_id = ?1 AND c.job_id = ?2 AND i.status = 'processing'",
@@ -2191,11 +2249,11 @@ impl Store {
         let connection = self.connection()?;
         let revision: i64 = connection
             .query_row(
-                "SELECT i.applied_revision
+                "SELECT COALESCE(i.applied_revision, i.no_change_revision)
                  FROM account_intake_events i
                  JOIN account_request_correlations c ON c.event_id = i.event_id
                  WHERE i.event_id = ?1 AND c.job_id = ?2
-                   AND i.status = 'processing' AND i.applied_revision IS NOT NULL",
+                   AND i.status = 'processing' AND (i.applied_revision IS NOT NULL OR i.no_change_revision IS NOT NULL)",
                 params![event_id, job_id],
                 |row| row.get(0),
             )
@@ -2207,7 +2265,7 @@ impl Store {
                 )
             })?;
         connection.execute(
-            "UPDATE account_intake_events SET status = 'applied', updated_at = ?2
+            "UPDATE account_intake_events SET status = CASE WHEN no_change_revision IS NOT NULL THEN 'ignored' ELSE 'applied' END, updated_at = ?2
              WHERE event_id = ?1",
             params![event_id, now()],
         )?;
@@ -2262,6 +2320,14 @@ impl Store {
             connection.execute_batch(MIGRATION_1_TO_2)?;
         } else if version == 2 {
             normalize_schema_two_working_state(&mut connection)?;
+        }
+        let current: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if current == 2 {
+            connection.pragma_update(None, "foreign_keys", false)?;
+            let transaction = connection.transaction()?;
+            transaction.execute_batch(MIGRATION_2_TO_3)?;
+            transaction.commit()?;
+            connection.pragma_update(None, "foreign_keys", true)?;
         }
         Ok(())
     }
@@ -2883,6 +2949,31 @@ fn validate_account_proposal_provenance(
     account: &DecisionAccountEvent,
     proposal: &ReconciliationProposal,
 ) -> Result<()> {
+    if account.is_document() {
+        for effect in &proposal.effects {
+            match effect {
+                SemanticEffect::Ground {
+                    source:
+                        crate::domain::GroundingSource::AnnalsDocument {
+                            library_id,
+                            event_id,
+                            document_id,
+                        },
+                    ..
+                } if library_id == &account.library_id
+                    && event_id == &account.event_id
+                    && document_id == &account.account_id => {}
+                SemanticEffect::Ground { .. } | SemanticEffect::Unground { .. } => {
+                    return Err(Error::domain(
+                        "document_grounding_conflict",
+                        "grounding must identify the supplied Annals document",
+                    ));
+                }
+                _ => {}
+            }
+        }
+        return Ok(());
+    }
     let mut exact_ground = false;
     for effect in &proposal.effects {
         match effect {
@@ -3097,10 +3188,10 @@ CREATE TABLE account_intake_events (
     routing_outcome TEXT NOT NULL CHECK (
         routing_outcome IN ('project_assigned', 'cwd_missing', 'cwd_unavailable', 'project_ambiguous')
     ),
-    host_id TEXT NOT NULL,
-    thread_id TEXT NOT NULL,
-    turn_id TEXT NOT NULL,
-    item_id TEXT NOT NULL,
+    host_id TEXT,
+    thread_id TEXT,
+    turn_id TEXT,
+    item_id TEXT,
     account_json TEXT NOT NULL,
     attempts INTEGER NOT NULL CHECK (attempts >= 0),
     last_error TEXT,
@@ -3108,7 +3199,8 @@ CREATE TABLE account_intake_events (
     applied_revision INTEGER,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    UNIQUE (library_id, account_id),
+    no_change_revision INTEGER,
+    UNIQUE (library_id, account_id, project_id),
     FOREIGN KEY (project_id, applied_revision)
         REFERENCES semantic_revisions(project_id, revision)
 ) STRICT;
@@ -3140,8 +3232,43 @@ CREATE TABLE account_mailbox_receipts (
     created_at TEXT NOT NULL,
     PRIMARY KEY (job_id, call_id)
 ) STRICT;
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;
 COMMIT;
+"#;
+
+const MIGRATION_2_TO_3: &str = r#"
+CREATE TABLE document_intake_migration (
+    event_id TEXT PRIMARY KEY,
+    library_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    source_cursor TEXT NOT NULL,
+    project_id TEXT REFERENCES projects(id),
+    status TEXT NOT NULL CHECK (
+        status IN ('unassigned', 'pending', 'paused', 'processing', 'applied', 'ignored', 'failed')
+    ),
+    routing_outcome TEXT NOT NULL CHECK (
+        routing_outcome IN ('project_assigned', 'cwd_missing', 'cwd_unavailable', 'project_ambiguous')
+    ),
+    host_id TEXT,
+    thread_id TEXT,
+    turn_id TEXT,
+    item_id TEXT,
+    account_json TEXT NOT NULL,
+    attempts INTEGER NOT NULL CHECK (attempts >= 0),
+    last_error TEXT,
+    terminal_reason TEXT,
+    applied_revision INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    no_change_revision INTEGER,
+    UNIQUE (library_id, account_id, project_id),
+    FOREIGN KEY (project_id, applied_revision)
+        REFERENCES semantic_revisions(project_id, revision)
+) STRICT;
+INSERT INTO document_intake_migration(event_id, library_id, account_id, source_cursor, project_id, status, routing_outcome, host_id, thread_id, turn_id, item_id, account_json, attempts, last_error, terminal_reason, applied_revision, created_at, updated_at) SELECT event_id, library_id, account_id, source_cursor, project_id, status, routing_outcome, host_id, thread_id, turn_id, item_id, account_json, attempts, last_error, terminal_reason, applied_revision, created_at, updated_at FROM account_intake_events;
+DROP TABLE account_intake_events;
+ALTER TABLE document_intake_migration RENAME TO account_intake_events;
+PRAGMA user_version = 3;
 "#;
 
 const MIGRATION_1_TO_2: &str = r#"
@@ -3298,21 +3425,23 @@ mod tests {
             cursor: "account-cursor-1".to_owned(),
             event_id: "account-event-1".to_owned(),
             account_id: "account-1".to_owned(),
-            account_schema_version: 1,
-            statement: "Use stable semantic identities.".to_owned(),
-            context: "A durable boundary is needed.".to_owned(),
-            action: "Applied the boundary.".to_owned(),
-            result: "The identity is stable.".to_owned(),
-            occurred_at: 1,
-            occurred_at_precision: "second".to_owned(),
-            authority: DecisionAccountAnchor {
-                host_id: "host".to_owned(),
-                thread_id: "thread".to_owned(),
-                turn_id: "turn".to_owned(),
-                item_id: "item".to_owned(),
-                span_start: 0,
-                span_end: 10,
-            },
+            content: crate::domain::DecisionContent::Legacy(crate::domain::LegacyAccountContent {
+                account_schema_version: 1,
+                statement: "Use stable semantic identities.".to_owned(),
+                context: "A durable boundary is needed.".to_owned(),
+                action: "Applied the boundary.".to_owned(),
+                result: "The identity is stable.".to_owned(),
+                occurred_at: 1,
+                occurred_at_precision: "second".to_owned(),
+                authority: DecisionAccountAnchor {
+                    host_id: "host".to_owned(),
+                    thread_id: "thread".to_owned(),
+                    turn_id: "turn".to_owned(),
+                    item_id: "item".to_owned(),
+                    span_start: 0,
+                    span_end: 10,
+                },
+            }),
         }
     }
 
@@ -4045,7 +4174,7 @@ mod tests {
         drop(connection);
 
         let store = Store::open(&database).expect("migrated database");
-        assert_eq!(store.schema_version().expect("version"), 2);
+        assert_eq!(store.schema_version().expect("version"), 3);
         let project = store.project("cell").expect("project");
         assert_eq!(project.activation_cursor, "legacy-a");
         assert_eq!(project.scan_cursor, "legacy-s");
@@ -4122,10 +4251,10 @@ mod tests {
                     event.account_id,
                     event.cursor,
                     "/PRIVATE/project/path",
-                    event.authority.host_id,
-                    event.authority.thread_id,
-                    event.authority.turn_id,
-                    event.authority.item_id,
+                    event.authority().expect("legacy anchor").host_id,
+                    event.authority().expect("legacy anchor").thread_id,
+                    event.authority().expect("legacy anchor").turn_id,
+                    event.authority().expect("legacy anchor").item_id,
                     serde_json::to_string(&event).expect("account JSON"),
                     "Conversations exact cwd resolution failed: PRIVATE dependency payload",
                 ],
@@ -4209,7 +4338,7 @@ mod tests {
                         event_id: event.event_id.clone(),
                         account_id: event.account_id.clone(),
                     },
-                    statement: event.statement.clone(),
+                    statement: "Use stable semantic identities.".to_owned(),
                 },
             ],
         };

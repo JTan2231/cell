@@ -544,13 +544,6 @@ impl Paths {
         Ok(result["data"].clone())
     }
     pub fn doctor(&self, payload: &Path, watermark: Option<&str>, run: Option<&str>) -> Result<()> {
-        let codex = [
-            PathBuf::from("/opt/homebrew/bin/codex"),
-            self.home.join(".local/bin/codex"),
-        ]
-        .into_iter()
-        .find(|p| fs::metadata(p).is_ok_and(|m| m.is_file() && m.mode() & 0o111 != 0))
-        .ok_or("Codex executable is unavailable")?;
         let annals = self.home.join(".local/bin/annals");
         if !fs::metadata(&annals).is_ok_and(|m| m.is_file() && m.mode() & 0o111 != 0) {
             return fail("Annals executable is unavailable");
@@ -577,7 +570,6 @@ impl Paths {
                         str::to_owned,
                     ),
                 )
-                .env("CONVERSATIONS_CODEX", &codex)
                 .env("SEMANTICS_ANNALS", &annals)
                 .env("SEMANTICS_ANNALS_CONFIG", &config)
                 .output()?;
@@ -606,7 +598,6 @@ impl Paths {
                 "database",
                 "participation_markers",
                 "annals_decision_feed",
-                "conversations_exact_cwd",
                 "nucleus_reconciliation",
             ]
             .iter()
@@ -617,11 +608,11 @@ impl Paths {
                         && (*name != "database"
                             || c["detail"]
                                 .as_str()
-                                .is_some_and(|s| s.starts_with("schema 2 at")))
+                                .is_some_and(|s| s.starts_with("schema 3 at")))
                 })
             })
         {
-            return fail("Semantics doctor did not prove schema 2 and every required dependency");
+            return fail("Semantics doctor did not prove schema 3 and every required dependency");
         }
         Ok(())
     }

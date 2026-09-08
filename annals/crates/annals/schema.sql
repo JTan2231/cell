@@ -705,22 +705,9 @@ CREATE TABLE decision_account_acceptances (
                                          AND source_sha256 NOT GLOB '*[^0-9a-f]*'),
     job_id                   TEXT NOT NULL UNIQUE CHECK (length(trim(job_id)) > 0),
     accepted_at              TEXT NOT NULL CHECK (length(trim(accepted_at)) > 0),
-    account_schema_version   INTEGER NOT NULL CHECK (account_schema_version = 1),
-    statement                TEXT NOT NULL CHECK (length(trim(statement)) > 0),
-    context                  TEXT NOT NULL CHECK (length(trim(context)) > 0),
-    action                   TEXT NOT NULL CHECK (length(trim(action)) > 0),
-    result                   TEXT NOT NULL CHECK (length(trim(result)) > 0),
-    occurred_at              INTEGER NOT NULL,
-    occurred_at_precision    TEXT NOT NULL CHECK (length(trim(occurred_at_precision)) > 0),
-    capture_rule_version     TEXT NOT NULL CHECK (length(trim(capture_rule_version)) > 0),
-    authority_host_id        TEXT NOT NULL CHECK (length(trim(authority_host_id)) > 0),
-    authority_thread_id      TEXT NOT NULL CHECK (length(trim(authority_thread_id)) > 0),
-    authority_turn_id        TEXT NOT NULL CHECK (length(trim(authority_turn_id)) > 0),
-    authority_item_id        TEXT NOT NULL CHECK (length(trim(authority_item_id)) > 0),
-    authority_span_start     INTEGER NOT NULL CHECK (authority_span_start >= 0),
-    authority_span_end       INTEGER NOT NULL CHECK (authority_span_end > authority_span_start),
     UNIQUE(producer, producer_key)
 );
+
 
 CREATE TRIGGER decision_account_acceptances_immutable_update
 BEFORE UPDATE ON decision_account_acceptances BEGIN
@@ -889,4 +876,4 @@ SELECT identity.singleton,
        identity.library_id
 FROM library_identity AS identity;
 
-PRAGMA user_version = 6;
+PRAGMA user_version = 7;

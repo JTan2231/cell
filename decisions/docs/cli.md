@@ -48,26 +48,35 @@ still apply. Observation processing always requires normal Nucleus admission.
 
 ## Supported commands
 
+`krisis document build --thread-id THREAD --turn-id TURN --directory DIRECTORY`
+freezes the full normalized conversation through one completed exchange,
+classifies that exchange, and constructs an ordinary Markdown source document.
+Repeat the command to resume the same run. `krisis document render --directory
+DIRECTORY` reconstructs the document from the saved result without external
+services. Both commands emit JSON. They require no Annals configuration and do
+not open the observer database. See [source documents](source-documents.md) for
+the result format, source completeness, limits, and recovery rules.
+
 `krisis doctor` opens and migrates the database, checks Conversations and
 Nucleus readiness, and invokes Annals `decision-feed watermark` with the exact
-config. It requires the standard JSON envelope and matching contract-version-1
+config. It requires the standard JSON envelope and matching contract-version-2
 dedicated library identity.
 
 `krisis observe activate [--at UNIX_SECOND]` writes the post-deployment
-authority baseline exactly once. With no explicit time, it conservatively uses
+exchange-completion baseline exactly once. With no explicit time, it conservatively uses
 the next Unix second.
 
 `krisis observe ingest` reads one Codex Stop-hook JSON object from standard
 input and durably stores only its session/turn correlation.
 
 `krisis observe process` requires all Annals configuration values and first
-verifies `decision-feed watermark`. It then delivers the oldest pending account
+verifies `decision-feed watermark`. It then delivers the oldest pending document
 bound to that target. If none is pending, it resumes or classifies one
 observation bound to the target. A changed config path or library identity
 causes failure. Repeated calls are safe; processing remains serial.
 
 `krisis observe status [--date YYYY-MM-DD]` reports baseline, queue states,
-failure summaries, and pending/accepted Annals account counts without invoking
+failure summaries, and pending/accepted Annals document counts without invoking
 dependencies.
 
 `krisis observe reconcile [--date YYYY-MM-DD]` discovers missed completed turns
@@ -87,7 +96,7 @@ read retained Decisions lifecycle envelopes for existing consumers. Limits are
 1 through 1000. Krisis does not append new events.
 
 `krisis show DECISION_ID` reads retained legacy Decisions candidate state only;
-new accounts belong in Annals and are not browsable in Krisis.
+new documents belong in Annals and are not browsable in Krisis.
 
 The old `daily` and `review` command spellings are hidden compatibility parsers
 that always fail with `legacy_surface_retired`. They perform no build, send,

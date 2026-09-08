@@ -1,6 +1,6 @@
 # Data model
 
-Semantics uses SQLite schema version 2. Its database is the sole writable
+Semantics uses SQLite schema version 3. Its database is the sole writable
 authority. Registered folders contain their participation marker and ordinary
 project-owned material.
 
@@ -20,7 +20,7 @@ either cursor history.
 
 `semantic_revisions` has a contiguous per-project revision number, summary,
 optional source event ID, and commit time. `semantic_effects` orders typed JSON
-effects within the revision. HEAD is obtained by replay; schema 2 deliberately
+effects within the revision. HEAD is obtained by replay; schema 3
 has no mutable concept projection.
 
 Effects are:
@@ -30,7 +30,8 @@ Effects are:
 - `differentiate`: record its durable distinction from another active concept.
 - `retire`: close a concept, optionally naming an active replacement.
 - `reopen`: make a retired concept active again.
-- `ground`: cite an exact Annals library/event/account triple, a legacy
+- `ground`: cite an exact Annals library/event/document triple, a historical
+  Annals library/event/account triple, a legacy
   Decisions event/decision pair, or a hashed seed source.
 - `unground`: append the withdrawal of a prior decision grounding while
   retaining both its original and withdrawal provenance.
@@ -42,16 +43,21 @@ commits only if the whole revision is valid.
 
 ## Intake and reconciliation
 
-`account_intake_events` durably copies each normalized accepted-account
-projection selected for the project, its exact Annals identities, opaque item
-cursor, project assignment, fixed routing outcome, state, attempts, bounded
-failure, and optional applied revision. It stores no resolved cwd, raw
-Markdown, authority quotation, transcript, path, diff, command, tool output,
-or project content. Account event insertion or an irrelevance decision and the
-scanner project's Annals cursor advance are one transaction.
-`account_intake_assignments` appends manual routing history. Every new account
-uses exact current cwd transiently for deepest-root ownership and retains the
-selected project and routing outcome.
+`account_intake_events` retains complete accepted documents alongside preserved
+historical account projections. A new document row contains a local intake ID,
+the original Annals library/event/document identities, source filename, digest,
+acceptance time, exact text, project, cursor, state, and attempts. It requires no
+source anchor. Origin columns are nullable. Each project receives its own intake
+with uniqueness on `(library_id, account_id, project_id)`; the historical column
+`account_id` holds the producer's document key for new rows.
+
+Insertion and the scanner project's cursor advance are atomic. Projects decide
+relevance through their reconciliation agents. A completed empty-effect result
+records `no_change_revision` at the examined HEAD, leaves `applied_revision`
+absent, and ends as `ignored`; it creates no semantic revision. These facts and
+the exact tool receipt commit before acknowledgement. Historical assignments and
+source projections keep their original interpretation. A previously retained
+account event is not duplicated when its original bytes appear in the new feed.
 
 The schema-one `intake_events`, `intake_assignments`, lifecycle envelope bytes,
 statuses, Decisions cursors, and review behavior remain intact for historical
@@ -101,3 +107,10 @@ the schema version. Controlled cutover captures one Annals watermark after
 legacy draining; new projects capture their own current watermark. Schema
 changes must preserve this boundary and add explicit migration and rollback
 tests.
+
+Migration 2-to-3 preserves historical intake, correlations, receipts, cursor
+positions, and semantic revisions. It makes origin columns optional, permits
+one document intake per project, and adds the no-change result revision. New
+`annals_document` grounding has a distinct serialized kind. Old account and
+Decisions grounding kinds are unchanged. Immutable document tool schemas have
+new IDs; old admitted requests continue to use their original schemas.

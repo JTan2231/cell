@@ -211,7 +211,13 @@ where
             .account_reconciler
             .reconcile_account(self.store, &intake)
         {
-            Ok(revision) => report.applied_revision = Some(revision),
+            Ok(revision) => {
+                if self.store.account_intake(&intake.event_id)?.status
+                    == crate::domain::IntakeStatus::Applied
+                {
+                    report.applied_revision = Some(revision);
+                }
+            }
             Err(error) => {
                 let correlation = self.store.account_correlation(&intake.event_id)?;
                 let has_domain_commit = correlation
@@ -319,9 +325,7 @@ where
                         "Annals next cursor does not match the last account event",
                     ));
                 }
-                if event_count < usize::from(PAGE_LIMIT) {
-                    break;
-                }
+                // A byte-bounded page can be shorter than the requested count.
             }
         }
         Ok(())
@@ -334,7 +338,28 @@ where
         event: &DecisionAccountEvent,
         report: &mut AccountWorkerReport,
     ) -> Result<()> {
-        let cwd = match self.conversations.exact_account_cwd(&event.authority) {
+        if event.is_document() {
+            // Every project's own baseline controls eligibility. Its agent decides
+            // whether the document changes that repository; no source lookup gates it.
+            if self.store.record_account_observation(
+                scanner_project_id,
+                from_cursor,
+                event,
+                Some(scanner_project_id),
+                AccountRoutingOutcome::ProjectAssigned,
+                true,
+            )? {
+                report.intake_added += 1;
+            }
+            return Ok(());
+        }
+        let authority = event.authority().ok_or_else(|| {
+            Error::domain(
+                "legacy_account_anchor_missing",
+                "historical account has no anchor",
+            )
+        })?;
+        let cwd = match self.conversations.exact_account_cwd(authority) {
             Ok(Some(cwd)) => cwd,
             Ok(None) => {
                 if self.store.record_account_observation(
@@ -448,10 +473,19 @@ mod tests {
 
         fn read_page(
             &mut self,
-            _cursor: &str,
-            _watermark: &str,
+            cursor: &str,
+            watermark: &str,
             _limit: u16,
         ) -> crate::Result<DecisionAccountPage> {
+            if cursor == watermark {
+                return Ok(DecisionAccountPage {
+                    library_id: "0123456789abcdef0123456789abcdef".to_owned(),
+                    request_cursor: cursor.to_owned(),
+                    next_cursor: cursor.to_owned(),
+                    watermark: watermark.to_owned(),
+                    events: Vec::new(),
+                });
+            }
             self.pages
                 .pop_front()
                 .ok_or_else(|| crate::Error::domain("fixture_empty", "missing page"))
@@ -511,21 +545,23 @@ mod tests {
             cursor: cursor.to_owned(),
             event_id: "event-1".to_owned(),
             account_id: "account-1".to_owned(),
-            account_schema_version: 1,
-            statement: "Use stable identities.".to_owned(),
-            context: "The boundary needs a durable name.".to_owned(),
-            action: "Implemented the name.".to_owned(),
-            result: "The boundary is stable.".to_owned(),
-            occurred_at: 1,
-            occurred_at_precision: "second".to_owned(),
-            authority: DecisionAccountAnchor {
-                host_id: "host".to_owned(),
-                thread_id: "thread".to_owned(),
-                turn_id: "turn".to_owned(),
-                item_id: "item".to_owned(),
-                span_start: 0,
-                span_end: 10,
-            },
+            content: crate::domain::DecisionContent::Legacy(crate::domain::LegacyAccountContent {
+                account_schema_version: 1,
+                statement: "Use stable identities.".to_owned(),
+                context: "The boundary needs a durable name.".to_owned(),
+                action: "Implemented the name.".to_owned(),
+                result: "The boundary is stable.".to_owned(),
+                occurred_at: 1,
+                occurred_at_precision: "second".to_owned(),
+                authority: DecisionAccountAnchor {
+                    host_id: "host".to_owned(),
+                    thread_id: "thread".to_owned(),
+                    turn_id: "turn".to_owned(),
+                    item_id: "item".to_owned(),
+                    span_start: 0,
+                    span_end: 10,
+                },
+            }),
         }
     }
 
@@ -566,7 +602,7 @@ mod tests {
         );
         let report = worker.run_once().expect("worker");
         assert_eq!(report.intake_added, 1);
-        assert_eq!(report.applied_revision, Some(1));
+        assert_eq!(report.applied_revision, None);
         let intake = store.account_intake("event-1").expect("intake");
         assert_eq!(intake.attempts, 1);
         assert_eq!(intake.status, crate::domain::IntakeStatus::Processing);

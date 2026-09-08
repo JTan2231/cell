@@ -62,7 +62,7 @@ Doctor captures one Annals watermark, walks bounded pages from every distinct
 installed cursor until an unchanged empty page, and reads every page twice at
 that fixed watermark. It rejects changed replay, identity duplication,
 nonadvancement, cycles, or more than 1,000 pages from one cursor. It also checks
-schema 2, Conversations, and both preserved and successor Nucleus/toolset
+schema 3, the Annals document feed, and both preserved and document Nucleus/toolset
 contracts. Doctor refuses the worker switch if an active or paused project
 lacks the selected Annals feed identity or cursor. Pending activation is
 accepted only if there are no active or paused projects. The deployer atomically

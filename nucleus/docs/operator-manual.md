@@ -70,6 +70,26 @@ Platter, Mentor, Paperboy --> Email --> Resend
 installed product releases --> Chancery documentation
 ```
 
+Krisis uses `krisis/decision-document/1` for its sole active observer production
+path. It freezes full normalized conversation through a completed exchange,
+accepts a yes/no verdict and summary, and renders the source into Markdown.
+The saved run protects request and result recovery; the observer commits
+coverage and a target-bound document outbox. Local `document build` and
+`document render` use the same builder without delivery or observer coverage.
+See [Krisis source documents](/Users/joey/rust/cell/decisions/docs/source-documents.md).
+
+Annals exchange contract 2 accepts the handed text without a decision schema
+or source lookup. It owns ordinary storage metadata and returns complete accepted
+documents through its dedicated feed. Conatus forwards those exact bytes to its
+library. Semantics supplies each post-activation document to each participating
+project's reconciliation agent. Its `semantic-document-reconciliation/1` toolset
+allows an empty result without creating a semantic revision. Interpretation and
+connections belong to the agents and their instructions. Historical account
+jobs retain their original immutable tool contracts. Persistent schemas are
+Krisis 5, Annals 7, and Semantics 3; these migrations preserve accepted history
+and cursors. Krisis refuses the document cutover while old handoffs or
+classification jobs are in flight.
+
 Each product owns its data and success rules. Nucleus owns execution. A completed
 model turn does not establish a product result. A later runtime failure does
 not erase an already committed domain result.
@@ -282,7 +302,7 @@ values into local domain models as needed. Do not copy provider wire structs,
 private SQL, or command parsers.
 
 Nucleus and Conversations expose their existing libraries. Other products expose
-focused `api` modules. `krisis-api` owns accounts and retained Decisions lifecycle
+focused `api` modules. `krisis-api` owns historical account and retained Decisions lifecycle
 exchange. `annals-api` owns acceptance, feed, and Usage interfaces. General
 operations use `decisions::api` and `annals::api`.
 

@@ -23,7 +23,7 @@ HEAD revision.
 ```
 
 The result includes stable concept IDs, canonical labels, full meanings,
-active or retired state, replacements, and distinctions. The schema 2 view also
+active or retired state, replacements, and distinctions. The schema 3 view also
 includes project identity and the selected revision. Search returns the same
 view with only matching concepts. Use stable concept IDs to follow terms across revisions.
 

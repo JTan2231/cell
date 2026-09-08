@@ -11,7 +11,7 @@ Semantics-Project: decisions
   tests, and component documentation remain authoritative for actual behavior.
   Do not edit Semantics state directly; report an unresolved repository rather
   than guessing.
-- Krisis owns eligible-turn coverage, stable decision-account identity and
+- Krisis owns eligible-turn coverage, stable document identity and
   rendering, its durable outbox, and Annals acceptance receipts. Annals owns
   the accepted canonical decisions library; Nucleus owns only bounded agent
   execution. Retained Decisions history is compatibility state, not an active

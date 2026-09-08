@@ -1,123 +1,72 @@
 # Krisis architecture
 
-Krisis feeds decision accounts into Annals. It determines whether an eligible
-user message contains a decision. If it does, Krisis constructs immutable
-accounts of the settlement and observations available at capture time.
+Krisis identifies a user decision in one completed root exchange. A positive
+classification produces a Markdown document containing a generated summary
+heading and the complete normalized user/assistant conversation through that
+exchange. A negative classification produces no document. The model decides
+whether a decision occurred; code checks the result structure and renders text.
 
-## Authority and eligibility
+## Source and classification
 
-An eligible source is a completed default root interactive turn from the active
-or archived store. It must complete after the write-once Krisis activation
-baseline and contain at least one nonblank user message.
+The Stop hook stores only session/turn correlation. Reconciliation discovers
+missed completed root turns through Conversations. The observer freezes the full
+normalized conversation prefix through the selected completed exchange. Exchanges
+completed before the activation baseline are ineligible. Missing or unfinished
+hook sources remain queued for later resolution.
 
-A decision is an attributable user transition from practical openness to an
-explicit settlement constraining intended future behavior or state. Only an
-exact span in the cited user message supplies authority. Assistant text may
-resolve a referential acceptance or describe context, action, or result; it
-cannot create a decision.
+The shared document builder uses `krisis/decision-document/1` with the managed
+`submit_decision` tool. Its only result fields are `is_decision` and `summary`.
+No quoted authority, source span, or context/action/result fields are required.
+The full prompt must fit 262144 UTF-8 bytes; Krisis fails instead of truncating
+history. The summary must be a nonblank single line of at most 1000 Unicode
+scalar values for a positive result, and null for a negative result. These are
+structural checks. Decision meaning is governed by the classifier instructions.
 
-Every admitted user authority receives exactly one durable `decision` or
-`no_decision` verdict. `no_decision` records that the examined message contains
-no user settlement in the selected classification scope.
+See [source documents](source-documents.md) for rendering, source completeness,
+request permissions, and immutable schema identities.
 
-## Source scopes
+## Durable processing and delivery
 
-Krisis resolves and verifies normalized source through Conversations. Level
-zero contains all current-turn user authorities, the nearest preceding
-assistant message for each when present, and at most the final assistant
-message. Level one, requested at most once, adds the newest preceding normalized
-messages that fit. Both levels are bounded to 64 messages and 262,144 aggregate
-UTF-8 bytes. Mandatory content is never truncated; an oversized scope fails.
+One serial `observe process` activation first delivers the oldest pending
+document. When none is pending, it resumes or classifies one observation.
+Each observation binds an exact Annals config path and persistent library ID.
+Changing either value cannot redirect an existing observation or handoff.
 
-The model sees opaque aliases, normalized role/text, and authority-turn
-relationships. Occurrence time and precision remain host-derived. It does not
-receive real host/thread/turn/item IDs, paths, file activity, commands,
-tools, reasoning, approvals, raw Codex items, local execution, or web access.
+The builder saves its frozen source, exact Nucleus request, job identity, and
+accepted tool result in a private run directory before acknowledgement. A retry
+resumes the same run and request. An ambiguous admission or result never creates
+a new attempt. After classification settles, one SQLite transaction records the
+observation verdict and, for a positive result, the exact document and digest in
+`decision_documents`. A crash between the saved result and this transaction is
+recovered by reading the same run.
 
-## Classification
+The producer key is derived from host, canonical thread, and selected turn
+identity. Krisis calls Annals `inbox accept --producer krisis --key KEY FILE`.
+Annals accepts accessible, nonblank UTF-8 text with normal file, size, integrity,
+and storage checks. It imposes no decision layout or metadata schema. Annals
+owns the accepted bytes and generates its own storage and processing metadata.
+Its configured librarian agent interprets the document.
 
-Nucleus executes `gpt-5.6-terra` with medium reasoning, workspace `none`, and
-the single-tool set `krisis/decision-account-classification/1`. The only tool is
-`submit_decision_account_classification`, with immutable input schema
-`krisis.tool.submit-decision-account-classification.input.v1` and result schema
-`krisis.tool.decision-account-classification.result.v1`.
+Krisis keeps the outbox body until it commits the matching Annals receipt. It
+then clears that body and retains the key, digest, target, verdict, and receipt.
+The private document run still contains the frozen source and result. Routine
+status does not expose this text. Annals retries later processing under its own
+inbox contract; Krisis does not redeliver under a new key after an inbox failure.
 
-The terminal result supplies one verdict per authority and at most 100 accounts.
-Each account proposal contains an exact authority quote of at most 500 bytes,
-a 1–1,000-byte statement, and unique supporting aliases. Context, action, and
-result fields are nullable; each nonnull value contains 1–1,000 bytes.
-Krisis validates the whole result. Outside the model, it derives stable IDs from
-the real host, authority item, and exact UTF-8 span.
+## Compatibility and authority
 
-## Durable commit and delivery
+The observer uses this document builder as its sole active production path.
+`document build` and `document render` expose the same construction engine for
+local use. They do not enqueue documents or advance observer coverage. Retired
+`daily` and `review` commands cannot generate or deliver accounts.
 
-Before classification, Krisis verifies Annals `decision-feed watermark` and
-durably binds the observation to the exact config path and persistent library
-ID. Before acknowledging a valid tool call, one transaction records complete
-binary coverage, stable IDs and anchors, deterministic account Markdown and
-SHA-256, that target identity in the delivery outbox, Nucleus job/call and exact
-argument digests, the receipt, and the bounded accepted result. Identical replay
-is idempotent; conflicting call arguments or target reuse fails closed.
+Krisis schema 5 retains Decisions and schema-one account history. Migration
+requires the old account outbox and in-flight observations/classification jobs
+to be settled before the cutover. It does not silently discard or convert an
+unfinished account. Old codecs and job decoders exist for retained history,
+not new capture. The legacy lifecycle feed remains read-only.
 
-Classification coverage may be complete while delivery is still pending; each
-decision account remains pending end to end until Annals accepts it.
-`observe process` always attempts the oldest pending account before classifying
-new work. It invokes exactly:
-
-```text
-annals --config CONFIG --json inbox accept --producer krisis --key DECISION_ID FILE
-```
-
-The success envelope is `{ "ok": true, "data": RECEIPT }`. Krisis validates
-contract version, dedicated library ID, producer, key, source digest, Annals job
-identity, acceptance time, and `created` or `replayed` disposition before
-committing the receipt. Annals outage retries exact delivery against the bound
-config and library and never triggers reclassification. Exact owned temporary
-handoff files are reused after uncertainty and scavenged only after a valid
-receipt; cleanup failure remains visible and leaves the outbox pending.
-
-The deterministic Markdown sections are `Decision`, `Authority`, `Context`,
-`Action`, `Result`, and `Source`. Source is exact schema-version-1 JSON with the
-decision ID, Unix occurrence second and precision, capture-rule version, and
-authority host/thread/turn/item/span. An unobserved field renders as `Unknown.`
-
-After acceptance Krisis discards the outbox body and new account prose and
-non-authority support rows. It retains decision ID and digest, exact authority
-anchor, binary coverage, source/job correlation, and the Annals receipt. Search,
-retrieval, libraries, and later interpretation belong to Annals.
-
-## Recovery and compatibility
-
-Observation is serial. If Nucleus admission is uncertain, Krisis resumes the
-same request and job. Only a confirmed terminal failure permits a successor.
-Each scope has one initial attempt and at most two successors. Level-one
-expansion creates a new scope. A committed domain result remains authoritative
-despite later harness or transport failure.
-
-SQLite schema 4 is additive over Decisions history. Legacy classifier receipts,
-candidates, reviews, digests, deliveries, and lifecycle events remain decodable.
-Migration refuses unsettled `decisions-observe-*` correlations so the public
-identity transition cannot strand an in-flight legacy job.
-Krisis does not append new legacy lifecycle events. The read-only
-`decisions.lifecycle.consume` command surface remains for existing consumers;
-daily digest, review, email, and their schedules are retired.
-
-## Provider-owned Rust exports
-
-`krisis-api` owns the schema-one account sections, source metadata, authority
-anchor, canonical Markdown renderer, and parser. Both Krisis rendering and
-Annals admission use that codec. Its separate `lifecycle` module owns the
-frozen Decisions envelopes and read-only CLI client; retained provider event
-JSON is preserved while consumers decode the same exported envelope types.
-There is no new lifecycle producer, backfill, or acknowledgement operation.
-
-Krisis imports `annals-api` for acceptance and watermark transport and response
-types. Target binding, exact outbox digest matching, durable receipt storage,
-and retry policy remain Krisis-owned. The account export crate does not depend
-on Annals, so these provider-owned dependencies do not form a crate cycle.
-
-`decisions::api` exposes the operational Krisis CLI separately from the small
-account/lifecycle crate. It owns hook input, activation and processing results,
-observation status, retained-candidate inspection, reconciliation and doctor
-reports, and the typed CLI client. The executable emits those same structs.
-The client does not expose retired daily digest or review actions.
+`annals-api` owns exchange contract 2: acceptance receipts, library identity,
+opaque cursors, and complete accepted-document events. It does not prescribe
+document meaning. `decisions::api` owns hook and operational CLI types. Historical
+`krisis-api` account and lifecycle types retain their original meaning.

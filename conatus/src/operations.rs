@@ -204,7 +204,7 @@ fn consume_feed(store: &mut Store, config: &Config) -> Result<usize> {
 
 fn decision_record(
     library_id: &str,
-    event: &annals_api::AcceptedAccountEvent,
+    event: &annals_api::AcceptedDocumentEvent,
     captured_at: i64,
 ) -> Result<Record> {
     let id = format!(
@@ -212,26 +212,16 @@ fn decision_record(
         Sha256::digest(format!("{library_id}:{}", event.event_id))
     );
     let source = format!(
-        "annals:{library_id}/event/{}/account/{}",
-        event.event_id, event.account_id
+        "annals:{library_id}/event/{}/document/{}",
+        event.event_id, event.document_id
     );
-    let provenance = serde_json::to_string_pretty(&json!({
-        "library_id":library_id,"event_id":event.event_id,"account_id":event.account_id,
-        "account_schema_version":event.account_schema_version,"authority":event.authority,
-        "occurred_at":event.occurred_at,"occurred_at_precision":event.occurred_at_precision
-    }))?;
-    let document = format!(
-        "# Conatus decision account\n\nRecord: {id}\nSource: {source}\n\n\
-         ## Account provenance\n\n{provenance}\n\n\
-         ## Statement\n\n{}\n\n## Context\n\n{}\n\n## Action\n\n{}\n\n## Result\n\n{}",
-        event.statement, event.context, event.action, event.result
-    );
+    let document = event.document.clone();
     Ok(Record {
         work_name: id.clone(),
         id,
         kind: "decision".to_owned(),
         source,
-        wording: event.statement.clone(),
+        wording: event.document.clone(),
         source_data: serde_json::to_value(event)?,
         document,
         captured_at,

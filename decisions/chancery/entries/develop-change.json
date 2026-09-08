@@ -17,7 +17,7 @@
   "dependencies": [
     {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 3},
     {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3},
-    {"id": "annals.decision-account.exchange", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "annals.decision-account.exchange", "min_contract": 2, "max_contract_exclusive": 3},
     {"id": "clockwork.schedule.operate", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],

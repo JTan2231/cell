@@ -9,24 +9,12 @@ use crate::db;
 use crate::error::AppError;
 use crate::render::CommandOutput;
 
+pub(crate) use annals_api::CONTRACT_VERSION;
 use annals_api::{
-    AcceptedAccountEvent, MAX_PAGE_SIZE, Page as PageOutput, Watermark as WatermarkOutput,
+    AcceptedDocumentEvent, MAX_PAGE_DOCUMENT_BYTES, MAX_PAGE_SIZE, Page as PageOutput,
+    Watermark as WatermarkOutput,
 };
-pub(crate) use annals_api::{AuthorityAnchor, AuthoritySpan, CONTRACT_VERSION};
 const CURSOR_VERSION: u32 = 1;
-
-#[derive(Debug, Clone)]
-pub(crate) struct AccountProjection {
-    pub schema_version: u32,
-    pub statement: String,
-    pub context: String,
-    pub action: String,
-    pub result: String,
-    pub occurred_at: i64,
-    pub occurred_at_precision: String,
-    pub capture_rule_version: String,
-    pub authority: AuthorityAnchor,
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct AcceptanceRecord {
@@ -77,23 +65,12 @@ pub(crate) fn require_expected_library(
     Ok(actual)
 }
 
-pub(crate) fn parse_account(text: &str, expected_key: &str) -> Result<AccountProjection, AppError> {
-    let account = krisis_api::account::parse(text, expected_key)
-        .map_err(|error| AppError::invalid("invalid_decision_account", error.to_string()))?;
-    Ok(AccountProjection {
-        schema_version: account.source.schema_version,
-        statement: account.statement,
-        context: account.context,
-        action: account.action,
-        result: account.result,
-        occurred_at: account.source.occurred_at,
-        occurred_at_precision: account.source.occurred_at_precision,
-        capture_rule_version: account.source.capture_rule_version,
-        authority: account.source.authority,
-    })
+pub(crate) fn valid_producer_key(value: &str) -> bool {
+    !value.trim().is_empty()
+        && value.len() <= 512
+        && !value.chars().any(char::is_control)
+        && value == value.trim()
 }
-
-pub(crate) use krisis_api::account::valid_producer_key;
 
 pub(crate) fn find_acceptance(
     connection: &Connection,
@@ -125,55 +102,12 @@ pub(crate) fn insert_acceptance(
     source_sha256: &str,
     job_id: &str,
     accepted_at: &str,
-    account: &AccountProjection,
 ) -> Result<(), AppError> {
-    let event_id =
-        transaction.query_row("SELECT 'dae_' || lower(hex(randomblob(16)))", [], |row| {
-            row.get::<_, String>(0)
-        })?;
     transaction.execute(
         "INSERT INTO decision_account_acceptances(
-             event_id, producer, producer_key, source_sha256, job_id, accepted_at,
-             account_schema_version, statement, context, action, result, occurred_at,
-             occurred_at_precision, capture_rule_version, authority_host_id,
-             authority_thread_id, authority_turn_id, authority_item_id,
-             authority_span_start, authority_span_end
-         ) VALUES(
-             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-             ?15, ?16, ?17, ?18, ?19, ?20
-         )",
-        params![
-            event_id,
-            producer,
-            key,
-            source_sha256,
-            job_id,
-            accepted_at,
-            account.schema_version,
-            account.statement,
-            account.context,
-            account.action,
-            account.result,
-            account.occurred_at,
-            account.occurred_at_precision,
-            account.capture_rule_version,
-            account.authority.host_id,
-            account.authority.thread_id,
-            account.authority.turn_id,
-            account.authority.item_id,
-            i64::try_from(account.authority.span.start).map_err(|_| {
-                AppError::invalid(
-                    "invalid_decision_account",
-                    "Source authority span start exceeds signed 64-bit storage",
-                )
-            })?,
-            i64::try_from(account.authority.span.end).map_err(|_| {
-                AppError::invalid(
-                    "invalid_decision_account",
-                    "Source authority span end exceeds signed 64-bit storage",
-                )
-            })?,
-        ],
+            event_id, producer, producer_key, source_sha256, job_id, accepted_at
+         ) VALUES('dae_' || lower(hex(randomblob(16))), ?1, ?2, ?3, ?4, ?5)",
+        params![producer, key, source_sha256, job_id, accepted_at],
     )?;
     Ok(())
 }
@@ -232,91 +166,56 @@ pub(crate) fn page(
         ));
     }
     let mut statement = connection.prepare(
-        "SELECT sequence, event_id, producer_key, account_schema_version, statement,
-                context, action, result, occurred_at, occurred_at_precision,
-                authority_host_id, authority_thread_id, authority_turn_id,
-                authority_item_id, authority_span_start, authority_span_end
+        "SELECT sequence, event_id, producer_key, source_sha256, job_id, accepted_at
          FROM decision_account_acceptances
-         WHERE sequence > ?1 AND sequence <= ?2
-         ORDER BY sequence ASC
-         LIMIT ?3",
+         WHERE sequence > ?1 AND sequence <= ?2 ORDER BY sequence ASC LIMIT ?3",
     )?;
     let rows = statement.query_map(
         params![
             i64::try_from(after_sequence).map_err(|_| invalid_cursor())?,
             i64::try_from(watermark.sequence).map_err(|_| invalid_cursor())?,
-            i64::try_from(args.limit).map_err(|_| invalid_cursor())?,
+            i64::try_from(args.limit).map_err(|_| invalid_cursor())?
         ],
         |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
-                row.get::<_, u32>(3)?,
+                row.get::<_, String>(3)?,
                 row.get::<_, String>(4)?,
                 row.get::<_, String>(5)?,
-                row.get::<_, String>(6)?,
-                row.get::<_, String>(7)?,
-                row.get::<_, i64>(8)?,
-                row.get::<_, String>(9)?,
-                row.get::<_, String>(10)?,
-                row.get::<_, String>(11)?,
-                row.get::<_, String>(12)?,
-                row.get::<_, String>(13)?,
-                row.get::<_, i64>(14)?,
-                row.get::<_, i64>(15)?,
             ))
         },
     )?;
     let mut events = Vec::new();
+    let mut document_bytes = 0;
     for row in rows {
-        let (
-            sequence,
-            event_id,
-            account_id,
-            account_schema_version,
-            statement,
-            context,
-            action,
-            result,
-            occurred_at,
-            occurred_at_precision,
-            host_id,
-            thread_id,
-            turn_id,
-            item_id,
-            span_start,
-            span_end,
-        ) = row?;
-        let sequence = u64::try_from(sequence).map_err(|_| invalid_feed_state())?;
-        let span_start = u64::try_from(span_start).map_err(|_| invalid_feed_state())?;
-        let span_end = u64::try_from(span_end).map_err(|_| invalid_feed_state())?;
-        events.push(AcceptedAccountEvent {
+        let (sequence, event_id, document_id, source_sha256, job_id, accepted_at) = row?;
+        let (source_name, document) = crate::inbox::accepted_document(
+            config,
+            &library_id,
+            &document_id,
+            &source_sha256,
+            &job_id,
+            &accepted_at,
+        )?;
+        if !events.is_empty() && document_bytes + document.len() > MAX_PAGE_DOCUMENT_BYTES {
+            break;
+        }
+        document_bytes += document.len();
+        events.push(AcceptedDocumentEvent {
             cursor: encode_cursor(&CursorPayload {
                 version: CURSOR_VERSION,
                 kind: CursorKind::Item,
                 library_id: library_id.clone(),
-                sequence,
+                sequence: u64::try_from(sequence).map_err(|_| invalid_feed_state())?,
             })?,
             event_id,
-            account_id,
-            account_schema_version,
-            statement,
-            context,
-            action,
-            result,
-            occurred_at,
-            occurred_at_precision,
-            authority: AuthorityAnchor {
-                host_id,
-                thread_id,
-                turn_id,
-                item_id,
-                span: AuthoritySpan {
-                    start: span_start,
-                    end: span_end,
-                },
-            },
+            document_id,
+            source_name,
+            source_sha256,
+            accepted_at,
+            document,
         });
     }
     let request_cursor = args.after.clone();
@@ -402,32 +301,4 @@ fn invalid_feed_state() -> AppError {
         "invalid_decision_feed_state",
         "the decision-account feed contains invalid stored state",
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_the_bounded_account_shape() -> Result<(), AppError> {
-        let text = concat!(
-            "# Decision\n\nUse one library.\n\n",
-            "## Authority\n\n> use Annals\n\n",
-            "## Context\n\nThe boundary is local.\n\n",
-            "## Action\n\nCreate a feed.\n\n",
-            "## Result\n\nUnknown.\n\n",
-            "## Source\n\n```json\n",
-            "{\"schema_version\":1,\"decision_id\":\"d1\",",
-            "\"occurred_at\":1788436800,",
-            "\"occurred_at_precision\":\"second\",",
-            "\"capture_rule_version\":\"krisis/1\",",
-            "\"authority\":{\"host_id\":\"h\",\"thread_id\":\"t\",",
-            "\"turn_id\":\"u\",\"item_id\":\"i\",",
-            "\"span\":{\"start\":4,\"end\":14}}}\n```\n",
-        );
-        let parsed = parse_account(text, "d1")?;
-        assert_eq!(parsed.statement, "Use one library.");
-        assert_eq!(parsed.authority.span.end, 14);
-        Ok(())
-    }
 }

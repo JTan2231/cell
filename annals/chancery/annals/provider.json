@@ -7,7 +7,7 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Annals owns its named-library catalog, authoritative retained works and source deliveries, stored library instruction revisions, producer-accepted decision accounts and their bounded feed, the revisioned corpus of concepts, parent edges and evidence, examinations, reconciliations, commits, inbox jobs and retries, and installed library/spool state.",
+      "Annals owns its named-library catalog, authoritative retained works and source deliveries, stored library instruction revisions, producer-accepted decision documents and their bounded feed, the revisioned corpus of concepts, parent edges and evidence, examinations, reconciliations, commits, inbox jobs and retries, and installed library/spool state.",
       "Each selected library and canonical reducer are authoritative for its stored records and structural domain transitions. A consuming application defines the interpretation of concepts and edges through that library’s stored instructions; the default frame uses broader/narrower scope."
     ],
     "not_authoritative_for": [

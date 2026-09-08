@@ -1,14 +1,14 @@
 {
   "id": "annals.decision-account.exchange",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
-  "title": "Accept and read Krisis decision accounts",
-  "summary": "Idempotently accept immutable Krisis accounts into one explicitly identified decisions library and read its bounded accepted-account feed.",
+  "title": "Accept and read Krisis decision documents",
+  "summary": "Accept immutable Krisis documents in one explicitly identified decisions library and read complete accepted text through its bounded feed.",
   "use_when": [
-    "Krisis must hand one deterministic decision account to its configured Annals decisions library.",
-    "A local consumer must freeze or page the accepted-account prefix without reading raw account Markdown."
+    "Krisis must hand a document to its configured Annals decisions library.",
+    "A local consumer must freeze or page the accepted-document prefix with complete text."
   ],
   "do_not_use_when": [
     "General source material should enter the primary Annals inbox.",
@@ -17,15 +17,15 @@
   ],
   "outcome": "One durable producer acceptance and unstarted inbox job, an exact idempotent replay, or a bounded immutable feed view fixed to a requested watermark.",
   "effects": [
-    "First acceptance copies unchanged account bytes into a complete producer-identified inbox envelope and appends one immutable acceptance row.",
+    "First acceptance copies unchanged document bytes into a producer-identified inbox envelope and appends one immutable acceptance row.",
     "A decision-config inbox run binds only a fresh empty spool or verifies its existing binding, ignores ordinary incoming files, and dispatches only committed producer-accepted originals or their explicit retry children.",
     "Exact replay and feed reads are side-effect free; conflicting bytes, invalid input, maintenance, insufficient storage, or identity mismatch create no acceptance.",
     "Acceptance starts no source delivery, model run, reconciliation, or corpus transition; later inbox dispatch retains its separate existing effects."
   ],
   "authority": [
-    "Krisis owns decision identification, producer key, account meaning, bounded content, and source anchors.",
-    "Annals owns the configured library and spool identity, accepted bytes, producer idempotency, job identity, event order, and feed projection.",
-    "A feed event records acceptance of one producer account into the dedicated library."
+    "Krisis owns decision identification, document construction, and the producer key. No document content schema is required by Annals.",
+    "Annals owns library and spool identity, accepted bytes, producer idempotency, job identity, event order, and supported accepted-content access.",
+    "A feed event records acceptance of a document, not successful interpretation or enactment of a decision."
   ],
   "success": [
     "A created or replayed receipt identifies contract version, exact library, producer, key, SHA-256, stable original job, and acceptance time without content or paths.",
@@ -38,16 +38,34 @@
     "Stop on missing or mismatched config, schema, library identity, spool identity, envelope, or digest. Do not redirect or edit receipts."
   ],
   "privacy": [
-    "Complete accounts remain private in Krisis handoff state and the Annals decisions spool, library, archives, and backups; model dispatch may later disclose relevant decisions-library context only through the separate inbox contract.",
-    "Feed output omits raw Markdown, authority quotation, transcript, paths, diffs, commands, tool output, prompts, credentials, and general-library content."
+    "Complete documents remain private in producer handoff state and Annals spool, library, archives, and backups. Later model dispatch may disclose document and library context under the inbox contract.",
+    "Feed output includes complete document text, which can include full normalized conversation. Keep it private and out of routine logs. It excludes general-library content."
   ],
   "interfaces": [
-    {"label": "Accept into a named decisions library", "invocation": "/Users/joey/.local/bin/annals library <NAME> inbox accept --producer krisis --key <ID> <FILE>"},
-    {"label": "Freeze named decisions feed", "invocation": "/Users/joey/.local/bin/annals library <NAME> decision-feed watermark"},
-    {"label": "Accept account", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> inbox accept --producer krisis --key <ID> <FILE>"},
-    {"label": "Freeze watermark", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> decision-feed watermark"},
-    {"label": "Read fixed page", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> decision-feed page --watermark <TOKEN> --after <CURSOR> --limit <N>"},
-    {"label": "Rust account exchange", "invocation": "annals_api::Client::{accept,watermark,read_page}"}
+    {
+      "label": "Accept into a named decisions library",
+      "invocation": "/Users/joey/.local/bin/annals library <NAME> inbox accept --producer krisis --key <ID> <FILE>"
+    },
+    {
+      "label": "Freeze named decisions feed",
+      "invocation": "/Users/joey/.local/bin/annals library <NAME> decision-feed watermark"
+    },
+    {
+      "label": "Accept document",
+      "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> inbox accept --producer krisis --key <ID> <FILE>"
+    },
+    {
+      "label": "Freeze watermark",
+      "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> decision-feed watermark"
+    },
+    {
+      "label": "Read fixed page",
+      "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> decision-feed page --watermark <TOKEN> --after <CURSOR> --limit <N>"
+    },
+    {
+      "label": "Rust document exchange",
+      "invocation": "annals_api::Client::{accept,watermark,read_page}"
+    }
   ],
   "dependencies": [],
   "does_not_authorize": [
@@ -57,52 +75,124 @@
   ],
   "promise": {
     "consumers": [
-      {"status": "declared", "statement": "Krisis may submit one immutable schema-one Markdown account per decision, and local consumers may read the resulting accepted-account prefix."}
+      {
+        "status": "declared",
+        "statement": "Krisis may submit immutable text documents; local consumers may read the resulting accepted-document prefix."
+      }
     ],
     "preconditions": [
-      {"status": "declared", "statement": "Every exchange command names an explicit decisions config or a registered decisions name whose managed config binds a library, inbox root, and exact 32-lowercase-hex expected library ID. The current schema, persistent identity, and immutable decisions role must match. Acceptance or dispatch binds or verifies spool identity."},
-      {"status": "declared", "statement": "New acceptance additionally requires no deployment maintenance and enough spool headroom to preserve the configured reserve."}
+      {
+        "status": "declared",
+        "statement": "Every exchange command names an explicit decisions config or a registered decisions name whose managed config binds a library, inbox root, and exact 32-lowercase-hex expected library ID. The current schema, persistent identity, and immutable decisions role must match. Acceptance or dispatch binds or verifies spool identity."
+      },
+      {
+        "status": "declared",
+        "statement": "New acceptance additionally requires no deployment maintenance and enough spool headroom to preserve the configured reserve."
+      }
     ],
     "inputs": [
-      {"status": "declared", "statement": "Acceptance takes producer krisis, one nonblank producer key, and one nonblank UTF-8 Markdown file of at most 1 MiB. The file must be regular, not symbolic. It must contain the ordered schema-one account sections and metadata."},
-      {"status": "declared", "statement": "A page takes one committed watermark, one earlier watermark or item cursor, and a limit from 1 through 200."}
+      {
+        "status": "declared",
+        "statement": "Acceptance takes producer krisis, a trimmed nonblank single-line key of at most 512 bytes, and one regular non-symlink nonblank UTF-8 text file of at most 1 MiB. Accessible text is sufficient; no extension, headings, content schema, source metadata, source lookup, or fitness check is required."
+      },
+      {
+        "status": "declared",
+        "statement": "A page takes one committed watermark, one earlier watermark or item cursor, and a limit from 1 through 200."
+      }
     ],
     "outputs": [
-      {"status": "declared", "statement": "Acceptance JSON reports contract_version, library_id, producer, key, source_sha256, job_id, accepted_at, and acceptance created or replayed."},
-      {"status": "declared", "statement": "Watermark JSON reports contract and library identity plus an opaque token; page JSON echoes library, watermark, request_cursor and next_cursor and returns bounded accepted-account events."}
+      {
+        "status": "declared",
+        "statement": "Acceptance JSON reports contract_version, library_id, producer, key, source_sha256, job_id, accepted_at, and acceptance created or replayed."
+      },
+      {
+        "status": "declared",
+        "statement": "Watermark JSON reports contract and library identity plus an opaque token. Pages echo library, watermark, request_cursor and next_cursor and return complete accepted-document events."
+      }
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Producer acceptance means Annals durably owns one exact complete spool copy and the immutable producer tuple. Source delivery, processing, reconciliation, and corpus application have separate records."},
-      {"status": "declared", "statement": "Each feed event projects the account ID, schema, statement, context, action, result, Unix occurrence time and precision, and exactly one host/thread/turn/item/span authority anchor without returning raw account bytes."}
+      {
+        "status": "declared",
+        "statement": "Producer acceptance means Annals durably owns one exact complete spool copy and the immutable producer tuple. Source delivery, processing, reconciliation, and corpus application have separate records."
+      },
+      {
+        "status": "declared",
+        "statement": "Each event supplies cursor, event_id, document_id equal to the producer key, source_name, source_sha256, accepted_at, and document containing exact unchanged UTF-8 text. Filename and normal storage metadata come from the file and Annals, not required document fields."
+      }
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Producer idempotency is scoped by persistent library ID, immutable decisions role, producer krisis, and producer key; SHA-256 binds exact bytes, job ID binds the original queue item, and event and cursor values are opaque."},
-      {"status": "declared", "statement": "Occurrence time is signed Unix seconds paired with producer precision; authority span is a nonempty unsigned byte range; file and page bounds are bytes and event count respectively."}
+      {
+        "status": "declared",
+        "statement": "Producer idempotency is scoped by persistent library ID, immutable decisions role, producer krisis, and producer key; SHA-256 binds exact bytes, job ID binds the original queue item, and event and cursor values are opaque."
+      },
+      {
+        "status": "declared",
+        "statement": "accepted_at describes Annals acceptance, not occurrence of a decision. SHA-256 identifies exact document bytes. File and page content bounds count UTF-8 bytes; the event limit counts records."
+      }
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "A watermark freezes every committed acceptance through one sequence; pages return the ascending prefix strictly after the requested cursor and no later than that watermark."},
-      {"status": "unsupported", "statement": "No historical Decisions rows, records of decisions not accepted through this feed, raw account body, dispatch result, semantic interpretation, correction, retraction, or consumer acknowledgement appears in feed version one."}
+      {
+        "status": "declared",
+        "statement": "A watermark freezes every committed acceptance through one sequence; pages return the ascending prefix strictly after the requested cursor and no later than that watermark."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The feed includes accepted documents before dispatch and after later processing success or failure. It supplies no historical Decisions rows, unaccepted records, dispatch result, semantic interpretation, correction, retraction, or consumer acknowledgement."
+      }
     ],
     "access": [
-      {"status": "declared", "statement": "Named scope is an identity-checked wrapper over the same account/feed command. Operator-path calls still require explicit --config and reject --library. A name or librarian instruction change cannot bypass immutable decisions admission."},
-      {"status": "declared", "statement": "The supported boundary is the local Annals CLI with an explicit decisions config or registered identity-bound decisions name; acceptance permits only producer krisis and feed commands are read-only."},
-      {"status": "declared", "statement": "With decision_feed configured, Annals rejects direct work add or integration, generic enqueue, ordinary incoming registration, and backlog import. The decisions database rejects these routes through any config, spool, or direct selector. Dispatch permits accepted originals and explicit retry children."},
-      {"status": "unsupported", "statement": "Library override, environment or frontend fallback, direct SQLite access, receipt editing, cross-library query, and remote access are unsupported."}
+      {
+        "status": "declared",
+        "statement": "Named scope is an identity-checked wrapper over the same account/feed command. Operator-path calls still require explicit --config and reject --library. A name or librarian instruction change cannot bypass immutable decisions admission."
+      },
+      {
+        "status": "declared",
+        "statement": "The supported boundary is the local Annals CLI with an explicit decisions config or registered identity-bound decisions name; acceptance permits only producer krisis and feed commands are read-only."
+      },
+      {
+        "status": "declared",
+        "statement": "With decision_feed configured, Annals rejects direct work add or integration, generic enqueue, ordinary incoming registration, and backlog import. The decisions database rejects these routes through any config, spool, or direct selector. Dispatch permits accepted originals and explicit retry children."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Library override, environment or frontend fallback, direct SQLite access, receipt editing, cross-library query, and remote access are unsupported."
+      }
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "First acceptance publishes one complete unstarted envelope, then commits its event. Exact replay returns the original result. Changed bytes conflict without mutation. Recovery resolves publication uncertainty from the envelope."},
-      {"status": "declared", "statement": "Pages are fixed to one watermark, strictly ascending, replay a committed prefix after uncertainty, and preserve the exact request cursor when empty; Annals keeps no consumer cursor."}
+      {
+        "status": "declared",
+        "statement": "First acceptance publishes one complete unstarted envelope, then commits its event. Exact replay returns the original result. Changed bytes conflict without mutation. Recovery resolves publication uncertainty from the envelope."
+      },
+      {
+        "status": "declared",
+        "statement": "Pages are fixed to one watermark, strictly ascending, replay a committed prefix after uncertainty, and preserve the exact request cursor when empty; Annals keeps no consumer cursor."
+      }
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "One call accepts one file of at most 1 MiB; one page returns 1 through 200 requested events; new spool copies preserve the configured available-byte reserve."},
-      {"status": "unspecified", "statement": "No acceptance, queue, dispatch, model, storage, schedule, throughput, quality, or wall-clock service-level objective is promised."}
+      {
+        "status": "declared",
+        "statement": "A file is at most 1 MiB. A page request selects 1 through 200 events, with at most 4 MiB of document bytes excluding JSON and transport fields. Short nonempty pages may continue; only empty pages end the fixed prefix. New spool copies preserve the configured available-byte reserve."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No acceptance, queue, dispatch, model, storage, schedule, throughput, quality, or wall-clock service-level objective is promised."
+      }
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Exchange contract version 1, account schema 1, library schema 6, producer receipt 1, feed cursor 1, provider release, and later inbox or Nucleus protocols are distinct compatibility axes."},
-      {"status": "unsupported", "statement": "Changed accepted bytes, correction, retraction, or a new event type cannot be introduced under this version-one identity."}
+      {
+        "status": "declared",
+        "statement": "Exchange contract 2, library schema 7, producer receipt 1, feed cursor 1, provider release, and later inbox/Nucleus protocols are separate axes. Documents have no content schema version. Migration preserves original sequences, IDs, digests, jobs, times, and cursor meaning; old projections remain historical."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Changed accepted bytes, correction, retraction, or a new event type cannot be introduced under this exchange identity."
+      }
     ],
     "reliances": [
-      {"status": "not_applicable", "statement": "Acceptance and feed reads invoke no Conversations, Nucleus, Clockwork, model, network, or remote service; later dispatch has its own declared Nucleus reliance."}
+      {
+        "status": "not_applicable",
+        "statement": "Acceptance and feed reads invoke no Conversations, Nucleus, Clockwork, model, network, or remote service; later dispatch has its own declared Nucleus reliance."
+      }
     ]
   },
   "manual": "manuals/decision-account-exchange.md"

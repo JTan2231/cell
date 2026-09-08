@@ -34,6 +34,9 @@ const ACCOUNT_RESULT_SCHEMA_ID: &str = "semantics.tool.commit-account-reconcilia
 const ACCOUNT_TOOL_NAME: &str = "commit_account_semantic_reconciliation";
 const ACCOUNT_TOOLSET_NAME: &str = "semantic-account-reconciliation";
 const ACCOUNT_TOOLSET_VERSION: u32 = 1;
+const DOCUMENT_INPUT_SCHEMA_ID: &str = "semantics.tool.commit-document-reconciliation.input.v1";
+const DOCUMENT_RESULT_SCHEMA_ID: &str = "semantics.tool.commit-document-reconciliation.result.v1";
+const DOCUMENT_INSTRUCTIONS: &str = include_str!("../document-reconciliation.md");
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
 const INSTRUCTIONS: &str = r"Maintain one project's authoritative semantic repository from one normalized Decisions lifecycle event. You have exactly one managed tool. For an admitted decision or an effective confirmation, submit a complete atomic reconciliation that includes at least one ground effect citing the exact supplied event_id and decision_id, even when the meaning is already represented. For a dismissal review, withdraw every active grounding whose decision_id is dismissed using unground; preserve history. Define only durable project terms, not incidental implementation nouns. Prefer revise, differentiate, retire, reopen, ground, or unground over duplicate definitions. Active canonical labels must remain unique. Use only the supplied decision and repository snapshot. Call commit_semantic_reconciliation; if it returns a validation error, correct the proposal and retry. Never finish without an accepted tool result.";
@@ -71,6 +74,7 @@ impl NucleusReconciler {
             require_health(&client, deployment_run_id.as_deref()).await?;
             register_contract(&client).await?;
             register_account_contract(&client).await?;
+            register_document_contract(&client).await?;
             Ok(())
         })
     }
@@ -299,7 +303,11 @@ impl NucleusReconciler {
             .block_on(async {
                 let client = self.client()?;
                 require_health(&client, None).await?;
-                let toolset = register_account_contract(&client).await?;
+                let toolset = if intake.account.is_document() {
+                    register_document_contract(&client).await?
+                } else {
+                    register_account_contract(&client).await?
+                };
                 let correlation = match store.account_correlation(&intake.event_id)? {
                     Some(value) => value,
                     None => {
@@ -631,6 +639,16 @@ async fn serve_account_mailbox(
     job_id: &str,
     mut tool_after: u64,
 ) -> Result<u64> {
+    let input_schema_id = if intake.account.is_document() {
+        DOCUMENT_INPUT_SCHEMA_ID
+    } else {
+        ACCOUNT_INPUT_SCHEMA_ID
+    };
+    let result_schema_id = if intake.account.is_document() {
+        DOCUMENT_RESULT_SCHEMA_ID
+    } else {
+        ACCOUNT_RESULT_SCHEMA_ID
+    };
     let job_id = JobId::new(job_id);
     loop {
         let calls = client
@@ -646,7 +664,7 @@ async fn serve_account_mailbox(
             let call = pending.call;
             if call.job_id != job_id
                 || call.tool_name != ACCOUNT_TOOL_NAME
-                || call.arguments_schema_id.as_str() != ACCOUNT_INPUT_SCHEMA_ID
+                || call.arguments_schema_id.as_str() != input_schema_id
             {
                 return Err(Error::domain(
                     "nucleus_tool_contract_mismatch",
@@ -681,7 +699,7 @@ async fn serve_account_mailbox(
                         })?
                         .requester_id,
                 },
-                result_schema_id: SchemaId::new(ACCOUNT_RESULT_SCHEMA_ID),
+                result_schema_id: SchemaId::new(result_schema_id),
                 result: RawValue::from_string(result.json).map_err(|error| {
                     Error::domain(
                         "tool_result_invalid",
@@ -951,11 +969,17 @@ fn build_account_request(
             program: "semantics".to_owned(),
             id: requester_id.to_owned(),
         },
-        ACCOUNT_INSTRUCTIONS,
+        if intake.account.is_document() {
+            DOCUMENT_INSTRUCTIONS
+        } else {
+            ACCOUNT_INSTRUCTIONS
+        },
         prompt,
         invocation,
     );
-    request.developer_instructions = Some(ACCOUNT_DEVELOPER_INSTRUCTIONS.to_owned());
+    request.developer_instructions = Some(if intake.account.is_document() {
+        "Treat source identifiers as opaque. Use next_concept_ids in order. The repository snapshot is complete for the selected revision. Interpret the supplied document under the task instructions; no conversation origin or source lookup is required."
+    } else { ACCOUNT_DEVELOPER_INSTRUCTIONS }.to_owned());
     Ok(request)
 }
 
@@ -994,23 +1018,31 @@ fn account_reconciliation_prompt(
     let next_concept_ids = (next_concept_number..next_concept_number.saturating_add(32))
         .map(crate::domain::concept_id_for)
         .collect::<Vec<_>>();
-    serde_json::to_string(&json!({
-        "decision_account": {
-            "library_id": intake.account.library_id,
-            "event_id": intake.account.event_id,
-            "account_id": intake.account.account_id,
-            "account_schema_version": intake.account.account_schema_version,
-            "statement": intake.account.statement,
-            "context": intake.account.context,
-            "action": intake.account.action,
-            "result": intake.account.result,
-            "occurred_at": intake.account.occurred_at,
-            "occurred_at_precision": intake.account.occurred_at_precision
-        },
-        "repository": repository,
-        "next_concept_ids": next_concept_ids
-    }))
-    .map_err(Into::into)
+    let source = match &intake.account.content {
+        crate::domain::DecisionContent::Document {
+            source_name,
+            document,
+            ..
+        } => json!({
+            "library_id": intake.account.library_id, "event_id": intake.account.event_id,
+            "document_id": intake.account.account_id, "source_name": source_name, "document": document,
+        }),
+        crate::domain::DecisionContent::Legacy(account) => json!({
+            "library_id": intake.account.library_id, "event_id": intake.account.event_id,
+            "account_id": intake.account.account_id, "account_schema_version": account.account_schema_version,
+            "statement": account.statement, "context": account.context, "action": account.action,
+            "result": account.result, "occurred_at": account.occurred_at,
+            "occurred_at_precision": account.occurred_at_precision,
+        }),
+    };
+    let source_key = if intake.account.is_document() {
+        "source_document"
+    } else {
+        "decision_account"
+    };
+    let mut prompt = json!({"repository": repository, "next_concept_ids": next_concept_ids});
+    prompt[source_key] = source;
+    serde_json::to_string(&prompt).map_err(Into::into)
 }
 
 async fn register_contract(client: &NucleusClient) -> Result<ToolsetRegistrationV1> {
@@ -1114,6 +1146,58 @@ async fn register_account_contract(client: &NucleusClient) -> Result<ToolsetRegi
     Ok(registration)
 }
 
+async fn register_document_contract(client: &NucleusClient) -> Result<ToolsetRegistrationV1> {
+    let input = document_input_schema();
+    let result = document_result_schema();
+    for (id, title, schema) in [
+        (
+            DOCUMENT_INPUT_SCHEMA_ID,
+            "Semantics Annals document reconciliation input",
+            input.clone(),
+        ),
+        (
+            DOCUMENT_RESULT_SCHEMA_ID,
+            "Semantics Annals document reconciliation result",
+            result,
+        ),
+    ] {
+        client
+            .register_schema(&LogSchemaV1::new(
+                id,
+                title,
+                "1",
+                "application/schema+json",
+                "semantics",
+                to_raw_value(&schema)
+                    .map_err(|error| Error::domain("nucleus_schema_invalid", error.to_string()))?,
+            ))
+            .await?;
+    }
+    let definitions = ToolsetDefinitionsV1 {
+        version: PROTOCOL_VERSION_V1,
+        tools: vec![ToolDefinitionV1 {
+            name: ACCOUNT_TOOL_NAME.to_owned(),
+            description: "Atomically append one document reconciliation or record no change. Retry after a validation error."
+                .to_owned(),
+            input_schema_id: SchemaId::new(DOCUMENT_INPUT_SCHEMA_ID),
+            input_schema: to_raw_value(&input)
+                .map_err(|error| Error::domain("nucleus_schema_invalid", error.to_string()))?,
+        }],
+    };
+    let registration = ToolsetRegistrationV1::new(
+        ToolsetRef {
+            provider: "semantics".to_owned(),
+            name: "semantic-document-reconciliation".to_owned(),
+            version: ACCOUNT_TOOLSET_VERSION,
+        },
+        TOOLSET_DEFINITIONS_SCHEMA_ID,
+        definitions,
+    )
+    .map_err(|error| Error::domain("nucleus_toolset_invalid", error.to_string()))?;
+    client.register_toolset(&registration).await?;
+    Ok(registration)
+}
+
 fn input_schema() -> Value {
     json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1146,6 +1230,36 @@ fn account_input_schema() -> Value {
             }
         }
     })
+}
+
+fn document_input_schema() -> Value {
+    let mut effects = account_effect_schemas();
+    for effect in &mut effects {
+        if effect["properties"]["type"]["const"] == "ground" {
+            effect["properties"]["source"] = json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "library_id", "event_id", "document_id"],
+                "properties": {
+                    "kind": {"type": "string", "const": "annals_document"},
+                    "library_id": text_schema(),
+                    "event_id": text_schema(),
+                    "document_id": text_schema()
+                }
+            });
+        }
+    }
+    let mut schema = account_input_schema();
+    schema["properties"]["effects"]["minItems"] = json!(0);
+    schema["properties"]["effects"]["items"]["oneOf"] = json!(effects);
+    schema
+}
+
+fn document_result_schema() -> Value {
+    let mut schema = result_schema();
+    schema["oneOf"][0]["properties"]["revision"]["minimum"] = json!(0);
+    schema["oneOf"][0]["properties"]["no_change"] = json!({"type": "boolean"});
+    schema
 }
 
 fn account_effect_schemas() -> Vec<Value> {
@@ -1882,21 +1996,23 @@ mod tests {
             cursor: "PRIVATE_CURSOR".to_owned(),
             event_id: "event-1".to_owned(),
             account_id: "account-1".to_owned(),
-            account_schema_version: 1,
-            statement: "Keep vocabulary authoritative.".to_owned(),
-            context: "A durable boundary is needed.".to_owned(),
-            action: "Used an immutable repository.".to_owned(),
-            result: "Meaning replays.".to_owned(),
-            occurred_at: 17,
-            occurred_at_precision: "second".to_owned(),
-            authority: DecisionAccountAnchor {
-                host_id: "PRIVATE_HOST".to_owned(),
-                thread_id: "PRIVATE_THREAD".to_owned(),
-                turn_id: "PRIVATE_TURN".to_owned(),
-                item_id: "PRIVATE_ITEM".to_owned(),
-                span_start: 4,
-                span_end: 8,
-            },
+            content: crate::domain::DecisionContent::Legacy(crate::domain::LegacyAccountContent {
+                account_schema_version: 1,
+                statement: "Keep vocabulary authoritative.".to_owned(),
+                context: "A durable boundary is needed.".to_owned(),
+                action: "Used an immutable repository.".to_owned(),
+                result: "Meaning replays.".to_owned(),
+                occurred_at: 17,
+                occurred_at_precision: "second".to_owned(),
+                authority: DecisionAccountAnchor {
+                    host_id: "PRIVATE_HOST".to_owned(),
+                    thread_id: "PRIVATE_THREAD".to_owned(),
+                    turn_id: "PRIVATE_TURN".to_owned(),
+                    item_id: "PRIVATE_ITEM".to_owned(),
+                    span_start: 4,
+                    span_end: 8,
+                },
+            }),
         };
         let intake = AccountIntake {
             event_id: account.event_id.clone(),

@@ -3,7 +3,7 @@
 Semantics-Project: conatus
 
 - Keep changes simple. Conatus preserves wants and organizes accepted decision
-  accounts through its dedicated Annals library.
+  documents through its dedicated Annals library.
 - Until the `conatus` Semantics project is registered, use the `cell` repository
   for terminology. After registration, read `semantics.repository.explore`
   through Chancery and query `conatus` before analysis or changes. Do not edit

@@ -719,7 +719,10 @@ fn abandonment_action(state: Option<&JobState>, admitted: bool) -> AppResult<Aba
     }
 }
 
-async fn require_health(client: &NucleusClient, deployment_run_id: Option<&str>) -> AppResult<()> {
+pub(crate) async fn require_health(
+    client: &NucleusClient,
+    deployment_run_id: Option<&str>,
+) -> AppResult<()> {
     let mut health = client.health().await.map_err(client_error)?;
     let mut deployment_proved = false;
     if (health.status != "ok" || !health.accepting_jobs)
@@ -1135,7 +1138,7 @@ fn source_alias(index: usize) -> String {
     format!("m{:04}", index + 1)
 }
 
-fn classifier_cwd(job_id: &str) -> AppResult<PathBuf> {
+pub(crate) fn classifier_cwd(job_id: &str) -> AppResult<PathBuf> {
     classifier_cwd_in(&platform_user_temporary_root()?, job_id)
 }
 

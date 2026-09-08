@@ -8,11 +8,12 @@ use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 use crate::error::AppError;
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 6;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 7;
 const FRESH_STATE_SCHEMA_VERSION: i64 = 3;
 const SCHEMA: &str = include_str!("../schema.sql");
 const MIGRATION_3_TO_4: &str = include_str!("../migrations/3-to-4.sql");
 const MIGRATION_4_TO_5: &str = include_str!("../migrations/4-to-5.sql");
+const MIGRATION_6_TO_7: &str = include_str!("../migrations/6-to-7.sql");
 const MIGRATION_5_TO_6: &str = include_str!("../migrations/5-to-6.sql");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,7 +176,7 @@ pub fn migrate(path: &Path) -> Result<MigrationResult, AppError> {
             if locked_version == CURRENT_SCHEMA_VERSION {
                 transaction.commit()?;
                 false
-            } else if matches!(locked_version, 3..=5) {
+            } else if matches!(locked_version, 3..=6) {
                 if locked_version == 3 {
                     transaction.execute_batch(MIGRATION_3_TO_4).map_err(|error| {
                         AppError::database(
@@ -196,7 +197,8 @@ pub fn migrate(path: &Path) -> Result<MigrationResult, AppError> {
                         )
                     })?;
                 }
-                transaction.execute_batch(MIGRATION_5_TO_6).map_err(|error| {
+                if locked_version <= 5 {
+                    transaction.execute_batch(MIGRATION_5_TO_6).map_err(|error| {
                     AppError::database(
                         "schema_migration_failed",
                         format!(
@@ -204,7 +206,13 @@ pub fn migrate(path: &Path) -> Result<MigrationResult, AppError> {
                         ),
                     )
                 })?;
-                crate::instructions::initialize(&transaction)?;
+                    crate::instructions::initialize(&transaction)?;
+                }
+                transaction
+                    .execute_batch(MIGRATION_6_TO_7)
+                    .map_err(|error| {
+                        AppError::database("schema_migration_failed", error.to_string())
+                    })?;
                 transaction.commit().map_err(|error| {
                     AppError::database(
                         "schema_migration_failed",

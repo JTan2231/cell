@@ -3,6 +3,7 @@
 mod account;
 mod classifier;
 mod digest;
+mod document_command;
 mod email;
 mod error;
 mod model;
@@ -59,6 +60,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Build a decision header and full conversation document without Annals delivery.
+    Document {
+        #[command(subcommand)]
+        command: document_command::Command,
+    },
     /// Hold or restore deployment admission without changing observer history.
     Maintenance {
         #[command(subcommand)]
@@ -254,9 +260,13 @@ fn run(cli: Cli) -> AppResult<()> {
     // Store::open may migrate persistent state even for a diagnostic/read.
     // The maintenance status command remains available without opening it.
     let _admission = deployment_admission(&database)?;
+    if let Command::Document { command } = cli.command {
+        return document_command::run(command);
+    }
     let annals = annals_configuration(cli.annals_binary, cli.annals_config, cli.annals_library_id)?;
     match cli.command {
         Command::Maintenance { .. } => unreachable!("maintenance returned before opening state"),
+        Command::Document { .. } => unreachable!("document returned before opening observer state"),
         Command::Doctor => doctor(&database, annals.as_ref(), cli.json),
         Command::Daily { command: _ } => Err(AppError::new(
             "legacy_surface_retired",
@@ -288,9 +298,10 @@ fn run(cli: Cli) -> AppResult<()> {
                         )
                     })?;
                     account::doctor(annals)?;
-                    if let Some(pending) = store.pending_account()? {
+                    let _processing_lock = store.lock_observation_processing()?;
+                    if let Some(pending) = store.pending_document()? {
                         let receipt = account::accept(&pending, annals, store.state_directory())?;
-                        store.record_annals_acceptance(&pending, &receipt)?;
+                        store.record_document_acceptance(&pending, &receipt)?;
                         print_account_delivery(&pending.account_id, &receipt, cli.json)
                     } else {
                         let result = process_one_observation(&mut store, annals)?;
@@ -315,7 +326,7 @@ fn run(cli: Cli) -> AppResult<()> {
                         print_json(&status)
                     } else {
                         println!(
-                            "Observer baseline: {}\nQueued: {}\nProcessing: {}\nComplete: {}\nFailed: {}\nAccounts pending Annals: {}\nAccounts accepted by Annals: {}",
+                            "Observer baseline: {}\nQueued: {}\nProcessing: {}\nComplete: {}\nFailed: {}\nDocuments pending Annals: {}\nDocuments accepted by Annals: {}",
                             status
                                 .observer_baseline_at
                                 .map_or_else(|| "inactive".to_owned(), |value| value.to_string()),
@@ -516,11 +527,154 @@ fn validate_hook_id(field: &str, value: &str) -> AppResult<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn process_one_observation(
     store: &mut Store,
     annals: &account::AnnalsConfig,
 ) -> AppResult<Option<ProcessResult>> {
-    process_one_observation_for_projection(store, None, false, Some(annals))
+    let baseline = store.observer_baseline_at()?.ok_or_else(|| {
+        AppError::new(
+            "observer_not_activated",
+            "activate the observer before processing completed turns",
+        )
+    })?;
+    let Some(observation) = store.next_observation_before(None)? else {
+        return Ok(None);
+    };
+    store.bind_observation_annals_target(
+        &observation.id,
+        &annals.expected_library_id,
+        account::config_path(annals)?,
+    )?;
+    let directory = store
+        .state_directory()
+        .join("document-runs")
+        .join(format!("{}-{}", observation.id, observation.attempt_epoch));
+    let thread_id = if let Some(id) = observation.thread_id.clone() {
+        id
+    } else {
+        let mut client = AppServerClient::spawn(ClientConfig {
+            stderr_policy: StderrPolicy::Suppress,
+            ..ClientConfig::default()
+        })
+        .map_err(|error| AppError::new("document_source_unavailable", error.to_string()))?;
+        let activity =
+            match client.resolve_turn_activity(&observation.session_id, &observation.turn_id) {
+                Ok(activity) => activity,
+                Err(
+                    error @ (conversations::Error::TurnNotCompleted { .. }
+                    | conversations::Error::TurnNotFound { .. }),
+                ) => {
+                    let observed_at = now_unix();
+                    let not_completed_at =
+                        matches!(error, conversations::Error::TurnNotCompleted { .. })
+                            .then_some(observed_at);
+                    store.defer_observation(
+                        &observation.id,
+                        not_completed_at,
+                        observed_at.saturating_add(5),
+                    )?;
+                    return Ok(Some(ProcessResult {
+                        observation_id: observation.id,
+                        status: "queued".to_owned(),
+                        scope_level: 0,
+                        outcome: None,
+                    }));
+                }
+                Err(error) => {
+                    return Err(AppError::new(
+                        "document_source_unavailable",
+                        error.to_string(),
+                    ));
+                }
+            };
+        activity.turn.reference.thread_id
+    };
+    let mut ineligible = None;
+    let result = document_command::build(
+        document_command::Command::Build {
+            thread_id,
+            turn_id: observation.turn_id.clone(),
+            directory,
+        },
+        |snapshot| {
+            let conversation = snapshot.conversation();
+            let completed_at = conversation
+                .turns
+                .last()
+                .and_then(|turn| turn.completed_at)
+                .ok_or_else(|| {
+                    AppError::new("document_source_invalid", "selected exchange is incomplete")
+                })?;
+            if completed_at < baseline {
+                ineligible = Some((
+                    conversation.thread.reference.host_id.clone(),
+                    conversation.thread.reference.thread_id.clone(),
+                    completed_at,
+                ));
+                return Err(AppError::new(
+                    "document_before_baseline",
+                    "exchange precedes observer activation",
+                ));
+            }
+            store.bind_document_source(&observation.id, snapshot)
+        },
+    );
+    let output = match result {
+        Ok(output) => output,
+        Err(error) => {
+            if let Some((host, thread, completed_at)) = ineligible {
+                store.mark_observation_not_eligible(
+                    &observation.id,
+                    &host,
+                    &thread,
+                    completed_at,
+                    None,
+                )?;
+                return Ok(Some(ProcessResult {
+                    observation_id: observation.id,
+                    status: "complete".to_owned(),
+                    scope_level: 0,
+                    outcome: Some("not_eligible".to_owned()),
+                }));
+            }
+            if matches!(
+                error.code,
+                "document_classification_missing"
+                    | "document_source_invalid"
+                    | "document_prompt_invalid"
+            ) {
+                store.fail_observation(&observation.id, error.code, &error.message)?;
+            }
+            return Err(error);
+        }
+    };
+    let conversation = output.snapshot.conversation();
+    let identity = serde_json::to_string(&(
+        &conversation.thread.reference.host_id,
+        &conversation.thread.reference.thread_id,
+        &observation.turn_id,
+    ))
+    .map_err(|error| AppError::new("document_identity_invalid", error.to_string()))?;
+    let document_id = format!("document_{}", account::sha256(&identity));
+    let markdown = output
+        .snapshot
+        .render(&output.classification)
+        .map_err(|error| AppError::new("document_render_failed", error.to_string()))?;
+    store.complete_document(&observation.id, &document_id, markdown.as_deref())?;
+    Ok(Some(ProcessResult {
+        observation_id: observation.id,
+        status: "complete".to_owned(),
+        scope_level: 0,
+        outcome: Some(
+            if markdown.is_some() {
+                "decision"
+            } else {
+                "no_decision"
+            }
+            .to_owned(),
+        ),
+    }))
 }
 
 #[allow(clippy::too_many_lines)]
@@ -885,7 +1039,7 @@ fn doctor(
             "Codex conversation source is not ready; inspect Conversations diagnostics",
         )
     })?;
-    Runner::for_current_user().doctor()?;
+    document_command::doctor()?;
     account::doctor(annals)?;
     if json_output {
         print_json(&DoctorReport {
