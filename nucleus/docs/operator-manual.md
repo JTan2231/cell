@@ -57,7 +57,8 @@ installed catalog for discovery.
 | Cast | Previously unknown employers and job postings should be discovered and monitored through ordinary HTTP. | Companies and jobs with stable identities, posting inputs, collection request outcomes and observation times, local request budgets, query configuration and consistent exports. | Personal selection, CRM stewardship, application packets, email, application submission or agent execution. |
 | Platter | A retained Cast opportunity needs a private brief and resume with only Jackson bullets tailored, or an authorized daily edition should be prepared and emailed. | Captured posting/career/template inputs, accepted Nucleus stages, fixed-template rendering, job eligibility, frozen editions, daily runner and recorded send outcomes. | Discovery, CRM editing, changes to fixed resume content, employer contact, applications, or Clockwork timer delivery. |
 | Annals | Source wording should be retained or organized in a named library under that library's instructions, or its sources and graph should be read. | The library catalog and each physical library's instruction revisions, retained works, concepts, evidence, reconciliations, corpus revisions, source deliveries, inbox policy, and recovery. | Application workflow decisions, agent-process supervision, cross-library federation, or account telemetry. |
-| Email | A plain-text email, optionally with authorized local files or in-memory attachment bytes, should be sent to the single fixed recipient. | The synchronous frozen Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, remote attachment URLs, or agent execution. |
+| Email | A plain-text email with optional attachments/reply headers should be sent to the fixed recipient, or authorized received Resend account mail should be read. | Frozen submission, fixed outbound addresses, credential loading and bounded receiving transport. | Drafting without sending, arbitrary recipients, receiving-workflow decisions, provider record deletion or agent execution. |
+| Mentor | A daily authored system design problem should be emailed and a complete answer independently critiqued. | Daily reservation, frozen corpus/assignment routing, temporary grading/send data, metadata, expiry and accepted-submission state. | Desktop draft editing, answer archives, continuing tutoring, numeric scores, arbitrary recipients or provider record deletion. |
 | Conversations | Codex tasks on this Mac should be listed, inspected, or searched. | A read-only normalized view over the normal user's Codex App Server. | Decision classification, durable projections, live-process supervision, or Nucleus's isolated job history. |
 | Krisis | Attributable decisions in completed root user turns should be identified and delivered as immutable accounts to the dedicated Annals decisions library. | The observation baseline and coverage, bounded classification, source anchors, account projection, durable outbox, Annals acceptance receipts, and recovery. | Retaining the canonical account library, running the legacy candidate-review workflow, or sending a digest. |
 | Semantics | A registered project folder's authoritative terminology and semantic history should be explored or maintained from accepted accounts in the dedicated Annals decisions library. | Project registration and routing, stable concept identities, append-only semantic revisions and evidence, decision-feed intake, Nucleus reconciliation, and recovery. | General documentation generation, unregistered folders, source-code behavior, or transcript storage. |
@@ -753,6 +754,33 @@ releases under `~/Library/Application Support/Email/install/`, and the
 depends on the installed binary, `RESEND_API_KEY`, and Resend, not on Nucleus or
 Chancery readiness.
 
+Email's reply options are part of the same frozen request as subject, body and
+attachments. Its receiving API reads one bounded metadata page or one selected
+email without retaining, acknowledging or deleting it. Account-read authority
+is separate from sending; the fixed outbound recipient does not limit incoming
+account records. `email::api::Client` invokes the exact installed credential
+wrapper, while direct free functions require the key in the caller environment.
+
+Mentor uses `~/Library/Application Support/MentorMail/mentor.sqlite3`, separate
+from the desktop Mentor app's `Mentor` state. It retains corpus versions and
+assignment/token metadata for no repeats and late replies. Pending answer,
+request and outgoing response content has a 24-hour expiry observed by each
+tick; recorded response acceptance clears that content immediately. Ordinary
+terminal mail metadata is eligible for removal after 35 days, while unresolved
+cancellation correlation remains until Nucleus settles. Mentor has no answer
+or critique history interface. Its cleanup does not remove Nucleus, Resend or
+inbox-provider records, and a stopped worker cannot enforce an exact deletion
+time.
+
+Mentor's explicit `mentor/worker` binding uses Clockwork at a 60-second interval,
+no run-at-load, overlap skip and a 90-second activation limit. Mentor owns the
+configured local daily time, due-date selection, polling progress and recovery.
+Initialization leaves admission paused; schedule enable does not clear pause.
+Disable the worker before initialized maintained deployment, drain existing
+work, and require a backup with no pending answer/request/payload content.
+After deployment, explicitly enable the intended release. These source
+contracts do not establish an installed Mentor provider or active schedule.
+
 Platter's canonical schema-two database is `packets.sqlite3` under
 `~/.local/share/platter`, or the sole predecessor `~/.local/share/job-packets`
 root in place. Both roots are ambiguous and independent custom live libraries
@@ -1210,6 +1238,23 @@ separate, explicit decision after meeting its recovery and retention requirement
 
 ## Add a new requester
 
+Mentor is a bounded independent-answer requester with program `mentor`. Each
+job contains the frozen authored problem/rubric and one extracted email answer.
+It uses `gpt-5.6-terra`, medium reasoning, a 1,200-second active timeout, workspace
+`none`, no local execution, no web and no dynamic tools. The worker persists the
+exact request before admission, checks returned job/request identity, and
+observes progress across ticks without waiting for model completion. A terminal
+failure does not create a replacement attempt automatically.
+
+Mentor validates a completed nonempty critique within 64 KiB and freezes it for
+Email. The product's success evidence is the recorded submission receipt, not
+Nucleus completion or Clockwork exit. Unknown sends retain their exact payload
+and key only until the earlier content deadline or 23 hours from the first
+attempt. Content expiry also queues cancellation by retained job ID. Nucleus
+retains its own request and execution output under the existing retention
+contract. See [Mentor service](../../mentor/docs/service.md) and
+[installation](../../mentor/docs/system-installation.md).
+
 Paperboy is the daily conversation-report requester. Its private schema-one
 database owns briefs, exact Nucleus agent attempts and email attempts. The
 initial agent input contains source pointers and a fixed timeframe only. Narrow
@@ -1528,6 +1573,7 @@ provider registry or documentation storage.
 | New portable invocation meaning or HTTP behavior | Nucleus core/client/daemon | Version the public contract, update examples/tests/docs, then update affected requesters in compatible order. |
 | Codex executable or app-server semantics | Nucleus Codex adapter | Prove the exact version, deploy Nucleus, and check installed readiness. |
 | Nucleus database schema or retention | Nucleus store | Quiesce, back up, migrate and validate, and define database-aware rollback before deployment. |
+| Mentor selection, reply eligibility, corpus, temporary content expiry, grading requests, send recovery or installation | Mentor | Preserve independent answers, frozen assignment/request/send identities, fixed Email addresses, body-free observations, provider retention boundaries and drained content-free backups. |
 | Requester tool arguments, result, or definition | Requester plus immutable Nucleus registration | Publish a new schema/toolset version and keep historical decoding. |
 | Requester prompt, model, timeout, or permission profile | Requester | Use new job IDs for new attempts, verify health capabilities, and rerun domain acceptance tests. |
 | Managed-authentication, canonical-refresh, or attended-login behavior | Nucleus | Quiesce all credential consumers, preserve forward-only authentication, and check account and service readiness. |
@@ -1825,6 +1871,12 @@ PID-aware file lock. Private packet state and database backups are retained.
 - [README](/Users/joey/rust/cell/email/README.md)
 - [CLI contract](/Users/joey/rust/cell/email/docs/cli.md)
 - [User-owned installation](/Users/joey/rust/cell/email/docs/system-installation.md)
+
+### Mentor
+
+- [Service contract](/Users/joey/rust/cell/mentor/docs/service.md)
+- [Installation and maintenance](/Users/joey/rust/cell/mentor/docs/system-installation.md)
+- [Corpus contract](/Users/joey/rust/cell/mentor/content/README.md)
 
 ### Conversations
 

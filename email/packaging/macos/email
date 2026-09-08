@@ -8,6 +8,13 @@ case "${1-}" in
         ;;
 esac
 
+case "${1-}:${2-}:${3-}:${4-}" in
+    receive:--help:*|receive:-h:*|receive:--version:*|receive:-V:*|\
+    receive:list:--help:*|receive:list:-h:*|receive:get:--help:*|receive:get:-h:*)
+        exec "$HOME/Library/Application Support/Email/install/current/libexec/email" "$@"
+        ;;
+esac
+
 if [[ -f "${HOME:?}/.zshrc" ]]; then
     source "$HOME/.zshrc" >/dev/null 2>&1
 fi

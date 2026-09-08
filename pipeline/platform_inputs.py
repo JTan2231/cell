@@ -36,6 +36,8 @@ PRODUCT_RUNTIME_INPUTS = {
                 "platter/src/readiness.rs"),
     "paperboy": ("paperboy/src/main.rs", "paperboy/src/operations.rs",
                  "paperboy/src/store.rs", "paperboy/src/lib.rs"),
+    "mentor": ("mentor/src/main.rs", "mentor/src/runner.rs",
+               "mentor/src/store.rs", "mentor/src/lib.rs"),
 }
 
 # A shared change selects its own suite. Only installation primitives expand
@@ -60,7 +62,7 @@ SHARED_INPUTS = {
 # introduced product also gets this suite. cell-maintenance has fewer consumers.
 MAINTENANCE_CONSUMERS = frozenset((
     "nucleus", "annals", "todo", "decisions", "semantics", "crm",
-    "platter", "paperboy",
+    "platter", "paperboy", "mentor",
 ))
 INSTALL_FIXTURE_CONSUMERS = frozenset((
     "cast", "clockwork", "chancery", "email", "crm", "conversations",

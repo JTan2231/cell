@@ -1,0 +1,238 @@
+{
+  "id": "mentor.installation.operate",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install and operate Mentor email practice",
+  "summary": "Initialize or configure paused Mentor state, install its program/provider release, operate the exact worker binding, and use owned maintenance for drained updates and metadata backups.",
+  "use_when": [
+    "Install, initialize, configure, inspect, pause, schedule, hold, drain, update or recover the Mentor mail service."
+  ],
+  "do_not_use_when": [
+    "The task is desktop Mentor operation, direct database repair, provider credential or DNS changes, or an unapproved live practice run."
+  ],
+  "outcome": "The selected Mentor program, state and worker binding have explicit product-owned configuration and maintenance boundaries without importing desktop state or creating an implicit live schedule.",
+  "interfaces": [
+    {
+      "label": "Initialize paused state",
+      "invocation": "mentor init"
+    },
+    {
+      "label": "Configure local delivery time",
+      "invocation": "mentor configure --time HH:MM --timezone IANA_ZONE"
+    },
+    {
+      "label": "Select receiving route and Email wrapper",
+      "invocation": "mentor configure --receiving-domain DOMAIN --email-executable ABSOLUTE_PATH"
+    },
+    {
+      "label": "Import an authored corpus",
+      "invocation": "mentor import-corpus ABSOLUTE_PATH"
+    },
+    {
+      "label": "Inspect local compatibility and executable presence",
+      "invocation": "mentor --json doctor"
+    },
+    {
+      "label": "Operate exact worker binding",
+      "invocation": "mentor schedule enable|disable|status"
+    },
+    {
+      "label": "Hold or release one owner",
+      "invocation": "mentor --json maintenance hold|release OWNER"
+    },
+    {
+      "label": "Observe or drain existing work",
+      "invocation": "mentor --json maintenance status|drain"
+    },
+    {
+      "label": "Back up drained schema-one state",
+      "invocation": "mentor migrate --backup ABSENT_ABSOLUTE_PATH"
+    },
+    {
+      "label": "Inspect installed artifacts",
+      "invocation": "mentor-install inspect"
+    }
+  ],
+  "effects": [
+    "Initialization creates private schema-one state with the bundled corpus and paused configuration. Configure/import/pause/resume modify only Mentor-owned records.",
+    "Explicit schedule enable registers and selects the exact installed worker; disable affects only mentor/worker. Installation selects product/provider artifacts without enabling practice.",
+    "Maintenance owns one hold; a drain pass can finish already admitted grading and send work and perform expiry. Migration copies only drained metadata/corpus state to a private backup."
+  ],
+  "authority": [
+    "Mentor owns its private state, admission, configuration, corpus import and exact worker definition. Clockwork owns binding mechanics and LaunchAgent/runtime records.",
+    "Cell coordinated deployment owns initialized release updates and recovery ordering. Email and Nucleus keep credential and execution authority."
+  ],
+  "success": [
+    "Initialization returns paused supported state without scheduling. Configuration/import commits selected values while preserving existing assignments.",
+    "A successful schedule operation returns the supported selected binding state; it is separate from Mentor pause and practice success. A supported backup follows drain with no pending text or unresolved jobs/cancellation."
+  ],
+  "failure_and_recovery": [
+    "Reject unsupported state or unsafe paths without creating a second database. Preserve owned holds when drain, backup, dependency readiness or rollback cannot be established.",
+    "Direct first installation is limited to uninitialized state. Disable mentor/worker before initialized coordinated deployment, then explicitly enable the desired current release afterward. Direct selector recovery is unsupported."
+  ],
+  "privacy": [
+    "State is separate from desktop Mentor under Application Support/MentorMail. Neither configuration nor Clockwork definitions contain provider credentials, answers or critiques.",
+    "Migration refuses pending content and unresolved work before copying. Product backups do not erase Nucleus, Resend or inbox records."
+  ],
+  "dependencies": [
+    {
+      "id": "mentor.practice.use",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "does_not_authorize": [
+    "Sending new practice mail merely because installation or initialization was requested, enabling an unrequested schedule, overriding another owner hold, publishing a release, or changing Email/Nucleus credentials."
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read Mentor practice and installation contracts and affected installed provider contracts.",
+    "Use the product initialization/configuration commands; keep program installation, pause/resume and schedule enable separate.",
+    "For initialized updates, disable the exact worker, use maintained Cell deployment, drain existing work and require a content-free private backup.",
+    "Inspect the resulting program, state and binding under the operation authority; resume or enable only the intended admission/binding."
+  ],
+  "checkpoints": [
+    "State root remains MentorMail, not the desktop Mentor state.",
+    "The worker has one exact immutable release, HOME only, interval 60, no run-at-load, overlap skip and timeout 90.",
+    "No unresolved pending content or cancellation is copied into migration backups.",
+    "Provider receipts, Nucleus observations and Clockwork runtime records remain separate success evidence."
+  ],
+  "adaptation": [
+    "If a provider capability is absent, complete its separately authorized compatible installation before enabling dependent work.",
+    "Preserve other owner holds and existing admission pauses across coordinated updates."
+  ],
+  "stop_when": [
+    "An initialized state update attempts direct selector recovery or occurs with an enabled worker.",
+    "Private-state, ownership, drain, dependency capability or backup requirements cannot be established."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current-user operator uses Mentor-owned administration and the maintained Cell installation path for initialized updates."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Administrative authority is separate from practice execution. A first install requires uninitialized state; initialized update/recovery requires coordinated maintenance and a disabled Mentor worker. Scheduling requires the canonical root and a selected immutable installed release."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Administrative inputs are validated daily time, IANA zone, lowercase DNS receiving domain whose complete assignment mailbox fits 254 bytes, absolute Email wrapper path, schema-one corpus file, owner token and private absolute backup destination. A pre-existing backup must exactly match drained state and is not overwritten."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Commands return ok:true with selected operation data under data when --json is requested. Maintenance observations use protocol_version 1 inside data.maintenance. Failure returns ok:false with an error detail. Status counts cover retained records, not lifetime totals; no pending content is exposed. First migration initializes paused schema-one state and returns backup:null."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Paused admission, an enabled Clockwork binding, a maintained hold, a drained queue, a selected release and accepted practice mail are independent states. Initialization does not enable scheduling; enabling a schedule does not clear pause."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Canonical application root is MentorMail; product/provider identity is mentor; stable schedule key is mentor/worker. Release definitions pin immutable executable identity. Daily time is a local HH:MM in an IANA zone; runtime metadata timestamps use Unix seconds UTC."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Doctor inspects only local installation/state compatibility and Email executable presence. Email API/receiving permission, Nucleus execution readiness and live delivery are explicitly not_probed. Schedule status reads the supported owned binding. Drain performs one bounded recovery pass and may require repetition."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future activation, deadline during downtime, provider mail retention or final inbox delivery is established by administration reads."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Private current-user files and an exclusive product runner protect state. Configure and installed schedule operations reject unsupported paths or foreign definitions. Email and Nucleus credentials remain provider-owned."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Initialization is separate from install. Schedule enable selects current exact release and leaves admission pause unchanged. Initialized deployment requires the supported maintained coordinator and disabled worker; direct recovery is rejected. Backup requires drained work and no pending text. Holds persist until the same owner releases them."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "The product supports one canonical scheduled state root, one worker binding, schema-one state, and no desktop database import. Timer delivery, provider operations and state rollback retain their independent limits."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Unsupported database versions fail. There is no predecessor state format or incompatible binary-only rollback. Program and Chancery bundle are staged together; enabling the worker pins the selected release."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general cross-release compatibility window or deployment duration is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Email owns fixed-recipient submission, exact reply metadata and accepted provider receipts. Mentor uses its installed-wrapper typed client; it does not load the credential.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "Email owns bounded account receiving reads and their metadata/content semantics. Mentor owns account-read authority, routing and duplicate handling.",
+        "target": "email",
+        "kind": "data",
+        "contract": "email.message.receive"
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus owns exact constrained job execution, capability readiness, job identity, cancellation and retained execution records.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Clockwork owns exact registered worker activation and runtime observations, not daily selection or practice completion.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Initialized installation and recovery use Cell maintained deployment and shared content-addressed file transactions.",
+        "target": "cell-deployment",
+        "kind": "control"
+      }
+    ]
+  },
+  "manual": "manuals/installation-operate.md"
+}

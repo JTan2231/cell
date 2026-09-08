@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Send a personal email now",
-  "summary": "Immediately send the caller's subject, plain-text body, and optional attachments through Resend to the fixed personal recipient. Attachments can be local files or bytes supplied in memory.",
+  "summary": "Immediately send the caller's plain-text message and optional attachments to the fixed personal recipient, with optional reply routing and thread headers.",
   "use_when": [
     "The user explicitly asks to send an email now to their fixed personal inbox and supplies or approves the subject, body, and any attachment filenames and bytes.",
     "A previously drafted message should now be sent exactly as approved.",
@@ -16,18 +16,20 @@
     "The intended recipient is anyone other than the fixed personal inbox.",
     "The request needs HTML, remote attachment URLs, carbon copies, scheduling, or delivery tracking."
   ],
-  "outcome": "Resend accepts one immediate plain-text email submission containing the caller-provided subject, body, and any attachment filenames and bytes for the fixed recipient.",
+  "outcome": "Resend accepts one immediate plain-text submission with the caller-provided subject, body, optional attachment bytes and optional reply metadata for the fixed recipient.",
   "effects": [
     "Reads `RESEND_API_KEY` from the process environment and makes an authenticated network request to Resend.",
     "Discloses the supplied subject, body, and any attachment filenames and bytes to Resend and the fixed recipient's Gmail provider.",
     "Uses either a fresh generated idempotency key or a validated caller-supplied key in the Resend request.",
     "Uses product-fixed sender and recipient addresses; callers cannot override either address.",
-    "Reads explicitly selected local regular files once before any network request and includes their filenames and exact bytes as attachments."
+    "Reads explicitly selected local regular files once before any network request and includes their filenames and exact bytes as attachments.",
+    "Optional reply_to, In-Reply-To and References values are validated and included in the same frozen provider request. They do not change the fixed sender or recipient."
   ],
   "authority": [
     "Email owns the fixed addresses, request construction, and command result.",
     "A calling product owns its send authorization, occurrence state, exact message, and caller-supplied idempotency key; invoking Email does not create that authority.",
-    "Resend owns submission acceptance and its message record; Gmail owns final delivery and inbox receipt."
+    "Resend owns submission acceptance and its message record; Gmail owns final delivery and inbox receipt.",
+    "The caller owns authorization for the Reply-To mailbox and the meaning and exact ordered values of thread headers. Email accepts no arbitrary header map."
   ],
   "success": [
     "The command exits successfully and reports the Resend message identifier returned for the accepted submission.",
@@ -44,7 +46,8 @@
     "A caller-supplied idempotency key also leaves the machine for Resend and must not contain secrets or message content.",
     "Email does not retain the subject, body, attachments, API key, or a delivery history in local product state.",
     "The installed wrapper sources `~/.zshrc`, extracts only `RESEND_API_KEY`, and scrubs unrelated caller environment variables before starting the payload.",
-    "Only attachment basenames and captured contents are transmitted; local source paths are not included in the provider payload or error diagnostics."
+    "Only attachment basenames and captured contents are transmitted; local source paths are not included in the provider payload or error diagnostics.",
+    "Reply addresses and RFC thread IDs are disclosed to Resend and Gmail and remain part of the exact idempotent payload. Email retains no thread state."
   ],
   "interfaces": [
     {
@@ -66,6 +69,10 @@
     {
       "label": "Send body and attachment bytes from stdin",
       "invocation": "email --payload-stdin --idempotency-key KEY SUBJECT -"
+    },
+    {
+      "label": "Send an answer in an email thread",
+      "invocation": "email --payload-stdin --idempotency-key KEY --reply-to ADDRESS --in-reply-to '<MESSAGE_ID>' --reference '<MESSAGE_ID>' SUBJECT -"
     }
   ],
   "does_not_authorize": [
@@ -107,6 +114,10 @@
       {
         "status": "declared",
         "statement": "--payload-stdin with body - accepts one JSON object containing UTF-8 body and ordered attachments, each with filename and base64 content. It conflicts with --attach. Unknown fields, invalid base64 or unsafe filenames are rejected before network submission."
+      },
+      {
+        "status": "declared",
+        "statement": "Optional --reply-to accepts one ASCII mailbox without a display name, at most 254 bytes with a 64-byte dot-atom local part and 63-byte DNS labels. --in-reply-to accepts one bracketed ASCII RFC Message-ID without whitespace, inner angle brackets, backslash or double quote, at most 998 bytes. Repeated --reference preserves order and allows at most 64 IDs and 8192 bytes including spaces. No arbitrary headers are accepted."
       }
     ],
     "outputs": [
@@ -149,6 +160,10 @@
       {
         "status": "not_applicable",
         "statement": "Email publishes no pricing, token, storage, or delivery-time measurement unit."
+      },
+      {
+        "status": "declared",
+        "statement": "In-Reply-To and References contain RFC Message-IDs, not Resend provider IDs. Reply routing and ordered thread IDs belong to the exact payload identified by a supplied idempotency key."
       }
     ],
     "completeness_and_freshness": [
@@ -177,6 +192,10 @@
       {
         "status": "unsupported",
         "statement": "Chancery discovery, binary presence, API-key availability, or possession of an idempotency key grants no send authority or access to another address."
+      },
+      {
+        "status": "declared",
+        "statement": "email::api::Client selects one absolute installed wrapper path and supplies content on stdin without reading RESEND_API_KEY. Direct free Rust functions use the caller environment credential. Both preserve fixed outbound addresses. api::recipient and api::sender expose those provider-owned values."
       }
     ],
     "lifecycle_and_consistency": [
@@ -191,6 +210,10 @@
       {
         "status": "declared",
         "statement": "After ambiguous failure, the caller inspects Resend before any separately authorized retry when avoiding a duplicate matters; Email has no queued operation to resume."
+      },
+      {
+        "status": "declared",
+        "statement": "Reply options remain frozen with the message and attachments across transport retries. Email does not retain or repair a thread; the receiving email client decides grouping."
       }
     ],
     "operational_limits": [
@@ -205,6 +228,10 @@
       {
         "status": "unspecified",
         "statement": "No maximum message-size promise beyond provider acceptance, throughput objective, rate-limit allocation, or provider service-level objective is declared."
+      },
+      {
+        "status": "declared",
+        "statement": "The typed installed-wrapper Client bounds each invocation to 120 seconds, receives at most 4096 receipt bytes, and performs no automatic process retry. Its timeout or process failure can leave send acceptance unknown. The transport does not follow redirects."
       }
     ],
     "compatibility_and_evolution": [
@@ -219,6 +246,10 @@
       {
         "status": "declared",
         "statement": "Release 0.5.1 adds --payload-stdin to attachment contract 4. Existing subject/body and --attach invocations retain their behavior. Callers requiring byte input must check the selected executable advertises the new flag."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 4 adds optional reply fields through ReplyOptions and send_with_options while preserving Message, send and send_with_attachments. The new receive list/get CLI forms are reserved; -- before send positionals preserves literal subjects that match a reserved form. Existing attachment and payload-stdin behavior remains supported."
       }
     ],
     "reliances": [

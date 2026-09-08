@@ -2,7 +2,8 @@
 
 Email is a CLI that sends one caller-provided
 subject and plain-text body immediately through Resend from
-`Codex <codex@joeytan.dev>` to `j.tan2231@gmail.com`.
+`Codex <codex@joeytan.dev>` to `j.tan2231@gmail.com`. It also reads received
+messages from the configured Resend account without retaining them locally.
 
 ```sh
 email 'Subject' 'Body'
@@ -41,7 +42,8 @@ cd /Users/joey/rust/cell/email
 The installed command is `~/.local/bin/email`. Installation details and
 recovery boundaries are in [docs/system-installation.md](docs/system-installation.md).
 The [Chancery provider for this release](chancery/provider.json) lists all
-supported send capabilities. Select `email.message.send`, then use
+supported transport capabilities. Select `email.message.send` or
+`email.message.receive`, then use
 `chancery resolve email.message.send` to read its contract, external dependencies,
 sources, and declared gaps. Resolution does not load credentials, check Resend,
 or send a message.
@@ -66,3 +68,20 @@ through the Rust API or fetch remote attachments.
 Callers holding attachment bytes in a database can use `--payload-stdin` with
 body `-` to supply JSON containing the body and ordered base64 attachments.
 See the [CLI contract](docs/cli.md). Email retains no local payload files.
+
+`ReplyOptions { reply_to, in_reply_to, references }` and
+`send_with_options(&message, &attachments, &options)` add reply routing and
+thread headers. Existing `Message`, `send`, and `send_with_attachments` callers
+keep their behavior. Reply routing does not change the fixed sender or recipient.
+
+`list_received(&ReceivedPageRequest)` returns one `ReceivedPage`, and
+`get_received(id)` returns one `ReceivedMessage`. The caller owns the read
+authorization, page traversal, routing, deduplication and any retained records.
+These free functions read the credential from the process environment.
+
+`Client::new(absolute_installed_wrapper)` provides asynchronous
+`send_with_options`, `list_received`, and `get_received` methods with the same
+types. It invokes that exact Email CLI without reading the credential in the
+requester. It passes send bodies and attachment bytes on stdin, bounds process
+output and execution time, and never retries a process invocation. The installed
+wrapper retains credential loading authority. See [receiving](docs/receiving.md).

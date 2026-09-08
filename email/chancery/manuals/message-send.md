@@ -129,3 +129,44 @@ retains no local attachment copy or send history after exit.
 
 The flag is additive in Email 0.5.1 under attachment contract 4. A caller that
 needs byte input must select an executable that advertises `--payload-stdin`.
+
+## Reply routing and thread headers
+
+Contract 4 also supports `--reply-to ADDRESS`, `--in-reply-to MESSAGE_ID`, and
+repeated `--reference MESSAGE_ID` flags. These optional values belong to the
+exact frozen request and must remain identical when the same idempotency key
+is reused. They do not change Email's fixed sender or recipient.
+
+The caller must authorize the reply mailbox. Email accepts one ASCII mailbox
+without a display name, at most 254 bytes, with a dot-atom local part of at
+most 64 bytes and DNS labels of at most 63 bytes. A Message-ID must be one
+bracketed ASCII ID such as `<answer@example.com>`, at most 998 bytes, with no
+whitespace, inner angle brackets, backslash or double quote. References
+preserve caller order, with at most 64 IDs and 8192 bytes including spaces.
+Email accepts no arbitrary email headers.
+
+```sh
+email --payload-stdin --idempotency-key mentor/critique/answer-id \
+  --reply-to mentor-assignment@account.resend.app \
+  --in-reply-to '<answer@example.com>' \
+  --reference '<problem@example.com>' --reference '<answer@example.com>' \
+  'Re: Design a rate limiter' -
+```
+
+`In-Reply-To` and `References` use RFC Message-IDs, not Resend provider IDs.
+Resend and Gmail receive these fields. Gmail decides how the thread appears;
+submission acceptance does not establish threading or final delivery. Email
+retains no thread state. Receiving is separately documented by
+`email.message.receive` and requires its own read authority.
+
+Rust callers keep `Message`, `send` and `send_with_attachments`. The additive
+`ReplyOptions` and `send_with_options` API carries the reply fields. Direct
+free functions read the process credential. `api::Client::new` selects one
+absolute installed wrapper and supplies the body and attachment bytes on
+stdin; it does not read the credential. That client performs no process retry,
+bounds each command to 120 seconds, and reads at most 4096 receipt bytes.
+It discards child stderr and returns a bounded command error. A timeout can
+leave send acceptance unknown. The HTTP transport does not follow redirects.
+
+The new `receive list/get` CLI forms are reserved. Use `--` before literal send
+positionals to avoid a collision, for example `email -- receive list`.
