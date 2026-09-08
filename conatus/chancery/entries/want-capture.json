@@ -1,0 +1,125 @@
+{
+  "id": "conatus.want.capture",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Capture a want in its source wording",
+  "summary": "Preserve one supplied want and its source reference as durable Conatus intake for later organization in its Annals library.",
+  "use_when": [
+    "The user expresses a want that should be preserved exactly and related to subsequent decisions."
+  ],
+  "do_not_use_when": [
+    "The input is only an assistant suggestion or hypothetical example.",
+    "The requested outcome is task planning, inferred qualification extraction, immediate implementation, or a model examination."
+  ],
+  "outcome": "One local immutable intake document records the want wording and source reference, awaiting update.",
+  "effects": [
+    "Writes one local want intake record and its frozen outgoing document.",
+    "Does not enqueue, run a model, or change an Annals corpus."
+  ],
+  "authority": [
+    "The user source defines the want. Conatus owns capture and provenance. Annals later owns retained library interpretation."
+  ],
+  "success": [
+    "The capture receipt identifies the committed local want record."
+  ],
+  "failure_and_recovery": [
+    "An input or storage error does not establish capture. Inspect the returned error before supplying a corrected input."
+  ],
+  "privacy": [
+    "The full wording and source reference remain in local Conatus state. Later update can provide them to Annals and its model integration."
+  ],
+  "interfaces": [
+    {
+      "label": "Capture text",
+      "invocation": "/Users/joey/.local/bin/conatus want add <TEXT> --source <SOURCE>"
+    },
+    {
+      "label": "Capture file",
+      "invocation": "/Users/joey/.local/bin/conatus want add --file <FILE> --source <SOURCE>"
+    }
+  ],
+  "does_not_authorize": [
+    "Publishing private content, directly editing Annals state, or changing unrelated product state."
+  ],
+  "promise": {
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The current local user invokes the Conatus CLI. --state-dir selects private Conatus state. No remote API or multi-user authorization surface is provided."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Contract version 1 describes Conatus 0.1.0 public semantics independently of Annals, feed, library schema, or Clockwork versions."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general cross-release compatibility or deprecation window is promised."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "unspecified",
+        "statement": "Storage capacity and wall-clock completion bounds are not specified."
+      }
+    ],
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "A local user or agent captures one actual user-authored want from conversation or another identified source."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Conatus state is initialized and writable. The caller supplies one nonblank UTF-8 statement and its source-reference string."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Exactly one text argument, --file input, or --stdin stream, plus --source text. File and stream transport do not authorize source modification."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "JSON {ok:true,data:...} returns the committed intake record. Errors use {ok:false,error:string}."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Want wording is retained exactly. The source reference is opaque caller-supplied text and is not fetched or verified. No conditions, deadlines, priorities, lifecycle fields, or additional wants are inferred."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Want intake IDs use want- followed by a UUIDv7. captured_at is the UTC Unix-second time of local capture, not source authorship. The work name is the intake ID; the outgoing filename adds .md."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "A successful capture reports the locally committed complete wording and source reference. It does not establish Annals enqueue, work retention, or interpretation."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Capture commits local intake and its frozen outgoing document. A later update forwards pending documents. Capture runs no model and does not change the Annals graph."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "Capture writes only Conatus local state and invokes no model, Annals, or network service."
+      }
+    ]
+  },
+  "manual": "manuals/want-capture.md"
+}

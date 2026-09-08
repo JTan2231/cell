@@ -1,0 +1,42 @@
+{
+  "schema_version": 3,
+  "provider": {
+    "id": "conatus",
+    "name": "Conatus",
+    "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Conatus owns captured want wording and source references, accepted decision-feed intake, the cursor baseline, frozen outgoing source documents, handoff receipts, local processing gates, and product views. It owns the instruction document selected in its dedicated Annals library."
+    ],
+    "not_authoritative_for": [
+      "Annals owns retained works, library and instruction identities, evidence, concept graph, reconciliations, revisions, inbox processing and model-result recovery. Krisis owns decision identification; accepted accounts do not prove enactment or current force. Nucleus owns model execution and Clockwork owns activation."
+    ],
+    "inventory": {
+      "covers": [
+        "Public Conatus want capture, library exploration, initialization, decision-feed update, instruction selection, bounded recovery, local pause, installation and schedule preparation in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help/version display, internal implementation, direct database edits, historical imports, task planning, progress measurement, notifications, remote sharing, and current installation or runtime readiness."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Interfaces are local current-user CLI operations over explicitly selected private state and pinned Annals libraries. Each operation states its own effects; read access is not mutation or disclosure authority."
+    ],
+    "shared_privacy_and_retention": [
+      "Conatus state retains source wording, account fields, references and handoff documents. Annals and Nucleus can retain complete sources and model context during interpretation. No automatic pruning, remote sharing or deletion interface is supplied."
+    ],
+    "compatibility_and_retirement": [
+      "Conatus provider release and entry versions are distinct from its state schema, Annals schemas and Nucleus/Clockwork contracts. No general deprecation or compatibility window is promised."
+    ],
+    "operational_limits": [
+      "List reads default to 20 with a maximum of 100. Source capture accepts one nonblank UTF-8 want. Background activation is separately selected and does not promise a completion time. No storage capacity, throughput or service-level objective is promised."
+    ]
+  },
+  "entries": [
+    "entries/want-capture.json",
+    "entries/library-explore.json",
+    "entries/update-operate.json"
+  ]
+}

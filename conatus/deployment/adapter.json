@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "product": "conatus",
+  "application": "Conatus",
+  "dependencies": ["annals"],
+  "description": "Select Conatus programs and their matching provider without changing runtime state or schedules.",
+  "adapter_binary": "conatus-install"
+}

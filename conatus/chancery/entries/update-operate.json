@@ -1,0 +1,207 @@
+{
+  "id": "conatus.update.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Initialize and update Conatus associations",
+  "summary": "Initialize the dedicated library and feed baseline, process new inputs through Annals, inspect or recover failures, and separately prepare background activation.",
+  "use_when": [
+    "Conatus needs initialization, feed intake, queued processing, instruction selection, explicit retry, re-examination, pause/resume, installation, or schedule preparation."
+  ],
+  "do_not_use_when": [
+    "Only source capture or read-only exploration is wanted.",
+    "Historical feed import, task planning, measured progress, direct Annals database edits, or implicit scheduling is requested."
+  ],
+  "outcome": "The selected initialization, processing, recovery, instruction, installation, or schedule-preparation operation has its own durable receipt and stated effect.",
+  "effects": [
+    "May create a named general library, append instructions, and persist Conatus configuration and feed intake.",
+    "Update enqueues immutable documents and runs Annals automatic integration. Retry and re-examination can use model allowance and apply valid changes.",
+    "Installation changes only the packaged release selection; separately requested Clockwork binding selection activates the runner."
+  ],
+  "authority": [
+    "Conatus owns intake, baseline, handoff, framing and views. Annals owns library content, graph interpretation, model submission and recovery. Clockwork owns activation; Nucleus owns execution."
+  ],
+  "success": [
+    "Initialization records the selected identities and baseline. Processing success is established by the relevant intake, queue, work or reconciliation receipt.",
+    "Installation or schedule generation alone does not prove a running or ready product."
+  ],
+  "failure_and_recovery": [
+    "Retain captured inputs after handoff errors. Resume normal pending work with update once the dependency is available.",
+    "Use an explicit failed-job interval for retry and a selected retained input for re-examination. Do not infer failed domain work from runtime exit alone.",
+    "Keep source, application, installation and activation failures distinct; do not reset the baseline to recover a failed handoff."
+  ],
+  "privacy": [
+    "Conatus state, Annals works/spool and Nucleus integration context can retain full private source material. Schedule definitions retain selected paths, not credentials."
+  ],
+  "interfaces": [
+    {
+      "label": "Initialize",
+      "invocation": "/Users/joey/.local/bin/conatus init --annals <ABS> --decisions-config <ABS>"
+    },
+    {
+      "label": "Update",
+      "invocation": "/Users/joey/.local/bin/conatus update"
+    },
+    {
+      "label": "Retry interval",
+      "invocation": "/Users/joey/.local/bin/conatus retry --from <JOB_ID> --through <JOB_ID>"
+    },
+    {
+      "label": "Re-examine",
+      "invocation": "/Users/joey/.local/bin/conatus reexamine <ID>"
+    },
+    {
+      "label": "Select instructions",
+      "invocation": "/Users/joey/.local/bin/conatus instructions set --file <FILE>"
+    }
+  ],
+  "does_not_authorize": [
+    "Publishing private content, directly editing Annals state, or changing unrelated product state."
+  ],
+  "promise": {
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The current local user invokes the Conatus CLI. --state-dir selects private Conatus state. No remote API or multi-user authorization surface is provided."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Contract version 1 describes Conatus 0.1.0 public semantics independently of Annals, feed, library schema, or Clockwork versions."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general cross-release compatibility or deprecation window is promised."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "unspecified",
+        "statement": "Storage capacity and wall-clock completion bounds are not specified."
+      }
+    ],
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "A local operator initializes Conatus, updates its decision associations, changes the library instructions, explicitly recovers selected work, or prepares its separately activated schedule."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Initialization requires the Annals executable, an explicit decisions-library config, and writable Conatus and named-library state. Updates require those pinned identities and Annals inbox readiness; model integration requires Annals' configured Nucleus path. Retry start requires the Annals inbox paused and no active processing job; Conatus pause is a separate local gate. Re-examination requires a retained work. Scheduling additionally requires a staged release and Clockwork."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "init selects executable, decisions config, optional Annals state root and named library. update consumes new events and pending local handoffs. retry selects an inclusive failed Annals job-ID interval. reexamine selects one Conatus input. instructions set accepts one file. pause/resume selects the local processing gate. Installation and schedule-definition use explicit candidate and output paths."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Product commands return JSON success data or error text. Init retains configuration, library identities, and initial cursor. Update reports intake, handoff, and Annals processing outcomes. A partial failure persists its update report before returning an error; status keeps that report available independently of Annals readiness. Retry and re-examination retain Annals domain receipts. Packaging commands report release/definition outcomes separately."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Initialization starts from the current accepted-account feed watermark. Feed projections preserve account fields and source identities. Library instructions define service-to-want interpretation while Annals keeps immutable works and structural validation. Changing instructions runs no model and does not reinterpret history."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "The feed cursor is opaque and source-library-bound. Each feed event and its cursor advancement commit atomically in Conatus. Named target and source-library IDs are pinned. Retry boundaries are Annals job IDs; local captured_at and queued_at describe Conatus intake and handoff in UTC Unix seconds. The proposed schedule activates every 300 seconds with run_at_load and overlap skip."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Each update consumes the new accepted feed prefix through its chosen watermark. Captured, queued, retained, and interpreted are distinct results. Generic enqueue has no producer-key idempotency; a duplicate retained work alone does not establish examination."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No maximum schedule delay, queue-drain deadline, or interpretation completion time is promised."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Conatus serializes its mutating update paths. Input events and frozen outgoing documents survive handoff failure. New documents are enqueued without prior work add; Annals owns retention and automatic application. Failed attempts require explicit bounded retry. Annals preserves a committed or recorded result after later runtime failure."
+      },
+      {
+        "status": "declared",
+        "statement": "Library initialization installs no schedule or model job. Installation does not initialize state or change an active schedule. Definition generation does not register or enable Clockwork. Pause gates subsequent update calls. An active update finishes and explicit retry or re-examination remains available. Pause does not cancel admitted Annals work or disable a Clockwork binding."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Named library creation, pinned identity and stored instruction selection depend on Annals.",
+        "target": "annals",
+        "kind": "control",
+        "contract": "annals.library.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Accepted accounts and their bounded opaque-cursor feed supply decision intake.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.decision-account.exchange"
+      },
+      {
+        "status": "declared",
+        "statement": "Queueing, retention, automatic integration and bounded retry depend on the Annals inbox.",
+        "target": "annals",
+        "kind": "control",
+        "contract": "annals.inbox.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Explicit re-examination uses Annals integration and its currentness and domain-result rules.",
+        "target": "annals",
+        "kind": "control",
+        "contract": "annals.work.integrate"
+      },
+      {
+        "status": "declared",
+        "statement": "Separate registration and activation of the generated schedule uses Clockwork; runtime exit is not Conatus domain success.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      }
+    ]
+  },
+  "manual": "manuals/update-operate.md",
+  "dependencies": [
+    {
+      "id": "annals.library.operate",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "annals.decision-account.exchange",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "annals.inbox.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "annals.work.integrate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+{
+  "id": "conatus.library.explore",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Read wants and their decision associations",
+  "summary": "Read captured wants, accepted decision projections, Annals evidence and graph history, and the progress of intake handoffs.",
+  "use_when": [
+    "Captured wants, their associated decisions, source evidence, history, or outstanding processing should be inspected."
+  ],
+  "do_not_use_when": [
+    "New model work, source capture, graph changes, deployment, or scheduling is requested."
+  ],
+  "outcome": "A read of selected local intake and available Annals library records, with their different freshness boundaries visible.",
+  "effects": [
+    "Reads local intake and supported Annals views.",
+    "Starts no model and changes no domain records."
+  ],
+  "authority": [
+    "Conatus owns intake and handoff facts. Annals owns work, evidence, concept and revision facts."
+  ],
+  "success": [
+    "The response identifies the selected input or requested collection and separates missing Annals state from local capture."
+  ],
+  "failure_and_recovery": [
+    "A failed Annals read does not erase captured input or prove failed interpretation. Inspect library and inbox state when the dependency is available."
+  ],
+  "privacy": [
+    "Responses may include complete want wording, decision fields, source references, and exact evidence. Do not publish them implicitly."
+  ],
+  "interfaces": [
+    {
+      "label": "List wants",
+      "invocation": "/Users/joey/.local/bin/conatus want list --limit 20"
+    },
+    {
+      "label": "Read input",
+      "invocation": "/Users/joey/.local/bin/conatus want show <ID>"
+    },
+    {
+      "label": "Read decisions",
+      "invocation": "/Users/joey/.local/bin/conatus decision list --limit 20"
+    },
+    {
+      "label": "Read graph",
+      "invocation": "/Users/joey/.local/bin/conatus graph"
+    },
+    {
+      "label": "Inspect processing",
+      "invocation": "/Users/joey/.local/bin/conatus status"
+    }
+  ],
+  "does_not_authorize": [
+    "Publishing private content, directly editing Annals state, or changing unrelated product state."
+  ],
+  "promise": {
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The current local user invokes the Conatus CLI. --state-dir selects private Conatus state. No remote API or multi-user authorization surface is provided."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Contract version 1 describes Conatus 0.1.0 public semantics independently of Annals, feed, library schema, or Clockwork versions."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general cross-release compatibility or deprecation window is promised."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "unspecified",
+        "statement": "Storage capacity and wall-clock completion bounds are not specified."
+      }
+    ],
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "A local user or agent reads captured wants, accepted decision projections, their Annals organization, or processing state."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Conatus state is initialized. Annals-backed reads also require the configured Annals executable and pinned named library to be readable."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "want or decision list selects a source kind with --limit; show selects one intake ID. graph selects the current Annals graph. history selects a bounded Annals revision history. status selects current local intake and available inbox state."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "JSON uses {ok:true,data:...} or {ok:false,error:string}. Lists default to 20 records and allow 1 through 100. A selected intake show separates record, retention, interpretation, and associations; each remote read has available data or its own error. Annals unavailability is reported separately from locally retained input."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Captured wants are input assertions. Decision rows are deterministic projections of accepted feed fields, not raw account Markdown or retrieved conversation quotations. Graph edges express interpretation under the selected library instructions, not measured progress or current force."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Local IDs distinguish want and decision inputs; decision IDs are decision- followed by SHA-256 of source library ID, colon, and event ID. Annals concept IDs, work names, revisions, and feed event/account IDs retain their separate namespaces. Intake timestamps are UTC Unix seconds; source occurrence precision is preserved."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Lists select retained Conatus intake by source kind. Status counts name the intake kind and queued or pending handoff selection. The stored cursor marks consumed decision-feed coverage, not interpreted coverage. Graph bounds and Annals current reads retain Annals semantics; a recent graph revision does not prove all captured inputs were interpreted."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Reads start no model and do not change intake, library instructions, source retention, or the corpus. Local and Annals reads are not one cross-system snapshot."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Graph, history, work and association reads use the selected Annals corpus interfaces.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.corpus.explore"
+      }
+    ]
+  },
+  "manual": "manuals/library-explore.md",
+  "dependencies": [
+    {
+      "id": "annals.corpus.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
+  ]
+}

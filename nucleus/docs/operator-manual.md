@@ -57,6 +57,7 @@ installed catalog for discovery.
 | Cast | Previously unknown employers and job postings should be discovered and monitored through ordinary HTTP. | Companies and jobs with stable identities, posting inputs, collection request outcomes and observation times, local request budgets, query configuration and consistent exports. | Personal selection, CRM stewardship, application packets, email, application submission or agent execution. |
 | Platter | A retained Cast opportunity needs a private brief and resume with only Jackson bullets tailored, or an authorized daily edition should be prepared and emailed. | Captured posting/career/template inputs, accepted Nucleus stages, fixed-template rendering, job eligibility, frozen editions, daily runner and recorded send outcomes. | Discovery, CRM editing, changes to fixed resume content, employer contact, applications, or Clockwork timer delivery. |
 | Annals | Source wording should be retained or organized in a named library under that library's instructions, or its sources and graph should be read. | The library catalog and each physical library's instruction revisions, retained works, concepts, evidence, reconciliations, corpus revisions, source deliveries, inbox policy, and recovery. | Application workflow decisions, agent-process supervision, cross-library federation, or account telemetry. |
+| Conatus | Wants should be preserved in their source wording and accepted decisions organized by which wants they appear to serve. | Verbatim want intake, decision-feed cursor and projections, frozen outgoing documents, handoff receipts, library instructions, and product views. | Inventing wants or qualifications, measuring progress, task planning, decision classification, or owning Annals model execution. |
 | Email | A plain-text email, optionally with authorized local files or in-memory attachment bytes, should be sent to the single fixed recipient. | The synchronous frozen Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, remote attachment URLs, or agent execution. |
 | Conversations | Codex tasks on this Mac should be listed, inspected, or searched. | A read-only normalized view over the normal user's Codex App Server. | Decision classification, durable projections, live-process supervision, or Nucleus's isolated job history. |
 | Krisis | Attributable decisions in completed root user turns should be identified and delivered as immutable accounts to the dedicated Annals decisions library. | The observation baseline and coverage, bounded classification, source anchors, account projection, durable outbox, Annals acceptance receipts, and recovery. | Retaining the canonical account library, running the legacy candidate-review workflow, or sending a digest. |
@@ -147,6 +148,7 @@ Krisis observer ----> Conversations
 Krisis observer ----> Annals decisions-library acceptance
 Annals decision feed -> Semantics --> Conversations exact cwd
 Semantics -----------> registered project semantic repositories
+Annals decision feed -> Conatus intake -> named Conatus Annals inbox/library
 
 installed product releases -- publish --> Chancery provider bundles
 interactive agent ----------- reads ----> Chancery
@@ -816,6 +818,24 @@ enables no schedule. The catalog name resolves to a persistent library ID;
 background callers pin that ID. Each library stores its instruction revisions
 and current selection. The configured primary and dedicated decisions libraries
 remain separately selected unless explicitly registered.
+
+Conatus uses a dedicated named general Annals library. Its local intake preserves
+want wording and source references, accepted decision-feed fields, an opaque
+cursor, frozen outgoing documents, and handoff receipts. Each feed event and
+cursor advancement commit together before forwarding. Conatus enqueues new
+documents without prior work retention; Annals owns retention, automatic
+integration, evidence, graph revisions, and domain recovery. Conatus is not an
+additional Nucleus requester. Captured, queued, retained, and interpreted remain
+separate outcomes; service-to-want associations do not establish progress.
+
+Conatus initialization pins both library identities and the current feed
+watermark, selects the bundled instructions, and starts no model or schedule.
+Its source packaging can prepare a separately enabled 300-second
+`conatus/update` Clockwork definition. Conatus owns its processing gate and
+serial update lock; Clockwork owns activation. Source presence does not prove
+installation or activation. A release upgrade does not retarget an existing
+immutable schedule. Use the Conatus product operation for capture, processing,
+bounded retry and re-examination; use Annals for deeper library recovery.
 
 Coordinated Annals deployment holds catalog admission before enumerating named
 libraries and holds each library while domain work drains. The primary installer
@@ -1520,6 +1540,7 @@ provider registry or documentation storage.
 | Cast company/job identity, source adapters, observations, collection requests, local budgets, configuration, exports or deployment | Cast | Keep ordinary HTTP collection separate from Nucleus, CRM stewardship and downstream selection/application/email state; preserve company/job records and explicit collection diagnostics. |
 | Platter source capture, constrained resume authoring, stages, editions or send history | Platter | Keep career editing in CRM, discovery in Cast, execution in Nucleus and acceptance transport in Email. Preserve fixed resume content and held uncertain sends; source defaults do not activate a schedule. |
 | Annals catalog, physical-library identity, instruction revisions, works, concepts, evidence, reconciliation, inbox, producer acceptance, decision feed, retry, or corpus migration | Annals | Preserve library isolation, instruction provenance, job correlation, and adapter behavior. Application frames cannot change admission or validation rules; Nucleus does not gain Annals workflow state. |
+| Conatus want capture, decision-feed intake, handoff, library instructions, views or activation | Conatus | Preserve source wording and Annals identities. Keep retention, interpretation and model recovery in Annals, and activation in Clockwork; Conatus adds no Nucleus requester or inferred want fields. |
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
 | Email content, delivery, Resend access, fixed addresses, or deployment | Email | Keep the direct Resend path independent of Nucleus; Nucleus gains no email fields, credential, or delivery authority. |
 | Codex task enumeration, normalized transcript reads, App Server compatibility, or Conversations deployment | Conversations | Keep it read-only and separate from Nucleus's private Codex home; consumers must not treat persisted status as live-process proof. |

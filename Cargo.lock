@@ -459,6 +459,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "conatus"
+version = "0.1.0"
+dependencies = [
+ "annals",
+ "annals-api",
+ "anyhow",
+ "cell-install",
+ "clap",
+ "fs2",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "toml",
+ "uuid",
+]
+
+[[package]]
 name = "conversations"
 version = "0.5.0"
 dependencies = [
