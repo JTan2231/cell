@@ -1,18 +1,18 @@
 {
   "id": "annals.work.integrate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Incorporate a source into Annals knowledge",
-  "summary": "Use Annals' AI reader to examine one retained source against the current corpus. Retain the proposed result or apply it when authorized.",
+  "title": "Interpret a source under its Annals library instructions",
+  "summary": "Have Annals examine one retained source under the selected library instructions and frozen corpus. Retain the proposed result or apply it when authorized.",
   "use_when": [
     "Immutable source material should be examined against the evidence-backed conceptual corpus.",
     "An already retained work should be deliberately integrated or reexamined at current HEAD."
   ],
   "do_not_use_when": [
     "Only unchanged source retention is wanted.",
-    "The requested result is a summary, action backlog, or generic semantic search.",
+    "The requested operation is summarization, application workflow, or generic semantic search.",
     "The user has not authorized immediate application of a material proposed corpus change."
   ],
   "outcome": "A durable examination and reconciliation for one work at one frozen base revision, left pending, applied by explicit request, or recorded with no corpus change.",
@@ -23,7 +23,7 @@
     "A mechanically equal projected state is recorded without a commit or revision advance."
   ],
   "authority": [
-    "Annals owns works, the frozen base revision, draft validation, reconciliation records, projected corpus state, application, and domain success.",
+    "Annals owns works, frozen corpus and instruction revisions, draft validation, reconciliation records, projected corpus state, application, and domain success.",
     "Nucleus owns only execution, authentication, job state, and raw protocol history; final model prose is diagnostic."
   ],
   "success": [
@@ -33,7 +33,7 @@
   ],
   "failure_and_recovery": [
     "The liaison may revise named draft operations until the complete request resolves; independently valid operations remain staged.",
-    "A pending reconciliation applies only while HEAD still equals its base revision.",
+    "A pending reconciliation applies only while HEAD and the instruction selection still match its frozen revisions.",
     "If Nucleus fails after Annals records the domain result, preserve that result and do not infer failure from the runtime alone."
   ],
   "privacy": [
@@ -41,6 +41,7 @@
     "Annals and Nucleus state belong inside the same private retention boundary for this operation."
   ],
   "interfaces": [
+    {"label": "Interpret in a named library", "invocation": "/Users/joey/.local/bin/annals library <NAME> integrate --work <LABEL>"},
     {"label": "Integrate file without applying", "invocation": "/Users/joey/.local/bin/annals integrate <UTF8_INPUT> --name <LABEL>"},
     {"label": "Integrate retained work", "invocation": "/Users/joey/.local/bin/annals integrate --work <LABEL>"},
     {"label": "Integrate and apply", "invocation": "/Users/joey/.local/bin/annals integrate <UTF8_INPUT> --name <LABEL> --apply"},
@@ -57,7 +58,7 @@
   "promise": {
     "consumers": [
       {"status": "declared", "statement": "A local user or agent may request an evidence-grounded examination of one immutable work against one frozen Annals corpus revision."},
-      {"status": "unsupported", "statement": "This capability is not a summary, action backlog, generic semantic search, or silent corpus-application surface."}
+      {"status": "unsupported", "statement": "This capability is not a summarization, application-workflow, generic semantic-search, or silent corpus-application surface."}
     ],
     "preconditions": [
       {"status": "declared", "statement": "A configured Annals library whose immutable role is general contains or can retain the selected nonblank UTF-8 work, and the configured Nucleus execution path is compatible, authenticated, and accepting work."},
@@ -74,11 +75,13 @@
       }
     ],
     "data_semantics": [
+      {"status": "declared", "statement": "Annals preserves source bytes and enforces structural and evidence invariants. Each library’s stored instructions define what concepts and parent connections mean; broader/narrower conceptual scope is the default instruction document, not a universal edge meaning."},
+      {"status": "declared", "statement": "An examination captures HEAD and the instruction selection in one admission transaction. The exact stored instruction document is supplied as Nucleus developerInstructions; the run records its revision and exact prompt/tool context hash."},
       {"status": "declared", "statement": "A reconciliation records an interpretation of one retained work at one base corpus revision through semantic operations and exact source quotations."},
       {"status": "declared", "statement": "Nucleus completion and liaison prose are execution evidence only; Annals records decide whether the domain reconciliation or application succeeded."}
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Examination reuse requires the same work identity, base revision, prompt version, model, and reasoning effort. Reconciliation and commit identities remain distinct."},
+      {"status": "declared", "statement": "Examination reuse requires the same work identity, base revision, instruction revision, exact effective prompt/tool context, model, and reasoning effort. Reconciliation and commit identities remain distinct."},
       {"status": "declared", "statement": "Existing concepts use public cN identifiers and corpus revisions are monotonic integer states; work labels select retained works."},
       {"status": "not_applicable", "statement": "This capability does not report token, allowance, price, or billing units."}
     ],
@@ -88,21 +91,25 @@
       {"status": "unspecified", "statement": "No model-completion latency or queue-time service level is promised."}
     ],
     "access": [
+      {"status": "declared", "statement": "A registered name scopes ordinary commands as annals library NAME COMMAND. The catalog resolves and verifies stable library identity and managed paths; unknown names fail without creation. Operator config/path selection remains supported."},
       {"status": "declared", "statement": "The supported surface is the local Annals CLI using its selected private library and configured local Nucleus requester boundary."},
       {"status": "unsupported", "statement": "The liaison receives only Annals-scoped tools and cannot publish the work, directly edit SQLite, or acquire general host access through this contract."}
     ],
     "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Successful reuse and active examination uniqueness require the same work, base, instruction revision, exact effective prompt/tool context, model, and reasoning effort. A → B → A selections append revisions and do not revive earlier reuse."},
+      {"status": "declared", "statement": "Material application checks both HEAD and instruction currentness in the committing transaction. Instruction changes start no reinterpretation and do not erase already committed or recorded domain results."},
       {"status": "declared", "statement": "Annals freezes HEAD before the closed Nucleus job, validates draft operations together, and durably records one valid reconciliation or reuses an exact-context successful examination."},
       {"status": "declared", "statement": "Material output remains pending by default; authorized application atomically creates a commit and advances HEAD, while stale application fails without a force path."},
       {"status": "declared", "statement": "If Annals commits the domain result before a later Nucleus failure, recovery preserves the Annals result and does not create an automatic new attempt."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "One invocation examines one work at one base revision through the constrained Annals liaison contract."},
-      {"status": "declared", "statement": "Application is opt-in for material changes, and a pending result can apply only at its unchanged base HEAD."},
+      {"status": "declared", "statement": "Application is opt-in for material changes, and a pending result can apply only at its unchanged base HEAD and instruction selection."},
       {"status": "unspecified", "statement": "No maximum work size, execution duration, queue latency, or Codex allowance consumption is promised here."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 2 is distinct from provider release, library schema, prompt version, model identity, and Nucleus public protocol."},
+      {"status": "declared", "statement": "Schema 6 preserves null instruction provenance for legacy runs and requests. New runs use immutable liaison toolset version 2 and input schema IDs ending in .input.v2; result schema v1 and historical decoding remain supported."},
+      {"status": "declared", "statement": "Capability contract version 3 is distinct from provider release, library schema, prompt version, model identity, and Nucleus public protocol."},
       {"status": "declared", "statement": "Examination reuse requires the exact documented context; changed context requires a new reading or explicit reexamination."},
       {"status": "unspecified", "statement": "No cross-release pending-reconciliation support window or deprecation period is promised."}
     ],

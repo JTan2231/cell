@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
@@ -22,6 +23,13 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "PATH")]
     pub library: Option<PathBuf>,
 
+    /// Require this immutable library identity when opening the selected database.
+    #[arg(long, global = true, value_name = "ID")]
+    pub expected_library_id: Option<String>,
+
+    #[arg(skip)]
+    pub named_library: Option<String>,
+
     /// Emit one JSON document.
     #[arg(long, global = true)]
     pub json: bool,
@@ -40,6 +48,15 @@ pub struct Cli {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
+    /// Create, list, or select an Annals-managed named library.
+    #[command(subcommand)]
+    Library(LibraryCommand),
+    /// Show the selected named library and its instruction selection.
+    #[command(hide = true)]
+    Show,
+    /// Read or replace the selected library's librarian instructions.
+    #[command(subcommand)]
+    Instructions(InstructionsCommand),
     /// Hold or restore admission for one deployment without changing inbox pause.
     #[command(subcommand)]
     Maintenance(crate::maintenance::MaintenanceCommand),
@@ -86,6 +103,108 @@ pub enum Command {
     Diff(DiffArgs),
     /// Create a new commit that inverses an earlier commit.
     Revert(RevertArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum LibraryCommand {
+    /// List registered libraries and their provisioning state.
+    List,
+    /// Create a library, or resume its interrupted creation.
+    Create(LibraryCreateArgs),
+    /// Select a registered name, then use an ordinary Annals command.
+    #[command(external_subcommand)]
+    Named(Vec<OsString>),
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct LibraryCreateArgs {
+    #[arg(value_name = "NAME")]
+    pub name: String,
+    /// Immutable admission kind selected at creation.
+    #[arg(long, value_enum, default_value_t = CliLibraryKind::General)]
+    pub kind: CliLibraryKind,
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum InstructionsCommand {
+    /// Read the currently selected exact instructions.
+    Show,
+    /// Read instruction revisions, newest first.
+    History(InstructionsHistoryArgs),
+    /// Select one complete instruction document without reinterpreting the corpus.
+    Set(InstructionsSetArgs),
+}
+
+#[derive(Debug, Clone, Args)]
+#[group(required = true, multiple = false)]
+pub struct InstructionsSetArgs {
+    /// Complete instruction document, preserved unchanged.
+    #[arg(value_name = "CONTENT")]
+    pub content: Option<String>,
+    /// Read the complete UTF-8 instruction document from a file.
+    #[arg(long, value_name = "PATH")]
+    pub file: Option<PathBuf>,
+    /// Read the complete UTF-8 instruction document from standard input.
+    #[arg(long)]
+    pub stdin: bool,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct InstructionsHistoryArgs {
+    /// Maximum number of instruction revisions (1 through 100).
+    #[arg(long, default_value_t = 20)]
+    pub limit: usize,
+    /// Select instruction revisions strictly older than this revision.
+    #[arg(long, value_name = "REVISION")]
+    pub before: Option<i64>,
+}
+
+impl Cli {
+    /// Parse named-library command arguments with the ordinary typed command parser.
+    pub fn resolve_named_command(mut self) -> Result<Self, clap::Error> {
+        let Command::Library(LibraryCommand::Named(arguments)) = &self.command else {
+            return Ok(self);
+        };
+        let Some(name) = arguments.first().and_then(|value| value.to_str()) else {
+            return Err(clap::Error::raw(
+                clap::error::ErrorKind::InvalidValue,
+                "library name must be UTF-8",
+            ));
+        };
+        let name = name.to_owned();
+        let mut scoped = Self::try_parse_from(
+            std::iter::once(OsString::from("annals")).chain(arguments.iter().skip(1).cloned()),
+        )?;
+        if matches!(scoped.command, Command::Library(_) | Command::Init(_)) {
+            return Err(clap::Error::raw(
+                clap::error::ErrorKind::InvalidSubcommand,
+                "create libraries with `annals library create NAME`; nested library selection is not supported",
+            ));
+        }
+        if self.library.is_some() || scoped.library.is_some() {
+            return Err(clap::Error::raw(
+                clap::error::ErrorKind::ArgumentConflict,
+                "a named library cannot be combined with --library",
+            ));
+        }
+        if let (Some(outer), Some(inner)) = (&self.expected_library_id, &scoped.expected_library_id)
+            && outer != inner
+        {
+            return Err(clap::Error::raw(
+                clap::error::ErrorKind::ArgumentConflict,
+                "conflicting expected library identities",
+            ));
+        }
+        scoped.config = scoped.config.or(self.config.take());
+        scoped.expected_library_id = scoped
+            .expected_library_id
+            .or(self.expected_library_id.take());
+        scoped.json |= self.json;
+        scoped.quiet |= self.quiet;
+        scoped.verbose = scoped.verbose.saturating_add(self.verbose);
+        scoped.named_library = Some(name);
+        Ok(scoped)
+    }
 }
 
 #[derive(Debug, Clone, Args)]

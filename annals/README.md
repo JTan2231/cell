@@ -1,8 +1,10 @@
 # Annals
 
-Annals is a local CLI for maintaining an evidence-grounded conceptual corpus.
-Source works are retained unchanged. Corpus concepts belong to the library, may
-be supported by many works, and change only through atomic revision commits.
+Annals authoritatively retains unchanged source material in named libraries.
+Each library has its own concept graph, exact evidence, revision history, and
+stored librarian instructions. The consuming application defines what that
+library organizes and what its connections mean. Annals enforces source
+immutability, valid references, an acyclic graph, evidence, and atomic changes.
 
 `annals::api` exports the same typed corpus, work, retention, reconciliation,
 source-activity, history, and inbox views emitted by the CLI. Its read-only
@@ -11,8 +13,10 @@ cursor rules; database connections and worker state remain private. Reconciliati
 inputs use the exported `Reconciliation` types and `parse_reconciliation` codec.
 `CliClient` invokes an explicitly selected executable with a typed `Request` and
 returns the matching `Response`. Requests reuse the CLI's own argument types
-and cover its reads and mutations, including inbox operations. Standard-input
-bytes are accepted only for a request with an explicit `-` input path. Client
+and cover its reads and mutations, including named library and instruction
+operations. `CliClient::for_named_library` selects a registered name; expected
+identity and state-root options bind the same CLI boundary. Standard-input
+bytes are accepted only for an explicit `-` input path or `instructions set --stdin`. Client
 construction has no effects; each call has the selected command's usual effects.
 The separate `annals-api` crate owns accepted-account exchange and usage views.
 
@@ -20,7 +24,7 @@ Annals can also host a physically separate decisions library. Krisis supplies
 immutable decision accounts through an idempotent handoff. Annals owns the
 accepted bytes, inbox dispatch, interpretation, and a bounded read-only
 accepted-account feed. Decision accounts do not enter the primary
-conversation-export library. Schema version 5 records the separation as an
+conversation-export library. Schema version 6 preserves the separation as an
 immutable database kind. Neither configuration nor direct path selection can
 make a decisions library accept general sources.
 The explicit macOS provisioner, shipped and hashed as
@@ -31,8 +35,9 @@ updates that private library and only its independent
 
 The public interface uses work labels, durable concept IDs such as `c42`, and
 exact quotations. Concepts form an unordered directed acyclic graph: an edge
-points from a broader concept to a narrower one, and a concept may have several
-parents. Labels may repeat. There is no canonical path, primary parent, sibling
+points from a parent to a child, and a concept may have several
+parents. The default library instructions interpret this as broader-to-narrower
+conceptual scope; another library can define another interpretation. Labels may repeat. There is no canonical path, primary parent, sibling
 order, or move operation.
 
 Source byte ranges and non-concept SQLite identifiers remain implementation
@@ -64,7 +69,8 @@ The liaison defaults to high quality: `gpt-5.6-sol` with max reasoning.
 `--quality low` selects `gpt-5.6-luna` with medium reasoning, and `--quality
 medium` selects `gpt-5.6-terra` with medium reasoning. `--model` provides an
 exact model override. Annals gives the liaison a short pointer prompt and
-exactly nine session-scoped tools through a Nucleus-owned isolated Codex app-server; no
+its library’s exact stored instructions and exactly nine session-scoped tools
+through a Nucleus-owned isolated Codex app-server; no
 shell, web, planning, user-input, or multi-agent tools are available. The
 complete work is not placed in the prompt. The liaison starts a reconciliation
 draft, corrects only operations Annals identifies when needed, and may inspect
@@ -78,8 +84,25 @@ model's final response, is the deliverable.
 cargo build --release --package annals --package annals-usage
 ```
 
-Create a library, examine a work, review the reconciliation, and apply its
-projected corpus transition:
+Create a named library and select its complete instruction document:
+
+```sh
+annals library create conatus
+annals library conatus instructions set --file conatus-instructions.md
+annals library conatus instructions show
+annals library conatus work add want.md --name "A want"
+annals library conatus integrate --work "A want"
+annals library conatus change show
+annals library conatus change apply
+```
+
+Instructions are private library settings, not source evidence. Setting them
+preserves exact text and appends an instruction revision without changing or
+reinterpreting the graph. `library list` shows registered names;
+`library conatus show` shows the selected library. Unknown names fail.
+Creation makes no schedule. Each named library has its own database, config,
+and spool under the Annals state directory. Existing configured libraries
+remain available through explicit operator paths:
 
 ```sh
 annals --library ./annals.db init
@@ -126,8 +149,8 @@ manual `integrate` commands keep their normal integration behavior for an
 already retained work.
 
 An already retained work can be selected by label. Annals reuses a successful
-examination only when the work, corpus revision, prompt version, model, and
-reasoning effort all match:
+examination only when the work, corpus revision, library instruction revision,
+exact prompt/tool context, model, and reasoning effort all match:
 
 ```sh
 annals --library ./annals.db integrate --work "Serializable execution"
@@ -181,10 +204,13 @@ Graph expansion is bounded by depth and node count and reports a frontier when
 more of the graph exists beyond the returned neighborhood.
 
 `shake` reports HEAD's transitively implied parent edges and asks before
-removing them in one revision. It preserves every ancestor-descendant pair;
-`--yes` supplies noninteractive confirmation.
+removing them in one revision. It preserves every ancestor-descendant pair,
+but a direct edge can carry meaning under a library's instructions. Confirmation
+binds to the library, HEAD, and instruction revision; `--yes` supplies it
+noninteractively.
 
-Every command supports `--json`. Select a library explicitly with `--library`
+Every command supports `--json`. Use `annals library NAME COMMAND` for a
+registered library. Select an operator path explicitly with `--library`
 or `ANNALS_LIBRARY`, or select a TOML config with `--config` or
 `ANNALS_CONFIG`. Annals never silently creates or opens `./annals.db`.
 
@@ -299,10 +325,15 @@ authenticated dispatch preflight. Pause Annals, run `annals-usage login
 --device-auth` (which delegates to `nucleus auth login --device-auth`), verify
 with `annals-usage doctor`, and resume only the pause established for recovery.
 
-The current schema is version 5. Normal deployment migrates a version-3 or
-version-4 library without replacing its contents or spool. The migration adds
-bounded retry-event provenance when needed and the decision-account acceptance
-feed. It assigns the database the immutable `general` kind.
+The current schema is version 6. Normal deployment migrates supported
+version-3 through version-5 libraries without replacing their contents or
+spools. Version 6 adds immutable library instruction revisions and examination
+provenance. It seeds the default instructions without attributing them to old
+examinations. Older migration steps still add retry and decision-account
+records when needed. Version-3 and version-4 libraries receive the `general`
+kind; existing version-5 kinds are preserved. Registered named libraries enter
+the same guarded backup, migration, and recovery procedure. Their creation does
+not install a schedule, and installation does not adopt existing paths as names.
 Fresh dedicated state is created with `annals init --kind decisions`. Version
 3 remains the intentional fresh-state boundary;
 the one-time cutover from an older schema adds `--fresh-state` to the command

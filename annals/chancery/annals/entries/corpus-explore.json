@@ -1,10 +1,10 @@
 {
   "id": "annals.corpus.explore",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Search and read the Annals knowledge library",
+  "title": "Search and read an Annals library",
   "summary": "Search the corpus, read supporting quotations or retained documents, and inspect source activity and revision history.",
   "use_when": [
     "Concept labels, ancestor context, graph neighborhoods, exact supporting quotations, corpus revisions, or delivery metadata should be inspected.",
@@ -40,6 +40,7 @@
     "This capability sends no content to a model or network service."
   ],
   "interfaces": [
+    {"label": "Read a named library", "invocation": "/Users/joey/.local/bin/annals library <NAME> overview"},
     {"label": "Corpus overview", "invocation": "/Users/joey/.local/bin/annals overview"},
     {"label": "Lexical concept search", "invocation": "/Users/joey/.local/bin/annals search <QUERY>"},
     {"label": "Concept detail", "invocation": "/Users/joey/.local/bin/annals concept show <CONCEPT_ID>"},
@@ -71,6 +72,8 @@
       {"status": "declared", "statement": "Work show returns complete retained text; lately returns delivery metadata and never searches or emits source content or document-internal dates."}
     ],
     "data_semantics": [
+      {"status": "declared", "statement": "Annals preserves source bytes and enforces structural and evidence invariants. Each library’s stored instructions define what concepts and parent connections mean; broader/narrower conceptual scope is the default instruction document, not a universal edge meaning."},
+      {"status": "declared", "statement": "Current library instructions and the instruction revision used by one reconciliation are distinct. Historical results retain their original provenance, including null when legacy instructions are unknown."},
       {"status": "declared", "statement": "Lexical search matches normalized concept labels and derived ancestor-label context."},
       {"status": "declared", "statement": "Evidence associates an exact retained quotation occurrence with a concept across its parent relationships; it belongs to the concept rather than an edge."},
       {"status": "declared", "statement": "A graph frontier marks where configured depth or node limits stopped expansion and is not necessarily a leaf or the complete graph."}
@@ -85,6 +88,7 @@
       {"status": "unspecified", "statement": "No wall-clock read latency, unlimited graph expansion, or indefinite cursor validity across changed command context is promised."}
     ],
     "access": [
+      {"status": "declared", "statement": "A registered name scopes ordinary commands as annals library NAME COMMAND. The catalog resolves and verifies stable library identity and managed paths; unknown names fail without creation. Operator config/path selection remains supported."},
       {"status": "declared", "statement": "The supported boundary is a local read through the Annals CLI against an explicitly resolved private library."},
       {"status": "unsupported", "statement": "No model, network, mutation, direct SQLite, or external disclosure surface is provided by exploration."}
     ],
@@ -94,11 +98,12 @@
       {"status": "declared", "statement": "Commit history records applied corpus transitions, not work retention, no-change interpretations, model runs, or failed deliveries."}
     ],
     "operational_limits": [
+      {"status": "unsupported", "statement": "Combined search, graph links, cursors, and transactions across separate libraries are not provided."},
       {"status": "declared", "statement": "Graph expansion is bounded by direction, depth, and maximum nodes; search is lexical; lately can omit a delivery lacking the selected timestamp basis."},
       {"status": "unspecified", "statement": "No universal maximum corpus size, result throughput, query latency, or cursor-retention interval is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 1 is distinct from provider release and library schema; opaque cursors are not a parseable compatibility interface."},
+      {"status": "declared", "statement": "Capability contract version 2 is distinct from provider release and library schema; opaque cursors are not a parseable compatibility interface."},
       {"status": "unspecified", "statement": "No cross-release cursor compatibility, output-schema support window, or deprecation period is promised."}
     ],
     "reliances": [

@@ -15,8 +15,8 @@ use crate::change::{
 use crate::cli::{
     ChangeCommand, ChangeSelectArgs, ChangeShowArgs, Cli, CliGraphDirection, CliLibraryKind,
     Command, ConceptCommand, ConceptPageArgs, ConceptShowArgs, DecisionFeedCommand, GraphArgs,
-    InboxCommand, InboxRetryCommand, InitArgs, IntegrateArgs, LatelyArgs, PagedAtArgs, SearchArgs,
-    ShakeArgs, WorkAddArgs, WorkCommand,
+    InboxCommand, InboxRetryCommand, InitArgs, InstructionsCommand, IntegrateArgs, LatelyArgs,
+    LibraryCommand, PagedAtArgs, SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand,
 };
 use crate::config::Config;
 use crate::corpus::{
@@ -35,9 +35,48 @@ use crate::model::{
 use crate::model_runner::{ModelSettings, Runner};
 use crate::render::{CommandOutput, render_terminal_text};
 use crate::resolver::{ResolvedEvidence, ResolvedOperation};
-use crate::{decision_feed, inbox, ingestion, liaison, resolver};
+use crate::{catalog, decision_feed, inbox, ingestion, instructions, liaison, resolver};
+
+pub fn execute(cli: &Cli) -> AppResult<CommandOutput> {
+    let named = cli
+        .named_library
+        .as_deref()
+        .map(|name| catalog::resolve(&catalog::state_root()?, name))
+        .transpose()?;
+    let mut config = Config::load(
+        cli.config
+            .as_ref()
+            .or_else(|| named.as_ref().map(|value| &value.config)),
+    )?;
+    if let Some(library) = &named {
+        config.select_named(library)?;
+    }
+    let path = if matches!(cli.command, Command::Library(_)) {
+        if cli.library.is_some() || cli.expected_library_id.is_some() {
+            return Err(AppError::invalid(
+                "library_catalog_scope",
+                "catalog commands do not accept a database path or identity override",
+            ));
+        }
+        catalog::state_root()?.join("catalog.db")
+    } else {
+        selected_library_path(cli, &config)?
+    };
+    if cli.verbose > 0 && !cli.json {
+        eprintln!("annals: library {}", path.display());
+    }
+    run(cli, &config, &path)
+}
 
 pub fn selected_library_path(cli: &Cli, config: &Config) -> Result<PathBuf, AppError> {
+    if cli.named_library.is_some() {
+        return config.library.clone().ok_or_else(|| {
+            AppError::invalid(
+                "library_not_configured",
+                "the named library has no managed database path",
+            )
+        });
+    }
     if matches!(
         cli.command,
         Command::DecisionFeed(_) | Command::Inbox(InboxCommand::Accept(_))
@@ -102,7 +141,11 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
     } else {
         None
     };
+    require_selected_identity(cli, config, path)?;
     match &cli.command {
+        Command::Library(command) => library_command(command, config),
+        Command::Show => show_library(cli, path),
+        Command::Instructions(command) => library_instructions(path, command),
         Command::Maintenance(command) => crate::maintenance::command(path, command),
         Command::Init(args) => initialize(path, args),
         Command::Migrate => migrate_library(path),
@@ -181,6 +224,202 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
         Command::Log(args) => log(path, args.limit),
         Command::Diff(args) => diff_revisions(path, args.from, args.to),
         Command::Revert(args) => revert(path, args.revision),
+    }
+}
+
+fn require_selected_identity(cli: &Cli, config: &Config, path: &Path) -> AppResult<()> {
+    if matches!(
+        cli.command,
+        Command::Library(_) | Command::Maintenance(_) | Command::Init(_)
+    ) {
+        return Ok(());
+    }
+    if let (Some(requested), Some(configured)) =
+        (&cli.expected_library_id, &config.expected_library_id)
+        && requested != configured
+    {
+        return Err(AppError::conflict(
+            "unexpected_library",
+            "the requested library identity differs from the configuration pin",
+        ));
+    }
+    let expected = cli
+        .expected_library_id
+        .as_ref()
+        .or(config.expected_library_id.as_ref());
+    if let Some(expected) = expected {
+        let connection = if matches!(cli.command, Command::Migrate) {
+            db::open_backup_source(path)?
+        } else {
+            db::open_read(path)?
+        };
+        let actual: String = connection.query_row(
+            "SELECT library_id FROM library_identity WHERE singleton = 1",
+            [],
+            |row| row.get(0),
+        )?;
+        if actual != *expected {
+            return Err(AppError::conflict(
+                "unexpected_library",
+                "the selected database does not match its required library identity",
+            ));
+        }
+        if let Some(name) = &cli.named_library {
+            catalog::verify(
+                &catalog::resolve(&catalog::state_root()?, name)?,
+                &connection,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn library_command(command: &LibraryCommand, config: &Config) -> AppResult<CommandOutput> {
+    let root = catalog::state_root()?;
+    match command {
+        LibraryCommand::List => {
+            let libraries = catalog::registered_libraries(&root)?;
+            let human = if libraries.is_empty() {
+                "No named libraries are registered".to_owned()
+            } else {
+                libraries
+                    .iter()
+                    .map(|value| {
+                        format!(
+                            "{}  {}  {}  {}",
+                            value.name, value.library_id, value.kind, value.state
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            Ok(CommandOutput::new(
+                json!(api::LibraryList { libraries }),
+                human,
+            ))
+        }
+        LibraryCommand::Create(args) => {
+            let kind = match args.kind {
+                CliLibraryKind::General => db::LibraryKind::General,
+                CliLibraryKind::Decisions => db::LibraryKind::Decisions,
+            };
+            let library = catalog::create(&root, &args.name, kind, config)?;
+            let human = format!("Library {} is ready ({})", library.name, library.library_id);
+            Ok(CommandOutput::new(json!(library), human).mutation())
+        }
+        LibraryCommand::Named(_) => Err(AppError::invalid(
+            "invalid_command",
+            "named library arguments must be resolved before execution",
+        )),
+    }
+}
+
+fn show_library(cli: &Cli, path: &Path) -> AppResult<CommandOutput> {
+    let name = cli.named_library.as_ref().ok_or_else(|| {
+        AppError::invalid(
+            "library_name_required",
+            "select a named library with `annals library NAME show`",
+        )
+    })?;
+    let library = catalog::resolve(&catalog::state_root()?, name)?;
+    let connection = db::open_read(path)?;
+    catalog::verify(&library, &connection)?;
+    let selected = instructions::current(&connection)?;
+    let corpus_revision = revision(&connection)?;
+    let human = format!(
+        "Library {} ({})\nAdmission: {}\nCorpus revision: {}\nInstruction revision: {}\nDatabase: {}\nSpool: {}",
+        library.name,
+        library.library_id,
+        library.kind,
+        corpus_revision,
+        selected.revision,
+        library.library.display(),
+        library.spool.display()
+    );
+    Ok(CommandOutput::new(
+        json!(api::NamedLibraryView {
+            library,
+            corpus_revision,
+            current_instruction_revision: selected.revision,
+        }),
+        human,
+    ))
+}
+
+fn library_instructions(path: &Path, command: &InstructionsCommand) -> AppResult<CommandOutput> {
+    match command {
+        InstructionsCommand::Show => {
+            let selected = instructions::current(&db::open_read(path)?)?;
+            let human = format!(
+                "Instruction revision {} (recorded {})\n\n{}",
+                selected.revision,
+                selected.recorded_at,
+                render_terminal_text(&selected.content, true)
+            );
+            Ok(CommandOutput::new(json!(selected), human))
+        }
+        InstructionsCommand::Set(args) => {
+            let content = match (&args.content, &args.file, args.stdin) {
+                (Some(content), None, false) => content.clone(),
+                (None, Some(file), false) => fs::read_to_string(file)?,
+                (None, None, true) => {
+                    let mut text = String::new();
+                    io::stdin().read_to_string(&mut text)?;
+                    text
+                }
+                _ => {
+                    return Err(AppError::invalid(
+                        "invalid_instruction_input",
+                        "supply exactly one instruction document through CONTENT, --file, or --stdin",
+                    ));
+                }
+            };
+            let result = instructions::set(&mut db::open_write(path)?, &content)?;
+            let human = format!(
+                "{} instruction revision {} (recorded {}); existing corpus history is unchanged",
+                if result.changed {
+                    "Selected"
+                } else {
+                    "Retained"
+                },
+                result.instructions.revision,
+                result.instructions.recorded_at
+            );
+            Ok(CommandOutput::new(json!(result), human).mutation())
+        }
+        InstructionsCommand::History(args) => {
+            if !(1..=100).contains(&args.limit) {
+                return Err(AppError::invalid(
+                    "invalid_limit",
+                    "instruction history limit must be between 1 and 100",
+                ));
+            }
+            let connection = db::open_read(path)?;
+            let selected = instructions::current(&connection)?;
+            let mut revisions =
+                instructions::history_page(&connection, args.before, args.limit + 1)?;
+            let has_more = revisions.len() > args.limit;
+            revisions.truncate(args.limit);
+            let human = revisions
+                .iter()
+                .map(|value| {
+                    format!(
+                        "{}  {}  {}",
+                        value.revision, value.recorded_at, value.sha256
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            Ok(CommandOutput::new(
+                json!(api::InstructionHistory {
+                    library_id: selected.library_id,
+                    current_instruction_revision: selected.revision,
+                    instructions: revisions,
+                    has_more,
+                }),
+                human,
+            ))
+        }
     }
 }
 
@@ -614,8 +853,19 @@ fn render_recorded_change(change: &crate::model::RecordedChangeView) -> Result<S
         }
     };
     let effects = render_commit_effects(&change.effects);
+    let instruction_basis = if change.kind == "change" {
+        render_instruction_basis(
+            change.instruction_revision,
+            change.current_instruction_revision,
+        )
+    } else {
+        format!(
+            "Instruction revision used: not applicable (mechanical operation)\nCurrent instruction revision: {}",
+            change.current_instruction_revision
+        )
+    };
     Ok(format!(
-        "Applied {} at revision {}\nWork: {}\nSummary: {}\n{}\n{}\nActor: {}\nRecorded: {}",
+        "Applied {} at revision {}\nWork: {}\n{instruction_basis}\nSummary: {}\n{}\n{}\nActor: {}\nRecorded: {}",
         change.kind,
         change.revision,
         work,
@@ -692,8 +942,11 @@ fn validate_change(path: &Path, args: &ChangeSelectArgs) -> Result<CommandOutput
     let record = select_reconciliation(&connection, args.work.as_deref(), true)?;
     let resolved = resolver::validate_record(&connection, &record)?;
     let reconciliation = crate::change::load_request(&connection, record.request_id)?;
+    let current_instruction_revision = crate::instructions::current(&connection)?.revision;
+    let instruction_basis =
+        render_instruction_basis(record.instruction_revision, current_instruction_revision);
     let human = format!(
-        "Valid pending reconciliation for {}\nBase revision: {}\nSummary: {}\nResolved operations ({}):\n{}\n{}\nApplication: ready",
+        "Valid pending reconciliation for {}\nBase revision: {}\n{instruction_basis}\nSummary: {}\nResolved operations ({}):\n{}\n{}\nApplication: ready",
         render_quoted(&record.work_label),
         record.base_revision,
         render_terminal_text(&record.summary, false),
@@ -705,6 +958,8 @@ fn validate_change(path: &Path, args: &ChangeSelectArgs) -> Result<CommandOutput
         json!(api::ValidatedReconciliation {
             work: record.work_label.clone(),
             base_revision: record.base_revision,
+            instruction_revision: record.instruction_revision,
+            current_instruction_revision,
             status: "valid".to_owned(),
             summary: record.summary.clone(),
             operations: resolved.operations,
@@ -767,6 +1022,8 @@ fn reconciliation_output(
     let data = json!(api::ReconciliationResult {
         work: view.work.clone(),
         base_revision: view.base_revision,
+        instruction_revision: view.instruction_revision,
+        current_instruction_revision: view.current_instruction_revision,
         status: view.status.clone(),
         summary: view.summary.clone(),
         operation_count,
@@ -788,8 +1045,13 @@ fn reconciliation_output(
         ),
         "superseded" => "superseded".to_owned(),
         "recorded" => "recorded".to_owned(),
-        _ => "valid".to_owned(),
+        _ if view.instruction_revision != Some(view.current_instruction_revision) => {
+            "pending; stale library instructions".to_owned()
+        }
+        _ => "pending".to_owned(),
     };
+    let instruction_basis =
+        render_instruction_basis(view.instruction_revision, view.current_instruction_revision);
     let corpus_state = if view.status == "recorded" {
         format!("\nCorpus remained at revision {}", view.base_revision)
     } else {
@@ -797,14 +1059,14 @@ fn reconciliation_output(
     };
     let human = if !details && matches!(view.status.as_str(), "applied" | "recorded") {
         format!(
-            "{heading} for {}: {status}{corpus_state}\nBase revision: {}; operations: {operation_count}\n{}",
+            "{heading} for {}: {status}{corpus_state}\nBase revision: {}; operations: {operation_count}\n{instruction_basis}\n{}",
             render_quoted(&view.work),
             view.base_revision,
             render_terminal_text(&view.summary, false)
         )
     } else {
         format!(
-            "{heading} for {}\nBase revision: {}\nSummary: {}\nOperations ({}):\n{}\n{}\nStatus: {status}{corpus_state}",
+            "{heading} for {}\nBase revision: {}\n{instruction_basis}\nSummary: {}\nOperations ({}):\n{}\n{}\nStatus: {status}{corpus_state}",
             render_quoted(&view.work),
             view.base_revision,
             render_terminal_text(&view.summary, false),
@@ -814,6 +1076,12 @@ fn reconciliation_output(
         )
     };
     Ok(CommandOutput::new(data, human).mutation())
+}
+
+fn render_instruction_basis(examined: Option<i64>, current: i64) -> String {
+    let examined =
+        examined.map_or_else(|| "unknown (legacy)".to_owned(), |value| value.to_string());
+    format!("Instruction revision used: {examined}\nCurrent instruction revision: {current}")
 }
 
 fn render_requested_operations(operations: &[ChangeOperation]) -> String {
@@ -1115,17 +1383,22 @@ fn applied_output(
         json!(api::AppliedReconciliation {
             work: record.work_label.clone(),
             base_revision: record.base_revision,
+            instruction_revision: record.instruction_revision,
             revision: applied,
             status: "applied".to_owned(),
             summary: record.summary.clone(),
             operation_count: request.operations().len(),
         }),
         format!(
-            "Applied reconciliation for {} at revision {applied} (base {}, {} operations):\n{}",
+            "Applied reconciliation for {} at revision {applied} (base {}, {} operations):\n{}\nInstruction revision used: {}",
             render_quoted(&record.work_label),
             record.base_revision,
             request.operations().len(),
-            render_terminal_text(&record.summary, false)
+            render_terminal_text(&record.summary, false),
+            record.instruction_revision.map_or_else(
+                || "unknown (legacy)".to_owned(),
+                |revision| revision.to_string()
+            )
         ),
     )
     .mutation())

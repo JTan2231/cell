@@ -1,22 +1,17 @@
 # Data model
 
 [`crates/annals/schema.sql`](../crates/annals/schema.sql) is the authoritative
-SQLite schema. The current schema is version 5. Schema version 3 remains the
-fresh-state boundary. Annals rejects older libraries. `migrate` upgrades
-version 3 by adding version-4 retry provenance, then version-5 library profiles
-and decision-account acceptance tables. Existing version-3 and version-4
-libraries migrate as general libraries.
+SQLite schema. The current schema is version 6. Schema version 3 remains the
+fresh-state boundary. Migration accepts versions 3 through 5, preserving their
+records and adding each missing schema step in one transaction. Version 6
+adds library instruction history and frozen interpretation provenance.
+Version-3 and version-4 libraries migrate as general libraries; version-5
+library kinds remain unchanged.
 
-The library stores eight kinds of facts:
-
-1. immutable library identity and role;
-2. immutable works and source-delivery receipts;
-3. bounded inbox retry-event membership and parent-child delivery provenance;
-4. immutable Krisis producer acceptances and their bounded feed projection;
-5. durable concept identities;
-6. normalized reconciliation intent and examination audit records;
-7. immutable commit provenance; and
-8. append-only typed corpus effects.
+The library retains identity and admission kind, immutable source works,
+delivery and retry records, producer acceptances, instruction revisions,
+concept identities, examination and reconciliation records, and append-only
+corpus commits and effects. Each named library has its own SQLite database.
 
 `CorpusState` is an immutable in-memory value reduced from revision zero
 through the typed effects. Every current and historical corpus read uses that
@@ -42,6 +37,28 @@ preserves the identity. Applying a nonempty reconciliation, a confirmed
 nonempty shake, or a revert appends exactly one contiguous revision. Work
 retention, examinations, pending or mechanically equal reconciliations, and
 reads do not advance it.
+
+## Catalog and library instructions
+
+The Annals state directory contains a separate `catalog.db`. Its library
+records map unique human names and stable library IDs to managed database,
+config, and spool paths and provisioning state. Newly created libraries use
+`libraries/LIBRARY_ID/`. Opening a named library verifies its stored identity;
+a name cannot silently select a replacement database. The catalog locates the
+library and does not duplicate its source, graph, or instruction authority.
+
+`library_instruction_revisions` stores immutable `revision`, exact `content`,
+SHA-256, and `recorded_at`. `library_instruction_selection` holds the currently
+selected revision. Both belong to the library database and its backups.
+Initialization and version-6 migration seed instruction revision 1 with Annals'
+default broader/narrower interpretation. An executable update does not replace
+selected instructions.
+
+Selecting new text appends and selects a revision atomically. Selecting the
+current exact bytes is unchanged. Returning to earlier bytes appends another
+revision. `recorded_at` describes that instruction selection only. It does not
+advance the corpus, rewrite history, or schedule reinterpretation. Instruction
+text is trusted library configuration and never evidence.
 
 ## Decision-account acceptance
 
@@ -150,13 +167,15 @@ the identity present in `CorpusState`, and an identity is never reused.
 A reduced `CorpusState` contains:
 
 - present concept IDs and display labels;
-- explicit broader-to-narrower parent edges; and
+- explicit parent-to-child edges; and
 - evidence links from concepts to exact byte ranges in immutable works.
 
 Labels may repeat. IDs, not labels, carry identity. Edges form an unordered
 directed acyclic graph, with no primary parent, sibling order, stored path, or
 move operation. Roots, leaves, shared concepts, reachability, and search
-normalization are derived.
+normalization are derived. Library instructions define the meaning of concepts
+and edges. Broader-to-narrower scope is the stored default, not an unconditional
+graph invariant.
 
 Evidence belongs to a concept as a whole. A link stores a work and one UTF-8
 byte range of at most 8 KiB. Every derived leaf must retain evidence. A public
@@ -171,8 +190,8 @@ offsets.
 External reconciliation JSON is parsed once at ingress. Annals then stores the
 request relationally:
 
-- `reconciliation_requests` owns the work, frozen base revision, summary, and
-  creation time;
+- `reconciliation_requests` owns the work, frozen base and instruction revisions,
+  summary, and creation time;
 - `request_annotations` stores inert annotations in order;
 - `request_operations` stores one of the seven operation discriminators and
   its scalar fields;
@@ -201,7 +220,7 @@ serializing them.
 run and draft. Status is `pending`, `applied`, `superseded`, or `recorded`.
 At most one reconciliation per work is pending. A mechanically equal projected
 state is `recorded` and has no commit. A pending reconciliation is applied only
-while HEAD still equals its base revision.
+while HEAD and the current instruction selection equal its frozen revisions.
 
 Pending-reconciliation validation, display, and application reconstruct the
 typed request and resolve it against its original base `CorpusState`.
@@ -210,8 +229,20 @@ Annals does not use a stored resolved operation list or projected state.
 ## Examination audit
 
 `model_runs` binds one liaison examination to a work, base revision, model,
-reasoning effort, and prompt version. Status is `running`, `submitted`,
-`no_submission`, or `failed`.
+reasoning effort, prompt version, `instruction_revision`, and
+`instruction_context_sha256`. The hash covers exact mechanical instructions,
+library instruction bytes and revision, the pointer prompt, tool definitions,
+and result schema. Admission captures HEAD and instructions and inserts the run
+in one transaction. Successful reuse and active-run uniqueness include both
+instruction fields. Status is `running`, `submitted`, `no_submission`, or
+`failed`.
+
+Pre-version-6 model runs and reconciliation requests keep null instruction
+provenance. Migration does not invent the prompt they used. They remain
+inspectable but cannot supply a current pending interpretation. Model
+submissions inherit their run's frozen instruction revision; direct submissions
+select current instructions in their admission transaction. Reconciliation
+inspection exposes its used revision and the current selection separately.
 
 `tool_calls` records tool name, sequence, success, time, and immutable argument
 and result artifacts with SHA-256 digests. These text artifacts preserve an
@@ -237,14 +268,16 @@ edge and evidence additions require absent links and live endpoints, and
 removals require existing links. A reducer failure invalidates the library.
 
 Application first reconstructs the typed request, resolves it at its stored
-base, derives the projected state, checks that HEAD still equals the base, and
+base, derives the projected state, checks both HEAD and instruction currentness, and
 diffs HEAD against the projection. One immediate transaction then inserts the
 commit metadata, appends those canonical effects, marks the reconciliation
 applied, and updates the ingestion result when applicable. No second state
 representation is written.
 
 A shake computes redundant direct parent edges from replayed HEAD and appends
-only their removal effects after confirmation. A revert derives the inverse of
+only their removal effects after confirmation. The plan binds to the instruction
+selection as well as identity and HEAD. Reachability is preserved, but the
+meaning of a direct edge is defined by the library instructions. A revert derives the inverse of
 the selected transition against current replayed HEAD and appends it as a new
 commit; it never erases history.
 

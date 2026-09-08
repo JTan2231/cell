@@ -7,8 +7,8 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Annals owns retained works and source deliveries, producer-accepted decision accounts, their bounded feed, the revisioned corpus of concepts, explicit parent edges and evidence links, examinations, reconciliations, commits, inbox jobs and retry events, and its installed library and spool state.",
-      "The selected Annals library and canonical reducer are authoritative for those records and domain transitions."
+      "Annals owns its named-library catalog, authoritative retained works and source deliveries, stored library instruction revisions, producer-accepted decision accounts and their bounded feed, the revisioned corpus of concepts, parent edges and evidence, examinations, reconciliations, commits, inbox jobs and retries, and installed library/spool state.",
+      "Each selected library and canonical reducer are authoritative for its stored records and structural domain transitions. A consuming application defines the interpretation of concepts and edges through that library’s stored instructions; the default frame uses broader/narrower scope."
     ],
     "not_authoritative_for": [
       "Nucleus owns shared model execution, authentication, job and attempt state, and raw protocol output. Clockwork owns scheduled activation definitions, bindings, and execution history. Annals owns inbox outcomes. Annals Usage owns its separately versioned consumption projection."
@@ -23,11 +23,11 @@
       ]
     },
     "shared_access_and_trust": [
-      "Annals interfaces are local-user surfaces over an explicitly resolved library and, where applicable, configured spool and Nucleus connection.",
+      "Annals interfaces are local-user surfaces over a registered named library or explicitly resolved operator config/path and, where applicable, a configured spool and Nucleus connection. Named selection verifies immutable library identity.",
       "Read access does not authorize mutation, application, retry, deployment, destructive replacement, or disclosure. Each entry declares its effects and authority."
     ],
     "shared_privacy_and_retention": [
-      "Annals libraries, spools, backups, logs, and Nucleus requests may retain complete private source material, exact evidence, and model context.",
+      "Annals catalogs, libraries, instruction histories, spools, backups, logs, and Nucleus requests may retain private paths, complete source material, exact evidence, and model context.",
       "Only entries that invoke Nucleus may cross that private local boundary, and their entry-specific disclosure and retention rules apply. Clockwork retains only activation metadata and opens Annals-owned logs without ingesting their bodies."
     ],
     "compatibility_and_retirement": [

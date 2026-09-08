@@ -5,7 +5,10 @@ use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::cli::{ChangeCommand, Command, InboxCommand, InboxRetryCommand, WorkCommand};
+use crate::cli::{
+    ChangeCommand, Command, InboxCommand, InboxRetryCommand, InstructionsCommand, LibraryCommand,
+    WorkCommand,
+};
 use crate::error::{AppError, AppResult};
 use crate::render::CommandOutput;
 
@@ -73,6 +76,8 @@ pub fn held(library: &Path) -> AppResult<bool> {
 pub fn mutates(command: &Command) -> bool {
     match command {
         Command::Init(_)
+        | Command::Library(LibraryCommand::Create(_))
+        | Command::Instructions(InstructionsCommand::Set(_))
         | Command::Migrate
         | Command::Shake(_)
         | Command::Integrate(_)

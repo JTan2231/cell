@@ -16,7 +16,7 @@ context.
 
 ## Ownership
 
-Annals owns retained works, source deliveries, concepts, evidence,
+Annals owns its library catalog, stored instruction revisions, retained works, source deliveries, concepts, evidence,
 reconciliations, revisions, inbox policy, retries, domain recovery, and its
 installed state. Nucleus owns shared Codex execution and authentication.
 Clockwork owns immutable scheduled activation, binding, overlap admission, and
@@ -74,3 +74,17 @@ a test command. Development completion does not authorize it or installation.
 Source fixtures, experiment archives, libraries, spools, Nucleus output, and
 backups can contain private source and model context. Protect each according
 to the most sensitive content it can retain.
+
+## Library interpretation changes
+
+Named libraries share storage and graph mechanics while their stored
+instructions define interpretation. Keep default broader/narrower meaning in
+the initial instruction document, not unconditional shared prompt or tool text.
+Capture corpus and instruction revisions at one admission boundary, bind reuse
+to exact prompt/tool context, and check both revisions at material application.
+Preserve committed results and unknown legacy provenance. A changed immutable
+tool definition needs a new registration identity; do not rewrite historical
+Nucleus schema or output records. Catalog, library schema, and provider contract
+versions remain separate identities. Installation must include registered
+libraries in its journaled backup, migration, and recovery scope without
+implicitly adding schedules or adopting operator paths.

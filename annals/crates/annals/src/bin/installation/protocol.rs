@@ -6,7 +6,7 @@ use super::{
 use cell_install::InstallSnapshot;
 use cell_install::adapter::{Context, reply};
 
-fn libraries(home: &Path) -> Result<Vec<PathBuf>> {
+fn scheduled_libraries(home: &Path) -> Result<Vec<PathBuf>> {
     let mut result = vec![state(home)];
     let decisions = state(home).join("decisions");
     if fs::symlink_metadata(&decisions).is_ok() {
@@ -16,6 +16,45 @@ fn libraries(home: &Path) -> Result<Vec<PathBuf>> {
         result.push(decisions);
     }
     Ok(result)
+}
+
+fn libraries(home: &Path) -> Result<Vec<PathBuf>> {
+    let mut result = scheduled_libraries(home)?;
+    for entry in annals::api::registered_libraries(&state(home))
+        .map_err(|error| Error::new(error.to_string()))?
+    {
+        if entry.state != "ready" {
+            return Err(Error::new(
+                "named Annals library provisioning requires recovery",
+            ));
+        }
+        let root = entry
+            .library
+            .parent()
+            .ok_or_else(|| Error::new("named Annals library has no parent directory"))?;
+        if entry.library != root.join("annals.db") || entry.spool != root.join("spool") {
+            return Err(Error::new("named Annals library has an unsupported layout"));
+        }
+        if !result.iter().any(|path| path == root) {
+            result.push(root.to_owned());
+        }
+    }
+    Ok(result)
+}
+
+fn catalog_hold(payload: &Path, home: &Path, owner: &str, operation: &str) -> Result<Value> {
+    let mut args = vec![
+        "--library".into(),
+        state(home).join("catalog.db").into_os_string(),
+        "--json".into(),
+        "maintenance".into(),
+        operation.into(),
+    ];
+    if operation != "status" {
+        args.push(owner.into());
+    }
+    let value = call(payload, &args, home, Some(owner))?;
+    Ok(cell_install::command::maintenance(&value)?.clone())
 }
 
 fn no_installer_hold(home: &Path) -> Result<()> {
@@ -74,7 +113,7 @@ fn controls(
 ) -> Result<BTreeMap<String, schedule::Control>> {
     let clockwork = home.join(".local/bin/clockwork");
     let mut result = BTreeMap::new();
-    for library in libraries(home)? {
+    for library in scheduled_libraries(home)? {
         let key = if library == state(home) {
             "annals/inbox"
         } else {
@@ -99,6 +138,12 @@ pub(super) fn inspect(home: &Path, context: Option<&Context>) -> Result<Value> {
     if snapshot.current.is_some() || context.is_some() {
         let candidate = context.map(|ctx| ctx.binary("annals")).transpose()?;
         let payload = payload(home, &snapshot, candidate.as_deref())?;
+        let owner = context.map_or("inspection", |ctx| ctx.request.run_id.as_str());
+        let catalog = catalog_hold(&payload, home, owner, "status")?;
+        if catalog["holds"] != json!([]) && catalog["holds"] != json!([owner]) {
+            return Err(Error::new("another owner holds the Annals catalog"));
+        }
+        runtime.push(catalog);
         for library in libraries(home)? {
             let owner = context.map_or("inspection", |ctx| ctx.request.run_id.as_str());
             let status = lifecycle::hold(&payload, &library, home, owner, "status")?;
@@ -127,6 +172,12 @@ fn prior(context: &Context) -> Result<InstallSnapshot> {
 
 fn drain(context: &Context, snapshot: &InstallSnapshot) -> Result<()> {
     let payload = payload(&context.home, snapshot, Some(&context.binary("annals")?))?;
+    let catalog = catalog_hold(&payload, &context.home, &context.request.run_id, "status")?;
+    if catalog["holds"] != json!([context.request.run_id]) || catalog["drained"] != true {
+        return Err(Error::new(
+            "Annals catalog admission has not drained under this owner",
+        ));
+    }
     for library in libraries(&context.home)? {
         lifecycle::drained(&payload, &library, &context.home, &context.request.run_id)?;
     }
@@ -233,12 +284,15 @@ fn verify(context: &Context, snapshot: &InstallSnapshot, candidate: bool) -> Res
         return Err(Error::new("Annals operator pause was cleared"));
     }
     for library in libraries(&context.home)? {
+        let decisions = toml_value(&fs::read_to_string(library.join("config.toml"))?)?
+            .get("decision_feed")
+            .is_some();
         lifecycle::readiness(
             &root.join("libexec/annals"),
             &library,
             &context.home,
             Some(&context.request.run_id),
-            library != state(&context.home),
+            decisions,
         )?;
     }
     cell_install::command::checked(
@@ -286,6 +340,16 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
                 no_installer_hold(&context.home)?;
             }
             let mut values = Vec::new();
+            if matches!(operation, Operation::Hold) {
+                let catalog =
+                    catalog_hold(&payload, &context.home, &context.request.run_id, "hold")?;
+                if catalog["drained"] != true {
+                    return Err(Error::new(
+                        "Annals library creation is still active; catalog hold retained",
+                    ));
+                }
+                values.push(catalog);
+            }
             for library in libraries(&context.home)? {
                 values.push(lifecycle::hold(
                     &payload,
@@ -297,6 +361,14 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
                     } else {
                         "release"
                     },
+                )?);
+            }
+            if matches!(operation, Operation::Release) {
+                values.push(catalog_hold(
+                    &payload,
+                    &context.home,
+                    &context.request.run_id,
+                    "release",
                 )?);
             }
             Ok(reply(

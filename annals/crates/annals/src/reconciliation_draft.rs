@@ -125,10 +125,18 @@ pub(crate) fn start(
         return Err(identity_overflow());
     }
     let timestamp = now()?;
+    let instruction_revision = crate::instructions::request_revision(transaction, Some(run_id))?;
     transaction.execute(
-        "INSERT INTO reconciliation_requests(work_id, base_revision, summary, created_at)
-         VALUES(?1, ?2, ?3, ?4)",
-        params![work.id, base_revision, args.summary, timestamp],
+        "INSERT INTO reconciliation_requests(
+             work_id, base_revision, instruction_revision, summary, created_at
+         ) VALUES(?1, ?2, ?3, ?4, ?5)",
+        params![
+            work.id,
+            base_revision,
+            instruction_revision,
+            args.summary,
+            timestamp
+        ],
     )?;
     let request_id = transaction.last_insert_rowid();
     change::replace_request_metadata(transaction, request_id, &args.summary, &args.annotations)?;
@@ -646,7 +654,7 @@ fn assess_local_semantics(
                     assessment,
                     "needs_revision",
                     format!(
-                        "{} names the same broader parent more than once. Keep each parent only once.",
+                        "{} names the same parent more than once. Keep each parent only once.",
                         operation_id(operation_slot)
                     ),
                 );
@@ -658,7 +666,7 @@ fn assess_local_semantics(
                     assessment,
                     "needs_revision",
                     format!(
-                        "{} makes a concept its own broader parent. Replace or remove this operation.",
+                        "{} makes a concept its own parent. Replace or remove this operation.",
                         operation_id(operation_slot)
                     ),
                 );
@@ -675,7 +683,7 @@ fn assess_local_semantics(
                     assessment,
                     "needs_revision",
                     format!(
-                        "{} asks to remove the direct broader/narrower link {} → {}, but that link is not present in the frozen base revision.",
+                        "{} asks to remove the direct parent edge {} → {}, but that link is not present in the frozen base revision.",
                         operation_id(operation_slot),
                         parent,
                         concept
@@ -688,7 +696,7 @@ fn assess_local_semantics(
                     assessment,
                     "needs_revision",
                     format!(
-                        "{} cannot remove a broader/narrower link involving a concept created in this request, because that link is not present in the frozen base revision.",
+                        "{} cannot remove a parent edge involving a concept created in this request, because that link is not present in the frozen base revision.",
                         operation_id(operation_slot)
                     ),
                 );
@@ -899,7 +907,7 @@ fn assess_cross_operation_conflicts(work: &Work, slots: &[Slot], assessments: &m
         slots,
         assessments,
         &edge_removes,
-        "These operations remove the same broader/narrower link more than once.",
+        "These operations remove the same parent edge more than once.",
     );
     mark_map_duplicates(
         slots,
@@ -912,7 +920,7 @@ fn assess_cross_operation_conflicts(work: &Work, slots: &[Slot], assessments: &m
         assessments,
         &edge_adds,
         &edge_removes,
-        "These operations add and remove the same broader/narrower link. Choose one final result.",
+        "These operations add and remove the same parent edge. Choose one final result.",
     );
     mark_map_intersections(
         slots,
@@ -1557,8 +1565,8 @@ fn operation_summary(operation: Option<&ChangeOperation>) -> String {
         Some(ChangeOperation::CreateConcept { label, .. }) => {
             format!("Create concept {label:?}")
         }
-        Some(ChangeOperation::AddParent { .. }) => "Add one broader/narrower link".to_owned(),
-        Some(ChangeOperation::RemoveParent { .. }) => "Remove one broader/narrower link".to_owned(),
+        Some(ChangeOperation::AddParent { .. }) => "Add one parent edge".to_owned(),
+        Some(ChangeOperation::RemoveParent { .. }) => "Remove one parent edge".to_owned(),
         Some(ChangeOperation::AddEvidence { .. }) => "Attach exact evidence".to_owned(),
         Some(ChangeOperation::RemoveEvidence { .. }) => "Remove exact evidence".to_owned(),
         Some(ChangeOperation::RewordConcept { label, .. }) => {

@@ -9,10 +9,11 @@ use nucleus_core::{
     PROTOCOL_VERSION_V1, ReasoningEffort, Requester, SchemaId, TimeoutSeconds, ToolDefinitionV1,
     ToolResultV1, ToolsetDefinitionsV1, ToolsetRef, ToolsetRegistrationV1, WorkspaceAccess,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::value::{RawValue, to_raw_value};
 use serde_json::{Value, json};
 
+use crate::corpus::sha256_hex;
 use crate::error::{AppError, AppResult};
 use crate::tool_server::{self, Backend, Tool, ToolFailure, ToolSuccess};
 
@@ -24,15 +25,36 @@ const BEST_EFFORT_CANCEL_TIMEOUT: Duration = Duration::from_millis(250);
 const TOOLSET_DEFINITIONS_SCHEMA: &str = "nucleus.toolset-definitions.v1";
 const TOOL_RESULT_SCHEMA: &str = "annals.liaison-tool-result.v1";
 const TOOLSET_NAME: &str = "liaison";
-const TOOLSET_VERSION: u32 = 1;
-const DEVELOPER_INSTRUCTIONS: &str = "Use only the nine supplied Annals tools. Complete the session by recording exactly one reconciliation. A successful partial submit or revision is not terminal; correct only the named operations until a tool reports recorded true.";
+const TOOLSET_VERSION: u32 = 2;
 const TOOL_RESULT_SCHEMA_DOCUMENT: &str = r#"{
   "$schema":"http://json-schema.org/draft-07/schema#",
   "title":"Annals liaison tool result v1",
   "type":"object"
 }"#;
 
-#[derive(Debug, Clone, Copy, Default, Deserialize, Eq, PartialEq, clap::ValueEnum)]
+/// Identity of the exact prompt and immutable tool definitions used by an examination.
+/// The instruction revision distinguishes A -> B -> A selections even when bytes match.
+pub(crate) fn instruction_context_sha256(
+    prompt_version: &str,
+    prompt: &str,
+    instruction_revision: i64,
+    library_instructions: &str,
+) -> AppResult<String> {
+    let context = json!({
+        "prompt_version": prompt_version,
+        "system_instructions": tool_server::instructions(),
+        "prompt": prompt,
+        "instruction_revision": instruction_revision,
+        "developer_instructions": library_instructions,
+        "toolset_version": TOOLSET_VERSION,
+        "tools": tool_server::tool_definitions(),
+        "result_schema_id": TOOL_RESULT_SCHEMA,
+        "result_schema": TOOL_RESULT_SCHEMA_DOCUMENT,
+    });
+    Ok(sha256_hex(&serde_json::to_vec(&context)?))
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, Eq, PartialEq, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum ModelQuality {
     Low,
@@ -153,6 +175,7 @@ impl Runner {
         &self,
         settings: &ModelSettings,
         prompt: &str,
+        library_instructions: &str,
         model_run_token: &str,
         backend: &mut impl Backend,
         forward_stderr: bool,
@@ -160,6 +183,7 @@ impl Runner {
         self.run_liaison_cancellable(
             settings,
             prompt,
+            library_instructions,
             model_run_token,
             backend,
             forward_stderr,
@@ -167,10 +191,12 @@ impl Runner {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn run_liaison_cancellable(
         &self,
         settings: &ModelSettings,
         prompt: &str,
+        library_instructions: &str,
         model_run_token: &str,
         backend: &mut impl Backend,
         _forward_stderr: bool,
@@ -186,6 +212,7 @@ impl Runner {
             &client,
             settings,
             prompt,
+            library_instructions,
             model_run_token,
             backend,
             cancellation_requested,
@@ -199,6 +226,7 @@ impl Runner {
         client: &NucleusClient,
         settings: &ModelSettings,
         prompt: &str,
+        library_instructions: &str,
         model_run_token: &str,
         backend: &mut impl Backend,
         cancellation_requested: &dyn Fn() -> bool,
@@ -235,7 +263,7 @@ impl Runner {
             prompt,
             invocation,
         );
-        request.developer_instructions = Some(DEVELOPER_INSTRUCTIONS.to_owned());
+        request.developer_instructions = Some(library_instructions.to_owned());
         loop {
             match await_client_call(
                 client,
@@ -605,7 +633,7 @@ fn toolset_registration() -> AppResult<ToolsetRegistrationV1> {
             Ok(ToolDefinitionV1 {
                 name: name.to_owned(),
                 description: description.to_owned(),
-                input_schema_id: SchemaId::new(format!("annals.{name}.input.v1")),
+                input_schema_id: SchemaId::new(format!("annals.{name}.input.v2")),
                 input_schema: to_raw_value(input_schema)?,
             })
         })
@@ -637,7 +665,7 @@ fn tool_call_matches_contract(
 ) -> bool {
     admitted_job_id == call_job_id
         && Tool::from_name(tool_name).is_some()
-        && arguments_schema_id.as_str() == format!("annals.{tool_name}.input.v1")
+        && arguments_schema_id.as_str() == format!("annals.{tool_name}.input.v2")
 }
 
 async fn read_final_response(
@@ -865,13 +893,13 @@ mod tests {
             &job,
             &job,
             "work_read",
-            &SchemaId::new("annals.work_read.input.v1"),
+            &SchemaId::new("annals.work_read.input.v2"),
         ));
         assert!(!super::tool_call_matches_contract(
             &job,
             &JobId::new("annals-other"),
             "work_read",
-            &SchemaId::new("annals.work_read.input.v1"),
+            &SchemaId::new("annals.work_read.input.v2"),
         ));
         assert!(!super::tool_call_matches_contract(
             &job,
@@ -896,6 +924,7 @@ mod tests {
         let Err(error) = runner.run_liaison(
             &ModelSettings::default(),
             "prompt",
+            crate::instructions::DEFAULT_LIBRARY_INSTRUCTIONS,
             "stalled-timeout",
             &mut UnusedBackend,
             false,
@@ -915,6 +944,7 @@ mod tests {
         let Err(error) = runner.run_liaison_cancellable(
             &ModelSettings::default(),
             "prompt",
+            crate::instructions::DEFAULT_LIBRARY_INSTRUCTIONS,
             "stalled-interrupt",
             &mut UnusedBackend,
             false,

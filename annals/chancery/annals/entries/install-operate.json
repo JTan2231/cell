@@ -1,6 +1,6 @@
 {
   "id": "annals.install.operate",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -189,6 +189,7 @@
       }
     ],
     "data_semantics": [
+      {"status": "declared", "statement": "Named library registration and runtime readiness are separate. Existing primary and decisions operator paths are not automatically adopted as catalog names, and creating a named library adds no schedule."},
       {
         "status": "declared",
         "statement": "An ordinary update migrates and preserves the active library and spool; fresh state replaces them together and imports uncompleted backlog in preserved lane order."
@@ -237,6 +238,7 @@
       }
     ],
     "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "The primary deployer discovers registered catalog libraries, records their identity and paths, fences command admission, drains admitted work, and journals consistent per-library backups and schema migrations. Rollback restores each changed library from its own pre-migration backup while preserving config, spool, and instruction history."},
       {
         "status": "declared",
         "statement": "The durable per-library gate is the private sibling <database>.cell-maintenance. Hold atomically prevents new mutations, admitted commands may settle, and repeated holds or releases are idempotent. Release removes only the named owner and preserves operator pause. Corpus and decision-feed reads plus inbox pause and interrupt remain available; public CLI client mutations share the same fence before database access."
@@ -289,6 +291,7 @@
       }
     ],
     "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Schema 6 migrates supported versions 3 through 5, seeds default instruction revision 1, preserves existing version-5 admission kinds and retained history, and leaves legacy examination instruction provenance unknown. Older binaries require their matching pre-migration database on rollback."},
       {
         "status": "declared",
         "statement": "Annals Usage doctor may prove readiness under the same sole Nucleus deployment hold through the typed health_for_deployment interface, including runtime drain, authentication, and harness readiness; it does not turn held public Nucleus admission into normal job admission."

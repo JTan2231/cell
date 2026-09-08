@@ -7,6 +7,10 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::catalog::{
+    CatalogLock, RegisteredLibrary, lock_library_catalog, register_existing_library,
+    registered_libraries,
+};
 pub use crate::change::{
     ChangeOperation, ConceptSelector, EvidenceDisposition, EvidenceSelector, Reconciliation,
     ReconciliationContractError, parse_reconciliation,
@@ -18,8 +22,10 @@ pub use crate::cli::{
     InboxAcceptArgs, InboxCommand, InboxEnqueueArgs, InboxImportArgs, InboxInterruptArgs,
     InboxInterruptDisposition, InboxPriorityArgs, InboxRetryCommand, InboxRetryContinueArgs,
     InboxRetryStartArgs, InboxRetryStatusArgs, InboxRetryWindowArgs, InboxRunArgs,
-    IngestionChannel, IngestionStatus, InitArgs, IntegrateArgs, LatelyArgs, LatelyTime, LogArgs,
-    PagedAtArgs, RevertArgs, SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand, WorkShowArgs,
+    IngestionChannel, IngestionStatus, InitArgs, InstructionsCommand, InstructionsHistoryArgs,
+    InstructionsSetArgs, IntegrateArgs, LatelyArgs, LatelyTime, LibraryCommand, LibraryCreateArgs,
+    LogArgs, PagedAtArgs, RevertArgs, SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand,
+    WorkShowArgs,
 };
 pub use crate::client::{CliClient, ClientError, Response};
 pub use crate::corpus::ShakeEdge;
@@ -34,6 +40,7 @@ pub use crate::inbox_retry_store::{
     RetrySummary,
 };
 pub use crate::ingestion::{IngestionErrorView, IngestionView, LatelyReport};
+pub use crate::instructions::{InstructionRevision, InstructionSetResult};
 pub use crate::maintenance::{MaintenanceCommand, MaintenanceStatus};
 pub use crate::model::{
     CommitView, ConceptDetail, ConceptId, ConceptReference, ConceptSummary, CorpusOverview,
@@ -63,6 +70,26 @@ pub struct InitializedLibrary {
     pub library_id: String,
     pub kind: String,
     pub revision: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LibraryList {
+    pub libraries: Vec<RegisteredLibrary>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct NamedLibraryView {
+    pub library: RegisteredLibrary,
+    pub corpus_revision: i64,
+    pub current_instruction_revision: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InstructionHistory {
+    pub library_id: String,
+    pub current_instruction_revision: i64,
+    pub instructions: Vec<InstructionRevision>,
+    pub has_more: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -99,6 +126,8 @@ pub struct WorkContent {
 pub struct ReconciliationResult {
     pub work: String,
     pub base_revision: i64,
+    pub instruction_revision: Option<i64>,
+    pub current_instruction_revision: i64,
     pub status: String,
     pub summary: String,
     pub operation_count: usize,
@@ -112,6 +141,8 @@ pub struct ReconciliationResult {
 pub struct ValidatedReconciliation {
     pub work: String,
     pub base_revision: i64,
+    pub instruction_revision: Option<i64>,
+    pub current_instruction_revision: i64,
     pub status: String,
     pub summary: String,
     pub operations: Vec<ResolvedOperation>,
@@ -121,6 +152,7 @@ pub struct ValidatedReconciliation {
 pub struct AppliedReconciliation {
     pub work: String,
     pub base_revision: i64,
+    pub instruction_revision: Option<i64>,
     pub revision: i64,
     pub status: String,
     pub summary: String,
@@ -196,6 +228,53 @@ pub struct LibraryReader {
 }
 
 impl LibraryReader {
+    /// Open a registered library and verify its immutable identity and admission kind.
+    ///
+    /// # Errors
+    /// Returns an unknown-name, provisioning, identity, or library-read error.
+    pub fn open_named(state_root: &Path, name: &str) -> Result<Self, AppError> {
+        let library = crate::catalog::resolve(state_root, name)?;
+        let connection = crate::db::open_read(&library.library)?;
+        crate::catalog::verify(&library, &connection)?;
+        Ok(Self { connection })
+    }
+
+    /// Read the currently selected instruction document.
+    ///
+    /// # Errors
+    /// Returns a library-read or instruction-integrity error.
+    pub fn instructions(&self) -> Result<InstructionRevision, AppError> {
+        crate::instructions::current(&self.connection)
+    }
+
+    /// Read at most 100 instruction revisions before the optional exclusive bound.
+    ///
+    /// # Errors
+    /// Returns an invalid bound or library-read error.
+    pub fn instruction_history(
+        &self,
+        before: Option<i64>,
+        limit: usize,
+    ) -> Result<InstructionHistory, AppError> {
+        if !(1..=100).contains(&limit) {
+            return Err(AppError::invalid(
+                "invalid_limit",
+                "instruction history limit must be between 1 and 100",
+            ));
+        }
+        let selected = self.instructions()?;
+        let mut instructions =
+            crate::instructions::history_page(&self.connection, before, limit + 1)?;
+        let has_more = instructions.len() > limit;
+        instructions.truncate(limit);
+        Ok(InstructionHistory {
+            library_id: selected.library_id,
+            current_instruction_revision: selected.revision,
+            instructions,
+            has_more,
+        })
+    }
+
     /// Read direct parents with the same cursor and revision checks as the CLI.
     ///
     /// # Errors

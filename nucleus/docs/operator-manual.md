@@ -56,7 +56,7 @@ installed catalog for discovery.
 | CRM | Employment-relevant people, opportunities, and contemplated contact should be stored as cases, or reusable career profile material should be stored. | Its local SQLite library, mutable Markdown profile entries, queued steward runs, immutable case revisions, evidence, and advisory review notes. | Sending or authorizing outreach, scheduled intake, treating an advisory as a gate, or storing CRM domain state in Nucleus. |
 | Cast | Previously unknown employers and job postings should be discovered and monitored through ordinary HTTP. | Companies and jobs with stable identities, posting inputs, collection request outcomes and observation times, local request budgets, query configuration and consistent exports. | Personal selection, CRM stewardship, application packets, email, application submission or agent execution. |
 | Platter | A retained Cast opportunity needs a private brief and resume with only Jackson bullets tailored, or an authorized daily edition should be prepared and emailed. | Captured posting/career/template inputs, accepted Nucleus stages, fixed-template rendering, job eligibility, frozen editions, daily runner and recorded send outcomes. | Discovery, CRM editing, changes to fixed resume content, employer contact, applications, or Clockwork timer delivery. |
-| Annals | Immutable source material should be retained or reconciled with a conceptual corpus, or that corpus should be searched or explored. | Each selected physical library's retained works, concepts, evidence, reconciliations, revisions, source deliveries, inbox policy, and domain recovery. | An action backlog, casual notes or preferences, agent-process supervision, cross-library federation, or account telemetry. |
+| Annals | Source wording should be retained or organized in a named library under that library's instructions, or its sources and graph should be read. | The library catalog and each physical library's instruction revisions, retained works, concepts, evidence, reconciliations, corpus revisions, source deliveries, inbox policy, and recovery. | Application workflow decisions, agent-process supervision, cross-library federation, or account telemetry. |
 | Email | A plain-text email, optionally with authorized local files or in-memory attachment bytes, should be sent to the single fixed recipient. | The synchronous frozen Resend request and its fixed sender and recipient contract. | Drafting without sending, arbitrary recipients, remote attachment URLs, or agent execution. |
 | Conversations | Codex tasks on this Mac should be listed, inspected, or searched. | A read-only normalized view over the normal user's Codex App Server. | Decision classification, durable projections, live-process supervision, or Nucleus's isolated job history. |
 | Krisis | Attributable decisions in completed root user turns should be identified and delivered as immutable accounts to the dedicated Annals decisions library. | The observation baseline and coverage, bounded classification, source anchors, account projection, durable outbox, Annals acceptance receipts, and recovery. | Retaining the canonical account library, running the legacy candidate-review workflow, or sending a digest. |
@@ -809,6 +809,22 @@ launchd invokes Todo at 09:00 machine-local time, its zsh runner sources
 `~/Library/Logs/Todo/`. It is not part of `org.nucleus.daemon` or Nucleus's
 authentication authority.
 
+Annals named libraries use an Annals-owned `catalog.db` under
+`~/Library/Application Support/Annals` (or `ANNALS_STATE_DIR`). Creation stores
+one separate database, spool, and config under `libraries/<library-id>/` and
+enables no schedule. The catalog name resolves to a persistent library ID;
+background callers pin that ID. Each library stores its instruction revisions
+and current selection. The configured primary and dedicated decisions libraries
+remain separately selected unless explicitly registered.
+
+Coordinated Annals deployment holds catalog admission before enumerating named
+libraries and holds each library while domain work drains. The primary installer
+also locks the catalog, backs up and migrates registered managed libraries, and
+records their recovery facts in its transaction journal. Rollback restores those
+backups before releasing owned holds. Incomplete library provisioning or an
+unfinished installer transaction blocks further catalog mutation. The dedicated
+decisions provisioner continues to own its existing deployment surface.
+
 Conversations has a content-addressed installation but no application database.
 Krisis owns its additive schema-version-4 database, write-once activation
 baseline, observation coverage, Nucleus correlations, account outbox, Annals
@@ -1308,6 +1324,15 @@ Specify each setting:
 Use base `instructions`, optional `developerInstructions`, and the per-job
 `prompt` for their defined roles. Nucleus forwards them separately.
 
+Annals stores librarian instructions inside each library. An examination freezes
+the corpus revision and instruction revision together. Its base instructions
+define Annals mechanics; `developerInstructions` contains that exact library
+instruction document; the per-job prompt identifies the frozen source and basis.
+Source text cannot change the selected instructions. Reuse includes the instruction
+revision and prompt/tool-definition identity. Annals rechecks both corpus and
+instruction currentness when applying a material result. Instruction replacement
+does not reinterpret committed history or erase a recorded domain result.
+
 All version-1 jobs are ephemeral and unattended. Approvals are disabled, and
 each job has one attempt. Nucleus accepts no command, arbitrary argv, retry count,
 workflow graph, or requester-defined Codex configuration.
@@ -1346,6 +1371,11 @@ results, tool meaning, or definitions change incompatibly:
 4. submit new jobs referencing it.
 
 Never update old registration rows in SQLite.
+
+Annals uses liaison toolset version 2 and version-2 input schemas for the neutral
+structural tool definitions used with library-specific instructions. Retained
+historical registrations remain immutable. A library instruction edit changes
+the invocation context without creating a new toolset or extending permissions.
 
 Todo's current immutable requester toolsets are
 `todo/concern-routing/1`, `todo/situation-assessment/1`, and
@@ -1489,7 +1519,7 @@ provider registry or documentation storage.
 | CRM profile entries, intake, cases, evidence, revisions, advisories, queued steward runs, database, or deployment | CRM | Preserve its bounded Nucleus adapter and prominent nonblocking advisories; Nucleus gains no CRM fields, domain success, scheduling, or retry authority. |
 | Cast company/job identity, source adapters, observations, collection requests, local budgets, configuration, exports or deployment | Cast | Keep ordinary HTTP collection separate from Nucleus, CRM stewardship and downstream selection/application/email state; preserve company/job records and explicit collection diagnostics. |
 | Platter source capture, constrained resume authoring, stages, editions or send history | Platter | Keep career editing in CRM, discovery in Cast, execution in Nucleus and acceptance transport in Email. Preserve fixed resume content and held uncertain sends; source defaults do not activate a schedule. |
-| Annals works, physical-library identity, concepts, evidence, reconciliation, inbox, producer acceptance, decision feed, retry, or corpus migration | Annals | Keep primary and decisions libraries isolated; preserve job correlation and adapter behavior when affected; Nucleus does not gain Annals workflow state. |
+| Annals catalog, physical-library identity, instruction revisions, works, concepts, evidence, reconciliation, inbox, producer acceptance, decision feed, retry, or corpus migration | Annals | Preserve library isolation, instruction provenance, job correlation, and adapter behavior. Application frames cannot change admission or validation rules; Nucleus does not gain Annals workflow state. |
 | Annals usage attribution, budget display, or diagnostic projection | Annals Usage | Read Nucleus records through the supported interfaces; do not become runtime or corpus authority. |
 | Email content, delivery, Resend access, fixed addresses, or deployment | Email | Keep the direct Resend path independent of Nucleus; Nucleus gains no email fields, credential, or delivery authority. |
 | Codex task enumeration, normalized transcript reads, App Server compatibility, or Conversations deployment | Conversations | Keep it read-only and separate from Nucleus's private Codex home; consumers must not treat persisted status as live-process proof. |

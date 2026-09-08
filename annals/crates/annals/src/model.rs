@@ -226,6 +226,9 @@ pub struct GraphView {
 pub struct ReconciliationView {
     pub work: String,
     pub base_revision: i64,
+    /// Unknown for examinations and requests made before instruction tracking.
+    pub instruction_revision: Option<i64>,
+    pub current_instruction_revision: i64,
     pub status: String,
     pub summary: String,
     pub request: serde_json::Value,
@@ -252,6 +255,9 @@ pub struct RecordedChangeView {
     pub kind: String,
     pub summary: String,
     pub work: Option<String>,
+    /// Unknown for legacy reconciliations; not applicable to shake or revert.
+    pub instruction_revision: Option<i64>,
+    pub current_instruction_revision: i64,
     pub submitted_request: serde_json::Value,
     pub resolved_operations: serde_json::Value,
     pub effects: Vec<DiffEntry>,

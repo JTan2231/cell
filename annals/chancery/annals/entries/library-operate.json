@@ -1,11 +1,11 @@
 {
   "id": "annals.library.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
-  "title": "Maintain an Annals knowledge library",
-  "summary": "Initialize, migrate, inspect, or back up the library. Apply corpus changes, simplify the graph, or revert a commit when explicitly requested.",
+  "title": "Manage Annals libraries and their instructions",
+  "summary": "Create or select named libraries, store their librarian instructions, inspect or back up state, and explicitly apply, simplify, or revert the graph.",
   "use_when": [
     "Library schema, backup, statistics, explicit reconciliation application, graph normalization, history, or reversion must be operated.",
     "Strict reconciliation JSON should be submitted without a model run."
@@ -17,7 +17,7 @@
   ],
   "outcome": "A deterministic library read or atomic state transition whose revision, provenance, compatibility, and recovery consequences are explicit.",
   "effects": [
-    "Initialization creates revision zero with one immutable general or decisions role. Migration upgrades only supported prior schemas as general. Backup creates a consistent SQLite copy without replacing its destination.",
+    "Initialization creates revision zero with one immutable general or decisions role. Migration upgrades supported schemas 3 through 5 to schema 6, assigning general only to version-3 and version-4 libraries and preserving existing version-5 kinds. Backup creates a consistent SQLite copy without replacing its destination.",
     "Applying, shaking, or reverting creates an append-only commit and advances the corpus revision when it changes state.",
     "Direct reconciliation submission validates a projected state but does not apply it."
   ],
@@ -26,13 +26,13 @@
     "No model or Nucleus job is required for deterministic library operations."
   ],
   "success": [
-    "The selected command reports the exact library, revision, reconciliation, backup, statistics, or migration result.",
-    "Every mutation is atomic and the resulting library passes its relevant invariants.",
+    "The selected command reports the exact library registration, instruction selection, corpus revision, reconciliation, backup, statistics, or migration result.",
+    "Instruction selection and corpus mutations are atomic. Named creation retains a durable provisioning record so interrupted filesystem publication can resume.",
     "A confirmed shake or revert records a new commit rather than rewriting history."
   ],
   "failure_and_recovery": [
     "Migration rejects unsupported old or newer schemas without partial mutation.",
-    "A pending reconciliation cannot apply after HEAD diverges from its base; re-resolve rather than force it.",
+    "A pending reconciliation cannot apply after HEAD or the instruction selection diverges from its frozen basis; submit under current context rather than force it.",
     "Revert conflicts atomically when relevant facts changed; unrelated state remains untouched."
   ],
   "privacy": [
@@ -40,6 +40,14 @@
     "Choose a private explicit backup destination and preserve its access controls."
   ],
   "interfaces": [
+    {"label": "List named libraries", "invocation": "/Users/joey/.local/bin/annals library list"},
+    {"label": "Create named library", "invocation": "/Users/joey/.local/bin/annals library create <NAME> [--kind general|decisions]"},
+    {"label": "Show named library", "invocation": "/Users/joey/.local/bin/annals library <NAME> show"},
+    {"label": "Set library instructions", "invocation": "/Users/joey/.local/bin/annals library <NAME> instructions set <CONTENT>"},
+    {"label": "Set library instructions from file", "invocation": "/Users/joey/.local/bin/annals library <NAME> instructions set --file <PATH>"},
+    {"label": "Set library instructions from stdin", "invocation": "/Users/joey/.local/bin/annals library <NAME> instructions set --stdin"},
+    {"label": "Read selected instructions", "invocation": "/Users/joey/.local/bin/annals library <NAME> instructions show"},
+    {"label": "Read instruction history", "invocation": "/Users/joey/.local/bin/annals library <NAME> instructions history [--limit N] [--before REVISION]"},
     {"label": "Initialize", "invocation": "/Users/joey/.local/bin/annals init [--kind general|decisions]"},
     {"label": "Migrate", "invocation": "/Users/joey/.local/bin/annals migrate"},
     {"label": "Statistics", "invocation": "/Users/joey/.local/bin/annals stats"},
@@ -57,49 +65,62 @@
   ],
   "promise": {
     "consumers": [
+      {"status": "declared", "statement": "An authorized consuming application or operator can create a named library, select its ordinary commands, and read or replace its complete librarian instructions without model execution."},
       {"status": "declared", "statement": "An authorized local operator or expert caller may initialize, inspect, migrate, back up, reconcile, normalize, or revert one Annals library through deterministic product-owned commands."},
       {"status": "unsupported", "statement": "This capability is not ordinary source retention, model-assisted integration, inbox operation, direct row editing, or an implicit destructive fresh-state cutover."}
     ],
     "preconditions": [
       {"status": "declared", "statement": "The caller explicitly selects the target library and holds authority for the requested mutation; initialization and backup require absent destination paths, and initialization chooses the immutable library role explicitly with general as the default."},
-      {"status": "declared", "statement": "Reconciliation application requires a valid pending result whose base is current HEAD, shake confirmation requires the exact preview context, and revert requires relevant facts not to have conflicted."}
+      {"status": "declared", "statement": "Reconciliation application requires a valid pending result whose base and instruction revision are current, shake confirmation requires the exact preview context, and revert requires relevant facts not to have conflicted."}
     ],
     "inputs": [
+      {"status": "declared", "statement": "Names have 1–64 lowercase ASCII letters, digits, underscores or hyphens, start with a letter, and exclude list, create, and help. Instruction set requires exactly one nonblank UTF-8 document supplied inline, from --file, or from --stdin."},
       {"status": "declared", "statement": "Inputs select one command and library, an absent backup destination, strict reconciliation JSON with work and base revision, a pending work, or a commit revision to revert."},
       {"status": "unsupported", "statement": "Arbitrary SQL, in-place backup replacement, forced stale application, unsupported-schema reinterpretation, history erasure, and bypass of confirmation are not accepted."}
     ],
     "outputs": [
+      {"status": "declared", "statement": "Library list reports catalog registrations and provisioning state. Library show verifies identity and reports the registration, corpus revision, and selected instruction revision; neither is a live readiness probe. Instruction set returns changed plus the selected instructions object with library_id, revision, exact content, SHA-256, and recorded_at."},
       {"status": "declared", "statement": "The selected command reports the exact initialized or migrated library, statistics, backup result, reconciliation validation, shake plan or commit, revert commit, and resulting revision as applicable."}
     ],
     "data_semantics": [
+      {"status": "declared", "statement": "Annals preserves source bytes and enforces structural and evidence invariants. Each library’s stored instructions define what concepts and parent connections mean; broader/narrower conceptual scope is the default instruction document, not a universal edge meaning."},
+      {"status": "declared", "statement": "Each library database owns immutable instruction revisions and one current selection. recorded_at describes instruction selection, not source creation or graph reinterpretation. Setting current exact bytes is unchanged; A → B → A creates successive revisions. Backups include this history."},
       {"status": "declared", "statement": "Initialization creates revision zero with an immutable general or decisions role. Migration assigns version-3 and version-4 libraries the general role. Application, confirmed nonempty shake, and successful revert append a commit and advance the corpus. They do not rewrite history."},
       {"status": "declared", "statement": "Direct reconciliation submission resolves and validates a complete projected corpus state but does not apply it."},
       {"status": "declared", "statement": "Shake removes only direct parent edges already implied by longer paths, preserving reachability but not every direct-neighbor count or hop distance."}
     ],
     "identity_and_units": [
+      {"status": "declared", "statement": "The Annals-owned catalog.db maps unique names and stable library IDs to managed database, config, and spool paths. It lives under ANNALS_STATE_DIR, default macOS ~/Library/Application Support/Annals or other platforms ~/.local/share/annals. New libraries live under libraries/LIBRARY_ID/."},
       {"status": "declared", "statement": "The selected library, its persistent ID and immutable role, public cN concept IDs, normalized work labels, reconciliation identity, commit identity, and integer corpus revision are distinct selectors."},
       {"status": "declared", "statement": "Backup paths identify filesystem copies, while statistics and shake plans report documented record and edge counts rather than usage or billing units."}
     ],
     "completeness_and_freshness": [
+      {"status": "declared", "statement": "Instruction history returns newest-first instructions and has_more, default limit 20 and maximum 100. --before REVISION selects strictly older revisions. Instruction changes affect future examinations, start no reinterpretation, and do not advance corpus revisions."},
       {"status": "declared", "statement": "Backup creates one consistent SQLite copy of the selected library, and validation re-resolves the stored request against its exact base rather than trusting a cached projection."},
-      {"status": "declared", "statement": "Every mutation checks the current library state at commit time and either applies its complete atomic transition or leaves the library unchanged."},
+      {"status": "declared", "statement": "Corpus and instruction mutations check their current library state at commit time and either apply their complete atomic transition or leave it unchanged. Named creation has an explicit recoverable provisioning lifecycle."},
       {"status": "unspecified", "statement": "No backup duration, maximum library size, migration latency, or long-term backup-retention guarantee is promised."}
     ],
     "access": [
+      {"status": "declared", "statement": "A registered name scopes ordinary commands as annals library NAME COMMAND. The catalog resolves and verifies stable library identity and managed paths; unknown names fail without creation. Operator config/path selection remains supported."},
+      {"status": "declared", "statement": "Named scope rejects --library, ignores ANNALS_LIBRARY, and verifies the selected persistent identity. An explicit config may tune execution but cannot redirect the registered database or spool or bypass its admission kind. Operator paths can be pinned with expected_library_id or --expected-library-id."},
       {"status": "declared", "statement": "The supported boundary is the local Annals CLI operating one explicitly resolved private library and an explicitly chosen backup or request file where applicable."},
       {"status": "unsupported", "statement": "Direct SQLite mutation, manual database replacement, remote administration, and model execution are not supported by this capability."}
     ],
     "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Creation durably reserves one name and identity in provisioning, then publishes matching private database/config/spool state as ready. Repeating the same name and kind resumes or returns that library; conflicting state fails without replacement. Creation adds no schedule or model job."},
+      {"status": "declared", "statement": "Instruction replacement and selection are one transaction. Material application checks the stored instruction revision with HEAD. Shake confirmation also binds its instruction selection; reachability preservation does not guarantee preservation of application meaning for a direct edge."},
       {"status": "declared", "statement": "Supported migrations and all corpus mutations are transactional; failure or conflict leaves no partial transition."},
-      {"status": "declared", "statement": "Application requires unchanged base HEAD, confirmed shake binds to exact library identity and HEAD, and revert appends an inverse commit while preserving unrelated intervening facts."},
+      {"status": "declared", "statement": "Application requires unchanged base HEAD and instruction selection, confirmed shake binds to exact library identity, HEAD, and instruction revision, and revert appends an inverse commit while preserving unrelated intervening facts."},
       {"status": "declared", "statement": "Initialization and backup refuse replacement, and migration rejects unsupported older or newer schemas without partial reinterpretation."}
     ],
     "operational_limits": [
+      {"status": "unsupported", "statement": "Library rename, deletion, combined queries, cross-library transactions, and automatic adoption of existing operator-selected libraries are not supplied by these commands."},
       {"status": "declared", "statement": "Migration accepts only documented prior schemas. Backup and initialization never overwrite. Stale reconciliation has no force path. Destructive installed fresh state is outside this operation."},
       {"status": "unspecified", "statement": "No maximum library, reconciliation, backup, or commit size, throughput, or wall-clock latency is promised here."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 3, provider release, library schema, reconciliation shape, and installed package generation are distinct; migrations cover only explicitly supported prior schemas."},
+      {"status": "declared", "statement": "Schema 6 seeds the default instruction revision for supported migrations, preserves existing library kind and corpus history, and leaves old model-run and reconciliation instruction provenance null. Legacy pending proposals cannot be applied as if their instruction basis were current."},
+      {"status": "declared", "statement": "Capability contract version 4, provider release, library schema, reconciliation shape, and installed package generation are distinct; migrations cover only explicitly supported prior schemas."},
       {"status": "declared", "statement": "Revert and commit history are append-only compatibility records; older history is not rewritten to current meaning."},
       {"status": "unspecified", "statement": "No universal forward-compatibility, migration window, or deprecation period is promised."}
     ],

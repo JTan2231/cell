@@ -2187,7 +2187,13 @@ fn eligible_retry_reconciliation(
     }
     match record.status.as_str() {
         "applied" | "recorded" => Ok(Some(record.id)),
-        "pending" if record.base_revision == revision(&connection)? => Ok(Some(record.id)),
+        "pending"
+            if record.base_revision == revision(&connection)?
+                && record.instruction_revision
+                    == Some(crate::instructions::current(&connection)?.revision) =>
+        {
+            Ok(Some(record.id))
+        }
         "pending" | "superseded" => Ok(None),
         other => Err(AppError::database(
             "invalid_reconciliation",
@@ -3524,7 +3530,9 @@ fn process_work(
         .or(envelope.receipt.retry_reconciliation_id);
     if let Some(record) = receipt_reconciliation(&connection, work.id, reconciliation_id)? {
         let retry_pending_is_current = envelope.receipt.retry_reconciliation_id != Some(record.id)
-            || record.base_revision == revision(&connection)?;
+            || (record.base_revision == revision(&connection)?
+                && record.instruction_revision
+                    == Some(crate::instructions::current(&connection)?.revision));
         match record.status.as_str() {
             "applied" | "recorded" => {
                 if envelope.receipt.reconciliation_id != Some(record.id) {

@@ -4,6 +4,14 @@ Annals reads are local and bounded. HEAD is the default. Commands that accept
 `--at <REVISION>` can read an immutable historical corpus state. Reads invoke
 no model and make no network request.
 
+Use `annals library NAME COMMAND` to select a registered library. Each library
+has separate source, graph, and history identity. The library's stored
+instructions define the meaning of concepts and parent edges; the default
+frame uses broader/narrower conceptual scope. A historical graph can include
+commits interpreted under earlier instruction revisions. Reconciliation
+inspection reports the used and current instruction revisions separately.
+No combined search or transaction across libraries is provided.
+
 ## Find and inspect ideas
 
 ```sh

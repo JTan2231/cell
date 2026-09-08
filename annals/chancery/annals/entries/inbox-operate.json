@@ -1,6 +1,6 @@
 {
   "id": "annals.inbox.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -45,6 +45,7 @@
     "Spool, database, logs, and retry archives belong to the user's private application boundary."
   ],
   "interfaces": [
+    {"label": "Run a named inbox", "invocation": "/Users/joey/.local/bin/annals library <NAME> inbox run"},
     {"label": "Inbox status", "invocation": "/Users/joey/.local/bin/annals inbox status"},
     {"label": "Register settled arrivals", "invocation": "/Users/joey/.local/bin/annals inbox register"},
     {"label": "Enqueue explicit files", "invocation": "/Users/joey/.local/bin/annals inbox enqueue <FILE>"},
@@ -87,6 +88,7 @@
       }
     ],
     "data_semantics": [
+      {"status": "declared", "statement": "Each new examination freezes the selected library instructions and corpus revision through the same admission boundary as manual integration. A named library uses its registered database, config, spool, and expected identity."},
       {"status": "declared", "statement": "Registration moves a settled arrival into a queued envelope and direct enqueue copies an explicit file; neither starts a source delivery or creates its database delivery record."},
       {"status": "declared", "statement": "Priority is a binary scheduling lane, not a mutable sequence or corpus property; selection is priority-first then immutable sequence order with no fairness promise."},
       {"status": "declared", "statement": "A closed storage gate is a non-durable dispatch condition that leaves work queued with zero attempts, while pause and maintenance are distinct durable operator and deployment controls."},
@@ -103,22 +105,25 @@
       {"status": "unspecified", "statement": "No schedule interval, queue-drain deadline, starvation bound, storage-restoration time, or model-completion latency is promised."}
     ],
     "access": [
+      {"status": "declared", "statement": "A registered name scopes ordinary commands as annals library NAME COMMAND. The catalog resolves and verifies stable library identity and managed paths; unknown names fail without creation. Operator config/path selection remains supported."},
       {"status": "declared", "statement": "The supported boundary is the local Annals inbox CLI and its configured private spool and library; dispatch may use the configured local Nucleus requester interface."},
       {"status": "unsupported", "statement": "Direct job.json editing, manual archive moves, direct SQLite writes, and host-wide service or storage control are not supported inbox surfaces."}
     ],
     "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "An exact original pending reconciliation is reusable by a retry child only while its corpus and instruction revisions remain current. Otherwise the child examines under current instructions. Already committed or recorded results survive later instruction changes or execution failures."},
       {"status": "declared", "statement": "Each job moves from a complete queued envelope to at most one processing attempt and one terminal archive; terminal jobs never return to queued."},
       {"status": "declared", "statement": "A known item-local failure archives that item and ordinary draining may continue, while unexpected model or runtime failure archives the current job and ends the activation nonzero."},
       {"status": "declared", "statement": "Pause prevents the next claim after active work finishes but permits registration. Maintenance separately blocks spool mutation. Resume clears only pause."},
       {"status": "declared", "statement": "A halted retry continues only its unattempted children and never retries a failed child; original failed history remains unchanged."}
     ],
     "operational_limits": [
+      {"status": "declared", "statement": "Creating a named library initializes a private config and spool but creates no timer or Clockwork binding. A background config pins the expected immutable library ID; readiness and scheduling remain separate operations."},
       {"status": "declared", "statement": "Every job has at most one attempt, priority has two lanes, retry membership is an explicit bounded inclusive interval, and ordinary claims require configured free-space reserve on both Annals filesystems."},
       {"status": "declared", "statement": "Low storage is a stop only; this operation cannot clear user data or alter the reserve without separate exact target-scoped user consent."},
       {"status": "unspecified", "statement": "No queue capacity, maximum file size, throughput, scheduling fairness, or wall-clock completion bound is promised here."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 2, Annals provider release, spool receipt shape, library schema, and Nucleus protocol are separate compatibility axes."},
+      {"status": "declared", "statement": "Capability contract version 3, Annals provider release, spool receipt shape, library schema, and Nucleus protocol are separate compatibility axes."},
       {"status": "declared", "statement": "Supported installation and recovery procedures preserve historical envelopes and use product-owned migration rather than manual reinterpretation."},
       {"status": "unspecified", "statement": "No cross-release spool-format support window or deprecation period is promised."}
     ],

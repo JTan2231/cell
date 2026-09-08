@@ -1,6 +1,6 @@
 {
   "id": "annals.develop.change",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -21,7 +21,7 @@
     "Release and installation actions remain separate and may mutate Git, installed binaries, database state, scheduler state, or configuration."
   ],
   "authority": [
-    "Annals owns works, corpus meaning, reconciliation, history, inbox policy, domain recovery, and its installation.",
+    "Annals owns the library catalog, retained sources, stored instruction revisions, structural corpus invariants, reconciliation, history, inbox policy, domain recovery, and installation; consuming applications define interpretation through library instructions.",
     "Nucleus owns shared model execution and authentication but never Annals domain success or retry policy.",
     "Clockwork owns immutable scheduled activation, binding, non-overlap, and process history but never Annals queue or corpus success."
   ],
@@ -93,6 +93,7 @@
       {"status": "unsupported", "statement": "A development result does not itself include Git publication, installed deployment, destructive migration, or a live production success claim."}
     ],
     "data_semantics": [
+      {"status": "declared", "statement": "Annals preserves source bytes and enforces structural and evidence invariants. Each library’s stored instructions define what concepts and parent connections mean; broader/narrower conceptual scope is the default instruction document, not a universal edge meaning."},
       {"status": "declared", "statement": "The registered annals Semantics repository governs maintained contributor terminology, while code, tests, and component documentation remain authoritative for behavior."},
       {"status": "declared", "statement": "Work, source delivery, examination, reconciliation, commit, revision, inbox job, and retry event remain distinct Annals lifecycle concepts."},
       {"status": "declared", "statement": "Nucleus terminal state and model prose remain execution evidence rather than Annals domain success."}
@@ -120,6 +121,7 @@
       {"status": "unspecified", "statement": "No maximum change size or completion time is promised."}
     ],
     "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Catalog schema, library schema, instruction revision, effective prompt/tool identity, and provider contract are separate compatibility axes. Preserve unknown legacy provenance and historical runtime decoders; use new immutable registrations when tool meanings change."},
       {"status": "declared", "statement": "Product release, library schema, Nucleus public protocol, Clockwork definition and binding identity, immutable tool registrations, installed packaging, provider schema, and entry contract version are evaluated separately."},
       {"status": "declared", "statement": "A public or persistent semantic change updates its owning documentation, migration, rollback, and historical decoder in the same coherent change."},
       {"status": "unspecified", "statement": "No release cadence, compatibility window, or deprecation period is promised by the development operation."}

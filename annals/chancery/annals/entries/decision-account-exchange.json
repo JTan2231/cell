@@ -42,6 +42,8 @@
     "Feed output omits raw Markdown, authority quotation, transcript, paths, diffs, commands, tool output, prompts, credentials, and general-library content."
   ],
   "interfaces": [
+    {"label": "Accept into a named decisions library", "invocation": "/Users/joey/.local/bin/annals library <NAME> inbox accept --producer krisis --key <ID> <FILE>"},
+    {"label": "Freeze named decisions feed", "invocation": "/Users/joey/.local/bin/annals library <NAME> decision-feed watermark"},
     {"label": "Accept account", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> inbox accept --producer krisis --key <ID> <FILE>"},
     {"label": "Freeze watermark", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> decision-feed watermark"},
     {"label": "Read fixed page", "invocation": "/Users/joey/.local/bin/annals --config <DECISIONS_CONFIG> decision-feed page --watermark <TOKEN> --after <CURSOR> --limit <N>"},
@@ -58,7 +60,7 @@
       {"status": "declared", "statement": "Krisis may submit one immutable schema-one Markdown account per decision, and local consumers may read the resulting accepted-account prefix."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "Every exchange command names one explicit decisions config with a library, inbox root, and exact 32-lowercase-hex expected library ID. The current schema, persistent identity, and immutable decisions role must match. Acceptance or dispatch binds or verifies spool identity."},
+      {"status": "declared", "statement": "Every exchange command names an explicit decisions config or a registered decisions name whose managed config binds a library, inbox root, and exact 32-lowercase-hex expected library ID. The current schema, persistent identity, and immutable decisions role must match. Acceptance or dispatch binds or verifies spool identity."},
       {"status": "declared", "statement": "New acceptance additionally requires no deployment maintenance and enough spool headroom to preserve the configured reserve."}
     ],
     "inputs": [
@@ -82,7 +84,8 @@
       {"status": "unsupported", "statement": "No historical Decisions rows, records of decisions not accepted through this feed, raw account body, dispatch result, semantic interpretation, correction, retraction, or consumer acknowledgement appears in feed version one."}
     ],
     "access": [
-      {"status": "declared", "statement": "The supported boundary is the local Annals CLI with an explicit decisions config; acceptance permits only producer krisis and feed commands are read-only."},
+      {"status": "declared", "statement": "Named scope is an identity-checked wrapper over the same account/feed command. Operator-path calls still require explicit --config and reject --library. A name or librarian instruction change cannot bypass immutable decisions admission."},
+      {"status": "declared", "statement": "The supported boundary is the local Annals CLI with an explicit decisions config or registered identity-bound decisions name; acceptance permits only producer krisis and feed commands are read-only."},
       {"status": "declared", "statement": "With decision_feed configured, Annals rejects direct work add or integration, generic enqueue, ordinary incoming registration, and backlog import. The decisions database rejects these routes through any config, spool, or direct selector. Dispatch permits accepted originals and explicit retry children."},
       {"status": "unsupported", "statement": "Library override, environment or frontend fallback, direct SQLite access, receipt editing, cross-library query, and remote access are unsupported."}
     ],
@@ -95,7 +98,7 @@
       {"status": "unspecified", "statement": "No acceptance, queue, dispatch, model, storage, schedule, throughput, quality, or wall-clock service-level objective is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Exchange contract version 1, account schema 1, library schema 5, producer receipt 1, feed cursor 1, provider release, and later inbox or Nucleus protocols are distinct compatibility axes."},
+      {"status": "declared", "statement": "Exchange contract version 1, account schema 1, library schema 6, producer receipt 1, feed cursor 1, provider release, and later inbox or Nucleus protocols are distinct compatibility axes."},
       {"status": "unsupported", "statement": "Changed accepted bytes, correction, retraction, or a new event type cannot be introduced under this version-one identity."}
     ],
     "reliances": [

@@ -1,7 +1,7 @@
 # Integrate a source with the Annals corpus
 
 Integration asks Annals' constrained AI reader to examine one immutable work
-against one frozen corpus revision. It records an interpretation as semantic
+against one frozen corpus and library instruction revision. It records an interpretation as semantic
 operations that associate ideas with exact source quotations in the corpus.
 
 ## Start an examination
@@ -14,7 +14,9 @@ Integrate a file or an existing work:
 ```
 
 Both forms deliberately examine the selected work even when its bytes were
-retained earlier. Annals freezes HEAD, submits one closed Nucleus job, and
+retained earlier. `annals library NAME integrate ...` selects a registered
+library. Annals freezes HEAD and the selected instructions in one admission
+transaction, submits one closed Nucleus job, and
 expects its liaison to record one reconciliation through Annals' validated
 tools. The liaison has only the scoped work/corpus interfaces supplied by
 Annals. Its final prose is diagnostic and is not parsed as the result. Direct
@@ -22,7 +24,9 @@ integration requires a `general` library; a decisions library is dispatched
 only from producer-accepted inbox jobs or their explicit retry children.
 
 Annals may reuse the newest successful examination for the exact same work,
-base revision, prompt version, model, and reasoning effort. Force a fresh
+base revision, instruction revision, exact effective prompt/tool context, model,
+and reasoning effort. Returning to earlier instruction bytes creates a new
+revision and does not revive earlier reuse. Force a fresh
 reading only when that is intended:
 
 ```sh
@@ -49,7 +53,8 @@ commits the projected corpus transition:
 Without it, a material result remains pending. A projected state mechanically
 equal to the base is recorded with no corpus change; it creates no commit and
 does not advance the revision. A pending reconciliation can apply only while
-HEAD still equals its base.
+HEAD and the selected instruction revision still equal its frozen basis.
+Both are checked in the committing transaction.
 
 ## Success, failure, and authority
 
@@ -63,7 +68,13 @@ independently valid operations. A liaison may discard an irreparable draft;
 abandoned and discarded drafts remain audit records but create no
 reconciliation.
 
-The complete work and frozen corpus context can enter the immutable Nucleus
+The exact selected library instructions are supplied as Nucleus
+`developerInstructions`. They define interpretation; the shared Annals prompt
+and tools enforce structural and evidence rules. A running examination reads
+its recorded instruction revision, even after selection changes. Instruction
+updates affect future examinations without rewriting committed results.
+
+The complete work, library instructions, and frozen corpus context can enter the immutable Nucleus
 request and raw protocol state. Protect both the Annals library and Nucleus
 state as sensitive. Use Annals Usage, not this capability, to inspect the
 resulting model consumption.

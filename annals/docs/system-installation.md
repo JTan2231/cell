@@ -13,6 +13,33 @@ CLI to Nucleus. Annals Usage calculates token consumption and reads account
 limits live; it stores no companion database and never becomes part of the
 Annals library or corpus.
 
+## Named library state
+
+`annals library create NAME` creates private state under
+`ANNALS_STATE_DIR/libraries/LIBRARY_ID/`: `annals.db`, `config.toml`, and
+`spool/`. The state root defaults to `~/Library/Application Support/Annals` on
+macOS and `~/.local/share/annals` elsewhere. `catalog.db` and `.catalog.lock`
+belong to Annals at that root. The catalog records stable identity, paths,
+admission kind, and provisioning state. `library list` reads those registrations;
+it is not a readiness probe. Interrupted creation resumes through the same
+`library create` command, without replacing conflicting state.
+
+Named libraries are separate storage and command boundaries. Their config pins
+the immutable library ID; background invocations must keep that identity pin
+when they select a config path. `annals library NAME inbox run` uses the named
+library's config and stored instructions. Creating a library installs no
+Clockwork binding or timer. Scheduling remains a separate explicit operation.
+Existing primary and decisions configs remain valid operator paths and are
+not automatically registered as names.
+
+Each library database includes its exact instruction history and current
+selection. Backups therefore preserve interpretation settings alongside sources
+and graph history. Schema 6 migration seeds the default instructions and leaves
+old examination provenance unknown; it does not reinterpret historical data.
+A replacement examination freezes current instructions. Recovery preserves an
+already committed or recorded result, while a pending application must still
+match both corpus and instruction revisions.
+
 ## Operational model
 
 The Annals library retains corpus state and history. The spool is a visible
@@ -573,7 +600,14 @@ $HOME/Library/Application Support/Chancery/providers/
 |-- annals -> Annals current release share/chancery/annals
 `-- annals-usage -> Annals current release share/chancery/annals-usage
 $HOME/Library/Application Support/Annals/
-|-- config.toml
+|-- catalog.db       # registered named libraries
+|-- .catalog.lock
+|-- libraries/
+|   `-- LIBRARY_ID/
+|       |-- annals.db
+|       |-- config.toml
+|       `-- spool/
+|-- config.toml      # existing primary operator path
 |-- usage.toml
 |-- annals.db
 |-- log/
@@ -864,14 +898,23 @@ release selector alone. A committed migration child retains spool maintenance
 until the outer system migration proves service absence. Nucleus credentials
 and state remain outside Annals rollback and move only forward.
 
-The version-5 deploy path invokes the candidate's additive `migrate` after the
-backup and while the service is quiescent. It adds retry-event provenance when
-upgrading a version-3 library and the decision-account acceptance ledger when
-upgrading a version-3 or version-4 library, and assigns every migrated library
-the immutable `general` role, without replacing its works, deliveries,
-reconciliations, commits, spool, or archives. The rollback
-transaction retains the pre-migration backup if candidate migration or cutover
-fails.
+The version-6 deploy path invokes the candidate's additive `migrate` after
+backup and while service and command admission are quiescent. It accepts
+versions 3 through 5, adds missing earlier schema steps, then seeds stored
+library instructions and adds frozen instruction provenance. It preserves
+existing version-5 admission kinds, sources, deliveries, reconciliations,
+commits, spools, and archives. Older examinations retain null instruction
+provenance. No historical graph is reinterpreted.
+
+The primary deployer discovers registered libraries in the catalog as well as
+its existing configured target. It records their identities and paths, fences
+new commands, drains admitted work, and journals consistent backups before
+migration. Rollback restores each migrated database from its own backup and
+preserves its config, spool, and instruction history. It adds no named-library
+schedules and does not automatically adopt primary or decisions paths as
+catalog names. Catalog presence alone is not readiness or migration success.
+The existing dedicated decisions provisioner keeps authority over its separate
+binding and admission profile.
 
 No operator timing or manual service stop is required. It is safe to run the
 same deployment command while a delivery is in progress; by default the
@@ -888,7 +931,7 @@ binding or legacy launchd state; it is not the complete scheduled-installation
 outcome.
 
 Schema version 3 established the intentional boundary that cannot open an
-older library. Versions 4 and 5 migrate supported older versions additively;
+older library. Versions 4 through 6 migrate supported older versions additively;
 they do not change the older boundary. For a pre-version-3 installation, use
 the guarded fresh-state operation after `ci.sh` is green:
 

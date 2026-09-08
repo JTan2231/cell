@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
 use crate::model_runner::ModelQuality;
@@ -10,23 +10,24 @@ use crate::model_runner::ModelQuality;
 const DEFAULT_SETTLE_SECONDS: u64 = 60;
 const DEFAULT_MINIMUM_AVAILABLE_BYTES: u64 = 7_000_000_000;
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     pub library: Option<PathBuf>,
+    pub expected_library_id: Option<String>,
     pub inbox: Option<InboxConfig>,
     pub decision_feed: Option<DecisionFeedConfig>,
     #[serde(default)]
     pub liaison: LiaisonConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct DecisionFeedConfig {
     pub expected_library_id: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct InboxConfig {
     pub root: PathBuf,
@@ -36,7 +37,7 @@ pub(crate) struct InboxConfig {
     pub minimum_available_bytes: u64,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct LiaisonConfig {
     pub quality: ModelQuality,
@@ -54,7 +55,7 @@ impl Config {
         Self::read(&path)
     }
 
-    fn read(path: &Path) -> Result<Self, AppError> {
+    pub(crate) fn read(path: &Path) -> Result<Self, AppError> {
         let document = fs::read_to_string(path).map_err(|error| {
             AppError::invalid(
                 "config_read_failed",
@@ -91,6 +92,16 @@ impl Config {
     }
 
     fn validate(&self) -> Result<(), AppError> {
+        if self
+            .expected_library_id
+            .as_deref()
+            .is_some_and(|value| !valid_library_id(value))
+        {
+            return Err(AppError::invalid(
+                "invalid_config",
+                "expected_library_id must be exactly 32 lowercase hexadecimal characters",
+            ));
+        }
         if self
             .library
             .as_ref()
@@ -158,6 +169,45 @@ impl Config {
                 "the selected configuration does not define [decision_feed]",
             )
         })
+    }
+
+    pub(crate) fn select_named(
+        &mut self,
+        library: &crate::catalog::RegisteredLibrary,
+    ) -> Result<(), AppError> {
+        if self
+            .expected_library_id
+            .as_ref()
+            .is_some_and(|id| id != &library.library_id)
+            || self
+                .decision_feed
+                .as_ref()
+                .is_some_and(|feed| feed.expected_library_id != library.library_id)
+        {
+            return Err(AppError::conflict(
+                "unexpected_library",
+                "the selected configuration is pinned to a different library",
+            ));
+        }
+        self.library = Some(library.library.clone());
+        self.expected_library_id = Some(library.library_id.clone());
+        self.inbox = Some(InboxConfig {
+            root: library.spool.clone(),
+            settle_seconds: self
+                .inbox
+                .as_ref()
+                .map_or(DEFAULT_SETTLE_SECONDS, |value| value.settle_seconds),
+            minimum_available_bytes: self
+                .inbox
+                .as_ref()
+                .map_or(DEFAULT_MINIMUM_AVAILABLE_BYTES, |value| {
+                    value.minimum_available_bytes
+                }),
+        });
+        self.decision_feed = (library.kind == "decisions").then(|| DecisionFeedConfig {
+            expected_library_id: library.library_id.clone(),
+        });
+        Ok(())
     }
 }
 

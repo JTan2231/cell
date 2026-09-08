@@ -2,10 +2,12 @@
 
 ## Boundaries
 
-Annals is one Rust executable and one SQLite library. A work owns immutable
-source bytes. The corpus owns durable concepts, explicit broader-to-narrower
-edges, and concept evidence. Model runs own examinations and draft provenance,
-never corpus facts.
+Annals is one Rust executable with an owned catalog and separate SQLite
+libraries. Each library authoritatively retains source bytes, a corpus of
+concepts, parent edges and evidence, its instruction selection, and history.
+The consuming application defines the interpretation through stored library
+instructions. Model runs own examination and draft provenance, never corpus
+facts. Structural invariants do not depend on a library's subject matter.
 
 Annals stores and derives different kinds of data:
 
@@ -20,7 +22,31 @@ attempting to translate competing historical representations. Schema version
 4 is an additive migration from version 3 that introduces bounded inbox retry
 provenance. Schema version 5 adds the immutable Krisis producer-acceptance
 ledger and accepted-account feed without changing existing semantic, work,
-delivery, or retry history.
+delivery, or retry history. Schema version 6 adds immutable library instructions
+and their examination provenance without rewriting prior results.
+
+## Library selection and instructions
+
+The private Annals catalog resolves unique names to persistent IDs and managed
+database, config, and spool paths. Named commands use the ordinary command
+handlers after resolution and identity checks. Catalog records reserve a new
+library in `provisioning` before filesystem initialization. Repeating creation
+resumes that same identity; only complete matching state becomes `ready`.
+Creation has no scheduler or model effects. Existing operator-selected paths
+remain supported and are not adopted as names automatically.
+
+Every library stores its exact instruction revisions and one current
+selection. `instructions set` appends and selects text in one transaction;
+identical current bytes are unchanged. Instructions are trusted library
+settings, separate from retained evidence. An instruction change leaves corpus
+history intact and starts no reinterpretation.
+
+Shared Annals instructions and tool descriptions specify source preservation,
+identity, quotations, DAG constraints, and reconciliation mechanics. The exact
+selected library text supplies `developerInstructions` in the Nucleus job.
+It defines interpretive choices such as what parent relationships mean. The
+initial stored frame uses broader/narrower conceptual scope. A custom frame
+changes none of the structural validators or source-admission rules.
 
 ## One corpus reducer
 
@@ -67,11 +93,11 @@ envelope. It does not publish another job.
 
 The decisions-library config contains the expected persistent library ID, and
 its spool contains the same durable binding. Acceptance and feed reads require
-an explicit config, reject library overrides, and fail closed when either
-identity differs. This keeps the primary conversation-export library and its
+an explicit config or a registered name bound to its decisions config, reject
+competing library overrides, and fail closed when either identity differs. This keeps the primary conversation-export library and its
 spool outside the producer boundary.
 
-The version-5 database itself also owns an immutable library kind. Dedicated
+The database also owns an immutable library kind, introduced in version 5. Dedicated
 decision databases are initialized as `decisions`; ordinary initialization and
 every version-3 or version-4 migration produce `general`. Acceptance, feed,
 and decision-config dispatch require the decisions kind. Generic work add,
@@ -163,7 +189,10 @@ failed. The child has its own identity and one attempt. Retry provenance is an
 explicit integration intent: content-addressed retention may recognize the
 same work, but the ordinary fresh-duplicate early return is not taken. The
 child can complete the exact reconciliation owned by the original attempt when
-that durable record still validates, or it can begin a new examination. It
+that durable record still validates, or it can begin a new examination. Pending
+reuse requires both its base and instruction revision to remain current.
+Committed or recorded results survive later instruction changes. A replacement
+examination selects current instructions through the same admission boundary. It
 cannot adopt merely similar history. Its version-6 job receipt carries the
 event, event ordinal, original job, and original delivery together, plus the
 exact original reconciliation when one is eligible for validation and reuse.
@@ -208,11 +237,18 @@ the complete work and repository instructions. Session-scoped tools provide boun
 corpus browsing, and reconciliation-draft operations. No shell, web, planning,
 user-input, or multi-agent tools are exposed.
 
-Annals registers the exact nine-tool contract with Nucleus, submits a
-deterministically identified job, and services Nucleus's durable requester
-mailbox. The base and developer instructions, pointer prompt, model, reasoning
-effort, lack of builtin shell/web access, and tool schemas are the same as the
-former in-process runner contract. A repeated ambiguous submission carries
+Annals captures HEAD and the instruction selection, checks exact-context reuse,
+and creates the model-run record in one immediate transaction. The record
+freezes the instruction revision and a hash of the exact effective prompt and
+tool definitions. Reuse and active-run uniqueness also require the same work,
+base, model, and reasoning effort. A → B → A instruction changes therefore do
+not revive old results. A session loads instructions by its recorded revision,
+not by the current selection.
+
+Annals registers immutable liaison toolset version 2 and input schemas ending
+in `.input.v2`, submits a deterministically identified Nucleus job, and services
+its durable requester mailbox. The tool-result schema remains
+`annals.liaison-tool-result.v1`; historical result decoding is preserved. A repeated ambiguous submission carries
 byte-identical request content. Tool results are cached before transmission,
 so retry after an ambiguous transport failure never executes an Annals backend
 operation twice. Annals continues to determine success from the durable
@@ -293,7 +329,7 @@ interpretive result without a commit.
 Applying a pending reconciliation opens an immediate transaction and:
 
 1. replays the original base and current HEAD;
-2. requires HEAD to equal the stored base revision;
+2. requires HEAD and the selected instructions to equal their stored revisions;
 3. reconstructs and resolves the normalized request;
 4. derives the canonical effect set by diffing HEAD and the projection;
 5. inserts one commit and its ordered typed effects;
@@ -317,7 +353,9 @@ replayed context to derive its public narrative.
 `shake` computes a transitive reduction plan from replayed HEAD. Confirmation
 replays HEAD again, rejects a stale plan, and appends only parent-edge removal
 effects. It preserves every ancestor-descendant relation while removing
-redundant direct assertions.
+transitively implied direct assertions. Library instructions can give a direct
+edge meaning beyond reachability, so shake confirmation binds to the exact
+instruction revision and warns about that limit.
 
 `revert` loads the target transition, derives its inverse, and applies that
 inverse to current HEAD. If a targeted fact has changed incompatibly since the
@@ -328,9 +366,13 @@ commit and never removes the original.
 
 Normal user deployments stop inbox activity between jobs and back up the
 supported library. They apply the candidate's additive migration through
-version 5 when needed, then switch the complete release. They check commands,
+version 6 when needed, then switch the complete release. They check commands,
 library statistics, and inbox state, then restore the prior operator pause.
-A failed cutover restores the pre-migration backup and prior release.
+The installer also discovers registered named libraries, fences their command
+admission, and journals their backups and migrations. It restores each changed
+library from its own pre-migration backup on rollback. This adds no schedules
+and does not register existing primary or decisions paths under new names.
+A failed cutover restores the pre-migration backups and prior release.
 
 The version-3 boundary uses `deploy-user.sh --fresh-state`. The deployer stages
 an initialized empty library and verifies its paused spool before touching live

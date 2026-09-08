@@ -1,4 +1,4 @@
--- Annals schema version 5 extends the version 3 fresh-state format.  The
+-- Annals schema version 6 extends the version 3 fresh-state format.  The
 -- corpus has no materialized HEAD and no stored snapshots: typed commit
 -- effects are the only authoritative corpus history.
 
@@ -30,6 +30,43 @@ END;
 CREATE TRIGGER library_profile_immutable_delete
 BEFORE DELETE ON library_profile BEGIN
     SELECT RAISE(ABORT, 'library profile is immutable');
+END;
+
+-- Instruction revisions are library settings, separate from retained evidence.
+CREATE TABLE library_instruction_revisions (
+    revision     INTEGER PRIMARY KEY CHECK (revision > 0),
+    content      TEXT NOT NULL CHECK (length(trim(content)) > 0),
+    sha256       TEXT NOT NULL CHECK (length(sha256) = 64
+                                      AND sha256 = lower(sha256)
+                                      AND sha256 NOT GLOB '*[^0-9a-f]*'),
+    recorded_at  TEXT NOT NULL CHECK (length(trim(recorded_at)) > 0)
+);
+
+CREATE TRIGGER library_instruction_revisions_immutable_update
+BEFORE UPDATE ON library_instruction_revisions BEGIN
+    SELECT RAISE(ABORT, 'library instruction revisions are immutable');
+END;
+
+CREATE TRIGGER library_instruction_revisions_immutable_delete
+BEFORE DELETE ON library_instruction_revisions BEGIN
+    SELECT RAISE(ABORT, 'library instruction revisions are immutable');
+END;
+
+CREATE TABLE library_instruction_selection (
+    singleton         INTEGER PRIMARY KEY CHECK (singleton = 1),
+    current_revision  INTEGER NOT NULL
+                          REFERENCES library_instruction_revisions(revision) ON DELETE RESTRICT
+);
+
+CREATE TRIGGER library_instruction_selection_forward_only
+BEFORE UPDATE ON library_instruction_selection
+WHEN NEW.singleton <> OLD.singleton OR NEW.current_revision <> OLD.current_revision + 1 BEGIN
+    SELECT RAISE(ABORT, 'library instruction selection must advance by one revision');
+END;
+
+CREATE TRIGGER library_instruction_selection_no_delete
+BEFORE DELETE ON library_instruction_selection BEGIN
+    SELECT RAISE(ABORT, 'library instruction selection cannot be deleted');
 END;
 
 CREATE TABLE works (
@@ -82,6 +119,15 @@ CREATE TABLE model_runs (
     model            TEXT NOT NULL,
     reasoning_effort TEXT NOT NULL,
     prompt_version   TEXT NOT NULL,
+    instruction_revision INTEGER
+                             REFERENCES library_instruction_revisions(revision) ON DELETE RESTRICT,
+    instruction_context_sha256 TEXT CHECK (
+        (instruction_revision IS NULL AND instruction_context_sha256 IS NULL)
+        OR (instruction_revision IS NOT NULL AND instruction_context_sha256 IS NOT NULL
+            AND length(instruction_context_sha256) = 64
+            AND instruction_context_sha256 = lower(instruction_context_sha256)
+            AND instruction_context_sha256 NOT GLOB '*[^0-9a-f]*')
+    ),
     final_response   TEXT,
     failure          TEXT,
     created_at       TEXT NOT NULL,
@@ -89,8 +135,14 @@ CREATE TABLE model_runs (
 );
 
 CREATE UNIQUE INDEX model_runs_one_active_context
-    ON model_runs(work_id, base_revision, model, reasoning_effort, prompt_version)
+    ON model_runs(work_id, base_revision, model, reasoning_effort, prompt_version,
+                  instruction_revision, instruction_context_sha256)
     WHERE status = 'running';
+
+CREATE TRIGGER model_runs_instruction_context_immutable
+BEFORE UPDATE OF instruction_revision, instruction_context_sha256 ON model_runs BEGIN
+    SELECT RAISE(ABORT, 'model run instruction context is immutable');
+END;
 
 -- arguments/result are immutable audit artifacts.  Annals records and hashes
 -- them but never decodes them to drive validation, replay, or application.
@@ -125,9 +177,16 @@ CREATE TABLE reconciliation_requests (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     work_id        INTEGER NOT NULL REFERENCES works(id) ON DELETE RESTRICT,
     base_revision  INTEGER NOT NULL CHECK (base_revision >= 0),
+    instruction_revision INTEGER
+                             REFERENCES library_instruction_revisions(revision) ON DELETE RESTRICT,
     summary        TEXT NOT NULL CHECK (length(trim(summary)) > 0),
     created_at     TEXT NOT NULL
 );
+
+CREATE TRIGGER reconciliation_requests_context_immutable
+BEFORE UPDATE OF work_id, base_revision, instruction_revision ON reconciliation_requests BEGIN
+    SELECT RAISE(ABORT, 'reconciliation request context is immutable');
+END;
 
 CREATE TABLE request_annotations (
     request_id  INTEGER NOT NULL
@@ -830,4 +889,4 @@ SELECT identity.singleton,
        identity.library_id
 FROM library_identity AS identity;
 
-PRAGMA user_version = 5;
+PRAGMA user_version = 6;

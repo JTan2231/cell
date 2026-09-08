@@ -169,10 +169,12 @@ fn submit_parsed(
         Some(&created_ids),
     )?;
     let changes_corpus = !snapshots_corpus_equal(&base, &resolved.resulting_snapshot);
+    let instruction_revision = crate::instructions::request_revision(connection, model_run_id)?;
     let request_id = insert_request(
         connection,
         work.id,
         base_revision,
+        instruction_revision,
         reconciliation,
         &created_ids,
         &crate::corpus::now()?,
@@ -238,6 +240,7 @@ pub(crate) fn validate_record(
     if head_revision != record.base_revision {
         return Err(stale_change(record.base_revision, head_revision));
     }
+    crate::instructions::require_current(connection, record.instruction_revision)?;
     let base = snapshot_at(connection, record.base_revision)?;
     let replayed = replay_record(connection, record)?;
     if snapshots_corpus_equal(&base, &replayed.resulting_snapshot) {
@@ -318,6 +321,7 @@ fn apply_record_with_ingestion(
     if head_revision != record.base_revision {
         return Err(stale_change(record.base_revision, head_revision));
     }
+    crate::instructions::require_current(&transaction, record.instruction_revision)?;
     let revalidated = replay_record(&transaction, record)?;
     if revalidated != resolved {
         return Err(AppError::conflict(
@@ -1581,6 +1585,7 @@ mod tests {
         let connection = Connection::open_in_memory()?;
         connection.execute_batch(include_str!("../schema.sql"))?;
         connection.pragma_update(None, "foreign_keys", true)?;
+        crate::instructions::initialize(&connection)?;
         Ok(connection)
     }
 }

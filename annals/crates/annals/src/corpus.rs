@@ -243,6 +243,7 @@ pub(crate) struct ReconciliationRecord {
     pub work_id: i64,
     pub work_label: String,
     pub base_revision: i64,
+    pub instruction_revision: Option<i64>,
     pub status: String,
     pub summary: String,
     pub actor: String,
@@ -1098,7 +1099,7 @@ pub(crate) fn recorded_change_at(
         reconciliation_id,
         reverted_revision,
     )?;
-    let (submitted_request, resolved_operations) = match kind.as_str() {
+    let (submitted_request, resolved_operations, instruction_revision) = match kind.as_str() {
         "change" => {
             let id = reconciliation_id.ok_or_else(|| {
                 AppError::database(
@@ -1112,15 +1113,18 @@ pub(crate) fn recorded_change_at(
             (
                 serde_json::to_value(request)?,
                 serde_json::to_value(resolved.operations)?,
+                record.instruction_revision,
             )
         }
         "shake" => (
             json!({ "operation": "transitive_reduction" }),
             serde_json::to_value(&effects)?,
+            None,
         ),
         "revert" => (
             json!({ "revert_revision": reverted_revision }),
             serde_json::to_value(&effects)?,
+            None,
         ),
         _ => {
             return Err(AppError::database(
@@ -1134,6 +1138,8 @@ pub(crate) fn recorded_change_at(
         kind,
         summary,
         work,
+        instruction_revision,
+        current_instruction_revision: crate::instructions::current(connection)?.revision,
         submitted_request,
         resolved_operations,
         effects,
@@ -1341,6 +1347,8 @@ pub(crate) fn reconciliation_view(
     Ok(ReconciliationView {
         work: record.work_label.clone(),
         base_revision: record.base_revision,
+        instruction_revision: record.instruction_revision,
+        current_instruction_revision: crate::instructions::current(connection)?.revision,
         status: record.status.clone(),
         summary: record.summary.clone(),
         request: serde_json::to_value(&request)?,
@@ -1446,7 +1454,7 @@ pub(crate) fn list_reconciliations(
 
 const RECONCILIATION_SELECT: &str = "SELECT \
     r.id, r.request_id, q.work_id, w.label, q.base_revision, r.status, q.summary, \
-    r.actor, r.created_at, r.applied_revision \
+    r.actor, r.created_at, r.applied_revision, q.instruction_revision \
     FROM reconciliations AS r \
     JOIN reconciliation_requests AS q ON q.id = r.request_id \
     JOIN works AS w ON w.id = q.work_id";
@@ -1485,6 +1493,7 @@ pub(crate) fn reconciliation_from_row(
         actor: row.get(7)?,
         created_at: row.get(8)?,
         applied_revision: row.get(9)?,
+        instruction_revision: row.get(10)?,
     })
 }
 
@@ -1499,17 +1508,24 @@ pub(crate) fn insert_reconciliation(
     changes_corpus: bool,
     actor: &str,
 ) -> Result<ReconciliationRecord, AppError> {
-    let pending_base = transaction
+    let instruction_revision: Option<i64> = transaction.query_row(
+        "SELECT instruction_revision FROM reconciliation_requests WHERE id = ?1",
+        [request_id],
+        |row| row.get(0),
+    )?;
+    let pending_context = transaction
         .query_row(
-            "SELECT q.base_revision \
+            "SELECT q.base_revision, q.instruction_revision \
              FROM reconciliations AS r \
              JOIN reconciliation_requests AS q ON q.id = r.request_id \
              WHERE q.work_id = ?1 AND r.status = 'pending'",
             [work_id],
-            |row| row.get::<_, i64>(0),
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<i64>>(1)?)),
         )
         .optional()?;
-    let replaces_pending = pending_base.is_none_or(|pending| base_revision >= pending);
+    let replaces_pending = pending_context.is_none_or(|(pending_base, pending_instructions)| {
+        base_revision >= pending_base && instruction_revision >= pending_instructions
+    });
     if replaces_pending {
         transaction.execute(
             "UPDATE reconciliations SET status = 'superseded' \

@@ -19,12 +19,18 @@ use crate::api::{
     RootsResult, RunSummary, SearchOutput, ShakeResult, SuccessEnvelope, ValidatedReconciliation,
     WorkCommand, WorkContent, WorkSummary,
 };
-use crate::cli::Command;
+use crate::cli::{Command, InstructionsCommand, LibraryCommand};
 
 /// A result selected from the request that was executed. These variants do not
 /// introduce a new wire envelope; the CLI continues to emit its existing JSON.
 #[derive(Debug)]
 pub enum Response {
+    Libraries(crate::api::LibraryList),
+    LibraryCreated(crate::api::RegisteredLibrary),
+    Library(crate::api::NamedLibraryView),
+    Instructions(crate::api::InstructionRevision),
+    InstructionsSet(crate::api::InstructionSetResult),
+    InstructionHistory(crate::api::InstructionHistory),
     Maintenance(crate::maintenance::MaintenanceStatus),
     Initialized(InitializedLibrary),
     Migrated(MigratedLibrary),
@@ -95,6 +101,9 @@ pub struct CliClient {
     pub executable: PathBuf,
     pub library: Option<PathBuf>,
     pub config: Option<PathBuf>,
+    pub named_library: Option<String>,
+    pub expected_library_id: Option<String>,
+    pub state_root: Option<PathBuf>,
 }
 
 impl CliClient {
@@ -104,7 +113,25 @@ impl CliClient {
             executable,
             library: None,
             config: None,
+            named_library: None,
+            expected_library_id: None,
+            state_root: None,
         }
+    }
+
+    /// Scope subsequent commands to a registered library name.
+    #[must_use]
+    pub fn for_named_library(mut self, name: impl Into<String>) -> Self {
+        self.named_library = Some(name.into());
+        self.library = None;
+        self
+    }
+
+    /// Require this stable library identity for subsequent commands.
+    #[must_use]
+    pub fn with_expected_library_id(mut self, library_id: impl Into<String>) -> Self {
+        self.expected_library_id = Some(library_id.into());
+        self
     }
 
     /// Execute a typed command using the existing CLI and decode its matching view.
@@ -127,10 +154,27 @@ impl CliClient {
         if input.is_some() && !reads_stdin(request) {
             return Err(ClientError::UnexpectedInput);
         }
+        if self.named_library.is_some()
+            && (self.library.is_some() || matches!(request, Command::Library(_) | Command::Init(_)))
+        {
+            return Err(ClientError::InvalidRequest);
+        }
         let mut process = Process::new(&self.executable);
+        if let Some(root) = &self.state_root {
+            process.env("ANNALS_STATE_DIR", root);
+        }
         let mut globals = vec![OsString::from("--json")];
         optional(&mut globals, "--library", self.library.as_deref());
         optional(&mut globals, "--config", self.config.as_deref());
+        optional(
+            &mut globals,
+            "--expected-library-id",
+            self.expected_library_id.as_deref(),
+        );
+        if let Some(name) = &self.named_library {
+            globals.push("library".into());
+            globals.push(name.into());
+        }
         process
             .args(globals)
             .args(arguments(request)?)
@@ -168,6 +212,9 @@ impl CliClient {
 }
 
 fn reads_stdin(request: &Request) -> bool {
+    if matches!(request, Command::Instructions(InstructionsCommand::Set(args)) if args.stdin) {
+        return true;
+    }
     let input = match request {
         Command::Work(WorkCommand::Add(args)) => Some(&args.input),
         Command::Integrate(args) => args.input.as_ref(),
@@ -228,6 +275,42 @@ fn retry_window(arguments: &mut Vec<OsString>, value: &InboxRetryWindowArgs) {
 fn arguments(request: &Request) -> Result<Vec<OsString>, ClientError> {
     let mut a = Vec::new();
     match request {
+        Command::Library(command) => {
+            a.push("library".into());
+            match command {
+                LibraryCommand::List => a.push("list".into()),
+                LibraryCommand::Create(args) => {
+                    a.push("create".into());
+                    enumeration(&mut a, "--kind", args.kind)?;
+                    positional(&mut a, [args.name.clone().into()]);
+                }
+                LibraryCommand::Named(_) => return Err(ClientError::InvalidRequest),
+            }
+        }
+        Command::Show => a.push("show".into()),
+        Command::Instructions(command) => {
+            a.push("instructions".into());
+            match command {
+                InstructionsCommand::Show => a.push("show".into()),
+                InstructionsCommand::History(args) => {
+                    a.push("history".into());
+                    number(&mut a, "--limit", args.limit);
+                    if let Some(before) = args.before {
+                        number(&mut a, "--before", before);
+                    }
+                }
+                InstructionsCommand::Set(args) => {
+                    a.push("set".into());
+                    optional(&mut a, "--file", args.file.as_deref());
+                    if args.stdin {
+                        a.push("--stdin".into());
+                    }
+                    if let Some(content) = &args.content {
+                        positional(&mut a, [content.into()]);
+                    }
+                }
+            }
+        }
         Command::Maintenance(command) => {
             a.push("maintenance".into());
             match command {
@@ -521,6 +604,17 @@ fn response(request: &Request, data: Value) -> Result<Response, ClientError> {
         };
     }
     match request {
+        Command::Library(command) => match command {
+            LibraryCommand::List => decode!(Libraries),
+            LibraryCommand::Create(_) => decode!(LibraryCreated),
+            LibraryCommand::Named(_) => Err(ClientError::InvalidRequest),
+        },
+        Command::Show => decode!(Library),
+        Command::Instructions(command) => match command {
+            InstructionsCommand::Show => decode!(Instructions),
+            InstructionsCommand::Set(_) => decode!(InstructionsSet),
+            InstructionsCommand::History(_) => decode!(InstructionHistory),
+        },
         Command::Maintenance(_) => decode!(Maintenance),
         Command::Init(_) => decode!(Initialized),
         Command::Migrate => decode!(Migrated),

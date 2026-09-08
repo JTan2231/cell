@@ -1,6 +1,6 @@
 # Exchange Krisis decision accounts
 
-Use one separately provisioned Annals decisions library. Its explicit config
+Use one separately provisioned Annals decisions library. Its explicitly selected config
 must select its own database and spool and must pin the persistent identity
 returned by `annals init --kind decisions`:
 
@@ -24,6 +24,13 @@ a fresh empty spool or verifies its existing binding. It does not register
 `incoming/` files. It dispatches only committed accepted originals and their
 explicit Annals retry children. A generic config cannot admit to or run the bound spool or the
 decisions database through an alternate spool or direct library selector.
+
+A registered decisions library may instead use
+`annals library NAME inbox accept ...` or `annals library NAME decision-feed ...`.
+Named scope selects its registered identity-bound config and preserves the same
+account validation, admission kind, spool binding, and feed contract. The raw
+operator-path form still requires explicit `--config` and rejects `--library`.
+Selecting a name or changing librarian instructions cannot relax admission.
 
 ## Accept one account
 

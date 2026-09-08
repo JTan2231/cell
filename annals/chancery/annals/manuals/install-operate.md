@@ -6,6 +6,19 @@ Clockwork binding `annals/inbox`. Nucleus remains a separately installed
 execution and credential service; Clockwork remains a separately installed
 activation and process-history service.
 
+The primary deployer also discovers registered named libraries in Annals'
+`catalog.db`. It records identity and paths, fences new command admission,
+drains admitted work, takes consistent per-library backups, and journals
+schema migrations. Rollback restores each changed library from its own backup.
+Schema 6 stores default instruction revision 1 without attributing it to legacy
+examinations; existing source, graph, kind, spool, and instruction history are
+preserved. Registered names are not evidence of runtime readiness.
+
+New libraries use `annals library create NAME`. Creation and ordinary
+installation add no named-library schedules and do not automatically register
+existing primary or decisions paths as names. The decisions provisioner retains
+its separate admission and binding authority.
+
 ## Deploy or update
 
 Build and test the candidate products first, then invoke the deployer only with

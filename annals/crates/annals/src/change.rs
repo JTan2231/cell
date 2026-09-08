@@ -190,6 +190,7 @@ pub(crate) fn insert_request(
     transaction: &Transaction<'_>,
     work_id: i64,
     base_revision: i64,
+    instruction_revision: Option<i64>,
     reconciliation: &Reconciliation,
     created_ids: &HashMap<String, i64>,
     created_at: &str,
@@ -198,9 +199,16 @@ pub(crate) fn insert_request(
         .validate()
         .map_err(|error| invalid_stored_request(error.to_string()))?;
     transaction.execute(
-        "INSERT INTO reconciliation_requests(work_id, base_revision, summary, created_at)
-         VALUES(?1, ?2, ?3, ?4)",
-        params![work_id, base_revision, reconciliation.summary(), created_at],
+        "INSERT INTO reconciliation_requests(
+             work_id, base_revision, instruction_revision, summary, created_at
+         ) VALUES(?1, ?2, ?3, ?4, ?5)",
+        params![
+            work_id,
+            base_revision,
+            instruction_revision,
+            reconciliation.summary(),
+            created_at
+        ],
     )?;
     let request_id = transaction.last_insert_rowid();
     replace_annotations(transaction, request_id, reconciliation.annotations())?;

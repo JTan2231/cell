@@ -1,9 +1,66 @@
 # CLI contract
 
+## Named libraries
+
+```text
+annals library list
+annals library create NAME [--kind general|decisions]
+annals library NAME show
+annals library NAME COMMAND
+annals library NAME instructions show
+annals library NAME instructions history [--limit N] [--before REVISION]
+annals library NAME instructions set CONTENT
+annals library NAME instructions set --file PATH
+annals library NAME instructions set --stdin
+```
+
+The catalog maps each name to a stable library ID and its managed database,
+config, and spool. Unknown names fail. An ordinary command never creates a
+library. `create` initializes revision zero and default instructions before
+publishing the library as ready; repeating an interrupted creation resumes
+that named operation. Repeating a completed creation with the same kind returns
+the same library; conflicting kind or state fails without rebinding.
+Creation starts no model job and creates no schedule.
+
+Names contain 1–64 lowercase ASCII letters, digits, underscores, or hyphens,
+start with a lowercase letter, and cannot be `list`, `create`, or `help`.
+`list` reports registered provisioning state. `show` verifies the database and
+returns the registration, corpus revision, and current instruction revision.
+Neither operation proves live model or scheduler readiness.
+
+Named scope selects ordinary work, graph, reconciliation, and inbox operations.
+It rejects a competing `--library` and ignores `ANNALS_LIBRARY`. Its own config
+is the default; an explicit `--config` may supply execution settings but cannot
+change the selected database, spool, identity, or admission kind. The resolved
+database must match its catalog identity. Config `expected_library_id` and
+`--expected-library-id` can also pin an operator path and must agree. Library kind remains an immutable admission boundary:
+Conatus or career libraries use `general`; selecting a name or changing its
+instructions cannot open generic admission to a `decisions` library.
+
+The catalog lives at `ANNALS_STATE_DIR/catalog.db`. With no override, macOS
+uses `~/Library/Application Support/Annals`; other platforms use
+`~/.local/share/annals`. Newly created library data lives under
+`libraries/LIBRARY_ID/` with `annals.db`, `config.toml`, and `spool/`. Existing
+operator-selected paths remain supported and are not automatically cataloged.
+
+`instructions set` requires exactly one nonblank UTF-8 input and preserves its
+complete text. It atomically appends and selects one instruction revision.
+Identical current bytes return `changed: false`; A → B → A creates three
+successive revisions. The result contains `changed` and an `instructions` object with `library_id`,
+`revision`, `content`, `sha256`, and `recorded_at`. The timestamp records instruction selection, not
+source creation, examination completion, or graph reinterpretation.
+
+`instructions show` reads the current exact instructions. History identifies
+`library_id` and `current_instruction_revision` and returns `instructions` and
+`has_more`, newest first, with a default limit of 20 and a maximum of 100.
+Continue with `--before` the oldest returned revision. Instruction changes
+start no examination, change no corpus revision, and leave committed history
+intact. Future examinations use the selection captured when they start.
+
 ## Global options
 
 ```text
-annals [--config PATH] [--library PATH] [--json] [--quiet] [-v...] COMMAND
+annals [--config PATH] [--library PATH] [--expected-library-id ID] [--json] [--quiet] [-v...] COMMAND
 ```
 
 The config path resolves from `--config`, then a nonempty `ANNALS_CONFIG`.
@@ -36,12 +93,12 @@ directory.
 `--quiet` suppresses successful human mutation messages. `-v` prints the
 resolved library path on stderr in human mode.
 
-Decision-account acceptance and feed reads are intentionally stricter. They
-require an explicit `--config`, reject `--library`, ignore `ANNALS_LIBRARY`,
-and use only that file's `library`, `inbox.root`, and
-`decision_feed.expected_library_id`. Missing or mismatched identities fail
+Decision-account acceptance and feed reads are intentionally stricter. They require an explicit decisions config or a registered name whose managed
+config pins the same decisions identity. The operator-path form requires
+`--config`, rejects `--library`, ignores `ANNALS_LIBRARY`, and uses only that
+file's `library`, `inbox.root`, and `decision_feed.expected_library_id`. Missing or mismatched identities fail
 closed rather than selecting the primary Annals library.
-Every version-5 database also carries one immutable `general` or `decisions`
+Every version-6 database also carries one immutable `general` or `decisions`
 library kind. Decision acceptance, feed reads, and a decision-config run
 require `decisions`; generic source-producing commands and a generic inbox run
 require `general`. Configuration, spool selection, or a direct `--library`
@@ -108,15 +165,17 @@ immutable kind. It refuses to replace an existing library. The default kind
 is `general`. Only the decisions provisioner or an explicitly selected
 dedicated-library setup uses `--kind decisions`.
 
-`migrate` upgrades a version-3 or version-4 library to version 5. It assigns
-the `general` kind, adds bounded inbox retry provenance when needed, and adds
-the decision-account acceptance feed. It does not reinterpret works,
-deliveries, reconciliations, or corpus history. It rejects libraries older
-than version 3 without changing them, and refuses libraries from a newer
-executable. On version 5, `migrate` is an idempotent current-format check.
-To replace an installed pre-version-3 library, use the macOS deployer's guarded
-`--fresh-state` cutover. Migration uses one transaction. A failure retains the
-prior version without partial tables.
+`migrate` upgrades a version-3, version-4, or version-5 library to version 6.
+Earlier steps assign version-3 and version-4 libraries the `general` kind and
+add retry provenance and the decision-account feed. Version 6 preserves an
+existing kind, seeds the default library instructions at instruction revision
+1, and adds examination and reconciliation instruction provenance. Older
+records keep unknown instruction provenance as null; the seed is not attributed
+to their historical examinations. Migration changes no retained source or
+corpus history. It rejects schemas older than 3 or newer than this executable.
+On version 6 it is an idempotent current-format check. Migration uses one
+transaction, so a failure retains the prior version without partial tables.
+A pre-version-3 replacement still requires the guarded `--fresh-state` cutover.
 `stats` reports revision and corpus, graph, work, reconciliation, history,
 model-run, and database-size information.
 
@@ -198,7 +257,8 @@ annals integrate --work LABEL [--quality QUALITY] [--model MODEL] [--apply] [--r
 The first form retains or recognizes and examines the selected work. The second
 examines an already retained work. Both are explicit manual integration and
 retain this behavior when the bytes were supplied before. Annals freezes the
-current corpus revision, invokes the liaison, and expects one recorded
+current corpus and instruction revisions in one admission transaction, invokes
+the liaison with those exact stored instructions, and expects one recorded
 reconciliation. The liaison starts a complete draft with
 `submit_reconciliation`. If Annals reports `needs_changes`, independently valid
 operations remain staged while `revise_reconciliation` changes only named
@@ -209,9 +269,13 @@ when every active operation works together. The model's final response is
 diagnostic and is not parsed as the reconciliation.
 
 Annals may reuse the newest successful reconciliation for the exact same work,
-base revision, prompt version, model, and reasoning effort. `--reexamine`
-bypasses this lookup. A later corpus revision or changed liaison configuration
-starts a fresh examination.
+base revision, instruction revision, exact effective prompt/tool context, model,
+and reasoning effort. `--reexamine` bypasses this lookup. A later corpus or
+instruction revision, or changed liaison configuration, starts a fresh
+examination. Returning to earlier instruction bytes does not revive old reuse.
+A pending material proposal can apply only while both HEAD and the instruction
+selection still match its frozen basis, checked in the committing transaction.
+Completed results survive later instruction changes and runtime failure.
 
 `--quality` accepts three presets. Its value resolves from the command line,
 then `[liaison].quality` in the selected config, then `high`:
@@ -822,7 +886,7 @@ least one evidence link.
 - `create_concept` requires request-unique `ref`, `label`, an unordered
   `parents` array, and nonempty `evidence`. An empty parent array creates a
   derived root. Labels may duplicate existing or newly created labels.
-- `add_parent` ensures one broader-parent edge exists for `concept` without
+- `add_parent` ensures one parent edge exists for `concept` without
   changing any other parent. An already-present edge is idempotent.
 - `remove_parent` removes one parent edge without relocating the concept or its
   descendants. If it removes the final parent, the concept becomes a root.

@@ -144,9 +144,10 @@ fn frontend(name: &str) -> Result<Value> {
         command.args(["--quiet", "inbox", "run"]);
     } else {
         let arguments: Vec<_> = std::env::args_os().skip(1).collect();
-        let selected = ["ANNALS_CONFIG", "ANNALS_LIBRARY"]
-            .iter()
-            .any(|key| std::env::var_os(key).is_some_and(|v| !v.is_empty()))
+        let selected = selects_named_library(&arguments)
+            || ["ANNALS_CONFIG", "ANNALS_LIBRARY"]
+                .iter()
+                .any(|key| std::env::var_os(key).is_some_and(|v| !v.is_empty()))
             || arguments.iter().any(|arg| {
                 arg.to_str().is_some_and(|a| {
                     matches!(a, "--config" | "--library")
@@ -162,6 +163,23 @@ fn frontend(name: &str) -> Result<Value> {
         command.args(arguments);
     }
     Err(command.exec().into())
+}
+
+fn selects_named_library(arguments: &[OsString]) -> bool {
+    let mut values = arguments.iter();
+    while let Some(argument) = values.next() {
+        let Some(argument) = argument.to_str() else {
+            return false;
+        };
+        if matches!(argument, "--config" | "--library" | "--expected-library-id") {
+            values.next();
+        } else if argument == "--" {
+            return values.next().is_some_and(|value| value == "library");
+        } else if !argument.starts_with('-') {
+            return argument == "library";
+        }
+    }
+    false
 }
 
 fn home(value: Option<PathBuf>) -> Result<PathBuf> {

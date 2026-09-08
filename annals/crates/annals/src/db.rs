@@ -8,11 +8,12 @@ use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 use crate::error::AppError;
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 5;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 6;
 const FRESH_STATE_SCHEMA_VERSION: i64 = 3;
 const SCHEMA: &str = include_str!("../schema.sql");
 const MIGRATION_3_TO_4: &str = include_str!("../migrations/3-to-4.sql");
 const MIGRATION_4_TO_5: &str = include_str!("../migrations/4-to-5.sql");
+const MIGRATION_5_TO_6: &str = include_str!("../migrations/5-to-6.sql");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LibraryKind {
@@ -43,8 +44,25 @@ pub fn init(path: &Path) -> Result<Connection, AppError> {
 
 /// Create a fresh library with one immutable role.
 pub(crate) fn init_with_kind(path: &Path, kind: LibraryKind) -> Result<Connection, AppError> {
+    init_selected_identity(path, kind, None)
+}
+
+/// Initialize a library with the stable identity reserved by its catalog.
+pub(crate) fn init_with_identity(
+    path: &Path,
+    kind: LibraryKind,
+    library_id: &str,
+) -> Result<Connection, AppError> {
+    init_selected_identity(path, kind, Some(library_id))
+}
+
+fn init_selected_identity(
+    path: &Path,
+    kind: LibraryKind,
+    library_id: Option<&str>,
+) -> Result<Connection, AppError> {
     reserve_new_file(path, "library_exists", "library")?;
-    match initialize_reserved_file(path, kind) {
+    match initialize_reserved_file(path, kind, library_id) {
         Ok(connection) => Ok(connection),
         Err(error) => {
             // This call exclusively created the path, so cleanup cannot remove
@@ -136,7 +154,7 @@ pub fn open_write(path: &Path) -> Result<Connection, AppError> {
     Ok(connection)
 }
 
-/// Migrate a version 3 or 4 library to the current additive format.
+/// Migrate a version 3, 4, or 5 library to the current additive format.
 ///
 /// Version 3 remains the deliberate fresh-state boundary. `migrate` never
 /// reinterprets a library older than that boundary.
@@ -157,7 +175,7 @@ pub fn migrate(path: &Path) -> Result<MigrationResult, AppError> {
             if locked_version == CURRENT_SCHEMA_VERSION {
                 transaction.commit()?;
                 false
-            } else if matches!(locked_version, 3 | 4) {
+            } else if matches!(locked_version, 3..=5) {
                 if locked_version == 3 {
                     transaction.execute_batch(MIGRATION_3_TO_4).map_err(|error| {
                         AppError::database(
@@ -168,14 +186,25 @@ pub fn migrate(path: &Path) -> Result<MigrationResult, AppError> {
                         )
                     })?;
                 }
-                transaction.execute_batch(MIGRATION_4_TO_5).map_err(|error| {
+                if locked_version <= 4 {
+                    transaction.execute_batch(MIGRATION_4_TO_5).map_err(|error| {
+                        AppError::database(
+                            "schema_migration_failed",
+                            format!(
+                                "unable to migrate library schema from version 4 to version 5: {error}"
+                            ),
+                        )
+                    })?;
+                }
+                transaction.execute_batch(MIGRATION_5_TO_6).map_err(|error| {
                     AppError::database(
                         "schema_migration_failed",
                         format!(
-                            "unable to migrate library schema from version 4 to version 5: {error}"
+                            "unable to migrate library schema from version 5 to version 6: {error}"
                         ),
                     )
                 })?;
+                crate::instructions::initialize(&transaction)?;
                 transaction.commit().map_err(|error| {
                     AppError::database(
                         "schema_migration_failed",
@@ -209,17 +238,22 @@ pub fn backup(source: &Connection, output: &Path) -> Result<(), AppError> {
     result
 }
 
-fn initialize_reserved_file(path: &Path, kind: LibraryKind) -> Result<Connection, AppError> {
-    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
+fn initialize_reserved_file(
+    path: &Path,
+    kind: LibraryKind,
+    library_id: Option<&str>,
+) -> Result<Connection, AppError> {
+    let mut connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
         .map_err(|error| open_error(path, &error))?;
     configure_connection(&connection)?;
-    connection.execute_batch(SCHEMA).map_err(|error| {
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    transaction.execute_batch(SCHEMA).map_err(|error| {
         AppError::database(
             "schema_creation_failed",
             format!("unable to create the library schema: {error}"),
         )
     })?;
-    connection
+    transaction
         .execute(
             "INSERT INTO library_profile(singleton, kind) VALUES(1, ?1)",
             [kind.as_str()],
@@ -230,6 +264,14 @@ fn initialize_reserved_file(path: &Path, kind: LibraryKind) -> Result<Connection
                 format!("unable to establish the library profile: {error}"),
             )
         })?;
+    if let Some(library_id) = library_id {
+        transaction.execute(
+            "UPDATE library_identity SET library_id = ?1 WHERE singleton = 1",
+            [library_id],
+        )?;
+    }
+    crate::instructions::initialize(&transaction)?;
+    transaction.commit()?;
     require_current_schema(&connection)?;
     enable_wal(&connection)?;
     Ok(connection)
@@ -278,6 +320,7 @@ fn require_current_schema(connection: &Connection) -> Result<(), AppError> {
     match version.cmp(&CURRENT_SCHEMA_VERSION) {
         std::cmp::Ordering::Equal => {
             library_kind(connection)?;
+            crate::instructions::current(connection)?;
             Ok(())
         }
         std::cmp::Ordering::Greater => Err(schema_too_new(version)),
@@ -376,6 +419,25 @@ mod tests {
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
+    // Existing migration fixtures start with the current schema, then remove
+    // later additions to construct their historical input format.
+    fn remove_instruction_schema(connection: &Connection) -> Result<(), AppError> {
+        connection.execute_batch(
+            "DROP TRIGGER model_runs_instruction_context_immutable;
+             DROP TRIGGER reconciliation_requests_context_immutable;
+             DROP INDEX model_runs_one_active_context;
+             ALTER TABLE model_runs DROP COLUMN instruction_context_sha256;
+             ALTER TABLE model_runs DROP COLUMN instruction_revision;
+             ALTER TABLE reconciliation_requests DROP COLUMN instruction_revision;
+             CREATE UNIQUE INDEX model_runs_one_active_context
+                 ON model_runs(work_id, base_revision, model, reasoning_effort, prompt_version)
+                 WHERE status = 'running';
+             DROP TABLE library_instruction_selection;
+             DROP TABLE library_instruction_revisions;",
+        )?;
+        Ok(())
+    }
+
     #[test]
     fn initializes_and_reopens_a_current_library() -> TestResult {
         let directory = tempfile::tempdir()?;
@@ -458,6 +520,7 @@ mod tests {
              )",
             [],
         )?;
+        remove_instruction_schema(&connection)?;
         connection.execute_batch(
             "DROP TABLE library_profile;
              DROP TABLE decision_account_acceptances;
@@ -522,6 +585,7 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("annals.db");
         let connection = init(&path)?;
+        remove_instruction_schema(&connection)?;
         connection.execute_batch(
             "DROP TABLE library_profile;
              DROP TABLE decision_account_acceptances;
@@ -564,6 +628,7 @@ mod tests {
              VALUES('work', 'work', 'source', ?1, 'now')",
             ["0".repeat(64)],
         )?;
+        remove_instruction_schema(&connection)?;
         connection.execute_batch(
             "DROP TABLE library_profile;
              DROP TABLE decision_account_acceptances;

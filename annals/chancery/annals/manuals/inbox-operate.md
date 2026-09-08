@@ -5,6 +5,17 @@ Annals has no resident inbox daemon and every job has at most one processing
 attempt. Operate it through supported commands; never edit `job.json`, move
 terminal envelopes back to the queue, or infer delivery state from processes.
 
+Named inbox commands use `annals library NAME inbox ...` and the registered
+library's database, identity, and spool. New named libraries receive private
+configs and spools but no schedule. A background invocation keeps the configured
+expected library ID so a path cannot silently select a replacement database.
+
+Dispatch freezes the current library instructions with HEAD for each new
+examination. Retried pending proposals can be reused only while both remain
+current; otherwise the retry begins a fresh examination under current
+instructions. Already committed or recorded results remain authoritative
+after later instruction changes or Nucleus failures.
+
 ## Observe and admit work
 
 ```sh
@@ -24,8 +35,8 @@ A configured decisions library also has a producer-specific admission path:
 It publishes one complete unstarted envelope and immutable acceptance event,
 but no source-delivery row or model attempt. Exact key-and-byte replay returns
 the original job; changed bytes conflict. This path requires the explicit
-decisions config and its expected persistent library ID and never falls back to
-the primary library.
+decisions config or a registered decisions name bound to that config and its
+expected persistent library ID. It never falls back to the primary library.
 
 That config rejects direct work add or integration, generic enqueue, ordinary
 incoming registration, and backlog import. Its dispatcher binds or verifies

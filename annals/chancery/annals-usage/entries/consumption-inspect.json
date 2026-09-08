@@ -44,7 +44,7 @@
     {"label": "Bounded JSON report", "invocation": "/Users/joey/.local/bin/annals-usage report --json --limit <COUNT>"}
   ],
   "dependencies": [
-    {"id": "annals.corpus.explore", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "annals.corpus.explore", "min_contract": 1, "max_contract_exclusive": 3},
     {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4}
   ],
   "does_not_authorize": [
