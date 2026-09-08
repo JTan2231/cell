@@ -1,4 +1,4 @@
-# CLI contract
+# Commands and records
 
 CRM commands operate on one explicitly selected schema-two database. The
 default is `~/Library/Application Support/CRM/crm.db`; global `--database`
@@ -28,18 +28,23 @@ readiness without changing case domain state.
 `migrate --backup PATH` upgrades schema one to schema two explicitly; it never
 imports profile content or launches a worker. Stop new CRM work and let active
 workers settle. Migration refuses a live worker PID, running work, or applied
-work without terminal runtime evidence, but preserves queued work. It creates a
-private, independently readable SQLite backup at a new path before changing
-schema. The parent must be an existing non-symbolic private directory, with no
+work without terminal runtime evidence, but preserves queued work. It creates
+a private, independently readable SQLite backup at a new path before changing
+schema.
+
+The parent must be an existing non-symbolic private directory, with no
 group/other permissions on Unix. A relative backup path resolves against the
 current working directory. Existing backup destinations, source/sidecar paths,
 and destinations with existing SQLite sidecars are refused. Schema changes and
-integrity validation are transactional. Repeating against schema two returns unchanged
-without creating a backup. JSON returns `type: "migrated"`, the database path,
-`backup` (absolute path or null for unchanged schema two), `changed`,
-`from_schema_version`, and `schema_version`. After an ambiguous failure,
-inspect schema before retrying; a failed backup may leave its destination, so
-use a fresh path after inspecting it. See [migration and rollback](data-model.md#initialization-integrity-and-migration).
+integrity validation are transactional. Repeating against schema two returns
+unchanged without creating a backup.
+
+JSON returns `type: "migrated"`, the database path, `backup` (absolute path or
+null for unchanged schema two), `changed`, `from_schema_version`, and
+`schema_version`. After an ambiguous failure, inspect schema before retrying;
+a failed backup may leave its destination, so use a fresh path after
+inspecting it. See [migration and
+rollback](data-model.md#initialization-and-migration).
 
 Nucleus unavailability does not make stored cases unreadable, but it prevents
 new steward progress until readiness is restored. There is no direct agent
@@ -178,7 +183,7 @@ Tell and retry acknowledgments plus update list/show/wait/resume/retry include
 its applied revision; other updates use their frozen base when assigned and
 otherwise the current head.
 
-Version 0.3 has no public raw-delivery, persisted-request, or mailbox-receipt
+CRM has no public raw-delivery, persisted-request, or mailbox-receipt
 show/export command. Case history plus update and Nucleus job identities are the
 supported inspection path; direct SQLite access is unsupported.
 
@@ -186,12 +191,13 @@ supported inspection path; direct SQLite access is unsupported.
 has a retained terminal Nucleus observation. Once on entry, if domain or
 runtime settlement still needs work, it activates queue drain or same-update
 recovery and then only polls. `--timeout SECONDS` defaults to 1,200; timeout
-returns an error without making the update terminal. `resume` synchronously
-processes queued work or resumes the same recoverable running or
-applied-but-unsettled update and pending mailbox call; it does not create a new
-update. `retry` is accepted only for `failed` or `lost` work. It records a
-successor update reusing the same immutable delivery row/text, with new
-requester/job identities and a retained `retry_of` link.
+returns an error without making the update terminal.
+
+`resume` synchronously processes queued work or resumes the same recoverable
+running or applied-but-unsettled update and pending mailbox call; it does not
+create a new update. `retry` is accepted only for `failed` or `lost` work. It
+records a successor update reusing the same immutable delivery row/text, with
+new requester/job identities and a retained `retry_of` link.
 
 Nucleus completion without a committed revision is not CRM success. A revision
 that committed before a later runtime failure remains CRM success and cannot be
@@ -223,65 +229,7 @@ before the error.
 Advisories are data, not errors: a non-null advisory never changes an otherwise
 valid command's exit status or authorizes CRM to refuse the operation.
 
-## Rust callers
-
-Use the provider-owned `crm::api::Client`, `Request`, and `Data` for typed
-CLI calls. The client preserves the documented envelope and successful stderr
-diagnostics, performs no automatic retries, and uses the same command effects
-and recovery rules. See [Rust interface](rust-api.md) for the exported boundary.
-
-## Coordinated deployment maintenance
-
-```sh
-crm --json maintenance hold RUN_ID
-crm --json maintenance status
-crm --json maintenance drain
-crm --json maintenance release RUN_ID
-```
-
-The selected database's parent directory contains `deployment-maintenance/`. The standard
-location is `~/Library/Application Support/CRM/deployment-maintenance/`.
-Databases in the same parent share this gate. This directory stores only
-operational hold/lock metadata, never retained case or profile text.
-
-Each hold is durable and has its own owner. While held, CRM rejects case and
-profile mutations, tell, retry, ordinary initialization and migration.
-Existing queued updates and running or applied-but-runtime-unsettled updates
-remain recoverable through the original hidden worker, wait, resume, or
-`maintenance drain`. Recovery holds a shared activity guard, so an installation
-cannot race a hidden drainer. It never creates a replacement model attempt.
-
-`--json` reports `data.maintenance` with `protocol_version: 1`, `holds`,
-`drained`, `unsettled_updates`, and `worker_alive`. Drain requires zero queued,
-running, or runtime-unsettled applied updates, no live worker lease, and no
-admitted operation. Schema-one maintenance observation is supported before
-its explicit migration. An unavailable or ambiguous worker is not assumed
-settled. Release removes only its exact owner's hold.
-
-The coordinator uses the program installer and the separate
-`migrate --backup` command. Its backup destination is
-`~/Library/Application Support/CRM/crm-pre-migration-RUN_ID.sqlite`, outside
-the temporary deployment workspace. The migration creates this private
-backup only when schema migration is needed; current-schema deployment
-creates no backup. A created backup survives deployment cleanup, including
-an interrupted or failed migration, for explicit database recovery.
-Migration with `CELL_DEPLOYMENT_RUN_ID` acquires
-exclusive activity only when the run owns the sole matching hold. An arbitrary
-environment value cannot bypass another owner or active work. The program installer still
-never opens or migrates CRM data. `doctor` can validate held Nucleus readiness
-for that exact deployment owner; normal steward admission remains strict.
-
-Deployment verification checks the installed release, database integrity,
-Nucleus readiness, and settled maintenance status. It creates no case, update,
-or model job. Ordinary CRM success remains the guarded revision commit; a
-later runtime failure does not reverse that commit.
-
-Deployment admission resolves the configured database to its canonical path and
-uses that database parent for `deployment-maintenance/`. Symbolic aliases share
-the same gate. Databases with multiple hard links are rejected because their
-state root cannot identify one authoritative admission gate. Database paths
-in command receipts use this canonical identity; backup receipts retain the
-caller-selected backup path.
+## Compact output
 
 Profile new/update return `type: profile_receipt` with ID, title and updated
 time; profile show remains `type: profile_entry` with exact Markdown.
@@ -291,3 +239,15 @@ Every profile/case/update list and search includes `has_more`. Read the selected
 case revision or profile with `show` for full content. Advisories remain complete
 and non-blocking on every revision-consuming view. The Rust client exposes
 `ProfileSummary` and `RevisionSummary` for the compact results.
+
+## Rust callers
+
+Use the provider-owned `crm::api::Client`, `Request`, and `Data` for typed
+CLI calls. The client preserves the documented envelope and successful stderr
+diagnostics, performs no automatic retries, and uses the same command effects
+and recovery rules. See [Rust interface](rust-api.md) for the exported boundary.
+
+## Deployment maintenance
+
+See [installation and maintenance](system-installation.md#coordinated-deployment-maintenance)
+for admission holds, drain, controlled migration, and deployment verification.

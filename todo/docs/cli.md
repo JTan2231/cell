@@ -1,4 +1,4 @@
-# CLI contract
+# Commands and records
 
 ## Command surface
 
@@ -211,28 +211,32 @@ never becomes ready because the job happened to end.
 the design liaison. Todo first stores the exact feedback and predecessor in an
 immutable `todo_design_corrections` row keyed by the new liaison job; its
 `correction:<agent_job_id>` value is the feedback's admitted basis reference.
+
 Correction is allowed from `ready`, `rejected`, or `abandoned`, never from a
 draft still `open` in its original run, and the predecessor's exact assessment
-must remain current and `ready`. The named `dN` is not edited; a successful run
-allocates a successor `dN`. The liaison may replace, add, or explicitly drop
-named operations and seals a corrected proposal; omission is not deletion.
-Correction does not accept the result. Dropping a staged
-jurisdiction-change operation during correction removes that proposal
-operation; it is distinct from a `retire` action, which proposes that the
-jurisdiction not exist in the desired state. `design show dN` displays every
-operation and basis, the assessment and predecessor bindings, correction
-feedback, status, decision provenance, and stale reasons.
+must remain current and `ready`. The named `dN` is not edited; a successful
+run allocates a successor `dN`. The liaison may replace, add, or explicitly
+drop named operations and seals a corrected proposal; omission is not
+deletion.
+
+Correction does not accept the result. Dropping a staged jurisdiction-change
+operation during correction removes that proposal operation; it is distinct
+from a `retire` action, which proposes that the jurisdiction not exist in the
+desired state. `design show dN` displays every operation and basis, the
+assessment and predecessor bindings, correction feedback, status, decision
+provenance, and stale reasons.
 
 `design accept` and `design reject` are deterministic Todo writes, never model
 tools. Both require a canonicalized readable UTF-8 `--source PATH`; rejection
 also requires a nonblank `--reason`. Acceptance fails if the draft is not
 ready, its umbrella is completed or superseded rather than open and canonical,
 its assessment is no longer current, its direction or attachment basis
-changed, or another design decision won the race. A newer `aN` makes the bound
-assessment non-current and therefore blocks both acceptance and correction.
-An accepted design remains historically accepted if later facts change, but
-the read model marks the basis stale. A new proposal must then reconcile from
-a fresh assessment.
+changed, or another design decision won the race.
+
+A newer `aN` makes the bound assessment non-current and therefore blocks both
+acceptance and correction. An accepted design remains historically accepted if
+later facts change, but the read model marks the basis stale. A new proposal
+must then reconcile from a fresh assessment.
 
 Acceptance stops at normative desired state: it does not create a plan, work
 item, implementation job, or completion claim.
@@ -343,58 +347,7 @@ and a later terminal liaison error occurs, Todo reports the durable result and
 may also report the later diagnostic on standard error. Nucleus completion by
 itself is never domain success.
 
-## Rust callers
-
-Use the provider-owned `todo::api::Client`, `Request`, and `Data` for typed
-CLI calls. The client preserves the documented envelope and successful stderr
-diagnostics, performs no automatic retries, and uses the same command effects
-and recovery rules. See [Rust interface](rust-api.md) for the exported boundary.
-
-## Coordinated deployment maintenance
-
-```sh
-todo --json maintenance hold RUN_ID
-todo --json maintenance status
-todo --json maintenance ready RUN_ID
-todo --json maintenance release RUN_ID
-```
-
-Normal database and config selection applies. The selected database's parent
-directory contains `deployment-maintenance/`. Databases in that directory share the gate.
-New research and ordinary mutations, including scheduled email send, retain a
-shared admission guard through completion. Holds prevent new admissions
-before input is retained, and do not interrupt already admitted research or
-change an operator configuration. Read-only commands remain available.
-
-JSON returns `data.maintenance` with `protocol_version: 1`, `holds`, `drained`,
-and `nonterminal_jobs`. Drain requires both no live admission guard and no
-accepted/running/waiting Nucleus jobs attributed to Todo, conservatively across
-all Todo databases. This catches a killed CLI whose job still exists. An
-unavailable runtime returns a null count and `drained: false`; it is never
-reported as zero. Holds survive process exit and release removes only its
-exact owner.
-
-`migrate --backup` with `CELL_DEPLOYMENT_RUN_ID` requires its sole matching
-hold and exclusive activity; no caller-supplied value bypasses another hold.
-The macOS deployer accepts `--expected-current absent|releases/HASH` under its
-update lock, preserves configured email addresses, and accepts either ordinary
-strict Nucleus readiness or the named deployment's proved held readiness.
-
-Deployment verification checks the installed release, configured database,
-Nucleus readiness, maintenance settlement, and captured email-service state.
-It creates no concern, routing proposal, or model job and sends no email.
-Ordinary Todo success remains its committed domain result after a later
-runtime failure.
-
-`maintenance ready RUN_ID` requires the sole drained hold. It checks whether
-this binary can read the configured database: version, required table, index
-and trigger definitions, SQLite integrity, and foreign keys. Use it to check
-storage compatibility after an interrupted migration.
-
-Deployment admission resolves the configured database to its canonical path and
-uses that database parent for `deployment-maintenance/`. Symbolic aliases share
-the same gate. Databases with multiple hard links are rejected because their
-state root cannot identify one authoritative admission gate.
+## Compact output
 
 Selection lists and search default to 20, expose `has_more`, and accept a
 larger positive `--limit` for more. Concern triage rows contain ID, status,
@@ -402,3 +355,15 @@ recorded time and an explicit excerpt of at most 240 characters; `concern show`
 retains complete provenance and routing history. Todo list/search rows remain
 compact identities, titles and lifecycle metadata. Exact show commands retain
 the full selected concern, routing, assessment, design or umbrella context.
+
+## Rust callers
+
+Use the provider-owned `todo::api::Client`, `Request`, and `Data` for typed
+CLI calls. The client preserves the documented envelope and successful stderr
+diagnostics, performs no automatic retries, and uses the same command effects
+and recovery rules. See [Rust interface](rust-api.md) for the exported boundary.
+
+## Deployment maintenance
+
+See [installation and maintenance](system-installation.md#coordinated-deployment-maintenance)
+for admission holds, drain, controlled migration, and deployment verification.

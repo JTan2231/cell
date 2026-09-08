@@ -63,11 +63,12 @@ to the newest 20 deliveries. It shows delivery totals, attempt counts,
 coverage, and any calculable credit-equivalent. It also shows unattributed run
 identities, status, totals, coverage, and errors. Output version 2 includes
 `hasMore` and `unattributedHasMore`. Increase positive `--limit` to read more.
-`--details` includes complete attempt and response projections in both text and
-JSON. `--json` selects encoding only. `Client::report` returns
+
+`--details` includes complete attempt and response projections in both text
+and JSON. `--json` selects encoding only. `Client::report` returns
 `ConsumptionSummary`; `report_details` returns `ConsumptionReport`.
-Job-receipt discovery includes processing, done, duplicates, failed, and skipped
-envelopes. Reports count a skipped job as a failed source delivery.
+Job-receipt discovery includes processing, done, duplicates, failed, and
+skipped envelopes. Reports count a skipped job as a failed source delivery.
 
 A retry child is a distinct source delivery and is reported separately from
 its original failure. If it starts a new examination, that Nucleus job and its
@@ -197,7 +198,7 @@ Annals and Annals Usage together, and pin both configurations to the deployed
 Nucleus socket. An obsolete `usage.db` and its SQLite sidecars are discarded
 after a successful deployment; they are retained only temporarily when needed
 to roll back an uncommitted cutover. See [System installation and scheduled
-inbox](system-installation.md#macos-user-clockwork-binding).
+inbox](system-installation.md#deploy-or-update).
 
 ## Authority and limits
 

@@ -1,201 +1,130 @@
-# Data model
+# CRM records
 
-CRM schema version 2 stores the private library in SQLite. Intake, deliveries,
-profile and case bodies, summaries, advisories, requester requests and tool
-results use `TEXT`. CRM adds digests where identity or replay requires them.
-It creates no product-owned Markdown or intake files.
+Schema 2 stores the private CRM library in SQLite. Retained Markdown, intake,
+requests, and tool results use `TEXT`. Digests support identity and replay.
+Input files are transport; CRM does not retain their paths or create content files.
 
-## Durable records
+## Record ownership
 
-- `crm_meta` identifies CRM schema two in addition to SQLite
-  `PRAGMA user_version`.
-- `profile_entries` retain mutable current profile content: stable opaque `id`,
-  `title`, exact `body_md`, and `updated_at`. There is no case foreign key.
-- `cases` retain stable identity, title, current revision, lifecycle metadata,
-  and no mutable content body.
-- `deliveries` retain exact raw UTF-8 tell text, its SHA-256 digest, and optional
-  caller-supplied label/source reference. Input paths are not retained.
-- `case_revisions` retain a case-local positive revision number, complete
-  Markdown, one fixed stage, nullable advisory, summary, content digests,
-  optional source update, and timestamp. Database triggers refuse revision
-  update or deletion.
-- `steward_updates` are both queued work and individual steward attempts. They
-  bind one case/delivery and retain `queued|running|applied|failed|lost` state,
-  frozen base revision/digest, exact typed Nucleus request/digest, mailbox
-  cursor, requester/job identities, admission, applied revision, result-post
-  acknowledgment, terminal runtime state/detail, predecessor retry link,
-  diagnostics, and lifecycle times.
-- `mailbox_receipts` retain job and call identity, exact argument digest,
-  exact result JSON and digest, and any committed revision. They make
-  byte-identical redelivery replay-safe and conflicting reuse detectable.
+| Record | Stored meaning |
+| --- | --- |
+| `crm_meta` | CRM schema marker, paired with SQLite `user_version` |
+| `profile_entries` | Current editable career material |
+| `cases` | Stable case identity, title, current revision, and lifecycle metadata |
+| `deliveries` | Immutable supplied text, SHA-256, and optional label or source reference |
+| `case_revisions` | Immutable complete case snapshots, numbered within each case |
+| `steward_updates` | Queued work and one steward attempt per row |
+| `mailbox_receipts` | Exact arguments and results associated with a job and tool call |
 
-Database triggers refuse delivery, case-revision, and receipt update or
-deletion. Current case and update views are projections over these durable
-rows.
-
-These retained rows do not imply a public export surface. Version 0.3 exposes
-current profile entries, case revisions, source-update identity, update/delivery
-identity, and Nucleus correlation, but not raw delivery bodies, persisted request JSON, or mailbox
-receipt JSON. Direct SQLite reads are outside the supported interface.
+Triggers reject updates or deletion of deliveries, revisions, and tool receipts.
+Case and update views derive from these records. Retention does not imply a
+public export interface. Use [the CLI](cli.md) for supported reads.
 
 ## Profile entries
 
-One row is one piece of career material the caller can retrieve or replace
-independently. The only fields are:
+One entry is one independently editable piece of career material.
 
-| Field | Stored meaning |
+| Field | Meaning and limit |
 | --- | --- |
-| `id` | Opaque stable identity generated on creation |
-| `title` | Trimmed nonempty title, at most 1,000 UTF-8 bytes; not unique |
-| `body_md` | Exact UTF-8 Markdown, at most 1,048,576 bytes; may be empty |
-| `updated_at` | CRM write time, as an RFC 3339 UTC string |
+| `id` | Stable opaque identity |
+| `title` | Trimmed nonempty text; at most 1,000 UTF-8 bytes; not unique |
+| `body_md` | Exact Markdown; at most 1,048,576 UTF-8 bytes; may be empty |
+| `updated_at` | Latest CRM write time as an RFC 3339 UTC string |
 
-Creation commits one row. Update atomically replaces the title and complete
-body and sets the write timestamp. It has no revision precondition; the last
-committed replacement wins. Identity survives title changes. No history,
-source-path column, structured entry kind, tag, fact field, case relation, or
-model-generated content is implied. Lists order by `updated_at` descending,
-then `id`; JSON list entries and show return entire current rows. Human list
-output shows ID, title, and timestamp.
-
-Profile Markdown is retained verbatim, including caveats and disclosure notes.
-Each entry is stored independently. `updated_at` records the latest CRM write.
-Profile operations invoke no steward work and leave cases unchanged.
+Update atomically replaces the title and full body. It preserves identity and
+sets the write time. There is no revision guard; the last committed replacement
+wins. Profiles have no history or case foreign key. They do not invoke a steward
+or supply automatic context to cases. Source and disclosure notes remain ordinary
+Markdown. List order is descending write time, then ID.
 
 ## Case revisions
 
-Every case has exactly one revision after creation and at most one current
-revision. A revision is a complete snapshot with exactly four structured
-content fields:
+Creation commits a case and revision one together. Each case has one current
+revision. Later revision numbers are contiguous, and the current pointer advances
+in the transaction that inserts the revision.
 
-1. full Markdown;
-2. stage: `research`, `warranted`, `contacted`, `connected`, `helped`, or
-   `closed`;
-3. nullable advisory; and
-4. summary.
+Each revision has four structured content fields:
 
-There is no field-level patch or inherited omission. Revision numbers are
-contiguous within a case, old revisions are immutable, and the case's current
-pointer advances only in the transaction that inserts the new revision.
-The stage is a stored CRM classification validated and committed with its revision.
+| Field | Meaning |
+| --- | --- |
+| Markdown | Complete case snapshot; omissions do not inherit prior content |
+| Stage | `research`, `warranted`, `contacted`, `connected`, `helped`, or `closed` |
+| Advisory | Nullable retained caution; displayed prominently without blocking operations |
+| Summary | Description of the revision |
 
-A non-null advisory is preserved verbatim as part of the revision. Storage
-does not turn it into a policy gate. Every read projection must carry it so the
-CLI and downstream JSON consumers can render it conspicuously.
+Revision metadata includes digests, timestamp, and an optional source update.
+At most one update can source a revision. A stage classifies the stored case;
+it does not authorize contact or prove an external outcome.
 
-## Intake and queued work
+With no initial body, creation uses a title and the suggested headings
+`Current picture`, `People`, `Chronicle`, and `Open threads`. CRM does not parse
+or require those headings. The initial summary is `Initial case`; advisory is null.
 
-`case new` validates its title, input and stage before a transaction, then
-commits the case and revision one atomically. With omitted input the stored
-Markdown contains the title followed by the suggested `Current picture`,
-`People`, `Chronicle`, and `Open threads` sections. Those headings are not
-stored as structured fields, parsed, or required in later revisions. The
-initial summary is `Initial case` and advisory is null.
+## Deliveries and updates
 
-`tell` validates its delivery before a transaction, then commits one immutable
-delivery row and one queued update atomically. The delivery remains durable
-whether the post-commit worker launch succeeds, the requester is offline, or a
-later attempt fails. Neither command stores its input path or creates a content
-file.
+`tell` commits one delivery and one queued update atomically. These records
+survive failure to launch the worker or complete the agent run.
 
-The worker claims an update and freezes the current base revision and digest.
-It builds and stores the immutable request before submission to Nucleus, whose
-transport outcome can be ambiguous. One `steward_updates` row is one attempt. Explicit retry
-reuses the same immutable delivery row/text in a successor update with
-`retry_of`, a new requester identity, and a new job identity. At most one update
-may source a case revision.
+An update retains its case and delivery, state, frozen base revision and digest,
+exact Nucleus request and digest, mailbox cursor, requester and job IDs, admission,
+applied revision, result-post acknowledgment, terminal runtime state and detail,
+retry predecessor, diagnostics, and lifecycle times.
 
-At most one update per case is `running`. Queue drain selects the oldest queued
-update whose case has no running update, making per-case steward commits serial
-while allowing unrelated cases to retain independent queues.
-One database-resident worker lease serializes hidden drainers without creating
-a lock sidecar. At its tail, a drain owner uses one immediate transaction to
-either claim the next eligible queued update or release the lease. A resume
-owner atomically releases and detects eligible queued work, then launches one
-replacement drainer when needed. Enqueue and either final handoff therefore
-serialize without an empty-check/release gap. A contender need wait at most two
-seconds: during a long drain the owner will claim the already-committed work,
-while work arriving during a long resume receives the replacement drainer.
-One drain attempts each already-unsettled update at most once, continues through
-eligible queued work after per-update errors, and only then returns the first
-unresolved diagnostic; it does not tight-loop the same recoverable attempt.
+The states are `queued`, `running`, `applied`, `failed`, and `lost`. At most one
+update per case is running. Drain selects the oldest queued update whose case
+has no running update. A database lease serializes hidden drainers; see
+[worker coordination](architecture.md#case-update-flow).
 
-## Nucleus correlation and commit
+Requester program `crm` and requester ID `case-steward:UPDATE_ID` correlate the
+attempt with one Nucleus job. The exact request is durable before submission.
+It references immutable toolset `crm/case-steward/1` and contains the frozen
+base and delivery.
 
-Requester program is `crm`; stable requester identity is
-`case-steward:UPDATE_ID`; each update has one unique Nucleus job identity. The
-request references
-immutable toolset `crm/case-steward/1` and contains the frozen base and delivery
-text. Nucleus records execution evidence but does not read or decide CRM rows.
+## Revision commit and replay
 
-The toolset contains exactly one managed tool, `submit_case_revision`. A valid
-call supplies the frozen positive base revision plus complete Markdown of at
-most 1,048,576 UTF-8 bytes, stage, nullable nonempty advisory of at most 4,000
-bytes, and nonempty summary of at most 1,000 bytes.
-CRM commits it only while the selected case's current revision still equals the
-attempt base. In one transaction it writes the next immutable revision, stores
-the receipt and exact result, advances the case head, marks the update applied,
-and records the attempt's domain success.
+`submit_case_revision` supplies a positive base revision and these bounded values:
 
-That commit is domain success. Nucleus completion alone does not commit a
-revision. The commit remains successful if the harness later fails while it
-receives the tool result or finishes. CRM retains whether the successful result was acknowledged
-and the later terminal runtime state/detail separately. An applied update is
-runtime-settled only after that terminal observation is durable. A stale base or
-malformed call never partially advances the case.
+- complete Markdown, at most 1,048,576 UTF-8 bytes;
+- one fixed stage;
+- a null or nonempty advisory, at most 4,000 bytes;
+- a nonempty summary, at most 1,000 bytes.
 
-## Idempotency and retry
+CRM commits only if the case head still matches the attempt's base. One
+transaction writes the revision and receipt, advances the head, marks the update
+applied, and records domain success. Invalid content or a stale base changes
+no revision.
 
-An ambiguous submission may repeat only the byte-identical typed request under
-the same job identity. Tool delivery is keyed by attempt and call identity. A
-byte-identical replay returns the already bound result; different arguments
-under a used identity fail closed.
+A receipt binds job and call identity to argument and result digests, exact
+result JSON, and any committed revision. Identical redelivery returns that
+result. Conflicting reuse fails. Ambiguous admission reuses only the exact
+request and job ID.
 
-`resume` preserves the queued, running, or applied-but-runtime-unsettled update
-and cannot create a successor merely because progress is uncertain. `retry`
-accepts only `failed` or `lost` updates, then creates a successor update with
-new identities and retained `retry_of` while reusing the same delivery. There
-is no automatic retry, daemon, or scheduler. `update wait` actively launches
-queue drain or same-update recovery once on entry, then only polls; it never
-changes retry eligibility.
+CRM retains result acknowledgment and later terminal runtime state separately.
+An applied update is runtime-settled only after terminal observation is durable.
+A runtime failure does not reverse the revision commit.
 
-## Initialization, integrity, and migration
+Resume preserves recoverable work. Retry accepts only failed or lost updates
+and creates a successor with a new job identity, the same delivery, and `retry_of`.
+Wait can launch recovery once on entry, then polls; it does not change retry
+eligibility. See [update operations](cli.md#updates).
 
-Only `init` creates a new CRM database, using schema two. Repeating it against
-an existing supported CRM schema is idempotent. New Unix database bytes are mode
-0600 before SQLite opens them; an existing symbolic link or non-regular target
-is rejected before open, and opening a regular database also tightens database
-and existing sidecar permissions. The Rust installer creates its default
-state directory mode 0700. Ordinary commands refuse absent, foreign,
-incomplete, newer, or older schemas and never migrate implicitly.
+## Initialization and migration
 
-Doctor checks `PRAGMA user_version`, the seven required schema-two tables,
-foreign keys, SQLite integrity, secure database/sidecar permissions, strict
-Nucleus health/capabilities, and idempotent registration of the immutable
-toolset and its input/result schemas. It does not make Nucleus authoritative
-for database health.
+`init` creates schema 2 and is idempotent for an existing supported CRM schema.
+Ordinary commands refuse absent, foreign, incomplete, older, or newer schemas.
+They do not migrate implicitly.
 
-`migrate --backup PATH` explicitly upgrades an existing schema-one database to
-schema two by adding the empty profile table and updating both schema markers.
-It preserves all existing case, revision, delivery, receipt, queue, and lease
-rows. No profile material is imported by schema migration itself.
+New database files are `0600`; the default state directory is `0700`.
+Database open rejects symbolic or non-regular targets and tightens database
+and existing sidecar permissions. Doctor checks schema objects, foreign keys,
+SQLite integrity, permissions, Nucleus readiness, and immutable registration.
 
-The operator must stop new CRM work and let active workers settle first. Under
-an immediate write transaction, migration refuses a live worker PID, a running
-update, or an applied update lacking terminal runtime evidence. Queued updates
-may remain queued. A SQLite-aware snapshot at the required new backup path
-includes committed WAL data and is independently readable; the backup is
-private and an existing destination is refused. Its parent must already be a
-private regular directory; a relative backup path resolves against the current
-working directory. It must be separate from the source database and sidecars
-and have no pre-existing SQLite sidecars. The source schema is changed
-and its integrity checked within the transaction. Failure before commit leaves
-schema one intact. Repeating migration on supported schema two is unchanged
-and creates no backup.
+Schema-one migration adds the empty profile table and updates both markers.
+It preserves case history, deliveries, receipts, queue state, and leases.
+Migration requires settled workers and a private SQLite-aware backup. Queued
+work can remain queued. A failure before commit leaves schema one intact;
+repeating migration on schema two creates no backup.
 
-For database rollback, quiesce all CRM use, preserve the current schema-two
-database and its applicable sidecars, and restore the independently readable
-schema-one backup as a complete database with no stale WAL/SHM from schema two.
-Only then use a schema-one binary. This discards post-backup writes from the
-active view, so it requires explicit recovery authority and retention of that
-newer state. Program rollback alone must never reinterpret a newer database.
+See [installation and rollback](system-installation.md) for exact backup-path,
+quiescence, and restoration requirements. Program rollback alone cannot make
+an older binary compatible with a newer database.

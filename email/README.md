@@ -1,87 +1,31 @@
 # Email
 
-Email is a CLI that sends one caller-provided
-subject and plain-text body immediately through Resend from
-`Codex <codex@joeytan.dev>` to `j.tan2231@gmail.com`. It also reads received
-messages from the configured Resend account without retaining them locally.
+Email sends plain-text messages and attachments through Resend from
+`Codex <codex@joeytan.dev>` to `j.tan2231@gmail.com`. It also reads received mail
+from the configured Resend account.
+
+## Example
+
+With the installed credential configured, this command sends immediately:
 
 ```sh
-email 'Subject' 'Body'
 email 'Subject' - < body.txt
-email --idempotency-key 'decisions/daily/2026-09-01' 'Subject' - < body.txt
-email --idempotency-key 'packets/daily/2026-09-06' --attach resume.pdf 'Jobs' - < body.txt
 ```
 
-The second form reads the body from standard input. An authorized calling
-product can supply one stable idempotency key for one exact message.
-Interactive calls receive a new `email/<UUIDv7>` key. Email sends
-immediately. There is no recipient option, draft store, HTML mode, remote attachment URL
-support, scheduler, daemon, or delivery database. A successful command means
-Resend accepted the submission; it does not prove final Gmail delivery.
+A successful command means Resend accepted the submission. It does not confirm
+arrival in the recipient's inbox.
 
-Repeat `--attach PATH` for multiple local files. Each file is captured once
-before sending; filenames and exact bytes are part of the idempotent request.
-Only basenames and contents leave the machine, never local source paths.
-Callers must retain the exact files when they own later retries.
+## Check
 
-## Build, test, and install
-
-The macOS user installation reads `RESEND_API_KEY` from `~/.zshrc` without
-putting the secret in command arguments or product state:
+From the Cell root:
 
 ```sh
-export RESEND_API_KEY='re_replace_with_the_real_key'
-
-cd /Users/joey/rust/cell/email
-./ci.sh
-<TESTED_EMAIL_INSTALL> install \
-  --binary <TESTED_EMAIL_BINARY> \
-  --bundle /Users/joey/rust/cell/email/chancery
+./ci.sh email
 ```
 
-The installed command is `~/.local/bin/email`. Installation details and
-recovery boundaries are in [docs/system-installation.md](docs/system-installation.md).
-The [Chancery provider for this release](chancery/provider.json) lists all
-supported transport capabilities. Select `email.message.send` or
-`email.message.receive`, then use
-`chancery resolve email.message.send` to read its contract, external dependencies,
-sources, and declared gaps. Resolution does not load credentials, check Resend,
-or send a message.
+## Further documentation
 
-Sending discloses the subject, body, and attachment names and bytes to Resend
-and Gmail. The runtime does not call Chancery. Chancery reads the documentation
-with the installed Email release.
-
-## Rust interface
-
-`email::api::{Message, Receipt, send}` exposes the same fixed-recipient,
-plain-text submission as the CLI, which uses that implementation. Callers own
-send authorization and any supplied occurrence key. `Receipt` means Resend
-accepted the submission. The API does not add configurable addresses, HTML or
-retained delivery state.
-
-`Attachment { filename, content }` and `send_with_attachments(&message,
-&attachments)` extend that interface without changing `Message` or `send`.
-The caller supplies captured bytes and a basename; Email does not read files
-through the Rust API or fetch remote attachments.
-
-Callers holding attachment bytes in a database can use `--payload-stdin` with
-body `-` to supply JSON containing the body and ordered base64 attachments.
-See the [CLI contract](docs/cli.md). Email retains no local payload files.
-
-`ReplyOptions { reply_to, in_reply_to, references }` and
-`send_with_options(&message, &attachments, &options)` add reply routing and
-thread headers. Existing `Message`, `send`, and `send_with_attachments` callers
-keep their behavior. Reply routing does not change the fixed sender or recipient.
-
-`list_received(&ReceivedPageRequest)` returns one `ReceivedPage`, and
-`get_received(id)` returns one `ReceivedMessage`. The caller owns the read
-authorization, page traversal, routing, deduplication and any retained records.
-These free functions read the credential from the process environment.
-
-`Client::new(absolute_installed_wrapper)` provides asynchronous
-`send_with_options`, `list_received`, and `get_received` methods with the same
-types. It invokes that exact Email CLI without reading the credential in the
-requester. It passes send bodies and attachment bytes on stdin, bounds process
-output and execution time, and never retries a process invocation. The installed
-wrapper retains credential loading authority. See [receiving](docs/receiving.md).
+- [Sending commands and Rust interface](docs/cli.md)
+- [Read received mail](chancery/manuals/message-receive.md)
+- [Installation and credentials](docs/system-installation.md)
+- [Send effects and recovery](chancery/manuals/message-send.md)

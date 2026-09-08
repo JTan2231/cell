@@ -37,12 +37,13 @@ every file or size. Filenames and bytes are disclosed to Resend and Gmail.
 `--idempotency-key KEY` lets an authorized calling product identify one exact
 send request. `KEY` must contain 1 to 256 visible ASCII characters and no
 whitespace. Callers must not put secrets or message content in it. Reusing a
-key with the same payload within Resend's 24-hour retention window deduplicates
-the submission; reusing it with a different payload is an error. Email does not
-persist the key or decide when it may be reused.
-The payload includes attachment order, names, and bytes. Retries within one
-invocation never reopen files. A later invocation reads the files anew, so the
-calling product must retain their exact content and names for the same key.
+key with the same payload within Resend's 24-hour retention window
+deduplicates the submission; reusing it with a different payload is an error.
+
+Email does not persist the key or decide when it may be reused. The payload
+includes attachment order, names, and bytes. Retries within one invocation
+never reopen files. A later invocation reads the files anew, so the calling
+product must retain their exact content and names for the same key.
 
 Every send uses:
 
@@ -129,4 +130,38 @@ Acceptance does not prove threading or final delivery.
 `receive list`, `receive get`, and `receive --help` select the receive parser.
 Use `--` before literal send positionals to avoid those reserved forms, such as
 `email -- receive list`. Receive commands use the same installed credential
-wrapper. See [receiving](receiving.md) for the JSON and access contract.
+wrapper. See [receiving](../chancery/manuals/message-receive.md) for the JSON and access contract.
+
+## Rust interface
+
+`email::api::{Message, Receipt, send}` exposes the same fixed-recipient,
+plain-text submission as the CLI, which uses that implementation. Callers own
+send authorization and any supplied occurrence key. `Receipt` means Resend
+accepted the submission. The API does not add configurable addresses, HTML or
+retained delivery state.
+
+`Attachment { filename, content }` and `send_with_attachments(&message,
+&attachments)` extend that interface without changing `Message` or `send`.
+The caller supplies captured bytes and a basename; Email does not read files
+through the Rust API or fetch remote attachments.
+
+Callers holding attachment bytes in a database can use `--payload-stdin` with
+body `-` to supply JSON containing the body and ordered base64 attachments.
+See the command descriptions above. Email retains no local payload files.
+
+`ReplyOptions { reply_to, in_reply_to, references }` and
+`send_with_options(&message, &attachments, &options)` add reply routing and
+thread headers. Existing `Message`, `send`, and `send_with_attachments` callers
+keep their behavior. Reply routing does not change the fixed sender or recipient.
+
+`list_received(&ReceivedPageRequest)` returns one `ReceivedPage`, and
+`get_received(id)` returns one `ReceivedMessage`. The caller owns the read
+authorization, page traversal, routing, deduplication and any retained records.
+These free functions read the credential from the process environment.
+
+`Client::new(absolute_installed_wrapper)` provides asynchronous
+`send_with_options`, `list_received`, and `get_received` methods with the same
+types. It invokes that exact Email CLI without reading the credential in the
+requester. It passes send bodies and attachment bytes on stdin, bounds process
+output and execution time, and never retries a process invocation. The installed
+wrapper retains credential loading authority. See [receiving](../chancery/manuals/message-receive.md).

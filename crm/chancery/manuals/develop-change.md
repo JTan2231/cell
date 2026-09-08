@@ -30,7 +30,7 @@ idempotency, or recovery change, read:
 Preserve reported readiness, unspecified, unsupported and dependency outcomes.
 Do not fill contract gaps from schemas or implementation code.
 
-## Fixed version-0.3 boundary
+## Product boundary
 
 CRM is one private local SQLite library. All retained Markdown, intake,
 request JSON, and tool-result content is database `TEXT`; input files and
@@ -102,13 +102,16 @@ A database schema change requires worker quiescence, a SQLite-aware backup
 including applicable sidecars, explicit migration, an old-state fixture,
 post-migration integrity proof, and database-aware rollback. The installer may
 never perform that migration implicitly. Schema two adds only the profile
-table and schema markers. The supported `migrate --backup PATH` path refuses
-live workers and active unsettled updates, preserves queued work, snapshots
-committed SQLite state, and validates integrity before committing. Repeat
-migration on schema two creates no backup. Retain synthetic schema-one
-fixtures and prove both profile writes and legacy case history survive the
-upgrade. A downgrade requires a quiescent database restore, preserving newer
-state and excluding stale schema-two WAL/SHM from the restored database.
+table and schema markers.
+
+The supported `migrate --backup PATH` path refuses live workers and active
+unsettled updates, preserves queued work, snapshots committed SQLite state,
+and validates integrity before committing. Repeat migration on schema two
+creates no backup. Retain synthetic schema-one fixtures and prove both profile
+writes and legacy case history survive the upgrade.
+
+A downgrade requires a quiescent database restore, preserving newer state and
+excluding stale schema-two WAL/SHM from the restored database.
 
 Ambiguous admission reuses only a byte-identical typed request with the same
 job ID. Resume preserves recoverable work. A new retry requires a recorded
@@ -152,9 +155,7 @@ sender, scheduler, generic people graph, or general autonomous agent.
 
 ## Rust callers
 
-The provider crate exports `crm::api`: supported request and response
-types, provider-owned envelope decoding, and an explicit-executable CLI client.
-Use these types at imports and convert only to caller-local domain values.
-The client performs the same operations under this contract and never adds
-retry or authorization. See `crm/docs/rust-api.md`; the Rust structs and
-enums define the interface without a separate declaration layer.
+Use `crm::api::Client` with provider-owned request and response types.
+The client invokes an explicitly selected CLI and decodes its envelopes. It
+preserves this operation's effects, failures, and authority requirements and
+does not retry automatically. Convert results only to caller-local models.

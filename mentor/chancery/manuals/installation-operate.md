@@ -53,6 +53,9 @@ before the Mentor database exists. `--home ABS` and
 `mentor-install --help`.
 
 Initialized installations use the Cell maintained deployment coordinator.
+Mentor orders selected Email, Nucleus, and Clockwork releases before itself.
+Its maintenance closure includes Nucleus, which also holds Mentor during shared
+updates. Deployment cleanup uses the `MentorMail` installation root.
 Disable `mentor/worker` before deployment; an enabled binding makes installer
 inspection and publication refuse the change. The coordinator uses Mentor's
 `maintenance hold`, `status`, `drain`, and `release` interface, runs the

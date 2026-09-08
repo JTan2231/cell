@@ -166,3 +166,20 @@ uses shared defaults and exceptions, `show` reads the self-contained authored
 manual once, `show --full` preserves authoring fields, and `resolve --summary`
 selects outcome and gaps from the same complete resolution. These projections
 never alter stored bundle bytes or infer missing promises.
+
+## Rust callers
+
+Rust callers use `chancery::api::Client` for typed list, show, resolve, doctor,
+and validate operations. The caller selects an executable and registry.
+Reports distinguish unresolved or invalid domain results from transport errors.
+
+The Rust library exposes provider-owned bundle documents and CLI output types
+through `chancery::api`. `ProviderManifest::decode` and `EntryDocument::decode`
+use the same codecs as the CLI, including legacy schema handling. Decoding a
+document is separate from full bundle validation.
+
+`ProviderIntroduction` and `EntryIntroduction` read the identity and
+indexed-manual fields that Usher needs. They ignore other fields and do not
+evaluate promises, dependencies, or full bundle validity. Usher owns membership
+policy. `Output<T>` and the command result types define the JSON output that
+the CLI serializes.

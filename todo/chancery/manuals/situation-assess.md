@@ -52,9 +52,7 @@ liaison, while Todo retains exact source references and frozen provenance.
 
 ## Rust callers
 
-The provider crate exports `todo::api`: supported request and response
-types, provider-owned envelope decoding, and an explicit-executable CLI client.
-Use these types at imports and convert only to caller-local domain values.
-The client performs the same operations under this contract and never adds
-retry or authorization. See `todo/docs/rust-api.md`; the Rust structs and
-enums define the interface without a separate declaration layer.
+Use `todo::api::Client` with provider-owned request and response types.
+The client invokes an explicitly selected CLI and decodes its envelopes. It
+preserves this operation's effects, failures, and authority requirements and
+does not retry automatically. Convert results only to caller-local models.

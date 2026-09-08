@@ -1,54 +1,30 @@
 # Conversations
 
-Conversations is a local CLI and Rust library for exploring Codex tasks stored
-on this machine. It launches a short-lived `codex app-server --stdio` process
-and uses the documented JSON-RPC API; it never reads Codex's JSONL logs or
-SQLite database directly.
+Conversations reads local Codex task history through App Server. It lists,
+searches, and exports user and assistant messages from active and archived root
+tasks. Optional flags include subagents and non-interactive tasks.
+
+## Example
 
 ```sh
-conversations doctor
 conversations list
-conversations show THREAD_ID
-conversations activity SESSION_OR_THREAD_ID TURN_ID
 conversations search 'approved design'
-conversations export --json > conversations.json
-conversations refresh
+conversations show THREAD_ID
 ```
 
-The default corpus contains interactive root tasks from both active and
-archived stores. Pass `--include-subagents` to include spawned tasks or
-`--include-exec` to include non-interactive `codex exec` tasks. Message output
-contains only normalized user and assistant text and stable
-host/thread/turn/item references. Reasoning, tools, approvals, and internal
-events are excluded. On macOS the default host reference is derived from an
-opaque hash of the platform UUID, so a machine rename does not change it and
-the raw hardware identifier is never exposed.
+Message output and exported files can contain private conversation text.
 
-Use `activity` to read completed-turn metadata for local automation.
-It reports normalized message counts plus stable item references
-and counts for successfully completed file-change items. It never reports file
-paths, diffs, commands, tool output, approvals, or reasoning. Conversations first
-tries a session hint as an exact thread ID. If that thread is absent, it searches
-visible members of the same App Server session lineage. Multiple matches fail.
+## Check
 
-Embedded Rust callers can use
-`AppServerClient::read_thread_summary(&ThreadRef)` to retrieve exact persisted
-task metadata, including the recorded working directory, for a canonical
-machine-local thread reference. The lookup remains App Server-only,
-state-database-only, and metadata-only; it rejects references for another host.
+From the Cell root:
 
-`export --json`, `show --json`, and search output can contain private transcript
-text. Treat redirected files and terminal history accordingly.
-Interactive commands inherit App Server diagnostics by default. Embedded or
-scheduled callers with private-log requirements should set
-`ClientConfig.stderr_policy` to `StderrPolicy::Suppress`.
+```sh
+./ci.sh conversations
+```
 
-The product-owned [`chancery/`](chancery/) bundle indexes Conversations' public
-capabilities. Use `chancery list`, then read every plausible entry with
-`chancery show`. After selecting one exact entry, use `chancery resolve
-<ENTRY_ID>` for its contract, dependency contracts, sources, and declared gaps.
-Resolution does not check App Server readiness
-or authorize an effect, and its uncontracted App Server reliance remains a gap.
+## Further documentation
 
-See [CLI behavior](docs/cli.md), [architecture](docs/architecture.md), and
-[macOS installation](docs/system-installation.md).
+- [Commands and output](docs/cli.md)
+- [Architecture and Rust interface](docs/architecture.md)
+- [Installation](docs/system-installation.md)
+- [Operating contracts](chancery/provider.json)

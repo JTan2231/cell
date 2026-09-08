@@ -16,14 +16,8 @@ Annals stores and derives different kinds of data:
 - JSON exists only at external command/tool boundaries and in immutable hashed
   audit artifacts.
 
-There is no materialized current graph, stored HEAD snapshot, or alternative
-replay path. Schema version 3 rejects every earlier library rather than
-attempting to translate competing historical representations. Schema version
-4 is an additive migration from version 3 that introduces bounded inbox retry
-provenance. Schema version 5 adds the immutable Krisis producer-acceptance
-ledger and accepted-account feed without changing existing semantic, work,
-delivery, or retry history. Schema version 6 adds immutable library instructions
-and their examination provenance without rewriting prior results.
+Corpus reads replay history. Annals stores no current-graph snapshot.
+See [library migration](cli.md#library-operations) for supported schema versions.
 
 ## Library selection and instructions
 
@@ -76,158 +70,29 @@ connection-local temporary concept, edge, and evidence tables. Those tables
 exist only for the connection and revision being queried. They are disposable
 query acceleration, not library state or authority.
 
-## Source-delivery boundary
+## Source deliveries and inbox recovery
 
-A source delivery is distinct from its content-addressed work. Manual commands
-and dispatched inbox jobs create ingestion receipts with captured source
-metadata and lifecycle status. Several deliveries can select the same work.
+A source delivery records one occasion when material is supplied. Several
+deliveries can select the same content-addressed work. Registration and producer
+acceptance precede delivery; dispatch starts the inbox delivery record.
 
-Producer acceptance occurs before source delivery. In a dedicated decisions
-library, `inbox accept` binds `(library ID, krisis, decision ID)` to one exact
-SHA-256 digest. Annals publishes a complete envelope with unchanged account
-bytes and producer identity, then commits the immutable acceptance row.
-Acceptance starts no delivery or model. Exact replay returns the original job;
-different bytes conflict. If the envelope exists but the database commit is
-uncertain, the next identical call reconstructs the acceptance from that
-envelope. It does not publish another job.
+The database owns delivery and retry records. The filesystem owns queue envelopes.
+These stores cannot commit together. Durable receipts let recovery complete the
+exact accepted result without starting a second liaison for an attempted job.
+Retry events freeze their membership before publishing fresh child envelopes.
+Publication is idempotent across interruption.
 
-The decisions-library config contains the expected persistent library ID, and
-its spool contains the same durable binding. Acceptance and feed reads require
-an explicit config or a registered name bound to its decisions config, reject
-competing library overrides, and fail closed when either identity differs. This keeps the primary conversation-export library and its
-spool outside the producer boundary.
+The activation lock excludes other workers. A shorter control lock orders
+registration, priority changes, dispatch, pause, and interruption. Pause lets
+current work finish. Deployment maintenance also blocks spool mutations.
+See [inbox operations and recovery](inbox.md) for the state transitions.
 
-The database also owns an immutable library kind, introduced in version 5. Dedicated
-decision databases are initialized as `decisions`; ordinary initialization and
-every version-3 or version-4 migration produce `general`. Acceptance, feed,
-and decision-config dispatch require the decisions kind. Generic work add,
-integration, inbox admission, backlog import, and generic dispatch require the
-general kind, including when the database is selected directly. A config or
-alternate spool therefore cannot reclassify the physical library.
-
-A run with that config checks the database identity and binds or verifies the
-spool before recovery or dispatch. First binding requires an empty spool and
-fresh queue index. The run never registers `incoming/` files. Each non-retry
-envelope must carry a valid Krisis producer receipt. Its digest and job metadata
-must match the committed acceptance. Direct work
-add or integration and generic register, enqueue, or backlog-import commands
-reject the decisions config; generic inbox admission also rejects any spool
-that already carries the decision-library binding. These local role and
-routing checks are not authentication against the operating user; the general
-source and inbox behavior is otherwise unchanged.
-
-The accepted-account feed is a read-only projection of immutable acceptance
-rows. A watermark freezes a committed sequence prefix. Pages are ascending and
-strictly after either an earlier watermark or an item cursor, remain fixed to
-the requested watermark, and keep an empty-page cursor unchanged. The feed
-contains bounded decision projections and one source anchor, never raw account
-Markdown or general-library content, and stores no consumer acknowledgement.
-
-The filesystem inbox separates admission from dispatch. Registration moves a
-settled source into `queued/JOB_ID/material`, assigns an immutable monotonic
-sequence, and writes an unstarted normal-lane job receipt. Direct enqueue
-copies explicitly selected files into complete unstarted envelopes, leaves the
-originals unchanged, and can select the priority lane without passing through
-settling admission. Before copying, enqueue verifies that the copy would leave
-the configured storage reserve available on the spool filesystem. Dispatch
-finishes any active job, then moves the
-lowest-sequence priority envelope, or the lowest-sequence normal envelope when
-the priority lane is empty, to `processing`. It creates or recovers the
-database receipt and starts the delivery's only processing attempt. A
-continuing priority stream may starve normal jobs. Every job-processing error
-fails the delivery and archives the envelope. Known item-local source errors
-allow draining to continue; an unexpected model, runner, or runtime processing
-failure ends the activation nonzero, leaving later jobs queued for the next
-activation.
-
-Before each zero-attempt claim, the inbox storage gate checks bytes available
-to the Annals user on both the library and spool filesystems. A closed gate
-leaves the next envelope queued with attempts zero and no delivery record, and
-the ordinary activation exits successfully. It creates no pause marker: the
-next scheduled or explicit activation measures again and resumes automatically
-when both locations satisfy the reserve. A probe failure also prevents the
-claim but ends the activation nonzero with `storage_probe_failed`. Recovery of
-an already processing envelope precedes this new-claim gate.
-
-After recovery and registration, Annals performs one authenticated account
-preflight before the activation's first queued dispatch. The preflight does not
-claim an envelope, increment its attempts, or start a source delivery. If
-authentication is unavailable, the activation ends nonzero and every queued
-job remains unstarted. An already processing job is recovered before this
-queued-dispatch check.
-
-The activation-long run lock excludes workers. A shorter control lock orders
-dispatch, pause, registration, direct enqueue, queued-job priority changes,
-interruption, and terminal job disposition. Priority changes apply only to
-queued envelopes, preserve their immutable sequences, and are visible to the
-next claim. Operator pause allows the current delivery to finish and blocks the
-next claim. A durable interrupt targets one named processing job for failed or
-skipped archival without itself pausing later dispatch. Deployment maintenance
-blocks registration, enqueue, repair, priority changes, and dispatch. Pause and
-maintenance are independent; `resume` never removes maintenance.
-
-Recovery never starts a second liaison for a job whose receipt records an
-attempt. It may finish durable success already established by that attempt,
-such as a conclusively retained duplicate or the job's exact linked
-reconciliation. Without such success, it fails the interrupted delivery and
-archives the job.
-
-### Bounded retry boundary
-
-Recovery of terminal failures is an explicit retry event, not another pass of
-ordinary queue draining. The operator supplies two failed inbox job anchors.
-Annals resolves their failed deliveries in ascending `(completed_at, delivery
-ID)` order, includes both endpoints, and stores the complete ordered membership
-before any retry child runs. Both bounds are mandatory. Because membership is
-frozen, a later failure cannot enter an existing event and no command means
-"retry every failed job."
-
-Each retry item relates one immutable original failed job and delivery to at
-most one fresh child job and delivery. The original envelope stays under
-`failed/`, its receipt keeps its one attempt, and its database delivery remains
-failed. The child has its own identity and one attempt. Retry provenance is an
-explicit integration intent: content-addressed retention may recognize the
-same work, but the ordinary fresh-duplicate early return is not taken. The
-child can complete the exact reconciliation owned by the original attempt when
-that durable record still validates, or it can begin a new examination. Pending
-reuse requires both its base and instruction revision to remain current.
-Committed or recorded results survive later instruction changes. A replacement
-examination selects current instructions through the same admission boundary. It
-cannot adopt merely similar history. Its version-6 job receipt carries the
-event, event ordinal, original job, and original delivery together, plus the
-exact original reconciliation when one is eligible for validation and reuse.
-
-Retry execution uses the normal run and control locks. It requires an operator
-pause, no processing job in the spool, and no deployment maintenance. Children
-run sequentially in frozen failure order while ordinary dispatch stays paused.
-`resume` refuses an unfinished retry event, so ordinary queued arrivals cannot
-interleave with its corpus transitions. Start and continue perform one
-authenticated account preflight before their first zero-attempt child claim.
-A failed preflight halts the event. It does not increment a child attempt or
-start a child delivery or model run.
-The same storage gate is checked before each queued retry child claim. A closed
-gate halts the attended event with `insufficient_storage`; an unreadable gate
-halts it with `storage_probe_failed`. In either case the child remains queued
-and unattempted, and the operator uses `retry continue` after correcting the
-condition.
-
-SQLite owns event identity and frozen membership. The spool owns child
-envelopes. These cannot be published in one atomic transaction. A `preparing`
-event is the durable recovery marker for that interval. Publication is
-idempotent: recovery recognizes an existing child or publishes the one missing
-child. It never changes membership or creates a second attempt.
-The event becomes `running` during child processing and `completed` after all
-items are terminal. A known item-local failure remains one item outcome and
-processing advances. An unexpected model, runner, or runtime failure instead
-changes the event to `halted`; continuing it considers only not-attempted
-members. Interrupting the active child with either operator disposition also
-halts the event after recording that child's failed or skipped outcome.
-
-Event reporting joins the frozen original provenance to the current linked
-child delivery's lifecycle, result, and error. Item outcomes and aggregates are
-derived from that authoritative state rather than duplicated as mutable
-counters. The result therefore preserves both sides of the audit trail: why
-each original failed and what its bounded recovery attempt did.
+A decisions library has an immutable kind, expected persistent ID, and bound
+spool. Only validated Krisis acceptance admits sources. Acceptance binds one
+producer key to exact bytes; an identical replay returns the original job.
+The accepted-account feed exposes a fixed committed prefix with opaque cursors.
+These checks isolate it from general libraries. They do not authenticate the
+operating user. See [account exchange](../chancery/annals/manuals/decision-account-exchange.md).
 
 ## Liaison boundary
 
@@ -362,45 +227,12 @@ inverse to current HEAD. If a targeted fact has changed incompatibly since the
 original commit, the revert fails atomically. Successful reversion is a new
 commit and never removes the original.
 
-## Fresh-state deployment boundary
+## Installation state
 
-Normal user deployments stop inbox activity between jobs and back up the
-supported library. They apply the candidate's additive migration through
-version 6 when needed, then switch the complete release. They check commands,
-library statistics, and inbox state, then restore the prior operator pause.
-The installer also discovers registered named libraries, fences their command
-admission, and journals their backups and migrations. It restores each changed
-library from its own pre-migration backup on rollback. This adds no schedules
-and does not register existing primary or decisions paths under new names.
-A failed cutover restores the pre-migration backups and prior release.
-
-The version-3 boundary uses `deploy-user.sh --fresh-state`. The deployer stages
-an initialized empty library and verifies its paused spool before touching live
-state. It disables activation, pauses dispatch, lets the active delivery
-finish, registers all remaining arrivals, and applies maintenance. It then
-moves the old library, its sidecars, and whole spool into one rollback
-generation, switches in the staged state, and checks the installed library
-statistics.
-
-After candidate and installed checks, a dedicated import operation reads
-the archived queued envelopes in lane and immutable-sequence order, preserves
-their priority choices, copies their unchanged source bytes into new unstarted
-envelopes, and verifies the destination count. Attempted processing envelopes
-are terminalized rather than imported for another liaison run. The importer
-requires an otherwise fresh destination with both pause and maintenance
-active. The deployer clears the operator pause while maintenance still prevents
-dispatch, switches the exact-release Clockwork binding, commits its cutover
-receipt, then removes maintenance for the next activation.
-
-Any failure before that commit restores the previous release selector,
-configuration, library and sidecars, spool, and pause state. It restores the
-exact prior Clockwork definition only when its binding was enabled, or the
-legacy LaunchAgent, never both; a prior absent or disabled binding stays
-disabled without transient activation. Every selected definition is compared
-field for field with the complete relevant Annals release before Annals
-disables or replaces it; unknown same-key state is left untouched. On
-success the old generation remains under `backups/generations/` for explicit
-recovery.
+Deployment journals library identities, backups, migrations, program selection,
+and scheduler state. Recovery restores compatible data before public commands.
+See [installation and recovery](system-installation.md) and
+[older-installation migration](migration.md).
 
 ## Rust account interface
 
@@ -409,5 +241,36 @@ page, accepted-account event, and the typed CLI client. Annals emits these same
 types. Krisis and Semantics import them, then retain only their own delivery
 policy, target binding, local projections, and durable progress. Annals decodes
 Krisis account content with `krisis_api::account`; its database and feed
-projection remain Annals-owned. This library extraction preserves the CLI
-JSON, account bytes, cursor rules, and persistent schema.
+projection remain Annals-owned.
+
+## Resource limits and cost
+
+The selected `CorpusState` is held in memory. Reading revision N replays effects
+from revisions 1 through N. Replay and invariant checks grow with the number
+of concepts, edges, and evidence links. Annals has no snapshot cache.
+
+Mutation stores canonical differences. Graph queries load a temporary projection
+of the whole selected state, then apply page limits before constructing output.
+A bounded response therefore does not imply bounded replay cost. Evidence reads
+load only selected byte ranges, with an 8 KiB cap per range.
+
+Exact-context examination reuse can avoid a new model run. `--reexamine` bypasses
+reuse. These mechanisms specify no latency or throughput guarantee.
+
+| Operation or retained value | Limit | Default |
+| --- | --- | --- |
+| Liaison execution | 60 minutes | — |
+| App-server transcript | 64 MiB | — |
+| Retained model-error tail | 64 KiB | — |
+| `work_read` regions per call | 1–20 | — |
+| Characters per work region | 12,000 | 4,000 |
+| Work overview heading characters | 16,000; truncation reported | — |
+| Queries per work or corpus search | 1–20 nonempty queries | — |
+| Matches per work-search query | 1–10 | 5 |
+| Work-search excerpt characters | 1,000 | — |
+| Matches per corpus-search query | 1–50, separate cursor per query | 10 |
+| Requests per `corpus_inspect` call | 1–20 | — |
+| Parent, child, evidence, or root page | 1–100 items | 25 |
+| Relation preview in concept inspection | At most 20 items | 5 |
+| Local graph | Depth 0–5; at most 500 concepts; frontier reported | — |
+| Model-facing evidence excerpt | 2,000 characters; truncation reported | — |

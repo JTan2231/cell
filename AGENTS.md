@@ -3,6 +3,10 @@
 Semantics-Project: cell
 
 - Keep changes simple.
+- Write documentation for readers who need to understand, use, operate, or
+  change the current system. Keep a passage only when it helps them make a
+  decision, perform a task, or interpret a result. Delete material that no
+  longer serves those needs.
 - Keep the root `README.md` slim: project introduction, basic CI examples, and
   documentation pointers. Do not update it as part of documentation updates
   unless the user explicitly requests a README change. Put operational details
@@ -10,6 +14,13 @@ Semantics-Project: cell
 - Use a concise house style based on ASD-STE100 Issue 9. Preserve meaning over
   strict language rules. Keep required technical terms, commands, and field
   names. Add explanation only when it helps the reader.
+- Keep product READMEs short: purpose, a small example or check, and direct
+  documentation links. Keep each full explanation with its owning product.
+- Write current behavior in short active sentences. Give each paragraph one
+  subject. Start procedure steps with an action verb. Preserve required terms.
+- Remove duplicate explanations, test-result reports, completed-work narratives,
+  and obsolete change commentary. Retain supported limits and recovery rules.
+  Installed Chancery manuals must remain complete for independent use.
 - Describe each product's records, their supported interpretation, and their
   operations. State which operation or selected records each collection count,
   timestamp, or failure describes.

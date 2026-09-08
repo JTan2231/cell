@@ -87,32 +87,36 @@ The Todo-owned `providers/todo` selector points through Todo's atomic `current`
 release selector, so documentation and executable rollback together. Todo
 creates that one selector even when Chancery is not yet installed, never changes
 another provider's selector, and does not depend on Chancery at runtime.
-Todo CI validates the bundle and requires its declared provider release to equal
-the Todo package version; `release.sh` bumps and commits both versions together.
 
-Before an update can change database state,
-it records whether the email LaunchAgent is loaded and quiesces it. It creates a
-private transaction directory, asks the candidate binary to run `todo migrate
---backup` with a nonexistent absolute path inside that directory, switches the
-release selector, and validates the installed CLI. Only then does it install
-the final `org.todo.daily-email` definition. It bootstraps an update only if
-the schedule was previously loaded; an unloaded schedule remains unloaded.
-Fresh installation bootstraps only when no existing plist or disabled override
-records an operator choice. The deployer never changes launchd enable/disable
-overrides. A service that is both loaded and disabled is refused before
-quiescence because launchd cannot reload it without changing that override.
+Before an update can change database state, it records whether the email
+LaunchAgent is loaded and quiesces it. It creates a private transaction
+directory, asks the candidate binary to run `todo migrate --backup` with a
+nonexistent absolute path inside that directory, switches the release
+selector, and validates the installed CLI. Only then does it install the final
+`org.todo.daily-email` definition.
+
+It bootstraps an update only if the schedule was previously loaded; an
+unloaded schedule remains unloaded. Fresh installation bootstraps only when no
+existing plist or disabled override records an operator choice. The deployer
+never changes launchd enable/disable overrides. A service that is both loaded
+and disabled is refused before quiescence because launchd cannot reload it
+without changing that override.
+
 Standalone installation creates its own durable admission hold and coordinated
 deployment retains its captured run's hold throughout these changes. Public
 commands stay suspended during migration and database recovery. Recovery uses
 SQLite's exclusive destination locking to restore the migration backup instead
-of replacing a database underneath an active connection. If exclusive recovery
-or any schedule restoration cannot be proved, maintenance and the private
-transaction directory remain for product recovery.
+of replacing a database underneath an active connection.
+
+If exclusive recovery or any schedule restoration cannot be proved,
+maintenance and the private transaction directory remain for product recovery.
 The Todo deployment adapter captures loaded/disabled state and proves that the
 live plist matches the selected release's rendered template. Verification and
-recovery retain the hold if those controls drift, including interruption between
-bootout and bootstrap. Recovery never guesses whether an unload was an operator
-pause or an incomplete installer step.
+recovery retain the hold if those controls drift, including interruption
+between bootout and bootstrap.
+
+Recovery never guesses whether an unload was an operator pause or an
+incomplete installer step.
 
 The candidate migrator writes a complete pre-migration SQLite backup before
 the version-2 transaction begins. If migration, selector switching, smoke
@@ -242,3 +246,9 @@ runtime failure.
 this binary can read the configured database: version, required table, index
 and trigger definitions, SQLite integrity, and foreign keys. Use it to check
 storage compatibility after an interrupted migration.
+
+
+Deployment admission resolves the configured database to its canonical path and
+uses that database parent for `deployment-maintenance/`. Symbolic aliases share
+the same gate. Databases with multiple hard links are rejected because their
+state root cannot identify one authoritative admission gate.

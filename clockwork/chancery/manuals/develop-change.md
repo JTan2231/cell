@@ -2,20 +2,23 @@
 
 Read Clockwork's product instructions and the exact architecture, CLI,
 data-model, installation, semantic-seed, packaging, and Chancery documents for
-the behavior being changed. Keep version 0.1 small: immutable strict
+the behavior being changed. Preserve the product scope: immutable strict
 definitions, stable bindings, generated current-user LaunchAgents, per-key
 admission, one directly supervised child, and runtime history.
 
-Preserve the executable contract. Runtime callers and the
-private launchd entry supply one stable `owner/name` key and no process
-context. Registration alone accepts the exact release, top-level program or
-interpreter/script hashes, literal arguments, exact scrubbed environment,
-absolute cwd and output paths, schedule, timeout, and skip-overlap policy.
-The recognized-Mach-O product program or executable script stays beneath an
-immutable non-symbolic release. Schema one permits only exact, separately
-hashed, root-owned `/bin/sh` as an interpreter. Every launch image is canonical, symlink-free, executable,
-non-writable by group or world, and reverified before spawn. Never add PATH lookup, mutable selectors, shell strings,
-interpolation, implicit shebang choice, inherited environment, or runtime argv.
+Preserve the executable contract. Runtime callers and the private launchd
+entry supply one stable `owner/name` key and no process context. Registration
+alone accepts the exact release, top-level program or interpreter/script
+hashes, literal arguments, exact scrubbed environment, absolute cwd and output
+paths, schedule, timeout, and skip-overlap policy. The recognized-Mach-O
+product program or executable script stays beneath an immutable non-symbolic
+release.
+
+Schema one permits only exact, separately hashed, root-owned `/bin/sh` as an
+interpreter. Every launch image is canonical, symlink-free, executable,
+non-writable by group or world, and reverified before spawn. Never add PATH
+lookup, mutable selectors, shell strings, interpolation, implicit shebang
+choice, inherited environment, or runtime argv.
 
 Clockwork verifies the registered top-level
 launch images at the documented times. It does not attest transitive libraries,

@@ -17,7 +17,7 @@
   "interfaces": [
     {
       "label": "Read the service boundary",
-      "invocation": "Read mentor/docs/service.md and mentor/docs/system-installation.md"
+      "invocation": "Read mentor/chancery/manuals/practice-use.md and mentor/chancery/manuals/installation-operate.md"
     },
     {
       "label": "Read requester requirements",

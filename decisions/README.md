@@ -1,15 +1,23 @@
 # Krisis
 
-Krisis observes eligible completed root user turns. It assigns each user
-authority a `decision` or `no_decision` verdict and delivers deterministic
-decision accounts to a dedicated Annals library. After Annals accepts an
-account, Krisis keeps only the coverage, source anchors, digests, correlations,
-and receipts needed for recovery and audit. Annals stores the accepted accounts.
+Krisis identifies decisions in completed root user turns and delivers decision
+accounts to a dedicated Annals library. Annals retains the accepted accounts.
+Krisis keeps the coverage and receipts needed to trace and recover delivery.
 
-The public executable and Chancery provider are `krisis`. The repository folder,
-Rust package, database path, and log path retain the `decisions`/`Decisions` name
-for migration compatibility with existing persistent history.
+The command is `krisis`. The source directory and existing state paths retain
+the `decisions` name.
 
-Start with [docs/README.md](docs/README.md). Development is gated by `./ci.sh`.
-Release, deployment, live migration, hook trust, and live Annals acceptance are
-separate operations and are not performed by CI.
+## Check
+
+From the Cell root:
+
+```sh
+./ci.sh decisions
+```
+
+## Further documentation
+
+- [Commands and records](docs/cli.md)
+- [Installation and recovery](docs/system-installation.md)
+- [Architecture](docs/architecture.md) and [stored records](docs/data-model.md)
+- [Operating contracts](chancery/provider.json)

@@ -1,57 +1,35 @@
 # CRM
 
-CRM is a private local library for employment-related cases. It also stores
-reusable career vignettes, statements and other profile material as editable
-Markdown entries. For each AI-assisted case update, it retains the caller's
-input, immutable revisions and exact execution correlations. Supported
-reads expose the case lineage and CRM/Nucleus identities; version 0.3 does not
-provide a raw-delivery or mailbox-receipt export command.
+CRM is a private library for employment-related cases. It stores case history
+and reusable career material as Markdown. An AI steward uses supplied updates
+to revise a case. The caller handles messages and other contact actions.
 
-CRM stores case narratives, stages and supporting material. A `warranted`,
-`connected`, or `helped` stage is part of the stored case history. Source
-references remain attached to their deliveries. Any revision advisory is
-shown prominently and never acts as a gate. CRM performs local library reads
-and writes; the caller handles messages and other contact actions.
+## Example
 
-## Build and check
+With an initialized library:
 
 ```sh
-./crm/ci.sh
-cargo build --release --locked --package crm
+crm case new --title "Example opportunity"
+crm case list
+crm tell CASE_ID update.md
+crm update list
 ```
 
-## Isolated smoke
+`tell` stores the update before it starts the worker. It returns before the AI
+work finishes. Profile entries can be created and edited without AI.
+
+## Check
+
+From the Cell root:
 
 ```sh
-temporary=$(mktemp -d)
-target/release/crm --database "$temporary/crm.db" init
-target/release/crm --database "$temporary/crm.db" \
-  case new --title "Example opportunity"
-target/release/crm --database "$temporary/crm.db" case list
+./ci.sh crm
 ```
 
-The installed database defaults to
-`~/Library/Application Support/CRM/crm.db`. Use `--database` or
-`CRM_DATABASE` for an isolated library. CRM never falls back to a database in
-the current directory.
+## Further documentation
 
-`crm tell CASE_ID INPUT` stores the supplied UTF-8 text and a queued update,
-launches the hidden worker, and returns without waiting for AI work. Inspect or
-recover that work with `crm update list`, `show`, `wait`, `resume`, and
-`retry`.
-
-When no initial Markdown is supplied, CRM starts a small suggested outline:
-`Current picture`, `People`, `Chronicle`, and `Open threads`. These headings
-are editorial hints only. Caller-supplied Markdown and steward revisions remain
-free-form; CRM never parses or requires the outline.
-
-`crm profile new --title TITLE INPUT` retains one profile entry; `profile list`,
-`show`, and `update` read or replace its current content. Profile operations run
-locally without AI. Existing schema-one databases require an explicit
-`crm migrate --backup PATH` before this release can use them.
-
-Start with [the documentation index](docs/README.md). The
-[CRM provider bundle](chancery/provider.json) lists the supported contracts for
-this release. After choosing an entry, use `chancery resolve crm.library.explore`
-(or the chosen ID) to read its boundary and explicit gaps. `release.sh` publishes
-a Git release; use separate commands to build or install.
+- [Commands and recovery](docs/cli.md)
+- [Installation and migration](docs/system-installation.md)
+- [Architecture](docs/architecture.md) and [stored records](docs/data-model.md)
+- [Rust interface](docs/rust-api.md)
+- [Operating contracts](chancery/provider.json)

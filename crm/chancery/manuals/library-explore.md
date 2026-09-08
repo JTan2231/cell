@@ -66,7 +66,7 @@ Each revision is a full snapshot containing:
 - summary.
 
 The revision's `source_update_id` can be passed to `crm update show` to inspect
-its update/delivery and Nucleus identities. Version 0.3 has no supported
+its update/delivery and Nucleus identities. CRM has no supported
 raw-delivery, persisted-request, or mailbox-receipt show/export command; direct
 SQLite reads are unsupported. Historical output returns the selected stored
 revision.
@@ -102,12 +102,10 @@ output are caller-controlled disclosure surfaces.
 
 ## Rust callers
 
-The provider crate exports `crm::api`: supported request and response
-types, provider-owned envelope decoding, and an explicit-executable CLI client.
-Use these types at imports and convert only to caller-local domain values.
-The client performs the same operations under this contract and never adds
-retry or authorization. See `crm/docs/rust-api.md`; the Rust structs and
-enums define the interface without a separate declaration layer.
+Use `crm::api::Client` with provider-owned request and response types.
+The client invokes an explicitly selected CLI and decodes its envelopes. It
+preserves this operation's effects, failures, and authority requirements and
+does not retry automatically. Convert results only to caller-local models.
 
 ## Output selection
 

@@ -16,15 +16,16 @@ Build and validate first, then deploy under separate authority:
 ```
 
 Deployment stages the binary, Rust installer, and complete provider bundle in
-one content-addressed release. It atomically selects that release for the stable
-command and provider paths. Before either selector changes, the supplied
-candidate Chancery reader must validate the provider copy in that staged release.
-Before commit, the same reader must find all three Clockwork entries through
-the installed provider registry and selected provider path. Deployment retains
-the prior valid selector for rollback.
-It neither calls `clockwork binding switch` nor scans another product for jobs.
-Missing current-user `.local/bin` and Chancery parent directories may be
-created; existing shared parents are validated without changing their modes.
+one content-addressed release. It atomically selects that release for the
+stable command and provider paths. Before either selector changes, the
+supplied candidate Chancery reader must validate the provider copy in that
+staged release. Before commit, the same reader must find all three Clockwork
+entries through the installed provider registry and selected provider path.
+
+Deployment retains the prior valid selector for rollback. It neither calls
+`clockwork binding switch` nor scans another product for jobs. Missing
+current-user `.local/bin` and Chancery parent directories may be created;
+existing shared parents are validated without changing their modes.
 
 New releases use the shared Rust `cell-install-v2` manifest in `manifest.json`.
 The exact inventory includes `clockwork-install` at `bin/clockwork-install` and
@@ -97,18 +98,21 @@ installer, provider, current, and previous selectors after refusing any remainin
 <TRUSTED_CLOCKWORK_INSTALL> uninstall
 ```
 
-Before running it, disable every binding and verify quiescence. The uninstaller
-serializes with deployment through `/usr/bin/shlock` on the private product
-installation lock; that primitive performs atomic PID ownership and safe stale
-owner recovery rather than path-renaming a previously inspected lock. When the
-Clockwork state root is absent, uninstall may create that empty private root so
-the same lock path can serialize against a first deployment; it creates no
-runtime database. It does not
-boot out or delete a product schedule, kill a running activation, delete
-content-addressed releases, remove the database, prune history, or delete
-product logs. Retained state and releases require a separate, explicit
-destructive operation. Removing selectors is not proof that no already-running
-child remains.
+Before running it, disable every binding and verify quiescence. The
+uninstaller serializes with deployment through `/usr/bin/shlock` on the
+private product installation lock; that primitive performs atomic PID
+ownership and safe stale owner recovery rather than path-renaming a previously
+inspected lock.
+
+When the Clockwork state root is absent, uninstall may create that empty
+private root so the same lock path can serialize against a first deployment;
+it creates no runtime database. It does not boot out or delete a product
+schedule, kill a running activation, delete content-addressed releases, remove
+the database, prune history, or delete product logs.
+
+Retained state and releases require a separate, explicit destructive
+operation. Removing selectors is not proof that no already-running child
+remains.
 
 ## launchd limits
 
@@ -117,13 +121,3 @@ login domain. Timer delivery and catch-up behavior remain subject to launchd,
 login/logout, sleep/wake, clock and time-zone changes, filesystem access and
 TCC, and operating-system resource pressure. No readiness check proves the
 next delivery time.
-
-## Semantics participation
-
-Clockwork carries the exact marker `Semantics-Project: clockwork` in its
-product instructions. This change intentionally does not register or seed the
-project. Under separate authority, register the canonical folder, atomically
-seed [the project-local definition list](semantics-seed.md) at revision zero,
-verify repository HEAD, and then remove the seed source if it is no longer
-needed. Until registration, Cell remains the maintained shared-terminology
-authority.

@@ -35,6 +35,4 @@ The supported API does not expose database connections, workers, or mutable
 storage operations. It invokes the same noninteractive CLI boundary, with the
 same authority requirements. The crate is a source dependency; installation
 continues to select the ordinary executable, not a separate runtime service or
-shared-library deployment. No cross-product Rust consumer currently imports
-this API in the workspace; future consumers should depend on this provider
-crate rather than defining the wire interface themselves.
+shared-library deployment.

@@ -92,16 +92,18 @@ The backup path must be new, separate from the source database and its
 sidecars, and have no existing SQLite sidecars. Its parent must already be a
 private non-symbolic directory with no group/other permissions on Unix. A
 relative backup path resolves against the current working directory. An
-existing destination is refused. CRM creates a
-private, independently readable SQLite snapshot that includes committed WAL
-content, then adds the profile table and advances both schema markers with
-integrity validation before commit. Failure before commit leaves the source
-at schema one. The result reports `changed`, `from_schema_version`, and
-`schema_version`, plus database and backup paths. `backup` is absolute when
-changed and null otherwise. Repeating on schema two is unchanged and creates
-no backup. After an ambiguous result, inspect schema before retrying. A failed
-backup may leave its destination; inspect it and choose a fresh destination
-for another attempt.
+existing destination is refused.
+
+CRM creates a private, independently readable SQLite snapshot that includes
+committed WAL content, then adds the profile table and advances both schema
+markers with integrity validation before commit. Failure before commit leaves
+the source at schema one. The result reports `changed`, `from_schema_version`,
+and `schema_version`, plus database and backup paths. `backup` is absolute
+when changed and null otherwise.
+
+Repeating on schema two is unchanged and creates no backup. After an ambiguous
+result, inspect schema before retrying. A failed backup may leave its
+destination; inspect it and choose a fresh destination for another attempt.
 Migration calls no Nucleus service and starts no worker.
 
 Retain the backup as private data. To roll back storage, stop all CRM use,
@@ -202,17 +204,15 @@ Nucleus state. Stop when `previous` is absent/invalid or the older binary
 cannot read the retained database schema; use that release's database-aware
 recovery plan instead of forcing binary rollback.
 
-Version 0.3 has no uninstaller or automatic pruning. Deleting retained cases,
+CRM has no uninstaller or automatic pruning. Deleting retained cases,
 attempts, releases, or a database is a separate destructive action.
 
 ## Rust callers
 
-The provider crate exports `crm::api`: supported request and response
-types, provider-owned envelope decoding, and an explicit-executable CLI client.
-Use these types at imports and convert only to caller-local domain values.
-The client performs the same operations under this contract and never adds
-retry or authorization. See `crm/docs/rust-api.md`; the Rust structs and
-enums define the interface without a separate declaration layer.
+Use `crm::api::Client` with provider-owned request and response types.
+The client invokes an explicitly selected CLI and decodes its envelopes. It
+preserves this operation's effects, failures, and authority requirements and
+does not retry automatically. Convert results only to caller-local models.
 
 ## Coordinated deployment maintenance
 
@@ -242,18 +242,19 @@ admitted operation. Schema-one maintenance observation is supported before
 its explicit migration. An unavailable or ambiguous worker is not assumed
 settled. Release removes only its exact owner's hold.
 
-The coordinator uses the program installer and the separate
-`migrate --backup` command. Its backup destination is
-`~/Library/Application Support/CRM/crm-pre-migration-RUN_ID.sqlite`, outside
-the temporary deployment workspace. The migration creates this private
-backup only when schema migration is needed; current-schema deployment
-creates no backup. A created backup survives deployment cleanup, including
-an interrupted or failed migration, for explicit database recovery.
-Migration with `CELL_DEPLOYMENT_RUN_ID` acquires
-exclusive activity only when the run owns the sole matching hold. An arbitrary
-environment value cannot bypass another owner or active work. The program installer still
-never opens or migrates CRM data. `doctor` can validate held Nucleus readiness
-for that exact deployment owner; normal steward admission remains strict.
+The coordinator uses the program installer and the separate `migrate --backup`
+command. Its backup destination is `~/Library/Application
+Support/CRM/crm-pre-migration-RUN_ID.sqlite`, outside the temporary deployment
+workspace. The migration creates this private backup only when schema
+migration is needed; current-schema deployment creates no backup. A created
+backup survives deployment cleanup, including an interrupted or failed
+migration, for explicit database recovery.
+
+Migration with `CELL_DEPLOYMENT_RUN_ID` acquires exclusive activity only when
+the run owns the sole matching hold. An arbitrary environment value cannot
+bypass another owner or active work. The program installer still never opens
+or migrates CRM data. `doctor` can validate held Nucleus readiness for that
+exact deployment owner; normal steward admission remains strict.
 
 Deployment verification checks the installed release, database integrity,
 Nucleus readiness, and settled maintenance status. It creates no case, update,

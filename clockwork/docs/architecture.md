@@ -62,10 +62,11 @@ does not use the shebang and rejects the literal `-c` command-string argument.
 
 At registration and again before spawn, the pinned artifacts must be regular,
 non-symbolic, non-hard-linked, executable by the current user, and not group-
-or world-writable.
-The Mach-O magic check is a closed format discriminator, not a complete loader
-or host-architecture preflight; an otherwise admitted image may still fail at
-spawn and is recorded as `start_failed` when the terminal state write succeeds.
+or world-writable. The Mach-O magic check is a closed format discriminator,
+not a complete loader or host-architecture preflight; an otherwise admitted
+image may still fail at spawn and is recorded as `start_failed` when the
+terminal state write succeeds.
+
 The manifest's release root is an absolute non-symbolic directory whose final
 path component equals the product's caller-supplied exact 64-lowercase-hex
 content release ID. Clockwork pins that identity but does not recompute or
@@ -114,32 +115,38 @@ loaded state. If that restoration fails while the current projection still
 matches recorded prior or candidate state, Clockwork first persists a disable
 intent and attempts fail-disabled cleanup. An unrecognized projection is left
 untouched and recovery-gated; Clockwork reports explicitly when disabled state
-cannot be established. It refuses to replace or remove a plist that does not match the
-binding's recorded digest. It never leaves an intentional old-and-new dual schedule. Disabling a
-binding first prevents new admission, waits for exclusive ownership of the
-transition gate while any already-running broker/child finishes naturally,
-then boots out the generated agent and removes its plist. If a broker has
-disappeared while its recorded child remains live or cannot be proved absent,
-the shared gate no longer provides a wait handle: disable rejects, restores the
-prior coherent binding, and must be retried after demonstrable child exit. It
-retains definition and activation history.
+cannot be established.
+
+It refuses to replace or remove a plist that does not match the binding's
+recorded digest. It never leaves an intentional old-and-new dual schedule.
+Disabling a binding first prevents new admission, waits for exclusive
+ownership of the transition gate while any already-running broker/child
+finishes naturally, then boots out the generated agent and removes its plist.
+
+If a broker has disappeared while its recorded child remains live or cannot be
+proved absent, the shared gate no longer provides a wait handle: disable
+rejects, restores the prior coherent binding, and must be retried after
+demonstrable child exit. It retains definition and activation history.
 
 For a transition involving an existing binding or launchd projection,
-Clockwork fsyncs a private per-key transition journal containing the operation,
-target definition, exact prior binding/plist/loaded-state observation, and the
-exact candidate definition and plist bytes for a switch before the first mutation. Recovery
-touches a current plist or binding only when it matches the journal's prior or
-candidate projection; an unattributable projection is retained and reported.
+Clockwork fsyncs a private per-key transition journal containing the
+operation, target definition, exact prior binding/plist/loaded-state
+observation, and the exact candidate definition and plist bytes for a switch
+before the first mutation. Recovery touches a current plist or binding only
+when it matches the journal's prior or candidate projection; an unattributable
+projection is retained and reported.
+
 A later switch for that key restores a switch journal left by an abruptly
 terminated broker before attempting the requested change. A later disable
 first durably replaces either journal with its requested disable intent, then
 resolves it directly into a disabled selection without loading a schedule.
 Doctor reports pending transition keys without choosing either repair effect.
+
 If the journal unlink succeeds but its directory sync fails, Clockwork retains
 the already coherent binding projection, reports commit durability as
-uncertain, and does not begin an unjournaled rollback.
-Disabling a wholly absent coherent key instead creates one disabled SQLite
-tombstone atomically; there is no external projection to coordinate.
+uncertain, and does not begin an unjournaled rollback. Disabling a wholly
+absent coherent key instead creates one disabled SQLite tombstone atomically;
+there is no external projection to coordinate.
 
 Bootstrapping a definition with run-at-load enabled may make launchd request
 an activation once the transition gate opens. The same is true when recovery
@@ -161,16 +168,19 @@ activation row.
 The broker enters a shared per-key transition gate, refuses a pending binding
 transition, pins the selected immutable definition, acquires the exclusive
 per-key activation lock, and re-verifies the direct artifacts. It then starts
-the same installed Clockwork binary as a blocked execution gate and new process
-group leader, records that PID, and only then releases a one-byte parent pipe.
+the same installed Clockwork binary as a blocked execution gate and new
+process group leader, records that PID, and only then releases a one-byte
+parent pipe.
+
 EOF before that release makes the gate exit without product execution. After
 release the gate proves that its PID owns the running activation, re-verifies
 the definition, claims and unlinks a private status marker, opens the product
-outputs, and `exec`s the registered program or `/bin/sh` profile in place. A
-pre-exec or loader failure is written only to that marker and becomes
-`start_failed`; Clockwork diagnostics do not enter product output. The recorded
-PID is therefore the product PID after exec, and there is no unrecorded
-spawned-product window.
+outputs, and `exec`s the registered program or `/bin/sh` profile in place.
+
+A pre-exec or loader failure is written only to that marker and becomes
+`start_failed`; Clockwork diagnostics do not enter product output. The
+recorded PID is therefore the product PID after exec, and there is no
+unrecorded spawned-product window.
 
 The broker waits for that process, forwards termination to its process group,
 applies the optional timeout, and records one terminal result. One activation
@@ -208,13 +218,22 @@ Clockwork supports interval timers and one daily local-calendar hour/minute.
 These are launchd triggers, not a service-level clock. Delivery depends on the
 user being logged in, macOS launchd behavior, sleep/wake coalescing, clock and
 time-zone changes, resource pressure, TCC and filesystem access, and the
-continued existence of the exact release paths. Version 0.1 promises no
+continued existence of the exact release paths. Clockwork specifies no
 maximum start delay, catch-up count, fairness, availability percentage, or
 delivery SLA.
 
 ## Deliberate exclusions
 
-Version 0.1 has no agent execution, Nucleus submission, daemon, HTTP or network
+Clockwork has no agent execution, Nucleus submission, daemon, HTTP or network
 surface, workflow dependencies, fan-out, retry engine, backoff, queue,
 distributed lock, secret store, output capture, product log rotation, calendar
 expressions beyond the documented forms, or system/root service mode.
+
+## Rust interface
+
+`clockwork::api` owns the activation manifest, definition, binding and history
+types, their existing codecs, and a typed client for an explicitly selected
+Clockwork executable. The CLI serializes these same types. Manifest decoding
+is structural; registration still performs the authoritative local-artifact
+and scheduling checks. Private plist bookkeeping is excluded from binding
+exports.

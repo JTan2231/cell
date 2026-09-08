@@ -1,40 +1,31 @@
 # Semantics
 
-Semantics maintains an authoritative, append-only vocabulary for each
-participating project folder. It reads durable accepted-account events from one
-dedicated Annals decisions library. Conversations resolves each account's exact
-authority-thread working directory. Nucleus proposes a typed reconciliation;
-Semantics validates and commits it. Legacy Decisions intake remains available
-for replay and recovery. New intake comes from Annals.
+Semantics maintains terminology and its history for registered project folders.
+It reads accepted decision accounts from Annals and uses Nucleus to propose
+changes. Semantics validates each change before it appends a repository revision.
 
-On macOS, Clockwork owns the recurring process activation for the immutable
-`semantics/worker` definition. Semantics still owns worker serialization,
-intake state, recovery, validation, and every repository commit.
-
-Participation is explicit. A registered folder must contain an exact line in
-its root `AGENTS.md`:
-
-```text
-Semantics-Project: project-id
-```
-
-The central SQLite database stores the project registry, immutable semantic
-revisions, intake state, and durable Nucleus correlations. Project files are
-never rewritten by the worker.
-
-Start with [the documentation map](docs/README.md), then see the
-[CLI reference](docs/cli.md), [user installation guide](docs/system-installation.md),
-or [Semantics provider bundle](chancery/provider.json). After selecting an exact
-Semantics entry, use `chancery resolve semantics.repository.explore` (or the
-selected ID) to read its contract and declared gaps.
+## Example
 
 ```sh
-./ci.sh
+semantics project list
+semantics repository show PROJECT
+semantics repository search PROJECT TERM
 ```
 
-Product CI is offline and uses synthetic state and fake service boundaries.
+Repository reads describe maintained meaning. Product code and documentation
+define current runtime behavior.
 
-`./release.sh --patch|--minor|--major` is the separately authorized Git
-publication path. It requires clean synchronized `main`, runs product CI,
-commits the version bump, creates `semantics-v*`, and atomically pushes the
-commit and tag. It does not deploy the installed service.
+## Check
+
+From the Cell root:
+
+```sh
+./ci.sh semantics
+```
+
+## Further documentation
+
+- [Commands and repository output](docs/cli.md)
+- [Registration, installation, and recovery](docs/system-installation.md)
+- [Architecture](docs/architecture.md) and [stored records](docs/data-model.md)
+- [Operating contracts](chancery/provider.json)

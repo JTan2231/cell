@@ -1,158 +1,35 @@
 # Todo
 
-Todo is a local Rust CLI for Codex and people with terminal access. It records
-an actionable concern and where it arose. It supports routing decisions,
-situation assessments and design reconciliation.
+Todo records concerns and the sources they came from. It helps research the
+current situation, propose a design, and record explicit decisions. Research
+produces proposals; acceptance and implementation are separate actions.
 
-Todo keeps its durable layers separate:
+## Example
 
-- a `cN` concern preserves the caller's direction and source provenance;
-- a pending `rN` routing proposal says whether that concern should attach to,
-  create, revise, unify, dismiss, or defer a todo identity;
-- a `tN` todo is the stable umbrella for an enduring actionable concern, whose
-  current title and direction come from its latest direction revision;
-- an `aN` situation assessment describes dated observed state and authority,
-  while a `dN` design describes a proposed or explicitly accepted desired
-  state.
-
-Todo does not model plans, work items, implementation execution or a general
-project graph. Its Nucleus jobs research routing, assessments and designs.
-They do not implement a todo. `done` and `reopen` maintain the umbrella's
-`open`/`done` lifecycle.
-
-`todo new` is a convenience for `concern add` followed by `concern assess`.
-The concern is committed before research begins. The routing liaison reads the
-source and a bounded snapshot of candidate todos, then records one pending
-proposal. It cannot apply the proposal. `routing accept --source PATH` is a
-separate, provenance-bearing authorization command.
-
-Situation and design research have the same boundary. `todo assess tN` records
-an immutable dated assessment whose jurisdictions can name one owner plus
-participants and consumers. Bounded source reads use stable source IDs, and
-the assessment persists the exact `source_ref` mapping behind every source
-citation. A newer assessment makes every older `aN` non-current.
-
-`todo design propose tN` resolves and rechecks the latest current ready
-assessment, then records a draft bound to that exact `aN`. The draft explicitly
-keeps, moves, adds, or retires each jurisdiction and may cite only its closed
-direction, assessment, predecessor, and correction basis catalog. Ready requires
-all nine clause kinds, references covering the full direction and predecessor,
-and no remaining choices. Correction feedback is immutable;
-correction leaves the named design unchanged and produces a successor. A
-liaison that stops with an open draft leaves an inspectable `abandoned` draft
-that can be corrected. Only `design accept --source PATH` can authorize a ready
-design, and only while its umbrella remains open and canonical and its
-assessment current. Acceptance does not plan or execute implementation.
-
-Todo stores source paths, decision-source paths, and evidence references, not
-the contents of those files. Nucleus separately retains the model's raw JSONL
-output, which can include content Codex reads during research; its state
-therefore belongs inside the same local security and retention boundary.
-
-## Requirements
-
-- macOS or Linux and Rust/Cargo 1.97.1 to build;
-- a healthy, authenticated per-user Nucleus service for routing, assessment,
-  design, and `todo new` research;
-- no separate Todo daemon or database server;
-- for email sending only, a Resend API key and a Resend-verified sender domain.
-
-Todo is a member of the Cargo workspace rooted at `/Users/joey/rust/cell`.
-The root workspace supplies its Nucleus client, contract, and third-party
-dependencies while Todo continues to own its domain behavior and state.
-
-## Build and use
+With an initialized library:
 
 ```sh
-cd /Users/joey/rust/cell/todo
-./ci.sh
-cargo build --manifest-path ../Cargo.toml --package todo --release
-
-/Users/joey/rust/cell/target/release/todo --database ./todo.db init
-/Users/joey/rust/cell/target/release/todo --database ./todo.db concern add \
-  "Need to report token consumption statistics" \
-  --source /absolute/path/to/the-originating-conversation.jsonl
-/Users/joey/rust/cell/target/release/todo --database ./todo.db concern assess c1
-/Users/joey/rust/cell/target/release/todo --database ./todo.db routing show r1
-/Users/joey/rust/cell/target/release/todo --database ./todo.db routing accept r1 \
-  --source /absolute/path/to/the-authorizing-conversation.jsonl
-/Users/joey/rust/cell/target/release/todo --database ./todo.db show t1
-/Users/joey/rust/cell/target/release/todo --database ./todo.db assess t1
-/Users/joey/rust/cell/target/release/todo --database ./todo.db design propose t1
-/Users/joey/rust/cell/target/release/todo --database ./todo.db design accept d1 \
-  --source /absolute/path/to/the-authorizing-conversation.jsonl
+todo concern add "Need to report token consumption" --source /absolute/source.md
+todo concern show c1
+todo list
 ```
 
-The source is usually a Codex conversation transcript, but it may be any
-readable UTF-8 file. A source path says where a statement or decision came
-from; Todo does not treat the source contents as instructions and does not
-reopen them on ordinary reads.
+Use the concern ID returned by `concern add`. Assessing a concern uses Nucleus
+and records a pending routing proposal.
 
-Select the SQLite database explicitly with `--database` or `TODO_DATABASE`, or
-select a strict TOML config with `--config` or `TODO_CONFIG`. The development
-binary does not silently create `./todo.db`. Every command supports stable
-human output and `--json` output.
+## Check
 
-See [the documentation index](docs/README.md) for the complete CLI, liaison,
-data, and installation contracts.
-
-Todo's product-owned [`chancery/`](chancery/) bundle is the public capability
-index. Use `chancery list`, then read every plausible entry with `chancery
-show`. After selecting one exact entry, use `chancery resolve <ENTRY_ID>` for
-its complete contract, documentation dependencies, exact basis and explicit gaps.
-Resolution does not check runtime readiness or authorize an
-effect, and an unsupported, unspecified, or uncontracted result remains a gap.
-
-## Release
-
-Todo releases use annotated tags named `todo-vMAJOR.MINOR.PATCH`. From a clean
-`main` branch that exactly matches `origin/main`, run one of:
+From the Cell root:
 
 ```sh
-./release.sh --patch
-./release.sh --minor
-./release.sh --major
+./ci.sh todo
 ```
 
-The script bumps `crates/todo/Cargo.toml`, refreshes the root workspace
-`Cargo.lock`, runs Todo's complete CI suite, verifies the release binary
-version, commits and tags the release, and atomically pushes `main` with its
-tag.
+## Further documentation
 
-## User-owned macOS deployment
-
-After a release build, deploy without administrator privileges:
-
-```sh
-<TESTED_TODO_INSTALL> install \
-  --binary <TESTED_TODO_BINARY> \
-  --bundle /Users/joey/rust/cell/todo/chancery \
-  --package /Users/joey/rust/cell/todo/packaging/macos \
-  --email-from 'todo@joeytan.dev' \
-  --email-to 'j.tan2231@gmail.com'
-```
-
-The sender and recipient above are configuration for this deployment, not
-universal Todo defaults.
-
-This installs `~/.local/bin/todo`, initializes
-`~/Library/Application Support/Todo/todo.db`, and stores complete,
-content-addressed releases under
-`~/Library/Application Support/Todo/install/releases`. During an update the
-deployer quiesces the email LaunchAgent, retains a transaction-local database
-backup, explicitly migrates the database, and runs the installed smoke test.
-If a later step fails, it restores both database and installed release state.
-
-The installation owns `org.todo.daily-email`, a launchd timer that invokes
-Todo at 09:00 machine-local time. Email delivery talks directly to Resend;
-model execution and authentication remain with the separately installed
-Nucleus service. Fresh deployment requires the paired email-address flags
-shown above; see the [installation guide](docs/system-installation.md) for the
-`~/.zshrc` API-key prerequisite and update behavior.
-
-The message is a daily attention digest. It groups pending concerns and open
-canonical todos under **Needs your decision**, **Needs follow-up**, and **Other
-open todos**. Entries lead with a title or plain-language label and status;
-typed references such as `Todo tN` and their safe inspection commands are
-secondary. The digest does not include concern bodies, directions, notes,
-source paths, assessment or design summaries, unresolved choices, or evidence.
+- [Commands and records](docs/cli.md)
+- [Installation and recovery](docs/system-installation.md)
+- [Research stages](docs/liaison.md)
+- [Architecture](docs/architecture.md) and [stored records](docs/data-model.md)
+- [Rust interface](docs/rust-api.md)
+- [Operating contracts](chancery/provider.json)

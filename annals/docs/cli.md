@@ -1,4 +1,10 @@
-# CLI contract
+# Commands and records
+
+- [Select a library](#named-libraries) and [set global options](#global-options).
+- [Retain a work](#immutable-works) or [integrate it](#model-assisted-integration).
+- [Read source activity](#recent-source-activity) and [browse the corpus](#local-corpus-browsing).
+- [Apply a reconciliation](#reconciliations-and-corpus-changes) or [read history](#history).
+- [Operate the inbox](inbox.md) or [report usage](telemetry.md).
 
 ## Named libraries
 
@@ -93,24 +99,29 @@ directory.
 `--quiet` suppresses successful human mutation messages. `-v` prints the
 resolved library path on stderr in human mode.
 
-Decision-account acceptance and feed reads are intentionally stricter. They require an explicit decisions config or a registered name whose managed
-config pins the same decisions identity. The operator-path form requires
-`--config`, rejects `--library`, ignores `ANNALS_LIBRARY`, and uses only that
-file's `library`, `inbox.root`, and `decision_feed.expected_library_id`. Missing or mismatched identities fail
-closed rather than selecting the primary Annals library.
+Decision-account acceptance and feed reads are intentionally stricter. They
+require an explicit decisions config or a registered name whose managed config
+pins the same decisions identity. The operator-path form requires `--config`,
+rejects `--library`, ignores `ANNALS_LIBRARY`, and uses only that file's
+`library`, `inbox.root`, and `decision_feed.expected_library_id`. Missing or
+mismatched identities fail closed rather than selecting the primary Annals
+library.
+
 Every version-6 database also carries one immutable `general` or `decisions`
 library kind. Decision acceptance, feed reads, and a decision-config run
 require `decisions`; generic source-producing commands and a generic inbox run
 require `general`. Configuration, spool selection, or a direct `--library`
 override cannot reclassify or bypass that database identity.
-When `[decision_feed]` is configured, `work add`, direct `integrate`,
-`inbox enqueue`, `inbox register`, and the hidden backlog importer fail with
-`decision_feed_accept_required`.
-`inbox run` binds and verifies the dedicated spool identity, dispatches only
-producer-accepted originals or their explicit retry children, and leaves files
-in `incoming/` unregistered. A generic config also cannot admit to or run a
-spool that already carries the decision-library binding. The primary inbox
-keeps its existing behavior.
+
+When `[decision_feed]` is configured, `work add`, direct `integrate`, `inbox
+enqueue`, `inbox register`, and the hidden backlog importer fail with
+`decision_feed_accept_required`. `inbox run` binds and verifies the dedicated
+spool identity, dispatches only producer-accepted originals or their explicit
+retry children, and leaves files in `incoming/` unregistered. A generic config
+also cannot admit to or run a spool that already carries the decision-library
+binding.
+
+The primary inbox keeps its existing behavior.
 
 ## Deployment maintenance
 
@@ -169,60 +180,25 @@ dedicated-library setup uses `--kind decisions`.
 Earlier steps assign version-3 and version-4 libraries the `general` kind and
 add retry provenance and the decision-account feed. Version 6 preserves an
 existing kind, seeds the default library instructions at instruction revision
-1, and adds examination and reconciliation instruction provenance. Older
-records keep unknown instruction provenance as null; the seed is not attributed
-to their historical examinations. Migration changes no retained source or
-corpus history. It rejects schemas older than 3 or newer than this executable.
-On version 6 it is an idempotent current-format check. Migration uses one
-transaction, so a failure retains the prior version without partial tables.
-A pre-version-3 replacement still requires the guarded `--fresh-state` cutover.
-`stats` reports revision and corpus, graph, work, reconciliation, history,
-model-run, and database-size information.
+1, and adds examination and reconciliation instruction provenance.
+
+Older records keep unknown instruction provenance as null; the seed is not
+attributed to their historical examinations. Migration changes no retained
+source or corpus history. It rejects schemas older than 3 or newer than this
+executable. On version 6 it is an idempotent current-format check. Migration
+uses one transaction, so a failure retains the prior version without partial
+tables.
+
+A pre-version-3 replacement still requires the guarded `--fresh-state`
+cutover. `stats` reports revision and corpus, graph, work, reconciliation,
+history, model-run, and database-size information.
 
 `backup` makes a consistent SQLite copy and refuses to replace its destination.
 
 ## Krisis decision-account exchange
 
-```text
-annals --config DECISIONS_CONFIG inbox accept --producer krisis --key ID FILE
-annals --config DECISIONS_CONFIG decision-feed watermark
-annals --config DECISIONS_CONFIG decision-feed page \
-  --watermark TOKEN --after CURSOR [--limit N]
-```
-
-`accept` takes one nonblank UTF-8 Markdown file of at most 1 MiB. It must be a
-regular file, not a symbolic link. Its sections are exactly `# Decision`, `## Authority`,
-`## Context`, `## Action`, `## Result`, and `## Source`. Authority is a Markdown
-quotation. Source is one fenced JSON object containing schema version 1, the
-same decision ID, Unix occurrence time and precision, capture-rule version,
-and one host/thread/turn/item/nonempty-span anchor. Unknown metadata fields are
-rejected.
-
-On first acceptance, Annals computes SHA-256, derives work label
-`Krisis decision ID`, durably publishes one queue envelope, and commits one
-feed event. JSON reports contract and library identity, producer, `key`, digest,
-stable job, acceptance time, and `acceptance` as `created`. Submitting the same
-key and bytes reports the original values with `acceptance` `replayed` and
-creates no job or delivery. Different bytes return
-`decision_account_key_conflict`. Acceptance is valid while dispatch is paused,
-but maintenance, storage reserve, schema, config, or identity failure leaves no
-new acceptance.
-
-The decisions library has one supported source-admission route: validated
-`inbox accept --producer krisis`. Direct work retention or integration,
-generic enqueue, ordinary incoming-file registration, and fresh-state backlog
-import fail even when a caller selects the decisions database directly with
-`--library`; they are not recovery routes for a rejected or failed account. Status,
-pause, priority, interrupt, dispatch, and bounded retry operations remain
-available for accepted jobs.
-
-`watermark` returns an opaque token for the current committed acceptance
-prefix. `page` requires that watermark and a prior watermark or item cursor.
-It returns at most 200 ascending events and echoes both requested tokens.
-The last event cursor becomes `next_cursor`. With no events, it returns the exact
-`--after` token unchanged. Events contain no raw Markdown, transcript, path,
-confidence, review, disposition, or supersession data. The feed records no
-consumer acknowledgement.
+See [the account-exchange contract](../chancery/annals/manuals/decision-account-exchange.md)
+for acceptance, library identity, input validation, and bounded feed reads.
 
 ## Immutable works
 
@@ -254,19 +230,23 @@ annals integrate INPUT [--name LABEL] [--quality QUALITY] [--model MODEL] [--app
 annals integrate --work LABEL [--quality QUALITY] [--model MODEL] [--apply] [--reexamine]
 ```
 
-The first form retains or recognizes and examines the selected work. The second
-examines an already retained work. Both are explicit manual integration and
-retain this behavior when the bytes were supplied before. Annals freezes the
-current corpus and instruction revisions in one admission transaction, invokes
-the liaison with those exact stored instructions, and expects one recorded
-reconciliation. The liaison starts a complete draft with
-`submit_reconciliation`. If Annals reports `needs_changes`, independently valid
-operations remain staged while `revise_reconciliation` changes only named
-operation IDs. `reconciliation_status` recalls the compact roster or exact
-stored operations, and `discard_reconciliation` abandons the complete draft so
-a fresh submission can start. Submission or revision records automatically
-when every active operation works together. The model's final response is
-diagnostic and is not parsed as the reconciliation.
+The first form retains or recognizes and examines the selected work. The
+second examines an already retained work. Both are explicit manual integration
+and retain this behavior when the bytes were supplied before. Annals freezes
+the current corpus and instruction revisions in one admission transaction,
+invokes the liaison with those exact stored instructions, and expects one
+recorded reconciliation.
+
+The liaison starts a complete draft with `submit_reconciliation`. If Annals
+reports `needs_changes`, independently valid operations remain staged while
+`revise_reconciliation` changes only named operation IDs.
+`reconciliation_status` recalls the compact roster or exact stored operations,
+and `discard_reconciliation` abandons the complete draft so a fresh submission
+can start. Submission or revision records automatically when every active
+operation works together.
+
+The model's final response is diagnostic and is not parsed as the
+reconciliation.
 
 Annals may reuse the newest successful reconciliation for the exact same work,
 base revision, instruction revision, exact effective prompt/tool context, model,
@@ -292,6 +272,7 @@ quality continues to choose reasoning effort. `[liaison].nucleus_socket`
 optionally selects a nonstandard Nucleus Unix socket. Annals submits the same
 prompt, base and developer instructions, model, reasoning effort, and exact
 nine-tool contract as one Nucleus job. There is no direct Codex fallback.
+
 Nucleus owns the isolated app-server process, persistent authentication,
 canonical credential refresh, and eight-slot scheduling. Annals asks Nucleus
 for an authenticated account preflight before a queued dispatch; it may wait
@@ -309,328 +290,13 @@ Optional annotations are inert and never block application.
 
 ## Consumption telemetry
 
-The separate companion CLI has three reporting commands:
-
-```text
-annals-usage report [--json] [--limit N] [--config PATH]
-annals-usage budget [--json] [--config PATH]
-annals-usage doctor [--config PATH]
-annals-usage login --device-auth
-```
-
-`report` reads current Annals jobs and ordered model output from Nucleus and
-attributes their observed model-run attempts to recent source deliveries. Its
-coverage field distinguishes exact per-response totals,
-cumulative fallbacks, known zero-use deliveries, pending work, reused
-examinations, and output gaps. `budget` displays a live,
-account-global Codex allowance snapshot and labels the account's lifetime and
-daily token activity as contextual rather than allowance units. The backend
-exposes neither a token denominator for that allowance nor a per-delivery
-subscription share. Neither command retains a reporting database or account
-snapshot. `doctor` checks the companion configuration, the Annals paths,
-Nucleus, and authenticated account-telemetry access. `budget`
-and `doctor` report that authentication is busy instead of waiting when another
-canonical account, refresh, or login operation owns the credential boundary;
-an active job alone does not make the read busy. `login` delegates to
-`nucleus auth login`, so Annals never owns credential files.
-
-The token categories overlap: cached and cache-write tokens are subsets of
-input, reasoning tokens are a subset of output, and total is input plus output.
-The complete accounting and configuration contract is documented in
-[Consumption telemetry](telemetry.md).
+See [usage reporting](telemetry.md) for `annals-usage report`, `budget`,
+`doctor`, and `login`, including accounting and coverage rules.
 
 ## Scheduled inbox
 
-```text
-annals inbox register [--settle-seconds SECONDS]
-annals inbox enqueue [--priority] FILE...
-annals inbox prioritize JOB_ID...
-annals inbox deprioritize JOB_ID...
-annals inbox run [--settle-seconds SECONDS]
-annals inbox pause
-annals inbox resume
-annals inbox interrupt JOB_ID --as failed|skipped [--reason TEXT]
-annals inbox retry preview --from JOB_ID --through JOB_ID
-annals inbox retry start --from JOB_ID --through JOB_ID [--reason TEXT]
-annals inbox retry status [EVENT_ID]
-annals inbox retry continue EVENT_ID
-annals inbox status
-```
-
-All commands except `inbox retry status` require an `[inbox]` config section
-with `root`; retry-event reports are durable library reads and can be selected
-with `--library` alone. The optional config key `settle_seconds` defaults to 60;
-the `register` and `run` flags override it. A zero settling interval is allowed.
-`minimum_available_bytes` defaults to `7_000_000_000` and sets the storage
-reserve required before a new inbox claim; zero disables that gate.
-`inbox status`, `inbox retry preview`, and `inbox retry status` are read-only.
-
-`inbox register` moves every settled file into a durable queued job without
-processing it. Each file moves, without changing its basename or bytes, into
-`queued/JOB_ID/material/` beside an operational `job.json` receipt. The
-receipt has state `queued`, attempts zero, and an immutable monotonic sequence.
-Registration creates no database source-delivery record. Human output reports
-the registered jobs; JSON includes each assigned job ID and sequence with
-`priority` set to `normal`.
-
-`inbox enqueue` copies each named regular file into a new durable queued
-envelope and leaves the original unchanged. It bypasses `incoming/` and the
-settling interval. The envelope becomes dispatchable only after its material
-and receipt are complete, so dispatch cannot start during a partial copy.
-Files receive immutable monotonic sequences in argument order
-and enter the normal lane unless `--priority` selects the priority lane. The
-copy is rejected with `insufficient_storage` when its size would leave less
-than `minimum_available_bytes` available on the spool filesystem. The
-result reports the spool root, selected priority, registered count, each job's
-ID, sequence, and priority, the total queued and priority-queued counts, and
-the next job. Like registration, enqueue starts no source delivery.
-
-`inbox prioritize JOB_ID...` moves the named queued jobs to the priority lane;
-`inbox deprioritize JOB_ID...` moves them to the normal lane. Both operate only
-on jobs that are still under `queued/`, hold the queue-control lock for the
-mutation, and leave each job ID and immutable sequence unchanged. Argument
-order therefore does not reorder jobs; an older normal job moved to priority
-can precede newer priority jobs. Requesting the lane a job already has is an
-idempotent success. The result reports the spool root, requested and changed
-counts, selected priority, requested jobs, the priority-queued count, and the
-next job. Naming a processing or terminal job, or an unknown job ID, is an
-error rather than a request to alter history. A retry child is controlled by
-its retry event and cannot be prioritized or deprioritized independently.
-
-`inbox run` takes the activation-long spool lock, performs the same
-registration phase, and drains jobs sequentially while processing is allowed.
-After recovery and registration, it checks available storage on the library
-and spool filesystems before each queued claim. If either location is below the
-configured reserve, the job stays queued with attempts zero and no delivery
-record, `stopped_for_low_space` is true, and the activation exits zero. No pause
-is created; a later scheduled or explicit activation measures again and
-continues automatically once both locations are ready. Failure to measure
-storage exits nonzero with `storage_probe_failed` and also leaves the job
-unattempted. An already processing job is recovered before this gate.
-
-When storage is ready, `inbox run` performs one authenticated account
-preflight before its first queued dispatch. The preflight does not claim a job,
-increment attempts, or start a source delivery. If it fails, `inbox run` exits
-nonzero while the next envelope remains under `queued/` with attempts zero and
-no database delivery record. An already processing job is recovered before
-this check.
-
-Dispatch atomically moves the lowest-sequence priority envelope, or the
-lowest-sequence normal envelope when no priority job is queued, to
-`processing/`. It changes the receipt to `processing`, increments its attempts
-from zero to one, and starts its database source delivery. A priority arrival
-never preempts a processing job, and a continuing priority stream can starve
-the normal lane; there is no starvation protection. A job receives no second
-processing attempt. A fresh job that retains a new work enters model-assisted
-integration with immediate application. A fresh job whose exact bytes select an
-existing work completes with `duplicate` retention and result `retained`,
-without an examination,
-reconciliation, or commit. Content identity is resolved before the incoming
-filename is considered as a label, so a duplicate keeps the retained work's
-canonical label even when its basename is unusable or belongs to another work.
-Explicit manual `integrate` remains available for deliberate integration of an
-already retained work.
-
-Applied and recorded envelopes move whole from `processing/` to `done/`,
-retained duplicate envelopes to `duplicates/`, failed envelopes to `failed/`,
-and operator-skipped envelopes to `skipped/`. Every job-processing error fails
-the source delivery and archives the job on its first attempt. A known
-item-local source error lets the activation continue. An unexpected model,
-runner, or runtime processing failure ends the activation nonzero after
-archival; successors remain queued for the next activation. Historical
-archives are not reclassified. There is no item or activation-lifetime limit,
-and newly settled arrivals are registered between jobs.
-
-`inbox pause` is an idempotent dispatch barrier. If a delivery is active, it is
-allowed to finish, but no later queued job starts. A short-lived queue-control
-lock orders pause against dispatch: if dispatch wins, that job is the current
-job allowed to finish; once `pause` returns, no additional job can be claimed.
-Registration remains available while paused, including the registration phase
-of scheduled `inbox run` activations. Direct enqueue and queued-job priority
-changes also remain available. Such an activation exits successfully after
-registering arrivals, leaving the next envelope in `queued/`.
-
-`inbox resume` idempotently removes only the operator pause. It does not start
-a worker; dispatch resumes on the next external scheduler activation or an
-explicit `inbox run`. The operator-owned `.paused` state is independent of the
-Annals-owned `.maintenance` deployment boundary, and `resume` never removes
-maintenance. It refuses to clear the pause while a retry event is preparing,
-running, or halted, so ordinary dispatch cannot interleave with an unfinished
-event. Maintenance blocks registration, direct enqueue, priority changes,
-repair, retry execution, and ordinary dispatch.
-
-`inbox interrupt` durably requests that the named processing job stop and
-requires an explicit `failed` or `skipped` disposition. `--reason` records
-optional operator context. The job ID prevents a request from selecting a
-later job if the observed job finishes first. An accepted request stops the
-active liaison and archives the envelope in the selected directory. It does
-not establish a pause, so the worker may continue with the next queued job;
-run `inbox pause` first to keep later jobs queued. A skipped job receipt has
-state `skipped`, but its already-started source delivery has status `failed`,
-no result, and error code `inbox_job_skipped`. Interruption returns a conflict
-as too late when the job already has a durable terminal delivery outcome or an
-applied or recorded reconciliation. A pending reconciliation remains
-interruptible until inbox automatic application begins.
-
-Only visible top-level regular files not ending in `.part` are candidates for
-automatic registration. Eligible files are registered in persisted first-seen
-order into the normal lane. Dispatch prefers the priority lane and follows
-immutable sequence within each lane. Invalid UTF-8, empty input, unusable
-filename-derived labels, label conflicts, and other known item-local source
-errors are archived as failed on the first attempt, and draining continues.
-Unexpected model, runner, and runtime processing failures are also archived as
-failed on the first attempt, but `inbox run` then exits nonzero and leaves
-successors for the next activation. An arrival still settling at the final
-rescan, or racing the final empty check, waits for the next activation.
-
-Recovery never starts a second liaison when a processing receipt already has
-an attempt. It may finish durable success left by that attempt, such as a
-conclusively retained duplicate or the job's exact linked reconciliation. If
-there is no durable success to finish, it fails and archives the interrupted
-job. A durable interrupt request preserves its selected failed or skipped
-disposition through recovery.
-
-### Bounded retry events
-
-`inbox retry preview` is a read-only selection check. Both `--from` and
-`--through` are required and must name terminal failed inbox jobs. Annals orders
-failed source deliveries by `(completed_at, delivery ID)`, resolves both
-anchors in that order, and selects the inclusive interval. This is failure
-order. Priority dispatch can make it differ from job sequence. The
-preview reports the ordered candidate jobs, delivery IDs, failure details, and
-count without creating an event or a child job. A failed delivery already used
-as an original in another event remains visible in its interval but is marked
-ineligible with that prior event and any child provenance. Reversed anchors and
-an anchor that is absent, not failed, or not an inbox delivery are errors. The
-whole preview also fails if any selected delivery lacks its matching terminal
-envelope, unchanged retained source identity, or archived material. Only
-failures after work retention are retryable: a pre-retention source error has
-no durable digest against which Annals can validate its archive, so correct the
-source and deliver it as a new job instead. There are no omitted, open-ended,
-or retry-all bounds. An operator-skipped job is not a failed-job candidate even
-though its source delivery has failed status. The two anchors may be equal to
-select one failed job.
-
-JSON preview output contains `from_job_id`, `through_job_id`, and ordered
-`items`. Each item exposes its zero-based `ordinal`, original job, sequence,
-delivery, completion time, and error. Nullable `already_selected_by`,
-`already_selected_child_job_id`, and
-`already_selected_child_delivery_id` carry prior retry provenance; null means
-the item is eligible.
-
-`inbox retry start` resolves the same interval and freezes that exact ordered
-membership in one durable event before processing it. The optional reason must
-be trimmed, nonempty operator context of at most 1,000 characters; Annals
-retains it with the event. Start requires the operator pause to be set, no
-processing job, no other unfinished retry event, and no deployment maintenance.
-It rejects the complete window when any member is ineligible and never silently
-drops a member.
-Ordinary arrivals remain intact and registrable while the pause is set, but the
-retry runner's run lock excludes a simultaneous scheduled activation and no
-ordinary queued job interleaves with the event.
-
-For every frozen member, Annals preserves the original failed envelope and
-failed delivery record and creates a fresh retry child job and source delivery
-linked to both the event and original. The child envelope copies the original
-unchanged source material; it never moves material out of `failed/`. Retry
-children run sequentially in the frozen failure order and each has one attempt.
-They are event-controlled even if Annals uses a spool priority lane internally;
-ordinary priority dispatch does not select or order them during the event.
-Their explicit retry intent bypasses the fresh-job duplicate cutoff:
-recognizing already retained bytes does not end the child with result
-`retained`. Annals instead continues into integration. It may finish or reuse
-the exact pending, applied, or recorded reconciliation owned by the original
-failed attempt when its ownership and context still validate; otherwise it
-begins a fresh examination. Retry does not blindly force reexamination and
-never adopts an unrelated reconciliation for the same work. In particular, a
-pending record is reusable only while HEAD still equals its base; a stale or
-superseded record is not handed to the child.
-
-Publication supports recovery across SQLite and the spool. The event is
-`preparing` while Annals publishes its frozen items. Recovery creates or
-recognizes each item's exact child without expanding selection or duplicating
-an attempt. The event becomes `running` while children are
-processed. Before the first zero-attempt child claim in each start or continue
-invocation, Annals performs the same authenticated account preflight as
-ordinary dispatch. A failed preflight changes the event to `halted` but leaves
-every remaining child queued with attempts zero and creates no child delivery
-or model-run row. The storage gate is also checked before every queued child:
-insufficient space or a failed probe halts the event without starting that
-child. After correcting the condition, use `inbox retry continue`; attended
-retry events do not resume from the ordinary scheduler. A known item-local
-failure terminalizes its child and
-advances to the next frozen item. An unexpected model, runner, or runtime
-failure terminalizes the current child, changes the event to `halted`, exits
-nonzero, and leaves later members `not_attempted`. Interrupting an active retry
-child with either disposition also halts the event after archiving that member;
-its outcome is `failed` or `skipped` as requested. The outer pause is already
-set, so this is the operator stop mechanism for the event.
-
-`inbox retry continue EVENT_ID` requires the same paused, quiescent,
-non-maintenance state as start. It completes interrupted publication when
-needed, accepts a crash-stale `running` event after acquiring the run lock, and
-advances only the selected event's `not_attempted` items. It never retries a
-failed or skipped child. Continuing a completed event is a conflict; an unknown
-event ID is not found. An event becomes `completed` only when all frozen items
-are terminal. A later bounded event may select a failed child, making another
-attempt an explicit chain; use the same child for both bounds when it is the
-only desired member.
-
-`inbox retry status EVENT_ID` reports the durable event bounds, reason, state,
-lifecycle times, latest halt details, a summary, and ordered items. The summary
-reports selected, attempted, succeeded, unsuccessful, and remaining totals plus
-each outcome count. Each item pairs the original job, delivery, and failure
-with its linked child job and delivery and derives one outcome:
-`not_attempted`, `processing`, `applied`, `recorded`, `failed`, or `skipped`.
-The aggregates are derived too, not copied counters, so the report remains
-consistent with delivery history after recovery. A missing child or a queued
-zero-attempt child is `not_attempted`. Without an event ID, `status` lists the
-20 most recent completed events plus the one unfinished event, if present.
-Neither form mutates the event or spool.
-
-The JSON event report has `event`, `summary`, and `items`. `event` carries the
-bounds, optional reason, lifecycle fields, optional `last_halt`, and member
-count. `summary` carries the totals described above. Each item repeats its
-frozen original snapshot, adds nullable child job, sequence, delivery,
-lifecycle, result, revision, and error fields, and ends with its derived
-`outcome`. The no-ID list form returns an `events` array of event records.
-
-Start and continue exit zero when the event reaches `completed`, even when its
-durable report contains item-local `failed` or `skipped` outcomes. They exit
-nonzero when preflight, an unexpected processing error, or an operator
-interruption leaves the event `halted`. The event report, not the process exit
-code alone, is the success/failure accounting surface.
-
-Human `inbox status` reports incoming files split into ready and settling,
-the total queued count and its priority subset, processing envelopes, the next
-and active jobs' identities and priorities, terminal archives including
-skipped jobs, whether a worker is active, and the independent paused and
-maintenance states. JSON exposes the subset as `priority_queued` and each next
-or active job's `priority`; `attempts`, `started_at`, and
-`interrupt_requested` remain specific to `active_job`. It also reports ignored
-entries. Both forms include the live storage gate. JSON `storage` contains
-`enabled`, `minimum_available_bytes`, `ready`, and library/inbox `locations`
-with their measured `available_bytes`.
-Human `inbox run` reports registered, attempted, applied, recorded, duplicates,
-failed, skipped, remaining, settling, whether the runnable queue was drained,
-and whether pause, maintenance, or low storage stopped dispatch.
-`queue_drained` is false
-whenever `queued/` or `processing/` is nonempty, including a healthy paused
-or storage-gated queue. JSON uses `duplicates` and `skipped` for their archive
-counts and adds `stopped_for_low_space` plus the most recent `storage` check
-when a queued claim was considered. It also includes
-the spool root, effective settling interval, elapsed time, recovery count, and
-ignored count. The external Clockwork or systemd schedule remains the wake-up
-and recovery mechanism; Annals has no resident daemon or internal scheduler.
-Human low-space deferral emits one diagnostic even under `--quiet`; JSON keeps
-that condition in its success document without writing a success diagnostic to
-standard error.
-See the [system installation guide](system-installation.md) for the complete
-spool, recovery, control, and scheduler contract.
-
-Because registration and direct enqueue do not start a source delivery, queued
-jobs appear in `inbox status` but not in `lately`. They enter source-delivery
-history when dispatched.
+See [inbox operations](inbox.md) for admission, dispatch, priority, pause,
+interruption, bounded retry, status fields, and crash recovery.
 
 ## Recent source activity
 
@@ -647,11 +313,13 @@ text, headings, quotations, topics, or dates mentioned inside a work.
 
 The report uses a UTC half-open interval: `since` is inclusive and `until` is
 exclusive. `--until` defaults to the instant at which the report begins.
-`--since` defaults to `7d`. A relative `--since` is subtracted from the resolved
-`until`, so an explicit end and relative start produce a reproducible window.
-Relative durations are a positive integer followed by `s`, `m`, `h`, `d`, or
-`w`. Absolute values are either an RFC 3339 timestamp or a `YYYY-MM-DD` UTC
-date, interpreted as midnight at the start of that date. RFC 3339 offsets are
+`--since` defaults to `7d`. A relative `--since` is subtracted from the
+resolved `until`, so an explicit end and relative start produce a reproducible
+window. Relative durations are a positive integer followed by `s`, `m`, `h`,
+`d`, or `w`.
+
+Absolute values are either an RFC 3339 timestamp or a `YYYY-MM-DD` UTC date,
+interpreted as midnight at the start of that date. RFC 3339 offsets are
 accepted and normalized to UTC in output. The start must precede the end.
 
 Examples:
@@ -703,16 +371,18 @@ original remains failed at its original completion time. `lately` reports each
 delivery independently; use `inbox retry status` for their event and
 parent-child relationship.
 
-A processing delivery has not reached a terminal outcome and has no result.
-An inbox job-processing error fails the delivery on its first attempt.
+A processing delivery has not reached a terminal outcome and has no result. An
+inbox job-processing error fails the delivery on its first attempt.
 Source-bearing manual commands run serially per library. If an earlier command
-was interrupted, the next command finalizes its abandoned receipt with
-error `manual_ingestion_interrupted`. A failed delivery has status `failed`,
-no result, and a structured error. It can still identify a work and retention
-disposition when failure occurred after ingestion. An operator-skipped inbox
-job is reported here as a failed delivery with error `inbox_job_skipped`. Work
-retention and a `work add` completion are atomic, as are an input integration's
-applied result and its corpus revision.
+was interrupted, the next command finalizes its abandoned receipt with error
+`manual_ingestion_interrupted`. A failed delivery has status `failed`, no
+result, and a structured error.
+
+It can still identify a work and retention disposition when failure occurred
+after ingestion. An operator-skipped inbox job is reported here as a failed
+delivery with error `inbox_job_skipped`. Work retention and a `work add`
+completion are atomic, as are an input integration's applied result and its
+corpus revision.
 
 When the selected basis is unavailable, the delivery cannot be placed in the
 window and is omitted. `missing_time_count` counts all such receipts matching
@@ -964,11 +634,13 @@ annals shake [--yes]
 
 `shake` computes the transitive reduction of HEAD. It removes an explicit
 parent edge exactly when the child remains reachable from that parent through
-another directed path. In interactive mode, the report gives the base revision,
-edge counts before and after, and every edge that would be removed, then asks
-once for confirmation. Only `y` or `yes`, case-insensitively, applies the plan;
-any other answer or end-of-file cancels without writing. `--yes` bypasses the
-prompt. With `--json`, omitting `--yes` returns the plan with status
+another directed path. In interactive mode, the report gives the base
+revision, edge counts before and after, and every edge that would be removed,
+then asks once for confirmation.
+
+Only `y` or `yes`, case-insensitively, applies the plan; any other answer or
+end-of-file cancels without writing. `--yes` bypasses the prompt. With
+`--json`, omitting `--yes` returns the plan with status
 `confirmation_required` and exit status zero, without writing. That preview is
 informational: a later invocation with `--yes` computes and applies a fresh
 plan for its then-current HEAD.

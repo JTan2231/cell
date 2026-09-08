@@ -46,7 +46,7 @@ work, let active workers and runtime settlement finish, and run:
 
 The backup path must be new. Migration preserves existing case and queue rows
 and adds an empty profile table; it does not import source files. It refuses
-live workers and unsettled active updates. See the [data model](data-model.md#initialization-integrity-and-migration)
+live workers and unsettled active updates. See the [data model](data-model.md#initialization-and-migration)
 for transaction, backup, and database rollback semantics. A program downgrade
 to a schema-one release requires restoring the compatible backup separately;
 selector rollback does not downgrade the database.
@@ -68,7 +68,7 @@ recovering a retained release.
 ```
 
 The database and SQLite sidecars are retained independently from installed
-releases. Version 0.3 has no uninstaller or automatic pruning. Removing cases,
+releases. CRM has no uninstaller or automatic pruning. Removing cases,
 intake, steward updates, tool receipts, or retained releases is a separate
 destructive action requiring explicit authority.
 
@@ -142,18 +142,19 @@ admitted operation. Schema-one maintenance observation is supported before
 its explicit migration. An unavailable or ambiguous worker is not assumed
 settled. Release removes only its exact owner's hold.
 
-The coordinator uses the program installer and the separate
-`migrate --backup` command. Its backup destination is
-`~/Library/Application Support/CRM/crm-pre-migration-RUN_ID.sqlite`, outside
-the temporary deployment workspace. The migration creates this private
-backup only when schema migration is needed; current-schema deployment
-creates no backup. A created backup survives deployment cleanup, including
-an interrupted or failed migration, for explicit database recovery.
-Migration with `CELL_DEPLOYMENT_RUN_ID` acquires
-exclusive activity only when the run owns the sole matching hold. An arbitrary
-environment value cannot bypass another owner or active work. The program installer still
-never opens or migrates CRM data. `doctor` can validate held Nucleus readiness
-for that exact deployment owner; normal steward admission remains strict.
+The coordinator uses the program installer and the separate `migrate --backup`
+command. Its backup destination is `~/Library/Application
+Support/CRM/crm-pre-migration-RUN_ID.sqlite`, outside the temporary deployment
+workspace. The migration creates this private backup only when schema
+migration is needed; current-schema deployment creates no backup. A created
+backup survives deployment cleanup, including an interrupted or failed
+migration, for explicit database recovery.
+
+Migration with `CELL_DEPLOYMENT_RUN_ID` acquires exclusive activity only when
+the run owns the sole matching hold. An arbitrary environment value cannot
+bypass another owner or active work. The program installer still never opens
+or migrates CRM data. `doctor` can validate held Nucleus readiness for that
+exact deployment owner; normal steward admission remains strict.
 
 Deployment verification checks the installed release, database integrity,
 Nucleus readiness, and settled maintenance status. It creates no case, update,

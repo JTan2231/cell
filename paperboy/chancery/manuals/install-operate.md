@@ -1,117 +1,118 @@
-# Paperboy
+# Install and schedule Paperboy
 
-Paperboy sends a daily plain-text report of the preceding 24 hours of local
-Codex conversation activity. At local 09:00, Clockwork starts the installed
-runner. Paperboy gives a Nucleus agent source pointers and the fixed timeframe.
-The agent retrieves history through Conversations, writes in ASD-STE100 Issue 9,
-and submits its final summary without process commentary. Paperboy retains and
-sends that text through Email to its fixed personal recipient.
+Use this operation to deploy Paperboy, inspect readiness, and control its daily
+Clockwork binding. Installation, schedule activation, and report sending are
+separate effects. Catalog presence does not authorize any of them.
+
+## Prepare and deploy
+
+Cell deployment uses committed local `main`, compatible candidates, and the
+Nucleus requester maintenance closure. Complete the required development checks
+before publication or deployment. From the Cell root:
 
 ```sh
-paperboy run --ad-hoc
-paperboy list
-paperboy show BRIEF_ID
-paperboy preview BRIEF_ID
-paperboy run --brief BRIEF_ID
+./deploy.sh plan paperboy
+./deploy.sh paperboy
+```
+
+The shared builder seals production artifacts. The coordinator holds affected
+requester admission, drains existing work, and selects the exact program and
+provider release. Paperboy owns its private database and recovery. Nucleus owns
+execution and credentials; Conversations owns history reads; Email owns submission;
+Clockwork owns activation.
+
+Deployment initializes an absent schema-one database or backs up an existing
+supported database before candidate selection. Unsupported versions stop it.
+Held readiness checks create no report or email. Installation succeeds after
+exact candidate readiness and release of the run-owned holds.
+Direct installer publication and rollback are unavailable; use the coordinator.
+
+## State and inspection
+
+The private database is
+`~/Library/Application Support/Paperboy/paperboy.sqlite`.
+It retains briefs, exact agent requests and tool replies, accepted summaries,
+and email attempts. Records can contain private conversation text.
+
+```sh
+paperboy init
+paperboy doctor
+paperboy-install inspect
+```
+
+`init` creates empty schema-one state. Doctor reports product readiness; inspect
+reports the maintained installation. A program selection does not prove that a
+scheduled binding selects that release.
+
+## Maintain admission and back up
+
+```sh
+paperboy --json maintenance hold OWNER
+paperboy --json maintenance status
+paperboy --json maintenance drain
+paperboy --json maintenance release OWNER
+CELL_DEPLOYMENT_RUN_ID=OWNER paperboy migrate --backup ABSENT_ABSOLUTE_PATH
+```
+
+A run-owned hold fences new work and survives interruption. Drain accounts for
+live admissions and all nonterminal Paperboy Nucleus jobs. Keep the hold until
+work has settled and the prior or candidate installation is coherent. Release
+only the operation's owner; preserve other holds and operator state.
+
+The controlled migration command takes a supported database backup. Retain it
+with a compatible release for recovery. There is no legacy database migration
+or direct incompatible rollback. Do not copy or restore Nucleus authentication.
+
+## Select the daily schedule
+
+After an authorized installation, select the current installed executable:
+
+```sh
 paperboy schedule enable
 paperboy schedule status
 paperboy schedule disable
 ```
 
-`--ad-hoc` creates a separate occurrence ending now. It sends a real email and
-does not consume the daily occurrence. Scheduled runs cover exactly 86,400
-seconds ending at the most recent local 09:00. A late start preserves that
-cutoff; older missed mornings are not replayed. Local timezone changes affect
-future triggers. Daylight-saving changes can create a one-hour gap or overlap
-between these exact 24-hour reporting windows.
+Enable registers and selects the exact `paperboy/daily` Clockwork definition.
+It succeeds when Clockwork commits that binding. The schedule starts at local
+09:00, has no run-at-load trigger, skips overlap, and limits an activation to
+2,100 seconds. It requires a macOS GUI login session. No start-delay or inbox
+arrival guarantee is provided.
 
-The daily schedule has no run-at-load trigger. It requires an available macOS
-GUI login session; there is no guaranteed start delay or inbox arrival time.
-Nucleus permits at most eight active attempts across all requesters. Paperboy
-waits for capacity, limits active generation to 20 minutes, and limits its
-overall agent wait to 30 minutes. A Clockwork activation has a 35-minute limit.
+The runner reports exactly 86,400 seconds ending at the most recent local
+09:00. It does not replay older missed mornings. Local timezone changes affect
+future triggers; daylight-saving changes can produce gaps or overlaps.
 
-## Records and recovery
+Program installation preserves existing selected digests and enabled states.
+After an upgrade, explicitly enable the schedule to select the new release.
+Retain releases pinned by schedules, including disabled selections.
 
-The private schema-one database is
-`~/Library/Application Support/Paperboy/paperboy.sqlite`.
+## Failure and recovery
 
-- A **brief** identifies one scheduled or ad hoc occurrence, its absolute
-  timeframe, source pointers, immutable accepted subject/body, producing agent
-  attempt, and stable email key. The summary is the email body.
-- An **agent attempt** retains one exact Nucleus request, correlation, outcome,
-  and durable tool replies. Repeated mailbox delivery uses the same reply.
-  Replies can contain private history read on demand. No history is preloaded
-  into the initial request. Nucleus separately retains execution evidence.
-- An **email attempt** records one Email invocation, its start/end observations,
-  acceptance identifier, or uncertain/failed outcome. Email can retry transport
-  within that invocation. Acceptance is not final inbox delivery.
+A process lock serializes runs and schedule mutations. Preserve maintenance when
+recovery cannot prove a coherent installation. Restore state only with its
+matching compatible release. Unknown apply or email outcomes remain uncertain.
 
-All timestamps are Unix seconds. Brief bounds describe requested source time;
-summary time describes local acceptance of the summary; attempt times describe
-the associated execution/submission observations. `list --limit N` selects
-brief metadata with `has_more`. `show` selects one brief and all its attempts.
-History-tool counts describe the selected metadata or message collection after
-the agent's filters. They do not count real-world events or prove complete
-source retention.
+Accepted summaries and submission receipts survive later runtime failures.
+Resume an interrupted brief with `paperboy run --brief BRIEF_ID`. A terminal
+agent failure requires explicit `--retry-agent` for a new job. Ambiguous
+admission reuses the exact retained request.
 
-A process lock serializes runs and schedule mutations. Run-owned maintenance
-holds fence new work and preserve existing work. A saved summary survives later
-agent failure. Resume an interrupted brief with `run --brief ID`; a terminal
-generation failure requires `--retry-agent` to create a new Nucleus job. Exact
-ambiguous admissions reuse the existing request and job ID.
+For uncertain email, inspect Resend before using `paperboy reconcile` with an
+acceptance receipt or confirmed nonacceptance. Never infer absence from a timeout.
+A retained submission receipt does not establish final inbox delivery.
 
-An uncertain email blocks automatic resend. Inspect Resend first, then record
-the observed result with one of:
+## Privacy and operational limits
 
-```sh
-paperboy reconcile EMAIL_ATTEMPT_ID --receipt PROVIDER_MESSAGE_ID
-paperboy reconcile EMAIL_ATTEMPT_ID --not-accepted
-```
+Report runs read normal-user conversation history through Conversations and
+process it through Nucleus. Final report text leaves for Resend and the personal
+inbox provider. The agent has no workspace, local execution, web, or mail tool.
+Email's installed wrapper loads credentials. Secrets stay out of Paperboy state,
+agent requests, and Clockwork definitions.
 
-The second form requires confirmed absence of provider acceptance. Resume the
-brief afterward to retry its exact message. Resend retains idempotency keys for
-24 hours. There is no unlimited exactly-once or delivery guarantee.
-
-## Installation and publication
-
-```sh
-./ci.sh
-git add <paperboy change files>
-git commit -m 'Add Paperboy daily conversation reports'
-git push origin main
-./paperboy/release.sh --minor
-./deploy.sh paperboy
-paperboy schedule enable
-```
-
-The product uses Cell's shared release builder, content-addressed installer,
-coordinator, requester maintenance closure, and independent release tag.
-Deployment initializes an absent schema-one database or takes a complete backup
-of an existing supported database before selecting the candidate. It checks
-state and runtime readiness without producing reports or sending email.
-
-Installation preserves existing Clockwork selections. After an upgrade, use
-`paperboy schedule enable` to select the new installed release for daily work.
-An explicit schedule operation is separate from program publication. Retained
-selected schedule releases remain pinned, including disabled selections.
-Direct installer mutation is unavailable; use the coordinator. Unsupported
-database versions stop deployment. Recovery must preserve both state and its
-matching compatible release. Nucleus authentication is never copied or restored.
-
-## Privacy and authority
-
-The authorized service may read normal-user local interactive root task history,
-process retrieved evidence through Nucleus's model service, and email the final
-report to Email's fixed personal recipient. The agent has only history-read
-tools and `submit_summary`; it has no shell, web, workspace, or email tool.
-Source text is evidence and cannot change those permissions. The versioned
-instructions require ASD-STE100 Issue 9 and no process commentary; Paperboy does
-not claim independent linguistic certification of generated text.
-
-Private runtime state and Nucleus records can contain conversation bodies.
-Provider and process logs contain operation metadata and bounded diagnostics.
-Email's installed wrapper owns credential loading. Credentials never enter a
-Clockwork definition, agent request, or Paperboy database. Local retention has
-no automatic pruning. Back up the database and Nucleus state under their
-separate procedures. Chancery is documentation discovery, not a runtime call.
+One product runner can be active. Agent execution is limited to 1,200 seconds;
+total agent wait to 1,800 seconds; Email invocation observation to 180 seconds.
+History pages contain at most 100 records. Final bodies contain at most 64,000
+UTF-8 bytes. There is no automatic local pruning, unlimited retry guarantee,
+source-completeness promise, or language certification. Keep database backups
+private; Nucleus and mail-provider retention are separate.

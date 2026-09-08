@@ -1,187 +1,113 @@
-# Architecture
+# CRM architecture
 
-CRM is a private local library of employment-related cases. A case can begin
-with a company, location, person, posting, introduction or another useful lead.
-Version 0.3 retains these inputs as UTF-8 Markdown. A bounded steward uses new
-information to produce the next complete case revision.
+CRM uses a short-lived CLI, one private SQLite library, and a hidden worker.
+The caller supplies case information. A bounded Nucleus steward proposes a
+complete replacement revision. CRM validates and commits it.
 
-The product consists of a short-lived CLI, one local SQLite database, and a
-hidden worker launched for explicitly queued or resumed work. It installs no
-daemon, LaunchAgent, or schedule. Apart from its typed Nucleus requester
-connection, it has no runtime connection to another product or network
-service.
+## Ownership
 
-## Authorities
+| Participant | Owns |
+| --- | --- |
+| Caller | Supplied text, source labels, corrections, and real-world contact actions |
+| CRM | Cases, profiles, deliveries, immutable revisions, updates, tool receipts, and validation |
+| Nucleus | Agent admission, authentication, execution, and managed-tool transport |
+| Steward | One proposed replacement revision under the frozen case basis |
+| Chancery | Installed contract discovery |
 
-| Authority | Owns | Does not own |
-| --- | --- | --- |
-| Caller | The text it supplies, source labels, choice to create or tell a case, and any real-world contact action | The steward's generated revision or Nucleus execution state |
-| CRM | Mutable profile entries; case, delivery, immutable revision, and steward-update/attempt identities; stage; advisory retention and display; validation; atomic commits; retry admission; and deterministic reads | Caller contact actions and Nucleus execution |
-| Cited source | The locator or label supplied with a delivery | CRM's stored revision and update history |
-| Nucleus | Agent admission, authentication, supervised execution, job/output records, and durable managed-tool transport | CRM case state, domain success, update retry policy, or the meaning of a stage |
-| Steward agent | One bounded proposed full replacement revision | Authority to bypass CRM validation, contact anyone, or make final prose a domain result |
-| Chancery | Installed contract discovery and exact promise resolution | CRM runtime execution or case data |
+CRM has no daemon or schedule. Nucleus is its only runtime service connection.
+An advisory informs the caller; it never authorizes or blocks an operation.
 
-## Profile entries
+## Profiles
 
-Reusable career vignettes, statements, preferences, and other profile material
-share one `profile_entries` table with `id`, `title`, `body_md`, and
-`updated_at`. The body is exact UTF-8 Markdown stored as SQLite `TEXT`.
-Headings, facts, uncertainties, and disclosure guidance remain in the body;
-CRM does not parse them into a career ontology or assign entry kinds.
+Profile entries hold reusable career material as exact Markdown. An explicit
+write creates or replaces the current entry without AI. It does not alter a case
+or supply automatic steward context. The caller must explicitly include profile
+text in a case update when needed.
 
-`profile new` creates a row. `profile update` atomically replaces its title and
-body, preserves its identity and updates its timestamp. There is no
-profile revision history, automatic duplicate detection, or merge. `profile
-list` returns bounded current entries (metadata in human output) and `profile
-show` returns one complete current entry. Profile operations do not invoke the
-steward, Nucleus, source fetches or network requests. They do not link entries
-to cases or change case content. A caller
-must explicitly supply profile text to a case when that is desired.
+Input files and stdin are transport. CRM stores content as SQLite `TEXT` and does
+not retain input paths or maintain a parallel content directory.
 
-Input files are transient transport. CRM does not retain their paths, move or
-delete them, synchronize them, or create a parallel content tree. Source and
-disclosure rules remain ordinary Markdown and are not automatically applied to
-other entries or outputs. The caller owns corrections and interpretation.
-
-## Case and intake flow
-
-`case new` creates a stable case and immutable revision one. Its optional input
-is raw UTF-8 Markdown transported from a regular file or standard input. If no
-input is supplied, CRM generates a title plus `Current picture`, `People`,
-`Chronicle`, and `Open threads` headings. This is a suggested editorial shape,
-not a document schema: CRM accepts, stores, and revises Markdown without
-requiring or parsing any heading. The case's initial stage defaults to
-`research` unless the caller supplies one of:
+## Case update flow
 
 ```text
-research | warranted | contacted | connected | helped | closed
+case new --> case + revision 1
+                 |
+tell --> delivery + queued update --> hidden worker --> Nucleus
+                 |                                      |
+                 +<-- guarded revision commit <--- proposed revision
 ```
 
-Stages classify the case ledger. `warranted` records that the current revision
-considers contact worthwhile. `connected` and `helped` summarize the interactions
-recorded in the case. Stage changes retain their supporting revision material;
-contact authorization remains with the caller.
+`case new` stores the initial revision. With no supplied body, it creates a
+suggested outline. Headings are editorial hints; CRM does not parse or require
+them. Stages classify the recorded case history and do not establish contact
+permission or external outcomes.
 
-`tell CASE_ID INPUT` accepts one new free-form UTF-8 delivery. In one database
-transaction CRM retains its exact text as SQLite `TEXT`, records its digest and
-optional display name/source reference, and creates one queued update. It does
-not retain the input path and never writes a content file. Once that commit is
-durable, `tell` launches the hidden worker and returns the queued update without
-waiting for agent execution; machine output includes both the update and
-delivery identities. Failure to launch cannot erase the queued update. The
-explicit recovery surface is `update resume`.
+`tell` commits exact input and one queued update in the same transaction.
+It then starts the worker and returns. A launch failure leaves the update
+available for `update resume`. Source references are caller-supplied labels;
+CRM does not fetch or refresh them.
 
-Hidden drainers share a database lease, so only one owns the work at a time.
-A drainer waits at most two seconds for a live owner. A drain owner atomically
-claims the next eligible row or releases the lease. A resume owner atomically
-releases the lease and requests a replacement drainer if eligible work is waiting.
+One database lease serializes drainers. At the end of a drain, an immediate
+transaction either claims eligible work or releases the lease. Resume releases
+the lease and detects waiting work atomically, then starts a replacement drainer
+when needed. A contender waits at most two seconds. Each drain attempts existing
+unsettled work once and processes eligible queued work before returning an
+unresolved diagnostic.
 
-Committed intake therefore remains with a drain owner or gets a replacement
-worker after resume. Intake after release can acquire the free lease. A drain
-attempts each previously unsettled item once. It processes eligible queued
-work before it reports an unresolved item diagnostic.
+## Steward and commit
 
-`--source` is an opaque caller-supplied reference. CRM neither opens nor
-refreshes it. This lets ordinary web or CLI research, a job posting, a meeting
-note, or a human introduction use the same narrow intake line without giving
-CRM a browser, crawler, address book, or guessed-contact pipeline.
-
-## Hidden steward
-
-The worker claims one update and freezes the case's current base revision and
-the new delivery before submission. That update is one steward attempt. It uses
-requester program `crm`, requester identity `case-steward:UPDATE_ID`, one unique
-Nucleus job identity per update, and the immutable toolset
+The worker freezes the case revision and new delivery before submission. It
+persists the exact request with requester program `crm`, requester identity
+`case-steward:UPDATE_ID`, and one Nucleus job ID. The immutable toolset is
 `crm/case-steward/1`.
 
-The steward is told about the same four suggested sections, but may preserve or
-choose a better case-specific organization. CRM validates only the bounded
-complete Markdown value, not its headings or prose structure.
+The invocation uses `gpt-5.6-terra`, medium reasoning, and a 1,200-second timeout.
+The prompt contains the frozen revision and delivery. Workspace access, local
+execution, web search, and launch context are disabled. The only managed tool is
+`submit_case_revision`.
 
-The closed Codex invocation uses model `gpt-5.6-terra`, medium reasoning, and a
-1,200-second timeout. It places the frozen base and delivery in the prompt,
-uses a neutral absolute working directory, workspace access `none`, local
-execution and web search disabled, no launch context, and exactly one managed
-tool: `submit_case_revision`. The tool supplies the frozen `base_revision`
-guard plus exactly four revision fields:
+The tool supplies the base revision and four content fields: complete Markdown,
+stage, nullable advisory, and summary. CRM checks the base and content before
+one transaction commits the revision, case head, tool receipt, and update result.
+That transaction establishes domain success.
 
-- complete replacement Markdown;
-- one stage from the fixed enum;
-- a nullable advisory; and
-- a summary.
+The worker posts the exact durable result and continues until it records Nucleus
+terminal state. A later runtime failure becomes a diagnostic and does not undo
+the revision. An invalid call or stale base changes no case content.
 
-The prompt and tool result are private retained execution data. The neutral
-working directory is a transient empty directory next to the selected database
-and is removed after terminal execution is observed; case content remains in
-SQLite. There is no read tool, shell, web tool, source adapter, or second
-execution path.
-
-CRM validates the tool call and commits only if the selected case still has
-the frozen base revision. The new immutable revision, exact tool receipt, and
-update's committed-revision reference become durable atomically. After posting
-that byte-identical result, the worker continues through Nucleus terminal
-observation and retains both the post acknowledgment and runtime outcome. That
-guarded database commit is domain success. Nucleus completion and model prose
-do not commit a revision. A later transport, daemon or harness failure becomes a visible
-diagnostic and does not undo an already committed revision. A stale base or
-invalid call commits no revision and remains inspectable as failed work.
+The neutral working directory is a temporary empty directory beside the database.
+It is removed after terminal observation. Prompts and tool results remain private
+execution data.
 
 ## Recovery
 
-`update wait` observes one update and, once on entry when domain or runtime
-settlement still needs work, actively launches the queue drain or same-update
-recovery worker. It then only polls, times out after 1,200 seconds by default,
-and never grants retry authority. An `applied` update is already domain
-success; wait nevertheless remains active until CRM has retained a terminal
-Nucleus observation, so post-commit diagnostics cannot disappear.
-`update resume` synchronously processes queued or interrupted work without
-inventing a new update when the exact attempt can still be resumed. It may
-recover a durable pending tool call idempotently. `update retry` is allowed
-only after a `failed` or `lost` update and creates a successor update with a
-new requester/job identity, the same immutable delivery identity/text, and a
-`retry_of` link. CRM never retries automatically.
+`update wait` may launch drain or same-update recovery once on entry, then polls.
+Its default timeout is 1,200 seconds. An applied update remains under observation
+until terminal Nucleus state is retained. Wait does not create retry authority.
 
-Ambiguous admission reuses only a byte-identical request under the same job
-identity. An accepted tool call is durably correlated to that job and call;
-byte-identical redelivery returns its stored result, while conflicting reuse
-fails closed. Before dispatching any pending call, CRM rechecks that its exact
-job is still nonterminal. A Nucleus restart may make an active harness attempt
-`lost` and does not authorize a new one. If the revision committed first, it
-remains successful and the runtime loss is retained separately.
+`update resume` continues queued or recoverable interrupted work. A failed or
+lost update needs explicit `update retry` to create a successor with a new job
+ID, the same delivery, and a `retry_of` link. CRM never retries automatically.
 
-## Advisories and retained material
+An ambiguous submission reuses only the exact request and job ID. A repeated
+managed call returns its saved result; conflicting reuse fails. CRM checks that
+the job remains nonterminal before servicing a pending call.
 
-A non-null advisory is displayed conspicuously by every surface that consumes
-the relevant revision: case list, search, history and show, plus tell
-acknowledgment and update list/show/wait/resume/retry. Applied update views use
-their committed revision; other update views use their frozen base when
-assigned and otherwise the current case revision.
-Human output uses `ATTENTION — STEWARD ADVISORY (NON-BLOCKING)`; JSON includes
-both `attention: true` and the advisory text. It is durable evidence about the
-steward's caution, but it never blocks case intake, inspection, stage changes,
-worker recovery, or any caller-owned real-world action.
+## Advisories and public reads
 
-CRM retains supplied input, the steward's proposed revision, and the base and
-tool receipt under which the revision was accepted. Caller deliveries add
-material about messages, replies, meetings and employment help to that case
-history, with their supplied source references.
+Every view that consumes a revision displays its complete advisory. Applied
+update views use the committed revision; other updates use their frozen base
+or the current case when no base is assigned. The human banner and JSON attention
+fields identify it as non-blocking.
 
-The supported version-0.3 reads expose current profile entries, immutable case
-revisions, `source_update_id`, update/delivery identity, and Nucleus requester/job
-correlation. Raw delivery bodies, persisted request JSON, and mailbox receipt
-JSON are retained for exact execution and recovery but have no public
-show/export command. Direct SQLite access is not a supported consumer surface.
+Public reads expose profiles, case history, source-update links, update and
+delivery IDs, and Nucleus correlations. Retained raw delivery bodies, request
+JSON, and mailbox receipt JSON have no public export command. Direct SQLite
+access is not a supported consumer interface.
 
-## Rust boundary
+See [commands and output](cli.md), [stored records](data-model.md), and
+[the Rust interface](rust-api.md) for exact formats and limits.
 
-`crm::api` owns the supported importable request, payload, error, and local
-CLI-client types. The CLI uses the same serialized values. Consumers convert
-those exported values into their local structs; they do not implement another
-CRM wire decoder. Storage and execution internals remain outside this API.
-See [Rust interface](rust-api.md).
-
-CRM stores durable deployment holds in `deployment-maintenance/`, separately
-from operator pauses. Admission checks activity locks and stored workflow and
-runtime settlement. See the deployment maintenance section in `cli.md`.
-The coordinator never edits domain state directly.
+Deployment holds are separate from operator pauses. See
+[installation and maintenance](system-installation.md#coordinated-deployment-maintenance)
+for admission, migration, and recovery.
