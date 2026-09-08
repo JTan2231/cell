@@ -148,7 +148,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Administrative inputs are validated daily time, IANA zone, lowercase DNS receiving domain whose complete assignment mailbox fits 254 bytes, absolute Email wrapper path, schema-one corpus file, owner token and private absolute backup destination. A pre-existing backup must exactly match drained state and is not overwritten."
+        "statement": "Administrative inputs are validated daily time, IANA zone, optional first delivery date in exact YYYY-MM-DD form interpreted in that zone, lowercase DNS receiving domain whose complete assignment mailbox fits 254 bytes, absolute Email wrapper path, schema-one corpus file, owner token and private absolute backup destination. A pre-existing backup must exactly match drained state and is not overwritten."
       }
     ],
     "outputs": [

@@ -22,6 +22,8 @@ pub struct Config {
     pub hour: u32,
     pub minute: u32,
     pub timezone: String,
+    #[serde(default)]
+    pub first_delivery_date: Option<String>,
     pub receiving_domain: String,
     pub email_executable: PathBuf,
     pub paused: bool,
@@ -37,19 +39,27 @@ impl Config {
             hour: 9,
             minute: 0,
             timezone: "America/Chicago".into(),
+            first_delivery_date: None,
             receiving_domain: "woovrunea.resend.app".into(),
             email_executable: crate::home()?.join(".local/bin/email"),
             paused: true,
         })
     }
 
-    /// Check time, zone, mailbox length, domain syntax and executable path.
+    /// Check time, zone, first date, mailbox length, domain and executable path.
     ///
     /// # Errors
     /// Returns an error when any configured value is outside its supported range.
     pub fn validate(&self) -> Result<()> {
         if self.hour > 23 || self.minute > 59 || self.timezone.parse::<chrono_tz::Tz>().is_err() {
             return Err(fail("invalid daily time or IANA time zone"));
+        }
+        if let Some(date) = &self.first_delivery_date {
+            let parsed = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
+                .map_err(|_| fail("first delivery date must be YYYY-MM-DD"))?;
+            if date.len() != 10 || parsed.format("%Y-%m-%d").to_string() != *date {
+                return Err(fail("first delivery date must be YYYY-MM-DD"));
+            }
         }
         if !self.email_executable.is_absolute()
             || self.receiving_domain.len() + "mentor.".len() + 32 + 1 > 254
@@ -69,7 +79,7 @@ impl Config {
         Ok(())
     }
 
-    /// Return the current local date once its configured delivery time is due.
+    /// Return the local date once its first date and delivery time are due.
     ///
     /// # Errors
     /// Returns an error for invalid configuration or an unrepresentable timestamp.
@@ -78,6 +88,12 @@ impl Config {
         let utc =
             chrono::DateTime::from_timestamp(now, 0).ok_or_else(|| fail("invalid current time"))?;
         let local = utc.with_timezone(&self.timezone.parse::<chrono_tz::Tz>()?);
+        if let Some(date) = &self.first_delivery_date {
+            let first = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")?;
+            if local.date_naive() < first {
+                return Ok(None);
+            }
+        }
         if (local.hour(), local.minute()) < (self.hour, self.minute) {
             return Ok(None);
         }
@@ -618,6 +634,7 @@ impl Store {
         };
         Ok(
             json!({"paused":config.paused,"daily_time":format!("{:02}:{:02}",config.hour,config.minute),"timezone":config.timezone,
+            "first_delivery_date":config.first_delivery_date,
             "unused_problems_in_active_corpus":remaining,"assigned_problem_count":used.len(),
             "retained_incoming_message_counts":counts("SELECT state,count(*) FROM incoming GROUP BY state")?,
             "retained_outgoing_message_counts":counts("SELECT state,count(*) FROM outbox GROUP BY state")?,
@@ -676,3 +693,60 @@ CREATE INDEX incoming_pending ON incoming(state,received_at);
 CREATE INDEX outbox_pending ON outbox(state,next_attempt);
 PRAGMA user_version=1;
 ";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config() -> Config {
+        Config {
+            hour: 9,
+            minute: 0,
+            timezone: "America/Chicago".into(),
+            first_delivery_date: Some("2026-09-08".into()),
+            receiving_domain: "example.resend.app".into(),
+            email_executable: PathBuf::from("/usr/local/bin/email"),
+            paused: false,
+        }
+    }
+
+    #[test]
+    fn first_delivery_waits_for_its_local_date_and_nine_am() -> Result<()> {
+        let config = config();
+        for (instant, expected) in [
+            ("2026-09-07T14:00:00Z", None),
+            ("2026-09-08T04:59:59Z", None),
+            ("2026-09-08T13:59:59Z", None),
+            ("2026-09-08T14:00:00Z", Some("2026-09-08")),
+            ("2026-09-09T14:00:00Z", Some("2026-09-09")),
+            ("2026-12-01T14:59:59Z", None),
+            ("2026-12-01T15:00:00Z", Some("2026-12-01")),
+        ] {
+            let now = chrono::DateTime::parse_from_rfc3339(instant)?.timestamp();
+            assert_eq!(config.due_date(now)?.as_deref(), expected, "{instant}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn older_configuration_keeps_its_existing_daily_behavior() -> Result<()> {
+        let mut old = serde_json::to_value(config())?;
+        old.as_object_mut()
+            .ok_or_else(|| fail("expected configuration object"))?
+            .remove("first_delivery_date");
+        let config: Config = serde_json::from_value(old)?;
+        assert!(config.first_delivery_date.is_none());
+        let now = chrono::DateTime::parse_from_rfc3339("2026-09-07T14:00:00Z")?.timestamp();
+        assert_eq!(config.due_date(now)?.as_deref(), Some("2026-09-07"));
+        Ok(())
+    }
+
+    #[test]
+    fn first_delivery_date_requires_an_exact_calendar_date() {
+        let mut config = config();
+        for invalid in ["2026-9-08", "2026-09-8", "2026-02-30", "tomorrow", ""] {
+            config.first_delivery_date = Some(invalid.into());
+            assert!(config.validate().is_err(), "{invalid}");
+        }
+    }
+}

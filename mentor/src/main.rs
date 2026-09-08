@@ -32,6 +32,9 @@ enum Command {
         time: Option<String>,
         #[arg(long)]
         timezone: Option<String>,
+        /// Earliest delivery date in the configured time zone (YYYY-MM-DD).
+        #[arg(long)]
+        first_delivery_date: Option<String>,
         #[arg(long)]
         receiving_domain: Option<String>,
         #[arg(long)]
@@ -144,6 +147,7 @@ async fn run(command: Command) -> Result<Value> {
         Command::Configure {
             time,
             timezone,
+            first_delivery_date,
             receiving_domain,
             email_executable,
         } => {
@@ -163,6 +167,9 @@ async fn run(command: Command) -> Result<Value> {
             }
             if let Some(timezone) = timezone {
                 config.timezone = timezone;
+            }
+            if let Some(date) = first_delivery_date {
+                config.first_delivery_date = Some(date);
             }
             if let Some(domain) = receiving_domain {
                 config.receiving_domain = domain;

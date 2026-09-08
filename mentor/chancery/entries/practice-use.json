@@ -100,7 +100,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Configuration selects local daily time/time zone, receiving domain and absolute Email wrapper. Incoming email must route to a saved assignment token/address and the expected personal sender, have a usable RFC ID/provider time, and contain a complete bounded answer. Corpus bytes are frozen per assignment."
+        "statement": "Configuration selects local daily time/time zone, optional first delivery date in that zone, receiving domain and absolute Email wrapper. Daily selection starts no earlier than the configured first date; absence preserves current-date eligibility after the daily time. Incoming email must route to a saved assignment token/address and the expected personal sender, have a usable RFC ID/provider time, and contain a complete bounded answer. Corpus bytes are frozen per assignment."
       },
       {
         "status": "unsupported",

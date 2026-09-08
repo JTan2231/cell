@@ -19,6 +19,9 @@ change that destination.
 The default daily time is 09:00 in `America/Chicago`. Initialization leaves
 Mentor paused. Installation, initialization, resuming admission, and enabling
 the schedule are separate operations. Source files alone enable none of them.
+Set `--first-delivery-date YYYY-MM-DD` to defer the first problem until that
+date in the configured time zone. With no first date, the current day is
+eligible once its delivery time has passed.
 
 ```sh
 mentor --json status

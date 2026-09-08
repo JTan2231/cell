@@ -12,7 +12,10 @@ admission paused. The defaults are 09:00, `America/Chicago`, the configured
 Resend receiving domain, and `~/.local/bin/email` as the transport wrapper.
 
 After the configured local time, a worker can reserve one problem for the
-current calendar date. It selects an unused stable problem ID from a
+current calendar date. An optional `first_delivery_date` prevents selection
+before that date in the configured time zone. It defaults to absent, including
+for older saved configurations. Set it before enabling delivery when the first
+problem should wait until a future date. It selects an unused stable problem ID from a
 deterministic shuffled order. Reservation and its frozen outgoing message
 commit together. Reservation consumes the problem ID even if submission later
 fails; another pass cannot silently substitute a different exercise for that
@@ -140,6 +143,7 @@ never problem, answer or critique content.
 ```sh
 mentor init
 mentor configure --time 09:00 --timezone America/Chicago
+mentor configure --first-delivery-date 2026-09-08
 mentor configure --receiving-domain example.resend.app \
   --email-executable /Users/joey/.local/bin/email
 mentor pause
@@ -162,6 +166,8 @@ mentor migrate --backup /absolute/private/backup.sqlite3
 Configuration accepts a lowercase DNS receiving domain only when the complete
 `mentor.<32-hex-token>@domain` mailbox fits Email's 254-byte limit. The Email
 path is absolute; Mentor does not source a shell profile or read its credential.
+The optional first delivery date must be a real calendar date in exact
+`YYYY-MM-DD` form. Omitted configuration options keep their saved values.
 
 Initialization, configuration, corpus import, pause/resume, tick, schedule,
 maintenance and migration are separate effects. `tick` and `worker` may submit
@@ -178,6 +184,8 @@ lifetime grading totals. `last_poll_completed_at` identifies the last completed
 full provider scan. `last_tick_completed_at` identifies the last completed
 worker pass, which may report stage errors. These timestamps use Unix seconds
 UTC; the daily date uses the configured IANA time zone.
+`first_delivery_date` is that zone's earliest eligible date, or `null` when no
+date restriction is configured. It is independent of pause and schedule state.
 
 `doctor` inspects local installation/state compatibility and whether the Email
 executable is present. It explicitly reports Email API/receiving permission,

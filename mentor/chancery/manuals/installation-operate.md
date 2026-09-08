@@ -82,6 +82,17 @@ mentor configure \
 mentor doctor
 ```
 
+To start on a future local date, configure it before resuming:
+
+```sh
+mentor configure --first-delivery-date 2026-09-08
+```
+
+The date uses the configured time zone, and delivery still waits for 09:00 or
+the configured daily time. With no first date, enabling after the daily time
+makes the current date eligible. `mentor status` exposes the selected first
+date as `first_delivery_date`, or `null` when absent.
+
 Email owns the recipient, credentials, provider requests, and incoming mail
 transport. The receiving domain must route to that configured Email account.
 Mentor's configuration contains no mail-provider credentials. `doctor` does

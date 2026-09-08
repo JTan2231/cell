@@ -777,6 +777,8 @@ time.
 Mentor's explicit `mentor/worker` binding uses Clockwork at a 60-second interval,
 no run-at-load, overlap skip and a 90-second activation limit. Mentor owns the
 configured local daily time, due-date selection, polling progress and recovery.
+An optional first delivery date uses that configured local zone and prevents
+problem selection before the selected date.
 Initialization leaves admission paused; schedule enable does not clear pause.
 Disable the worker before initialized maintained deployment, drain existing
 work, and require a backup with no pending answer/request/payload content.
