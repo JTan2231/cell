@@ -89,13 +89,15 @@ pub(super) fn definition(
     } else {
         json!({"kind":"interpreted","interpreter":"/bin/sh","interpreter_sha256":cell_install::file_digest(Path::new("/bin/sh"))?,"script":runner,"script_sha256":cell_install::file_digest(&runner)?})
     };
-    Ok(json!({
-        "schema_version":1,"key":key,"release_id":info.release_id,"release_root":root,
+    let manifest: clockwork::api::Manifest = serde_json::from_value(json!({
+        "schema_version":2,"key":key,"release_id":info.release_id,"release_root":root,
+        "failure":clockwork::api::FailurePolicy::default(),
         "authority":"current-user-background","overlap":"skip","arguments":[],"cwd":library,
         "schedule":{"kind":"interval","seconds":300,"run_at_load":true},"launch":launch,
         "environment":{"HOME":home,"USER":user,"LOGNAME":user,"ANNALS_CONFIG":library.join("config.toml")},
         "output":{"stdout":library.join("log/inbox.stdout.log"),"stderr":library.join("log/inbox.stderr.log")}
-    }))
+    }))?;
+    Ok(serde_json::to_value(manifest)?)
 }
 
 pub(super) fn prove(
@@ -124,7 +126,11 @@ pub(super) fn prove(
             home,
             None,
         )?;
-        let expected = definition(home, key, library, info)?;
+        let mut expected = definition(home, key, library, info)?;
+        // Prove the original owned definition before replacing a schema-one binding.
+        if value.pointer("/data/manifest/schema_version") == Some(&json!(1)) {
+            expected["schema_version"] = json!(1);
+        }
         if value.pointer("/data/key") != Some(&json!(key))
             || value.pointer("/data/digest") != Some(&json!(digest))
             || value.pointer("/data/manifest") != Some(&expected)

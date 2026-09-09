@@ -416,11 +416,14 @@ impl State<'_> {
         } else {
             json!({"kind":"interpreted","interpreter":"/bin/sh","interpreter_sha256":hash(Path::new("/bin/sh"))?,"script":runner,"script_sha256":hash(&runner)?})
         };
-        let expected = json!({"schema_version":1,"key":KEY,"release_id":release_id,"release_root":release,"authority":"current-user-background","overlap":"skip","arguments":[],"cwd":self.target,
+        let mut expected = json!({"schema_version":2,"key":KEY,"release_id":release_id,"release_root":release,"authority":"current-user-background","overlap":"skip","arguments":[],"cwd":self.target,
             "schedule":{"kind":"interval","seconds":300,"run_at_load":true},
             "launch":launch,
             "environment":{"HOME":self.home,"USER":self.operator,"LOGNAME":self.operator,"ANNALS_CONFIG":self.target.join("config.toml")},
             "output":{"stdout":self.target.join("log/inbox.stdout.log"),"stderr":self.target.join("log/inbox.stderr.log")}});
+        if actual["schema_version"] == 1 {
+            expected["schema_version"] = json!(1);
+        }
         if actual != expected {
             return Err(failure(
                 "migration handoff differs from the complete release-owned Clockwork definition",

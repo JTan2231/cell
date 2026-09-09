@@ -29,6 +29,7 @@ dependencies = [
  "cell-install",
  "cell-maintenance",
  "clap",
+ "clockwork",
  "fs2",
  "krisis-api",
  "nucleus-client",

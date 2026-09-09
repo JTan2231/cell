@@ -190,6 +190,48 @@ fn native_release_installs_primary_and_independent_decisions_library() -> Result
 }
 
 #[test]
+fn native_schedules_upgrade_schema_one_bindings_to_default_failure_policy() -> Result {
+    let fixture = Fixture::new()?;
+    success(&fixture.install()?);
+    success(&fixture.provision(false)?);
+    let state_path = fixture.home.join("clockwork.json");
+    let mut state: Value = serde_json::from_slice(&fs::read(&state_path)?)?;
+    let keys = ["annals/inbox", "annals/decisions-inbox"];
+    for key in keys {
+        let digest = state["bindings"][key]["definition_digest"]
+            .as_str()
+            .ok_or("missing selected definition")?
+            .to_owned();
+        let mut definition = state["definitions"][&digest].clone();
+        let manifest: clockwork::api::Manifest =
+            serde_json::from_value(definition["manifest"].clone())?;
+        assert_eq!(manifest.schema_version, 2);
+        assert_eq!(manifest.failure, clockwork::api::FailurePolicy::default());
+        definition["manifest"]["schema_version"] = serde_json::json!(1);
+        let legacy: clockwork::api::Manifest =
+            serde_json::from_value(definition["manifest"].clone())?;
+        let legacy_digest = legacy.digest()?;
+        definition["digest"] = serde_json::json!(legacy_digest);
+        state["definitions"][&legacy_digest] = definition;
+        state["bindings"][key]["definition_digest"] = serde_json::json!(legacy_digest);
+    }
+    fs::write(&state_path, serde_json::to_vec(&state)?)?;
+    success(&fixture.install()?);
+    success(&fixture.provision(false)?);
+    let state: Value = serde_json::from_slice(&fs::read(&state_path)?)?;
+    for key in keys {
+        let digest = state["bindings"][key]["definition_digest"]
+            .as_str()
+            .ok_or("missing selected definition")?;
+        let manifest: clockwork::api::Manifest =
+            serde_json::from_value(state["definitions"][digest]["manifest"].clone())?;
+        assert_eq!(manifest.schema_version, 2);
+        assert_eq!(manifest.failure, clockwork::api::FailurePolicy::default());
+    }
+    Ok(())
+}
+
+#[test]
 fn failed_update_restores_programs_database_and_own_maintenance() -> Result {
     let fixture = Fixture::new()?;
     success(&fixture.install()?);
