@@ -76,9 +76,11 @@ accepts a yes/no verdict and summary, and renders the source into Markdown.
 The saved run protects request and result recovery; the observer commits
 coverage and a target-bound document outbox. Local `document build` and
 `document render` use the same builder without delivery or observer coverage.
-Krisis marks an observation failed on its first processing error and continues
-with other work. Explicit observation retry preserves uncertain Nucleus request
-identity and pending Annals document identity. `krisis health` reports worker
+Krisis marks an observation failed on its first processing error. A saved
+conversation read failure returns zero and permits later scheduled work. Other
+processing failures halt its Clockwork schedule. Explicit observation retry
+preserves uncertain Nucleus request identity and pending Annals document identity.
+`krisis health` reports worker
 activity and its age; retained observation failures do not make the worker
 unhealthy. See [Krisis source documents](/Users/joey/rust/cell/decisions/docs/source-documents.md).
 

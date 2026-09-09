@@ -1,6 +1,6 @@
 {
   "id": "krisis.develop.change",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",

@@ -74,9 +74,11 @@ serial worker lock. It verifies the Annals target for that work. The first
 processing error marks the observation `failed`, retains the error, and removes
 it from automatic selection. This includes missing or incomplete sources,
 classification errors, uncertain dependency calls, and delivery errors.
-A newly recorded observation failure returns nonzero with
-`observation_processing_failed`. Errors that prevent a durable outcome also
-return nonzero. Both cause the configured Clockwork schedule to halt.
+A conversation read failure (`document_source_unavailable`), including a timeout
+or protocol error, returns zero after its failed observation is saved. The next
+scheduled run can process other work. Other observation failures return nonzero
+with `observation_processing_failed`. Errors that prevent a durable outcome also
+return nonzero. These errors cause the configured Clockwork schedule to halt.
 
 Failed deliveries retain the exact pending document and target. Their observations
 remain failed until explicit retry. Other observations and deliveries wait for
@@ -110,12 +112,14 @@ state commands, it opens and can migrate Krisis state and obeys maintenance hold
 `working` means the serial worker lock has a live owner. `idle` means no worker
 owns it and the last run finished within the selected interval. Empty polls
 update the last finish time without resetting how long the worker has been idle.
-A newly failed observation sets the last worker error. Historical failure counts
-do not create new worker errors or scheduling incidents.
+A saved conversation read failure leaves the worker idle. Other newly failed
+observations set the last worker error. Historical failure counts do not create
+new worker errors or scheduling incidents.
 
 The default idle limit is 180 seconds for the installed 60-second schedule.
 A longer interval produces `stale`. This is a local diagnostic threshold, not a
-Clockwork delivery guarantee. `error` reports the last worker error, including a newly failed observation.
+Clockwork delivery guarantee. `error` reports the last worker error, excluding
+saved conversation read failures.
 `interrupted` means a started run has no recorded finish and no lock owner.
 `unobserved` means this database has no worker activity record yet.
 

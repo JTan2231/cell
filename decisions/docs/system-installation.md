@@ -215,9 +215,12 @@ candidate database state.
 ## Scheduled failure policy
 
 Krisis configures Clockwork definition schema 2 for `krisis/observer` with
-`[failure] on_abend = "halt-until-approved"`. A launch, dependency, classification,
-source, or Annals delivery failure halts future activations. Saving the failed
-observation does not make that activation successful. A failed or cancelled
+`[failure] on_abend = "halt-until-approved"`. A conversation read failure
+(`document_source_unavailable`), including a timeout or protocol error, is a
+handled outcome after Krisis saves the failed observation. It returns zero,
+permits later activations, and creates no pause alert. Other launch, dependency,
+source-validation, classification, or Annals delivery failures halt future
+activations. A failed or cancelled
 Nucleus job after an accepted classification preserves the classification and
 reports that exact job to Clockwork; it creates no successor attempt. An empty poll or valid
 maintenance gate is a successful no-work result. Krisis owns these outcome

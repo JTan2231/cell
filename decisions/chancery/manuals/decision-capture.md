@@ -29,9 +29,11 @@ The first observation processing error marks that observation failed and
 retains its error. This includes missing or incomplete sources, classification,
 dependency, target, digest, and receipt errors. A delivery failure keeps exact
 bytes pending and excludes the failed observation from automatic delivery.
-A newly recorded observation failure returns nonzero with
-`observation_processing_failed`. The configured Clockwork schedule halts before
-other work starts. Errors that prevent a durable outcome also return nonzero.
+A conversation read failure (`document_source_unavailable`), including a timeout
+or protocol error, returns zero after its failed observation is saved. Later
+scheduled work can proceed. Other observation failures return nonzero with
+`observation_processing_failed` and halt the configured Clockwork schedule.
+Errors that prevent a durable outcome also return nonzero.
 
 Failed observations do not retry automatically. Repeated hooks and reconciliation
 preserve their failed state. Use `krisis observe retry OBSERVATION_ID` after
@@ -68,13 +70,14 @@ dependency. It obeys maintenance admission and can migrate the database.
 
 `working` means the serial processing lock has a live owner. `idle` means the
 worker has finished a run within the selected limit. Empty polls update the last
-finish without resetting continuous idle time. A newly failed observation is a
-worker error. Historical failed observations do not create recurring incidents.
+finish without resetting continuous idle time. A saved conversation read failure
+leaves the worker idle; other newly failed observations are worker errors.
+Historical failed observations do not create recurring incidents.
 
 The idle limit defaults to 180 seconds for the installed 60-second schedule.
 `stale` means the last finished run is older than that limit. It is a diagnostic
 threshold, not a scheduling guarantee. `error` means the last worker run failed,
-including a newly recorded observation failure. `interrupted` means a started run has no finish and
+excluding saved conversation read failures. `interrupted` means a started run has no finish and
 no lock owner. `unobserved` means no worker activity has been recorded yet.
 
 JSON reports `ok`, `state`, `checked_at`, `state_since`,
@@ -95,9 +98,12 @@ older binaries cannot open schema 6.
 ## Scheduled failure policy
 
 Krisis configures Clockwork definition schema 2 for `krisis/observer` with
-`[failure] on_abend = "halt-until-approved"`. A launch, dependency, classification,
-source, or Annals delivery failure halts future activations. Saving the failed
-observation does not make that activation successful. A failed or cancelled
+`[failure] on_abend = "halt-until-approved"`. A conversation read failure
+(`document_source_unavailable`), including a timeout or protocol error, is a
+handled outcome after Krisis saves the failed observation. It returns zero,
+permits later activations, and creates no pause alert. Other launch, dependency,
+source-validation, classification, or Annals delivery failures halt future
+activations. A failed or cancelled
 Nucleus job after an accepted classification preserves the classification and
 reports that exact job to Clockwork; it creates no successor attempt. An empty poll or valid
 maintenance gate is a successful no-work result. Krisis owns these outcome

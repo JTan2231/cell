@@ -622,23 +622,6 @@ fn process_worker(
             process_one_observation(store, &annals).map(observation_output)
         }
     })();
-    let result = result.and_then(|output| {
-        if let ProcessOutput::Observation(ObservationProcess {
-            observation: Some(observation),
-            ..
-        }) = &output
-            && observation.status == "failed"
-        {
-            return Err(AppError::new(
-                "observation_processing_failed",
-                format!(
-                    "observation {} failed; inspect its retained failure before recovery",
-                    observation.observation_id
-                ),
-            ));
-        }
-        Ok(output)
-    });
     let worked = match &result {
         Ok(ProcessOutput::Account(_)) => true,
         Ok(ProcessOutput::Observation(output)) => output.processed,
@@ -665,6 +648,15 @@ fn record_observation_failure(
     error: &AppError,
 ) -> AppResult<ProcessResult> {
     store.fail_observation(&observation.id, error.code, &error.message)?;
+    if error.code != "document_source_unavailable" {
+        return Err(AppError::new(
+            "observation_processing_failed",
+            format!(
+                "observation {} failed; inspect its retained failure before recovery",
+                observation.id
+            ),
+        ));
+    }
     Ok(ProcessResult {
         observation_id: observation.id.clone(),
         status: "failed".to_owned(),
@@ -1719,6 +1711,29 @@ mod tests {
         assert_eq!(error.code, "observation_processing_failed");
         assert_eq!(store.observation(&first.id)?.status, "failed");
         assert_eq!(store.observation(&second.id)?.status, "queued");
+        assert_eq!(
+            store.next_observation_before(None)?.map(|value| value.id),
+            Some(second.id)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn conversation_read_failure_is_retained_without_stopping_queue()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let store = Store::open(&directory.path().join("decisions.db"))?;
+        let first = store.ingest_observation("session", "turn-first")?;
+        let second = store.ingest_observation("session", "turn-second")?;
+        let error = AppError::new(
+            "document_source_unavailable",
+            "assistant message has empty text",
+        );
+        let result = super::record_observation_failure(&store, &first, &error)?;
+        assert_eq!(result.status, "failed");
+        let failed = store.observation(&first.id)?;
+        assert_eq!(failed.status, "failed");
+        assert_eq!(failed.failure_code.as_deref(), Some(error.code));
         assert_eq!(
             store.next_observation_before(None)?.map(|value| value.id),
             Some(second.id)

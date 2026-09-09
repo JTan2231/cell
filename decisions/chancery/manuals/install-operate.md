@@ -136,8 +136,10 @@ A working duration measures lock ownership, not classifier progress.
 Working and idle exit zero; all other states print the report and exit nonzero.
 Use `doctor` to check dependency readiness.
 
-The first processing error marks its observation failed and ends the worker
-nonzero. Historical failure counts do not determine health and need
+The first processing error marks its observation failed. A conversation read
+failure (`document_source_unavailable`) returns zero after that record is saved
+and leaves the worker idle. Other failures end the worker nonzero.
+Historical failure counts do not determine health and need
 no repeated alert. `observe status` reports their count for optional later review.
 `observe retry OBSERVATION_ID` is explicit recovery. It preserves prior failures,
 resumes uncertain saved jobs, and releases failed pending deliveries using their
@@ -151,9 +153,12 @@ in the quiescent backup; restore the compatible database and binary together.
 ## Scheduled failure policy
 
 Krisis configures Clockwork definition schema 2 for `krisis/observer` with
-`[failure] on_abend = "halt-until-approved"`. A launch, dependency, classification,
-source, or Annals delivery failure halts future activations. Saving the failed
-observation does not make that activation successful. An empty poll or valid
+`[failure] on_abend = "halt-until-approved"`. A conversation read failure
+(`document_source_unavailable`), including a timeout or protocol error, is a
+handled outcome after Krisis saves the failed observation. It returns zero,
+permits later activations, and creates no pause alert. Other launch, dependency,
+source-validation, classification, or Annals delivery failures halt future
+activations. An empty poll or valid
 maintenance gate is a successful no-work result. Krisis owns these outcome
 meanings and its configuration; Clockwork owns the durable scheduling incident,
 admission gate, and one retained email notification through

@@ -56,8 +56,10 @@ inbox contract; Krisis does not redeliver under a new key after an inbox failure
 The first processing error is retained with the observation in one transaction.
 Failed observations and their pending documents are excluded from automatic work.
 A later explicit retry preserves failure history and existing request or document
-identity. Recording a new failed observation ends the worker nonzero. Clockwork
-halts the observer schedule; historical failure counts create no new incident.
+identity. A saved conversation read failure (`document_source_unavailable`)
+returns zero so later scheduled work can proceed. Other new observation failures
+end the worker nonzero and halt its Clockwork schedule. Historical failure counts
+create no new incident.
 `health` reads durable worker timing and current lock ownership; it does not use
 the failed-observation count. See [CLI](cli.md#worker-health) for state meanings.
 

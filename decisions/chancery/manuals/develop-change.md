@@ -47,11 +47,13 @@ records a target-bound outbox and supplies the sole active production path.
 
 ## Observation outcomes and worker health
 
-The observer records the first returned processing error as a failed observation
-and returns nonzero before successor work. Preserve error history across explicit retries.
+The observer records the first returned processing error as a failed observation.
+A saved conversation read failure (`document_source_unavailable`) returns zero
+and permits later scheduled work. Other errors return nonzero before successor
+work. Preserve error history across explicit retries.
 An uncertain saved job or accepted classification must reuse its run; a failed
 pending delivery must reuse its key, exact bytes, and target. A recorded
-observation failure is an abend for the configured Clockwork schedule.
+observation failure is an abend unless it is a saved conversation read failure.
 
 Keep `health` independent of retained failures. It reports live lock ownership,
 last run timing, continuous idle time, and unhandled worker errors. Empty polls
