@@ -1727,7 +1727,7 @@ mod tests {
         let second = store.ingest_observation("session", "turn-second")?;
         let error = AppError::new(
             "document_source_unavailable",
-            "assistant message has empty text",
+            "turn has no items array in a full-history response",
         );
         let result = super::record_observation_failure(&store, &first, &error)?;
         assert_eq!(result.status, "failed");

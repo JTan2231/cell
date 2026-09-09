@@ -119,7 +119,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "The source is the full normalized root conversation through one selected completed exchange. Later exchanges are excluded and required history is never truncated."
+        "statement": "The source is the full normalized root conversation through one selected completed exchange containing a nonblank user message. Empty or whitespace-only assistant text and earlier turns with no messages are valid context. The classifier identifies user decisions. Later exchanges are excluded and required history is never truncated."
       },
       {
         "status": "declared",

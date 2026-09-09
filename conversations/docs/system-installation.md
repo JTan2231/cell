@@ -23,6 +23,10 @@ Codex processes. The deployer creates:
 - `~/Library/Application Support/Chancery/providers/conversations` selecting
   the current release's provider bundle.
 
+Krisis and Paperboy embed the Conversations library. Rebuild and deploy each
+consumer to apply normalization changes such as accepting empty message text;
+replacing the Conversations CLI alone does not update embedded callers.
+
 The `cell-install-v2` release identity covers the binary, Rust installer, public
 layout, and complete Chancery bundle. `manifest.json` records the exact inventory;
 `package/install` retains the installer bytes.

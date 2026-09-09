@@ -71,6 +71,43 @@ fn snapshot_and_document_preserve_all_source_text_and_turn_order() {
 }
 
 #[test]
+fn empty_context_and_assistant_text_survive_snapshot_recovery() {
+    for text in ["", " \t\n"] {
+        let mut source = support::conversation();
+        source.turns[0].messages.clear();
+        source.turns[1].messages[1].text = text.to_owned();
+        let snapshot = Snapshot::capture(source.clone(), "target").unwrap();
+        assert_eq!(snapshot.conversation(), &source);
+        let prompt: Value = serde_json::from_str(&snapshot.prompt().unwrap()).unwrap();
+        assert_eq!(prompt["conversation"][1]["classify_this_exchange"], true);
+        let restored = Snapshot::parse(&serde_json::to_vec(&snapshot).unwrap()).unwrap();
+        assert_eq!(restored, snapshot);
+        let classification =
+            Classification::parse(r#"{"is_decision":false,"summary":null}"#).unwrap();
+        assert_eq!(restored.render(&classification).unwrap(), None);
+    }
+}
+
+#[test]
+fn selected_exchange_requires_nonblank_user_text() {
+    for text in [None, Some(""), Some(" \t\n")] {
+        let mut source = support::conversation();
+        if let Some(text) = text {
+            source.turns[1].messages[0].text = text.to_owned();
+        } else {
+            source.turns[1].messages.remove(0);
+        }
+        assert!(matches!(
+            Snapshot::capture(source, "target"),
+            Err(Error::Source(message)) if message == "selected turn has no user message"
+        ));
+    }
+    let mut source = support::conversation();
+    source.turns[1].messages.clear();
+    assert!(Snapshot::capture(source, "target").is_err());
+}
+
+#[test]
 fn negative_verdict_has_no_artifact() {
     let snapshot = Snapshot::capture(support::conversation(), "target").unwrap();
     let classification = Classification::parse(r#"{"is_decision":false,"summary":null}"#).unwrap();

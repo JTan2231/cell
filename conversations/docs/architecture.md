@@ -92,6 +92,11 @@ fallback.
 Only `userMessage` text content and `agentMessage` text become `Message`
 records. Images, reasoning, command execution, tool calls/results, approvals,
 plans, and other internal items are omitted rather than partially exposed.
+
+Empty and whitespace-only message text is preserved. A user item with no text
+parts has empty text. Turns with no normalized messages are retained. These
+values do not fail history or activity reads; callers own their interpretation.
+
 App Server currently timestamps turns but not every item, so a message uses an
 item timestamp when one exists, otherwise its containing turn's `startedAt`
 with `timestampPrecision: turn`, otherwise `unknown`.

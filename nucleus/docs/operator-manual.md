@@ -70,6 +70,12 @@ Platter, Mentor, Paperboy --> Email --> Resend
 installed product releases --> Chancery documentation
 ```
 
+Conversations preserves empty message text and turns with no normalized messages.
+Krisis requires nonblank user text in the selected exchange to identify user
+decisions. Empty assistant text and earlier empty turns remain valid context.
+Krisis and Paperboy embed Conversations, so normalization changes require
+rebuilding and deploying those consumers as well as the standalone CLI.
+
 Krisis uses `krisis/decision-document/1` for its sole active observer production
 path. It freezes full normalized conversation through a completed exchange,
 accepts a yes/no verdict and summary, and renders the source into Markdown.

@@ -22,8 +22,10 @@ and the command does not open or migrate the observer database.
 Conversations supplies the complete normalized history of an exact root
 interactive task. Krisis freezes all turns through the selected completed turn,
 including all user and assistant messages in their supplied order. The selected
-turn must contain a nonblank user message. Missing completion or inconsistent
-source identities cause an error; they do not produce a negative verdict.
+turn must contain a nonblank user message because Krisis identifies user decisions.
+Empty assistant text and earlier turns with no messages are valid context.
+Missing completion or inconsistent source identities cause an error; they do
+not produce a negative verdict.
 Earlier messages can have unknown timestamps. Later turns are excluded.
 
 “Complete history” means Conversations' normalized user/assistant text. It does

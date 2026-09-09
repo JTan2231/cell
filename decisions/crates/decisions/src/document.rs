@@ -86,7 +86,7 @@ impl Snapshot {
     ///
     /// # Errors
     /// Returns an error for missing or ambiguous turns, inconsistent identities,
-    /// non-root sources, or an incomplete target without user content.
+    /// non-root sources, an incomplete target, or a target without nonblank user text.
     pub fn capture(mut conversation: Conversation, through_turn_id: &str) -> Result<Self, Error> {
         if conversation
             .turns
@@ -132,7 +132,7 @@ impl Snapshot {
     ///
     /// # Errors
     /// Returns an error for unsupported versions, inconsistent or duplicate identities,
-    /// non-root sources, or an incomplete target without user content.
+    /// non-root sources, an incomplete target, or a target without nonblank user text.
     pub fn validate(&self) -> Result<(), Error> {
         let source = &self.conversation;
         let thread = &source.thread;

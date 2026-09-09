@@ -267,6 +267,45 @@ fn enumerates_both_archives_and_filters_subagents_by_default() {
 }
 
 #[test]
+fn empty_text_and_turns_remain_readable_through_history_and_activity() {
+    let directory = must(TempDir::new());
+    let script = fake_codex(directory.path());
+    let fixture = must(fs::read_to_string(&script))
+        .replace(r#""text":"active answer""#, r#""text":"""#)
+        .replace(r#""text":"accepted""#, r#""text":"   ""#)
+        .replace(
+            r#""content":[{"type":"text","text":"shared prompt"}]"#,
+            r#""content":[]"#,
+        )
+        .replace(
+            r#""content":[{"type":"text","text":"legacy decision"}]"#,
+            r#""content":[{"type":"image","url":"file:///private/image.png"}]"#,
+        )
+        .replace(
+            r#""id":"active-turn","itemsView":"full""#,
+            r#""id":"empty-turn","startedAt":18,"completedAt":19,"status":"completed","items":[]},{"id":"active-turn","itemsView":"full""#,
+        );
+    must(fs::write(&script, fixture));
+    let mut client = client(script);
+
+    let corpus = must(client.snapshot(&ListOptions::default()));
+    assert_eq!(corpus.len(), 2);
+    assert_eq!(corpus[0].turns.len(), 2);
+    assert!(corpus[0].turns[0].messages.is_empty());
+    assert_eq!(corpus[0].turns[1].messages.len(), 2);
+    assert_eq!(corpus[0].turns[1].messages[0].text, "");
+    assert_eq!(corpus[0].turns[1].messages[1].text, "");
+    assert_eq!(corpus[1].turns[0].messages[0].text, "");
+    assert_eq!(corpus[1].turns[0].messages[1].text, "   ");
+    let empty = must(client.read_turn_activity("root-active", "empty-turn"));
+    assert!(empty.turn.messages.is_empty());
+    let activity = must(client.read_turn_activity("root-active", "active-turn"));
+    assert_eq!(activity.turn.messages.len(), 2);
+    assert_eq!(activity.completed_file_changes.len(), 1);
+    assert!(client.search("choice", &ListOptions::default()).is_ok());
+}
+
+#[test]
 fn exact_thread_summary_uses_canonical_host_and_metadata_only() {
     let directory = must(TempDir::new());
     let script = fake_codex(directory.path());

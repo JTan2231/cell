@@ -85,6 +85,7 @@
     "data_semantics": [
       {"status": "declared", "statement": "The default corpus is active and archived interactive root tasks; subagents and exec tasks are included only by explicit independent filters, and copied fork items are deduplicated by item ID for snapshot, search, and export."},
       {"status": "declared", "statement": "Only userMessage and agentMessage text become Message records; activity is a separate content-free projection, and observed runtimeStatus belongs only to the newly launched App Server."},
+      {"status": "declared", "statement": "Empty and whitespace-only message text is valid and preserved. User items with no text parts have empty text. Turns with no normalized messages are retained. Empty content does not fail history or activity reads; activity counts message records, including empty messages, and callers own interpretation."},
       {"status": "unsupported", "statement": "Reasoning, images, commands, tool calls or results, approvals, file paths, diffs, raw storage records, and machine-wide task liveness are not corpus fields."}
     ],
     "identity_and_units": [

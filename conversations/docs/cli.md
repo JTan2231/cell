@@ -13,6 +13,11 @@ diagnostics for an interactive operator. `--app-server-stderr suppress` routes
 only the spawned App Server's diagnostic stream to the null device. JSON-RPC
 errors still fail and are reported by Conversations itself.
 
+Empty and whitespace-only user or assistant text does not fail a read. A user
+item with no text parts has empty text. Transcripts retain empty messages and
+turns with no messages. Activity counts retained message records, including
+empty messages; a turn with no messages has zero message counts.
+
 Every command is short-lived. On Unix its selected Codex command and inherited
 App Server descendants run in one private process group that Conversations
 terminates on return or error; unrelated Codex desktop and CLI processes are

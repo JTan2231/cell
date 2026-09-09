@@ -46,6 +46,11 @@ Show, search, and export expose user and assistant text, which can be private.
 Never send or publish that output without separate authority. A failed page or
 unsupported full-history record fails the operation.
 
+Empty and whitespace-only user or assistant text is valid and preserved. A user
+item with no text parts has empty text. Turns with no normalized messages are
+retained. Empty content does not fail history or activity reads. Activity counts
+message records, including empty messages; interpretation belongs to the caller.
+
 Activity returns metadata without transcript content. It emits only turn timing/status, message
 counts, stable references, and counts of structurally validated completed file
 changes. It never emits transcript bodies, file paths, diffs, commands, tool

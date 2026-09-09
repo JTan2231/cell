@@ -6,6 +6,11 @@ no-decision. A positive result creates a summary heading followed by the full
 normalized user/assistant conversation through that exchange. Code renders the
 source; the classifier returns only `is_decision` and `summary`.
 
+The selected turn must contain a nonblank user message because Krisis identifies
+user decisions. Empty or whitespace-only assistant text and earlier turns with
+no messages are valid context. The classifier decides whether the selected
+exchange contains a user decision.
+
 The observer uses `krisis/decision-document/1` as its sole production path.
 `document build --thread-id THREAD --turn-id TURN --directory DIRECTORY` and
 `document render --directory DIRECTORY` use the same construction engine for

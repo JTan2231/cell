@@ -483,13 +483,7 @@ fn user_text(item: &Value, item_id: &str) -> Result<String> {
             text_parts.push(text);
         }
     }
-    let text = text_parts.join("\n");
-    if text.trim().is_empty() {
-        return Err(Error::Protocol {
-            message: format!("userMessage {item_id} has no nonempty text content"),
-        });
-    }
-    Ok(text)
+    Ok(text_parts.join("\n"))
 }
 
 fn message_text(item: &Value, item_id: &str) -> Result<String> {
@@ -499,11 +493,6 @@ fn message_text(item: &Value, item_id: &str) -> Result<String> {
         .ok_or_else(|| Error::Protocol {
             message: format!("agentMessage {item_id} has no string text"),
         })?;
-    if text.trim().is_empty() {
-        return Err(Error::Protocol {
-            message: format!("agentMessage {item_id} has empty text"),
-        });
-    }
     Ok(text.to_owned())
 }
 
