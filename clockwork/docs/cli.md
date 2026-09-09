@@ -393,3 +393,22 @@ Email double, preventing isolated fixtures from selecting the real account.
 An explicit `failure.email_cli` still selects the caller's authorized wrapper.
 The canonical ordinary state path used by a product report retains the normal
 installed layout and Email default.
+
+## EMT notification integration
+
+~~~sh
+clockwork incident feed --after CURSOR --limit 100
+clockwork notification emt --receiving-domain DOMAIN
+clockwork notification emt --disable
+clockwork notification show INCIDENT_ID
+clockwork notification claim INCIDENT_ID --delivery-id UUID
+~~~
+
+Feed returns items, next_cursor and has_more in insertion order. Show returns
+the basic payload and ownership and can materialize the incident reply route.
+Claim is for an already retained EMT email and refuses a started basic send or
+a different delivery owner. Disabling new EMT routing preserves existing
+routes and claims. These operations never resume a schedule.
+
+See the installed schedule-operation manual for grace timing, transport
+ownership, cursor recovery and the required broker cutover.

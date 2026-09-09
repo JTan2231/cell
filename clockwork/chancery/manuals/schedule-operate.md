@@ -423,3 +423,68 @@ Email double, preventing isolated fixtures from selecting the real account.
 An explicit `failure.email_cli` still selects the caller's authorized wrapper.
 The canonical ordinary state path used by a product report retains the normal
 installed layout and Email default.
+
+## EMT incident discovery and initial notification handoff
+
+The additive incident feed reads retained incidents in insertion order:
+
+~~~sh
+clockwork incident feed --after 0 --limit 100
+~~~
+
+The response contains items, next_cursor and has_more. Limits are 1 through
+1000. Save the returned cursor only after retaining every item on its page.
+Cursors belong to this database history. They use insertion order rather than
+wall-clock time and must be re-established after restoring a different history.
+These reads do not approve continuation or run products.
+
+An operator can configure EMT preference for new incidents:
+
+~~~sh
+clockwork notification emt --receiving-domain RECEIVING_DOMAIN
+clockwork notification emt --disable
+clockwork notification show INCIDENT_ID
+clockwork notification claim INCIDENT_ID --delivery-id UUID
+~~~
+
+The receiving domain is an Email account routing destination. Configuration
+does not initialize, schedule or run EMT. It grants EMT the opportunity to own
+the initial notification for newly routed incidents. EMT's own emt/worker
+incidents always use the basic notification path.
+
+Clockwork stores version-one metadata in notification-routing.json under its
+private state root. It contains the configured domain, activation time, saved
+incident reply routes, grace deadlines and optional EMT delivery UUIDs. It
+contains no diagnostic text, received mail or credential. The schema-two
+database remains unchanged. Back up and recover this metadata with that
+database; a database-only backup does not preserve delegated ownership.
+
+The first notification inspection or sender visit snapshots an eligible
+incident's Reply-To and a deadline 120 seconds after its halt. Notification
+show can therefore create that metadata under the notification lock. It
+returns the basic subject/body, saved Reply-To and optional delivery ID.
+The basic rendering remains fixed; existing attempted notifications do not
+acquire new headers.
+
+EMT persists its exact outgoing email before claiming ownership. Claim uses
+the same lock as basic transport. It requires an unattempted pending
+notification with an EMT route and is idempotent for the same delivery UUID.
+An existing different claim or started basic send refuses the claim. A basic
+send begins only after the grace deadline and only when no EMT claim exists.
+
+Claims never expire. After a claim, EMT owns delivery and uncertainty recovery.
+Clockwork's incident notification_status and attempt counts still describe
+Clockwork transport only; read EMT for delegated acceptance. Configuration
+changes preserve saved routes and claims. No notification operation clears
+the scheduling halt.
+
+If basic submission starts first, EMT can send its report as a follow-up. The
+basic message's incident-specific reply address also routes to EMT. An agent
+failure or unavailable Nucleus does not prevent an unclaimed basic alert.
+There is no independent notification timer or final-delivery guarantee.
+
+Before enabling EMT, refresh all active generated plists to a Clockwork broker
+that understands this handoff. An older pinned broker ignores the routing
+sidecar. Do not run or restore old brokers with delegated ownership present.
+Preserve database, sidecar and EMT exchange state together during recovery;
+do not erase claims to force another send after uncertain acceptance.

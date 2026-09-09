@@ -152,3 +152,17 @@ and last attempt times, total attempted invocations, and an idempotency
 generation changed only by explicit duplicate-risk approval. Attempts and
 acceptance describe Email submission, not product completion or inbox delivery.
 No email body, provider response body, credential, or product output is stored.
+
+## Notification routing metadata
+
+The optional notification-routing.json file has version 1 and is protected by
+the notification lock. It records a domain, enable time and per-incident reply
+address, grace deadline and optional EMT delivery UUID. Writes replace a
+private file atomically and sync its directory. It stores no mail body.
+
+The SQLite schema remains two. Incident row insertion order supplies the feed
+cursor; retained rows are never deleted. Cursors belong to that retained
+history. Save a page cursor after its items are retained. Restore routing
+metadata with the database: losing a claim can duplicate an already submitted
+EMT notification. Incident notification_status still describes Clockwork
+transport; EMT records its own email acceptance.

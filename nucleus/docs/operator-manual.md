@@ -44,6 +44,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | Annals | Retained sources, library instructions, interpretations, and corpus history | [Annals](/Users/joey/rust/cell/annals/README.md) |
 | Conatus | Exact want intake and associations with accepted decisions | [Conatus](/Users/joey/rust/cell/conatus/README.md) |
 | Email | Fixed-recipient submission and received-account mail reads | [Email](/Users/joey/rust/cell/email/README.md) |
+| EMT | Clockwork incident correspondence and one-off agent interventions by email | [EMT](/Users/joey/rust/cell/emt/README.md) |
 | Mentor | Daily problems and independent answer critiques | [Mentor](/Users/joey/rust/cell/mentor/README.md) |
 | Paperboy | Daily reports from local conversation history | [Paperboy](/Users/joey/rust/cell/paperboy/README.md) |
 | Conversations | Local Codex task metadata and normalized message reads | [Conversations](/Users/joey/rust/cell/conversations/README.md) |
@@ -66,7 +67,7 @@ Clockwork --> registered product programs
 Conversations --> normal-user Codex App Server
 Krisis --> dedicated Annals decisions library --> Semantics and Conatus
 Cast --> Platter <-- CRM career entries
-Platter, Mentor, Paperboy --> Email --> Resend
+Platter, Mentor, Paperboy, EMT --> Email --> Resend
 installed product releases --> Chancery documentation
 ```
 
@@ -471,3 +472,34 @@ Use short active sentences and descriptive headings. State which records or
 operation a count, timestamp, or failure describes. Remove duplicate explanations,
 completed-work narratives, test-result reports, and obsolete change commentary.
 Git retains source history.
+
+## EMT incident correspondence
+
+EMT retains incident and exchange records with Nucleus job references. Agents
+discover Cell operations through Chancery, investigate freely and author their
+emails through emt send. Diagnosis is instructed to leave recovery changes for
+the user's reply. Each recognized reply starts one bounded intervention.
+Sender verification is explicitly deferred. Nucleus owns all execution and
+tool activity; EMT has no operation ledger or product adapters.
+
+EMT jobs use local execution and read-write workspace access. Their default
+cwd is the user's home; Cell source is supplied separately. This permits
+user-owned operational state and EMT mail writes, subject to Nucleus's actual
+sandbox. The agent must observe its deadline and the affected product's
+authority, maintenance and recovery contracts.
+
+Clockwork's optional EMT preference defers a basic alert for 120 seconds.
+EMT freezes its email before claiming initial-notification ownership. Claim
+and basic-send admission are serialized. A claim does not expire or clear
+the halt; EMT owns the delegated send outcome. A basic alert can precede a
+late diagnostic follow-up. EMT's own failure uses Clockwork's basic path.
+
+Refresh every active pinned Clockwork broker before enabling EMT preference.
+Keep Clockwork's version-one notification-routing metadata with its incident
+database during backup and recovery. Older brokers ignore claims. Read the
+Clockwork and EMT installed contracts before cutover or rollback.
+
+Hold and drain EMT before holding Nucleus during coordinated deployment.
+Already admitted exchanges retain their job and email identities; installers
+do not retry product work or clear halts. Disable emt/worker for program
+replacement and explicitly restore its previously enabled selection afterward.

@@ -147,3 +147,16 @@ Rollback across schema two requires the matching schema-one backup, sidecars,
 Clockwork/product releases, prior definitions and generated plists, plus full
 quiescence. Retain the failed store and newer incident evidence. A pre-halt
 backup must not erase a later halt or authorize resumed work.
+
+## EMT handoff compatibility
+
+Before configuring notification emt, refresh all active generated broker
+plists to this handoff-capable Clockwork release. Stable CLI replacement alone
+does not change those pinned brokers. No schema-two database migration is
+needed for the additive incident feed and version-one routing sidecar.
+
+Include notification-routing.json in state backups and recovery. Older
+brokers ignore that file. Do not roll back to them while notification claims
+remain: a claimed EMT message may already have been accepted. Preserve the
+database, routing metadata and EMT correspondence together. Disabling new
+EMT routing does not erase prior claims or authorize another initial send.

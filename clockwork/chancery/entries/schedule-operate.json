@@ -24,12 +24,14 @@
     "No operation retries a child, submits to Nucleus, stores a secret, interprets product output, or changes product durable state except through the child process itself.",
     "Schema-two runtime or reported abends retain failure evidence and apply the registered response; the default opens one durable incident and blocks future admission until explicit incident-bound approval.",
     "Each scheduling halt grants standing authority for one fixed personal plain-text Email notification. Broker visits attempt retained pending notifications independently of product admission, with bounded transport and provider idempotency limits.",
-    "Explicit migrate --backup DIR retains a private quiescent schema-one database and sidecar backup before the transactional schema-two upgrade; program deployment never migrates state."
+    "Explicit migrate --backup DIR retains a private quiescent schema-one database and sidecar backup before the transactional schema-two upgrade; program deployment never migrates state.",
+    "Optional EMT routing retains version-one reply routes and delivery claims in notification-routing.json. Unclaimed notifications wait 120 seconds; emt/worker always uses the basic path. A notification view can materialize the incident route under the transport lock."
   ],
   "authority": [
     "Clockwork owns definition and activation identity, stable selection, generated LaunchAgents, admission, direct-process supervision, runtime history, enforcement of declared failure policy, durable halt incidents, explicit continuation, and pause notification state.",
     "The product owns immutable failure configuration, the interpretation and reporting of domain failures, exact release and runner, durable work, locks, idempotency, secrets, output files, and item recovery. It stops successor admission after an abend and transfers any former failure-owned scheduling gate to Clockwork without clearing user or maintenance pauses.",
-    "launchd owns trigger delivery in the current user's login domain; the operator or product deployer owns authorization to register and switch a binding."
+    "launchd owns trigger delivery in the current user's login domain; the operator or product deployer owns authorization to register and switch a binding.",
+    "EMT owns agent diagnosis, correspondence and delegated email delivery. Clockwork retains only notification routing metadata and never invokes the agent or retains its diagnosis."
   ],
   "success": [
     "Registration succeeds only after the complete strict manifest, release root and ID, top-level launch images, hashes, permissions, literal process context, schedule, and supported policies validate without a partial write.",
@@ -47,7 +49,8 @@
     "A `running` row becomes `lost` only after its recorded broker and any recorded child are both demonstrably absent; elapsed time or a restarted observer alone is insufficient.",
     "Schema-two omission means halt-until-approved; only explicit continue-next-activation permits further scheduled work after an abend. Overlap, expected empty and waiting outcomes are normal. Binding selection, disable, compensation, restart, and reinstall preserve the halt.",
     "Pending alerts retry at most once per five minutes when a broker visits, with fixed payload and key and a 120-second invocation bound. After 23 hours from the first invocation or a backwards clock jump, status becomes uncertain and later notification retry requires explicit duplicate-risk approval. No independent timer or delivery SLA exists.",
-    "Schema-one definitions preserve their original digest and legacy failure semantics after database migration. failure_policy_active exposes this gap until a schema-two definition and current broker plist are selected under product maintenance. Preserve newer incident evidence during schema rollback."
+    "Schema-one definitions preserve their original digest and legacy failure semantics after database migration. failure_policy_active exposes this gap until a schema-two definition and current broker plist are selected under product maintenance. Preserve newer incident evidence during schema rollback.",
+    "Claims are durable and do not expire or clear a halt. Once claimed, EMT owns send recovery. Older pinned brokers ignore this new metadata; refresh all active brokers before enabling EMT and do not roll back to older brokers with outstanding claims."
   ],
   "privacy": [
     "Definitions retain local paths, hashes, literal arguments, schedule, output paths, and a scrubbed exact environment in private current-user state; secret-looking environment names are rejected and no secret belongs in any manifest field.",
@@ -130,6 +133,26 @@
     {
       "label": "Migrate quiescent schema-one state",
       "invocation": "/Users/joey/.local/bin/clockwork migrate --backup ABSOLUTE_NEW_DIRECTORY"
+    },
+    {
+      "label": "Read insertion-ordered incidents",
+      "invocation": "clockwork incident feed --after CURSOR --limit 100"
+    },
+    {
+      "label": "Configure EMT notification preference",
+      "invocation": "clockwork notification emt --receiving-domain DOMAIN"
+    },
+    {
+      "label": "Disable new EMT routing",
+      "invocation": "clockwork notification emt --disable"
+    },
+    {
+      "label": "Read initial notification ownership",
+      "invocation": "clockwork notification show INCIDENT_ID"
+    },
+    {
+      "label": "Claim initial notification for retained EMT mail",
+      "invocation": "clockwork notification claim INCIDENT_ID --delivery-id UUID"
     }
   ],
   "does_not_authorize": [
@@ -189,6 +212,10 @@
       {
         "status": "declared",
         "statement": "Binding receipts include halted_incident and failure_policy_active. Incident pages use items/has_more and expose halt identity, code, occurrence, activation and definition when available, creation and resumption times, and notification status/attempt times/count. Notification send reports attempted invocations, not accepted deliveries."
+      },
+      {
+        "status": "declared",
+        "statement": "Incident feed returns items, next_cursor and has_more in insertion order. Notification show returns basic subject/body, saved Reply-To and an optional EMT delivery ID. Incident notification_status continues to describe only Clockwork transport; delegated acceptance is read from EMT."
       }
     ],
     "data_semantics": [
@@ -259,6 +286,10 @@
       {
         "status": "declared",
         "statement": "Open incidents live independently of binding projection journals and survive switch, disable and rollback. Admission requires no open incident. Reports deduplicate by stable key and occurrence even after approval; product batch admission must stop at the failure because a report cannot retract already admitted work."
+      },
+      {
+        "status": "declared",
+        "statement": "Claim and basic-send admission share the notification lock. A claim requires an unattempted pending notification and is idempotent for the same delivery UUID. Configuration changes preserve existing routes and claims."
       }
     ],
     "operational_limits": [

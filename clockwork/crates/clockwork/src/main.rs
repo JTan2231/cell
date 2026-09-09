@@ -116,6 +116,12 @@ enum DefinitionCommand {
 
 #[derive(Debug, Subcommand)]
 enum IncidentCommand {
+    Feed {
+        #[arg(long, default_value_t = 0)]
+        after: u64,
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+    },
     List {
         key: Option<String>,
         #[arg(long, default_value_t = 20)]
@@ -128,10 +134,27 @@ enum IncidentCommand {
 
 #[derive(Debug, Subcommand)]
 enum NotificationCommand {
+    /// Configure EMT preference for new incidents. Existing routes and claims remain retained.
+    Emt {
+        #[arg(long, required_unless_present = "disable", conflicts_with = "disable")]
+        receiving_domain: Option<String>,
+        #[arg(long)]
+        disable: bool,
+    },
+    Show {
+        id: String,
+    },
+    Claim {
+        id: String,
+        #[arg(long)]
+        delivery_id: String,
+    },
     /// Attempt one due pause email; safe within the retained deduplication window.
     Send,
     /// Explicitly approve duplicate risk and retry an uncertain email after provider inspection.
-    Retry { id: String },
+    Retry {
+        id: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -369,6 +392,9 @@ async fn run(cli: Cli) -> Result<()> {
             }
         }
         Command::Incident { command } => match command {
+            IncidentCommand::Feed { after, limit } => {
+                emit(&store.incident_feed(after, limit)?, cli.json)
+            }
             IncidentCommand::List { key, limit } => {
                 if limit == 0 || limit == usize::MAX {
                     return Err(Error::new(
@@ -383,17 +409,35 @@ async fn run(cli: Cli) -> Result<()> {
             }
             IncidentCommand::Show { id } => emit(&store.incident(&id)?, cli.json),
         },
-        Command::Notification { command } => {
-            let selected = if let NotificationCommand::Retry { id } = command {
-                notification::approve_retry(&mut store, &layout, &id)?;
-                Some(id)
-            } else {
-                None
-            };
-            let attempted =
-                notification::send_selected(&mut store, &layout, selected.as_deref()).await?;
-            emit(&serde_json::json!({"attempted": attempted}), cli.json)
-        }
+        Command::Notification { command } => match command {
+            NotificationCommand::Emt {
+                receiving_domain, ..
+            } => {
+                notification::configure_emt(&layout, receiving_domain.as_deref())?;
+                emit(
+                    &serde_json::json!({"emt_enabled":receiving_domain.is_some()}),
+                    cli.json,
+                )
+            }
+            NotificationCommand::Show { id } => {
+                emit(&notification::view(&store, &layout, &id, None)?, cli.json)
+            }
+            NotificationCommand::Claim { id, delivery_id } => emit(
+                &notification::view(&store, &layout, &id, Some(&delivery_id))?,
+                cli.json,
+            ),
+            command => {
+                let selected = if let NotificationCommand::Retry { id } = command {
+                    notification::approve_retry(&mut store, &layout, &id)?;
+                    Some(id)
+                } else {
+                    None
+                };
+                let attempted =
+                    notification::send_selected(&mut store, &layout, selected.as_deref()).await?;
+                emit(&serde_json::json!({"attempted": attempted}), cli.json)
+            }
+        },
         Command::Abend {
             activation_id,
             code,

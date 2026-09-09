@@ -34,17 +34,41 @@ pub(crate) async fn send_selected(
         "UPDATE incidents SET notification_status='uncertain' WHERE notification_status='pending' AND first_attempt_at IS NOT NULL AND (first_attempt_at > ?1 OR ?1 - first_attempt_at >= ?2)",
         params![now, DEDUP_WINDOW],
     ).context("database_write_failed", "retain notifications outside the deduplication window")?;
-    let pending: Option<(String, String, i64)> = {
-        use rusqlite::OptionalExtension as _;
-        store.connection.query_row(
-            "SELECT id,email_cli,notification_generation FROM incidents WHERE notification_status='pending' AND (?2 IS NULL OR id = ?2) AND (last_attempt_at IS NULL OR last_attempt_at <= ?1) ORDER BY created_at,id LIMIT 1",
-            params![now - RETRY_INTERVAL, selected], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        ).optional().context("database_read_failed", "select pending pause notification")?
+    let candidates: Vec<(String, String, i64)> = {
+        let mut query = store.connection.prepare(
+            "SELECT id,email_cli,notification_generation FROM incidents WHERE notification_status='pending' AND (?2 IS NULL OR id = ?2) AND (last_attempt_at IS NULL OR last_attempt_at <= ?1) ORDER BY created_at,id",
+        ).context("database_read_failed", "prepare pending notifications")?;
+        query
+            .query_map(params![now - RETRY_INTERVAL, selected], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })
+            .context("database_read_failed", "read pending notifications")?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("database_read_failed", "decode pending notifications")?
     };
-    let Some((id, email_cli, generation)) = pending else {
+    let mut routing = Routing::load(layout)?;
+    let mut pending = None;
+    for (id, executable, generation) in candidates {
+        let incident = store.incident(&id)?;
+        let route = routing.route(layout, &incident)?;
+        if route
+            .as_ref()
+            .is_some_and(|route| route.delivery_id.is_some() || now < route.due_at)
+        {
+            continue;
+        }
+        pending = Some((
+            incident,
+            executable,
+            generation,
+            route.and_then(|route| route.reply_to),
+        ));
+        break;
+    }
+    let Some((incident, email_cli, generation, reply_to)) = pending else {
         return Ok(0);
     };
-    let incident = store.incident(&id)?;
+    let id = incident.id.clone();
     let (subject, body) = payload(&incident);
     store.connection.execute(
         "UPDATE incidents SET first_attempt_at=COALESCE(first_attempt_at,?2),last_attempt_at=?2,notification_attempts=notification_attempts+1 WHERE id=?1 AND notification_status='pending'",
@@ -52,7 +76,15 @@ pub(crate) async fn send_selected(
     ).context("database_write_failed", "record notification attempt before transport")?;
     // The fixed rendering version and stored incident metadata freeze this payload.
     let idempotency_key = format!("clockwork/pause/{id}/{generation}/v1");
-    let accepted = send_email(&email_cli, layout, &idempotency_key, &subject, &body).await;
+    let accepted = send_email(
+        &email_cli,
+        layout,
+        &idempotency_key,
+        &subject,
+        &body,
+        reply_to.as_deref(),
+    )
+    .await;
     if accepted {
         store
             .connection
@@ -115,8 +147,12 @@ async fn send_email(
     idempotency_key: &str,
     subject: &str,
     body: &str,
+    reply_to: Option<&str>,
 ) -> bool {
     let mut command = Command::new(executable);
+    if let Some(address) = reply_to {
+        command.args(["--reply-to", address]);
+    }
     command
         .args(["--idempotency-key", idempotency_key, "--", subject, "-"])
         .env_clear()
@@ -155,6 +191,209 @@ async fn send_email(
         let _ = child.kill().await;
         false
     }
+}
+
+// Versioned metadata beside the unchanged schema-two incident database.
+// Diagnostic text and incoming mail remain in EMT.
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Routing {
+    version: u32,
+    domain: Option<String>,
+    enabled_at: i64,
+    routes: std::collections::BTreeMap<String, Route>,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Route {
+    reply_to: Option<String>,
+    due_at: i64,
+    delivery_id: Option<String>,
+}
+
+impl Routing {
+    fn load(layout: &Layout) -> Result<Self> {
+        let path = layout.state_root().join("notification-routing.json");
+        match std::fs::read(&path) {
+            Ok(bytes) => {
+                let value: Self = serde_json::from_slice(&bytes)
+                    .context("notification_routing_invalid", "read notification routing")?;
+                if value.version != 1 {
+                    return Err(Error::new(
+                        "notification_routing_invalid",
+                        "unsupported notification routing version",
+                    ));
+                }
+                Ok(value)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self {
+                version: 1,
+                ..Self::default()
+            }),
+            Err(error) => Err(Error::new(
+                "notification_routing_unavailable",
+                error.to_string(),
+            )),
+        }
+    }
+
+    fn save(&self, layout: &Layout) -> Result<()> {
+        use std::io::Write as _;
+        use std::os::unix::fs::OpenOptionsExt as _;
+        let temporary = layout
+            .state_root()
+            .join(format!(".notification-routing-{}", uuid::Uuid::now_v7()));
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temporary)
+            .context(
+                "notification_routing_write_failed",
+                "prepare notification routing",
+            )?;
+        file.write_all(&serde_json::to_vec(self).context(
+            "notification_routing_invalid",
+            "encode notification routing",
+        )?)
+        .context(
+            "notification_routing_write_failed",
+            "write notification routing",
+        )?;
+        file.sync_all().context(
+            "notification_routing_write_failed",
+            "sync notification routing",
+        )?;
+        std::fs::rename(
+            &temporary,
+            layout.state_root().join("notification-routing.json"),
+        )
+        .context(
+            "notification_routing_write_failed",
+            "commit notification routing",
+        )?;
+        std::fs::File::open(layout.state_root())
+            .and_then(|file| file.sync_all())
+            .context(
+                "notification_routing_write_failed",
+                "sync routing directory",
+            )
+    }
+
+    fn route(
+        &mut self,
+        layout: &Layout,
+        incident: &clockwork::api::IncidentRecord,
+    ) -> Result<Option<Route>> {
+        if let Some(route) = self.routes.get(&incident.id) {
+            return Ok(Some(route.clone()));
+        }
+        let Some(domain) = &self.domain else {
+            return Ok(None);
+        };
+        if incident.key == "emt/worker"
+            || incident.created_at < self.enabled_at
+            || incident.first_attempt_at.is_some()
+        {
+            return Ok(None);
+        }
+        let route = Route {
+            reply_to: Some(format!("emt.{}@{}", incident.id.replace('-', ""), domain)),
+            due_at: incident.created_at.saturating_add(120),
+            delivery_id: None,
+        };
+        self.routes.insert(incident.id.clone(), route.clone());
+        self.save(layout)?;
+        Ok(Some(route))
+    }
+}
+
+pub(crate) fn configure_emt(layout: &Layout, domain: Option<&str>) -> Result<()> {
+    let Some(_lock) = KeyLock::try_acquire_notifications(layout)? else {
+        return Err(Error::new(
+            "notification_busy",
+            "another notification operation is in progress",
+        ));
+    };
+    if let Some(domain) = domain
+        && (domain.len() + 37 > 254
+            || !domain.contains('.')
+            || domain.split('.').any(|part| {
+                part.is_empty()
+                    || part.len() > 63
+                    || part.starts_with('-')
+                    || part.ends_with('-')
+                    || !part
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            }))
+    {
+        return Err(Error::new(
+            "receiving_domain_invalid",
+            "invalid EMT receiving domain",
+        ));
+    }
+    let mut routing = Routing::load(layout)?;
+    if routing.domain.as_deref() != domain {
+        routing.domain = domain.map(str::to_owned);
+        routing.enabled_at = now_unix()?;
+        routing.save(layout)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn view(
+    store: &Store,
+    layout: &Layout,
+    id: &str,
+    delivery_id: Option<&str>,
+) -> Result<clockwork::api::NotificationView> {
+    let Some(_lock) = KeyLock::try_acquire_notifications(layout)? else {
+        return Err(Error::new(
+            "notification_busy",
+            "another notification operation is in progress",
+        ));
+    };
+    let incident = store.incident(id)?;
+    let mut routing = Routing::load(layout)?;
+    let mut route = routing.route(layout, &incident)?;
+    if let Some(delivery) = delivery_id {
+        if uuid::Uuid::parse_str(delivery).is_err() {
+            return Err(Error::new(
+                "delivery_id_invalid",
+                "delivery ID must be a UUID",
+            ));
+        }
+        let current = route.as_mut().ok_or_else(|| {
+            Error::new(
+                "notification_not_delegatable",
+                "this incident uses a basic notification",
+            )
+        })?;
+        if current.delivery_id.as_deref() != Some(delivery) {
+            if current.delivery_id.is_some()
+                || incident.first_attempt_at.is_some()
+                || incident.notification_status != "pending"
+            {
+                return Err(Error::new(
+                    "notification_not_delegatable",
+                    "initial notification already belongs to another delivery",
+                ));
+            }
+            current.delivery_id = Some(delivery.to_owned());
+            routing.routes.insert(id.to_owned(), current.clone());
+            routing.save(layout)?;
+        }
+    }
+    let (subject, body) = payload(&incident);
+    Ok(clockwork::api::NotificationView {
+        incident_id: id.to_owned(),
+        delivery_id: route.as_ref().and_then(|route| route.delivery_id.clone()),
+        reply_to: route.and_then(|route| route.reply_to),
+        subject,
+        body,
+    })
 }
 
 #[cfg(test)]

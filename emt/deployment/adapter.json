@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "product": "emt",
+  "application": "EMT",
+  "dependencies": ["email", "nucleus", "clockwork"],
+  "maintenance_products": ["nucleus"],
+  "description": "Install EMT with its worker disabled and admitted exchanges drained.",
+  "adapter_binary": "emt-install"
+}

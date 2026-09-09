@@ -1,0 +1,207 @@
+{
+  "id": "emt.development.change",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change EMT incident response",
+  "summary": "Change EMT while keeping incident correspondence and Nucleus references small, investigation agent-driven, and product recovery in supported interfaces.",
+  "use_when": [
+    "The requested outcome matches this EMT operation and its standing or explicit authority."
+  ],
+  "do_not_use_when": [
+    "The user needs another recipient, sender authentication, continuous repair, or a replacement for product-owned recovery."
+  ],
+  "outcome": "A scoped source and contract change with validation and installation status stated separately.",
+  "interfaces": [
+    {
+      "label": "Read installed shared manual",
+      "invocation": "nucleus manual"
+    },
+    {
+      "label": "Read maintained terminology",
+      "invocation": "semantics repository show cell"
+    },
+    {
+      "label": "Run authorized routine validation",
+      "invocation": "./ci.sh"
+    }
+  ],
+  "effects": [
+    "Changes source and documentation only. CI, installation, publication and live exchanges remain separately authorized."
+  ],
+  "authority": [
+    "EMT owns correspondence and its transport progress. Nucleus owns execution; products own results."
+  ],
+  "success": [
+    "Interpret the exact operation receipt. A send succeeds at provider acceptance; an intervention needs product evidence."
+  ],
+  "failure_and_recovery": [
+    "Keep exact pending request and mail identities. Preserve unknown outcomes. Do not create another agent attempt automatically. Use the complete manual for cancellation, deadlines, maintenance and notification recovery."
+  ],
+  "privacy": [
+    "Correspondence and pointers remain private and retained. Nucleus and email providers keep separate copies. Logs and ordinary status omit bodies."
+  ],
+  "dependencies": [
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "email.message.send",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "email.message.receive",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "does_not_authorize": [
+    "Unrequested recipients, unrelated mutations, automatic failed-job replacement, or clearing a newer Clockwork halt."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user and authorized local EMT worker or operator."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Compatible installed Clockwork feed and notification handoff, Email send/receive, and Nucleus local-execution capabilities; configured receiving account and explicit operation authority."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Incident identity and metadata, installed contract and source pointers, current received email and preceding correspondence. Configuration selects absolute provider paths, Cell and agent directories and an accepted model."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Incident and exchange reads expose retained correspondence and Nucleus IDs. Status and worker output expose counts and waiting codes. Email text is agent-authored except deterministic failure notices."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "An exchange is correspondence, not an operation ledger. Nucleus job completion is runtime evidence. Product state determines intervention success; Email receipts prove provider acceptance only."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Clockwork IDs identify incidents, provider IDs deduplicate received mail, RFC Message-IDs thread replies, and UUID exchange/job IDs correlate Nucleus. Deadlines use Unix seconds; content limits use bytes."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Bounded pages advance only after capture; cursors do not acknowledge provider mail."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No inbox completeness, authenticated sender identity, model accuracy, timer latency or final-delivery deadline is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Agents use Nucleus read-write workspace access and local execution. Default cwd is the user home. They discover public operations through Chancery; EMT has no operation adapter layer. Diagnosis-only behavior is an instruction. Sender verification is deferred."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Persist exact request before submission; retain job ID and digest after admission. Freeze outgoing mail before claiming initial delivery. One basic sender or EMT claim owns the initial alert. No automatic replacement agent job. Uncertain external actions require inspection through Nucleus and the owning product."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "One agent; 100 incidents and four receiving pages per pass; 300/900-second assignments; 64 KiB email bodies; two transport invocations at least five minutes apart within 23 hours. Worker interval 15 seconds and activation timeout 300 seconds."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "EMT schema one and Clockwork routing sidecar version one are separate from release versions. Old pinned Clockwork brokers must be replaced before routing is enabled."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future support lifetime or retention horizon is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Clockwork owns incidents, notification ownership and worker scheduling.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus owns agent invocation and durable activity.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Email submits fixed-recipient messages.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "Email supplies received-account observations.",
+        "target": "email",
+        "kind": "data",
+        "contract": "email.message.receive"
+      },
+      {
+        "status": "declared",
+        "statement": "Agents select the affected product contracts through Chancery; those products own recovery and success.",
+        "target": "affected-product",
+        "kind": "authority"
+      }
+    ]
+  },
+  "manual": "manuals/development-change.md",
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read EMT instructions, maintained Cell terminology and the affected provider contracts.",
+    "Make the scoped source and contract change while retaining incident exchanges and Nucleus references.",
+    "Run authorized routine CI and state validation and installation outcomes separately."
+  ],
+  "checkpoints": [
+    "Nucleus remains the owner of agent execution and activity.",
+    "Agents use supported product interfaces; EMT retains no operation ledger or structured diagnosis schema.",
+    "Uncertain requests and email keep their exact identities."
+  ],
+  "adaptation": [
+    "Update owning contracts and the shared Nucleus manual when public boundaries change.",
+    "Use the Cell semantic repository until EMT is registered."
+  ],
+  "stop_when": [
+    "The change requires unapproved live exchanges, release publication or installation.",
+    "The requested scope or retry limit would be exceeded."
+  ]
+}

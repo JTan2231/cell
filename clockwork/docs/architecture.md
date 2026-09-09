@@ -260,3 +260,13 @@ controls whether the gate remains closed. The fixed payload, five-minute retry
 spacing, 120-second process bound, and 23-hour deduplication horizon constrain
 notification recovery; later retries need explicit duplicate-risk approval.
 Use the CLI contract for commands, fields, privacy, and upgrade requirements.
+
+## EMT boundary
+
+EMT consumes the insertion-ordered incident feed and owns agent diagnosis,
+correspondence and delegated email transport. Clockwork retains only optional
+notification routes, grace deadlines and delivery ownership. It runs no agent
+and stores no diagnosis. Claim and basic-send admission share the notification
+lock. EMT must persist its email before claiming it. Unclaimed basic alerts
+remain available after 120 seconds; claims do not expire. EMT's own worker
+failure uses only the basic path.

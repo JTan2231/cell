@@ -3442,3 +3442,24 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
+[[package]]
+name = "emt"
+version = "0.1.0"
+dependencies = [
+ "cell-install",
+ "cell-maintenance",
+ "clap",
+ "clockwork",
+ "email",
+ "fs2",
+ "hex",
+ "nucleus-client",
+ "nucleus-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "time",
+ "tokio",
+ "uuid",
+]

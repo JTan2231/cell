@@ -82,6 +82,24 @@ pub struct IncidentRecord {
     pub notification_attempts: u32,
 }
 
+/// Insertion-ordered incident page. Cursors belong to this retained store.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IncidentFeed {
+    pub items: Vec<IncidentRecord>,
+    pub next_cursor: u64,
+    pub has_more: bool,
+}
+
+/// Initial notification ownership and the exact basic fallback message.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationView {
+    pub incident_id: String,
+    pub delivery_id: Option<String>,
+    pub reply_to: Option<String>,
+    pub subject: String,
+    pub body: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Schedule {
@@ -506,6 +524,47 @@ impl Client {
     }
     pub fn doctor(&self) -> Result<DoctorReport, Error> {
         self.invoke(&["doctor".as_ref()])
+    }
+
+    pub fn incident_feed(&self, after: u64, limit: usize) -> Result<IncidentFeed, Error> {
+        self.invoke(&[
+            "incident".as_ref(),
+            "feed".as_ref(),
+            "--after".as_ref(),
+            after.to_string().as_ref(),
+            "--limit".as_ref(),
+            limit.to_string().as_ref(),
+        ])
+    }
+
+    pub fn notification(&self, id: &str) -> Result<NotificationView, Error> {
+        self.invoke(&["notification".as_ref(), "show".as_ref(), id.as_ref()])
+    }
+
+    pub fn claim_notification(&self, id: &str, delivery: &str) -> Result<NotificationView, Error> {
+        self.invoke(&[
+            "notification".as_ref(),
+            "claim".as_ref(),
+            id.as_ref(),
+            "--delivery-id".as_ref(),
+            delivery.as_ref(),
+        ])
+    }
+
+    pub fn configure_emt(&self, domain: Option<&str>) -> Result<serde_json::Value, Error> {
+        match domain {
+            Some(domain) => self.invoke(&[
+                "notification".as_ref(),
+                "emt".as_ref(),
+                "--receiving-domain".as_ref(),
+                domain.as_ref(),
+            ]),
+            None => self.invoke(&[
+                "notification".as_ref(),
+                "emt".as_ref(),
+                "--disable".as_ref(),
+            ]),
+        }
     }
 }
 

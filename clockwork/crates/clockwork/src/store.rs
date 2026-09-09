@@ -727,6 +727,44 @@ impl Store {
             .context("database_read_failed", "decode failure incidents")
     }
 
+    pub(crate) fn incident_feed(
+        &self,
+        after: u64,
+        limit: usize,
+    ) -> Result<clockwork::api::IncidentFeed> {
+        if limit == 0 || limit > 1000 {
+            return Err(Error::new(
+                "limit_invalid",
+                "feed limit must be 1 through 1000",
+            ));
+        }
+        let cursor = i64::try_from(after)
+            .map_err(|_| Error::new("cursor_invalid", "invalid incident cursor"))?;
+        let select = INCIDENT_SELECT.replace(" FROM incidents", ", rowid FROM incidents");
+        let mut query = self
+            .connection
+            .prepare(&format!(
+                "{select} WHERE rowid > ?1 ORDER BY rowid LIMIT ?2"
+            ))
+            .context("database_read_failed", "prepare incident feed")?;
+        let rows = query
+            .query_map(
+                params![cursor, i64::try_from(limit + 1).unwrap_or(1001)],
+                |row| Ok((incident_from_row(row)?, row.get::<_, i64>(12)?)),
+            )
+            .context("database_read_failed", "read incident feed")?;
+        let mut records = rows
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("database_read_failed", "decode incident feed")?;
+        let has_more = records.len() > limit;
+        records.truncate(limit);
+        Ok(clockwork::api::IncidentFeed {
+            next_cursor: records.last().map_or(after, |row| row.1.cast_unsigned()),
+            items: records.into_iter().map(|row| row.0).collect(),
+            has_more,
+        })
+    }
+
     pub(crate) fn report_abend(
         &mut self,
         activation_id: &str,

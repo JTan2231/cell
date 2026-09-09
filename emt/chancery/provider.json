@@ -1,0 +1,42 @@
+{
+  "schema_version": 3,
+  "provider": {
+    "id": "emt",
+    "name": "EMT",
+    "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "EMT owns incident tracking, retained email exchanges, Nucleus correlation, frozen outgoing mail, worker admission and its installation."
+    ],
+    "not_authoritative_for": [
+      "Clockwork owns scheduling halts and notification claims. Nucleus owns agent execution and activity. Email owns transport and credentials. Products own intervention results."
+    ],
+    "inventory": {
+      "covers": [
+        "EMT incident diagnosis, email-directed interventions, exchange inspection, mail submission, configuration, worker, schedule, maintenance and installation operations."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help/version, external sender authentication, provider deletion, final inbox delivery and product-domain recovery implementations."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Current-user private service. Explicit activation authorizes incident diagnosis and mail. Recognized replies authorize one-off interventions; sender verification is deferred. Agents use local execution and the configured read-write workspace."
+    ],
+    "shared_privacy_and_retention": [
+      "Retains incidents and correspondence without automatic deletion. Job IDs point to Nucleus activity; no operation ledger or tool-output mirror. Providers retain separate copies."
+    ],
+    "compatibility_and_retirement": [
+      "EMT release and schema one are independent of provider contracts. Exact pending requests and frozen emails survive restarts. Unsupported schema fails. Installation does not activate work."
+    ],
+    "operational_limits": [
+      "One agent assignment at a time, one 100-incident feed page and four 100-message receiving pages per pass. Five-minute diagnosis and fifteen-minute reply deadlines. No timer or delivery latency guarantee."
+    ]
+  },
+  "entries": [
+    "entries/incident-respond.json",
+    "entries/installation-operate.json",
+    "entries/development-change.json"
+  ]
+}

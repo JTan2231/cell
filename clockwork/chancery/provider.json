@@ -7,7 +7,8 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Clockwork owns immutable scheduled-activation definitions, stable binding selection, generated Clockwork LaunchAgents, overlap admission, direct-child supervision, runtime activation history, durable failure halts and their email notification state."
+      "Clockwork owns immutable scheduled-activation definitions, stable binding selection, generated Clockwork LaunchAgents, overlap admission, direct-child supervision, runtime activation history, durable failure halts and their email notification state.",
+      "Clockwork owns the optional initial-notification handoff to EMT and insertion-ordered incident discovery. It retains routing and ownership metadata without agent or correspondence bodies."
     ],
     "not_authoritative_for": [
       "Each product owns artifact publication, durable work, locks, retries, idempotency, secrets, logs, recovery, and domain success. launchd owns timer delivery under the current macOS user session."
