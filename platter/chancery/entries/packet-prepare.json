@@ -27,6 +27,10 @@
       "invocation": "platter prepare JOB_ID"
     },
     {
+      "label": "Restart incomplete preparation without prior model context",
+      "invocation": "platter prepare JOB_ID --fresh"
+    },
+    {
       "label": "Prepare the daily ready pool",
       "invocation": "platter prepare-daily"
     },
@@ -90,7 +94,9 @@
     "A consistent schema-two SQLite backup contains the complete retained Platter library. Schema-one file-backed state requires maintained migration.",
     "Exact pending Nucleus requests are retained. Successful submissions resolve to immutable run content; Platter stores no separate tool-receipt ledger.",
     "Accepted content survives later execution failure. Uncertain sends remain held and accepted editions are not resent. There is no automatic new model attempt, direct Codex fallback or ambiguous-send reconciliation.",
-    "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. A preparation/export failure leaves its existing retained progress and stops before send; individual posting failures keep the existing preparation policy."
+    "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. A preparation/export failure leaves its existing retained progress and stops before send; individual posting failures keep the existing preparation policy.",
+    "An explicitly authorized prepare JOB_ID --fresh requires an eligible incomplete latest run without an accepted resume and terminal or absent prior model jobs. It captures source inputs again and creates new run and model-job IDs without copying prior outputs, requests, transcripts or error feedback. Older runs remain retained.",
+    "Renderer executable or execution failure requests cancellation of the exact model job and stops preparation, including the daily run. It is not model content feedback. Repair the environment before an explicit fresh preparation; content and layout rejection still allows revision in the current job."
   ],
   "privacy": [
     "Private state includes career history, preferences, contact details, source text and tailored resumes. Keep it outside the repository and exclude it from commits.",
@@ -225,6 +231,10 @@
       {
         "status": "declared",
         "statement": "One CLI admission lock spans run-daily preparation, preview and send. An existing edition bypasses preparation and follows the retained send rules. Empty days create no edition or email and may be tried by a later invocation. The captured date stays fixed across midnight; missed dates are not backfilled."
+      },
+      {
+        "status": "declared",
+        "statement": "An explicitly authorized prepare JOB_ID --fresh requires an eligible incomplete latest run without an accepted resume and terminal or absent prior model jobs. It captures source inputs again and creates new run and model-job IDs without copying prior outputs, requests, transcripts or error feedback. Older runs remain retained."
       }
     ],
     "operational_limits": [
@@ -235,6 +245,10 @@
       {
         "status": "unspecified",
         "statement": "No preparation-latency, completion-time, delivery-time or throughput guarantee exists. Activation is a separately authorized Clockwork operation; stored 09:00 fields do not control it."
+      },
+      {
+        "status": "declared",
+        "statement": "PDF inspection keeps the same Python user-package lookup as doctor and disables bytecode writes. Tectonic uses a temporary home. Renderer executable or execution failures stop daily preparation and request exact-job cancellation; content and layout errors remain model revision feedback."
       }
     ],
     "compatibility_and_evolution": [

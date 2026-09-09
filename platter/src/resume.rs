@@ -16,6 +16,19 @@ const LIST_START: &str = "\\resumeItemListStart";
 const LIST_END: &str = "\\resumeItemListEnd";
 const ITEM: &str = "\\resumeItem{";
 
+#[derive(Debug)]
+pub(crate) struct RendererFailure;
+
+impl std::fmt::Display for RendererFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            "resume renderer failed; repair its environment before starting fresh preparation",
+        )
+    }
+}
+
+impl std::error::Error for RendererFailure {}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResumeTemplate {
@@ -173,12 +186,14 @@ impl ResumeTemplate {
              \\ifdefined\\pdfglyphtounicode\\else\\def\\pdfglyphtounicode#1#2{}\\fi\n\
              \\input{resume.tex}\n",
         )?;
-        let mut compiler = Command::new(crate::readiness::renderer("tectonic")?);
+        let mut compiler =
+            Command::new(crate::readiness::renderer("tectonic").context(RendererFailure)?);
         compiler
             .args(["--untrusted", "--keep-logs", "--outdir", ".", "render.tex"])
             .current_dir(build.path());
         isolate_environment(&mut compiler, build.path())?;
-        run_checked(&mut compiler, build.path(), "tectonic")?;
+        compiler.env("HOME", build.path().join("cache"));
+        run_checked(&mut compiler, build.path(), "tectonic").context(RendererFailure)?;
         let log = fs::read_to_string(build.path().join("render.log"))?;
         ensure!(
             !log.contains("Overfull \\hbox") && !log.contains("Overfull \\vbox"),
@@ -189,7 +204,8 @@ impl ResumeTemplate {
             "resume contains characters the fixed template cannot render; revise Jackson text"
         );
 
-        let mut inspect = Command::new(crate::readiness::renderer("python3")?);
+        let mut inspect =
+            Command::new(crate::readiness::renderer("python3").context(RendererFailure)?);
         inspect
             .args([
                 "-c",
@@ -198,7 +214,10 @@ impl ResumeTemplate {
             ])
             .current_dir(build.path());
         isolate_environment(&mut inspect, build.path())?;
-        let inspection = run_checked(&mut inspect, build.path(), "pdf-inspection")?;
+        // Preserve Python's user-package lookup, as in doctor. Temporary files
+        // remain private and Python bytecode writes stay disabled.
+        let inspection =
+            run_checked(&mut inspect, build.path(), "pdf-inspection").context(RendererFailure)?;
         let PdfInspection { pages, text } =
             serde_json::from_str(&inspection).context("read PDF inspection result")?;
         ensure!(
@@ -337,7 +356,6 @@ fn isolate_environment(command: &mut Command, directory: &Path) -> Result<()> {
     let cache = directory.join("cache");
     create_private_dir(&cache)?;
     for name in [
-        "HOME",
         "TMPDIR",
         "TMP",
         "TEMP",

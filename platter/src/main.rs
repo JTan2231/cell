@@ -47,6 +47,9 @@ enum Command {
     },
     Prepare {
         job_id: String,
+        /// Restart incomplete preparation with new source capture and no prior model context.
+        #[arg(long)]
+        fresh: bool,
     },
     PrepareDaily,
     /// Prepare, freeze and send today's edition with applicable send authorization.
@@ -142,8 +145,12 @@ async fn run() -> Result<()> {
             workflow::initialize(&root, &resume)?;
             println!("initialized: {}", root.display());
         }
-        Command::Prepare { job_id } => {
-            let result = workflow::prepare(&root, &job_id, deadline).await?;
+        Command::Prepare { job_id, fresh } => {
+            let result = if fresh {
+                workflow::prepare_fresh(&root, &job_id, deadline).await?
+            } else {
+                workflow::prepare(&root, &job_id, deadline).await?
+            };
             println!("{}: {}", result.id, result.status);
         }
         Command::PrepareDaily => {

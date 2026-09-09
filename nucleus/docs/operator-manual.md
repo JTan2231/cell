@@ -408,6 +408,13 @@ private prompts, sources, and tool values.
 | Runtime completion without the required record | Follow the product's failure policy. |
 | Unresolved deployment hold | Use that product's retained recovery procedure. |
 
+Platter cancels its exact model job and stops daily preparation on a renderer
+execution failure. After repair and terminal job status, an authorized
+`platter prepare CAST_JOB_ID --fresh` creates new source capture and model jobs.
+It retains old runs without passing their outputs or error context to the new
+preparation. See [Platter preparation](/Users/joey/rust/cell/platter/chancery/manuals/packet-prepare.md)
+for eligibility and accepted-resume limits.
+
 After a shared change, verify matching programs, service status, exact harness,
 account access, and affected product readiness. Release only holds and pauses
 owned by the operation. Preserve pre-existing disabled schedules.

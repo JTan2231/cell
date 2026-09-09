@@ -35,6 +35,24 @@ pub fn config(root: &Path) -> Result<Config> {
 }
 
 pub async fn prepare(root: &Path, job_id: &str, deadline: Option<Instant>) -> Result<PacketRecord> {
+    prepare_selected(root, job_id, deadline, false).await
+}
+
+/// Start new source capture and model jobs for an incomplete, settled preparation.
+pub async fn prepare_fresh(
+    root: &Path,
+    job_id: &str,
+    deadline: Option<Instant>,
+) -> Result<PacketRecord> {
+    prepare_selected(root, job_id, deadline, true).await
+}
+
+async fn prepare_selected(
+    root: &Path,
+    job_id: &str,
+    deadline: Option<Instant>,
+    fresh: bool,
+) -> Result<PacketRecord> {
     let settings = config(root)?;
     let store = Store::open(root)?;
     let snapshot = source::discovery(&settings.cast_executable)?;
@@ -48,7 +66,7 @@ pub async fn prepare(root: &Path, job_id: &str, deadline: Option<Instant>) -> Re
         .iter()
         .find(|company| company.id == job.company_id)
         .map_or("Unknown employer", |company| company.name.as_str());
-    prepare_job(&settings, &store, job, company, deadline).await
+    prepare_job(&settings, &store, job, company, deadline, fresh).await
 }
 
 #[allow(clippy::too_many_lines)] // Keep the ordered preparation stages together.
@@ -58,6 +76,7 @@ async fn prepare_job(
     job: &Job,
     company: &str,
     deadline: Option<Instant>,
+    fresh: bool,
 ) -> Result<PacketRecord> {
     ensure!(
         source::eligible(job),
@@ -68,9 +87,34 @@ async fn prepare_job(
         store.is_eligible(&opportunity)?,
         "job is ineligible for selection"
     );
-    let existing = store
+    let mut existing = store
         .packet(&opportunity)?
         .filter(|record| matches!(record.status.as_str(), "preparing" | "ready" | "deferred"));
+    if fresh {
+        let prior = existing
+            .as_ref()
+            .context("no incomplete preparation to restart")?;
+        ensure!(
+            matches!(prior.status.as_str(), "preparing" | "deferred")
+                && store.run_artifact(&prior.id, "resume-content")?.is_none()
+                && store.run_artifact(&prior.id, "resume-pdf")?.is_none(),
+            "fresh preparation requires an incomplete run without an accepted resume"
+        );
+        let client = nucleus_client::NucleusClient::for_current_user()?;
+        for stage in [Stage::Brief, Stage::Resume] {
+            if let Some(request) = agent::retained_request(store, &prior.id, stage)? {
+                match client.get_job(&request.id).await {
+                    Ok(job) => ensure!(
+                        job.summary.state.is_terminal(),
+                        "prior model job is still active"
+                    ),
+                    Err(nucleus_client::ClientError::Api { status: 404, .. }) => {}
+                    Err(error) => return Err(error.into()),
+                }
+            }
+        }
+        existing = None;
+    }
     let record = if let Some(record) = existing {
         if record.status != "preparing" {
             return Ok(record);
@@ -201,7 +245,10 @@ pub async fn prepare_daily(root: &Path, deadline: Option<Instant>) -> Result<Vec
             .iter()
             .find(|c| c.id == job.company_id)
             .map_or("Unknown employer", |c| c.name.as_str());
-        if let Err(error) = prepare_job(&settings, &store, job, company, deadline).await {
+        if let Err(error) = prepare_job(&settings, &store, job, company, deadline, false).await {
+            if error.is::<crate::resume::RendererFailure>() {
+                return Err(error);
+            }
             eprintln!("deferred {}: {error}", job.id);
         }
     }

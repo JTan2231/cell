@@ -190,7 +190,7 @@ async fn run_stage_impl(
 ) -> Result<StageResult> {
     let mut state = load_or_create(store, kind, inputs)?;
     let operation = run_stage_inner(client, store, &mut state, validator);
-    if let Some(deadline) = deadline {
+    let result = if let Some(deadline) = deadline {
         if let Ok(result) = tokio::time::timeout(
             deadline.saturating_duration_since(Instant::now()),
             operation,
@@ -206,7 +206,21 @@ async fn run_stage_impl(
         }
     } else {
         operation.await
+    };
+    if result
+        .as_ref()
+        .is_err_and(anyhow::Error::is::<crate::resume::RendererFailure>)
+    {
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            client.cancel_job(&state.request.id),
+        )
+        .await
+        .context("renderer failed; exact Nucleus job cancellation timed out")
+        .context(crate::resume::RendererFailure)?
+        .context(crate::resume::RendererFailure)?;
     }
+    result
 }
 
 pub fn retained_request(store: &Store, run: &str, selected: Stage) -> Result<Option<JobRequestV1>> {
@@ -702,6 +716,7 @@ fn bind_tool_result_validated(
     );
     let (value, is_error) = match execute_tool(state, call, validator) {
         Ok(value) => (value, false),
+        Err(error) if error.is::<crate::resume::RendererFailure>() => return Err(error),
         Err(error) => (json!({"error":format!("{error:#}")}), true),
     };
     let response = ToolResultV1 {

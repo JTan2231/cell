@@ -17,6 +17,7 @@ root; it cannot create an independent live library that bypasses maintenance.
 ```sh
 platter init --resume /absolute/original-resume.tex
 platter prepare CAST_JOB_ID
+platter prepare CAST_JOB_ID --fresh
 platter prepare-daily
 platter preview YYYY-MM-DD
 platter status
@@ -81,6 +82,14 @@ characters, extractable text, the Jackson heading and one-page layout before
 acceptance. Each bullet retains its captured career-entry references.
 A run becomes ready only with accepted brief/resume content and retained PDF.
 
+For an authorized restart after a failed or cancelled preparation, use
+`prepare CAST_JOB_ID --fresh`. The latest run must be incomplete, with no
+accepted resume, and its model jobs must be terminal or absent. The job must
+remain eligible. This operation captures the posting, career entries and
+template again. It creates a new run and new model jobs without copying prior
+outputs, requests, transcripts or error feedback. Older runs and accepted
+artifacts remain retained. Ordinary preparation still resumes retained work.
+
 Rendering uses Tectonic and Python 3 with pypdf. Absolute `PLATTER_TECTONIC` and
 `PLATTER_PYTHON` overrides are supported; otherwise resolution checks
 `~/.local/bin`, `/usr/local/bin`, `/opt/homebrew/bin` and `/usr/bin`.
@@ -89,6 +98,12 @@ Platter root and are removed after rendering; abandoned renderer directories
 are removed on a later rendering invocation. This is not memory-only rendering.
 SQLite journals stay with its database and query temporary storage uses memory.
 Installed programs, packages and system fonts remain separate dependencies.
+PDF inspection preserves Python's user-package lookup, as in `doctor`, and
+disables bytecode writes. Tectonic uses a temporary home. A renderer executable
+or execution failure stops preparation and the daily run, and requests
+cancellation of the exact model job. It is not sent to the model as content
+feedback. Repair the dependency before an explicit fresh preparation. Content
+and layout rejection still allows revision within the current model job.
 
 There is no candidate or token budget. An optional
 `--stop-after-seconds SECONDS` on preparation requests cancellation of the exact
