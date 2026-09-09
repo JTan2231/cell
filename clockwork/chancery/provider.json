@@ -3,7 +3,7 @@
   "provider": {
     "id": "clockwork",
     "name": "Clockwork",
-    "release": "0.5.0"
+    "release": "0.6.0"
   },
   "promise_scope": {
     "authoritative_for": [
